@@ -1,0 +1,2 @@
+FORGE canonical living context is maintained in FORGE_CONTEXT.md at the repository root.
+If your tooling expects this filename, treat FORGE_CONTEXT.md as the source of truth and keep both in sync when project reality changes.

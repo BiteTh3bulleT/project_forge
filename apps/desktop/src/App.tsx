@@ -1,0 +1,157 @@
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useEffect } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+
+import { ForgeErrorBoundary } from "./components/ForgeErrorBoundary";
+import { AppShell } from "./layout/AppShell";
+import { WORKSPACE_LAYOUT_EVENT, WORKSPACE_NAVIGATE_EVENT, isTauriDesktop } from "./lib/desktop";
+import { ActionLanesPage } from "./pages/ActionLanesPage";
+import { AdaptersPage } from "./pages/AdaptersPage";
+import { AuditPage } from "./pages/AuditPage";
+import { BackupPage } from "./pages/BackupPage";
+import { CanvasPage } from "./pages/CanvasPage";
+import { ChatPage } from "./pages/ChatPage";
+import { StartPage } from "./pages/StartPage";
+import { ApprovalsPage } from "./pages/ApprovalsPage";
+import { AutomationPage } from "./pages/AutomationPage";
+import { CommandPage } from "./pages/CommandPage";
+import { DashboardPage } from "./pages/DashboardPage";
+import { ExecutionPermissionsPage } from "./pages/ExecutionPermissionsPage";
+import { EventsPage } from "./pages/EventsPage";
+import { EvaluationsPage } from "./pages/EvaluationsPage";
+import { PolicyPage } from "./pages/PolicyPage";
+import { ReviewsPage } from "./pages/ReviewsPage";
+import { JobDetailPage } from "./pages/JobDetailPage";
+import { JobsPage } from "./pages/JobsPage";
+import { LineagePage } from "./pages/LineagePage";
+import { MemoryDetailPage } from "./pages/MemoryDetailPage";
+import { MemoryPage } from "./pages/MemoryPage";
+import { DossiersPage } from "./pages/DossiersPage";
+import { ProjectContextPage } from "./pages/ProjectContextPage";
+import { ReleasePage } from "./pages/ReleasePage";
+import { RetrievalRunsPage } from "./pages/RetrievalRunsPage";
+import { SettingsPage } from "./pages/SettingsPage";
+import { ToolGatewayPage } from "./pages/ToolGatewayPage";
+import { WorkbenchPage } from "./pages/WorkbenchPage";
+import { InsightsPage } from "./pages/InsightsPage";
+import { SourcesPage } from "./pages/SourcesPage";
+import { StrategiesPage } from "./pages/StrategiesPage";
+import { WorkspaceLayoutsPage } from "./pages/WorkspaceLayoutsPage";
+import { useDesktopShellStore } from "./stores/desktopShellStore";
+import { useWorkspaceLayoutStore } from "./stores/workspaceLayoutStore";
+import { useWorkspaceStore } from "./stores/workspaceStore";
+
+function RoutedViews() {
+  const location = useLocation();
+  return (
+    <ForgeErrorBoundary resetKey={location.pathname + location.search}>
+      <Routes>
+        <Route path="/" element={<Navigate to="/chat" replace />} />
+        <Route path="/start" element={<StartPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/chat" element={<ChatPage />} />
+        <Route path="/workbench" element={<WorkbenchPage />} />
+        <Route path="/canvas" element={<CanvasPage />} />
+        <Route path="/command" element={<CommandPage />} />
+        <Route path="/memory" element={<MemoryPage />} />
+        <Route path="/memory/chunk/:id" element={<MemoryDetailPage />} />
+        <Route path="/project-context" element={<ProjectContextPage />} />
+        <Route path="/policy" element={<PolicyPage />} />
+        <Route path="/strategies" element={<StrategiesPage />} />
+        <Route path="/automation" element={<AutomationPage />} />
+        <Route path="/reviews" element={<ReviewsPage />} />
+        <Route path="/dossiers" element={<DossiersPage />} />
+        <Route path="/retrieval-runs" element={<RetrievalRunsPage />} />
+        <Route path="/evaluations" element={<EvaluationsPage />} />
+        <Route path="/lineage" element={<LineagePage />} />
+        <Route path="/insights" element={<InsightsPage />} />
+        <Route path="/jobs" element={<JobsPage />} />
+        <Route path="/jobs/:id" element={<JobDetailPage />} />
+        <Route path="/approvals" element={<ApprovalsPage />} />
+        <Route path="/gateway" element={<ToolGatewayPage />} />
+        <Route path="/action-lanes" element={<ActionLanesPage />} />
+        <Route path="/execution-permissions" element={<ExecutionPermissionsPage />} />
+        <Route path="/audit" element={<AuditPage />} />
+        <Route path="/backup" element={<BackupPage />} />
+        <Route path="/release" element={<ReleasePage />} />
+        <Route path="/sources" element={<SourcesPage />} />
+        <Route path="/adapters" element={<AdaptersPage />} />
+        <Route path="/events" element={<EventsPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/layouts" element={<WorkspaceLayoutsPage />} />
+        <Route path="*" element={<Navigate to="/chat" replace />} />
+      </Routes>
+    </ForgeErrorBoundary>
+  );
+}
+
+export default function App() {
+  const ping = useWorkspaceStore((s) => s.ping);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const hydrateLayouts = useWorkspaceLayoutStore((s) => s.hydrate);
+  const refreshEnvironment = useWorkspaceLayoutStore((s) => s.refreshEnvironment);
+  const syncCurrentRoute = useWorkspaceLayoutStore((s) => s.syncCurrentRoute);
+  const currentWindowLabel = useWorkspaceLayoutStore((s) => s.currentWindowLabel);
+  const hydrateShell = useDesktopShellStore((s) => s.hydrate);
+
+  useEffect(() => {
+    void ping();
+    const id = window.setInterval(() => void ping(), 8000);
+    return () => window.clearInterval(id);
+  }, [ping]);
+
+  useEffect(() => {
+    void hydrateLayouts(location.pathname + location.search);
+  }, []);
+
+  useEffect(() => {
+    hydrateShell(currentWindowLabel || "main");
+  }, [currentWindowLabel, hydrateShell]);
+
+  useEffect(() => {
+    void syncCurrentRoute(location.pathname + location.search);
+  }, [location.pathname, location.search, syncCurrentRoute]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => void refreshEnvironment(), 5000);
+    return () => window.clearInterval(id);
+  }, [refreshEnvironment]);
+
+  useEffect(() => {
+    if (!isTauriDesktop()) {
+      const onStorage = (event: StorageEvent) => {
+        if (event.key?.startsWith("forge.")) {
+          void refreshEnvironment();
+        }
+      };
+      window.addEventListener("storage", onStorage);
+      return () => window.removeEventListener("storage", onStorage);
+    }
+    let disposers: Array<() => void> = [];
+    void (async () => {
+      const appWindow = getCurrentWindow();
+      disposers.push(
+        await appWindow.listen<{ route: string }>(WORKSPACE_NAVIGATE_EVENT, (event) => {
+          if (event.payload?.route && event.payload.route !== `${location.pathname}${location.search}`) {
+            navigate(event.payload.route);
+          }
+        }),
+      );
+      disposers.push(await listen(WORKSPACE_LAYOUT_EVENT, () => void refreshEnvironment()));
+      disposers.push(await appWindow.onMoved(() => void refreshEnvironment()));
+      disposers.push(await appWindow.onResized(() => void refreshEnvironment()));
+      disposers.push(await appWindow.onFocusChanged(() => void refreshEnvironment()));
+    })();
+    return () => {
+      disposers.forEach((dispose) => void dispose());
+    };
+  }, [location.pathname, location.search, navigate, refreshEnvironment]);
+
+  return (
+    <AppShell>
+      <RoutedViews />
+    </AppShell>
+  );
+}

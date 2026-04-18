@@ -1,0 +1,260 @@
+package approvals
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"time"
+)
+
+type Request struct {
+	ID               int64           `json:"id"`
+	JobID            string          `json:"jobId"`
+	CreatedAtMs      int64           `json:"createdAtMs"`
+	Status           string          `json:"status"`
+	RequestedAction  string          `json:"requestedAction"`
+	RiskClass        string          `json:"riskClass"`
+	RequestedAdapter string          `json:"requestedAdapter"`
+	WriteIntent      bool            `json:"writeIntent"`
+	ScopeSnapshot    json.RawMessage `json:"scopeSnapshot"`
+	TaskPacketID     *int64          `json:"taskPacketId"`
+	RequestSummary   string          `json:"requestSummary"`
+	Decision         *Decision       `json:"decision,omitempty"`
+}
+
+type Decision struct {
+	ID          int64  `json:"id"`
+	RequestID   int64  `json:"requestId"`
+	CreatedAtMs int64  `json:"createdAtMs"`
+	Actor       string `json:"actor"`
+	Decision    string `json:"decision"`
+	Note        string `json:"note"`
+}
+
+type CreateRequestInput struct {
+	JobID            string
+	RequestedAction  string
+	RiskClass        string
+	RequestedAdapter string
+	WriteIntent      bool
+	ScopeSnapshot    map[string]any
+	TaskPacketID     *int64
+	RequestSummary   string
+}
+
+type Service struct {
+	db *sql.DB
+}
+
+func New(db *sql.DB) *Service {
+	return &Service{db: db}
+}
+
+func (s *Service) OpenRequestForJob(ctx context.Context, jobID string, in CreateRequestInput) (*Request, error) {
+	// Reuse existing pending request when available.
+	existing, err := s.LatestRequestByJob(ctx, jobID)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil && existing.Status == "pending" {
+		return existing, nil
+	}
+
+	scopeJSON, _ := json.Marshal(nonNilMap(in.ScopeSnapshot))
+	now := time.Now().UnixMilli()
+	res, err := s.db.ExecContext(ctx, `
+INSERT INTO approval_requests(
+  job_id, created_at, status, requested_action, risk_class, requested_adapter,
+  write_intent, scope_snapshot_json, task_packet_id, request_summary
+) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+		in.JobID,
+		now,
+		"pending",
+		in.RequestedAction,
+		in.RiskClass,
+		in.RequestedAdapter,
+		boolToInt(in.WriteIntent),
+		string(scopeJSON),
+		in.TaskPacketID,
+		in.RequestSummary,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("insert approval request: %w", err)
+	}
+	id, _ := res.LastInsertId()
+	return s.GetRequest(ctx, id)
+}
+
+func (s *Service) Decide(ctx context.Context, requestID int64, actor, decision, note string) (*Decision, error) {
+	if decision != "approved" && decision != "denied" && decision != "cancelled" {
+		return nil, fmt.Errorf("invalid decision %q", decision)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var status string
+	if err := tx.QueryRowContext(ctx, `SELECT status FROM approval_requests WHERE id = ?`, requestID).Scan(&status); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("approval request %d not found", requestID)
+		}
+		return nil, err
+	}
+	if status != "pending" {
+		return nil, fmt.Errorf("approval request %d is not pending", requestID)
+	}
+
+	now := time.Now().UnixMilli()
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO approval_decisions(request_id, created_at, actor, decision, note) VALUES(?,?,?,?,?)`,
+		requestID,
+		now,
+		nonEmpty(actor, "operator"),
+		decision,
+		note,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := tx.ExecContext(ctx, `UPDATE approval_requests SET status = ? WHERE id = ?`, "resolved", requestID); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	did, _ := res.LastInsertId()
+	return s.GetDecision(ctx, did)
+}
+
+func (s *Service) GetRequest(ctx context.Context, id int64) (*Request, error) {
+	row := s.db.QueryRowContext(ctx, `
+SELECT id, job_id, created_at, status, requested_action, risk_class, requested_adapter,
+       write_intent, scope_snapshot_json, task_packet_id, request_summary
+FROM approval_requests WHERE id = ?`, id)
+	var r Request
+	var writeInt int
+	var scope string
+	var packet sql.NullInt64
+	if err := row.Scan(&r.ID, &r.JobID, &r.CreatedAtMs, &r.Status, &r.RequestedAction, &r.RiskClass, &r.RequestedAdapter, &writeInt, &scope, &packet, &r.RequestSummary); err != nil {
+		return nil, err
+	}
+	r.WriteIntent = writeInt == 1
+	r.ScopeSnapshot = json.RawMessage(scope)
+	if packet.Valid {
+		v := packet.Int64
+		r.TaskPacketID = &v
+	}
+	dec, _ := s.LatestDecisionForRequest(ctx, r.ID)
+	r.Decision = dec
+	return &r, nil
+}
+
+func (s *Service) LatestRequestByJob(ctx context.Context, jobID string) (*Request, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT id FROM approval_requests WHERE job_id = ? ORDER BY id DESC LIMIT 1`, jobID)
+	var id int64
+	if err := row.Scan(&id); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return s.GetRequest(ctx, id)
+}
+
+func (s *Service) LatestDecisionForRequest(ctx context.Context, requestID int64) (*Decision, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, request_id, created_at, actor, decision, note FROM approval_decisions WHERE request_id = ? ORDER BY id DESC LIMIT 1`,
+		requestID,
+	)
+	var d Decision
+	if err := row.Scan(&d.ID, &d.RequestID, &d.CreatedAtMs, &d.Actor, &d.Decision, &d.Note); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &d, nil
+}
+
+func (s *Service) GetDecision(ctx context.Context, id int64) (*Decision, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, request_id, created_at, actor, decision, note FROM approval_decisions WHERE id = ?`, id,
+	)
+	var d Decision
+	if err := row.Scan(&d.ID, &d.RequestID, &d.CreatedAtMs, &d.Actor, &d.Decision, &d.Note); err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
+func (s *Service) ListRequests(ctx context.Context, status string, limit int) ([]Request, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+	if status == "" {
+		status = "pending"
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, job_id, created_at, status, requested_action, risk_class, requested_adapter,
+       write_intent, scope_snapshot_json, task_packet_id, request_summary
+FROM approval_requests WHERE status = ? ORDER BY id DESC LIMIT ?`, status, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]Request, 0, limit)
+	for rows.Next() {
+		var r Request
+		var writeInt int
+		var scope string
+		var packet sql.NullInt64
+		if err := rows.Scan(&r.ID, &r.JobID, &r.CreatedAtMs, &r.Status, &r.RequestedAction, &r.RiskClass, &r.RequestedAdapter, &writeInt, &scope, &packet, &r.RequestSummary); err != nil {
+			return nil, err
+		}
+		r.WriteIntent = writeInt == 1
+		r.ScopeSnapshot = json.RawMessage(scope)
+		if packet.Valid {
+			v := packet.Int64
+			r.TaskPacketID = &v
+		}
+		out = append(out, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// IMPORTANT: Query decisions only after rows are closed. The store uses a
+	// single SQLite connection; nested queries while iterating rows can block.
+	for i := range out {
+		dec, _ := s.LatestDecisionForRequest(ctx, out[i].ID)
+		out[i].Decision = dec
+	}
+	return out, nil
+}
+
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func nonNilMap(v map[string]any) map[string]any {
+	if v == nil {
+		return map[string]any{}
+	}
+	return v
+}
+
+func nonEmpty(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
+}

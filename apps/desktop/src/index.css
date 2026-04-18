@@ -1,0 +1,248 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  background:
+    radial-gradient(1000px 520px at 15% -10%, rgba(226, 74, 27, 0.06), transparent 50%),
+    radial-gradient(800px 420px at 95% 0%, rgba(226, 74, 27, 0.035), transparent 48%),
+    #0b0c0f;
+}
+
+::selection {
+  background: rgba(226, 74, 27, 0.28);
+  color: #f1f2f4;
+}
+
+html[data-theme="light"] body {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+html[data-theme="light"] .forge-panel {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="light"] .forge-input {
+  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(255, 255, 255, 0.95);
+  color: #111827;
+}
+
+/* Scrollable nav — thin rail */
+.forge-nav-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+.forge-nav-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.forge-nav-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}
+.forge-nav-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Chat transcript — readable, thin rail */
+.forge-chat-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+.forge-chat-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.forge-chat-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+}
+.forge-chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.forge-panel {
+  @apply rounded-lg border border-white/10 bg-forge-iron/75 shadow-panel;
+}
+
+.forge-panel__head {
+  @apply flex flex-wrap items-start justify-between gap-3 gap-y-2 border-b border-white/10 px-4 py-3 sm:px-5 sm:py-3.5;
+}
+
+.forge-panel__title {
+  @apply text-[13px] font-semibold tracking-wide text-forge-ash;
+}
+
+.forge-panel__sub {
+  @apply mt-0.5 max-w-prose text-[11px] leading-relaxed text-forge-mist/90;
+}
+
+.forge-panel__actions {
+  @apply flex flex-shrink-0 flex-wrap items-center gap-1.5;
+}
+
+.forge-panel__body {
+  @apply px-4 py-4 sm:px-5 sm:py-4;
+}
+
+.forge-btn {
+  @apply inline-flex items-center justify-center rounded-md px-3 py-2 text-xs font-semibold transition-colors;
+}
+
+.forge-btn:focus-visible {
+  @apply outline outline-2 outline-offset-2 outline-forge-ember/45;
+}
+
+.forge-btn:disabled {
+  @apply cursor-not-allowed opacity-45;
+}
+
+.forge-btn--ghost {
+  @apply border border-white/10 bg-forge-slate/35 text-forge-ash hover:border-white/15 hover:bg-forge-slate/60;
+}
+
+.forge-btn--primary {
+  @apply border border-forge-ember/40 bg-forge-ember/20 text-forge-ash hover:border-forge-ember/50 hover:bg-forge-ember/30;
+}
+
+.forge-input {
+  @apply w-full rounded-md border border-white/10 bg-forge-slate/35 px-3 py-2 text-sm text-forge-ash outline-none ring-0 placeholder:text-forge-mist/50 focus:border-forge-ember/45;
+}
+
+.forge-input:focus-visible {
+  @apply ring-1 ring-forge-ember/30;
+}
+
+.forge-kbd {
+  @apply rounded border border-white/10 bg-black/35 px-1.5 py-0.5 font-mono text-[10px] text-forge-mist/90;
+}
+
+.forge-topbar {
+  @apply flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3 backdrop-blur-md;
+  background: linear-gradient(180deg, rgba(19, 22, 27, 0.98), rgba(9, 11, 14, 0.92));
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+}
+
+.forge-dock {
+  @apply flex w-[5.5rem] shrink-0 flex-col border-r border-white/10;
+  background: linear-gradient(180deg, rgba(13, 16, 20, 0.96), rgba(7, 9, 11, 0.94));
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03);
+}
+
+.forge-dock__item {
+  @apply flex w-full flex-col items-center gap-1 rounded-2xl border border-transparent px-2 py-3 text-center text-[11px] text-forge-mist/75 transition;
+}
+
+.forge-dock__item:hover {
+  @apply border-white/10 text-forge-ash;
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.forge-dock__item--active {
+  @apply border-forge-ember/30 text-forge-ash;
+  background-color: rgba(226, 74, 27, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 12px 24px rgba(0, 0, 0, 0.25);
+}
+
+.forge-dock__glyph {
+  @apply flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-black/30 font-mono text-[10px] font-semibold tracking-[0.16em];
+}
+
+.forge-dock__label {
+  @apply leading-tight;
+}
+
+.forge-taskstrip {
+  @apply flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-3 py-3 backdrop-blur-md;
+  background-color: rgba(12, 16, 20, 0.92);
+}
+
+.forge-task {
+  @apply flex min-w-[13rem] max-w-[18rem] items-center gap-2 rounded-2xl border border-white/10 bg-black/25 px-3 py-2 transition;
+}
+
+.forge-task:hover {
+  @apply border-white/20 bg-black/35;
+}
+
+.forge-task--active {
+  @apply border-forge-ember/35;
+  background-color: rgba(226, 74, 27, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.forge-desktop-surface {
+  @apply flex min-h-0 min-w-0 flex-1 overflow-hidden p-3 sm:p-4 xl:p-5;
+}
+
+.forge-window-frame {
+  @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[1.6rem] border border-white/10;
+  background: linear-gradient(180deg, rgba(17, 20, 25, 0.94), rgba(8, 10, 13, 0.98));
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.forge-window-frame__head {
+  @apply flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5;
+}
+
+.forge-context-panel {
+  @apply hidden w-[24rem] shrink-0 border-l border-white/10 p-3 xl:flex xl:flex-col xl:gap-3 xl:overflow-y-auto;
+  background: linear-gradient(180deg, rgba(13, 16, 20, 0.96), rgba(8, 10, 12, 0.96));
+}
+
+.forge-context-card {
+  @apply rounded-[1.2rem] border border-white/10 p-4;
+  background-color: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.forge-inline-link {
+  @apply text-[11px] font-semibold text-forge-emberSoft underline underline-offset-2;
+}
+
+@media (max-width: 1024px) {
+  .forge-topbar {
+    @apply flex-wrap;
+  }
+
+  .forge-dock {
+    @apply w-[4.75rem];
+  }
+
+  .forge-task {
+    @apply min-w-[11rem];
+  }
+}
+
+@media (max-width: 768px) {
+  .forge-topbar {
+    @apply px-3 py-2.5;
+  }
+
+  .forge-dock {
+    @apply hidden;
+  }
+
+  .forge-desktop-surface {
+    @apply p-2;
+  }
+
+  .forge-window-frame {
+    @apply rounded-[1.1rem];
+  }
+}

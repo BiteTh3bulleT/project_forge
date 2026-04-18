@@ -1,0 +1,892 @@
+package api
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
+
+	"forge/projectforge/services/core/internal/adapters"
+	"forge/projectforge/services/core/internal/approvals"
+	"forge/projectforge/services/core/internal/artifacts"
+	"forge/projectforge/services/core/internal/audit"
+	"forge/projectforge/services/core/internal/automation"
+	"forge/projectforge/services/core/internal/backup"
+	"forge/projectforge/services/core/internal/canvas"
+	"forge/projectforge/services/core/internal/chat"
+	"forge/projectforge/services/core/internal/config"
+	"forge/projectforge/services/core/internal/dashboard"
+	"forge/projectforge/services/core/internal/dossiers"
+	"forge/projectforge/services/core/internal/embeddings"
+	"forge/projectforge/services/core/internal/evaluations"
+	"forge/projectforge/services/core/internal/events"
+	"forge/projectforge/services/core/internal/failurepatterns"
+	"forge/projectforge/services/core/internal/gateway"
+	"forge/projectforge/services/core/internal/imports"
+	"forge/projectforge/services/core/internal/ingest"
+	"forge/projectforge/services/core/internal/insights"
+	"forge/projectforge/services/core/internal/jobs"
+	"forge/projectforge/services/core/internal/lanes"
+	"forge/projectforge/services/core/internal/lineage"
+	"forge/projectforge/services/core/internal/memory"
+	"forge/projectforge/services/core/internal/packetopt"
+	"forge/projectforge/services/core/internal/packets"
+	"forge/projectforge/services/core/internal/permissions"
+	"forge/projectforge/services/core/internal/policy"
+	"forge/projectforge/services/core/internal/projectcontext"
+	"forge/projectforge/services/core/internal/reconciliation"
+	"forge/projectforge/services/core/internal/release"
+	"forge/projectforge/services/core/internal/retrieval"
+	"forge/projectforge/services/core/internal/reviews"
+	"forge/projectforge/services/core/internal/search"
+	"forge/projectforge/services/core/internal/store"
+	"forge/projectforge/services/core/internal/strategies"
+	"forge/projectforge/services/core/internal/watch"
+)
+
+type Server struct {
+	st          *store.Store
+	cfg         config.Config
+	log         *events.Logger
+	ingest      *ingest.Service
+	search      *search.Service
+	adapters    *adapters.Registry
+	approvals   *approvals.Service
+	packets     *packets.Service
+	artifacts   *artifacts.Service
+	chat        *chat.Service
+	canvas      *canvas.Service
+	projectCtx  *projectcontext.Service
+	embeddings  *embeddings.Service
+	retrieval   *retrieval.Service
+	memory      *memory.Service
+	dossiers    *dossiers.Service
+	evals       *evaluations.Service
+	lineage     *lineage.Service
+	imports     *imports.Service
+	insights    *insights.Service
+	strategies  *strategies.Service
+	policy      *policy.Service
+	automation  *automation.Service
+	packetOpt   *packetopt.Service
+	reviews     *reviews.Service
+	reconcile   *reconciliation.Service
+	failures    *failurepatterns.Service
+	dashboard   *dashboard.Service
+	jobs        *jobs.Service
+	gateway     *gateway.Gateway
+	lanes       *lanes.Service
+	permissions *permissions.Service
+	auditSvc    *audit.Service
+	backup      *backup.Service
+	release     *release.Service
+	watch       *watch.Manager
+	watchStop   context.CancelFunc
+
+	// chatAssistInflight tracks assistant generation (async job or SSE) per thread/user-message key.
+	chatAssistInflight sync.Map
+}
+
+func NewServer(st *store.Store, cfg config.Config) *Server {
+	ev := events.New(st.DB)
+	ext := loadSetting(st.DB, "extensions_csv", ingest.DefaultExtensionsCSV())
+	ing := ingest.New(st.DB, ev, ext)
+	searchSvc := search.New(st.DB)
+	embedSvc := embeddings.New(st.DB)
+	memorySvc := memory.New(st.DB)
+	retrievalSvc := retrieval.New(st.DB, searchSvc, embedSvc, memorySvc)
+	artSvc := artifacts.New(st.DB, cfg.DataDir)
+	chatSvc := chat.New(st.DB)
+	canvasSvc := canvas.New(st.DB)
+	pktSvc := packets.New(st.DB, searchSvc, memorySvc)
+	appSvc := approvals.New(st.DB)
+	pcSvc := projectcontext.New(st.DB, ev, cfg.WorkspaceDir, cfg.DataDir)
+	dossierSvc := dossiers.New(st.DB)
+	evalSvc := evaluations.New(st.DB)
+	lineageSvc := lineage.New(st.DB)
+	importSvc := imports.New(st.DB)
+	insightSvc := insights.New(st.DB)
+	strategySvc := strategies.New(st.DB)
+	policySvc := policy.New(st.DB, strategySvc)
+	automationSvc := automation.New(st.DB)
+	packetOptSvc := packetopt.New(st.DB)
+	reviewSvc := reviews.New(st.DB)
+	reconcileSvc := reconciliation.New(st.DB)
+	failureSvc := failurepatterns.New(st.DB)
+	dashboardSvc := dashboard.New(st.DB)
+	reg := adapters.NewRegistry(adapters.Options{
+		DB:           st.DB,
+		WorkspaceDir: cfg.WorkspaceDir,
+	})
+	bg := context.Background()
+	permSvc := permissions.New(st.DB)
+	laneSvc := lanes.New(st.DB)
+	auditSvc := audit.New(st.DB)
+	_ = permSvc.EnsureDefaults(bg, cfg.WorkspaceDir)
+	_ = os.MkdirAll(filepath.Join(cfg.WorkspaceDir, "scratch"), 0o755)
+	_ = permSvc.EnsureMkdirChatPolicy(bg, cfg.WorkspaceDir)
+	_ = permSvc.EnsureGatewayToolPolicy(bg, cfg.WorkspaceDir)
+	_ = laneSvc.EnsureDefaults(bg, cfg.WorkspaceDir)
+	backupSvc := backup.New(st.DB, cfg.DataDir)
+	releaseSvc := release.New(st.DB, cfg.DataDir, cfg.WorkspaceDir)
+	gw := gateway.New(gateway.Options{
+		DB:           st.DB,
+		Permissions:  permSvc,
+		Lanes:        laneSvc,
+		Approvals:    appSvc,
+		Audit:        auditSvc,
+		WorkspaceDir: cfg.WorkspaceDir,
+		DataDir:      cfg.DataDir,
+	})
+	jobSvc := jobs.NewService(jobs.Dependencies{
+		DB:           st.DB,
+		Logger:       ev,
+		Ingest:       ing,
+		Adapters:     reg,
+		Packets:      pktSvc,
+		Approvals:    appSvc,
+		Artifacts:    artSvc,
+		ProjectCtx:   pcSvc,
+		Dossiers:     dossierSvc,
+		Retrieval:    retrievalSvc,
+		Gateway:      gw,
+		WorkspaceDir: cfg.WorkspaceDir,
+	})
+	_ = strategySvc.EnsureDefaults(context.Background())
+	_ = policySvc.EnsureDefaults(context.Background())
+	_ = automationSvc.EnsureDefaults(context.Background())
+	wm, err := watch.New(ing, ev)
+	if err != nil {
+		log.Printf("watch disabled: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	if wm != nil {
+		wm.Run(ctx)
+		_ = wm.SyncSources(context.Background(), listSourcePaths(st.DB))
+	}
+	go memorySvc.RepairTicker(ctx, 20*time.Minute, 14, 120)
+	return &Server{
+		st:          st,
+		cfg:         cfg,
+		log:         ev,
+		ingest:      ing,
+		search:      searchSvc,
+		adapters:    reg,
+		approvals:   appSvc,
+		packets:     pktSvc,
+		artifacts:   artSvc,
+		chat:        chatSvc,
+		canvas:      canvasSvc,
+		projectCtx:  pcSvc,
+		embeddings:  embedSvc,
+		retrieval:   retrievalSvc,
+		memory:      memorySvc,
+		dossiers:    dossierSvc,
+		evals:       evalSvc,
+		lineage:     lineageSvc,
+		imports:     importSvc,
+		insights:    insightSvc,
+		strategies:  strategySvc,
+		policy:      policySvc,
+		automation:  automationSvc,
+		packetOpt:   packetOptSvc,
+		reviews:     reviewSvc,
+		reconcile:   reconcileSvc,
+		failures:    failureSvc,
+		dashboard:   dashboardSvc,
+		jobs:        jobSvc,
+		gateway:     gw,
+		lanes:       laneSvc,
+		permissions: permSvc,
+		auditSvc:    auditSvc,
+		backup:      backupSvc,
+		release:     releaseSvc,
+		watch:       wm,
+		watchStop:   cancel,
+	}
+}
+
+func (s *Server) ShutdownWatch() {
+	if s.jobs != nil {
+		s.jobs.Close()
+	}
+	if s.watchStop != nil {
+		s.watchStop()
+	}
+	if s.watch != nil {
+		_ = s.watch.Close()
+	}
+}
+
+func (s *Server) Handler() http.Handler {
+	r := chi.NewRouter()
+	r.Use(middleware.RequestID)
+	r.Use(middleware.RealIP)
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+
+	r.Use(cors.Handler(cors.Options{
+		AllowOriginFunc: func(_ *http.Request, origin string) bool {
+			if origin == "" {
+				return true
+			}
+			if strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:") {
+				return true
+			}
+			if origin == "tauri://localhost" || origin == "https://tauri.localhost" {
+				return true
+			}
+			return false
+		},
+		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"},
+		AllowCredentials: false,
+	}))
+
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": "forge-core"})
+	})
+
+	r.Route("/api", func(r chi.Router) {
+		// Long-lived SSE — must not use the short HTTP timeout used for the rest of /api.
+		r.Get("/chat/threads/{id}/assistant-stream", s.handleChatAssistantStream)
+
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Timeout(120 * time.Second))
+
+			r.Get("/meta", s.handleMeta)
+			r.Get("/settings", s.handleGetSettings)
+			r.Patch("/settings", s.handlePatchSettings)
+
+			r.Get("/sources", s.handleListSources)
+			r.Post("/sources", s.handleAddSource)
+			r.Delete("/sources/{id}", s.handleDeleteSource)
+			r.Post("/reindex", s.handleReindex)
+
+			r.Get("/search", s.handleSearch)
+			r.Get("/chunks/{id}", s.handleChunk)
+
+			r.Get("/events", s.handleEvents)
+
+			r.Get("/adapters", s.handleAdapters)
+			r.Post("/adapters/{id}/invoke", s.handleAdapterInvoke)
+
+			r.Get("/jobs/templates", s.handleListJobTemplates)
+			r.Get("/jobs", s.handleListJobs)
+			r.Post("/jobs", s.handleCreateJob)
+			r.Get("/jobs/{id}", s.handleJobDetail)
+			r.Post("/jobs/{id}/cancel", s.handleCancelJob)
+			r.Post("/jobs/{id}/retry", s.handleRetryJob)
+			r.Post("/jobs/{id}/replay", s.handleReplayJob)
+
+			r.Get("/chat/threads", s.handleChatThreadsList)
+			r.Post("/chat/threads", s.handleChatThreadCreate)
+			r.Get("/chat/threads/{id}", s.handleChatThreadGet)
+			r.Patch("/chat/threads/{id}", s.handleChatThreadPatch)
+			r.Delete("/chat/threads/{id}", s.handleChatThreadDelete)
+			r.Post("/chat/threads/{id}/messages", s.handleChatMessagePost)
+			r.Post("/chat/threads/{id}/attachments", s.handleChatAttachmentUpload)
+			r.Post("/chat/threads/{id}/jobs", s.handleChatJobCreate)
+
+			r.Get("/canvas/boards", s.handleCanvasBoardsList)
+			r.Post("/canvas/boards", s.handleCanvasBoardCreate)
+			r.Get("/canvas/boards/{id}", s.handleCanvasBoardGet)
+			r.Delete("/canvas/boards/{id}", s.handleCanvasBoardDelete)
+			r.Post("/canvas/boards/{id}/notes", s.handleCanvasNoteCreate)
+			r.Patch("/canvas/boards/{id}/notes/{noteId}", s.handleCanvasNotePatch)
+			r.Delete("/canvas/boards/{id}/notes/{noteId}", s.handleCanvasNoteDelete)
+
+			r.Get("/artifacts", s.handleArtifactsList)
+			r.Get("/artifacts/{id}", s.handleArtifactGet)
+			r.Get("/artifacts/{id}/content", s.handleArtifactContent)
+
+			r.Get("/approvals", s.handleListApprovals)
+			r.Get("/approvals/{id}", s.handleGetApproval)
+			r.Post("/approvals/{id}/approve", s.handleApproveRequest)
+			r.Post("/approvals/{id}/deny", s.handleDenyRequest)
+			r.Post("/approvals/{id}/cancel", s.handleCancelRequest)
+
+			r.Get("/packets/{id}", s.handleGetPacket)
+			r.Get("/project-context", s.handleGetProjectContext)
+			r.Post("/project-context/import", s.handleImportProjectContext)
+			r.Post("/project-context/regenerate", s.handleRegenerateProjectContext)
+
+			r.Get("/embeddings/status", s.handleEmbeddingStatus)
+			r.Post("/embeddings/reembed", s.handleReembed)
+
+			r.Get("/retrieval/runs", s.handleListRetrievalRuns)
+			r.Post("/retrieval/runs", s.handleCreateRetrievalRun)
+			r.Get("/retrieval/runs/{id}", s.handleGetRetrievalRun)
+			r.Post("/retrieval/results/{id}/usefulness", s.handleMarkRetrievalUsefulness)
+			r.Get("/memory/observations", s.handleListMemoryObservations)
+			r.Post("/memory/observations", s.handleCreateMemoryObservation)
+			r.Get("/memory/observations/{id}", s.handleGetMemoryObservation)
+			r.Patch("/memory/observations/{id}", s.handlePatchMemoryObservation)
+			r.Post("/memory/observations/{id}/usefulness", s.handleMarkMemoryObservationUsefulness)
+			r.Get("/memory/retrieval-runs/{id}/selection", s.handleGetRetrievalSelection)
+			r.Get("/memory/packets/{id}/alignment", s.handleGetPacketAlignmentNotes)
+			r.Get("/memory/dossiers/{id}", s.handleGetDossierMemory)
+			r.Get("/memory/repair-runs", s.handleListMemoryRepairRuns)
+			r.Get("/memory/repair-runs/{id}", s.handleGetMemoryRepairRun)
+			r.Post("/memory/repair/run", s.handleRunMemoryRepair)
+
+			r.Get("/dossiers", s.handleListDossiers)
+			r.Post("/dossiers", s.handleCreateDossier)
+			r.Get("/dossiers/{id}", s.handleGetDossierDetail)
+			r.Patch("/dossiers/{id}", s.handleUpdateDossier)
+			r.Post("/dossiers/{id}/briefs/generate", s.handleGenerateDossierBrief)
+
+			r.Get("/evaluations", s.handleListEvaluations)
+			r.Post("/evaluations", s.handleCreateEvaluation)
+			r.Get("/evaluations/metrics", s.handleAdapterMetrics)
+
+			r.Get("/lineage/jobs/{id}", s.handleJobLineage)
+
+			r.Get("/imports/executions", s.handleListImportedExecutions)
+			r.Post("/imports/executions", s.handleCreateImportedExecution)
+
+			r.Get("/insights", s.handleListInsights)
+			r.Post("/insights/generate", s.handleGenerateInsights)
+
+			r.Get("/dashboard", s.handleDashboard)
+
+			r.Get("/strategies", s.handleListStrategies)
+			r.Post("/strategies", s.handleSaveStrategy)
+
+			r.Get("/policy/presets", s.handleListApprovalPresets)
+			r.Post("/policy/presets", s.handleSaveApprovalPreset)
+			r.Get("/policy/global-preset", s.handleGetGlobalPreset)
+			r.Post("/policy/global-preset", s.handleSetGlobalPreset)
+			r.Get("/policy/dossiers/{id}", s.handleGetDossierProfile)
+			r.Post("/policy/dossiers/{id}", s.handleSaveDossierProfile)
+			r.Post("/policy/recommend", s.handlePolicyRecommend)
+			r.Get("/policy/recommendations", s.handleListPolicyRecommendations)
+
+			r.Get("/automation/rules", s.handleListAutomationRules)
+			r.Post("/automation/rules", s.handleSaveAutomationRule)
+			r.Get("/automation/history", s.handleAutomationHistory)
+			r.Post("/automation/run", s.handleRunAutomationRule)
+
+			r.Get("/packet-guidance", s.handleListPacketGuidance)
+			r.Post("/packet-guidance/analyze", s.handleAnalyzePacketGuidance)
+
+			r.Get("/reconciliation/imports/{id}", s.handleGetImportReconciliation)
+			r.Post("/reconciliation/imports/{id}", s.handleSaveImportReconciliation)
+			r.Get("/reconciliation", s.handleListReconciliations)
+
+			r.Get("/reviews", s.handleListReviews)
+			r.Post("/reviews", s.handleCreateReview)
+			r.Patch("/reviews/{id}", s.handleUpdateReview)
+
+			r.Get("/failure-patterns", s.handleListFailurePatterns)
+			r.Post("/failure-patterns/analyze", s.handleAnalyzeFailurePatterns)
+
+			r.Get("/gateway/tools", s.handleGatewayTools)
+			r.Post("/gateway/invoke", s.handleGatewayInvoke)
+			r.Get("/gateway/invocations", s.handleGatewayInvocations)
+
+			r.Get("/action-lanes", s.handleListLanes)
+			r.Post("/action-lanes", s.handleSaveLane)
+			r.Delete("/action-lanes/{id}", s.handleDeleteLane)
+
+			r.Get("/permissions/profiles", s.handleListPermissionProfiles)
+			r.Post("/permissions/profiles", s.handleSavePermissionProfile)
+			r.Post("/permissions/profiles/{id}/activate", s.handleActivatePermissionProfile)
+			r.Delete("/permissions/profiles/{id}", s.handleDeletePermissionProfile)
+
+			r.Get("/audit", s.handleAuditList)
+			r.Get("/audit/trace/{correlationId}", s.handleAuditTrace)
+
+			r.Get("/backup/bundles", s.handleListBundles)
+			r.Post("/backup/bundles", s.handleCreateBundle)
+			r.Delete("/backup/bundles/{id}", s.handleDeleteBundle)
+			r.Post("/backup/restore", s.handleRestoreBundle)
+
+			r.Get("/release/readiness", s.handleReleaseReadiness)
+			r.Get("/release/artifacts", s.handleReleaseArtifacts)
+			r.Post("/release/artifacts", s.handleReleaseRecord)
+			r.Get("/release/first-run", s.handleFirstRun)
+
+			r.Post("/commands/execute", s.handleCommandExecute)
+		})
+	})
+	return r
+}
+
+func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"dataDir":      s.cfg.DataDir,
+		"dbPath":       filepath.Join(s.cfg.DataDir, "forge.sqlite"),
+		"workspaceDir": s.cfg.WorkspaceDir,
+	})
+}
+
+func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
+	ext := loadSetting(s.st.DB, "extensions_csv", ingest.DefaultExtensionsCSV())
+	theme := loadSetting(s.st.DB, "theme", "dark")
+	ollamaBase := loadSetting(s.st.DB, "ollama_base_url", "http://127.0.0.1:11434")
+	ollamaModel := loadSetting(s.st.DB, "ollama_model", "")
+	embeddingProvider := loadSetting(s.st.DB, "embedding_provider", "local_hash")
+	embeddingModel := loadSetting(s.st.DB, "embedding_model", "")
+	embeddingDims := loadSetting(s.st.DB, "embedding_dims", "128")
+	retrievalWeightKeyword := loadSetting(s.st.DB, "retrieval_weight_keyword", "0.45")
+	retrievalWeightSemantic := loadSetting(s.st.DB, "retrieval_weight_semantic", "0.55")
+	chatPersonalityPrompt := loadSetting(s.st.DB, "chat_personality_prompt", defaultChatOperatorSystemPrompt())
+	writeJSON(w, http.StatusOK, map[string]any{
+		"extensionsCsv":           ext,
+		"theme":                   theme,
+		"ollamaBaseUrl":           ollamaBase,
+		"ollamaModel":             ollamaModel,
+		"embeddingProvider":       embeddingProvider,
+		"embeddingModel":          embeddingModel,
+		"embeddingDims":           embeddingDims,
+		"retrievalWeightKeyword":  retrievalWeightKeyword,
+		"retrievalWeightSemantic": retrievalWeightSemantic,
+		"chatPersonalityPrompt":   chatPersonalityPrompt,
+		"chatPromptDefault":       defaultChatOperatorSystemPrompt(),
+	})
+}
+
+func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if v, ok := body["extensionsCsv"].(string); ok {
+		if err := upsertSetting(ctx, s.st.DB, "extensions_csv", v); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		s.ingest.SetExtensionsCSV(v)
+	}
+	if v, ok := body["theme"].(string); ok {
+		if err := upsertSetting(ctx, s.st.DB, "theme", v); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if v, ok := body["ollamaBaseUrl"].(string); ok {
+		if err := upsertSetting(ctx, s.st.DB, "ollama_base_url", v); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if v, ok := body["ollamaModel"].(string); ok {
+		if err := upsertSetting(ctx, s.st.DB, "ollama_model", v); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if v, ok := body["embeddingProvider"].(string); ok {
+		if err := upsertSetting(ctx, s.st.DB, "embedding_provider", v); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if v, ok := body["embeddingModel"].(string); ok {
+		if err := upsertSetting(ctx, s.st.DB, "embedding_model", v); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	switch v := body["embeddingDims"].(type) {
+	case string:
+		if err := upsertSetting(ctx, s.st.DB, "embedding_dims", v); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	case float64:
+		if err := upsertSetting(ctx, s.st.DB, "embedding_dims", strconv.Itoa(int(v))); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	switch v := body["retrievalWeightKeyword"].(type) {
+	case string:
+		if err := upsertSetting(ctx, s.st.DB, "retrieval_weight_keyword", v); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	case float64:
+		if err := upsertSetting(ctx, s.st.DB, "retrieval_weight_keyword", strconv.FormatFloat(v, 'f', 4, 64)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	switch v := body["retrievalWeightSemantic"].(type) {
+	case string:
+		if err := upsertSetting(ctx, s.st.DB, "retrieval_weight_semantic", v); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	case float64:
+		if err := upsertSetting(ctx, s.st.DB, "retrieval_weight_semantic", strconv.FormatFloat(v, 'f', 4, 64)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if v, ok := body["chatPersonalityPrompt"].(string); ok {
+		next := strings.TrimSpace(v)
+		if next == "" {
+			next = defaultChatOperatorSystemPrompt()
+		}
+		if err := upsertSetting(ctx, s.st.DB, "chat_personality_prompt", next); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	_ = s.log.Emit(ctx, "command.executed", map[string]any{"command": "settings.patch"})
+	s.handleGetSettings(w, r)
+}
+
+func (s *Server) handleListSources(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	rows, err := s.st.DB.QueryContext(ctx, `
+SELECT id, path, created_at, last_scan_started_at, last_scan_completed_at, last_error
+FROM sources ORDER BY id`)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+	type src struct {
+		ID                  int64   `json:"id"`
+		Path                string  `json:"path"`
+		CreatedAtMs         int64   `json:"createdAtMs"`
+		LastScanStartedMs   *int64  `json:"lastScanStartedMs"`
+		LastScanCompletedMs *int64  `json:"lastScanCompletedMs"`
+		LastError           *string `json:"lastError"`
+	}
+	var out []src
+	for rows.Next() {
+		var srow src
+		var ls, lc sql.NullInt64
+		var le sql.NullString
+		if err := rows.Scan(&srow.ID, &srow.Path, &srow.CreatedAtMs, &ls, &lc, &le); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if ls.Valid {
+			v := ls.Int64
+			srow.LastScanStartedMs = &v
+		}
+		if lc.Valid {
+			v := lc.Int64
+			srow.LastScanCompletedMs = &v
+		}
+		if le.Valid {
+			v := le.String
+			srow.LastError = &v
+		}
+		out = append(out, srow)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sources": out})
+}
+
+type addSourceBody struct {
+	Path string `json:"path"`
+}
+
+func (s *Server) handleAddSource(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var body addSourceBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	p := strings.TrimSpace(body.Path)
+	if p == "" {
+		http.Error(w, "path required", http.StatusBadRequest)
+		return
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	fi, err := os.Stat(abs)
+	if err != nil || !fi.IsDir() {
+		http.Error(w, "not a directory", http.StatusBadRequest)
+		return
+	}
+	res, err := s.st.DB.ExecContext(ctx,
+		`INSERT INTO sources (path, created_at) VALUES (?, ?)`,
+		abs, time.Now().UnixMilli(),
+	)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "unique") {
+			http.Error(w, "source already exists", http.StatusConflict)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	id, _ := res.LastInsertId()
+	_ = s.log.Emit(ctx, "source.added", map[string]any{"sourceId": id, "path": abs})
+	if err := s.ingest.IndexSource(ctx, id, abs); err != nil {
+		_ = s.log.Emit(ctx, "error.raised", map[string]any{"where": "ingest after add", "message": err.Error(), "sourceId": id})
+	}
+	if s.watch != nil {
+		_ = s.watch.SyncSources(ctx, listSourcePaths(s.st.DB))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": id, "path": abs})
+}
+
+func (s *Server) handleDeleteSource(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	if _, err := s.st.DB.ExecContext(ctx, `DELETE FROM sources WHERE id = ?`, id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = s.log.Emit(ctx, "command.executed", map[string]any{"command": "source.delete", "sourceId": id})
+	if s.watch != nil {
+		_ = s.watch.SyncSources(ctx, listSourcePaths(s.st.DB))
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	q := r.URL.Query().Get("sourceId")
+	_ = s.log.Emit(ctx, "command.executed", map[string]any{"command": "reindex", "sourceId": q})
+	if q == "" {
+		if err := s.ingest.IndexAllSources(ctx); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "scope": "all"})
+		return
+	}
+	id, err := strconv.ParseInt(q, 10, 64)
+	if err != nil {
+		http.Error(w, "bad sourceId", http.StatusBadRequest)
+		return
+	}
+	var path string
+	if err := s.st.DB.QueryRowContext(ctx, `SELECT path FROM sources WHERE id = ?`, id).Scan(&path); err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if err := s.ingest.IndexSource(ctx, id, path); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "scope": "one", "sourceId": id})
+}
+
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	hits, err := s.search.Search(ctx, q, limit)
+	if err != nil {
+		_ = s.log.Emit(ctx, "error.raised", map[string]any{"where": "search", "message": err.Error()})
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	_ = s.log.Emit(ctx, "search.executed", map[string]any{"q": q, "hits": len(hits)})
+	writeJSON(w, http.StatusOK, map[string]any{"hits": hits})
+}
+
+func (s *Server) handleChunk(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	h, err := s.search.ChunkByID(ctx, id)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, h)
+}
+
+func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	rows, err := s.log.Recent(ctx, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": rows})
+}
+
+func (s *Server) handleAdapters(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	list := s.adapters.List(ctx)
+	sort.Slice(list, func(i, j int) bool { return list[i].ID < list[j].ID })
+	writeJSON(w, http.StatusOK, map[string]any{"adapters": list})
+}
+
+func (s *Server) handleAdapterInvoke(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := chi.URLParam(r, "id")
+	var req adapters.InvokeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.AdapterID) == "" {
+		req.AdapterID = id
+	}
+	a, err := s.adapters.Get(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	res, err := a.Invoke(ctx, req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	_ = s.log.Emit(ctx, "adapter.invoked", map[string]any{"adapter": id, "capability": req.Capability, "ok": res.OK})
+	writeJSON(w, http.StatusOK, res)
+}
+
+type cmdBody struct {
+	Name string         `json:"name"`
+	Args map[string]any `json:"args"`
+}
+
+func (s *Server) handleCommandExecute(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var body cmdBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid json", http.StatusBadRequest)
+		return
+	}
+	name := strings.TrimSpace(strings.ToLower(body.Name))
+	switch name {
+	case "reindex":
+		job, err := s.jobs.Create(ctx, jobs.CreateRequest{
+			TemplateID:       "reindex_sources",
+			Title:            "Re-index sources",
+			UserRequest:      "Re-index all configured sources",
+			Objective:        "Refresh indexed memory from current source folders.",
+			InitiatingSource: "command_bar",
+			RequestPayload:   body.Args,
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		_ = s.log.Emit(ctx, "command.executed", map[string]any{"command": "reindex", "jobId": job.ID})
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "jobId": job.ID})
+		return
+	case "search_packet":
+		s.createTemplateJob(w, r, "search_packet", "Search memory packet", "Build a packet from retrieved local memory context.", body.Args)
+		return
+	case "ollama_summary":
+		s.createTemplateJob(w, r, "ollama_summary", "Ollama summary", "Summarize relevant retrieved context.", body.Args)
+		return
+	case "plan_from_index":
+		s.createTemplateJob(w, r, "plan_from_index", "Plan from index", "Draft implementation plan from indexed context.", body.Args)
+		return
+	case "prepare_codex_handoff":
+		s.createTemplateJob(w, r, "prepare_codex_handoff", "Prepare Codex handoff", "Prepare bounded Codex handoff packet.", body.Args)
+		return
+	case "prepare_claude_handoff":
+		s.createTemplateJob(w, r, "prepare_claude_handoff", "Prepare Claude Code handoff", "Prepare bounded Claude Code handoff packet.", body.Args)
+		return
+	case "safe_local_analysis":
+		s.createTemplateJob(w, r, "safe_local_analysis", "Safe local analysis", "Run read-only local analysis.", body.Args)
+		return
+	case "normalize_project_context":
+		s.createTemplateJob(w, r, "normalize_project_context", "Normalize project context", "Import context and regenerate guidance artifacts.", body.Args)
+		return
+	case "navigate":
+		_ = s.log.Emit(ctx, "command.executed", map[string]any{"command": "navigate", "args": body.Args})
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "note": "Navigation is handled client-side."})
+		return
+	default:
+		_ = s.log.Emit(ctx, "command.executed", map[string]any{"command": body.Name})
+		writeJSON(w, http.StatusOK, map[string]any{"ok": false, "note": "Unknown command. Use a known command template."})
+	}
+}
+
+func (s *Server) createTemplateJob(w http.ResponseWriter, r *http.Request, templateID, title, objective string, args map[string]any) {
+	ctx := r.Context()
+	userRequest, _ := args["query"].(string)
+	if strings.TrimSpace(userRequest) == "" {
+		userRequest = title
+	}
+	job, err := s.jobs.Create(ctx, jobs.CreateRequest{
+		TemplateID:       templateID,
+		Title:            title,
+		UserRequest:      userRequest,
+		Objective:        objective,
+		Query:            userRequest,
+		InitiatingSource: "command_bar",
+		RequestPayload:   args,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "jobId": job.ID})
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func loadSetting(db *sql.DB, key, def string) string {
+	var v string
+	err := db.QueryRow(`SELECT value FROM settings WHERE key = ?`, key).Scan(&v)
+	if err != nil {
+		return def
+	}
+	if strings.TrimSpace(v) == "" {
+		return def
+	}
+	return v
+}
+
+func upsertSetting(ctx context.Context, db *sql.DB, key, val string) error {
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+		key, val,
+	)
+	return err
+}
+
+func listSourcePaths(db *sql.DB) []string {
+	rows, err := db.Query(`SELECT path FROM sources ORDER BY id`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var p string
+		if err := rows.Scan(&p); err != nil {
+			return out
+		}
+		out = append(out, p)
+	}
+	return out
+}

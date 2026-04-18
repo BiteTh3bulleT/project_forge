@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+*.sqlite
+*.sqlite-*
+*.db
+.DS_Store
+.env
+.env.local
+*.log
+data/
+apps/desktop/src-tauri/gen/
