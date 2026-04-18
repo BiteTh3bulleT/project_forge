@@ -7,6 +7,11 @@ target/
 .DS_Store
 .env
 .env.local
+.env.development
+.env.*.local
 *.log
 data/
 apps/desktop/src-tauri/gen/
+.forge/run/
+apps/desktop/.env*
+!apps/desktop/.env.example
