@@ -153,6 +153,14 @@ export type SettingsRecord = {
   retrievalWeightSemantic: string;
   chatPersonalityPrompt: string;
   chatPromptDefault: string;
+  remoteAccessEnabled: boolean;
+  remoteAccessToken: string;
+  remoteDefaultThreadId: string;
+  telegramBotToken: string;
+  telegramDefaultChatId: string;
+  discordBotToken: string;
+  discordDefaultChannelId: string;
+  discordWebhookUrl: string;
 };
 
 export const api = {
@@ -166,6 +174,12 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }),
+    ollamaModels: (baseUrl?: string) => {
+      const q = new URLSearchParams();
+      if (baseUrl) q.set("baseUrl", baseUrl);
+      const path = `/api/settings/ollama-models${q.toString() ? `?${q.toString()}` : ""}`;
+      return j<{ models: string[]; baseUrl: string; status: string; error?: string }>(path);
+    },
   },
   sources: {
     list: () => j<{ sources: SourceRow[] }>("/api/sources"),

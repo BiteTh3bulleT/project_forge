@@ -68,27 +68,14 @@ wait_for_core() {
 }
 
 wait_for_desktop() {
-  local attempts=40
-  local delay=0.5
-
-  echo "Waiting for desktop dev server on :$DESKTOP_PORT..."
-  for ((i=1; i<=attempts; i++)); do
-    if ss -ltn 2>/dev/null | awk '{print $4}' | grep -q ":$DESKTOP_PORT$"; then
-      echo "Desktop dev server is ready."
-      return 0
-    fi
-    sleep "$delay"
-  done
-
-  echo "Desktop dev server did not come up in time. Check $DESKTOP_LOG"
-  exit 1
+  :
 }
 
 start_if_needed "core" "$CORE_PID_FILE" "$CORE_LOG" "npm run core"
 wait_for_core
 start_if_needed "desktop" "$DESKTOP_PID_FILE" "$DESKTOP_LOG" "npm run desktop"
-wait_for_desktop
 
-echo "FORGE started."
+echo "FORGE start initiated."
+echo "Desktop startup runs in background and can take time on first compile."
 echo "Core log:    $CORE_LOG"
 echo "Desktop log: $DESKTOP_LOG"

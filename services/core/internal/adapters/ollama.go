@@ -32,7 +32,7 @@ func NewOllama(db *sql.DB) Ollama {
 
 func (o Ollama) Info(ctx context.Context) AdapterInfo {
 	baseURL := o.setting(ctx, "ollama_base_url", envOr("OLLAMA_BASE_URL", "http://127.0.0.1:11434"))
-	model := o.setting(ctx, "ollama_model", envOr("OLLAMA_MODEL", ""))
+	model := normalizeOllamaModel(o.setting(ctx, "ollama_model", envOr("OLLAMA_MODEL", "")))
 
 	tags, err := o.fetchTags(ctx, baseURL, 1300*time.Millisecond)
 	if err != nil {
@@ -108,6 +108,7 @@ func (o Ollama) Invoke(ctx context.Context, req InvokeRequest) (InvokeResult, er
 		if strings.TrimSpace(model) == "" {
 			model = o.setting(ctx, "ollama_model", envOr("OLLAMA_MODEL", ""))
 		}
+		model = normalizeOllamaModel(model)
 		if strings.TrimSpace(model) == "" {
 			return InvokeResult{OK: false, FailureCode: "validation", Message: "ollama model is not configured", Data: map[string]any{"baseUrl": baseURL}}, nil
 		}
@@ -135,7 +136,26 @@ func (o Ollama) BaseURLForChat(ctx context.Context) string {
 
 // ModelForChat returns the configured default model name.
 func (o Ollama) ModelForChat(ctx context.Context) string {
-	return o.setting(ctx, "ollama_model", envOr("OLLAMA_MODEL", ""))
+	return normalizeOllamaModel(o.setting(ctx, "ollama_model", envOr("OLLAMA_MODEL", "")))
+}
+
+func (o Ollama) FetchModels(ctx context.Context, baseURL string, timeout time.Duration) ([]string, error) {
+	tags, err := o.fetchTags(ctx, baseURL, timeout)
+	if err != nil {
+		return nil, err
+	}
+	return tags.ModelNames(), nil
+}
+
+func normalizeOllamaModel(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	if s == "qwen-coder:30b" {
+		return "qwen3-coder:30b"
+	}
+	return s
 }
 
 func (o Ollama) setting(ctx context.Context, key, def string) string {

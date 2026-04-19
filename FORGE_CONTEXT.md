@@ -32,6 +32,26 @@ Earlier phases (1–4) remain in force for jobs, approvals, packets, dossiers, r
 - artifacts are evidence
 - adapters are bounded workers
 
+## AI-OS framing
+
+FORGE doctrine is now promoted into an AI-OS framing:
+
+- events are the system journal
+- jobs are process projections
+- packets are execution contracts
+- approvals are gates
+- artifacts are evidence
+- adapters are bounded workers
+- gateway/action lanes/permissions/audit are kernel-like controls
+
+Target operating model is tri-lane:
+
+- Control Lane
+- I/O Lane
+- Compute Lane
+
+Semantic services (including future IRIS) may propose actions, but FORGE retains validation and commit authority over canonical state.
+
 ## Boundaries
 
 FORGE must keep these categories explicit and non-escalating:

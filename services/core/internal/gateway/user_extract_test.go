@@ -180,7 +180,7 @@ func TestParsePythonBannerScriptIntent(t *testing.T) {
 			name:     "inside directory with quoted banner text",
 			user:     `Now, in the ForgeTestFile directory, create a simple scrolling banner python script that says "FORGE LIVES!" in vegas lights font.`,
 			wantPath: "ForgeTestFile/banner.py",
-			mustHave: []string{`TEXT = "FORGE LIVES!"`, `PRIMARY_FONT = "Vegas Lights"`},
+			mustHave: []string{`TEXT = "FORGE LIVES!"`, `PRIMARY_FONT = "Vegas Lights"`, `def pulse()`},
 			ok:       true,
 		},
 		{
@@ -195,6 +195,13 @@ func TestParsePythonBannerScriptIntent(t *testing.T) {
 			user:     `Create scratch/Python directory. Inside the directory create a simple scrolling banner python script that says "FORGE LIVES!" in vegas lights font.`,
 			wantPath: "scratch/Python/banner.py",
 			mustHave: []string{`TEXT = "FORGE LIVES!"`, `PRIMARY_FONT = "Vegas Lights"`},
+			ok:       true,
+		},
+		{
+			name:     "directory labled typo no script keyword purple blue pulse",
+			user:     `I would like you to create a directory labled "test_project". Inside that directory, Create a scrolling banner in python that says "Te Queiro Mucho Mi Riena" in purple and blue pulsing letters.`,
+			wantPath: "test_project/banner.py",
+			mustHave: []string{`TEXT = "Te Queiro Mucho Mi Riena"`, `COLOR_A = "#8a2be2"`, `COLOR_B = "#1e90ff"`},
 			ok:       true,
 		},
 		{

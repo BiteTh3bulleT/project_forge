@@ -8,19 +8,20 @@ import (
 )
 
 var (
-	reDirectoryCalled = regexp.MustCompile(`(?i)(?:directory|folder)\s+(?:called|call|named)\s+['"]?([^\s'"]+(?:/[^\s'"]*)?)`)
-	reInsidePath      = regexp.MustCompile(`(?i)\binside\s+(?:the\s+)?['"]?([^\s'"]+(?:/[^\s'"]*)?)['"]?(?:\s+directory)?`)
-	reCreateDirPath   = regexp.MustCompile(`(?i)\b(?:create|make)\s+(?:an?\s+)?([a-z0-9_.\-\/]+)\s+directory\b`)
-	reFileLabeled     = regexp.MustCompile(`(?i)(?:a\s+)?file\s+labeled\s+['"]([^'"]+)['"]`)
-	reTheWords        = regexp.MustCompile(`(?i)the words\s+['"]([^'"]+)['"]`)
-	reMkdirOnly       = regexp.MustCompile(`(?i)\bmkdir(?:\s+-p)?\s+([^\s#]+)`)
-	reCatPath         = regexp.MustCompile(`(?i)^\s*cat\s+([^\s#]+)`)
-	reReadFilePath    = regexp.MustCompile(`(?i)\bread(?:\s+the)?\s+file\s+['"]?([^\s'"]+(?:/[^\s'"]*)?)`)
-	reLsPath          = regexp.MustCompile(`(?i)^\s*ls(?:\s+-[^\s]+)*\s+([^\s#]+)`)
-	reListDirPath     = regexp.MustCompile(`(?i)\blist(?:\s+the)?\s+(?:directory|files)(?:\s+(?:in|at|under))?\s+['"]?([^\s'"]+(?:/[^\s'"]*)?)`)
-	reInDirectoryPath = regexp.MustCompile(`(?i)\bin\s+(?:the\s+)?['"]?([a-z0-9_.\-\/]+)['"]?\s+directory\b`)
-	rePyFilePath      = regexp.MustCompile(`(?i)\b([a-z0-9_\-./]+\.py)\b`)
-	reSaysQuoted      = regexp.MustCompile(`(?i)\bsays?\s+['"]([^'"]+)['"]`)
+	reDirectoryCalled  = regexp.MustCompile(`(?i)(?:directory|folder)\s+(?:called|call|named)\s+['"]?([^\s'"]+(?:/[^\s'"]*)?)`)
+	reDirectoryLabeled = regexp.MustCompile(`(?i)(?:directory|folder)\s+(?:labeled|labelled|labled|labeld)\s+['"]?([^\s'"]+(?:/[^\s'"]*)?)`)
+	reInsidePath       = regexp.MustCompile(`(?i)\binside\s+(?:the\s+)?['"]?([^\s'"]+(?:/[^\s'"]*)?)['"]?(?:\s+directory)?`)
+	reCreateDirPath    = regexp.MustCompile(`(?i)\b(?:create|make)\s+(?:an?\s+)?([a-z0-9_.\-\/]+)\s+directory\b`)
+	reFileLabeled      = regexp.MustCompile(`(?i)(?:a\s+)?file\s+labeled\s+['"]([^'"]+)['"]`)
+	reTheWords         = regexp.MustCompile(`(?i)the words\s+['"]([^'"]+)['"]`)
+	reMkdirOnly        = regexp.MustCompile(`(?i)\bmkdir(?:\s+-p)?\s+([^\s#]+)`)
+	reCatPath          = regexp.MustCompile(`(?i)^\s*cat\s+([^\s#]+)`)
+	reReadFilePath     = regexp.MustCompile(`(?i)\bread(?:\s+the)?\s+file\s+['"]?([^\s'"]+(?:/[^\s'"]*)?)`)
+	reLsPath           = regexp.MustCompile(`(?i)^\s*ls(?:\s+-[^\s]+)*\s+([^\s#]+)`)
+	reListDirPath      = regexp.MustCompile(`(?i)\blist(?:\s+the)?\s+(?:directory|files)(?:\s+(?:in|at|under))?\s+['"]?([^\s'"]+(?:/[^\s'"]*)?)`)
+	reInDirectoryPath  = regexp.MustCompile(`(?i)\bin\s+(?:the\s+)?['"]?([a-z0-9_.\-\/]+)['"]?\s+directory\b`)
+	rePyFilePath       = regexp.MustCompile(`(?i)\b([a-z0-9_\-./]+\.py)\b`)
+	reSaysQuoted       = regexp.MustCompile(`(?i)\bsays?\s+['"]([^'"]+)['"]`)
 )
 
 const defaultRecipeMarkdown = `# Skillet Garlic Butter Pasta
@@ -202,7 +203,7 @@ func ParsePythonBannerScriptIntent(user string) (writePath string, contents stri
 		return "", "", false
 	}
 	lower := strings.ToLower(raw)
-	if !strings.Contains(lower, "python") || !strings.Contains(lower, "script") {
+	if !strings.Contains(lower, "python") {
 		return "", "", false
 	}
 	if !strings.Contains(lower, "banner") && !strings.Contains(lower, "scroll") {
@@ -245,6 +246,14 @@ func ParsePythonBannerScriptIntent(user string) (writePath string, contents stri
 		}
 	}
 	if dir == "" {
+		if m := reDirectoryLabeled.FindStringSubmatch(raw); len(m) >= 2 {
+			candidate := strings.TrimSpace(m[1])
+			if !isPlaceholderDirToken(candidate) {
+				dir = candidate
+			}
+		}
+	}
+	if dir == "" {
 		if m := reInDirectoryPath.FindStringSubmatch(raw); len(m) >= 2 {
 			candidate := strings.TrimSpace(m[1])
 			if !isPlaceholderDirToken(candidate) {
@@ -279,6 +288,14 @@ func ParsePythonBannerScriptIntent(user string) (writePath string, contents stri
 		}
 	}
 	escaped := strings.ReplaceAll(bannerText, `"`, `\"`)
+	escaped = strings.ReplaceAll(escaped, "`", "'")
+
+	colorA := "#ffd766"
+	colorB := "#ff5722"
+	if strings.Contains(lower, "purple") && strings.Contains(lower, "blue") {
+		colorA = "#8a2be2"
+		colorB = "#1e90ff"
+	}
 
 	contents = fmt.Sprintf(`#!/usr/bin/env python3
 """
@@ -286,6 +303,7 @@ FORGE scrolling banner.
 Attempts "Vegas Lights" first and falls back to system fonts if unavailable.
 """
 
+import math
 import tkinter as tk
 from tkinter import font as tkfont
 
@@ -295,6 +313,10 @@ FALLBACK_FONTS = ("Vegas Lights", "Arial Black", "Helvetica", "TkDefaultFont")
 FONT_SIZE = 48
 SPEED_PX = 3
 FRAME_MS = 20
+PULSE_MS = 25
+PULSE_STEP = 0.09
+COLOR_A = "%s"
+COLOR_B = "%s"
 
 root = tk.Tk()
 root.title("FORGE Banner")
@@ -315,46 +337,61 @@ text_id = canvas.create_text(
     0,
     0,
     text=TEXT,
-    fill="#ffd766",
+    fill=COLOR_A,
     font=(font_family, FONT_SIZE, "bold"),
     anchor="w",
 )
 
-shadow_id = canvas.create_text(
-    0,
-    0,
-    text=TEXT,
-    fill="#ff5722",
-    font=(font_family, FONT_SIZE, "bold"),
-    anchor="w",
-)
+phase = 0.0
+
+
+def _hex_to_rgb(v):
+    v = v.lstrip("#")
+    return int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16)
+
+
+def _blend(c1, c2, t):
+    r = int(c1[0] + (c2[0] - c1[0]) * t)
+    g = int(c1[1] + (c2[1] - c1[1]) * t)
+    b = int(c1[2] + (c2[2] - c1[2]) * t)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+RGB_A = _hex_to_rgb(COLOR_A)
+RGB_B = _hex_to_rgb(COLOR_B)
 
 
 def layout():
     w = canvas.winfo_width()
     h = canvas.winfo_height()
     y = h // 2
-    canvas.coords(shadow_id, w + 4, y + 3)
     canvas.coords(text_id, w, y)
 
 
 def tick():
     canvas.move(text_id, -SPEED_PX, 0)
-    canvas.move(shadow_id, -SPEED_PX, 0)
     bbox = canvas.bbox(text_id)
     if bbox and bbox[2] < 0:
         w = canvas.winfo_width()
         y = canvas.winfo_height() // 2
         canvas.coords(text_id, w, y)
-        canvas.coords(shadow_id, w + 4, y + 3)
     root.after(FRAME_MS, tick)
+
+
+def pulse():
+    global phase
+    t = (math.sin(phase) + 1.0) / 2.0
+    canvas.itemconfig(text_id, fill=_blend(RGB_A, RGB_B, t))
+    phase += PULSE_STEP
+    root.after(PULSE_MS, pulse)
 
 
 root.bind("<Configure>", lambda _evt: layout())
 root.after(100, layout)
 root.after(FRAME_MS, tick)
+root.after(PULSE_MS, pulse)
 root.mainloop()
-`, escaped)
+`, escaped, colorA, colorB)
 
 	writePath = filepath.ToSlash(filepath.Join(dir, fileName))
 	return writePath, contents, true
@@ -363,7 +400,7 @@ root.mainloop()
 func isPlaceholderDirToken(v string) bool {
 	s := strings.ToLower(strings.TrimSpace(v))
 	switch s {
-	case "", "directory", "folder", "dir", "the", "this", "that", "said":
+	case "", "a", "an", "directory", "folder", "dir", "the", "this", "that", "said":
 		return true
 	default:
 		return false

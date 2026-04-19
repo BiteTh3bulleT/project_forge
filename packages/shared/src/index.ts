@@ -678,3 +678,5 @@ export type DashboardSummary = {
   routingRecommendations: Array<{ id: number; taskType: string; adapter: string; confidence: number; reasons: string[]; createdAtMs: number }>;
   systemStatus: Record<string, unknown>;
 };
+
+export * from "./aios";

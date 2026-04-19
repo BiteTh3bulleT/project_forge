@@ -251,7 +251,7 @@ func (s *Server) Handler() http.Handler {
 			return false
 		},
 		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "X-Forge-Remote-Token", "X-Telegram-Bot-Api-Secret-Token"},
 		AllowCredentials: false,
 	}))
 
@@ -269,6 +269,10 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/meta", s.handleMeta)
 			r.Get("/settings", s.handleGetSettings)
 			r.Patch("/settings", s.handlePatchSettings)
+			r.Get("/settings/ollama-models", s.handleGetOllamaModels)
+			r.Get("/settings/ollama-models/", s.handleGetOllamaModels)
+			r.Post("/remote/telegram", s.handleRemoteTelegram)
+			r.Post("/remote/discord", s.handleRemoteDiscord)
 
 			r.Get("/sources", s.handleListSources)
 			r.Post("/sources", s.handleAddSource)
@@ -437,13 +441,21 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	ext := loadSetting(s.st.DB, "extensions_csv", ingest.DefaultExtensionsCSV())
 	theme := loadSetting(s.st.DB, "theme", "dark")
 	ollamaBase := loadSetting(s.st.DB, "ollama_base_url", "http://127.0.0.1:11434")
-	ollamaModel := loadSetting(s.st.DB, "ollama_model", "")
+	ollamaModel := normalizeOllamaModel(loadSetting(s.st.DB, "ollama_model", ""))
 	embeddingProvider := loadSetting(s.st.DB, "embedding_provider", "local_hash")
 	embeddingModel := loadSetting(s.st.DB, "embedding_model", "")
 	embeddingDims := loadSetting(s.st.DB, "embedding_dims", "128")
 	retrievalWeightKeyword := loadSetting(s.st.DB, "retrieval_weight_keyword", "0.45")
 	retrievalWeightSemantic := loadSetting(s.st.DB, "retrieval_weight_semantic", "0.55")
 	chatPersonalityPrompt := loadSetting(s.st.DB, "chat_personality_prompt", defaultChatOperatorSystemPrompt())
+	remoteAccessEnabled := parseRemoteBool(loadSetting(s.st.DB, remoteAccessEnabledKey, "false"))
+	remoteAccessToken := strings.TrimSpace(loadSetting(s.st.DB, remoteAccessTokenKey, ""))
+	telegramBotToken := strings.TrimSpace(loadSetting(s.st.DB, telegramBotTokenKey, ""))
+	telegramDefaultChatID := strings.TrimSpace(loadSetting(s.st.DB, telegramDefaultChatIDKey, ""))
+	discordBotToken := strings.TrimSpace(loadSetting(s.st.DB, discordBotTokenKey, ""))
+	discordDefaultChannelID := strings.TrimSpace(loadSetting(s.st.DB, discordDefaultChannelIDKey, ""))
+	discordWebhookURL := strings.TrimSpace(loadSetting(s.st.DB, discordWebhookURLKey, ""))
+	remoteDefaultThreadID := strings.TrimSpace(loadSetting(s.st.DB, remoteDefaultThreadIDKey, ""))
 	writeJSON(w, http.StatusOK, map[string]any{
 		"extensionsCsv":           ext,
 		"theme":                   theme,
@@ -456,6 +468,14 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		"retrievalWeightSemantic": retrievalWeightSemantic,
 		"chatPersonalityPrompt":   chatPersonalityPrompt,
 		"chatPromptDefault":       defaultChatOperatorSystemPrompt(),
+		"remoteAccessEnabled":     remoteAccessEnabled,
+		"remoteAccessToken":       remoteAccessToken,
+		"remoteDefaultThreadId":   remoteDefaultThreadID,
+		"telegramBotToken":        telegramBotToken,
+		"telegramDefaultChatId":   telegramDefaultChatID,
+		"discordBotToken":         discordBotToken,
+		"discordDefaultChannelId": discordDefaultChannelID,
+		"discordWebhookUrl":       discordWebhookURL,
 	})
 }
 
@@ -486,7 +506,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if v, ok := body["ollamaModel"].(string); ok {
-		if err := upsertSetting(ctx, s.st.DB, "ollama_model", v); err != nil {
+		if err := upsertSetting(ctx, s.st.DB, "ollama_model", normalizeOllamaModel(v)); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -539,6 +559,61 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if v, ok := body["remoteAccessEnabled"]; ok {
+		if err := upsertSetting(ctx, s.st.DB, remoteAccessEnabledKey, parseRemoteBoolValue(v)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if v, ok := body["remoteAccessToken"].(string); ok {
+		if err := upsertSetting(ctx, s.st.DB, remoteAccessTokenKey, strings.TrimSpace(v)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if raw, ok := body["remoteDefaultThreadId"]; ok {
+		if v := parseAnyInt64(raw); v > 0 {
+			if err := upsertSetting(ctx, s.st.DB, remoteDefaultThreadIDKey, strconv.FormatInt(v, 10)); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		} else if threadIDRaw, ok := raw.(string); ok && strings.TrimSpace(threadIDRaw) == "" {
+			if err := upsertSetting(ctx, s.st.DB, remoteDefaultThreadIDKey, ""); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+	if v, ok := body["telegramBotToken"].(string); ok {
+		if err := upsertSetting(ctx, s.st.DB, telegramBotTokenKey, strings.TrimSpace(v)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if v, ok := body["telegramDefaultChatId"].(string); ok {
+		if err := upsertSetting(ctx, s.st.DB, telegramDefaultChatIDKey, strings.TrimSpace(v)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if v, ok := body["discordBotToken"].(string); ok {
+		if err := upsertSetting(ctx, s.st.DB, discordBotTokenKey, strings.TrimSpace(v)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if v, ok := body["discordDefaultChannelId"].(string); ok {
+		if err := upsertSetting(ctx, s.st.DB, discordDefaultChannelIDKey, strings.TrimSpace(v)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if v, ok := body["discordWebhookUrl"].(string); ok {
+		if err := upsertSetting(ctx, s.st.DB, discordWebhookURLKey, strings.TrimSpace(v)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 	if v, ok := body["chatPersonalityPrompt"].(string); ok {
 		next := strings.TrimSpace(v)
 		if next == "" {
@@ -551,6 +626,60 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.log.Emit(ctx, "command.executed", map[string]any{"command": "settings.patch"})
 	s.handleGetSettings(w, r)
+}
+
+func (s *Server) handleGetOllamaModels(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	baseURL := strings.TrimSpace(r.URL.Query().Get("baseUrl"))
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(loadSetting(s.st.DB, "ollama_base_url", "http://127.0.0.1:11434"))
+	}
+	// Always allow best-effort discovery so settings UX can render even if Ollama is offline.
+	resp := map[string]any{
+		"baseUrl": baseURL,
+	}
+
+	ollamaAdapter, err := s.adapters.Get("ollama")
+	if err != nil {
+		resp["status"] = "unavailable"
+		resp["error"] = err.Error()
+		resp["models"] = []string{}
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+	ollama, ok := ollamaAdapter.(adapters.Ollama)
+	if !ok {
+		resp["status"] = "unavailable"
+		resp["error"] = "ollama adapter has unexpected type"
+		resp["models"] = []string{}
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+
+	models, err := ollama.FetchModels(ctx, baseURL, 1800*time.Millisecond)
+	if err != nil {
+		resp["status"] = "unavailable"
+		resp["error"] = err.Error()
+		resp["models"] = []string{}
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+
+	sort.Strings(models)
+	resp["status"] = "ready"
+	resp["models"] = models
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func normalizeOllamaModel(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	if s == "qwen-coder:30b" {
+		return "qwen3-coder:30b"
+	}
+	return s
 }
 
 func (s *Server) handleListSources(w http.ResponseWriter, r *http.Request) {

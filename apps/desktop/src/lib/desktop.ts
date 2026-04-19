@@ -108,8 +108,15 @@ function resolveMonitorFromBounds(monitors: Monitor[], bounds: { x: number; y: n
 
 export async function listAvailableMonitors(): Promise<MonitorSnapshot[]> {
   if (!isTauriDesktop()) return [];
-  const monitors = await availableMonitors();
-  return monitors.map((monitor, index) => snapshotMonitor(monitor, index));
+  try {
+    const monitors = await availableMonitors();
+    return monitors.map((monitor, index) => snapshotMonitor(monitor, index));
+  } catch (error) {
+    if (typeof console !== "undefined") {
+      console.error("[FORGE] failed to query monitors", error);
+    }
+    return [];
+  }
 }
 
 export async function getCurrentWindowLabel() {
@@ -176,18 +183,36 @@ export async function createShellWindow(options: {
   bounds: { x: number; y: number; width: number; height: number };
 }) {
   if (!isTauriDesktop()) return null;
-  return new WebviewWindow(options.label, {
-    url: buildWindowUrl(options.route),
-    title: options.title,
-    x: options.bounds.x,
-    y: options.bounds.y,
-    width: options.bounds.width,
-    height: options.bounds.height,
-    visible: true,
-    focus: false,
-    resizable: true,
-    preventOverflow: true,
-  });
+  if (!Number.isFinite(options.bounds.x) || !Number.isFinite(options.bounds.y) || !Number.isFinite(options.bounds.width) || !Number.isFinite(options.bounds.height)) {
+    options.bounds = { x: 60, y: 60, width: 1200, height: 780 };
+  }
+  try {
+    const window = new WebviewWindow(options.label, {
+      url: buildWindowUrl(options.route),
+      title: options.title,
+      x: options.bounds.x,
+      y: options.bounds.y,
+      width: options.bounds.width,
+      height: options.bounds.height,
+      visible: true,
+      focus: false,
+      resizable: true,
+      preventOverflow: true,
+    });
+    try {
+      await window.show();
+    } catch (error) {
+      if (typeof console !== "undefined") {
+        console.error(`[FORGE] failed to show new window ${options.label}`, error);
+      }
+    }
+    return window;
+  } catch (error) {
+    if (typeof console !== "undefined") {
+      console.error(`[FORGE] failed to create window ${options.label}`, error);
+    }
+    return null;
+  }
 }
 
 export async function getWindowByLabel(label: string) {

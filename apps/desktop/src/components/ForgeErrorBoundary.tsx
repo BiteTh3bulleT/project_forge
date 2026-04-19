@@ -28,8 +28,8 @@ export class ForgeErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.message) {
       return (
-        <div className="forge-panel border-forge-ember/30 bg-forge-iron/90">
-          <header className="forge-panel__head border-forge-ember/20">
+        <div className="forge-panel forge-status-glow border-forge-ember/30 bg-forge-iron/90">
+          <header className="forge-panel__head">
             <div>
               <h2 className="forge-panel__title text-forge-emberSoft">View error</h2>
               <p className="forge-panel__sub">Rendering stopped for this route. Check the console for the stack trace.</p>

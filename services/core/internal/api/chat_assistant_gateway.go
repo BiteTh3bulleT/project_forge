@@ -39,6 +39,9 @@ func (s *Server) completeAssistantWithGatewayTools(
 	if decision, ok := parseChatApprovalDirective(lastUserContent); ok {
 		return s.handleChatApprovalDirective(ctx, threadID, userMessageID, decision)
 	}
+	if probe := s.maybeRespondGatewayStatusProbe(ctx, threadID, userMessageID, th, lastUserContent); probe != nil {
+		return probe
+	}
 
 	corr := "chat-tools-" + strconv.FormatInt(userMessageID, 10)
 

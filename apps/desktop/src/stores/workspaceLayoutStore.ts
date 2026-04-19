@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { LogicalPosition, LogicalSize, getCurrentWindow } from "@tauri-apps/api/window";
+import { type Window, LogicalPosition, LogicalSize, getCurrentWindow } from "@tauri-apps/api/window";
 
 import { assignableShellTools } from "../layout/shellConfig";
 import {
@@ -209,13 +209,14 @@ function loadDoc(): LayoutDoc {
     if (!raw) return emptyDoc();
     const parsed = JSON.parse(raw) as LayoutDoc;
     if (!Array.isArray(parsed.layouts) || parsed.layouts.length === 0) return emptyDoc();
-    return {
+    const next: LayoutDoc = {
       ...emptyDoc(),
       ...parsed,
       layouts: parsed.layouts,
       runtimeWindows: Array.isArray(parsed.runtimeWindows) ? parsed.runtimeWindows : [],
       lastKnownMonitors: Array.isArray(parsed.lastKnownMonitors) ? parsed.lastKnownMonitors : [],
     };
+    return ensureActiveLayout(next);
   } catch {
     return emptyDoc();
   }
@@ -229,6 +230,86 @@ function persistDoc(doc: LayoutDoc) {
 function findLayout(doc: LayoutDoc, layoutId: string | null) {
   if (!layoutId) return null;
   return doc.layouts.find((layout) => layout.id === layoutId) ?? null;
+}
+
+function ensureActiveLayout(doc: LayoutDoc): LayoutDoc {
+  const hasActiveLayout = findLayout(doc, doc.activeLayoutId) !== null;
+  const fallbackLayoutId = doc.layouts[0]?.id ?? null;
+  if (!hasActiveLayout && fallbackLayoutId) {
+    doc.activeLayoutId = fallbackLayoutId;
+  }
+  if (!doc.selectedLayoutId || !findLayout(doc, doc.selectedLayoutId)) {
+    doc.selectedLayoutId = doc.activeLayoutId ?? fallbackLayoutId;
+  }
+  return doc;
+}
+
+function isInvalidWindowHandleError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return message.includes("Invalid window handle") || message.includes("is not found") || message.includes("not found");
+}
+
+async function reclaimWindowLabel(runtimeWindow: Window) {
+  await runtimeWindow.close().catch(() => undefined);
+}
+
+async function restoreWindow(runtimeWindow: Window) {
+  const maybeWindow = runtimeWindow as {
+    isMinimized?: () => Promise<boolean>;
+    unminimize?: () => Promise<void>;
+    show?: () => Promise<void>;
+    setFocus?: () => Promise<void>;
+    restore?: () => Promise<void>;
+  };
+  const isMinimized = typeof maybeWindow.isMinimized === "function" ? await maybeWindow.isMinimized().catch(() => false) : false;
+  if (isMinimized && typeof maybeWindow.unminimize === "function") {
+    await maybeWindow.unminimize().catch(() => undefined);
+  } else if (isMinimized && typeof maybeWindow.restore === "function") {
+    await maybeWindow.restore().catch(() => undefined);
+  }
+  await runtimeWindow.show().catch(() => undefined);
+}
+
+async function bringWindowFront(runtimeWindow: Window, setFocus = false) {
+  await restoreWindow(runtimeWindow);
+  if (setFocus) {
+    const maybeWindow = runtimeWindow as { setFocus?: () => Promise<void> };
+    await maybeWindow.setFocus?.().catch(() => undefined);
+  }
+}
+
+async function syncOrRecreateWindow(layoutWindow: LayoutWindowRecord, bounds: { x: number; y: number; width: number; height: number }, options: { route: string; setFocus?: boolean }) {
+  const targetWindow = await getWindowByLabel(layoutWindow.runtimeLabel);
+  if (!targetWindow) {
+    return createShellWindow({
+      label: layoutWindow.runtimeLabel,
+      route: options.route,
+      title: layoutWindow.title,
+      bounds,
+    });
+  }
+  try {
+    await targetWindow.setTitle(layoutWindow.title).catch(() => undefined);
+    await targetWindow.setPosition(new LogicalPosition(bounds.x, bounds.y)).catch(() => undefined);
+    await targetWindow.setSize(new LogicalSize(bounds.width, bounds.height)).catch(() => undefined);
+    await navigateWindow(layoutWindow.runtimeLabel, options.route);
+    await bringWindowFront(targetWindow, options.setFocus === true);
+    return targetWindow;
+  } catch (error) {
+    if (!isInvalidWindowHandleError(error)) {
+      throw error;
+    }
+    await reclaimWindowLabel(targetWindow).catch(() => undefined);
+    if (typeof console !== "undefined") {
+      console.warn(`[FORGE] window ${layoutWindow.runtimeLabel} has invalid handle, recreating`, error);
+    }
+    return createShellWindow({
+      label: layoutWindow.runtimeLabel,
+      route: options.route,
+      title: layoutWindow.title,
+      bounds,
+    });
+  }
 }
 
 function sanitizeRoutes(routes: string[]) {
@@ -275,6 +356,12 @@ function mergeRuntimeWindow(doc: LayoutDoc, next: RuntimeWindowRecord) {
   doc.runtimeWindows = runtimeWindows.sort((a, b) => a.runtimeLabel.localeCompare(b.runtimeLabel));
 }
 
+async function syncRuntimeWindowRegistry(doc: LayoutDoc) {
+  const runtimeWindows = await listRuntimeWindows();
+  const liveLabels = new Set(runtimeWindows.map((item) => item.label));
+  doc.runtimeWindows = doc.runtimeWindows.filter((item) => liveLabels.has(item.runtimeLabel) || item.runtimeLabel === "main");
+}
+
 async function navigateWindow(runtimeLabel: string, route: string) {
   const target = await getWindowByLabel(runtimeLabel);
   if (!target) return;
@@ -306,6 +393,7 @@ async function syncCurrentRuntimeWindow(pathname: string) {
     layoutWindow.fallbackReason = null;
     activeLayout!.updatedAtMs = nowMs();
   }
+  await syncRuntimeWindowRegistry(doc);
   persistDoc(doc);
   await emitWorkspaceSync(currentLabel);
   return doc;
@@ -338,12 +426,27 @@ async function applyLayout(layoutId: string, markRestore = false) {
       await appWindow.setPosition(new LogicalPosition(resolved.bounds.x, resolved.bounds.y)).catch(() => undefined);
       await appWindow.setSize(new LogicalSize(resolved.bounds.width, resolved.bounds.height)).catch(() => undefined);
       await navigateWindow(currentLabel, windowRecord.activeRoute);
+      await bringWindowFront(appWindow, true).catch(() => undefined);
     } else if (targetWindow) {
-      await targetWindow.setTitle(windowRecord.title).catch(() => undefined);
-      await targetWindow.setPosition(new LogicalPosition(resolved.bounds.x, resolved.bounds.y)).catch(() => undefined);
-      await targetWindow.setSize(new LogicalSize(resolved.bounds.width, resolved.bounds.height)).catch(() => undefined);
-      await navigateWindow(windowRecord.runtimeLabel, windowRecord.activeRoute);
-      await targetWindow.show().catch(() => undefined);
+      try {
+        await syncOrRecreateWindow(windowRecord, resolved.bounds, {
+          route: windowRecord.activeRoute,
+          setFocus: false,
+        });
+      } catch (error) {
+        if (isInvalidWindowHandleError(error)) {
+          await reclaimWindowLabel(targetWindow).catch(() => undefined);
+          if (typeof console !== "undefined") {
+            console.warn(`[FORGE] window ${windowRecord.runtimeLabel} could not be restored`, error);
+          }
+          await createShellWindow({
+            label: windowRecord.runtimeLabel,
+            route: windowRecord.activeRoute,
+            title: windowRecord.title,
+            bounds: resolved.bounds,
+          });
+        }
+      }
     } else {
       await createShellWindow({
         label: windowRecord.runtimeLabel,
@@ -362,6 +465,7 @@ async function applyLayout(layoutId: string, markRestore = false) {
       await runtimeWindow.close().catch(() => undefined);
     }
   }
+  await syncRuntimeWindowRegistry(doc);
 
   doc.fallbackNotice = fallbacks.length > 0 ? fallbacks.join(" ") : null;
   layout.lastActivatedAtMs = nowMs();
@@ -385,6 +489,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
     const supported = isTauriDesktop();
     const currentWindowLabel = await getCurrentWindowLabel();
     let doc = loadDoc();
+    doc = ensureActiveLayout(doc);
     if (supported) {
       doc = await syncCurrentRuntimeWindow(pathname);
       if (currentWindowLabel === "main" && doc.activeLayoutId) {

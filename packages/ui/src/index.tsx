@@ -4,10 +4,11 @@ export function Panel(props: {
   title: string;
   subtitle?: string;
   children: ReactNode;
+  className?: string;
   actions?: ReactNode;
 }) {
   return (
-    <section className="forge-panel overflow-hidden">
+    <section className={joinClassName("forge-panel overflow-hidden", props.className)}>
       <header className="forge-panel__head">
         <div className="min-w-0 flex-1">
           <h2 className="forge-panel__title">{props.title}</h2>

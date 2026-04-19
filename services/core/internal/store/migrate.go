@@ -768,6 +768,320 @@ CREATE INDEX IF NOT EXISTS idx_action_lanes_enabled ON action_lanes(enabled, upd
 CREATE INDEX IF NOT EXISTS idx_backup_bundles_created ON backup_bundles(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_release_artifacts_created ON release_artifacts(created_at DESC);
 
+CREATE TABLE IF NOT EXISTS provenance_records (
+  id TEXT PRIMARY KEY,
+  actor TEXT NOT NULL,
+  actor_type TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  selected_paths_json TEXT NOT NULL DEFAULT '[]',
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_kernel',
+  syscall_id TEXT NOT NULL DEFAULT '',
+  correlation_id TEXT NOT NULL DEFAULT '',
+  audit_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS journal_events (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  source TEXT NOT NULL,
+  actor TEXT NOT NULL DEFAULT '',
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  selected_paths_json TEXT NOT NULL DEFAULT '[]',
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  correlation_id TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
+  provenance_id TEXT REFERENCES provenance_records(id) ON DELETE SET NULL,
+  provenance_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_kernel',
+  syscall_id TEXT NOT NULL DEFAULT '',
+  audit_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TRIGGER IF NOT EXISTS journal_events_no_update
+BEFORE UPDATE ON journal_events
+BEGIN
+  SELECT RAISE(FAIL, 'journal_events are append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS journal_events_no_delete
+BEFORE DELETE ON journal_events
+BEGIN
+  SELECT RAISE(FAIL, 'journal_events are append-only');
+END;
+
+CREATE TABLE IF NOT EXISTS memory_notes (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  selected_paths_json TEXT NOT NULL DEFAULT '[]',
+  confidence REAL NOT NULL,
+  status TEXT NOT NULL,
+  provenance_id TEXT REFERENCES provenance_records(id) ON DELETE SET NULL,
+  provenance_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  archived_at INTEGER,
+  superseded_by TEXT,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_kernel',
+  syscall_id TEXT NOT NULL DEFAULT '',
+  correlation_id TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
+  audit_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS semantic_links (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  source_kind TEXT NOT NULL DEFAULT 'object',
+  target_id TEXT NOT NULL,
+  target_kind TEXT NOT NULL DEFAULT 'object',
+  confidence REAL NOT NULL,
+  provenance_id TEXT REFERENCES provenance_records(id) ON DELETE SET NULL,
+  provenance_json TEXT NOT NULL DEFAULT '{}',
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  selected_paths_json TEXT NOT NULL DEFAULT '[]',
+  created_at INTEGER NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_kernel',
+  syscall_id TEXT NOT NULL DEFAULT '',
+  correlation_id TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
+  audit_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS state_items (
+  id TEXT PRIMARY KEY,
+  key TEXT NOT NULL,
+  value_json TEXT NOT NULL DEFAULT '{}',
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  selected_paths_json TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL,
+  derived_from_json TEXT NOT NULL DEFAULT '[]',
+  current_version INTEGER NOT NULL DEFAULT 1,
+  updated_at INTEGER NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_kernel',
+  syscall_id TEXT NOT NULL DEFAULT '',
+  correlation_id TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
+  audit_id TEXT NOT NULL DEFAULT '',
+  UNIQUE(workspace_id, lane_id, key)
+);
+
+CREATE TABLE IF NOT EXISTS state_versions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  state_item_id TEXT NOT NULL REFERENCES state_items(id) ON DELETE RESTRICT,
+  state_key TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  previous_value_json TEXT NOT NULL DEFAULT '{}',
+  new_value_json TEXT NOT NULL DEFAULT '{}',
+  changed_by TEXT NOT NULL DEFAULT '',
+  derived_from_json TEXT NOT NULL DEFAULT '[]',
+  syscall_id TEXT NOT NULL DEFAULT '',
+  audit_id TEXT NOT NULL DEFAULT '',
+  correlation_id TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_kernel'
+);
+
+CREATE TABLE IF NOT EXISTS open_loops (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  state TEXT NOT NULL,
+  priority TEXT NOT NULL,
+  owner TEXT NOT NULL,
+  blocker TEXT NOT NULL DEFAULT '',
+  next_action TEXT NOT NULL DEFAULT '',
+  related_notes_json TEXT NOT NULL DEFAULT '[]',
+  created_from TEXT NOT NULL DEFAULT '',
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  selected_paths_json TEXT NOT NULL DEFAULT '[]',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  resolved_at INTEGER,
+  archived_at INTEGER,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_kernel',
+  syscall_id TEXT NOT NULL DEFAULT '',
+  correlation_id TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
+  audit_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS artifact_refs (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  uri TEXT NOT NULL,
+  content_hash TEXT NOT NULL DEFAULT '',
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  selected_paths_json TEXT NOT NULL DEFAULT '[]',
+  provenance_id TEXT REFERENCES provenance_records(id) ON DELETE SET NULL,
+  provenance_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_kernel',
+  syscall_id TEXT NOT NULL DEFAULT '',
+  correlation_id TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
+  audit_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS derived_models (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  expression_json TEXT NOT NULL DEFAULT '{}',
+  derived_from_json TEXT NOT NULL DEFAULT '[]',
+  support_count INTEGER NOT NULL DEFAULT 0,
+  confidence REAL NOT NULL DEFAULT 0,
+  status TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  selected_paths_json TEXT NOT NULL DEFAULT '[]',
+  last_validated_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_kernel',
+  syscall_id TEXT NOT NULL DEFAULT '',
+  correlation_id TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
+  audit_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS contradiction_records (
+  id TEXT PRIMARY KEY,
+  left_object_id TEXT NOT NULL,
+  left_object_kind TEXT NOT NULL DEFAULT 'object',
+  right_object_id TEXT NOT NULL,
+  right_object_kind TEXT NOT NULL DEFAULT 'object',
+  reason TEXT NOT NULL,
+  severity TEXT NOT NULL DEFAULT 'medium',
+  confidence REAL NOT NULL DEFAULT 0.5,
+  provenance_id TEXT REFERENCES provenance_records(id) ON DELETE SET NULL,
+  provenance_json TEXT NOT NULL DEFAULT '{}',
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_kernel',
+  syscall_id TEXT NOT NULL DEFAULT '',
+  correlation_id TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
+  audit_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS supersession_records (
+  id TEXT PRIMARY KEY,
+  old_object_id TEXT NOT NULL,
+  old_object_kind TEXT NOT NULL DEFAULT 'object',
+  new_object_id TEXT NOT NULL,
+  new_object_kind TEXT NOT NULL DEFAULT 'object',
+  reason TEXT NOT NULL,
+  provenance_id TEXT REFERENCES provenance_records(id) ON DELETE SET NULL,
+  provenance_json TEXT NOT NULL DEFAULT '{}',
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_kernel',
+  syscall_id TEXT NOT NULL DEFAULT '',
+  correlation_id TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
+  audit_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS context_packet_snapshots (
+  id TEXT PRIMARY KEY,
+  query TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  selected_paths_json TEXT NOT NULL DEFAULT '[]',
+  included_state_json TEXT NOT NULL DEFAULT '[]',
+  included_open_loops_json TEXT NOT NULL DEFAULT '[]',
+  included_notes_json TEXT NOT NULL DEFAULT '[]',
+  included_links_json TEXT NOT NULL DEFAULT '[]',
+  included_models_json TEXT NOT NULL DEFAULT '[]',
+  included_artifacts_json TEXT NOT NULL DEFAULT '[]',
+  included_events_json TEXT NOT NULL DEFAULT '[]',
+  budget_json TEXT NOT NULL DEFAULT '{}',
+  inclusion_reasons_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  correlation_id TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
+  syscall_id TEXT NOT NULL DEFAULT '',
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_kernel',
+  audit_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS semantic_idempotency_keys (
+  idempotency_key TEXT PRIMARY KEY,
+  action TEXT NOT NULL,
+  result_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT 0,
+  correlation_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_provenance_workspace_created ON provenance_records(workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_journal_workspace_created ON journal_events(workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_journal_corr ON journal_events(correlation_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_journal_trace ON journal_events(trace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notes_workspace_status ON memory_notes(workspace_id, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notes_workspace_type ON memory_notes(workspace_id, type, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notes_trace ON memory_notes(trace_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_links_workspace_type ON semantic_links(workspace_id, type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_links_source ON semantic_links(source_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_links_target ON semantic_links(target_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_state_workspace_key ON state_items(workspace_id, key, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_state_versions_key ON state_versions(workspace_id, state_key, id DESC);
+CREATE INDEX IF NOT EXISTS idx_state_versions_corr ON state_versions(correlation_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_loops_workspace_state ON open_loops(workspace_id, state, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_loops_workspace_priority ON open_loops(workspace_id, priority, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_artifact_refs_workspace ON artifact_refs(workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_artifact_refs_hash ON artifact_refs(content_hash, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_models_workspace_status ON derived_models(workspace_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_models_workspace_type ON derived_models(workspace_id, type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_contradiction_scope ON contradiction_records(workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_contradiction_left ON contradiction_records(left_object_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_contradiction_right ON contradiction_records(right_object_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_supersession_scope ON supersession_records(workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_supersession_old ON supersession_records(old_object_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_supersession_new ON supersession_records(new_object_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ctx_snapshot_scope ON context_packet_snapshots(workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ctx_snapshot_corr ON context_packet_snapshots(correlation_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS chat_threads (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL,

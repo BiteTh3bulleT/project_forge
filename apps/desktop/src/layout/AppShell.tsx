@@ -13,9 +13,9 @@ import { useWorkspaceStore } from "../stores/workspaceStore";
 import { getShellTool, primaryShellTools } from "./shellConfig";
 
 function corePill(core: "online" | "offline" | "unknown") {
-  if (core === "online") return "border-emerald-500/35 bg-emerald-500/10 text-emerald-200/90";
-  if (core === "offline") return "border-forge-ember/40 bg-forge-ember/10 text-forge-emberSoft";
-  return "border-white/10 bg-white/5 text-forge-mist";
+  if (core === "online") return "forge-chip forge-chip--ok";
+  if (core === "offline") return "forge-chip forge-chip--warn";
+  return "forge-chip forge-chip--muted";
 }
 
 function extractJobId(pathname: string) {
@@ -50,6 +50,7 @@ export function AppShell(props: { children: ReactNode }) {
   const monitors = useWorkspaceLayoutStore((s) => s.monitors);
   const fallbackNotice = useWorkspaceLayoutStore((s) => s.fallbackNotice);
   const currentWindowLabel = useWorkspaceLayoutStore((s) => s.currentWindowLabel);
+  const layoutReady = useWorkspaceLayoutStore((s) => s.ready);
   const activateLayout = useWorkspaceLayoutStore((s) => s.activateLayout);
   const clearFallbackNotice = useWorkspaceLayoutStore((s) => s.clearFallbackNotice);
 
@@ -64,6 +65,7 @@ export function AppShell(props: { children: ReactNode }) {
   const [adapters, setAdapters] = useState<AdapterInfo[]>([]);
   const [shellErr, setShellErr] = useState<string | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
+  const isMainWindow = layoutReady && currentWindowLabel === "main";
 
   useEffect(() => {
     openRoute(pathname);
@@ -71,6 +73,7 @@ export function AppShell(props: { children: ReactNode }) {
   }, [openRoute, pathname, touchRoute]);
 
   useEffect(() => {
+    if (!isMainWindow) return;
     let cancelled = false;
     async function loadShellState() {
       try {
@@ -95,7 +98,7 @@ export function AppShell(props: { children: ReactNode }) {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, []);
+  }, [isMainWindow]);
 
   useEffect(() => {
     const id = window.setInterval(() => setClockNow(Date.now()), 30000);
@@ -123,11 +126,11 @@ export function AppShell(props: { children: ReactNode }) {
   const reviewsPending = summary?.reviewsPending ?? 0;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#050608] text-forge-ash">
+    <div className="forge-shell-frame flex h-full min-h-0 flex-col text-forge-ash">
       <header className="forge-topbar">
         <div className="flex min-w-0 items-center gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] font-mono text-sm font-semibold tracking-[0.28em] text-forge-ash shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+            <div className="forge-shell-brand">
               FG
             </div>
             <div className="min-w-0">
@@ -138,7 +141,7 @@ export function AppShell(props: { children: ReactNode }) {
 
           <div className="hidden h-10 w-px bg-white/10 xl:block" aria-hidden />
 
-          <div className={chatFocused ? "hidden" : "hidden min-w-0 items-center gap-2 xl:flex"}>
+          <div className={chatFocused ? "hidden" : "min-w-0 items-center gap-2 xl:flex"}>
             <StatusChip label="Model" value={modelLabel} emphasis />
             <StatusChip label="Adapters" value={`${readyAdapters.length}/${adapters.length || 0} ready`} />
             <StatusChip label="Jobs" value={`${activeJobCount} active`} />
@@ -155,7 +158,7 @@ export function AppShell(props: { children: ReactNode }) {
 
         <div className="flex items-center gap-2">
           <select
-            className="hidden rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-forge-mist outline-none lg:block"
+            className="hidden forge-chip forge-chip--muted px-3 py-1.5 text-[11px] text-forge-mist outline-none lg:block"
             value={activeLayoutId ?? ""}
             onChange={(e) => void activateLayout(e.target.value)}
           >
@@ -168,21 +171,21 @@ export function AppShell(props: { children: ReactNode }) {
           <button
             type="button"
             onClick={() => navigate("/layouts")}
-            className="hidden rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist transition hover:border-white/20 hover:text-forge-ash md:inline-flex"
+            className="forge-chip forge-chip--muted hidden px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] md:inline-flex"
           >
             Layouts
           </button>
-          <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${corePill(core)}`}>
+          <span className={["forge-chip", corePill(core), "text-[10px] font-semibold uppercase tracking-[0.16em]"].join(" ")}>
             Core {core === "online" ? "online" : core === "offline" ? "offline" : "checking"}
           </span>
           <button
             type="button"
             onClick={() => toggleUiMode()}
-            className="hidden rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist transition hover:border-white/20 hover:text-forge-ash md:inline-flex"
+            className="forge-chip forge-chip--muted hidden px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] md:inline-flex"
           >
             {uiMode === "guided" ? "Guided" : "Pro"}
           </button>
-          <div className="hidden rounded-full border border-white/10 bg-black/30 px-3 py-1.5 text-[11px] text-forge-mist md:block">{formatClock(clockNow)}</div>
+          <div className="forge-chip forge-chip--muted hidden px-3 py-1.5 text-[11px] md:block">{formatClock(clockNow)}</div>
         </div>
       </header>
 
@@ -215,7 +218,7 @@ export function AppShell(props: { children: ReactNode }) {
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {fallbackNotice ? (
-            <div className="border-b border-white/10 bg-black/30 px-4 py-2 text-xs text-forge-mist">
+            <div className="forge-chat-toolbar text-xs text-forge-mist">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span>{fallbackNotice}</span>
                 <button type="button" onClick={() => clearFallbackNotice()} className="forge-inline-link">
@@ -224,7 +227,7 @@ export function AppShell(props: { children: ReactNode }) {
               </div>
             </div>
           ) : null}
-          <div className="border-b border-white/10 bg-[#0a0d11]/88 px-3 py-2 backdrop-blur-md lg:hidden">
+          <div className="forge-chat-toolbar backdrop-blur-md lg:hidden">
             <CommandBar compact />
           </div>
 
@@ -275,7 +278,7 @@ export function AppShell(props: { children: ReactNode }) {
             </div>
           ) : null}
 
-          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(226,74,27,0.08),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0))]">
+          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(74,99,255,0.09),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0))]">
             <main className="forge-desktop-surface">
               <div className="forge-window-frame">
                 {!chatFocused ? (
@@ -328,14 +331,9 @@ function describeRoute(route: string) {
 }
 
 function StatusChip(props: { label: string; value: string; warn?: boolean; emphasis?: boolean }) {
+  const tone = props.warn ? "forge-chip--warn" : props.emphasis ? "forge-chip--ok" : "forge-chip--muted";
   return (
-    <div
-      className={[
-        "rounded-full border px-3 py-1.5 text-[11px]",
-        props.warn ? "border-forge-ember/30 bg-forge-ember/10 text-forge-emberSoft" : "border-white/10 bg-white/[0.04] text-forge-mist",
-        props.emphasis ? "text-forge-ash" : "",
-      ].join(" ")}
-    >
+    <div className={["forge-chip", "px-3 py-1.5 text-[11px]", tone, props.emphasis ? "text-forge-ash" : ""].join(" ")}>
       <span className="mr-2 uppercase tracking-[0.16em] text-forge-mist/55">{props.label}</span>
       <span>{props.value}</span>
     </div>

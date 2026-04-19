@@ -12,9 +12,10 @@
     "build:core": "cd services/core && go build ./...",
     "build:desktop": "npm -w @forge/desktop run build",
     "build": "npm run build:desktop && npm run build:core",
+    "install": "npm install",
     "desktop": "npm -w @forge/desktop run tauri -- dev",
     "dev": "npm run desktop",
-    "up": "./scripts/forge-up.sh",
-    "down": "./scripts/forge-down.sh"
+    "up": "node ./scripts/forge-up.mjs",
+    "down": "node ./scripts/forge-down.mjs"
   }
 }

@@ -6,56 +6,70 @@ import (
 )
 
 var (
-	reMkdirShell = regexp.MustCompile(`(?i)\bmkdir(?:\s+-p)?\s+([^\s#]+)`)
-	reMakeFolder = regexp.MustCompile(`(?i)(?:create|make)\s+(?:a\s+)?(?:directory|dir|folder)(?:\s+(?:at|in|under|for|:))?\s+['"]?([^'"\n]+?)['"]?(?:\s|$)`)
-	reActionVerb = regexp.MustCompile(`(?i)\b(create|write|save|edit|modify|update|delete|remove|rename|move|copy|run|execute|build|test|install|commit|checkout|stash|chmod|fetch|scan|open|start|stop|restart|read|list|show)\b`)
+	reMkdirShell  = regexp.MustCompile(`(?i)\bmkdir(?:\s+-p)?\s+([^\s#]+)`)
+	reMakeFolder  = regexp.MustCompile(`(?i)(?:create|make)\s+(?:a\s+)?(?:directory|dir|folder)(?:\s+(?:at|in|under|for|:))?\s+['"]?([^'"\n]+?)['"]?(?:\s|$)`)
+	reActionVerb  = regexp.MustCompile(`(?i)\b(create|write|save|edit|modify|update|delete|remove|rename|move|copy|run|execute|build|test|install|commit|checkout|stash|chmod|fetch|scan|open|start|stop|restart|read|list|show)\b`)
+	reStatusProbe = regexp.MustCompile(`(?i)\b(how\s+are|is\s+everything|is\s+it\s+working|any\s+updates|any\s+progress|where\s+are\s+we|what\s+is\s+the\s+status|status\s+of|how\s+is\s+it\s+going|what\s+is\s+next|did\s+it\s+work|seemed\s+to\s+work|was\s+it\s+created|was\s+that\s+created|was\s+the\s+file\s+created|did\s+that\s+work)\b`)
 )
 
 var smallTalkTurns = map[string]struct{}{
-	"ok":           {},
-	"okay":         {},
-	"k":            {},
-	"cool":         {},
-	"nice":         {},
-	"great":        {},
-	"awesome":      {},
-	"good job":     {},
-	"well done":    {},
-	"thanks":       {},
-	"thank you":    {},
-	"thx":          {},
-	"bet":          {},
-	"ready":        {},
-	"ready?":       {},
-	"lets go":      {},
-	"let's go":     {},
-	"sounds good":  {},
-	"bravo":        {},
-	"bravo lad":    {},
-	"good work":    {},
-	"excellent":    {},
-	"solid":        {},
-	"perfect":      {},
-	"continue":     {},
-	"proceed":      {},
-	"carry on":     {},
-	"all good":     {},
-	"looks good":   {},
-	"that works":   {},
-	"that ll hold": {},
-	"that'll hold": {},
-	"nice work":    {},
-	"good stuff":   {},
-	"looks better": {},
-	"much better":  {},
-	"great work":   {},
-	"you got it":   {},
-	"impressive":   {},
-	"good":         {},
-	"yep":          {},
-	"yes":          {},
-	"no":           {},
-	"nah":          {},
+	"ok":                     {},
+	"okay":                   {},
+	"k":                      {},
+	"cool":                   {},
+	"nice":                   {},
+	"great":                  {},
+	"awesome":                {},
+	"good job":               {},
+	"well done":              {},
+	"thanks":                 {},
+	"thank you":              {},
+	"thx":                    {},
+	"bet":                    {},
+	"ready":                  {},
+	"ready?":                 {},
+	"lets go":                {},
+	"let's go":               {},
+	"sounds good":            {},
+	"bravo":                  {},
+	"bravo lad":              {},
+	"good work":              {},
+	"excellent":              {},
+	"solid":                  {},
+	"perfect":                {},
+	"continue":               {},
+	"proceed":                {},
+	"carry on":               {},
+	"all good":               {},
+	"looks good":             {},
+	"that works":             {},
+	"that ll hold":           {},
+	"that'll hold":           {},
+	"nice work":              {},
+	"how are":                {},
+	"how are we":             {},
+	"how are we looking":     {},
+	"how are we looking now": {},
+	"how's it going":         {},
+	"how is it going":        {},
+	"what's up":              {},
+	"what is up":             {},
+	"what now":               {},
+	"any updates":            {},
+	"any progress":           {},
+	"where are we":           {},
+	"where are we at":        {},
+	"good stuff":             {},
+	"looks better":           {},
+	"much better":            {},
+	"great work":             {},
+	"you got it":             {},
+	"impressive":             {},
+	"good":                   {},
+	"yep":                    {},
+	"yes":                    {},
+	"no":                     {},
+	"nah":                    {},
 }
 
 // ForcedChatModelName returns a forge_* function name when the user text clearly maps to one gateway tool.
@@ -199,6 +213,27 @@ func IsLikelySmallTalkTurn(user string) bool {
 		return true
 	}
 	if strings.HasPrefix(s, "thanks ") || strings.HasPrefix(s, "thank you ") {
+		return true
+	}
+	return false
+}
+
+// IsLikelyStatusProbeTurn identifies conversational status checks that should get direct operator feedback.
+func IsLikelyStatusProbeTurn(user string) bool {
+	s := normalizeIntentText(user)
+	if s == "" {
+		return false
+	}
+	if IsLikelySmallTalkTurn(user) {
+		return true
+	}
+	if reStatusProbe.MatchString(s) {
+		return true
+	}
+	if strings.HasPrefix(s, "how are") && (strings.Contains(s, "it") || strings.Contains(s, "we") || strings.Contains(s, "we looking")) {
+		return true
+	}
+	if strings.Contains(s, "status") && (strings.Contains(s, "core") || strings.Contains(s, "health") || strings.Contains(s, "adapter")) {
 		return true
 	}
 	return false

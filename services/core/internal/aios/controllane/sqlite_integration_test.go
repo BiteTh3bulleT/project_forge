@@ -1,0 +1,525 @@
+package controllane
+
+import (
+	"context"
+	"strings"
+	"testing"
+	"time"
+
+	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/audit"
+	"forge/projectforge/services/core/internal/store"
+)
+
+func newSQLiteKernel(t *testing.T, approval ApprovalGate) (*Processor, *SQLiteTransactionRunner, *store.Store) {
+	t.Helper()
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	txRunner := NewSQLiteTransactionRunner(st.DB)
+	if approval == nil {
+		approval = allowAllApprovalGate{}
+	}
+	k := NewProcessor(ProcessorOptions{
+		Registry:     NewStaticActionRegistry(),
+		Validator:    NewDeterministicValidator(),
+		Capabilities: NewStaticCapabilityService(),
+		ApprovalGate: approval,
+		TxRunner:     txRunner,
+		AuditSink:    NewCoreAuditSink(audit.New(st.DB)),
+		NowMillis:    func() int64 { return 1760001000000 + time.Now().UnixMilli()%1000000 },
+	})
+	return k, txRunner, st
+}
+
+func validSQLiteRequest(action domain.SemanticActionType, id, workspaceID string) domain.SyscallRequest {
+	req := validBaseRequest(action)
+	req.ID = id
+	req.Scope = domain.ForgeScope{WorkspaceID: workspaceID, LaneID: "control.semantic"}
+	req.CorrelationID = "corr-" + id
+	req.TraceID = "trace-" + id
+	req.Provenance.TraceID = req.TraceID
+	return req
+}
+
+func TestSQLiteJournalImmutability(t *testing.T) {
+	ctx := context.Background()
+	_, txRunner, st := newSQLiteKernel(t, nil)
+	read := txRunner.read
+	evt := createTestJournalEvent("evt-immut", "ws-immut", "corr-immut", 1760001000000)
+	if err := read.Append(ctx, evt); err != nil {
+		t.Fatalf("append journal event: %v", err)
+	}
+	got, ok, err := read.GetByID(ctx, evt.ID)
+	if err != nil || !ok {
+		t.Fatalf("get journal event failed: err=%v ok=%v", err, ok)
+	}
+	if got.ID != evt.ID {
+		t.Fatalf("unexpected event id: %s", got.ID)
+	}
+	if _, err := st.DB.ExecContext(ctx, `UPDATE journal_events SET type = 'mutated' WHERE id = ?`, evt.ID); err == nil {
+		t.Fatalf("expected journal update to fail due append-only trigger")
+	}
+	if _, err := st.DB.ExecContext(ctx, `DELETE FROM journal_events WHERE id = ?`, evt.ID); err == nil {
+		t.Fatalf("expected journal delete to fail due append-only trigger")
+	}
+}
+
+func TestSQLiteSyscallPersistenceFlows(t *testing.T) {
+	ctx := context.Background()
+	k, txRunner, st := newSQLiteKernel(t, nil)
+	read := txRunner.read
+	scope := ScopeFilter{WorkspaceID: "ws-main", LaneID: "control.semantic"}
+
+	t.Run("create note through syscall with audit linkage", func(t *testing.T) {
+		req := validSQLiteRequest(domain.ActionCreateNote, "note-create-1", scope.WorkspaceID)
+		req.Payload = map[string]any{
+			"id":      "note-a",
+			"type":    string(domain.NoteFact),
+			"title":   "A",
+			"content": "content-a",
+		}
+		res, err := k.Process(ctx, req)
+		if err != nil || !res.Success {
+			t.Fatalf("create note failed: err=%v res=%+v", err, res)
+		}
+		if res.AuditID == "" {
+			t.Fatalf("expected audit id")
+		}
+		n, ok := read.FindNote("note-a")
+		if !ok || n.ID != "note-a" {
+			t.Fatalf("note not persisted")
+		}
+		var corr, auditID, proposedBy, committedBy string
+		if err := st.DB.QueryRowContext(ctx, `SELECT correlation_id, audit_id, proposed_by, committed_by FROM memory_notes WHERE id = ?`, "note-a").Scan(&corr, &auditID, &proposedBy, &committedBy); err != nil {
+			t.Fatalf("query persisted note metadata: %v", err)
+		}
+		if corr != req.CorrelationID || auditID == "" {
+			t.Fatalf("expected correlation/audit linkage, got corr=%q audit=%q", corr, auditID)
+		}
+		if proposedBy == "" || committedBy != "forge_kernel" {
+			t.Fatalf("expected proposed/committed metadata, got proposedBy=%q committedBy=%q", proposedBy, committedBy)
+		}
+		var provProposedBy, provCommittedBy, provCorr, provAuditID string
+		if err := st.DB.QueryRowContext(ctx, `
+SELECT p.proposed_by, p.committed_by, p.correlation_id, p.audit_id
+FROM memory_notes n
+JOIN provenance_records p ON p.id = n.provenance_id
+WHERE n.id = ?`, "note-a").Scan(&provProposedBy, &provCommittedBy, &provCorr, &provAuditID); err != nil {
+			t.Fatalf("query provenance linkage: %v", err)
+		}
+		if provProposedBy == "" || provCommittedBy != "forge_kernel" || provCorr != req.CorrelationID || provAuditID == "" {
+			t.Fatalf("unexpected provenance trace fields: proposed=%q committed=%q corr=%q audit=%q", provProposedBy, provCommittedBy, provCorr, provAuditID)
+		}
+	})
+
+	t.Run("create link and query source target neighborhood", func(t *testing.T) {
+		mustCreateNote(ctx, k, "note-b", "B")
+		mustCreateNote(ctx, k, "note-c", "C")
+		req := validSQLiteRequest(domain.ActionCreateLink, "link-create-1", scope.WorkspaceID)
+		req.Payload = map[string]any{
+			"id":       "link-a-b",
+			"type":     string(domain.LinkSupports),
+			"sourceId": "note-a",
+			"targetId": "note-b",
+		}
+		res, err := k.Process(ctx, req)
+		if err != nil || !res.Success {
+			t.Fatalf("create link failed: err=%v res=%+v", err, res)
+		}
+		bySource, err := read.ListBySource(ctx, "note-a", scope, 20)
+		if err != nil || len(bySource) == 0 {
+			t.Fatalf("list by source failed: err=%v count=%d", err, len(bySource))
+		}
+		byTarget, err := read.ListByTarget(ctx, "note-b", scope, 20)
+		if err != nil || len(byTarget) == 0 {
+			t.Fatalf("list by target failed: err=%v count=%d", err, len(byTarget))
+		}
+		nh, err := read.ListNeighborhood(ctx, "note-a", scope, 1, 50)
+		if err != nil || len(nh) == 0 {
+			t.Fatalf("list neighborhood failed: err=%v count=%d", err, len(nh))
+		}
+	})
+
+	t.Run("update state preserves timeline", func(t *testing.T) {
+		req1 := validSQLiteRequest(domain.ActionUpdateState, "state-upsert-1", scope.WorkspaceID)
+		req1.Payload = map[string]any{
+			"key":         "runtime.mode",
+			"value":       map[string]any{"value": "alpha"},
+			"derivedFrom": []string{"note-a"},
+		}
+		res1, err := k.Process(ctx, req1)
+		if err != nil || !res1.Success {
+			t.Fatalf("state update 1 failed: err=%v res=%+v", err, res1)
+		}
+
+		req2 := validSQLiteRequest(domain.ActionUpdateState, "state-upsert-2", scope.WorkspaceID)
+		req2.Payload = map[string]any{
+			"key":         "runtime.mode",
+			"value":       map[string]any{"value": "beta"},
+			"derivedFrom": []string{"note-b"},
+		}
+		res2, err := k.Process(ctx, req2)
+		if err != nil || !res2.Success {
+			t.Fatalf("state update 2 failed: err=%v res=%+v", err, res2)
+		}
+		cur, ok, err := read.GetCurrent(ctx, "runtime.mode", scope)
+		if err != nil || !ok {
+			t.Fatalf("get current state failed: err=%v ok=%v", err, ok)
+		}
+		if got := cur.Value["value"]; got != "beta" {
+			t.Fatalf("expected beta state value, got %v", got)
+		}
+		timeline, err := read.GetTimeline(ctx, "runtime.mode", scope, 10)
+		if err != nil {
+			t.Fatalf("get timeline failed: %v", err)
+		}
+		if len(timeline) < 2 {
+			t.Fatalf("expected >=2 timeline entries, got %d", len(timeline))
+		}
+		if timeline[0].ProposedBy == "" || timeline[0].CommittedBy != "forge_kernel" {
+			t.Fatalf("expected state timeline proposer/committer metadata, got proposed=%q committed=%q", timeline[0].ProposedBy, timeline[0].CommittedBy)
+		}
+		if timeline[0].CorrelationID == "" || timeline[0].AuditID == "" {
+			t.Fatalf("expected state timeline correlation/audit linkage, got corr=%q audit=%q", timeline[0].CorrelationID, timeline[0].AuditID)
+		}
+	})
+
+	t.Run("open and close loop with transition enforcement", func(t *testing.T) {
+		openReq := validSQLiteRequest(domain.ActionOpenLoop, "loop-open-1", scope.WorkspaceID)
+		openReq.Payload = map[string]any{
+			"id":       "loop-a",
+			"title":    "loop a",
+			"state":    string(domain.LoopOpen),
+			"priority": "high",
+		}
+		openRes, err := k.Process(ctx, openReq)
+		if err != nil || !openRes.Success {
+			t.Fatalf("open loop failed: err=%v res=%+v", err, openRes)
+		}
+
+		closeReq := validSQLiteRequest(domain.ActionCloseLoop, "loop-close-1", scope.WorkspaceID)
+		closeReq.Payload = map[string]any{"loopId": "loop-a", "reason": "done"}
+		closeRes, err := k.Process(ctx, closeReq)
+		if err != nil || !closeRes.Success {
+			t.Fatalf("close loop failed: err=%v res=%+v", err, closeRes)
+		}
+
+		badClose := validSQLiteRequest(domain.ActionCloseLoop, "loop-close-2", scope.WorkspaceID)
+		badClose.Payload = map[string]any{"loopId": "loop-a", "reason": "done-again"}
+		badRes, err := k.Process(ctx, badClose)
+		if err != nil {
+			t.Fatalf("unexpected close loop error: %v", err)
+		}
+		if badRes.Success || badRes.DeterministicErrCode != domain.ErrInvalidStateTransition {
+			t.Fatalf("expected invalid transition rejection, got %+v", badRes)
+		}
+		loop, ok := read.FindLoop("loop-a")
+		if !ok || loop.State != domain.LoopResolved {
+			t.Fatalf("expected resolved loop to remain queryable")
+		}
+	})
+
+	t.Run("supersession preserves old and new", func(t *testing.T) {
+		req := validSQLiteRequest(domain.ActionMarkSuperseded, "supersede-1", scope.WorkspaceID)
+		req.Payload = map[string]any{
+			"oldObjectId":   "note-a",
+			"oldObjectKind": "memory_note",
+			"newObjectId":   "note-b",
+			"newObjectKind": "memory_note",
+			"reason":        "new evidence",
+		}
+		res, err := k.Process(ctx, req)
+		if err != nil || !res.Success {
+			t.Fatalf("mark superseded failed: err=%v res=%+v", err, res)
+		}
+		succ, ok, err := read.GetCurrentSuccessor(ctx, "note-a", scope)
+		if err != nil || !ok {
+			t.Fatalf("get successor failed: err=%v ok=%v", err, ok)
+		}
+		if succ.NewID != "note-b" {
+			t.Fatalf("unexpected successor: %+v", succ)
+		}
+		oldNote, oldOk := read.FindNote("note-a")
+		newNote, newOk := read.FindNote("note-b")
+		if !oldOk || !newOk {
+			t.Fatalf("both notes must remain after supersession")
+		}
+		if oldNote.Status != domain.NoteSuperseded || newNote.Status == domain.NoteArchived {
+			t.Fatalf("unexpected note statuses after supersession old=%s new=%s", oldNote.Status, newNote.Status)
+		}
+	})
+
+	t.Run("contradiction preserves both sides", func(t *testing.T) {
+		req := validSQLiteRequest(domain.ActionRegisterContradict, "contradict-1", scope.WorkspaceID)
+		req.Payload = map[string]any{
+			"leftObjectId":    "note-a",
+			"leftObjectKind":  "memory_note",
+			"rightObjectId":   "note-c",
+			"rightObjectKind": "memory_note",
+			"reason":          "contradiction",
+			"severity":        "high",
+			"confidence":      0.82,
+		}
+		res, err := k.Process(ctx, req)
+		if err != nil || !res.Success {
+			t.Fatalf("register contradiction failed: err=%v res=%+v", err, res)
+		}
+		list, err := read.ListByObject(ctx, "note-a", scope, 20)
+		if err != nil || len(list) == 0 {
+			t.Fatalf("expected contradiction by object, err=%v count=%d", err, len(list))
+		}
+		if _, ok := read.FindNote("note-a"); !ok {
+			t.Fatalf("left note removed unexpectedly")
+		}
+		if _, ok := read.FindNote("note-c"); !ok {
+			t.Fatalf("right note removed unexpectedly")
+		}
+	})
+
+	t.Run("derive model keeps evidence and stays provisional", func(t *testing.T) {
+		req := validSQLiteRequest(domain.ActionDeriveModel, "derive-1", scope.WorkspaceID)
+		req.Payload = map[string]any{
+			"id":           "model-a",
+			"type":         "routing",
+			"expression":   map[string]any{"formula": "score=evidence*confidence"},
+			"derivedFrom":  []string{"note-a", "note-b"},
+			"supportCount": 2,
+			"confidence":   0.6,
+		}
+		res, err := k.Process(ctx, req)
+		if err != nil || !res.Success {
+			t.Fatalf("derive model failed: err=%v res=%+v", err, res)
+		}
+		model, ok := read.FindModel("model-a")
+		if !ok {
+			t.Fatalf("model missing")
+		}
+		if model.Status != domain.ModelProvisional {
+			t.Fatalf("expected provisional model, got %s", model.Status)
+		}
+		if len(model.DerivedFrom) != 2 {
+			t.Fatalf("expected derivedFrom evidence")
+		}
+		if _, ok := read.FindNote("note-a"); !ok {
+			t.Fatalf("evidence note should remain")
+		}
+	})
+
+	t.Run("archive note keeps record and removes from active list", func(t *testing.T) {
+		req := validSQLiteRequest(domain.ActionArchiveNote, "archive-1", scope.WorkspaceID)
+		req.Payload = map[string]any{
+			"noteId": "note-c",
+			"reason": "cleanup",
+		}
+		res, err := k.Process(ctx, req)
+		if err != nil || !res.Success {
+			t.Fatalf("archive note failed: err=%v res=%+v", err, res)
+		}
+		note, ok := read.FindNote("note-c")
+		if !ok || note.Status != domain.NoteArchived {
+			t.Fatalf("note should remain archived")
+		}
+		active, err := read.ListActive(ctx, scope)
+		if err != nil {
+			t.Fatalf("list active notes: %v", err)
+		}
+		for _, n := range active {
+			if n.ID == "note-c" {
+				t.Fatalf("archived note should not appear in active list")
+			}
+		}
+	})
+
+	t.Run("workspace isolation and linked neighborhood", func(t *testing.T) {
+		ws2 := "ws-other"
+		reqWs2 := validSQLiteRequest(domain.ActionCreateNote, "ws2-note-1", ws2)
+		reqWs2.Payload = map[string]any{
+			"id":      "note-ws2",
+			"type":    string(domain.NoteFact),
+			"title":   "ws2",
+			"content": "isolated",
+		}
+		if res, err := k.Process(ctx, reqWs2); err != nil || !res.Success {
+			t.Fatalf("create ws2 note failed: err=%v res=%+v", err, res)
+		}
+
+		ws1Notes, err := read.ListActive(ctx, scope)
+		if err != nil {
+			t.Fatalf("list ws1 notes: %v", err)
+		}
+		for _, n := range ws1Notes {
+			if n.Scope.WorkspaceID != scope.WorkspaceID {
+				t.Fatalf("workspace leak into ws1 query: note=%+v", n)
+			}
+		}
+
+		ws2Notes, err := read.ListActive(ctx, ScopeFilter{WorkspaceID: ws2, LaneID: "control.semantic"})
+		if err != nil || len(ws2Notes) == 0 {
+			t.Fatalf("list ws2 notes failed: err=%v count=%d", err, len(ws2Notes))
+		}
+		for _, n := range ws2Notes {
+			if n.Scope.WorkspaceID != ws2 {
+				t.Fatalf("workspace leak into ws2 query: note=%+v", n)
+			}
+		}
+
+		// two-hop neighborhood
+		link2 := validSQLiteRequest(domain.ActionCreateLink, "link-b-c", scope.WorkspaceID)
+		link2.Payload = map[string]any{
+			"id":       "link-b-c",
+			"type":     string(domain.LinkSupports),
+			"sourceId": "note-b",
+			"targetId": "note-c",
+		}
+		if res, err := k.Process(ctx, link2); err != nil || !res.Success {
+			t.Fatalf("create link b-c failed: err=%v res=%+v", err, res)
+		}
+		nh, err := read.ListNeighborhood(ctx, "note-a", scope, 2, 50)
+		if err != nil {
+			t.Fatalf("list two-hop neighborhood: %v", err)
+		}
+		found := false
+		for _, l := range nh {
+			if l.ID == "link-b-c" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected two-hop neighborhood to include link-b-c")
+		}
+	})
+
+	t.Run("dry-run does not persist", func(t *testing.T) {
+		req := validSQLiteRequest(domain.ActionCreateNote, "dryrun-note-1", scope.WorkspaceID)
+		req.DryRun = true
+		req.Payload = map[string]any{
+			"id":      "note-dryrun",
+			"type":    string(domain.NoteFact),
+			"title":   "dryrun",
+			"content": "no write",
+		}
+		res, err := k.Process(ctx, req)
+		if err != nil || !res.Success || !res.DryRun {
+			t.Fatalf("dry-run failed: err=%v res=%+v", err, res)
+		}
+		if _, ok := read.FindNote("note-dryrun"); ok {
+			t.Fatalf("dry-run wrote note unexpectedly")
+		}
+	})
+
+	t.Run("transaction rollback on partial failure", func(t *testing.T) {
+		// Force link conflict in MARK_SUPERSEDED handler.
+		preLink := validSQLiteRequest(domain.ActionCreateLink, "txrb-1", scope.WorkspaceID)
+		preLink.Payload = map[string]any{
+			"id":       "txrb-1:supersedes_link",
+			"type":     string(domain.LinkRelatesTo),
+			"sourceId": "note-a",
+			"targetId": "note-b",
+		}
+		if res, err := k.Process(ctx, preLink); err != nil || !res.Success {
+			t.Fatalf("seed conflicting link failed: err=%v res=%+v", err, res)
+		}
+		req := validSQLiteRequest(domain.ActionMarkSuperseded, "txrb-1", scope.WorkspaceID)
+		req.Payload = map[string]any{
+			"oldObjectId": "note-a",
+			"newObjectId": "note-b",
+			"reason":      "rollback case",
+		}
+		res, err := k.Process(ctx, req)
+		if err != nil {
+			t.Fatalf("unexpected rollback error: %v", err)
+		}
+		if res.Success {
+			t.Fatalf("expected rollback failure")
+		}
+		if _, ok, err := read.GetByIDSupersession(ctx, "txrb-1:supersession"); err != nil || ok {
+			t.Fatalf("expected no supersession persisted after rollback, err=%v ok=%v", err, ok)
+		}
+	})
+
+	t.Run("context packet snapshot repository", func(t *testing.T) {
+		pkt := createTestContextPacketSnapshot("ctx-snap-1", scope.WorkspaceID, 1760001009999)
+		if err := read.CreateSnapshot(ctx, pkt, "ctx-syscall-1", "corr-ctx-1", "trace-ctx-1", map[string]any{"source": "test"}); err != nil {
+			t.Fatalf("create snapshot failed: %v", err)
+		}
+		got, ok, err := read.GetSnapshotByID(ctx, pkt.ID)
+		if err != nil || !ok {
+			t.Fatalf("get snapshot failed: err=%v ok=%v", err, ok)
+		}
+		if got.ID != pkt.ID || got.Query == "" {
+			t.Fatalf("unexpected snapshot payload: %+v", got)
+		}
+		byScope, err := read.ListSnapshotsByScope(ctx, ScopeFilter{WorkspaceID: scope.WorkspaceID}, 10)
+		if err != nil || len(byScope) == 0 {
+			t.Fatalf("list snapshots by scope failed: err=%v count=%d", err, len(byScope))
+		}
+		byCorr, err := read.ListSnapshotsByCorrelation(ctx, "corr-ctx-1", 10)
+		if err != nil || len(byCorr) == 0 {
+			t.Fatalf("list snapshots by correlation failed: err=%v count=%d", err, len(byCorr))
+		}
+	})
+}
+
+func TestSQLiteFutureIrisCannotBypassKernel(t *testing.T) {
+	ctx := context.Background()
+	k, txRunner, _ := newSQLiteKernel(t, NewStaticApprovalGate())
+	read := txRunner.read
+	req := validSQLiteRequest(domain.ActionCreateNote, "iris-note-denied", "ws-main")
+	req.Source = domain.SourceFutureIRIS
+	req.Actor.Kind = string(domain.SourceFutureIRIS)
+	req.Payload = map[string]any{
+		"id":      "note-iris-denied",
+		"type":    string(domain.NoteFact),
+		"title":   "iris proposal",
+		"content": "candidate",
+	}
+	res, err := k.Process(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected future_iris process error: %v", err)
+	}
+	if res.Success || res.DeterministicErrCode != domain.ErrApprovalRequired {
+		t.Fatalf("expected approval-required rejection for future_iris mutating action, got %+v", res)
+	}
+	if _, ok := read.FindNote("note-iris-denied"); ok {
+		t.Fatalf("future_iris should not bypass validation/approval and commit directly")
+	}
+}
+
+func TestSQLiteContextCompileDryRunAndReadOnlyPath(t *testing.T) {
+	ctx := context.Background()
+	k, txRunner, _ := newSQLiteKernel(t, nil)
+	read := txRunner.read
+	req := validSQLiteRequest(domain.ActionCompileContext, "ctx-compile-1", "ws-main")
+	req.DryRun = true
+	req.Payload = map[string]any{
+		"query":  "summarize",
+		"budget": map[string]any{"maxTokens": 20, "maxEvents": 10, "maxNotes": 10},
+	}
+	res, err := k.Process(ctx, req)
+	if err != nil || !res.Success || !res.DryRun {
+		t.Fatalf("compile context dry-run failed: err=%v res=%+v", err, res)
+	}
+	rows, err := txRunner.db.QueryContext(ctx, `SELECT id FROM context_packet_snapshots`)
+	if err != nil {
+		t.Fatalf("query context snapshots: %v", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		t.Fatalf("dry-run compile should not persist context snapshots by default")
+	}
+
+	// read-store BuildContext still deterministic and queryable.
+	pkt := read.BuildContext("summarize", domain.ForgeScope{WorkspaceID: "ws-main", LaneID: "control.semantic"}, domain.ContextBudget{
+		MaxTokens: 20,
+		MaxEvents: 10,
+		MaxNotes:  10,
+	}, 1760001001234)
+	if pkt.ID == "" || !strings.Contains(pkt.ID, "ctx-") {
+		t.Fatalf("unexpected context packet id: %q", pkt.ID)
+	}
+}

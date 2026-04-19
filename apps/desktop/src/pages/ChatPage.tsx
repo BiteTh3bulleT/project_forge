@@ -171,7 +171,19 @@ function readToolGatewayActivity(meta: Record<string, unknown> | undefined): Cha
   if (!meta) return null;
   const raw = meta.toolGatewayActivity;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  return raw as ChatToolGatewayActivity;
+  const activity = raw as ChatToolGatewayActivity;
+  const callsExecuted = typeof activity.toolCallsExecuted === "number" && Number.isFinite(activity.toolCallsExecuted) ? activity.toolCallsExecuted : 0;
+  const toolCallEmitted = activity.toolCallEmitted === true;
+  const state = typeof activity.executionState === "string" ? activity.executionState.trim().toLowerCase() : "";
+  const approvalRequired = state === "needs_approval";
+
+  const shouldSurface =
+    callsExecuted > 0 ||
+    toolCallEmitted ||
+    (approvalRequired && (activity.toolSelected != null || activity.executionResult != null));
+
+  if (!shouldSurface) return null;
+  return activity;
 }
 
 function readApprovalRequestIdFromGatewayResult(executionResult: unknown): number | null {
@@ -411,7 +423,7 @@ function ToolGatewayActivityPanel(props: { activity: ChatToolGatewayActivity }) 
   }, [gatewayJobId, approvalResolved, approvalState, gatewayJobTerminal]);
 
   return (
-    <div className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-forge-mist">
+    <div className="forge-status-glow mt-3 rounded-lg border border-forge-ember/25 bg-forge-iron/50 px-3 py-2 text-[11px] leading-relaxed text-forge-mist">
       <div className="font-semibold uppercase tracking-[0.14em] text-forge-emberSoft/90">Tool gateway</div>
       {a.userRequestSummary ? (
         <div className="mt-2">
@@ -468,7 +480,7 @@ function ToolGatewayActivityPanel(props: { activity: ChatToolGatewayActivity }) 
                   }
                 })();
               }}
-              className="rounded border border-emerald-500/40 bg-emerald-500/15 px-2 py-1 text-[10px] font-semibold text-forge-ash transition hover:bg-emerald-500/25 disabled:opacity-40"
+              className="forge-btn forge-btn--primary px-2 py-1 text-[10px] disabled:opacity-40"
             >
               Approve
             </button>
@@ -500,7 +512,7 @@ function ToolGatewayActivityPanel(props: { activity: ChatToolGatewayActivity }) 
                   }
                 })();
               }}
-              className="rounded border border-forge-ember/40 bg-forge-ember/10 px-2 py-1 text-[10px] font-semibold text-forge-ash transition hover:bg-forge-ember/20 disabled:opacity-40"
+              className="forge-btn forge-btn--ghost px-2 py-1 text-[10px] disabled:opacity-40"
             >
               Deny
             </button>
@@ -1185,7 +1197,7 @@ export function ChatPage() {
           </div>
         ) : (
           <>
-            <header className="border-b border-white/10 bg-[#0b0f14] px-4 py-3">
+            <header className="forge-chat-header">
               <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   {isEditingTitle ? (
@@ -1214,7 +1226,7 @@ export function ChatPage() {
                       <button
                         type="button"
                         onClick={() => void saveThreadTitle()}
-                        className="rounded-lg border border-white/12 bg-white/5 px-2.5 py-1.5 text-xs text-forge-ash"
+                        className="forge-chat-action-btn"
                       >
                         Save
                       </button>
@@ -1249,7 +1261,7 @@ export function ChatPage() {
                   <button
                     type="button"
                     onClick={() => setShowForgeActions((v) => !v)}
-                    className="rounded-lg border border-white/12 bg-white/5 px-3 py-1.5 text-xs font-medium text-forge-mist transition hover:bg-white/10"
+                    className="forge-chat-action-btn bg-transparent"
                   >
                     {showForgeActions ? "Hide Forge" : "Forge Actions"}
                   </button>
@@ -1257,7 +1269,7 @@ export function ChatPage() {
                     type="button"
                     onClick={() => void deleteActiveThread()}
                     disabled={busy}
-                    className="rounded-lg border border-white/12 bg-transparent px-2.5 py-1.5 text-xs font-medium text-forge-mist transition hover:border-white/20 hover:text-forge-ash"
+                    className="forge-chat-action-btn bg-transparent border-white/10 px-2.5"
                   >
                     Delete
                   </button>
@@ -1266,7 +1278,7 @@ export function ChatPage() {
             </header>
 
             {showForgeActions ? (
-              <div className="border-b border-white/10 bg-black/25 px-4 py-3">
+              <div className="forge-chat-toolbar">
                 <div className="mx-auto grid w-full max-w-4xl gap-2 md:grid-cols-2">
                   <label className="block">
                     <span className="text-[11px] font-medium uppercase tracking-wide text-forge-mist">Template</span>
@@ -1321,7 +1333,7 @@ export function ChatPage() {
                     type="button"
                     onClick={() => void queueJob()}
                     disabled={busy || templates.length === 0}
-                    className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-forge-ash transition hover:bg-white/10 disabled:opacity-40"
+                    className="forge-chat-action-btn"
                   >
                     Queue Job
                   </button>
@@ -1371,7 +1383,7 @@ export function ChatPage() {
               </div>
             </div>
 
-            <footer className="border-t border-white/10 bg-[#0b0f14] px-4 py-3">
+            <footer className="forge-chat-footer">
               <div className="mx-auto w-full max-w-4xl">
                 <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-forge-mist">
                   <label className="inline-flex items-center gap-2">
@@ -1386,7 +1398,7 @@ export function ChatPage() {
                   <button
                     type="button"
                     onClick={() => setShowAdvanced((v) => !v)}
-                    className="rounded border border-white/12 bg-white/5 px-2 py-1 text-[11px] text-forge-mist transition hover:bg-white/10"
+                    className="forge-chat-action-btn border-white/10 bg-transparent py-1 px-2.5 text-[11px]"
                   >
                     {showAdvanced ? "Hide advanced" : "Advanced"}
                   </button>
@@ -1442,7 +1454,7 @@ export function ChatPage() {
                     aria-label="Chat message"
                     ref={textareaRef}
                     rows={1}
-                    className="max-h-[300px] min-h-[80px] flex-1 resize-none rounded-2xl border border-white/10 bg-[#0a0d11] px-4 py-3 text-[15px] leading-relaxed text-forge-ash outline-none placeholder:text-forge-mist/45 focus:border-white/20"
+                    className="forge-chat-composer"
                     placeholder="Message FORGE"
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
@@ -1461,7 +1473,7 @@ export function ChatPage() {
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={busy || uploading || !active}
-                    className="h-[80px] min-w-[88px] rounded-2xl border border-white/15 bg-white/5 px-3 text-xs font-semibold text-forge-ash transition hover:bg-white/10 disabled:opacity-40"
+                    className="h-[80px] min-w-[88px] forge-chat-action-btn"
                   >
                     {uploading ? "Uploading…" : "Attach"}
                   </button>
@@ -1469,7 +1481,7 @@ export function ChatPage() {
                     type="button"
                     onClick={() => void send()}
                     disabled={busy || (!draft.trim() && pendingAttachments.length === 0)}
-                    className="h-[80px] min-w-[96px] rounded-2xl border border-white/15 bg-white/5 px-4 text-sm font-semibold text-forge-ash transition hover:bg-white/10 disabled:opacity-40"
+                    className="h-[80px] min-w-[96px] forge-chat-action-btn text-sm"
                   >
                     Send
                   </button>

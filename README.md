@@ -91,6 +91,7 @@ Default endpoints:
 - `docs/DESKTOP_SHELL.md`
 - `docs/MULTI_MONITOR_LAYOUTS.md`
 - `docs/WORKSPACE_LAYOUTS.md`
+- `docs/REMOTE_ACCESS.md`
 - `docs/UI_ARCHITECTURE.md`
 - `docs/MEMORY_ARCHITECTURE.md`
 - `docs/RETRIEVAL_PIPELINE.md`

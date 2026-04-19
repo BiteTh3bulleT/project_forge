@@ -1,6 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 
 import { ForgeErrorBoundary } from "./components/ForgeErrorBoundary";
@@ -93,14 +93,22 @@ export default function App() {
   const hydrateLayouts = useWorkspaceLayoutStore((s) => s.hydrate);
   const refreshEnvironment = useWorkspaceLayoutStore((s) => s.refreshEnvironment);
   const syncCurrentRoute = useWorkspaceLayoutStore((s) => s.syncCurrentRoute);
-  const currentWindowLabel = useWorkspaceLayoutStore((s) => s.currentWindowLabel);
   const hydrateShell = useDesktopShellStore((s) => s.hydrate);
+  const layoutReady = useWorkspaceLayoutStore((s) => s.ready);
+  const locationRef = useRef(`${location.pathname}${location.search}`);
+  const currentWindowLabel = useWorkspaceLayoutStore((s) => s.currentWindowLabel);
+  const isMainWindow = layoutReady && currentWindowLabel === "main";
 
   useEffect(() => {
+    locationRef.current = `${location.pathname}${location.search}`;
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    if (!isMainWindow) return;
     void ping();
     const id = window.setInterval(() => void ping(), 8000);
     return () => window.clearInterval(id);
-  }, [ping]);
+  }, [ping, isMainWindow]);
 
   useEffect(() => {
     void hydrateLayouts(location.pathname + location.search);
@@ -115,9 +123,10 @@ export default function App() {
   }, [location.pathname, location.search, syncCurrentRoute]);
 
   useEffect(() => {
+    if (!isMainWindow) return;
     const id = window.setInterval(() => void refreshEnvironment(), 5000);
     return () => window.clearInterval(id);
-  }, [refreshEnvironment]);
+  }, [refreshEnvironment, isMainWindow]);
 
   useEffect(() => {
     if (!isTauriDesktop()) {
@@ -130,24 +139,40 @@ export default function App() {
       return () => window.removeEventListener("storage", onStorage);
     }
     let disposers: Array<() => void> = [];
-    void (async () => {
+    let environmentRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleEnvironmentRefresh = () => {
+      if (!isMainWindow) return;
+      if (environmentRefreshTimer !== null) return;
+      environmentRefreshTimer = setTimeout(() => {
+        environmentRefreshTimer = null;
+        void refreshEnvironment();
+      }, 150);
+    };
+
+    (async () => {
       const appWindow = getCurrentWindow();
-      disposers.push(
-        await appWindow.listen<{ route: string }>(WORKSPACE_NAVIGATE_EVENT, (event) => {
-          if (event.payload?.route && event.payload.route !== `${location.pathname}${location.search}`) {
-            navigate(event.payload.route);
-          }
-        }),
-      );
-      disposers.push(await listen(WORKSPACE_LAYOUT_EVENT, () => void refreshEnvironment()));
-      disposers.push(await appWindow.onMoved(() => void refreshEnvironment()));
-      disposers.push(await appWindow.onResized(() => void refreshEnvironment()));
-      disposers.push(await appWindow.onFocusChanged(() => void refreshEnvironment()));
+      const handleNavigate = await appWindow.listen<{ route: string }>(WORKSPACE_NAVIGATE_EVENT, (event) => {
+        if (event.payload?.route && event.payload.route !== locationRef.current) {
+          navigate(event.payload.route);
+        }
+      });
+      disposers.push(handleNavigate);
+      disposers.push(await appWindow.onMoved(() => scheduleEnvironmentRefresh()));
+      disposers.push(await appWindow.onResized(() => scheduleEnvironmentRefresh()));
+      disposers.push(await appWindow.onFocusChanged(() => scheduleEnvironmentRefresh()));
+      if (isMainWindow) {
+        disposers.push(await listen(WORKSPACE_LAYOUT_EVENT, () => void refreshEnvironment()));
+      }
     })();
+
     return () => {
       disposers.forEach((dispose) => void dispose());
+      if (environmentRefreshTimer !== null) {
+        clearTimeout(environmentRefreshTimer);
+      }
     };
-  }, [location.pathname, location.search, navigate, refreshEnvironment]);
+  }, [navigate, refreshEnvironment, isMainWindow]);
 
   return (
     <AppShell>

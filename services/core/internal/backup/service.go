@@ -324,6 +324,10 @@ func (s *Service) pickSections(kind string) ([]string, error) {
 			"execution_strategies", "approval_presets", "permission_profiles",
 			"automation_rules", "evaluation_records", "audit_records",
 			"gateway_invocations", "action_lanes",
+			"provenance_records", "journal_events", "memory_notes", "semantic_links",
+			"state_items", "state_versions", "open_loops", "artifact_refs",
+			"derived_models", "contradiction_records", "supersession_records",
+			"context_packet_snapshots",
 		}, nil
 	}
 	return nil, fmt.Errorf("unknown bundle kind %q", kind)
@@ -403,6 +407,18 @@ var extractQueries = map[string]string{
 	"audit_records":           "SELECT * FROM audit_records ORDER BY id DESC LIMIT 5000",
 	"gateway_invocations":     "SELECT * FROM gateway_invocations ORDER BY id DESC LIMIT 5000",
 	"action_lanes":            "SELECT * FROM action_lanes",
+	"provenance_records":      "SELECT * FROM provenance_records ORDER BY created_at DESC",
+	"journal_events":          "SELECT * FROM journal_events ORDER BY created_at DESC",
+	"memory_notes":            "SELECT * FROM memory_notes ORDER BY updated_at DESC",
+	"semantic_links":          "SELECT * FROM semantic_links ORDER BY created_at DESC",
+	"state_items":             "SELECT * FROM state_items ORDER BY updated_at DESC",
+	"state_versions":          "SELECT * FROM state_versions ORDER BY id DESC",
+	"open_loops":              "SELECT * FROM open_loops ORDER BY updated_at DESC",
+	"artifact_refs":           "SELECT * FROM artifact_refs ORDER BY created_at DESC",
+	"derived_models":          "SELECT * FROM derived_models ORDER BY updated_at DESC",
+	"contradiction_records":   "SELECT * FROM contradiction_records ORDER BY created_at DESC",
+	"supersession_records":    "SELECT * FROM supersession_records ORDER BY created_at DESC",
+	"context_packet_snapshots": "SELECT * FROM context_packet_snapshots ORDER BY created_at DESC",
 }
 
 // Only policy-shaped tables are wired for re-import in this pass. Other

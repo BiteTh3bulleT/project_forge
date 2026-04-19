@@ -280,17 +280,17 @@ export function CommandBar(props: { compact?: boolean }) {
     <div className="flex flex-col gap-2.5">
       <div className="flex flex-wrap gap-1.5">
         {quickButtons.map((btn) => (
-          <button
-            key={btn.id}
-            type="button"
-            onClick={() => void runQuick(btn.id)}
-            disabled={busy}
-            className="whitespace-nowrap rounded border border-white/10 bg-black/20 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-forge-mist transition hover:border-forge-ember/35 hover:text-forge-ash disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {btn.label}
-          </button>
-        ))}
-      </div>
+            <button
+              key={btn.id}
+              type="button"
+              onClick={() => void runQuick(btn.id)}
+              disabled={busy}
+              className="forge-chip forge-chip--muted whitespace-nowrap px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {btn.label}
+            </button>
+          ))}
+        </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-2">

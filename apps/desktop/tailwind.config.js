@@ -5,22 +5,23 @@ export default {
     extend: {
       colors: {
         forge: {
-          void: "#0b0c0f",
-          iron: "#12141a",
-          slate: "#1b1f27",
-          steel: "#2a303c",
-          mist: "#9aa3b2",
-          ash: "#c7ccd6",
-          ember: "#e24a1b",
-          emberSoft: "#f06b3f",
+          void: "#05070d",
+          iron: "#0d1118",
+          slate: "#151b26",
+          steel: "#1f2734",
+          mist: "#9da6b6",
+          ash: "#cfd5e0",
+          carbon: "#1f2838",
+          ember: "#4963ff",
+          emberSoft: "#7e91ff",
         },
       },
       fontFamily: {
-        sans: ["ui-sans-serif", "system-ui", "Segoe UI", "Inter", "Roboto", "Helvetica", "Arial", "sans-serif"],
-        mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "Liberation Mono", "monospace"],
+        sans: ["Space Grotesk", "Manrope", "Avenir Next", "Segoe UI", "ui-sans-serif", "sans-serif"],
+        mono: ["JetBrains Mono", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
       },
       boxShadow: {
-        panel: "0 0 0 1px rgba(255,255,255,0.05), 0 10px 40px rgba(0,0,0,0.45)",
+        panel: "0 0 0 1px rgba(120, 141, 255, 0.08), 0 28px 80px rgba(0, 0, 0, 0.55)",
         header: "0 1px 0 0 rgba(255,255,255,0.06)",
       },
       maxWidth: {

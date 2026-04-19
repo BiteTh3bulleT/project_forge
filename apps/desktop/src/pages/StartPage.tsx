@@ -106,6 +106,7 @@ export function StartPage() {
   return (
     <div className="space-y-6">
       <Panel
+        className="forge-hero"
         title="Start Here"
         subtitle="FORGE in guided mode: connect context, run bounded jobs, review results, and keep control over risky actions."
         actions={<GhostButton onClick={() => void load()}>Refresh</GhostButton>}
