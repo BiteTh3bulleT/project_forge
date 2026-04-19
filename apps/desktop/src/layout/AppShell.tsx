@@ -665,6 +665,7 @@ function getInspectorSummary(pathname: string) {
   if (pathname === "/jobs" || pathname.startsWith("/jobs/")) return "Execution truth from job projections, approval gates, events, and artifacts.";
   if (pathname === "/reviews") return "Explicit operator review records and import reconciliation status.";
   if (pathname === "/approvals") return "Pending risk gates and recorded decisions. No silent escalation.";
+  if (pathname === "/autonomy") return "Dream-state telemetry, autonomy intents, policy decisions, budgets, and charter boundaries.";
   if (pathname === "/settings") return "Local model, retrieval, and workspace configuration persisted by the core.";
   return "Workspace surface details and recent operator context.";
 }

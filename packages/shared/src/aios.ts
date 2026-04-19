@@ -341,6 +341,7 @@ export type IngestResult = {
   summary: IngestSummary;
   diagnostics: CellDiagnostic[];
   batches: CandidateActionBatch[];
+  autonomyRuns?: AutonomyRunSummary[];
   truthDiagnostics?: Record<string, unknown>;
 };
 
@@ -414,6 +415,107 @@ export type ProjectionRebuildReport = {
   differences: ProjectionRebuildDiff[];
   warnings?: string[];
   applied: boolean;
+};
+
+export type AutonomyLevel =
+  | "level_0_observe_only"
+  | "level_1_internal_preparation"
+  | "level_2_propose_semantic_actions"
+  | "level_3_auto_commit_safe_internal"
+  | "level_4_approval_required"
+  | "level_5_delegated_mission";
+
+export type AutonomyMode = "off" | "observe" | "propose" | "maintain" | "mission";
+
+export type AutonomyRisk = "none" | "low" | "medium" | "high" | "critical";
+
+export type IntentStatus =
+  | "proposed"
+  | "approved"
+  | "running"
+  | "completed"
+  | "blocked"
+  | "rejected"
+  | "cancelled"
+  | "expired";
+
+export type AutonomyDecisionType =
+  | "allow_auto_commit"
+  | "allow_propose_only"
+  | "approval_required"
+  | "deny"
+  | "blocked_by_budget"
+  | "blocked_by_charter"
+  | "blocked_by_risk"
+  | "blocked_by_scope"
+  | "blocked_by_kernel";
+
+export type AutonomyIntent = {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  source: string;
+  proposedBy: string;
+  scope: ForgeScope;
+  status: IntentStatus;
+  risk: AutonomyRisk;
+  autonomyLevel: AutonomyLevel;
+  charterId?: string;
+  budgetId?: string;
+  requiredApproval: boolean;
+  approvalId?: string;
+  proposedActions: SyscallRequest[];
+  committedActions: SyscallResult[];
+  blockedReasons: string[];
+  evidence: string[];
+  provenance: Provenance;
+  correlationId?: string;
+  traceId?: string;
+  createdAt: number;
+  updatedAt: number;
+  expiresAt?: number | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type AutonomyDecision = {
+  id: string;
+  intentId: string;
+  decision: AutonomyDecisionType;
+  autonomyLevel: AutonomyLevel;
+  risk: AutonomyRisk;
+  charterId?: string;
+  budgetId?: string;
+  budgetReservationId?: string;
+  requiredApprovalReason?: string;
+  deniedReasons: string[];
+  warnings: string[];
+  allowedActions: SyscallRequest[];
+  blockedActions: SyscallRequest[];
+  explanation: string;
+  correlationId?: string;
+  traceId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+};
+
+export type AutonomyRunSummary = {
+  intentId: string;
+  decisionId?: string;
+  decision: AutonomyDecisionType;
+  committedObjectIds: string[];
+  committedActions: SyscallResult[];
+  approval: {
+    status: ApprovalStatus;
+    approvalId?: string;
+    reason?: string;
+    operatorMessage?: string;
+    recommendedAction?: string;
+  };
+  warnings: string[];
+  errors: Array<{ code: string; field?: string; message: string }>;
+  correlationId?: string;
+  traceId?: string;
 };
 
 export function validateSyscallRequest(req: SyscallRequest): string[] {

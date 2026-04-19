@@ -68,6 +68,37 @@ export type ChatAttachment = {
   textPreview?: string;
 };
 
+export type RemoteTelegramPayload = {
+  message?: {
+    message_id?: number;
+    text?: string;
+    caption?: string;
+    chat?: { id?: number };
+    from?: { id?: number };
+  };
+  edited_message?: {
+    message_id?: number;
+    text?: string;
+    caption?: string;
+    chat?: { id?: number };
+    from?: { id?: number };
+  };
+  channel_post?: {
+    message_id?: number;
+    text?: string;
+    caption?: string;
+    chat?: { id?: number };
+    from?: { id?: number };
+  };
+};
+
+export type RemoteDiscordPayload = {
+  id?: string;
+  channel_id?: string;
+  content?: string;
+  author?: { id?: string };
+};
+
 /** Persisted assistant metadata: governed tool activity from chat (see core chat_assistant_gateway). */
 export type ChatToolGatewayActivity = {
   userRequestSummary?: string;
@@ -119,6 +150,101 @@ export type ForgeArtifact = {
   filePath: string;
   mimeType: string;
   metadata: unknown;
+};
+
+export type AutonomyScope = {
+  workspaceId: string;
+  laneId?: string;
+};
+
+export type AutonomyDreamStatus = {
+  active: boolean;
+  enteredAt?: number;
+  lastReason?: string;
+  lastTickAt?: number;
+  lastMaintenanceAt?: number;
+  lastImprovementAt?: number;
+  lastError?: string;
+  lastTransitionType?: string;
+};
+
+export type AutonomyStatusSnapshot = {
+  available: boolean;
+  reason?: string;
+  scope?: AutonomyScope;
+  mode?: string;
+  dream?: AutonomyDreamStatus;
+  counts?: {
+    activeIntents?: number;
+    activeCharters?: number;
+    budgets?: number;
+    recentDecisions?: number;
+  };
+};
+
+export type AutonomyIntentRecord = {
+  id: string;
+  type: string;
+  title: string;
+  description?: string;
+  source?: string;
+  proposedBy?: string;
+  status: string;
+  risk?: string;
+  autonomyLevel?: string;
+  charterId?: string;
+  budgetId?: string;
+  requiredApproval?: boolean;
+  blockedReasons?: string[];
+  evidence?: string[];
+  correlationId?: string;
+  traceId?: string;
+  createdAt?: number;
+  updatedAt?: number;
+  scope?: AutonomyScope;
+  metadata?: Record<string, unknown>;
+};
+
+export type AutonomyDecisionRecord = {
+  id: string;
+  intentId: string;
+  decision: string;
+  risk?: string;
+  autonomyLevel?: string;
+  charterId?: string;
+  budgetId?: string;
+  requiredApprovalReason?: string;
+  deniedReasons?: string[];
+  warnings?: string[];
+  createdAt?: number;
+  correlationId?: string;
+  traceId?: string;
+};
+
+export type AutonomyBudgetRecord = {
+  id: string;
+  name: string;
+  status: string;
+  period: string;
+  scope?: AutonomyScope;
+  usage?: Record<string, number>;
+  resetsAt?: number;
+  updatedAt?: number;
+};
+
+export type AutonomyCharterRecord = {
+  id: string;
+  name: string;
+  status: string;
+  purpose?: string;
+  description?: string;
+  freedomBudgetId?: string;
+  scope?: AutonomyScope;
+  allowedActions?: string[];
+  deniedActions?: string[];
+  requiresApprovalActions?: string[];
+  createdAt?: number;
+  updatedAt?: number;
 };
 
 const base = () => import.meta.env.VITE_FORGE_API_URL ?? "http://127.0.0.1:18492";
@@ -181,6 +307,26 @@ export const api = {
       return j<{ models: string[]; baseUrl: string; status: string; error?: string }>(path);
     },
   },
+  remote: {
+    telegram: (body: RemoteTelegramPayload, token?: string) =>
+      j<{ ok: boolean }>("/api/remote/telegram", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token?.trim() ? { "X-Forge-Remote-Token": token.trim() } : {}),
+        },
+        body: JSON.stringify(body),
+      }),
+    discord: (body: RemoteDiscordPayload, token?: string) =>
+      j<{ ok: boolean }>("/api/remote/discord", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token?.trim() ? { "X-Forge-Remote-Token": token.trim() } : {}),
+        },
+        body: JSON.stringify(body),
+      }),
+  },
   sources: {
     list: () => j<{ sources: SourceRow[] }>("/api/sources"),
     add: (path: string) =>
@@ -202,6 +348,24 @@ export const api = {
     j<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(limit))}`),
   chunk: (id: number) => j<SearchHit>(`/api/chunks/${id}`),
   events: (limit = 120) => j<{ events: ForgeEvent[] }>(`/api/events?limit=${encodeURIComponent(String(limit))}`),
+  autonomy: {
+    status: () => j<AutonomyStatusSnapshot>("/api/autonomy/status"),
+    intents: (params?: { status?: string; limit?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.status) qs.set("status", params.status);
+      if (params?.limit != null) qs.set("limit", String(params.limit));
+      const q = qs.toString();
+      return j<{ intents: AutonomyIntentRecord[] }>(`/api/autonomy/intents${q ? `?${q}` : ""}`);
+    },
+    explainIntent: (id: string) => j<Record<string, unknown>>(`/api/autonomy/intents/${encodeURIComponent(id)}/explain`),
+    decisions: (limit = 80) =>
+      j<{ decisions: AutonomyDecisionRecord[] }>(`/api/autonomy/decisions?limit=${encodeURIComponent(String(limit))}`),
+    budgets: () => j<{ budgets: AutonomyBudgetRecord[] }>("/api/autonomy/budgets"),
+    charters: (activeOnly = false) =>
+      j<{ charters: AutonomyCharterRecord[] }>(`/api/autonomy/charters?activeOnly=${encodeURIComponent(String(activeOnly))}`),
+    events: (limit = 120) =>
+      j<{ events: ForgeEvent[] }>(`/api/autonomy/events?limit=${encodeURIComponent(String(limit))}`),
+  },
   adapters: {
     list: () => j<{ adapters: AdapterInfo[] }>("/api/adapters"),
     invoke: (id: string, body: AdapterInvokeRequest) =>

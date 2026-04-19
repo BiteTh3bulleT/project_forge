@@ -490,3 +490,16 @@ Artifacts:
 
 - cognitive `artifact_refs` store URIs/checksums (references).
 - binary/object files remain managed by existing artifact storage system.
+
+## Phase 5.75 autonomy bookkeeping note
+
+Autonomy layer entities introduced in Phase 5.75:
+
+- autonomy charters
+- intents
+- freedom budgets
+- autonomy decisions
+- budget reservations
+- curiosity items
+
+Current implementation uses repository interfaces with in-memory stores (`services/core/internal/aios/autonomy/repositories.go`) to keep policy/runner contracts stable while avoiding parallel persistence rewrites in this phase. Durable SQLite tables for autonomy bookkeeping can be added incrementally without changing syscall truth boundaries.

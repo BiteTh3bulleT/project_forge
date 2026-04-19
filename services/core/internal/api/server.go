@@ -94,6 +94,7 @@ type Server struct {
 	release     *release.Service
 	watch       *watch.Manager
 	watchStop   context.CancelFunc
+	autonomy    *AutonomyMaintenanceLoop
 
 	// chatAssistInflight tracks assistant generation (async job or SSE) per thread/user-message key.
 	chatAssistInflight sync.Map
@@ -176,7 +177,11 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		wm.Run(ctx)
 		_ = wm.SyncSources(context.Background(), listSourcePaths(st.DB))
 	}
-	go memorySvc.RepairTicker(ctx, 20*time.Minute, 14, 120)
+	var autonomyLoop *AutonomyMaintenanceLoop
+	if loop := newDefaultAutonomyMaintenanceLoop(st.DB, cfg, ev, memorySvc); loop != nil {
+		autonomyLoop = loop
+		go loop.Run(ctx)
+	}
 	return &Server{
 		st:          st,
 		cfg:         cfg,
@@ -215,12 +220,16 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		release:     releaseSvc,
 		watch:       wm,
 		watchStop:   cancel,
+		autonomy:    autonomyLoop,
 	}
 }
 
 func (s *Server) ShutdownWatch() {
 	if s.jobs != nil {
 		s.jobs.Close()
+	}
+	if s.autonomy != nil {
+		s.autonomy.Stop()
 	}
 	if s.watchStop != nil {
 		s.watchStop()
@@ -283,6 +292,13 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/chunks/{id}", s.handleChunk)
 
 			r.Get("/events", s.handleEvents)
+			r.Get("/autonomy/status", s.handleAutonomyStatus)
+			r.Get("/autonomy/intents", s.handleAutonomyIntents)
+			r.Get("/autonomy/intents/{id}/explain", s.handleAutonomyIntentExplain)
+			r.Get("/autonomy/decisions", s.handleAutonomyDecisions)
+			r.Get("/autonomy/budgets", s.handleAutonomyBudgets)
+			r.Get("/autonomy/charters", s.handleAutonomyCharters)
+			r.Get("/autonomy/events", s.handleAutonomyEvents)
 
 			r.Get("/adapters", s.handleAdapters)
 			r.Post("/adapters/{id}/invoke", s.handleAdapterInvoke)

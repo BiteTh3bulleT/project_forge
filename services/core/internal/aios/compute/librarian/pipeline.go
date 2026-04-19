@@ -15,22 +15,34 @@ import (
 )
 
 type IngestPipelineOptions struct {
-	Kernel       controllane.ForgeKernelProcessor
-	Repositories CellReadRepositories
-	Cells        []RuntimeCell
-	Semantic     SemanticInferenceService
-	NowMillis    func() int64
-	FeatureFlags map[string]bool
+	Kernel           controllane.ForgeKernelProcessor
+	Repositories     CellReadRepositories
+	Cells            []RuntimeCell
+	Semantic         SemanticInferenceService
+	AutonomyPass     AutonomyPassFunc
+	MaxAutonomyDepth int
+	NowMillis        func() int64
+	FeatureFlags     map[string]bool
 }
 
+type AutonomyPassFunc func(
+	ctx context.Context,
+	req domain.IngestRequest,
+	result domain.IngestResult,
+	truthEngine truth.TruthEngine,
+	depth int,
+) ([]domain.AutonomyRunSummary, error)
+
 type IngestPipeline struct {
-	kernel       controllane.ForgeKernelProcessor
-	repositories CellReadRepositories
-	cells        []RuntimeCell
-	semantic     SemanticInferenceService
-	truthEngine  *truth.Engine
-	nowMillis    func() int64
-	featureFlags map[string]bool
+	kernel           controllane.ForgeKernelProcessor
+	repositories     CellReadRepositories
+	cells            []RuntimeCell
+	semantic         SemanticInferenceService
+	truthEngine      *truth.Engine
+	autonomyPass     AutonomyPassFunc
+	maxAutonomyDepth int
+	nowMillis        func() int64
+	featureFlags     map[string]bool
 }
 
 func NewIngestPipeline(opts IngestPipelineOptions) *IngestPipeline {
@@ -63,13 +75,15 @@ func NewIngestPipeline(opts IngestPipelineOptions) *IngestPipeline {
 		NowMillis: nowFn,
 	})
 	return &IngestPipeline{
-		kernel:       opts.Kernel,
-		repositories: opts.Repositories,
-		cells:        cells,
-		semantic:     semantic,
-		truthEngine:  truthEngine,
-		nowMillis:    nowFn,
-		featureFlags: flags,
+		kernel:           opts.Kernel,
+		repositories:     opts.Repositories,
+		cells:            cells,
+		semantic:         semantic,
+		truthEngine:      truthEngine,
+		autonomyPass:     opts.AutonomyPass,
+		maxAutonomyDepth: nonZeroInt(opts.MaxAutonomyDepth, 1),
+		nowMillis:        nowFn,
+		featureFlags:     flags,
 	}
 }
 
@@ -91,6 +105,7 @@ func (p *IngestPipeline) Run(ctx context.Context, req domain.IngestRequest) (dom
 		DryRun:             req.DryRun || req.CommitMode == domain.IngestValidateOnly,
 		Diagnostics:        []domain.CellDiagnostic{},
 		Batches:            []domain.CandidateActionBatch{},
+		AutonomyRuns:       []domain.AutonomyRunSummary{},
 		TruthDiagnostics:   map[string]any{},
 	}
 	if p.kernel == nil {
@@ -216,7 +231,36 @@ func (p *IngestPipeline) Run(ctx context.Context, req domain.IngestRequest) (dom
 	if len(result.RejectedActions) > 0 {
 		result.Success = false
 	}
+	p.runAutonomyPass(ctx, req, &result)
 	return result, nil
+}
+
+func (p *IngestPipeline) runAutonomyPass(ctx context.Context, req domain.IngestRequest, result *domain.IngestResult) {
+	if p.autonomyPass == nil || result == nil {
+		return
+	}
+	if req.DryRun || req.CommitMode == domain.IngestValidateOnly {
+		result.Warnings = append(result.Warnings, "autonomy pass skipped in dry-run/validate-only mode")
+		return
+	}
+	depth := ingestAutonomyDepth(req)
+	if depth >= p.maxAutonomyDepth {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("autonomy pass depth capped at %d", p.maxAutonomyDepth))
+		return
+	}
+	runs, err := p.autonomyPass(ctx, req, *result, p.truthEngine, depth+1)
+	if err != nil {
+		result.Warnings = append(result.Warnings, "autonomy pass failed: "+err.Error())
+		return
+	}
+	if len(runs) == 0 {
+		return
+	}
+	result.AutonomyRuns = append(result.AutonomyRuns, runs...)
+	if result.TruthDiagnostics == nil {
+		result.TruthDiagnostics = map[string]any{}
+	}
+	result.TruthDiagnostics["autonomyRuns"] = runs
 }
 
 func (p *IngestPipeline) processActions(
@@ -601,6 +645,37 @@ func appendTruthApply(result *domain.IngestResult, summary domain.TruthApplySumm
 	entries, _ := result.TruthDiagnostics["apply"].([]domain.TruthApplySummary)
 	entries = append(entries, summary)
 	result.TruthDiagnostics["apply"] = entries
+}
+
+func ingestAutonomyDepth(req domain.IngestRequest) int {
+	if req.Metadata == nil {
+		return 0
+	}
+	raw, ok := req.Metadata["autonomyDepth"]
+	if !ok || raw == nil {
+		return 0
+	}
+	switch v := raw.(type) {
+	case int:
+		return v
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case float32:
+		return int(v)
+	default:
+		return 0
+	}
+}
+
+func nonZeroInt(v, fallback int) int {
+	if v > 0 {
+		return v
+	}
+	return fallback
 }
 
 func (p *IngestPipeline) validateCellDependencies() []domain.IngestError {

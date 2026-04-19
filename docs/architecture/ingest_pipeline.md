@@ -161,3 +161,21 @@ For each syscall outcome, pipeline records a `TruthApplySummary` in `truthDiagno
 
 - `commit_all_or_fail` atomic batch commit is intentionally unsupported in this phase.
 - Full context compilation remains Phase 6; Recall in Phase 4 returns lightweight hints and optional `COMPILE_CONTEXT` proposals only when explicitly enabled.
+
+## Phase 5.75 autonomy hook integration
+
+Ingest can optionally trigger bounded post-commit autonomy evaluation:
+
+- option: `IngestPipelineOptions.AutonomyPass`
+- depth cap: `IngestPipelineOptions.MaxAutonomyDepth`
+- request metadata depth key: `autonomyDepth`
+
+Behavior:
+
+- skipped for `dry_run` and `validate_only`
+- depth-capped to prevent recursive autonomy loops
+- autonomy outcomes are attached to:
+  - `IngestResult.autonomyRuns`
+  - `IngestResult.truthDiagnostics.autonomyRuns`
+
+This preserves a deterministic chain from ingest event to any self-initiated follow-up actions while keeping all durable writes syscall-mediated.

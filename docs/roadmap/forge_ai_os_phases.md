@@ -9,6 +9,8 @@ This roadmap extends current FORGE doctrine and modules. It does not create a pa
 - Phase 3: partially implemented (durable cognitive filesystem schema + SQLite transaction/repository integration landed)
 - Phase 4: implemented (FORGE-only ingest orchestration + librarian runtime cells + syscall integration + tests/docs)
 - Phase 5: implemented (truth engine services, lifecycle hardening, scope-safe resolution, ingest truth integration, tests/docs)
+- Phase 5.5: partially implemented (deterministic rule-agent runtime integrated through autonomy scaffolding)
+- Phase 5.75: implemented (autonomy charters + intent queue + freedom budgets + policy evaluator + self-initiated syscall runner + bounded ingest hook)
 - Phase 6+: planned
 
 ---
@@ -211,6 +213,49 @@ Validation criteria:
 
 - packet inclusion reasons are explicit and reproducible
 
+## Phase 5.75 - autonomy layer (implemented)
+
+Goal:
+
+- give FORGE bounded initiative without bypassing kernel sovereignty
+
+Landed modules:
+
+- autonomy domain contracts:
+  - `services/core/internal/aios/domain/autonomy.go`
+- autonomy services/runtime:
+  - `services/core/internal/aios/autonomy/repositories.go`
+  - `services/core/internal/aios/autonomy/risk.go`
+  - `services/core/internal/aios/autonomy/charter.go`
+  - `services/core/internal/aios/autonomy/intent_queue.go`
+  - `services/core/internal/aios/autonomy/budget.go`
+  - `services/core/internal/aios/autonomy/policy_evaluator.go`
+  - `services/core/internal/aios/autonomy/runner.go`
+  - `services/core/internal/aios/autonomy/rule_agents.go`
+  - `services/core/internal/aios/autonomy/ingest_integration.go`
+  - `services/core/internal/aios/autonomy/curiosity.go`
+  - `services/core/internal/aios/autonomy/defaults.go`
+  - `services/core/internal/aios/autonomy/explain.go`
+- ingest contract + integration:
+  - `services/core/internal/aios/domain/ingest.go`
+  - `services/core/internal/aios/compute/librarian/pipeline.go`
+- tests:
+  - `services/core/internal/aios/autonomy/autonomy_test.go`
+
+Non-goals:
+
+- unrestricted autonomy mode
+- direct state mutation outside syscalls
+- live LLM dependency
+
+Validation highlights:
+
+- charter/budget/risk gating before autonomous commit
+- approval escalation for high-risk/blocked categories
+- runner commits only through control-lane syscall processor
+- intent and decision traces are inspectable
+- ingest-triggered autonomy pass is depth-capped
+
 ## Phase 7 - runtime/event bus/workspaces
 
 Goal:
@@ -298,3 +343,4 @@ Phase 6 focus:
 - full deterministic context compiler and packet inclusion-reason expansion
 - richer retrieval/context assembly over notes/links/state/loops/models/artifacts/events
 - use Phase 5 current-object resolution and contradiction/supersession signals for packet ranking and warnings
+- integrate autonomy decision signals (intent/charter/budget history) into context ranking and operator explainability views

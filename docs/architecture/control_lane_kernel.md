@@ -91,6 +91,15 @@ Primary deterministic failures:
 
 Failure results still emit audit records when safe.
 
+## Autonomy integration (Phase 5.75)
+
+Self-initiated actions from FORGE autonomy still enter through the same syscall processor.
+
+- intent/charter/budget decisions do not commit directly
+- autonomous runners submit `SyscallRequest` like any other source
+- kernel validation, capability checks, approval checks, transition rules, and audit all remain mandatory
+- no autonomy mode can bypass Control Lane commit boundaries
+
 ## Key modules
 
 - `registry.go`

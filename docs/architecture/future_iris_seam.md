@@ -56,6 +56,18 @@ Future IRIS cannot bypass FORGE truth services:
 - truth projections are derived from committed durable records only.
 - provenance/audit/correlation links remain required for IRIS-sourced commits.
 
+## Phase 5.75 autonomy boundary
+
+Future IRIS may later propose **autonomy intents**, but still cannot bypass:
+
+- intent lifecycle governance
+- active charter requirements
+- freedom budget checks
+- approval escalation for high-risk actions
+- kernel syscall validation and commit path
+
+IRIS cannot auto-approve itself or directly commit autonomous mutations.
+
 ## Example objects
 
 ### IRIS candidate semantic action request

@@ -7,6 +7,7 @@ export type ShellToolId =
   | "reviews"
   | "approvals"
   | "settings"
+  | "autonomy"
   | "layouts"
   | "logs"
   | "start"
@@ -33,6 +34,7 @@ export const primaryShellTools: readonly ShellToolDefinition[] = [
   { id: "jobs", label: "Jobs", shortLabel: "JB", route: "/jobs", description: "Execution queue, lifecycle projections, and append-only event streams.", primary: true },
   { id: "reviews", label: "Reviews", shortLabel: "RV", route: "/reviews", description: "Human review decisions for imports and generated outputs.", primary: true },
   { id: "approvals", label: "Approvals", shortLabel: "AP", route: "/approvals", description: "Risk-gated approval queue with explicit request and decision records.", primary: true },
+  { id: "autonomy", label: "Autonomy", shortLabel: "AU", route: "/autonomy", description: "Dream-state, intents, charters, budgets, and self-initiated decision telemetry.", primary: true },
   { id: "settings", label: "Settings", shortLabel: "ST", route: "/settings", description: "Local workspace configuration, models, and retrieval defaults.", primary: true },
 ] as const;
 

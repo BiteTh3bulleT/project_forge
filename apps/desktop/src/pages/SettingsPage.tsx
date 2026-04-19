@@ -24,6 +24,11 @@ export function SettingsPage() {
   const [discordBotToken, setDiscordBotToken] = useState("");
   const [discordDefaultChannelId, setDiscordDefaultChannelId] = useState("");
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState("");
+  const [remoteProbeMessage, setRemoteProbeMessage] = useState("FORGE remote ingress smoke test");
+  const [remoteProbeTelegramChatId, setRemoteProbeTelegramChatId] = useState("");
+  const [remoteProbeDiscordChannelId, setRemoteProbeDiscordChannelId] = useState("");
+  const [remoteProbeStatus, setRemoteProbeStatus] = useState<string | null>(null);
+  const [remoteProbeBusy, setRemoteProbeBusy] = useState<"telegram" | "discord" | null>(null);
   const [meta, setMeta] = useState<{ dataDir: string; dbPath: string; workspaceDir: string } | null>(null);
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [ollamaModelsError, setOllamaModelsError] = useState<string | null>(null);
@@ -120,6 +125,67 @@ export function SettingsPage() {
 
   const normalizedOllamaModel = ollamaModel.trim();
   const selectedInDropdown = normalizedOllamaModel && ollamaModels.includes(normalizedOllamaModel);
+
+  async function probeTelegramIngress() {
+    setRemoteProbeStatus(null);
+    setRemoteProbeBusy("telegram");
+    try {
+      const chatIdRaw = (remoteProbeTelegramChatId || telegramDefaultChatId).trim();
+      const chatId = Number(chatIdRaw);
+      if (!Number.isFinite(chatId) || chatId <= 0) {
+        throw new Error("Provide a valid Telegram chat ID for probe.");
+      }
+      if (!remoteAccessToken.trim()) {
+        throw new Error("Set a remote access token before probing remote ingress.");
+      }
+      await api.remote.telegram(
+        {
+          message: {
+            message_id: Date.now(),
+            text: remoteProbeMessage.trim() || "FORGE remote ingress smoke test",
+            chat: { id: chatId },
+            from: { id: 1 },
+          },
+        },
+        remoteAccessToken,
+      );
+      setRemoteProbeStatus("Telegram ingress probe accepted by core.");
+      setStatus("Telegram ingress probe accepted.");
+    } catch (e) {
+      setRemoteProbeStatus(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRemoteProbeBusy(null);
+    }
+  }
+
+  async function probeDiscordIngress() {
+    setRemoteProbeStatus(null);
+    setRemoteProbeBusy("discord");
+    try {
+      const channelId = (remoteProbeDiscordChannelId || discordDefaultChannelId).trim();
+      if (!channelId) {
+        throw new Error("Provide a Discord channel ID for probe.");
+      }
+      if (!remoteAccessToken.trim()) {
+        throw new Error("Set a remote access token before probing remote ingress.");
+      }
+      await api.remote.discord(
+        {
+          id: String(Date.now()),
+          channel_id: channelId,
+          content: remoteProbeMessage.trim() || "FORGE remote ingress smoke test",
+          author: { id: "local-probe" },
+        },
+        remoteAccessToken,
+      );
+      setRemoteProbeStatus("Discord ingress probe accepted by core.");
+      setStatus("Discord ingress probe accepted.");
+    } catch (e) {
+      setRemoteProbeStatus(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRemoteProbeBusy(null);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -281,6 +347,46 @@ export function SettingsPage() {
           >
             Save remote access
           </PrimaryButton>
+        </div>
+        <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <label className="text-xs font-semibold tracking-wide text-forge-mist">Remote probe message</label>
+            <input
+              className="forge-input mt-1"
+              value={remoteProbeMessage}
+              onChange={(e) => setRemoteProbeMessage(e.target.value)}
+              placeholder="Probe payload text"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold tracking-wide text-forge-mist">Telegram probe chat ID</label>
+            <input
+              className="forge-input mt-1"
+              value={remoteProbeTelegramChatId}
+              onChange={(e) => setRemoteProbeTelegramChatId(e.target.value)}
+              placeholder={telegramDefaultChatId || "Uses Telegram default chat id"}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-semibold tracking-wide text-forge-mist">Discord probe channel ID</label>
+            <input
+              className="forge-input mt-1"
+              value={remoteProbeDiscordChannelId}
+              onChange={(e) => setRemoteProbeDiscordChannelId(e.target.value)}
+              placeholder={discordDefaultChannelId || "Uses Discord default channel id"}
+            />
+          </div>
+          <div className="md:col-span-2 flex flex-wrap gap-2">
+            <GhostButton onClick={() => void probeTelegramIngress()} disabled={remoteProbeBusy !== null}>
+              {remoteProbeBusy === "telegram" ? "Probing Telegram…" : "Probe Telegram ingress"}
+            </GhostButton>
+            <GhostButton onClick={() => void probeDiscordIngress()} disabled={remoteProbeBusy !== null}>
+              {remoteProbeBusy === "discord" ? "Probing Discord…" : "Probe Discord ingress"}
+            </GhostButton>
+          </div>
+          {remoteProbeStatus ? (
+            <div className="md:col-span-2 text-xs text-forge-mist">{remoteProbeStatus}</div>
+          ) : null}
         </div>
       </Panel>
 

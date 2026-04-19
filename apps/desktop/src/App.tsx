@@ -9,6 +9,7 @@ import { WORKSPACE_LAYOUT_EVENT, WORKSPACE_NAVIGATE_EVENT, isTauriDesktop } from
 import { ActionLanesPage } from "./pages/ActionLanesPage";
 import { AdaptersPage } from "./pages/AdaptersPage";
 import { AuditPage } from "./pages/AuditPage";
+import { AutonomyPage } from "./pages/AutonomyPage";
 import { BackupPage } from "./pages/BackupPage";
 import { CanvasPage } from "./pages/CanvasPage";
 import { ChatPage } from "./pages/ChatPage";
@@ -78,6 +79,7 @@ function RoutedViews() {
         <Route path="/sources" element={<SourcesPage />} />
         <Route path="/adapters" element={<AdaptersPage />} />
         <Route path="/events" element={<EventsPage />} />
+        <Route path="/autonomy" element={<AutonomyPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/layouts" element={<WorkspaceLayoutsPage />} />
         <Route path="*" element={<Navigate to="/chat" replace />} />
@@ -162,7 +164,16 @@ export default function App() {
       disposers.push(await appWindow.onResized(() => scheduleEnvironmentRefresh()));
       disposers.push(await appWindow.onFocusChanged(() => scheduleEnvironmentRefresh()));
       if (isMainWindow) {
-        disposers.push(await listen(WORKSPACE_LAYOUT_EVENT, () => void refreshEnvironment()));
+        disposers.push(
+          await listen<{ origin?: string }>(WORKSPACE_LAYOUT_EVENT, (event) => {
+            const origin = event.payload?.origin?.trim() ?? "";
+            // Ignore self-originated sync events to prevent refresh/emission loops.
+            if (origin && origin === (currentWindowLabel || "main")) {
+              return;
+            }
+            void refreshEnvironment();
+          }),
+        );
       }
     })();
 
@@ -172,7 +183,7 @@ export default function App() {
         clearTimeout(environmentRefreshTimer);
       }
     };
-  }, [navigate, refreshEnvironment, isMainWindow]);
+  }, [navigate, refreshEnvironment, isMainWindow, currentWindowLabel]);
 
   return (
     <AppShell>

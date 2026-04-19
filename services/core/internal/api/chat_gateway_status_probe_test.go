@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -43,7 +44,7 @@ func TestLatestGatewayProbeSnapshot(t *testing.T) {
 		},
 	}
 
-	snap, ok := s.latestGatewayProbeSnapshot(t.Context(), th)
+	snap, ok := s.latestGatewayProbeSnapshot(context.Background(), th)
 	if !ok {
 		t.Fatalf("expected probe snapshot to be found")
 	}
@@ -74,7 +75,7 @@ func TestLatestGatewayProbeSnapshotNotFound(t *testing.T) {
 		},
 	}
 
-	_, ok := s.latestGatewayProbeSnapshot(t.Context(), th)
+	_, ok := s.latestGatewayProbeSnapshot(context.Background(), th)
 	if ok {
 		t.Fatalf("expected no snapshot")
 	}

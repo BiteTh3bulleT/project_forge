@@ -121,6 +121,7 @@ type IngestResult struct {
 	Summary            IngestSummary          `json:"summary"`
 	Diagnostics        []CellDiagnostic       `json:"diagnostics"`
 	Batches            []CandidateActionBatch `json:"batches"`
+	AutonomyRuns       []AutonomyRunSummary   `json:"autonomyRuns,omitempty"`
 	TruthDiagnostics   map[string]any         `json:"truthDiagnostics,omitempty"`
 }
 
