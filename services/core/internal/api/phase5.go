@@ -20,23 +20,37 @@ import (
 // profiles, audit traces, backup / export / import, and release readiness.
 
 type gatewayInvokeBody struct {
-	ToolID         string         `json:"toolId"`
-	LaneID         string         `json:"laneId"`
-	Domain         string         `json:"domain"`
-	Action         string         `json:"action"`
-	RiskClass      string         `json:"riskClass"`
-	ExecutionLevel string         `json:"executionLevel"`
-	CorrelationID  string         `json:"correlationId"`
-	Paths          []string       `json:"paths"`
-	Input          map[string]any `json:"input"`
-	JobID          *string        `json:"jobId,omitempty"`
-	PacketID       *int64         `json:"packetId,omitempty"`
-	DryRun         bool           `json:"dryRun"`
-	Initiator      string         `json:"initiator"`
+	ToolID              string         `json:"toolId"`
+	LaneID              string         `json:"laneId"`
+	Domain              string         `json:"domain"`
+	Action              string         `json:"action"`
+	RiskClass           string         `json:"riskClass"`
+	ExecutionLevel      string         `json:"executionLevel"`
+	CorrelationID       string         `json:"correlationId"`
+	TraceID             string         `json:"traceId,omitempty"`
+	Source              string         `json:"source,omitempty"`
+	WorkspaceID         string         `json:"workspaceId,omitempty"`
+	IntentID            string         `json:"intentId,omitempty"`
+	CharterID           string         `json:"charterId,omitempty"`
+	BudgetID            string         `json:"budgetId,omitempty"`
+	ApprovalID          string         `json:"approvalId,omitempty"`
+	ProvenanceActor     string         `json:"provenanceActor,omitempty"`
+	ProvenanceActorType string         `json:"provenanceActorType,omitempty"`
+	Paths               []string       `json:"paths"`
+	Input               map[string]any `json:"input"`
+	JobID               *string        `json:"jobId,omitempty"`
+	PacketID            *int64         `json:"packetId,omitempty"`
+	DryRun              bool           `json:"dryRun"`
+	Initiator           string         `json:"initiator"`
+	Metadata            map[string]any `json:"metadata,omitempty"`
 }
 
 func (s *Server) handleGatewayTools(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"tools": s.gateway.Tools()})
+}
+
+func (s *Server) handleGatewayCapabilities(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"capabilities": s.gateway.Capabilities()})
 }
 
 func (s *Server) handleGatewayInvoke(w http.ResponseWriter, r *http.Request) {
@@ -47,19 +61,29 @@ func (s *Server) handleGatewayInvoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := s.gateway.Execute(ctx, gateway.Request{
-		ToolID:         body.ToolID,
-		LaneID:         body.LaneID,
-		Domain:         body.Domain,
-		Action:         body.Action,
-		RiskClass:      body.RiskClass,
-		ExecutionLevel: body.ExecutionLevel,
-		CorrelationID:  body.CorrelationID,
-		Paths:          body.Paths,
-		Input:          body.Input,
-		JobID:          body.JobID,
-		PacketID:       body.PacketID,
-		Initiator:      body.Initiator,
-		DryRun:         body.DryRun,
+		ToolID:              body.ToolID,
+		LaneID:              body.LaneID,
+		Domain:              body.Domain,
+		Action:              body.Action,
+		RiskClass:           body.RiskClass,
+		ExecutionLevel:      body.ExecutionLevel,
+		CorrelationID:       body.CorrelationID,
+		TraceID:             body.TraceID,
+		Source:              body.Source,
+		WorkspaceID:         body.WorkspaceID,
+		IntentID:            body.IntentID,
+		CharterID:           body.CharterID,
+		BudgetID:            body.BudgetID,
+		ApprovalID:          body.ApprovalID,
+		ProvenanceActor:     body.ProvenanceActor,
+		ProvenanceActorType: body.ProvenanceActorType,
+		Paths:               body.Paths,
+		Input:               body.Input,
+		JobID:               body.JobID,
+		PacketID:            body.PacketID,
+		Initiator:           body.Initiator,
+		DryRun:              body.DryRun,
+		Metadata:            body.Metadata,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

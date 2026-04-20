@@ -40,7 +40,7 @@ export const primaryShellTools: readonly ShellToolDefinition[] = [
 
 const secondaryShellTools: readonly ShellToolDefinition[] = [
   { id: "start", label: "Start", shortLabel: "ST", route: "/start", description: "Legacy guided launch surface.", primary: false },
-  { id: "dashboard", label: "Overview", shortLabel: "OV", route: "/dashboard", description: "Live operational summary.", primary: false },
+  { id: "dashboard", label: "Dashboard", shortLabel: "DB", route: "/dashboard", description: "Main command dashboard for autonomy, gateway, and correlation telemetry.", primary: false },
   { id: "command", label: "Command", shortLabel: "CM", route: "/command", description: "Template launch surface for system commands.", primary: false },
   { id: "memory", label: "Memory", shortLabel: "MM", route: "/memory", description: "Indexed project memory search.", primary: false },
   { id: "logs", label: "Logs", shortLabel: "LG", route: "/events", description: "Global event and log stream.", primary: false },

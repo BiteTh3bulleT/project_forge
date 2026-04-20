@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/approvals"
 	"forge/projectforge/services/core/internal/audit"
 	"forge/projectforge/services/core/internal/lanes"
@@ -32,25 +33,30 @@ import (
 // exporter flows through Gateway.Execute so scope, risk, permission, and
 // audit can be enforced uniformly. There are no hidden execution paths.
 type Gateway struct {
-	db          *sql.DB
-	perms       *permissions.Service
-	lanes       *lanes.Service
-	approvals   *approvals.Service
-	audit       *audit.Service
-	workspace   string
-	dataDir     string
-	tools       map[string]Tool
-	defaultMaxB int64
+	db           *sql.DB
+	perms        *permissions.Service
+	lanes        *lanes.Service
+	approvals    *approvals.Service
+	audit        *audit.Service
+	workspace    string
+	dataDir      string
+	tools        map[string]Tool
+	capabilities *ToolCapabilityRegistry
+	policy       ToolPolicyEvaluator
+	defaultMaxB  int64
 }
 
 type Options struct {
-	DB           *sql.DB
-	Permissions  *permissions.Service
-	Lanes        *lanes.Service
-	Approvals    *approvals.Service
-	Audit        *audit.Service
-	WorkspaceDir string
-	DataDir      string
+	DB                 *sql.DB
+	Permissions        *permissions.Service
+	Lanes              *lanes.Service
+	Approvals          *approvals.Service
+	Audit              *audit.Service
+	WorkspaceDir       string
+	DataDir            string
+	CapabilityRegistry *ToolCapabilityRegistry
+	AutonomyPolicy     ToolAutonomyAuthorizer
+	RiskClassifier     ToolRiskClassifier
 }
 
 // Tool is a registered bounded capability that the gateway may invoke after
@@ -74,19 +80,29 @@ type Tool interface {
 // action and risk come from the lane unless explicitly refined by the caller
 // (which still cannot widen what the lane permits).
 type Request struct {
-	ToolID         string         `json:"toolId"`
-	LaneID         string         `json:"laneId"`
-	Domain         string         `json:"domain"`
-	Action         string         `json:"action"`
-	RiskClass      string         `json:"riskClass"`
-	ExecutionLevel string         `json:"executionLevel"`
-	CorrelationID  string         `json:"correlationId"`
-	Paths          []string       `json:"paths"`
-	Input          map[string]any `json:"input"`
-	JobID          *string        `json:"jobId,omitempty"`
-	PacketID       *int64         `json:"packetId,omitempty"`
-	Initiator      string         `json:"initiator"`
-	DryRun         bool           `json:"dryRun"`
+	ToolID              string         `json:"toolId"`
+	LaneID              string         `json:"laneId"`
+	Domain              string         `json:"domain"`
+	Action              string         `json:"action"`
+	RiskClass           string         `json:"riskClass"`
+	ExecutionLevel      string         `json:"executionLevel"`
+	CorrelationID       string         `json:"correlationId"`
+	TraceID             string         `json:"traceId,omitempty"`
+	Source              string         `json:"source,omitempty"`
+	WorkspaceID         string         `json:"workspaceId,omitempty"`
+	IntentID            string         `json:"intentId,omitempty"`
+	CharterID           string         `json:"charterId,omitempty"`
+	BudgetID            string         `json:"budgetId,omitempty"`
+	ApprovalID          string         `json:"approvalId,omitempty"`
+	ProvenanceActor     string         `json:"provenanceActor,omitempty"`
+	ProvenanceActorType string         `json:"provenanceActorType,omitempty"`
+	Paths               []string       `json:"paths"`
+	Input               map[string]any `json:"input"`
+	JobID               *string        `json:"jobId,omitempty"`
+	PacketID            *int64         `json:"packetId,omitempty"`
+	Initiator           string         `json:"initiator"`
+	DryRun              bool           `json:"dryRun"`
+	Metadata            map[string]any `json:"metadata,omitempty"`
 }
 
 // Result is the outcome of a gateway invocation. It always carries the
@@ -95,6 +111,7 @@ type Request struct {
 type Result struct {
 	InvocationID   int64             `json:"invocationId"`
 	CorrelationID  string            `json:"correlationId"`
+	TraceID        string            `json:"traceId,omitempty"`
 	Status         string            `json:"status"`
 	PolicyOutcome  string            `json:"policyOutcome"`
 	Allowed        bool              `json:"allowed"`
@@ -105,6 +122,7 @@ type Result struct {
 	Tool           string            `json:"tool"`
 	Domain         string            `json:"domain"`
 	Action         string            `json:"action"`
+	CapabilityID   string            `json:"capabilityId,omitempty"`
 	ProfileID      string            `json:"profileId"`
 	Data           map[string]any    `json:"data"`
 	Artifacts      []ResultArtifact  `json:"artifacts"`
@@ -124,6 +142,8 @@ const (
 	StatusError       = "error"
 	StatusNeedsApprov = "needs_approval"
 	StatusDryRun      = "dry_run"
+	StatusUnsupported = "unsupported"
+	StatusDisabled    = "disabled"
 
 	OutcomeAllow           = "allow"
 	OutcomeRequireApproval = "require_approval"
@@ -131,16 +151,22 @@ const (
 )
 
 func New(opts Options) *Gateway {
+	registry := opts.CapabilityRegistry
+	if registry == nil {
+		registry = NewToolCapabilityRegistry()
+	}
 	g := &Gateway{
-		db:          opts.DB,
-		perms:       opts.Permissions,
-		lanes:       opts.Lanes,
-		approvals:   opts.Approvals,
-		audit:       opts.Audit,
-		workspace:   opts.WorkspaceDir,
-		dataDir:     opts.DataDir,
-		tools:       map[string]Tool{},
-		defaultMaxB: 2 * 1024 * 1024,
+		db:           opts.DB,
+		perms:        opts.Permissions,
+		lanes:        opts.Lanes,
+		approvals:    opts.Approvals,
+		audit:        opts.Audit,
+		workspace:    opts.WorkspaceDir,
+		dataDir:      opts.DataDir,
+		tools:        map[string]Tool{},
+		capabilities: registry,
+		policy:       NewToolPolicyEvaluator(opts.WorkspaceDir, opts.RiskClassifier, opts.AutonomyPolicy),
+		defaultMaxB:  2 * 1024 * 1024,
 	}
 	g.registerBuiltinTools()
 	return g
@@ -174,6 +200,7 @@ func (g *Gateway) registerBuiltinTools() {
 	register(&networkConnectivityTool{})
 	register(&networkDNSLookupTool{})
 	register(&networkFetchTool{})
+	register(&timeNowTool{})
 	register(&secretGetTool{db: g.db})
 	register(&writeFileTool{workspace: g.workspace})
 	register(&validateContextTool{workspace: g.workspace, dataDir: g.dataDir})
@@ -183,16 +210,41 @@ func (g *Gateway) registerBuiltinTools() {
 func (g *Gateway) Tools() []ToolInfo {
 	out := make([]ToolInfo, 0, len(g.tools))
 	for _, t := range g.tools {
+		capabilityID := ""
+		capabilityStatus := ""
+		capabilityRisk := ""
+		adapterID := ""
+		requiresApprovalByDefault := false
+		autonomyEligible := false
+		allowedInDryRun := true
+		if g.capabilities != nil {
+			if capability, ok := g.capabilities.Resolve(t.ID()); ok {
+				capabilityID = capability.ID
+				capabilityStatus = string(capability.Status)
+				capabilityRisk = string(capability.Risk)
+				adapterID = capability.AdapterID
+				requiresApprovalByDefault = capability.RequiresApprovalByDefault
+				autonomyEligible = capability.AutonomyEligible
+				allowedInDryRun = capability.AllowedInDryRun
+			}
+		}
 		out = append(out, ToolInfo{
-			ID:             t.ID(),
-			Domain:         t.Domain(),
-			Action:         t.Action(),
-			Description:    t.Description(),
-			RiskClass:      t.RiskClass(),
-			ExecutionLevel: t.ExecutionLevel(),
-			Executes:       t.Executes(),
-			UsesNetwork:    t.UsesNetwork(),
-			WriteIntent:    t.WriteIntent(),
+			ID:                        t.ID(),
+			Domain:                    t.Domain(),
+			Action:                    t.Action(),
+			Description:               t.Description(),
+			RiskClass:                 t.RiskClass(),
+			ExecutionLevel:            t.ExecutionLevel(),
+			Executes:                  t.Executes(),
+			UsesNetwork:               t.UsesNetwork(),
+			WriteIntent:               t.WriteIntent(),
+			CapabilityID:              capabilityID,
+			CapabilityStatus:          capabilityStatus,
+			CapabilityRisk:            capabilityRisk,
+			AdapterID:                 adapterID,
+			RequiresApprovalByDefault: requiresApprovalByDefault,
+			AutonomyEligible:          autonomyEligible,
+			AllowedInDryRun:           allowedInDryRun,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
@@ -200,15 +252,29 @@ func (g *Gateway) Tools() []ToolInfo {
 }
 
 type ToolInfo struct {
-	ID             string `json:"id"`
-	Domain         string `json:"domain"`
-	Action         string `json:"action"`
-	Description    string `json:"description"`
-	RiskClass      string `json:"riskClass"`
-	ExecutionLevel string `json:"executionLevel"`
-	Executes       bool   `json:"executes"`
-	UsesNetwork    bool   `json:"usesNetwork"`
-	WriteIntent    bool   `json:"writeIntent"`
+	ID                        string `json:"id"`
+	Domain                    string `json:"domain"`
+	Action                    string `json:"action"`
+	Description               string `json:"description"`
+	RiskClass                 string `json:"riskClass"`
+	ExecutionLevel            string `json:"executionLevel"`
+	Executes                  bool   `json:"executes"`
+	UsesNetwork               bool   `json:"usesNetwork"`
+	WriteIntent               bool   `json:"writeIntent"`
+	CapabilityID              string `json:"capabilityId,omitempty"`
+	CapabilityStatus          string `json:"capabilityStatus,omitempty"`
+	CapabilityRisk            string `json:"capabilityRisk,omitempty"`
+	AdapterID                 string `json:"adapterId,omitempty"`
+	RequiresApprovalByDefault bool   `json:"requiresApprovalByDefault"`
+	AutonomyEligible          bool   `json:"autonomyEligible"`
+	AllowedInDryRun           bool   `json:"allowedInDryRun"`
+}
+
+func (g *Gateway) Capabilities() []domain.ToolCapability {
+	if g.capabilities == nil {
+		return []domain.ToolCapability{}
+	}
+	return g.capabilities.List()
 }
 
 // Execute runs the full pipeline: lane resolution, permission check,
@@ -220,8 +286,68 @@ func (g *Gateway) Execute(ctx context.Context, req Request) (*Result, error) {
 	if strings.TrimSpace(req.Initiator) == "" {
 		req.Initiator = "operator"
 	}
+	if strings.TrimSpace(req.Source) == "" {
+		req.Source = "user"
+	}
+	if strings.TrimSpace(req.WorkspaceID) == "" {
+		req.WorkspaceID = workspaceIDFromPath(g.workspace)
+	}
+	if strings.TrimSpace(req.ProvenanceActor) == "" {
+		req.ProvenanceActor = req.Initiator
+	}
+	if strings.TrimSpace(req.ProvenanceActorType) == "" {
+		req.ProvenanceActorType = "service"
+	}
+	effectiveToolID := req.ToolID
+	capability, hasCapability := domain.ToolCapability{}, false
+	if g.capabilities != nil {
+		capability, hasCapability = g.capabilities.Resolve(req.ToolID)
+		if hasCapability {
+			if mapped := metadataString(capability.Metadata, "gatewayToolId"); mapped != "" {
+				effectiveToolID = mapped
+			}
+			if strings.TrimSpace(req.Domain) == "" {
+				req.Domain = capability.Domain
+			}
+		}
+	}
 	if strings.TrimSpace(req.Domain) == "" {
-		req.Domain = toolDomainFromID(req.ToolID)
+		req.Domain = toolDomainFromID(effectiveToolID)
+	}
+
+	paths := resolvePaths(g.workspace, req.Paths)
+	if strings.TrimSpace(req.LaneID) == "" {
+		req.LaneID = effectiveToolID
+	}
+
+	tool, hasAdapter := g.tools[effectiveToolID]
+	if hasCapability {
+		policyDecision := g.policy.Evaluate(ctx, ToolPolicyInput{
+			Request:       req,
+			Capability:    capability,
+			ResolvedPaths: paths,
+			HasAdapter:    hasAdapter,
+		})
+		riskFromCapability := gatewayRiskClassFromToolRisk(policyDecision.Risk.Risk)
+		if policyDecision.Status == StatusDisabled || policyDecision.Status == StatusUnsupported {
+			return g.recordCapabilityTerminal(ctx, req, capability, policyDecision, riskFromCapability)
+		}
+		if !policyDecision.Allowed && !policyDecision.RequiresApproval {
+			return g.denied(ctx, req, req.LaneID, effectiveToolID, riskFromCapability, explainToolPolicyDecision(policyDecision))
+		}
+		if policyDecision.RequiresApproval && !hasAdapter {
+			return g.recordCapabilityTerminal(ctx, req, capability, policyDecision, riskFromCapability)
+		}
+		req.Metadata = mergeGatewayMetadata(req.Metadata, map[string]any{
+			"toolCapabilityId": capability.ID,
+			"toolRisk":         policyDecision.Risk.Risk,
+		})
+		if policyDecision.RequiresApproval {
+			req.Metadata = mergeGatewayMetadata(req.Metadata, map[string]any{
+				"policyApprovalRequired": true,
+				"policyApprovalReason":   nonEmpty(policyDecision.Reason, "tool capability policy requires approval"),
+			})
+		}
 	}
 
 	lane, err := g.lanes.Get(ctx, req.LaneID)
@@ -232,23 +358,26 @@ func (g *Gateway) Execute(ctx context.Context, req Request) (*Result, error) {
 		return g.denied(ctx, req, lane.ID, "", lane.RiskClass, fmt.Sprintf("lane %q disabled", lane.ID))
 	}
 
-	tool, ok := g.tools[req.ToolID]
+	tool, ok := g.tools[effectiveToolID]
 	if !ok {
-		return g.denied(ctx, req, lane.ID, req.ToolID, lane.RiskClass, fmt.Sprintf("tool %q not registered in gateway", req.ToolID))
+		return g.denied(ctx, req, lane.ID, effectiveToolID, lane.RiskClass, fmt.Sprintf("tool %q not registered in gateway", effectiveToolID))
 	}
 
 	if lane.WriteIntent != tool.WriteIntent() && tool.WriteIntent() && !lane.WriteIntent {
 		return g.denied(ctx, req, lane.ID, tool.ID(), lane.RiskClass, fmt.Sprintf("tool %q requires write intent but lane %q is read-only", tool.ID(), lane.ID))
 	}
 
-	paths := resolvePaths(g.workspace, req.Paths)
 	for _, p := range paths {
 		if !laneCovers(lane, p) {
 			return g.denied(ctx, req, lane.ID, tool.ID(), lane.RiskClass, fmt.Sprintf("path %q outside lane %q allowed scope", p, lane.ID))
 		}
 	}
 
-	risk := effectiveRiskClass(req.RiskClass, lane.RiskClass, tool.RiskClass())
+	capabilityRiskClass := ""
+	if hasCapability {
+		capabilityRiskClass = gatewayRiskClassFromToolRisk(capability.Risk)
+	}
+	risk := effectiveRiskClass(req.RiskClass, lane.RiskClass, tool.RiskClass(), capabilityRiskClass)
 	level := normalizeExecutionLevel(req.ExecutionLevel)
 	if level == "" {
 		level = normalizeExecutionLevel(tool.ExecutionLevel())
@@ -291,7 +420,8 @@ func (g *Gateway) Execute(ctx context.Context, req Request) (*Result, error) {
 		return g.deniedWith(ctx, req, lane.ID, tool.ID(), risk, profileID, decision.Reason)
 	}
 
-	requiresApproval := decision.RequiresApproval || lane.RequiresApproval
+	requiresApproval := decision.RequiresApproval || lane.RequiresApproval || metadataBool(req.Metadata, "policyApprovalRequired")
+	policyApprovalReason := metadataString(req.Metadata, "policyApprovalReason")
 	if requiresApproval {
 		granted, grantErr := g.jobApprovalGranted(ctx, req.JobID)
 		if grantErr != nil {
@@ -302,7 +432,15 @@ func (g *Gateway) Execute(ctx context.Context, req Request) (*Result, error) {
 		}
 	}
 	if requiresApproval {
-		return g.recordNeedsApproval(ctx, req, lane, tool, risk, level, profileID, decision.Reason)
+		needsApprovalReason := strings.TrimSpace(decision.Reason)
+		if strings.TrimSpace(policyApprovalReason) != "" {
+			if needsApprovalReason != "" {
+				needsApprovalReason = policyApprovalReason + "; " + needsApprovalReason
+			} else {
+				needsApprovalReason = policyApprovalReason
+			}
+		}
+		return g.recordNeedsApproval(ctx, req, lane, tool, risk, level, profileID, needsApprovalReason)
 	}
 	if req.DryRun {
 		return g.recordDryRun(ctx, req, lane, tool, risk, level, profileID)
@@ -313,8 +451,32 @@ func (g *Gateway) Execute(ctx context.Context, req Request) (*Result, error) {
 		return nil, err
 	}
 
-	execResult, execErr := tool.Execute(ctx, req)
+	execCtx := ctx
+	cancelExec := func() {}
+	if hasCapability && capability.ResourceLimits.MaxDurationMs > 0 {
+		execCtx, cancelExec = context.WithTimeout(ctx, time.Duration(capability.ResourceLimits.MaxDurationMs)*time.Millisecond)
+	}
+	defer cancelExec()
+
+	execResult, execErr := tool.Execute(execCtx, req)
 	now := time.Now().UnixMilli()
+	if execErr == nil && hasCapability && capability.ResourceLimits.MaxOutputBytes > 0 {
+		bytes, _ := json.Marshal(execResult.Data)
+		if len(bytes) > capability.ResourceLimits.MaxOutputBytes {
+			truncated := map[string]any{
+				"truncated":      true,
+				"maxOutputBytes": capability.ResourceLimits.MaxOutputBytes,
+				"actualBytes":    len(bytes),
+			}
+			execResult.Data = mergeGatewayMetadata(execResult.Data, map[string]any{
+				"_outputLimit": truncated,
+			})
+			execResult.Data["warnings"] = appendStringWarning(execResult.Data["warnings"], "output exceeded maxOutputBytes and was truncated")
+		}
+	}
+	if execErr != nil && errors.Is(execCtx.Err(), context.DeadlineExceeded) {
+		execErr = fmt.Errorf("tool execution timed out after %dms", capability.ResourceLimits.MaxDurationMs)
+	}
 	if execErr != nil {
 		resultBytes, _ := json.Marshal(map[string]any{"error": execErr.Error()})
 		_, _ = g.db.ExecContext(ctx, `
@@ -337,6 +499,7 @@ WHERE id=?`, now, string(resultBytes), invID)
 		return &Result{
 			InvocationID:   invID,
 			CorrelationID:  req.CorrelationID,
+			TraceID:        req.TraceID,
 			Status:         StatusError,
 			PolicyOutcome:  OutcomeAllow,
 			Allowed:        true,
@@ -346,6 +509,7 @@ WHERE id=?`, now, string(resultBytes), invID)
 			Tool:           tool.ID(),
 			Domain:         tool.Domain(),
 			Action:         tool.Action(),
+			CapabilityID:   capabilityIDFromRequest(req),
 			ProfileID:      profileID,
 			Message:        execErr.Error(),
 			Data:           map[string]any{},
@@ -364,6 +528,8 @@ WHERE id=?`, now, string(resultBytes), invID)
 	execResult.Allowed = true
 	execResult.Domain = tool.Domain()
 	execResult.Action = tool.Action()
+	execResult.TraceID = req.TraceID
+	execResult.CapabilityID = capabilityIDFromRequest(req)
 	if execResult.Data == nil {
 		execResult.Data = map[string]any{}
 	}
@@ -397,9 +563,25 @@ WHERE id=?`, now, string(resultBytes), string(artifactsBytes), invID)
 }
 
 func (g *Gateway) openInvocation(ctx context.Context, req Request, lane *lanes.Lane, tool Tool, risk, level, profileID, status string, approvalRequestID *int64) (int64, error) {
-	scope := map[string]any{"paths": req.Paths, "lane": lane.ID}
+	scope := map[string]any{
+		"paths":       req.Paths,
+		"lane":        lane.ID,
+		"workspaceId": req.WorkspaceID,
+		"intentId":    req.IntentID,
+		"charterId":   req.CharterID,
+		"budgetId":    req.BudgetID,
+		"source":      req.Source,
+		"traceId":     req.TraceID,
+	}
 	scopeBytes, _ := json.Marshal(scope)
-	inputBytes, _ := json.Marshal(nonNilMap(req.Input))
+	inputPayload := cloneToolOutput(nonNilMap(req.Input))
+	inputPayload["_metadata"] = mergeGatewayMetadata(req.Metadata, map[string]any{
+		"approvalId":          req.ApprovalID,
+		"provenanceActor":     req.ProvenanceActor,
+		"provenanceActorType": req.ProvenanceActorType,
+		"capabilityId":        capabilityIDFromRequest(req),
+	})
+	inputBytes, _ := json.Marshal(inputPayload)
 	now := time.Now().UnixMilli()
 	writeIntent := 0
 	if tool.WriteIntent() {
@@ -428,7 +610,17 @@ func (g *Gateway) denied(ctx context.Context, req Request, laneID, toolID, risk,
 
 func (g *Gateway) deniedWith(ctx context.Context, req Request, laneID, toolID, risk, profileID, reason string) (*Result, error) {
 	now := time.Now().UnixMilli()
-	scopeBytes, _ := json.Marshal(map[string]any{"paths": req.Paths, "lane": laneID})
+	scopeBytes, _ := json.Marshal(map[string]any{
+		"paths":        req.Paths,
+		"lane":         laneID,
+		"workspaceId":  req.WorkspaceID,
+		"traceId":      req.TraceID,
+		"source":       req.Source,
+		"intentId":     req.IntentID,
+		"charterId":    req.CharterID,
+		"budgetId":     req.BudgetID,
+		"capabilityId": capabilityIDFromRequest(req),
+	})
 	inputBytes, _ := json.Marshal(nonNilMap(req.Input))
 	var laneVal any
 	if laneID != "" {
@@ -466,6 +658,7 @@ INSERT INTO gateway_invocations(
 	return &Result{
 		InvocationID:   id,
 		CorrelationID:  req.CorrelationID,
+		TraceID:        req.TraceID,
 		Status:         StatusDenied,
 		PolicyOutcome:  OutcomeDeny,
 		Allowed:        false,
@@ -476,9 +669,128 @@ INSERT INTO gateway_invocations(
 		Tool:           toolID,
 		Domain:         toolDomainFromID(toolID),
 		Action:         req.Action,
+		CapabilityID:   capabilityIDFromRequest(req),
 		ProfileID:      profileID,
 		Message:        reason,
 		Data:           map[string]any{},
+	}, nil
+}
+
+// ExecuteTool executes a typed tool request contract and returns a typed tool result.
+// This keeps AI-OS callers on explicit domain contracts while still using the
+// existing gateway pipeline for enforcement and execution.
+func (g *Gateway) ExecuteTool(ctx context.Context, req domain.ToolRequest) (domain.ToolResult, error) {
+	startedAt := time.Now().UnixMilli()
+	issues := req.Validate()
+	if len(issues) > 0 {
+		return domain.ToolResult{
+			Success:       false,
+			ToolID:        req.ToolID,
+			RequestID:     req.ID,
+			Status:        domain.ToolStatusDenied,
+			Error:         &issues[0],
+			StartedAt:     startedAt,
+			CompletedAt:   time.Now().UnixMilli(),
+			CorrelationID: req.CorrelationID,
+			TraceID:       req.TraceID,
+		}, nil
+	}
+	payload := map[string]any{}
+	for key, value := range req.Payload {
+		payload[key] = value
+	}
+	var paths []string
+	if len(req.Scope.SelectedPaths) > 0 {
+		paths = append(paths, req.Scope.SelectedPaths...)
+	}
+	if raw, ok := payload["paths"]; ok {
+		if arr, ok := raw.([]string); ok {
+			paths = append(paths, arr...)
+		}
+	}
+	gwReq := Request{
+		ToolID:              req.ToolID,
+		LaneID:              req.Scope.LaneID,
+		Domain:              toolDomainFromID(req.ToolID),
+		Action:              "invoke",
+		RiskClass:           "",
+		ExecutionLevel:      "",
+		CorrelationID:       req.CorrelationID,
+		TraceID:             req.TraceID,
+		Source:              string(req.Source),
+		WorkspaceID:         req.Scope.WorkspaceID,
+		IntentID:            req.IntentID,
+		CharterID:           req.CharterID,
+		BudgetID:            req.BudgetID,
+		ApprovalID:          req.ApprovalID,
+		ProvenanceActor:     req.Provenance.Actor,
+		ProvenanceActorType: req.Provenance.ActorType,
+		Paths:               paths,
+		Input:               payload,
+		Initiator:           req.Actor.ID,
+		DryRun:              req.DryRun,
+		Metadata:            req.Metadata,
+	}
+	result, err := g.Execute(ctx, gwReq)
+	completedAt := time.Now().UnixMilli()
+	if err != nil {
+		execErr := domain.ToolExecutionError{
+			Code:    domain.ToolErrExecutionFailed,
+			Field:   "gateway",
+			Message: err.Error(),
+		}
+		return domain.ToolResult{
+			Success:       false,
+			ToolID:        req.ToolID,
+			RequestID:     req.ID,
+			Status:        domain.ToolStatusFailed,
+			Error:         &execErr,
+			StartedAt:     startedAt,
+			CompletedAt:   completedAt,
+			CorrelationID: req.CorrelationID,
+			TraceID:       req.TraceID,
+		}, nil
+	}
+	toolArtifacts := make([]domain.ArtifactRef, 0, len(result.Artifacts))
+	for i, item := range result.Artifacts {
+		toolArtifacts = append(toolArtifacts, domain.ArtifactRef{
+			ID:   fmt.Sprintf("%s:%d", req.ID, i),
+			Type: strings.TrimSpace(item.Type),
+			URI:  strings.TrimSpace(item.Path),
+			Scope: domain.ForgeScope{
+				WorkspaceID: req.Scope.WorkspaceID,
+				LaneID:      req.Scope.LaneID,
+			},
+			CreatedAt: completedAt,
+			Provenance: domain.Provenance{
+				Actor:     req.Actor.ID,
+				ActorType: req.Provenance.ActorType,
+				Source:    req.Provenance.Source,
+				TraceID:   req.TraceID,
+			},
+			Metadata: map[string]any{"summary": item.Summary},
+		})
+	}
+	return domain.ToolResult{
+		Success:       result.Status == StatusOK || result.Status == StatusDryRun,
+		ToolID:        req.ToolID,
+		RequestID:     req.ID,
+		Status:        mapGatewayStatusToToolStatus(result.Status),
+		Output:        cloneToolOutput(result.Data),
+		Error:         toolErrorFromGatewayResult(result),
+		Warnings:      warningsFromGatewayResult(result),
+		Artifacts:     toolArtifacts,
+		AuditID:       "",
+		ResourceUsage: domain.ToolResourceUsage{},
+		StartedAt:     startedAt,
+		CompletedAt:   completedAt,
+		CorrelationID: req.CorrelationID,
+		TraceID:       req.TraceID,
+		Metadata: map[string]any{
+			"gatewayInvocationId": result.InvocationID,
+			"policyOutcome":       result.PolicyOutcome,
+			"capabilityId":        result.CapabilityID,
+		},
 	}, nil
 }
 
@@ -546,6 +858,7 @@ func (g *Gateway) recordNeedsApproval(ctx context.Context, req Request, lane *la
 	return &Result{
 		InvocationID:   id,
 		CorrelationID:  req.CorrelationID,
+		TraceID:        req.TraceID,
 		Status:         StatusNeedsApprov,
 		PolicyOutcome:  OutcomeRequireApproval,
 		Allowed:        false,
@@ -556,6 +869,7 @@ func (g *Gateway) recordNeedsApproval(ctx context.Context, req Request, lane *la
 		Tool:           tool.ID(),
 		Domain:         tool.Domain(),
 		Action:         tool.Action(),
+		CapabilityID:   capabilityIDFromRequest(req),
 		ProfileID:      profileID,
 		Message:        reason,
 		Data:           data,
@@ -659,6 +973,7 @@ func (g *Gateway) recordDryRun(ctx context.Context, req Request, lane *lanes.Lan
 	return &Result{
 		InvocationID:   id,
 		CorrelationID:  req.CorrelationID,
+		TraceID:        req.TraceID,
 		Status:         StatusDryRun,
 		PolicyOutcome:  OutcomeAllow,
 		Allowed:        true,
@@ -668,8 +983,108 @@ func (g *Gateway) recordDryRun(ctx context.Context, req Request, lane *lanes.Lan
 		Tool:           tool.ID(),
 		Domain:         tool.Domain(),
 		Action:         tool.Action(),
+		CapabilityID:   capabilityIDFromRequest(req),
 		ProfileID:      profileID,
 		Data:           map[string]any{"dryRun": true},
+	}, nil
+}
+
+func (g *Gateway) recordCapabilityTerminal(ctx context.Context, req Request, capability domain.ToolCapability, policy ToolPolicyDecision, risk string) (*Result, error) {
+	now := time.Now().UnixMilli()
+	scopeBytes, _ := json.Marshal(map[string]any{
+		"paths":        req.Paths,
+		"lane":         req.LaneID,
+		"workspaceId":  req.WorkspaceID,
+		"capabilityId": capability.ID,
+		"source":       req.Source,
+		"intentId":     req.IntentID,
+		"charterId":    req.CharterID,
+		"budgetId":     req.BudgetID,
+		"traceId":      req.TraceID,
+	})
+	inputBytes, _ := json.Marshal(nonNilMap(req.Input))
+	status := policy.Status
+	if strings.TrimSpace(status) == "" {
+		status = StatusDenied
+	}
+	deniedReason := explainToolPolicyDecision(policy)
+	if strings.TrimSpace(deniedReason) == "" {
+		deniedReason = "tool capability policy blocked request"
+	}
+	policyOutcome := OutcomeDeny
+	if status == StatusNeedsApprov {
+		policyOutcome = OutcomeRequireApproval
+	}
+	res, err := g.db.ExecContext(ctx, `
+INSERT INTO gateway_invocations(
+  correlation_id, created_at, completed_at, tool_id, lane_id, job_id, packet_id,
+  initiator, action, risk_class, write_intent, scope_json, input_json,
+  status, denied_reason, permission_profile_id
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		req.CorrelationID, now, now, req.ToolID, req.LaneID, req.JobID, req.PacketID,
+		req.Initiator, nonEmpty(req.Action, capability.Name), nonEmpty(risk, gatewayRiskClassFromToolRisk(policy.Risk.Risk)), 0,
+		string(scopeBytes), string(inputBytes), status, deniedReason, "",
+	)
+	if err != nil {
+		return nil, err
+	}
+	id, _ := res.LastInsertId()
+	auditAction := "tool.denied"
+	outcome := "denied"
+	if status == StatusNeedsApprov {
+		auditAction = "tool.needs_approval"
+		outcome = "needs_approval"
+	} else if status == StatusUnsupported {
+		auditAction = "tool.unsupported"
+		outcome = "unsupported"
+	} else if status == StatusDisabled {
+		auditAction = "tool.disabled"
+		outcome = "disabled"
+	}
+	payload := map[string]any{
+		"capabilityId": capability.ID,
+		"status":       status,
+		"reason":       deniedReason,
+		"warnings":     policy.Warnings,
+	}
+	if policy.Error != nil {
+		payload["error"] = policy.Error
+	}
+	_, _ = g.audit.Record(ctx, audit.CreateRequest{
+		CorrelationID:       req.CorrelationID,
+		Category:            "gateway",
+		Action:              auditAction,
+		Actor:               req.Initiator,
+		SubjectType:         "tool_capability",
+		SubjectID:           capability.ID,
+		JobID:               req.JobID,
+		GatewayInvocationID: &id,
+		RiskClass:           nonEmpty(risk, gatewayRiskClassFromToolRisk(policy.Risk.Risk)),
+		Outcome:             outcome,
+		Summary:             deniedReason,
+		Payload:             payload,
+	})
+	return &Result{
+		InvocationID:   id,
+		CorrelationID:  req.CorrelationID,
+		TraceID:        req.TraceID,
+		Status:         status,
+		PolicyOutcome:  policyOutcome,
+		Allowed:        false,
+		DeniedReason:   deniedReason,
+		RiskClass:      nonEmpty(risk, gatewayRiskClassFromToolRisk(policy.Risk.Risk)),
+		ExecutionLevel: executionLevelFromRisk(nonEmpty(risk, gatewayRiskClassFromToolRisk(policy.Risk.Risk))),
+		Lane:           req.LaneID,
+		Tool:           req.ToolID,
+		Domain:         capability.Domain,
+		Action:         capability.Name,
+		CapabilityID:   capability.ID,
+		ProfileID:      "",
+		Message:        deniedReason,
+		Data: map[string]any{
+			"toolError": policy.Error,
+			"warnings":  policy.Warnings,
+		},
 	}, nil
 }
 
@@ -677,9 +1092,11 @@ func (g *Gateway) recordDryRun(ctx context.Context, req Request, lane *lanes.Lan
 type InvocationRecord struct {
 	ID                  int64           `json:"id"`
 	CorrelationID       string          `json:"correlationId"`
+	TraceID             string          `json:"traceId,omitempty"`
 	CreatedAtMs         int64           `json:"createdAtMs"`
 	CompletedAtMs       *int64          `json:"completedAtMs,omitempty"`
 	ToolID              string          `json:"toolId"`
+	CapabilityID        string          `json:"capabilityId,omitempty"`
 	LaneID              *string         `json:"laneId,omitempty"`
 	JobID               *string         `json:"jobId,omitempty"`
 	PacketID            *int64          `json:"packetId,omitempty"`
@@ -777,6 +1194,11 @@ FROM gateway_invocations %s ORDER BY id DESC LIMIT ?`, where)
 		r.Input = json.RawMessage(input)
 		r.Result = json.RawMessage(result)
 		r.Artifacts = json.RawMessage(artifacts)
+		scopeObj := map[string]any{}
+		if err := json.Unmarshal([]byte(scope), &scopeObj); err == nil {
+			r.TraceID = metadataString(scopeObj, "traceId")
+			r.CapabilityID = metadataString(scopeObj, "capabilityId")
+		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -1683,6 +2105,33 @@ func (t *networkFetchTool) Execute(ctx context.Context, req Request) (Result, er
 
 type secretGetTool struct{ db *sql.DB }
 
+type timeNowTool struct{}
+
+func (t *timeNowTool) ID() string             { return "time.now" }
+func (t *timeNowTool) Domain() string         { return "time" }
+func (t *timeNowTool) Action() string         { return "get_system_time" }
+func (t *timeNowTool) RiskClass() string      { return "read_only" }
+func (t *timeNowTool) ExecutionLevel() string { return "L0" }
+func (t *timeNowTool) Executes() bool         { return false }
+func (t *timeNowTool) UsesNetwork() bool      { return false }
+func (t *timeNowTool) WriteIntent() bool      { return false }
+func (t *timeNowTool) Description() string {
+	return "Read current system clock in UTC and local timezone"
+}
+func (t *timeNowTool) Execute(_ context.Context, _ Request) (Result, error) {
+	now := time.Now()
+	_, offset := now.Zone()
+	return Result{
+		Data: map[string]any{
+			"unixMs":      now.UnixMilli(),
+			"iso8601":     now.Format(time.RFC3339Nano),
+			"utcIso8601":  now.UTC().Format(time.RFC3339Nano),
+			"zoneOffsetS": offset,
+		},
+		Message: "system time captured",
+	}, nil
+}
+
 func (t *secretGetTool) ID() string             { return "secret.get" }
 func (t *secretGetTool) Domain() string         { return "secrets" }
 func (t *secretGetTool) Action() string         { return "get_secret_ref" }
@@ -1818,6 +2267,162 @@ func nonNilMap(v map[string]any) map[string]any {
 	return v
 }
 
+func mergeGatewayMetadata(base map[string]any, add map[string]any) map[string]any {
+	out := map[string]any{}
+	for key, value := range base {
+		out[key] = value
+	}
+	for key, value := range add {
+		if strings.TrimSpace(fmt.Sprintf("%v", value)) == "" {
+			continue
+		}
+		out[key] = value
+	}
+	return out
+}
+
+func capabilityIDFromRequest(req Request) string {
+	if req.Metadata == nil {
+		return ""
+	}
+	return metadataString(req.Metadata, "toolCapabilityId")
+}
+
+func metadataBool(meta map[string]any, key string) bool {
+	if meta == nil {
+		return false
+	}
+	v, ok := meta[key]
+	if !ok {
+		return false
+	}
+	switch x := v.(type) {
+	case bool:
+		return x
+	case string:
+		x = strings.TrimSpace(strings.ToLower(x))
+		return x == "true" || x == "1" || x == "yes"
+	case int:
+		return x != 0
+	case int64:
+		return x != 0
+	case float64:
+		return x != 0
+	default:
+		return false
+	}
+}
+
+func workspaceIDFromPath(path string) string {
+	base := strings.TrimSpace(filepath.Base(filepath.Clean(path)))
+	if base == "" || base == "." {
+		return "workspace:default"
+	}
+	base = strings.ToLower(strings.ReplaceAll(base, " ", "_"))
+	return "workspace:" + base
+}
+
+func mapGatewayStatusToToolStatus(status string) domain.ToolResultStatus {
+	switch strings.TrimSpace(strings.ToLower(status)) {
+	case StatusOK:
+		return domain.ToolStatusSucceeded
+	case StatusDryRun:
+		return domain.ToolStatusDryRun
+	case StatusNeedsApprov:
+		return domain.ToolStatusApprovalRequired
+	case StatusUnsupported:
+		return domain.ToolStatusUnsupported
+	case StatusDisabled:
+		return domain.ToolStatusDisabled
+	case StatusDenied:
+		return domain.ToolStatusDenied
+	default:
+		return domain.ToolStatusFailed
+	}
+}
+
+func cloneToolOutput(in map[string]any) map[string]any {
+	if in == nil {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
+func toolErrorFromGatewayResult(result *Result) *domain.ToolExecutionError {
+	if result == nil {
+		return &domain.ToolExecutionError{Code: domain.ToolErrExecutionFailed, Message: "gateway result is nil"}
+	}
+	msg := strings.TrimSpace(result.DeniedReason)
+	if msg == "" && strings.TrimSpace(result.Message) != "" && strings.TrimSpace(strings.ToLower(result.Status)) != StatusOK {
+		msg = strings.TrimSpace(result.Message)
+	}
+	if msg == "" {
+		return nil
+	}
+	code := domain.ToolErrPolicyDenied
+	switch strings.TrimSpace(strings.ToLower(result.Status)) {
+	case StatusNeedsApprov:
+		code = domain.ToolErrApprovalRequired
+	case StatusUnsupported:
+		code = domain.ToolErrUnsupportedOperation
+	case StatusDisabled:
+		code = domain.ToolErrToolDisabled
+	case StatusError:
+		code = domain.ToolErrExecutionFailed
+	}
+	return &domain.ToolExecutionError{
+		Code:    code,
+		Message: msg,
+	}
+}
+
+func warningsFromGatewayResult(result *Result) []string {
+	if result == nil {
+		return nil
+	}
+	raw, ok := result.Data["warnings"]
+	if !ok {
+		return nil
+	}
+	out := []string{}
+	switch rows := raw.(type) {
+	case []string:
+		return rows
+	case []any:
+		for _, item := range rows {
+			s := strings.TrimSpace(fmt.Sprintf("%v", item))
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
+}
+
+func appendStringWarning(existing any, warning string) []string {
+	out := []string{}
+	switch rows := existing.(type) {
+	case []string:
+		out = append(out, rows...)
+	case []any:
+		for _, row := range rows {
+			text := strings.TrimSpace(fmt.Sprintf("%v", row))
+			if text != "" {
+				out = append(out, text)
+			}
+		}
+	}
+	warning = strings.TrimSpace(warning)
+	if warning != "" {
+		out = append(out, warning)
+	}
+	return out
+}
+
 func newCorrelationID() string {
 	var buf [8]byte
 	_, _ = rand.Read(buf[:])
@@ -1926,10 +2531,12 @@ func legacyRiskClass(risk string) string {
 	}
 }
 
-func effectiveRiskClass(requested, lane, tool string) string {
+func effectiveRiskClass(requested, lane, tool string, extra ...string) string {
 	best := strings.TrimSpace(strings.ToLower(tool))
 	bestRank := levelRank(executionLevelFromRisk(best))
-	for _, candidate := range []string{lane, requested} {
+	candidates := []string{lane, requested}
+	candidates = append(candidates, extra...)
+	for _, candidate := range candidates {
 		risk := strings.TrimSpace(strings.ToLower(candidate))
 		if risk == "" {
 			continue

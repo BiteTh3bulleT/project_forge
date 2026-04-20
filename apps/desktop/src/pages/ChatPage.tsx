@@ -313,14 +313,6 @@ function ToolGatewayActivityPanel(props: { activity: ChatToolGatewayActivity }) 
   const gatewayJobTerminal = gatewayJobStatus === "succeeded" || gatewayJobStatus === "failed" || gatewayJobStatus === "cancelled";
   const stages = Array.isArray(a.stages) ? (a.stages as Record<string, unknown>[]) : [];
   const args = a.toolArgs && typeof a.toolArgs === "object" && !Array.isArray(a.toolArgs) ? (a.toolArgs as Record<string, unknown>) : null;
-  let resultText = "";
-  if (a.executionResult !== undefined) {
-    try {
-      resultText = JSON.stringify(a.executionResult, null, 2);
-    } catch {
-      resultText = String(a.executionResult);
-    }
-  }
 
   const isAlreadyResolvedError = useCallback((message: string) => {
     const value = message.toLowerCase();
@@ -438,7 +430,7 @@ function ToolGatewayActivityPanel(props: { activity: ChatToolGatewayActivity }) 
         </div>
         <div>
           <span className="text-forge-mist/60">Args · </span>
-          {args ? JSON.stringify(args) : "—"}
+          {args ? summarizeInlineFields(args) : "—"}
         </div>
         <div>
           <span className="text-forge-mist/60">State · </span>
@@ -544,9 +536,7 @@ function ToolGatewayActivityPanel(props: { activity: ChatToolGatewayActivity }) 
             Approval is required, but no approval request id was recorded. Check that the approvals service and database are available.
           </div>
         ) : null}
-        {resultText ? (
-          <pre className="forge-chat-scroll mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-white/10 bg-black/30 p-2 text-forge-ash">{resultText}</pre>
-        ) : null}
+        {a.executionResult !== undefined ? <InlineStructuredSummary value={a.executionResult} /> : null}
       </div>
       {stages.length > 0 ? (
         <details className="mt-2">
@@ -564,6 +554,76 @@ function ToolGatewayActivityPanel(props: { activity: ChatToolGatewayActivity }) 
     </div>
   );
 }
+
+function summarizeInlineFields(value: Record<string, unknown>) {
+  const entries = Object.entries(value);
+  if (entries.length === 0) return "none";
+  return entries
+    .slice(0, 6)
+    .map(([key, raw]) => `${key}=${inlineValue(raw)}`)
+    .join(" · ");
+}
+
+function inlineValue(raw: unknown) {
+  if (raw == null) return "—";
+  if (typeof raw === "string") return raw.trim() || "—";
+  if (typeof raw === "number" || typeof raw === "boolean") return String(raw);
+  if (Array.isArray(raw)) return `${raw.length} item(s)`;
+  if (typeof raw === "object") return `${Object.keys(raw as Record<string, unknown>).length} field(s)`;
+  return "value";
+}
+
+function InlineStructuredSummary(props: { value: unknown }) {
+  const rows = summarizeResultRows(props.value);
+  if (rows.length === 0) {
+    return (
+      <div className="mt-1 rounded border border-white/10 bg-black/30 px-2 py-1 text-[10px] text-forge-mist">
+        Execution result recorded.
+      </div>
+    );
+  }
+  return (
+    <div className="mt-1 rounded border border-white/10 bg-black/30 p-2 text-[10px] text-forge-mist">
+      <div className="font-semibold uppercase tracking-[0.14em] text-forge-mist/70">Execution Result</div>
+      <div className="mt-1 grid gap-1">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex items-start justify-between gap-3">
+            <span className="text-forge-mist/70">{label}</span>
+            <span className="text-right text-forge-ash">{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function summarizeResultRows(value: unknown): Array<[string, string]> {
+  if (value == null) return [];
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return [["Result", String(value)]];
+  }
+  if (Array.isArray(value)) {
+    return [["Result items", String(value.length)]];
+  }
+  if (typeof value !== "object") return [];
+  const row = value as Record<string, unknown>;
+  const keys = ["status", "policyOutcome", "approvalRequestId", "jobId", "gatewayStatus", "reason", "error", "message"];
+  const out: Array<[string, string]> = [];
+  for (const key of keys) {
+    const raw = row[key];
+    if (raw == null) continue;
+    if (typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean") {
+      out.push([key, String(raw)]);
+    } else if (Array.isArray(raw)) {
+      out.push([key, `${raw.length} item(s)`]);
+    } else {
+      out.push([key, `${Object.keys(raw as Record<string, unknown>).length} field(s)`]);
+    }
+  }
+  if (out.length > 0) return out;
+  return [["Fields", String(Object.keys(row).length)]];
+}
+
 function RichMessage(props: { content: string }) {
   const parts = useMemo(() => parseMessageParts(props.content), [props.content]);
   return (

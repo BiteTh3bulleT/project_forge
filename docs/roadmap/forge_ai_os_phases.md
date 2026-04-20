@@ -11,6 +11,8 @@ This roadmap extends current FORGE doctrine and modules. It does not create a pa
 - Phase 5: implemented (truth engine services, lifecycle hardening, scope-safe resolution, ingest truth integration, tests/docs)
 - Phase 5.5: partially implemented (deterministic rule-agent runtime integrated through autonomy scaffolding)
 - Phase 5.75: implemented (autonomy charters + intent queue + freedom budgets + policy evaluator + self-initiated syscall runner + bounded ingest hook)
+- Phase 5.9: implemented (AI-OS tool capability taxonomy + registry + gateway policy integration + capability API/UI visibility)
+- Discord integration layer: implemented (Discord gateway transport + canonical event normalization + intent routing + permission/audit scaffolding)
 - Phase 6+: planned
 
 ---
@@ -213,6 +215,41 @@ Validation criteria:
 
 - packet inclusion reasons are explicit and reproducible
 
+## Phase 5.9 - AI-OS tool surface and capability registry (implemented)
+
+Goal:
+
+- formalize tools as kernel-governed capabilities with typed policy metadata
+
+Landed modules:
+
+- tool surface domain contracts:
+  - `services/core/internal/aios/domain/tool_surface.go`
+- capability registry + policy evaluator:
+  - `services/core/internal/gateway/tool_capability_registry.go`
+  - `services/core/internal/gateway/tool_policy.go`
+- gateway integration:
+  - `services/core/internal/gateway/service.go`
+  - `services/core/internal/api/phase5.go`
+  - `services/core/internal/api/server.go`
+- UI/API surface:
+  - `apps/desktop/src/lib/api.ts`
+  - `apps/desktop/src/pages/ToolGatewayPage.tsx`
+- tests:
+  - `services/core/internal/gateway/tool_surface_test.go`
+
+Non-goals:
+
+- enabling all dangerous primitives as active operations
+- bypassing existing permission/approval/audit boundaries
+
+Validation highlights:
+
+- full taxonomy registered as capability metadata (active + approval_only + stubbed coverage)
+- capability policy gates execution before adapter invocation
+- self-initiated context hooks support intent/charter/budget approval gating semantics
+- capability metadata is inspectable via API/UI
+
 ## Phase 5.75 - autonomy layer (implemented)
 
 Goal:
@@ -309,6 +346,30 @@ Non-goals:
 Validation criteria:
 
 - proposal-to-commit/reject trace visible end-to-end
+
+## Discord integration layer (implemented)
+
+Goal:
+
+- treat Discord as FORGE external operator I/O, not reasoning core
+
+Landed modules:
+
+- `services/core/internal/api/discord_gateway_types.go`
+- `services/core/internal/api/discord_gateway_translate.go`
+- `services/core/internal/api/discord_gateway_router.go`
+- `services/core/internal/api/discord_gateway_permissions.go`
+- `services/core/internal/api/discord_gateway_service.go`
+- `services/core/internal/api/discord_gateway_server.go`
+- `docs/architecture/discord_integration_layer.md`
+
+Validation highlights:
+
+- slash/text ingress normalizes into canonical Discord event envelopes
+- routed intents reuse existing FORGE services (chat/search/dashboard/adapters)
+- outbound replies are structured and bounded by response contracts
+- permission-denial, gateway errors, and accepted intents are auditable and correlated
+- runtime status is inspectable via `/api/discord/status`
 
 ## Phase 10 - evals and future IRIS integration seam
 

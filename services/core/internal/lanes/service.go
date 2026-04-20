@@ -482,6 +482,18 @@ func (s *Service) EnsureDefaults(ctx context.Context, workspaceDir string) error
 			Enabled:          true,
 		},
 		{
+			ID:               "time.now",
+			Name:             "System clock read",
+			Description:      "Read current system time without side effects.",
+			ActionType:       "time.now",
+			AllowedPaths:     []string{workspaceDir},
+			WriteIntent:      false,
+			RequiresApproval: false,
+			RiskClass:        "read_only",
+			Builtin:          true,
+			Enabled:          true,
+		},
+		{
 			ID:               "desktop.session",
 			Name:             "Desktop session actions",
 			Description:      "Desktop notification/open actions.",

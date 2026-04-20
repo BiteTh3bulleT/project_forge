@@ -57,44 +57,47 @@ import (
 )
 
 type Server struct {
-	st          *store.Store
-	cfg         config.Config
-	log         *events.Logger
-	ingest      *ingest.Service
-	search      *search.Service
-	adapters    *adapters.Registry
-	approvals   *approvals.Service
-	packets     *packets.Service
-	artifacts   *artifacts.Service
-	chat        *chat.Service
-	canvas      *canvas.Service
-	projectCtx  *projectcontext.Service
-	embeddings  *embeddings.Service
-	retrieval   *retrieval.Service
-	memory      *memory.Service
-	dossiers    *dossiers.Service
-	evals       *evaluations.Service
-	lineage     *lineage.Service
-	imports     *imports.Service
-	insights    *insights.Service
-	strategies  *strategies.Service
-	policy      *policy.Service
-	automation  *automation.Service
-	packetOpt   *packetopt.Service
-	reviews     *reviews.Service
-	reconcile   *reconciliation.Service
-	failures    *failurepatterns.Service
-	dashboard   *dashboard.Service
-	jobs        *jobs.Service
-	gateway     *gateway.Gateway
-	lanes       *lanes.Service
-	permissions *permissions.Service
-	auditSvc    *audit.Service
-	backup      *backup.Service
-	release     *release.Service
-	watch       *watch.Manager
-	watchStop   context.CancelFunc
-	autonomy    *AutonomyMaintenanceLoop
+	st             *store.Store
+	cfg            config.Config
+	log            *events.Logger
+	ingest         *ingest.Service
+	search         *search.Service
+	adapters       *adapters.Registry
+	approvals      *approvals.Service
+	packets        *packets.Service
+	artifacts      *artifacts.Service
+	chat           *chat.Service
+	canvas         *canvas.Service
+	projectCtx     *projectcontext.Service
+	embeddings     *embeddings.Service
+	retrieval      *retrieval.Service
+	memory         *memory.Service
+	dossiers       *dossiers.Service
+	evals          *evaluations.Service
+	lineage        *lineage.Service
+	imports        *imports.Service
+	insights       *insights.Service
+	strategies     *strategies.Service
+	policy         *policy.Service
+	automation     *automation.Service
+	packetOpt      *packetopt.Service
+	reviews        *reviews.Service
+	reconcile      *reconciliation.Service
+	failures       *failurepatterns.Service
+	dashboard      *dashboard.Service
+	jobs           *jobs.Service
+	gateway        *gateway.Gateway
+	lanes          *lanes.Service
+	permissions    *permissions.Service
+	auditSvc       *audit.Service
+	backup         *backup.Service
+	release        *release.Service
+	watch          *watch.Manager
+	watchStop      context.CancelFunc
+	autonomy       *AutonomyMaintenanceLoop
+	discordMu      sync.RWMutex
+	discordGateway *DiscordGateway
+	discordErr     string
 
 	// chatAssistInflight tracks assistant generation (async job or SSE) per thread/user-message key.
 	chatAssistInflight sync.Map
@@ -142,14 +145,19 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	_ = laneSvc.EnsureDefaults(bg, cfg.WorkspaceDir)
 	backupSvc := backup.New(st.DB, cfg.DataDir)
 	releaseSvc := release.New(st.DB, cfg.DataDir, cfg.WorkspaceDir)
+	var autonomyLoop *AutonomyMaintenanceLoop
+	if loop := newDefaultAutonomyMaintenanceLoop(st.DB, cfg, ev, memorySvc); loop != nil {
+		autonomyLoop = loop
+	}
 	gw := gateway.New(gateway.Options{
-		DB:           st.DB,
-		Permissions:  permSvc,
-		Lanes:        laneSvc,
-		Approvals:    appSvc,
-		Audit:        auditSvc,
-		WorkspaceDir: cfg.WorkspaceDir,
-		DataDir:      cfg.DataDir,
+		DB:             st.DB,
+		Permissions:    permSvc,
+		Lanes:          laneSvc,
+		Approvals:      appSvc,
+		Audit:          auditSvc,
+		WorkspaceDir:   cfg.WorkspaceDir,
+		DataDir:        cfg.DataDir,
+		AutonomyPolicy: newGatewayAutonomyAuthorizer(autonomyLoop),
 	})
 	jobSvc := jobs.NewService(jobs.Dependencies{
 		DB:           st.DB,
@@ -177,12 +185,10 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		wm.Run(ctx)
 		_ = wm.SyncSources(context.Background(), listSourcePaths(st.DB))
 	}
-	var autonomyLoop *AutonomyMaintenanceLoop
-	if loop := newDefaultAutonomyMaintenanceLoop(st.DB, cfg, ev, memorySvc); loop != nil {
-		autonomyLoop = loop
-		go loop.Run(ctx)
+	if autonomyLoop != nil {
+		go autonomyLoop.Run(ctx)
 	}
-	return &Server{
+	srv := &Server{
 		st:          st,
 		cfg:         cfg,
 		log:         ev,
@@ -222,6 +228,8 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		watchStop:   cancel,
 		autonomy:    autonomyLoop,
 	}
+	srv.discordGateway = srv.tryStartDiscordGateway(ctx, cfg)
+	return srv
 }
 
 func (s *Server) ShutdownWatch() {
@@ -231,6 +239,12 @@ func (s *Server) ShutdownWatch() {
 	if s.autonomy != nil {
 		s.autonomy.Stop()
 	}
+	s.discordMu.Lock()
+	if s.discordGateway != nil {
+		s.discordGateway.Stop()
+		s.discordGateway = nil
+	}
+	s.discordMu.Unlock()
 	if s.watchStop != nil {
 		s.watchStop()
 	}
@@ -282,6 +296,8 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/settings/ollama-models/", s.handleGetOllamaModels)
 			r.Post("/remote/telegram", s.handleRemoteTelegram)
 			r.Post("/remote/discord", s.handleRemoteDiscord)
+			r.Get("/telegram/status", s.handleTelegramStatus)
+			r.Get("/discord/status", s.handleDiscordGatewayStatus)
 
 			r.Get("/sources", s.handleListSources)
 			r.Post("/sources", s.handleAddSource)
@@ -414,6 +430,7 @@ func (s *Server) Handler() http.Handler {
 			r.Post("/failure-patterns/analyze", s.handleAnalyzeFailurePatterns)
 
 			r.Get("/gateway/tools", s.handleGatewayTools)
+			r.Get("/gateway/capabilities", s.handleGatewayCapabilities)
 			r.Post("/gateway/invoke", s.handleGatewayInvoke)
 			r.Get("/gateway/invocations", s.handleGatewayInvocations)
 
@@ -466,11 +483,13 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	chatPersonalityPrompt := loadSetting(s.st.DB, "chat_personality_prompt", defaultChatOperatorSystemPrompt())
 	remoteAccessEnabled := parseRemoteBool(loadSetting(s.st.DB, remoteAccessEnabledKey, "false"))
 	remoteAccessToken := strings.TrimSpace(loadSetting(s.st.DB, remoteAccessTokenKey, ""))
+	remoteCrossChatContext := parseRemoteBool(loadSetting(s.st.DB, remoteCrossChatContextKey, "false"))
 	telegramBotToken := strings.TrimSpace(loadSetting(s.st.DB, telegramBotTokenKey, ""))
 	telegramDefaultChatID := strings.TrimSpace(loadSetting(s.st.DB, telegramDefaultChatIDKey, ""))
 	discordBotToken := strings.TrimSpace(loadSetting(s.st.DB, discordBotTokenKey, ""))
 	discordDefaultChannelID := strings.TrimSpace(loadSetting(s.st.DB, discordDefaultChannelIDKey, ""))
 	discordWebhookURL := strings.TrimSpace(loadSetting(s.st.DB, discordWebhookURLKey, ""))
+	discordCrossChatContext := parseRemoteBool(loadSetting(s.st.DB, discordGatewayCrossChatContextKey, "false"))
 	remoteDefaultThreadID := strings.TrimSpace(loadSetting(s.st.DB, remoteDefaultThreadIDKey, ""))
 	writeJSON(w, http.StatusOK, map[string]any{
 		"extensionsCsv":           ext,
@@ -486,12 +505,14 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		"chatPromptDefault":       defaultChatOperatorSystemPrompt(),
 		"remoteAccessEnabled":     remoteAccessEnabled,
 		"remoteAccessToken":       remoteAccessToken,
+		"remoteCrossChatContext":  remoteCrossChatContext,
 		"remoteDefaultThreadId":   remoteDefaultThreadID,
 		"telegramBotToken":        telegramBotToken,
 		"telegramDefaultChatId":   telegramDefaultChatID,
 		"discordBotToken":         discordBotToken,
 		"discordDefaultChannelId": discordDefaultChannelID,
 		"discordWebhookUrl":       discordWebhookURL,
+		"discordCrossChatContext": discordCrossChatContext,
 	})
 }
 
@@ -502,6 +523,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
+	discordConfigChanged := false
 	if v, ok := body["extensionsCsv"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, "extensions_csv", v); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -580,9 +602,16 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		discordConfigChanged = true
 	}
 	if v, ok := body["remoteAccessToken"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, remoteAccessTokenKey, strings.TrimSpace(v)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if v, ok := body["remoteCrossChatContext"]; ok {
+		if err := upsertSetting(ctx, s.st.DB, remoteCrossChatContextKey, parseRemoteBoolValue(v)); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -617,18 +646,28 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		discordConfigChanged = true
 	}
 	if v, ok := body["discordDefaultChannelId"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, discordDefaultChannelIDKey, strings.TrimSpace(v)); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		discordConfigChanged = true
 	}
 	if v, ok := body["discordWebhookUrl"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, discordWebhookURLKey, strings.TrimSpace(v)); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		discordConfigChanged = true
+	}
+	if v, ok := body["discordCrossChatContext"]; ok {
+		if err := upsertSetting(ctx, s.st.DB, discordGatewayCrossChatContextKey, parseRemoteBoolValue(v)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		discordConfigChanged = true
 	}
 	if v, ok := body["chatPersonalityPrompt"].(string); ok {
 		next := strings.TrimSpace(v)
@@ -639,6 +678,9 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+	}
+	if discordConfigChanged {
+		s.reloadDiscordGateway(ctx)
 	}
 	_ = s.log.Emit(ctx, "command.executed", map[string]any{"command": "settings.patch"})
 	s.handleGetSettings(w, r)

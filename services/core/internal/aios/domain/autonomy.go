@@ -176,6 +176,7 @@ func (e AutonomyError) Error() string {
 
 type ConditionRule struct {
 	Action               SemanticActionType `json:"action"`
+	Tool                 string             `json:"tool,omitempty"`
 	Conditions           []string           `json:"conditions"`
 	MaxRisk              AutonomyRisk       `json:"maxRisk"`
 	RequiresEvidence     bool               `json:"requiresEvidence"`
@@ -184,6 +185,16 @@ type ConditionRule struct {
 	WorkspaceConstraints []string           `json:"workspaceConstraints"`
 	BudgetCost           int                `json:"budgetCost"`
 	ApprovalRequiredWhen []string           `json:"approvalRequiredWhen"`
+}
+
+type ToolConditionRule struct {
+	Tool                 string   `json:"tool"`
+	Conditions           []string `json:"conditions"`
+	MaxRisk              ToolRisk `json:"maxRisk"`
+	RequiresEvidence     bool     `json:"requiresEvidence"`
+	WorkspaceConstraints []string `json:"workspaceConstraints"`
+	BudgetCost           int      `json:"budgetCost"`
+	ApprovalRequiredWhen []string `json:"approvalRequiredWhen"`
 }
 
 type AutonomyCharter struct {
@@ -197,6 +208,13 @@ type AutonomyCharter struct {
 	DeniedActions           []SemanticActionType `json:"deniedActions"`
 	ConditionalActions      []ConditionRule      `json:"conditionalActions"`
 	RequiresApprovalActions []SemanticActionType `json:"requiresApprovalActions"`
+	AllowedTools            []string             `json:"allowedTools,omitempty"`
+	DeniedTools             []string             `json:"deniedTools,omitempty"`
+	ConditionalTools        []ToolConditionRule  `json:"conditionalTools,omitempty"`
+	RequiresApprovalTools   []string             `json:"requiresApprovalTools,omitempty"`
+	MaxToolRisk             ToolRisk             `json:"maxToolRisk,omitempty"`
+	ToolBudgetCosts         map[string]int       `json:"toolBudgetCosts,omitempty"`
+	ExternalToolRules       []string             `json:"externalToolRules,omitempty"`
 	AllowedSources          []IntentSource       `json:"allowedSources"`
 	RiskLimits              []AutonomyRisk       `json:"riskLimits"`
 	FreedomBudgetID         string               `json:"freedomBudgetId,omitempty"`
@@ -247,6 +265,42 @@ func (c AutonomyCharter) DeniesAction(action SemanticActionType) bool {
 func (c AutonomyCharter) RequiresApproval(action SemanticActionType) bool {
 	for _, item := range c.RequiresApprovalActions {
 		if item == action {
+			return true
+		}
+	}
+	return false
+}
+
+func (c AutonomyCharter) AllowsTool(toolID string) bool {
+	toolID = strings.TrimSpace(strings.ToLower(toolID))
+	if toolID == "" {
+		return false
+	}
+	if len(c.AllowedTools) == 0 {
+		return false
+	}
+	for _, item := range c.AllowedTools {
+		if strings.EqualFold(strings.TrimSpace(item), toolID) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c AutonomyCharter) DeniesTool(toolID string) bool {
+	toolID = strings.TrimSpace(strings.ToLower(toolID))
+	for _, item := range c.DeniedTools {
+		if strings.EqualFold(strings.TrimSpace(item), toolID) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c AutonomyCharter) RequiresToolApproval(toolID string) bool {
+	toolID = strings.TrimSpace(strings.ToLower(toolID))
+	for _, item := range c.RequiresApprovalTools {
+		if strings.EqualFold(strings.TrimSpace(item), toolID) {
 			return true
 		}
 	}

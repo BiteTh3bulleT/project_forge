@@ -48,7 +48,7 @@ function RoutedViews() {
   return (
     <ForgeErrorBoundary resetKey={location.pathname + location.search}>
       <Routes>
-        <Route path="/" element={<Navigate to="/chat" replace />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/start" element={<StartPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/chat" element={<ChatPage />} />

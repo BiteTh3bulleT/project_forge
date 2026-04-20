@@ -1,9 +1,9 @@
-import type { AdapterInfo, ApprovalRequest, DashboardSummary, JobDetail, ReviewRecord } from "@forge/shared";
+import type { ApprovalRequest, DashboardSummary, JobDetail, ReviewRecord } from "@forge/shared";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { CommandBar } from "../components/CommandBar";
-import { api, type CanvasBoardDetail, type ChatThreadDetail, type ForgeArtifact, type SettingsRecord } from "../lib/api";
+import { api, type CanvasBoardDetail, type ChatThreadDetail, type ForgeArtifact } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useDesktopShellStore } from "../stores/desktopShellStore";
 import { useUiStore } from "../stores/uiStore";
@@ -61,8 +61,6 @@ export function AppShell(props: { children: ReactNode }) {
   const touchRoute = useDesktopShellStore((s) => s.touchRoute);
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [settings, setSettings] = useState<SettingsRecord | null>(null);
-  const [adapters, setAdapters] = useState<AdapterInfo[]>([]);
   const [shellErr, setShellErr] = useState<string | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const isMainWindow = layoutReady && currentWindowLabel === "main";
@@ -77,15 +75,9 @@ export function AppShell(props: { children: ReactNode }) {
     let cancelled = false;
     async function loadShellState() {
       try {
-        const [nextSummary, nextSettings, nextAdapters] = await Promise.all([
-          api.dashboard.summary(),
-          api.settings.get(),
-          api.adapters.list(),
-        ]);
+        const nextSummary = await api.dashboard.summary();
         if (cancelled) return;
         setSummary(nextSummary);
-        setSettings(nextSettings);
-        setAdapters(Array.isArray(nextAdapters.adapters) ? nextAdapters.adapters : []);
         setShellErr(null);
       } catch (e) {
         if (cancelled) return;
@@ -105,11 +97,6 @@ export function AppShell(props: { children: ReactNode }) {
     return () => window.clearInterval(id);
   }, []);
 
-  const readyAdapters = adapters.filter((adapter) => adapter.status === "ready");
-  const activeModel = settings?.ollamaModel?.trim() ? settings.ollamaModel : "unassigned";
-  const modelLabel = settings?.ollamaBaseUrl?.trim()
-    ? `${activeModel} @ ${settings.ollamaBaseUrl.replace(/^https?:\/\//, "")}`
-    : activeModel;
   const chatFocused = pathname === "/chat";
   const lockPageScroll = chatFocused;
   const activeLayout = layouts.find((layout) => layout.id === activeLayoutId) ?? null;
@@ -124,6 +111,7 @@ export function AppShell(props: { children: ReactNode }) {
   const activeJobCount = summaryActiveJobs.length;
   const approvalsPending = summary?.approvalsPending ?? 0;
   const reviewsPending = summary?.reviewsPending ?? 0;
+  const attentionCount = approvalsPending + reviewsPending;
 
   return (
     <div className="forge-shell-frame flex h-full min-h-0 flex-col text-forge-ash">
@@ -138,18 +126,18 @@ export function AppShell(props: { children: ReactNode }) {
               <div className="truncate text-sm text-forge-ash">{meta?.workspaceDir ?? "Workspace metadata unavailable"}</div>
             </div>
           </div>
-
-          <div className="hidden h-10 w-px bg-white/10 xl:block" aria-hidden />
-
-          <div className={chatFocused ? "hidden" : "min-w-0 items-center gap-2 xl:flex"}>
-            <StatusChip label="Model" value={modelLabel} emphasis />
-            <StatusChip label="Adapters" value={`${readyAdapters.length}/${adapters.length || 0} ready`} />
-            <StatusChip label="Jobs" value={`${activeJobCount} active`} />
-            <StatusChip label="Approvals" value={String(approvalsPending)} warn={approvalsPending > 0} />
-            <StatusChip label="Reviews" value={String(reviewsPending)} warn={reviewsPending > 0} />
-            <StatusChip label="Layout" value={activeLayout?.name ?? "none"} />
-            <StatusChip label="Display" value={currentMonitor?.name ?? (currentMonitor ? `display ${currentMonitor.ordinal + 1}` : "unknown")} />
-          </div>
+          {!chatFocused ? (
+            <div className="hidden min-w-0 items-center gap-2 xl:flex">
+              <span className="forge-chip forge-chip--muted px-3 py-1.5 text-[11px]">
+                <span className="mr-2 uppercase tracking-[0.16em] text-forge-mist/55">Surface</span>
+                {currentTool.label}
+              </span>
+              <span className="forge-chip forge-chip--muted px-3 py-1.5 text-[11px]">
+                <span className="mr-2 uppercase tracking-[0.16em] text-forge-mist/55">Layout</span>
+                {activeLayout?.name ?? "none"}
+              </span>
+            </div>
+          ) : null}
         </div>
 
         <div className="hidden min-w-0 flex-1 px-4 lg:block">
@@ -157,6 +145,13 @@ export function AppShell(props: { children: ReactNode }) {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate("/dashboard")}
+            className="forge-chip forge-chip--muted hidden px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] md:inline-flex"
+          >
+            Dashboard
+          </button>
           <select
             className="hidden forge-chip forge-chip--muted px-3 py-1.5 text-[11px] text-forge-mist outline-none lg:block"
             value={activeLayoutId ?? ""}
@@ -175,6 +170,9 @@ export function AppShell(props: { children: ReactNode }) {
           >
             Layouts
           </button>
+          <span className={["forge-chip", attentionCount > 0 ? "forge-chip--warn" : "forge-chip--muted", "text-[10px] font-semibold uppercase tracking-[0.16em]"].join(" ")}>
+            Attention {attentionCount}
+          </span>
           <span className={["forge-chip", corePill(core), "text-[10px] font-semibold uppercase tracking-[0.16em]"].join(" ")}>
             Core {core === "online" ? "online" : core === "offline" ? "offline" : "checking"}
           </span>
@@ -264,16 +262,12 @@ export function AppShell(props: { children: ReactNode }) {
               </div>
 
               <div className="hidden items-center gap-2 xl:flex">
-                {summaryActiveJobs.slice(0, 3).map((job) => (
-                  <button
-                    key={job.id}
-                    type="button"
-                    onClick={() => navigate(`/jobs/${encodeURIComponent(job.id)}`)}
-                    className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] text-forge-mist transition hover:border-white/20 hover:text-forge-ash"
-                  >
-                    {job.status} · {job.title}
-                  </button>
-                ))}
+                <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] text-forge-mist">
+                  {activeJobCount} active jobs
+                </span>
+                <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] text-forge-mist">
+                  {attentionCount} attention items
+                </span>
               </div>
             </div>
           ) : null}
@@ -288,7 +282,9 @@ export function AppShell(props: { children: ReactNode }) {
                       <div className="mt-1 text-sm text-forge-mist/80">{currentTool.description}</div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-[11px] text-forge-mist/75">
-                      <span className="rounded-full border border-white/10 bg-black/25 px-2.5 py-1">Route {pathname}</span>
+                      <span className="rounded-full border border-white/10 bg-black/25 px-2.5 py-1">
+                        {currentMonitor?.name ?? (currentMonitor ? `display ${currentMonitor.ordinal + 1}` : "display unknown")}
+                      </span>
                       {lastErr && core === "offline" ? <span className="rounded-full border border-forge-ember/25 bg-forge-ember/10 px-2.5 py-1 text-forge-emberSoft">{lastErr}</span> : null}
                     </div>
                   </div>
@@ -328,16 +324,6 @@ function describeRoute(route: string) {
   if (route.startsWith("/jobs/")) return `Run ${route.replace("/jobs/", "")}`;
   const tool = getShellTool(route);
   return tool.primary ? tool.label : route;
-}
-
-function StatusChip(props: { label: string; value: string; warn?: boolean; emphasis?: boolean }) {
-  const tone = props.warn ? "forge-chip--warn" : props.emphasis ? "forge-chip--ok" : "forge-chip--muted";
-  return (
-    <div className={["forge-chip", "px-3 py-1.5 text-[11px]", tone, props.emphasis ? "text-forge-ash" : ""].join(" ")}>
-      <span className="mr-2 uppercase tracking-[0.16em] text-forge-mist/55">{props.label}</span>
-      <span>{props.value}</span>
-    </div>
-  );
 }
 
 function ShellContextPanel(props: {

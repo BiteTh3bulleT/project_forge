@@ -243,6 +243,9 @@ export type AutonomyCharterRecord = {
   allowedActions?: string[];
   deniedActions?: string[];
   requiresApprovalActions?: string[];
+  allowedTools?: string[];
+  deniedTools?: string[];
+  requiresApprovalTools?: string[];
   createdAt?: number;
   updatedAt?: number;
 };
@@ -281,12 +284,63 @@ export type SettingsRecord = {
   chatPromptDefault: string;
   remoteAccessEnabled: boolean;
   remoteAccessToken: string;
+  remoteCrossChatContext: boolean;
   remoteDefaultThreadId: string;
   telegramBotToken: string;
   telegramDefaultChatId: string;
   discordBotToken: string;
   discordDefaultChannelId: string;
   discordWebhookUrl: string;
+  discordCrossChatContext: boolean;
+};
+
+export type TelegramStatusResponse = {
+  remoteAccessEnabled: boolean;
+  tokenConfigured: boolean;
+  defaultChatId: string;
+  crossChatContext: boolean;
+  ready: boolean;
+  reason?: string;
+  bot?: {
+    id: number;
+    username: string;
+    firstName: string;
+  };
+  webhook?: {
+    url: string;
+    has_custom_certificate: boolean;
+    pending_update_count: number;
+    last_error_date: number;
+    last_error_message: string;
+    max_connections: number;
+    ip_address: string;
+  };
+  webhookError?: string;
+};
+
+export type DiscordGatewayStatusSnapshot = {
+  enabled: boolean;
+  connected?: boolean;
+  applicationId?: string;
+  guildId?: string;
+  commandPrefix?: string;
+  enableSlash?: boolean;
+  enableText?: boolean;
+  enablePassive?: boolean;
+  enableOutbound?: boolean;
+  registeredCommands?: string[];
+  lastError?: string;
+  startedAtMs?: number;
+  lastInboundAtMs?: number;
+  lastOutboundAtMs?: number;
+  inboundCount?: number;
+  outboundCount?: number;
+};
+
+export type DiscordGatewayStatusResponse = {
+  enabled: boolean;
+  status: "disabled" | DiscordGatewayStatusSnapshot;
+  reason?: string;
 };
 
 export const api = {
@@ -327,6 +381,9 @@ export const api = {
         body: JSON.stringify(body),
       }),
   },
+  telegram: {
+    status: () => j<TelegramStatusResponse>("/api/telegram/status"),
+  },
   sources: {
     list: () => j<{ sources: SourceRow[] }>("/api/sources"),
     add: (path: string) =>
@@ -365,6 +422,9 @@ export const api = {
       j<{ charters: AutonomyCharterRecord[] }>(`/api/autonomy/charters?activeOnly=${encodeURIComponent(String(activeOnly))}`),
     events: (limit = 120) =>
       j<{ events: ForgeEvent[] }>(`/api/autonomy/events?limit=${encodeURIComponent(String(limit))}`),
+  },
+  discord: {
+    status: () => j<DiscordGatewayStatusResponse>("/api/discord/status"),
   },
   adapters: {
     list: () => j<{ adapters: AdapterInfo[] }>("/api/adapters"),
@@ -786,8 +846,44 @@ export const api = {
           executes: boolean;
           usesNetwork: boolean;
           writeIntent: boolean;
+          capabilityId?: string;
+          capabilityStatus?: string;
+          capabilityRisk?: string;
+          adapterId?: string;
+          requiresApprovalByDefault?: boolean;
+          autonomyEligible?: boolean;
+          allowedInDryRun?: boolean;
         }>;
       }>("/api/gateway/tools"),
+    capabilities: () =>
+      j<{
+        capabilities: Array<{
+          id: string;
+          domain: string;
+          name: string;
+          description: string;
+          status: string;
+          lane: string;
+          effect: string[];
+          risk: string;
+          requiresWorkspace: boolean;
+          requiresIntent: boolean;
+          requiresApprovalByDefault: boolean;
+          autonomyEligible: boolean;
+          allowedInDryRun: boolean;
+          requiredCapabilities?: string[];
+          policyTags?: string[];
+          resourceCost: Record<string, unknown>;
+          resourceLimits: Record<string, unknown>;
+          inputSchema?: Record<string, unknown>;
+          outputSchema?: Record<string, unknown>;
+          auditLevel: string;
+          artifactBehavior: string;
+          rollbackSupport: boolean;
+          adapterId?: string;
+          metadata?: Record<string, unknown>;
+        }>;
+      }>("/api/gateway/capabilities"),
     invoke: (body: Record<string, unknown>) =>
       j<{ result: Record<string, unknown> }>("/api/gateway/invoke", {
         method: "POST",

@@ -369,6 +369,44 @@ html[data-theme="light"] .forge-input {
   @apply flex flex-col gap-1 rounded-xl border border-white/10 bg-black/20 px-3 py-3;
 }
 
+.forge-sim-graph__edge {
+  stroke: rgba(129, 150, 255, 0.38);
+  stroke-dasharray: 4 5;
+  stroke-linecap: round;
+  animation: forge-link-flow 9s linear infinite;
+}
+
+.forge-sim-graph__edge--highlight {
+  stroke: rgba(168, 202, 255, 0.9);
+}
+
+.forge-sim-graph__node {
+  fill: rgba(104, 138, 255, 0.82);
+  stroke: rgba(220, 230, 255, 0.44);
+  stroke-width: 1.2;
+}
+
+.forge-sim-graph__node--stale {
+  fill: rgba(215, 126, 126, 0.84);
+  stroke: rgba(255, 210, 210, 0.5);
+}
+
+.forge-sim-graph__halo {
+  fill: none;
+  stroke: rgba(160, 192, 255, 0.54);
+  stroke-width: 1.4;
+}
+
+@keyframes forge-link-flow {
+  from {
+    stroke-dashoffset: 0;
+  }
+
+  to {
+    stroke-dashoffset: -42;
+  }
+}
+
 .forge-status-glow {
   position: relative;
   overflow: hidden;

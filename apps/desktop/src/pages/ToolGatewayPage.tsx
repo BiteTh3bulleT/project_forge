@@ -15,6 +15,30 @@ type ToolRow = {
   executes: boolean;
   usesNetwork: boolean;
   writeIntent: boolean;
+  capabilityId?: string;
+  capabilityStatus?: string;
+  capabilityRisk?: string;
+  adapterId?: string;
+  requiresApprovalByDefault?: boolean;
+  autonomyEligible?: boolean;
+  allowedInDryRun?: boolean;
+};
+
+type CapabilityRow = {
+  id: string;
+  domain: string;
+  name: string;
+  description: string;
+  status: string;
+  lane: string;
+  effect: string[];
+  risk: string;
+  requiresWorkspace: boolean;
+  requiresIntent: boolean;
+  requiresApprovalByDefault: boolean;
+  autonomyEligible: boolean;
+  allowedInDryRun: boolean;
+  adapterId?: string;
 };
 
 type LaneRow = {
@@ -73,6 +97,7 @@ export function ToolGatewayPage() {
   const navigate = useNavigate();
   const setStatus = useUiStore((s) => s.setStatusLine);
   const [tools, setTools] = useState<ToolRow[]>([]);
+  const [capabilities, setCapabilities] = useState<CapabilityRow[]>([]);
   const [lanes, setLanes] = useState<LaneRow[]>([]);
   const [invs, setInvs] = useState<InvocationRow[]>([]);
   const [workspace, setWorkspace] = useState("");
@@ -100,15 +125,18 @@ export function ToolGatewayPage() {
 
   async function refresh() {
     try {
-      const [t, l, m, i] = await Promise.all([
+      const [t, c, l, m, i] = await Promise.all([
         api.gateway.tools(),
+        api.gateway.capabilities(),
         api.actionLanes.list(),
         api.meta(),
         api.gateway.invocations({ limit: 80, status: statusFilter || undefined }),
       ]);
       const toolRows = Array.isArray(t.tools) ? t.tools : [];
+      const capabilityRows = Array.isArray(c.capabilities) ? c.capabilities : [];
       const laneRows = (Array.isArray(l.lanes) ? l.lanes : []) as LaneRow[];
       setTools(toolRows);
+      setCapabilities(capabilityRows);
       setLanes(laneRows);
       setInvs(Array.isArray(i.invocations) ? i.invocations : []);
       setWorkspace(m.workspaceDir);
@@ -267,9 +295,7 @@ export function ToolGatewayPage() {
           ) : null}
         </div>
         {last ? (
-          <pre className="mt-4 max-h-72 overflow-auto rounded-md border border-white/10 bg-black/30 p-3 font-mono text-[11px] text-forge-mist">
-            {JSON.stringify(last, null, 2)}
-          </pre>
+          <GatewayResultSummary result={last} />
         ) : null}
       </Panel>
 
@@ -279,7 +305,29 @@ export function ToolGatewayPage() {
             <div key={t.id} className="rounded border border-white/10 bg-forge-slate/20 px-3 py-2 text-xs text-forge-mist">
               <div className="font-mono text-forge-ash">{t.id}</div>
               <div className="mt-1">{t.domain}.{t.action} · {t.riskClass} · {t.executionLevel} · {t.writeIntent ? "write" : "read"}</div>
+              <div className="mt-1 text-[11px]">
+                capability {t.capabilityId ?? "—"} · status {t.capabilityStatus ?? "—"} · risk {t.capabilityRisk ?? "—"} · adapter {t.adapterId ?? "—"}
+              </div>
               <div className="mt-1">{t.description}</div>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel title="Capability Registry" subtitle="Kernel capability taxonomy, status, risk, and autonomy eligibility.">
+        <div className="space-y-2">
+          {capabilities.length === 0 ? <div className="text-sm text-forge-mist">No capability metadata available.</div> : null}
+          {capabilities.map((cap) => (
+            <div key={cap.id} className="rounded border border-white/10 bg-black/25 px-3 py-2 text-xs text-forge-mist">
+              <div className="font-mono text-forge-ash">{cap.id}</div>
+              <div className="mt-1">
+                {cap.domain}.{cap.name} · {cap.status} · risk {cap.risk} · lane {cap.lane}
+              </div>
+              <div className="mt-1">
+                effects {cap.effect.join(", ")} · intent {cap.requiresIntent ? "required" : "optional"} · dry-run{" "}
+                {cap.allowedInDryRun ? "allowed" : "blocked"} · autonomy {cap.autonomyEligible ? "eligible" : "not eligible"}
+              </div>
+              <div className="mt-1">{cap.description}</div>
             </div>
           ))}
         </div>
@@ -306,4 +354,80 @@ export function ToolGatewayPage() {
       </Panel>
     </div>
   );
+}
+
+function GatewayResultSummary(props: { result: Record<string, unknown> }) {
+  const rows: Array<[string, string]> = [
+    ["Status", toText(props.result.status)],
+    ["Policy outcome", toText(props.result.policyOutcome)],
+    ["Tool", toText(props.result.toolId)],
+    ["Lane", toText(props.result.laneId)],
+    ["Action", toText(props.result.action)],
+    ["Risk class", toText(props.result.riskClass)],
+    ["Execution level", toText(props.result.executionLevel)],
+    ["Approval request", toText(props.result.approvalRequestId)],
+    ["Job", toText(props.result.jobId)],
+    ["Correlation", toText(props.result.correlationId)],
+    ["Audit", toText(props.result.auditId)],
+  ];
+  const warnings = normalizeStringList(props.result.warnings);
+  const deniedReason = toText(props.result.deniedReason);
+  const errorMessage = toText(props.result.error);
+  const outputSummary = summarizeOutput(props.result.output);
+
+  return (
+    <div className="mt-4 rounded-md border border-white/10 bg-black/25 p-3 text-[11px] text-forge-mist">
+      <div className="grid gap-1 md:grid-cols-2">
+        {rows
+          .filter(([, value]) => value !== "—")
+          .map(([label, value]) => (
+            <div key={label} className="flex items-start justify-between gap-3 border-b border-white/5 pb-1">
+              <span className="text-forge-mist/75">{label}</span>
+              <span className="text-right text-forge-ash">{value}</span>
+            </div>
+          ))}
+      </div>
+      {outputSummary ? (
+        <div className="mt-2 rounded border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-forge-ash">
+          Output: {outputSummary}
+        </div>
+      ) : null}
+      {warnings.length > 0 ? (
+        <div className="mt-2 rounded border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-forge-ash">
+          Warnings: {warnings.join(" | ")}
+        </div>
+      ) : null}
+      {deniedReason !== "—" ? (
+        <div className="mt-2 rounded border border-forge-ember/30 bg-forge-ember/10 px-2 py-1 text-[11px] text-forge-ash">
+          Denied: {deniedReason}
+        </div>
+      ) : null}
+      {errorMessage !== "—" ? (
+        <div className="mt-2 rounded border border-forge-ember/30 bg-forge-ember/10 px-2 py-1 text-[11px] text-forge-ash">
+          Error: {errorMessage}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function toText(value: unknown) {
+  if (value == null) return "—";
+  if (typeof value === "string") return value.trim() || "—";
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return "structured";
+}
+
+function normalizeStringList(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item).trim()).filter(Boolean);
+}
+
+function summarizeOutput(value: unknown) {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return `${value.length} item(s)`;
+  if (typeof value === "object") return `${Object.keys(value as Record<string, unknown>).length} field(s)`;
+  return "";
 }

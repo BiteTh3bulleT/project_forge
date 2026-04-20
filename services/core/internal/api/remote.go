@@ -21,6 +21,7 @@ const (
 	remoteAccessEnabledKey     = "remote_access_enabled"
 	remoteAccessTokenKey       = "remote_access_token"
 	remoteDefaultThreadIDKey   = "remote_default_thread_id"
+	remoteCrossChatContextKey  = "remote_cross_chat_context"
 	telegramBotTokenKey        = "telegram_bot_token"
 	telegramDefaultChatIDKey   = "telegram_default_chat_id"
 	discordBotTokenKey         = "discord_bot_token"
@@ -36,6 +37,7 @@ type remoteConfig struct {
 	enabled             bool
 	token               string
 	defaultThreadID     int64
+	crossChatContext    bool
 	telegramBotToken    string
 	telegramDefaultChat string
 	discordBotToken     string
@@ -124,7 +126,7 @@ func (s *Server) handleRemoteTelegram(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fromID := remoteStringID(msg.FromID())
-	sourceKey := remoteSourceKey("telegram", chatID, fromID)
+	sourceKey := remoteSourceKeyForPlatform(conf, "telegram", chatID, fromID)
 	sendTarget := remoteReplyTarget{
 		platform:  "telegram",
 		chatID:    chatID,
@@ -185,7 +187,7 @@ func (s *Server) handleRemoteDiscord(w http.ResponseWriter, r *http.Request) {
 		lookupChannelID = "webhook"
 	}
 
-	sourceKey := remoteSourceKey("discord", lookupChannelID, authorID)
+	sourceKey := remoteSourceKeyForPlatform(conf, "discord", lookupChannelID, authorID)
 	sendTarget := remoteReplyTarget{
 		platform:  "discord",
 		channelID: channelID,
@@ -298,6 +300,7 @@ func (s *Server) loadRemoteConfig(ctx context.Context) (remoteConfig, error) {
 		enabled:             parseRemoteBool(loadSetting(s.st.DB, remoteAccessEnabledKey, "false")),
 		token:               strings.TrimSpace(loadSetting(s.st.DB, remoteAccessTokenKey, "")),
 		defaultThreadID:     parseRemoteInt64(loadSetting(s.st.DB, remoteDefaultThreadIDKey, "")),
+		crossChatContext:    parseRemoteBool(loadSetting(s.st.DB, remoteCrossChatContextKey, "false")),
 		telegramBotToken:    strings.TrimSpace(loadSetting(s.st.DB, telegramBotTokenKey, "")),
 		telegramDefaultChat: strings.TrimSpace(loadSetting(s.st.DB, telegramDefaultChatIDKey, "")),
 		discordBotToken:     strings.TrimSpace(loadSetting(s.st.DB, discordBotTokenKey, "")),
@@ -467,6 +470,13 @@ func remoteSourceKey(platform, locationID, senderID string) string {
 		return platform + ":" + strings.TrimSpace(locationID)
 	}
 	return platform + ":" + strings.TrimSpace(locationID) + ":" + strings.TrimSpace(senderID)
+}
+
+func remoteSourceKeyForPlatform(conf remoteConfig, platform, locationID, senderID string) string {
+	if conf.crossChatContext {
+		return remoteSourceKey(platform+"_shared", "global", "shared")
+	}
+	return remoteSourceKey(platform, locationID, senderID)
 }
 
 func remoteTrimmedText(values ...string) string {

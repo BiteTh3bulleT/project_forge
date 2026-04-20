@@ -518,6 +518,136 @@ export type AutonomyRunSummary = {
   traceId?: string;
 };
 
+export type ToolCapabilityStatus = "active" | "disabled" | "stubbed" | "approval_only" | "deprecated";
+export type ToolLane = "control" | "io" | "compute";
+export type ToolEffect = "read" | "write" | "execute" | "network" | "external" | "privileged" | "destructive";
+export type ToolRisk = "none" | "low" | "medium" | "high" | "critical";
+export type ToolAuditLevel = "minimal" | "basic" | "verbose";
+export type ToolArtifactBehavior = "none" | "optional" | "required";
+
+export type ToolResourceCost = {
+  cpu?: number;
+  memory?: number;
+  io?: number;
+  network?: number;
+  duration?: number;
+  costUnits?: number;
+  concurrency?: number;
+  externalCalls?: number;
+};
+
+export type ToolResourceLimits = {
+  maxDurationMs?: number;
+  maxOutputBytes?: number;
+  maxMemoryMb?: number;
+  maxCpuPercent?: number;
+  maxNetworkBytes?: number;
+  allowedPaths?: string[];
+  deniedPaths?: string[];
+  allowedHosts?: string[];
+  deniedHosts?: string[];
+  allowedMethods?: string[];
+  sandboxMode?: string;
+};
+
+export type ToolCapability = {
+  id: string;
+  domain: string;
+  name: string;
+  description: string;
+  status: ToolCapabilityStatus;
+  lane: ToolLane;
+  effect: ToolEffect[];
+  risk: ToolRisk;
+  requiresWorkspace: boolean;
+  requiresIntent: boolean;
+  requiresApprovalByDefault: boolean;
+  autonomyEligible: boolean;
+  allowedInDryRun: boolean;
+  requiredCapabilities?: string[];
+  policyTags?: string[];
+  resourceCost: ToolResourceCost;
+  resourceLimits: ToolResourceLimits;
+  inputSchema?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
+  auditLevel: ToolAuditLevel;
+  artifactBehavior: ToolArtifactBehavior;
+  rollbackSupport: boolean;
+  adapterId?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type ToolRequest = {
+  id: string;
+  toolId: string;
+  actor: ActorIdentity;
+  source: ActionSource;
+  scope: ForgeScope;
+  intentId?: string;
+  charterId?: string;
+  budgetId?: string;
+  approvalId?: string;
+  payload: Record<string, unknown>;
+  dryRun: boolean;
+  requestedAt: number;
+  correlationId?: string;
+  traceId?: string;
+  provenance: Provenance;
+  metadata?: Record<string, unknown>;
+};
+
+export type ToolResultStatus = "succeeded" | "failed" | "denied" | "approval_required" | "dry_run" | "unsupported" | "disabled";
+
+export type ToolExecutionErrorCode =
+  | "TOOL_NOT_FOUND"
+  | "TOOL_DISABLED"
+  | "INVALID_PAYLOAD"
+  | "UNAUTHORIZED"
+  | "APPROVAL_REQUIRED"
+  | "BUDGET_EXCEEDED"
+  | "POLICY_DENIED"
+  | "RISK_TOO_HIGH"
+  | "SCOPE_DENIED"
+  | "RESOURCE_LIMIT_EXCEEDED"
+  | "ADAPTER_UNAVAILABLE"
+  | "EXECUTION_FAILED"
+  | "TIMEOUT"
+  | "DRY_RUN_ONLY"
+  | "UNSUPPORTED";
+
+export type ToolExecutionError = {
+  code: ToolExecutionErrorCode;
+  field?: string;
+  message: string;
+};
+
+export type ToolResourceUsage = {
+  cpuPercent?: number;
+  memoryMb?: number;
+  durationMs?: number;
+  outputBytes?: number;
+  networkBytes?: number;
+  costUnits?: number;
+};
+
+export type ToolResult = {
+  success: boolean;
+  toolId: string;
+  requestId: string;
+  status: ToolResultStatus;
+  output?: Record<string, unknown>;
+  error?: ToolExecutionError;
+  warnings?: string[];
+  artifacts?: ArtifactRef[];
+  auditId?: string;
+  resourceUsage?: ToolResourceUsage;
+  startedAt: number;
+  completedAt: number;
+  correlationId?: string;
+  traceId?: string;
+  metadata?: Record<string, unknown>;
+};
+
 export function validateSyscallRequest(req: SyscallRequest): string[] {
   const errors: string[] = [];
   if (!req.id?.trim()) errors.push("id is required");
@@ -560,5 +690,18 @@ export function validateIngestRequest(req: IngestRequest): string[] {
   ) {
     errors.push("commitMode is invalid");
   }
+  return errors;
+}
+
+export function validateToolRequest(req: ToolRequest): string[] {
+  const errors: string[] = [];
+  if (!req.id?.trim()) errors.push("id is required");
+  if (!req.toolId?.trim()) errors.push("toolId is required");
+  if (!req.actor?.id?.trim()) errors.push("actor.id is required");
+  if (!req.actor?.kind?.trim()) errors.push("actor.kind is required");
+  if (!req.scope?.workspaceId?.trim()) errors.push("scope.workspaceId is required");
+  if (!req.provenance?.actor?.trim()) errors.push("provenance.actor is required");
+  if (!req.provenance?.actorType?.trim()) errors.push("provenance.actorType is required");
+  if (!Number.isFinite(req.requestedAt) || req.requestedAt <= 0) errors.push("requestedAt must be a positive timestamp");
   return errors;
 }

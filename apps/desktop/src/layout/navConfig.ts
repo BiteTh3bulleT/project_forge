@@ -23,7 +23,7 @@ export const navGroups: readonly NavGroup[] = [
     mode: "both",
     items: [
       { to: "/start", label: "Start Here", blurb: "Guided setup and next actions.", mode: "both" },
-      { to: "/dashboard", label: "Overview", blurb: "Live system summary.", mode: "both" },
+      { to: "/dashboard", label: "Dashboard", blurb: "Main command dashboard with autonomy and gateway telemetry.", mode: "both" },
     ],
   },
   {
@@ -92,7 +92,7 @@ export const navGroups: readonly NavGroup[] = [
 
 export const routeHelp: Record<string, { title: string; text: string }> = {
   "/start": { title: "Start", text: "Use this page for the easiest path: connect sources, search memory, run jobs, and review results." },
-  "/dashboard": { title: "Overview", text: "Live summary of active jobs, approvals, reviews, and recent system signals." },
+  "/dashboard": { title: "Dashboard", text: "Main command dashboard: active work, autonomy pulse, capability status, and memory correlation graph." },
   "/chat": { title: "Chat", text: "Create threads, discuss work, and queue jobs from conversation context." },
   "/jobs": { title: "Jobs", text: "Track job lifecycle, logs, packet references, and artifacts." },
   "/approvals": { title: "Approvals", text: "Approve or deny risky operations before execution continues." },

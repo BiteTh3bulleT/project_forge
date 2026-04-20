@@ -100,6 +100,29 @@ Self-initiated actions from FORGE autonomy still enter through the same syscall 
 - kernel validation, capability checks, approval checks, transition rules, and audit all remain mandatory
 - no autonomy mode can bypass Control Lane commit boundaries
 
+## Tool capability integration (Phase 5.9)
+
+Tool execution is governed in the gateway, but kernel sovereignty remains intact:
+
+- tool calls are policy/audit/approval controlled through the tool gateway and capability registry
+- tool output is treated as evidence artifacts and invocation records
+- no tool output may directly mutate canonical semantic truth
+- any truth-changing effect from tool output must be represented as semantic syscall proposals and processed by Control Lane
+
+This preserves the separation:
+
+- gateway controls externalized side-effect execution
+- Control Lane controls semantic truth commits
+
+## Discord gateway integration
+
+Discord is an external control and conversational surface, not a kernel authority.
+
+- inbound Discord events are normalized and routed in `internal/api/discord_gateway_*`
+- Discord handlers may enqueue chat/intent work and produce tool/evidence outputs
+- any semantic truth mutation still requires syscall validation/authorization/audit in Control Lane
+- Discord identity does not bypass permission/approval gates
+
 ## Key modules
 
 - `registry.go`

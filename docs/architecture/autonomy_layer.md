@@ -144,3 +144,15 @@ Future IRIS may propose intents and actions, but it still cannot:
 - bypass budget checks
 - bypass kernel syscall validation
 - bypass scope and audit requirements
+
+## Tool surface integration (Phase 5.9)
+
+Autonomy does not directly execute host tools. Self-initiated tool calls are governed by the AI-OS tool surface:
+
+- tool capability registry resolves `domain.primitive` capability ids
+- gateway policy checks capability status/risk/resource limits
+- autonomy context (intent/charter/budget/source) is required for self-initiated paths
+- approval-only/high-risk/critical capabilities escalate to approval
+- tool output is evidence only; semantic truth updates still require semantic syscalls
+
+This keeps autonomy bounded while enabling safe maintenance diagnostics and preparation workflows.
