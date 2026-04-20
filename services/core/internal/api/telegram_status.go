@@ -45,6 +45,15 @@ func (s *Server) handleTelegramStatus(w http.ResponseWriter, r *http.Request) {
 		"defaultChatId":       defaultChatID,
 		"crossChatContext":    crossChat,
 	}
+	s.telegramMu.RLock()
+	gateway := s.telegramGateway
+	gatewayErr := strings.TrimSpace(s.telegramErr)
+	s.telegramMu.RUnlock()
+	if gateway != nil {
+		payload["gateway"] = gateway.Status()
+	} else if gatewayErr != "" {
+		payload["gatewayReason"] = gatewayErr
+	}
 	if token == "" {
 		payload["ready"] = false
 		payload["reason"] = "telegram bot token is not configured"

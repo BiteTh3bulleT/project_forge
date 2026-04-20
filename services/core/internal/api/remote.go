@@ -109,33 +109,7 @@ func (s *Server) handleRemoteTelegram(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no telegram message", http.StatusBadRequest)
 		return
 	}
-
-	text := remoteTrimmedText(msg.Text, msg.Caption)
-	if text == "" {
-		http.Error(w, "content required", http.StatusBadRequest)
-		return
-	}
-
-	chatID := remoteStringID(msg.Chat.ID)
-	if chatID == "" {
-		chatID = conf.telegramDefaultChat
-	}
-	if chatID == "" {
-		http.Error(w, "telegram chat id not configured", http.StatusBadRequest)
-		return
-	}
-
-	fromID := remoteStringID(msg.FromID())
-	sourceKey := remoteSourceKeyForPlatform(conf, "telegram", chatID, fromID)
-	sendTarget := remoteReplyTarget{
-		platform:  "telegram",
-		chatID:    chatID,
-		replyToID: remoteStringID(msg.MessageID),
-	}
-
-	if err := s.processRemoteMessage(r.Context(), conf, sourceKey, text, sendTarget, func(ctx context.Context, reply string) error {
-		return s.sendTelegramReply(ctx, conf.telegramBotToken, sendTarget.chatID, sendTarget.replyToID, reply)
-	}); err != nil {
+	if err := s.processTelegramRemoteMessage(r.Context(), conf, msg); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -265,6 +239,33 @@ func (s *Server) processRemoteMessage(
 	return nil
 }
 
+func (s *Server) processTelegramRemoteMessage(ctx context.Context, conf remoteConfig, msg *telegramMessage) error {
+	text := remoteTrimmedText(msg.Text, msg.Caption)
+	if text == "" {
+		return fmt.Errorf("content required")
+	}
+
+	chatID := remoteStringID(msg.Chat.ID)
+	if chatID == "" {
+		chatID = conf.telegramDefaultChat
+	}
+	if chatID == "" {
+		return fmt.Errorf("telegram chat id not configured")
+	}
+
+	fromID := remoteStringID(msg.FromID())
+	sourceKey := remoteSourceKeyForPlatform(conf, "telegram", chatID, fromID)
+	sendTarget := remoteReplyTarget{
+		platform:  "telegram",
+		chatID:    chatID,
+		replyToID: remoteStringID(msg.MessageID),
+	}
+
+	return s.processRemoteMessage(ctx, conf, sourceKey, text, sendTarget, func(innerCtx context.Context, reply string) error {
+		return s.sendTelegramReply(innerCtx, conf.telegramBotToken, sendTarget.chatID, sendTarget.replyToID, reply)
+	})
+}
+
 func (s *Server) runRemoteAssistantAsync(
 	key string,
 	threadID int64,
@@ -296,6 +297,10 @@ func (s *Server) runRemoteAssistantAsync(
 }
 
 func (s *Server) loadRemoteConfig(ctx context.Context) (remoteConfig, error) {
+	return s.loadRemoteConfigForMode(ctx, true)
+}
+
+func (s *Server) loadRemoteConfigForMode(ctx context.Context, requireToken bool) (remoteConfig, error) {
 	conf := remoteConfig{
 		enabled:             parseRemoteBool(loadSetting(s.st.DB, remoteAccessEnabledKey, "false")),
 		token:               strings.TrimSpace(loadSetting(s.st.DB, remoteAccessTokenKey, "")),
@@ -312,7 +317,7 @@ func (s *Server) loadRemoteConfig(ctx context.Context) (remoteConfig, error) {
 	if !conf.enabled {
 		return conf, fmt.Errorf("remote access disabled")
 	}
-	if conf.token == "" {
+	if requireToken && conf.token == "" {
 		return conf, fmt.Errorf("remote token not configured")
 	}
 	if conf.telegramBotToken == "" && conf.discordBotToken == "" && conf.discordWebhookURL == "" {

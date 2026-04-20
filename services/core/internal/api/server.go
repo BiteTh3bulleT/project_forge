@@ -57,47 +57,50 @@ import (
 )
 
 type Server struct {
-	st             *store.Store
-	cfg            config.Config
-	log            *events.Logger
-	ingest         *ingest.Service
-	search         *search.Service
-	adapters       *adapters.Registry
-	approvals      *approvals.Service
-	packets        *packets.Service
-	artifacts      *artifacts.Service
-	chat           *chat.Service
-	canvas         *canvas.Service
-	projectCtx     *projectcontext.Service
-	embeddings     *embeddings.Service
-	retrieval      *retrieval.Service
-	memory         *memory.Service
-	dossiers       *dossiers.Service
-	evals          *evaluations.Service
-	lineage        *lineage.Service
-	imports        *imports.Service
-	insights       *insights.Service
-	strategies     *strategies.Service
-	policy         *policy.Service
-	automation     *automation.Service
-	packetOpt      *packetopt.Service
-	reviews        *reviews.Service
-	reconcile      *reconciliation.Service
-	failures       *failurepatterns.Service
-	dashboard      *dashboard.Service
-	jobs           *jobs.Service
-	gateway        *gateway.Gateway
-	lanes          *lanes.Service
-	permissions    *permissions.Service
-	auditSvc       *audit.Service
-	backup         *backup.Service
-	release        *release.Service
-	watch          *watch.Manager
-	watchStop      context.CancelFunc
-	autonomy       *AutonomyMaintenanceLoop
-	discordMu      sync.RWMutex
-	discordGateway *DiscordGateway
-	discordErr     string
+	st              *store.Store
+	cfg             config.Config
+	log             *events.Logger
+	ingest          *ingest.Service
+	search          *search.Service
+	adapters        *adapters.Registry
+	approvals       *approvals.Service
+	packets         *packets.Service
+	artifacts       *artifacts.Service
+	chat            *chat.Service
+	canvas          *canvas.Service
+	projectCtx      *projectcontext.Service
+	embeddings      *embeddings.Service
+	retrieval       *retrieval.Service
+	memory          *memory.Service
+	dossiers        *dossiers.Service
+	evals           *evaluations.Service
+	lineage         *lineage.Service
+	imports         *imports.Service
+	insights        *insights.Service
+	strategies      *strategies.Service
+	policy          *policy.Service
+	automation      *automation.Service
+	packetOpt       *packetopt.Service
+	reviews         *reviews.Service
+	reconcile       *reconciliation.Service
+	failures        *failurepatterns.Service
+	dashboard       *dashboard.Service
+	jobs            *jobs.Service
+	gateway         *gateway.Gateway
+	lanes           *lanes.Service
+	permissions     *permissions.Service
+	auditSvc        *audit.Service
+	backup          *backup.Service
+	release         *release.Service
+	watch           *watch.Manager
+	watchStop       context.CancelFunc
+	autonomy        *AutonomyMaintenanceLoop
+	telegramMu      sync.RWMutex
+	telegramGateway *TelegramGateway
+	telegramErr     string
+	discordMu       sync.RWMutex
+	discordGateway  *DiscordGateway
+	discordErr      string
 
 	// chatAssistInflight tracks assistant generation (async job or SSE) per thread/user-message key.
 	chatAssistInflight sync.Map
@@ -228,6 +231,7 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		watchStop:   cancel,
 		autonomy:    autonomyLoop,
 	}
+	srv.telegramGateway = srv.tryStartTelegramGateway(ctx, cfg)
 	srv.discordGateway = srv.tryStartDiscordGateway(ctx, cfg)
 	return srv
 }
@@ -239,6 +243,12 @@ func (s *Server) ShutdownWatch() {
 	if s.autonomy != nil {
 		s.autonomy.Stop()
 	}
+	s.telegramMu.Lock()
+	if s.telegramGateway != nil {
+		s.telegramGateway.Stop()
+		s.telegramGateway = nil
+	}
+	s.telegramMu.Unlock()
 	s.discordMu.Lock()
 	if s.discordGateway != nil {
 		s.discordGateway.Stop()
@@ -524,6 +534,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	discordConfigChanged := false
+	telegramConfigChanged := false
 	if v, ok := body["extensionsCsv"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, "extensions_csv", v); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -603,6 +614,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		discordConfigChanged = true
+		telegramConfigChanged = true
 	}
 	if v, ok := body["remoteAccessToken"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, remoteAccessTokenKey, strings.TrimSpace(v)); err != nil {
@@ -634,6 +646,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		telegramConfigChanged = true
 	}
 	if v, ok := body["telegramDefaultChatId"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, telegramDefaultChatIDKey, strings.TrimSpace(v)); err != nil {
@@ -681,6 +694,9 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if discordConfigChanged {
 		s.reloadDiscordGateway(ctx)
+	}
+	if telegramConfigChanged {
+		s.reloadTelegramGateway(ctx)
 	}
 	_ = s.log.Emit(ctx, "command.executed", map[string]any{"command": "settings.patch"})
 	s.handleGetSettings(w, r)
