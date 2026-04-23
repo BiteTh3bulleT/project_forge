@@ -469,7 +469,7 @@ func (s *InMemorySemanticStore) BuildContext(query string, scope domain.ForgeSco
 	activeState := make([]domain.StateItem, 0, len(stateIDs))
 	for _, id := range stateIDs {
 		item := s.state.states[id]
-		if !scopeMatchesBuildContext(scope, item.Scope) {
+		if !scopeMatchesBuildContext(scope, item.Scope) || item.Status == domain.StateArchived {
 			continue
 		}
 		activeState = append(activeState, item)

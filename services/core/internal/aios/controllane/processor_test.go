@@ -639,6 +639,37 @@ func TestInMemoryBuildContextScopeAndEvidenceFiltering(t *testing.T) {
 		t.Fatalf("seed open other loop: %v", err)
 	}
 
+	if err := store.CreateState(domain.StateItem{
+		ID:        "state-main-active",
+		Key:       "runtime.mode",
+		Value:     map[string]any{"value": "deterministic"},
+		Scope:     scopeMain,
+		Status:    domain.StateActive,
+		UpdatedAt: 109,
+	}); err != nil {
+		t.Fatalf("seed active main state: %v", err)
+	}
+	if err := store.CreateState(domain.StateItem{
+		ID:        "state-main-archived",
+		Key:       "runtime.mode.old",
+		Value:     map[string]any{"value": "legacy"},
+		Scope:     scopeMain,
+		Status:    domain.StateArchived,
+		UpdatedAt: 110,
+	}); err != nil {
+		t.Fatalf("seed archived main state: %v", err)
+	}
+	if err := store.CreateState(domain.StateItem{
+		ID:        "state-other-active",
+		Key:       "runtime.mode",
+		Value:     map[string]any{"value": "other"},
+		Scope:     scopeOther,
+		Status:    domain.StateActive,
+		UpdatedAt: 111,
+	}); err != nil {
+		t.Fatalf("seed active other state: %v", err)
+	}
+
 	if err := store.CreateArtifactRef(domain.ArtifactRef{
 		ID:          "artifact-main-evidence",
 		Type:        "document",
@@ -684,6 +715,9 @@ func TestInMemoryBuildContextScopeAndEvidenceFiltering(t *testing.T) {
 	}
 	if len(packet.OpenLoops) != 1 || packet.OpenLoops[0].ID != "loop-main-open" {
 		t.Fatalf("expected only active scoped loops, got %+v", packet.OpenLoops)
+	}
+	if len(packet.ActiveState) != 1 || packet.ActiveState[0].ID != "state-main-active" {
+		t.Fatalf("expected only scoped non-archived state items, got %+v", packet.ActiveState)
 	}
 	if len(packet.Artifacts) != 1 || packet.Artifacts[0].ID != "artifact-main-evidence" {
 		t.Fatalf("expected scoped non-snapshot artifacts only, got %+v", packet.Artifacts)
