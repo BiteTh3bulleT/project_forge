@@ -13,5 +13,7 @@ target/
 data/
 apps/desktop/src-tauri/gen/
 .forge/run/
+.claude/settings.local.json
+.claude/worktrees/
 apps/desktop/.env*
 !apps/desktop/.env.example

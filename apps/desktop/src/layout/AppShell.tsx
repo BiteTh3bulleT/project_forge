@@ -32,7 +32,12 @@ function formatClock(now: number) {
   }).format(new Date(now));
 }
 
-export function AppShell(props: { children: ReactNode }) {
+type AppShellProps = {
+  children: ReactNode;
+  isMainWindow: boolean;
+};
+
+export function AppShell(props: AppShellProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const pathname = location.pathname;
@@ -50,7 +55,6 @@ export function AppShell(props: { children: ReactNode }) {
   const monitors = useWorkspaceLayoutStore((s) => s.monitors);
   const fallbackNotice = useWorkspaceLayoutStore((s) => s.fallbackNotice);
   const currentWindowLabel = useWorkspaceLayoutStore((s) => s.currentWindowLabel);
-  const layoutReady = useWorkspaceLayoutStore((s) => s.ready);
   const activateLayout = useWorkspaceLayoutStore((s) => s.activateLayout);
   const clearFallbackNotice = useWorkspaceLayoutStore((s) => s.clearFallbackNotice);
 
@@ -63,7 +67,7 @@ export function AppShell(props: { children: ReactNode }) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [shellErr, setShellErr] = useState<string | null>(null);
   const [clockNow, setClockNow] = useState(() => Date.now());
-  const isMainWindow = layoutReady && currentWindowLabel === "main";
+  const isMainWindow = props.isMainWindow;
 
   useEffect(() => {
     openRoute(pathname);
@@ -115,7 +119,8 @@ export function AppShell(props: { children: ReactNode }) {
 
   return (
     <div className="forge-shell-frame flex h-full min-h-0 flex-col text-forge-ash">
-      <header className="forge-topbar">
+      {isMainWindow ? (
+        <header className="forge-topbar">
         <div className="flex min-w-0 items-center gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <div className="forge-shell-brand">
@@ -185,7 +190,8 @@ export function AppShell(props: { children: ReactNode }) {
           </button>
           <div className="forge-chip forge-chip--muted hidden px-3 py-1.5 text-[11px] md:block">{formatClock(clockNow)}</div>
         </div>
-      </header>
+        </header>
+      ) : null}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {!chatFocused ? (

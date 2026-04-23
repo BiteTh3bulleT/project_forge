@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -93,6 +94,20 @@ func (s *Server) handleGetMemoryObservation(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"observation": obs})
+}
+
+func (s *Server) handleGetObservationVSA(w http.ResponseWriter, r *http.Request) {
+	observationID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	detail, err := s.memory.GetObservationVSA(r.Context(), observationID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"detail": detail})
 }
 
 func (s *Server) handlePatchMemoryObservation(w http.ResponseWriter, r *http.Request) {
@@ -207,6 +222,20 @@ func (s *Server) handleGetDossierMemory(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"view": view})
 }
 
+func (s *Server) handleGetDossierVSASummary(w http.ResponseWriter, r *http.Request) {
+	dossierID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	summary, err := s.memory.DossierVSASummary(r.Context(), dossierID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"summary": summary})
+}
+
 func (s *Server) handleListMemoryRepairRuns(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	dossierID := parseOptionalInt(r.URL.Query().Get("dossierId"))
@@ -249,6 +278,67 @@ func (s *Server) handleRunMemoryRepair(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"detail": detail})
+}
+
+func (s *Server) handleRunVSAReindex(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		DossierID   optionalInt64 `json:"dossierId"`
+		Mode        string        `json:"mode"`
+		Limit       int           `json:"limit"`
+		TriggeredBy string        `json:"triggeredBy"`
+		Reason      string        `json:"reason"`
+		Note        string        `json:"note"`
+		StaleOnly   bool          `json:"staleOnly"`
+		Force       bool          `json:"force"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if strings.TrimSpace(body.Mode) == "" {
+		body.Mode = "manual"
+	}
+	detail, err := s.memory.RunVSAReindex(r.Context(), memory.RunVSAReindexRequest{
+		DossierID:   body.DossierID.Value,
+		Mode:        strings.TrimSpace(body.Mode),
+		Limit:       body.Limit,
+		TriggeredBy: strings.TrimSpace(body.TriggeredBy),
+		Reason:      strings.TrimSpace(body.Reason),
+		Note:        strings.TrimSpace(body.Note),
+		StaleOnly:   body.StaleOnly,
+		Force:       body.Force,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"detail": detail})
+}
+
+func (s *Server) handleListVSAReindexRuns(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	dossierID := parseOptionalInt(r.URL.Query().Get("dossierId"))
+	runs, err := s.memory.ListVSAReindexRuns(r.Context(), limit, dossierID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
+}
+
+func (s *Server) handleGetVSAReindexRun(w http.ResponseWriter, r *http.Request) {
+	runID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	detail, err := s.memory.GetVSAReindexRun(r.Context(), runID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"detail": detail})

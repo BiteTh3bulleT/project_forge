@@ -92,6 +92,7 @@ type Server struct {
 	auditSvc        *audit.Service
 	backup          *backup.Service
 	release         *release.Service
+	modelRuntime    modelRuntimeService
 	watch           *watch.Manager
 	watchStop       context.CancelFunc
 	autonomy        *AutonomyMaintenanceLoop
@@ -145,9 +146,13 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	_ = os.MkdirAll(filepath.Join(cfg.WorkspaceDir, "scratch"), 0o755)
 	_ = permSvc.EnsureMkdirChatPolicy(bg, cfg.WorkspaceDir)
 	_ = permSvc.EnsureGatewayToolPolicy(bg, cfg.WorkspaceDir)
+	if filepath.Clean(cfg.WorkspaceDir) == string(filepath.Separator) {
+		_, _ = permSvc.Activate(bg, "workspace-write")
+	}
 	_ = laneSvc.EnsureDefaults(bg, cfg.WorkspaceDir)
 	backupSvc := backup.New(st.DB, cfg.DataDir)
 	releaseSvc := release.New(st.DB, cfg.DataDir, cfg.WorkspaceDir)
+	modelRuntimeSvc := initModelRuntimeService(cfg, auditSvc)
 	var autonomyLoop *AutonomyMaintenanceLoop
 	if loop := newDefaultAutonomyMaintenanceLoop(st.DB, cfg, ev, memorySvc); loop != nil {
 		autonomyLoop = loop
@@ -162,6 +167,9 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		DataDir:        cfg.DataDir,
 		AutonomyPolicy: newGatewayAutonomyAuthorizer(autonomyLoop),
 	})
+	if err := gw.RegisterTool(newLegacyAdapterGatewayTool(reg)); err != nil {
+		log.Printf("legacy adapter gateway tool registration failed: %v", err)
+	}
 	jobSvc := jobs.NewService(jobs.Dependencies{
 		DB:           st.DB,
 		Logger:       ev,
@@ -192,44 +200,45 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		go autonomyLoop.Run(ctx)
 	}
 	srv := &Server{
-		st:          st,
-		cfg:         cfg,
-		log:         ev,
-		ingest:      ing,
-		search:      searchSvc,
-		adapters:    reg,
-		approvals:   appSvc,
-		packets:     pktSvc,
-		artifacts:   artSvc,
-		chat:        chatSvc,
-		canvas:      canvasSvc,
-		projectCtx:  pcSvc,
-		embeddings:  embedSvc,
-		retrieval:   retrievalSvc,
-		memory:      memorySvc,
-		dossiers:    dossierSvc,
-		evals:       evalSvc,
-		lineage:     lineageSvc,
-		imports:     importSvc,
-		insights:    insightSvc,
-		strategies:  strategySvc,
-		policy:      policySvc,
-		automation:  automationSvc,
-		packetOpt:   packetOptSvc,
-		reviews:     reviewSvc,
-		reconcile:   reconcileSvc,
-		failures:    failureSvc,
-		dashboard:   dashboardSvc,
-		jobs:        jobSvc,
-		gateway:     gw,
-		lanes:       laneSvc,
-		permissions: permSvc,
-		auditSvc:    auditSvc,
-		backup:      backupSvc,
-		release:     releaseSvc,
-		watch:       wm,
-		watchStop:   cancel,
-		autonomy:    autonomyLoop,
+		st:           st,
+		cfg:          cfg,
+		log:          ev,
+		ingest:       ing,
+		search:       searchSvc,
+		adapters:     reg,
+		approvals:    appSvc,
+		packets:      pktSvc,
+		artifacts:    artSvc,
+		chat:         chatSvc,
+		canvas:       canvasSvc,
+		projectCtx:   pcSvc,
+		embeddings:   embedSvc,
+		retrieval:    retrievalSvc,
+		memory:       memorySvc,
+		dossiers:     dossierSvc,
+		evals:        evalSvc,
+		lineage:      lineageSvc,
+		imports:      importSvc,
+		insights:     insightSvc,
+		strategies:   strategySvc,
+		policy:       policySvc,
+		automation:   automationSvc,
+		packetOpt:    packetOptSvc,
+		reviews:      reviewSvc,
+		reconcile:    reconcileSvc,
+		failures:     failureSvc,
+		dashboard:    dashboardSvc,
+		jobs:         jobSvc,
+		gateway:      gw,
+		lanes:        laneSvc,
+		permissions:  permSvc,
+		auditSvc:     auditSvc,
+		backup:       backupSvc,
+		release:      releaseSvc,
+		modelRuntime: modelRuntimeSvc,
+		watch:        wm,
+		watchStop:    cancel,
+		autonomy:     autonomyLoop,
 	}
 	srv.telegramGateway = srv.tryStartTelegramGateway(ctx, cfg)
 	srv.discordGateway = srv.tryStartDiscordGateway(ctx, cfg)
@@ -292,6 +301,36 @@ func (s *Server) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": "forge-core"})
 	})
 
+	r.Route("/forge", func(r chi.Router) {
+		r.Use(middleware.Timeout(120 * time.Second))
+		r.Get("/models", s.handleForgeModelsList)
+		r.Post("/models/import", s.handleForgeModelImport)
+		r.Post("/models/scan", s.handleForgeModelsScan)
+		r.Get("/models/{id}", s.handleForgeModelGet)
+		r.Get("/models/{id}/compatibility", s.handleForgeModelCompatibility)
+		r.Post("/models/{id}/verify", s.handleForgeModelVerify)
+		r.Post("/models/{id}/enable", s.handleForgeModelEnable)
+		r.Post("/models/{id}/disable", s.handleForgeModelDisable)
+		r.Post("/models/{id}/archive", s.handleForgeModelArchive)
+		r.Post("/models/{id}/remove", s.handleForgeModelRemove)
+		r.Post("/models/{id}/load", s.handleForgeModelLoad)
+		r.Post("/models/{id}/unload", s.handleForgeModelUnload)
+		r.Post("/models/{id}/chat", s.handleForgeModelChat)
+		r.Get("/model-runtime/backends", s.handleForgeModelRuntimeBackends)
+		r.Get("/model-runtime/usage", s.handleForgeModelRuntimeUsage)
+		r.Get("/model-runtime/health", s.handleForgeModelRuntimeHealth)
+		r.Get("/model-runtime/queue", s.handleForgeModelRuntimeQueue)
+		r.Get("/model-runtime/loaded", s.handleForgeModelRuntimeLoaded)
+	})
+
+	if s.cfg.EnableOpenAICompatAPI {
+		r.Route("/v1", func(r chi.Router) {
+			r.Use(middleware.Timeout(120 * time.Second))
+			r.Get("/models", s.handleV1Models)
+			r.Post("/chat/completions", s.handleV1ChatCompletions)
+		})
+	}
+
 	r.Route("/api", func(r chi.Router) {
 		// Long-lived SSE — must not use the short HTTP timeout used for the rest of /api.
 		r.Get("/chat/threads/{id}/assistant-stream", s.handleChatAssistantStream)
@@ -327,7 +366,6 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/autonomy/events", s.handleAutonomyEvents)
 
 			r.Get("/adapters", s.handleAdapters)
-			r.Post("/adapters/{id}/invoke", s.handleAdapterInvoke)
 
 			r.Get("/jobs/templates", s.handleListJobTemplates)
 			r.Get("/jobs", s.handleListJobs)
@@ -375,15 +413,24 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/retrieval/runs", s.handleListRetrievalRuns)
 			r.Post("/retrieval/runs", s.handleCreateRetrievalRun)
 			r.Get("/retrieval/runs/{id}", s.handleGetRetrievalRun)
+			r.Get("/retrieval/runs/{id}/vsa-signals", s.handleGetRetrievalRunVSASignals)
+			r.Get("/retrieval/results/{id}/vsa-signal", s.handleGetRetrievalResultVSASignal)
 			r.Post("/retrieval/results/{id}/usefulness", s.handleMarkRetrievalUsefulness)
 			r.Get("/memory/observations", s.handleListMemoryObservations)
-			r.Post("/memory/observations", s.handleCreateMemoryObservation)
+			r.Post("/memory/observations", s.withLegacyMemoryMutationGate("legacy.memory.observation.create", s.handleCreateMemoryObservation))
 			r.Get("/memory/observations/{id}", s.handleGetMemoryObservation)
-			r.Patch("/memory/observations/{id}", s.handlePatchMemoryObservation)
-			r.Post("/memory/observations/{id}/usefulness", s.handleMarkMemoryObservationUsefulness)
+			r.Get("/memory/observations/{id}/vsa", s.handleGetObservationVSA)
+			r.Patch("/memory/observations/{id}", s.withLegacyMemoryMutationGate("legacy.memory.observation.patch", s.handlePatchMemoryObservation))
+			r.Post("/memory/observations/{id}/usefulness", s.withLegacyMemoryMutationGate("legacy.memory.observation.usefulness", s.handleMarkMemoryObservationUsefulness))
 			r.Get("/memory/retrieval-runs/{id}/selection", s.handleGetRetrievalSelection)
 			r.Get("/memory/packets/{id}/alignment", s.handleGetPacketAlignmentNotes)
 			r.Get("/memory/dossiers/{id}", s.handleGetDossierMemory)
+			r.Get("/memory/dossiers/{id}/vsa-summary", s.handleGetDossierVSASummary)
+			r.Get("/memory/vsa/reindex-runs", s.handleListVSAReindexRuns)
+			r.Get("/memory/vsa/reindex-runs/{id}", s.handleGetVSAReindexRun)
+			r.Get("/memory/vsa/reindex/runs", s.handleListVSAReindexRuns)    // compatibility route
+			r.Get("/memory/vsa/reindex/runs/{id}", s.handleGetVSAReindexRun) // compatibility route
+			r.Post("/memory/vsa/reindex/run", s.handleRunVSAReindex)
 			r.Get("/memory/repair-runs", s.handleListMemoryRepairRuns)
 			r.Get("/memory/repair-runs/{id}", s.handleGetMemoryRepairRun)
 			r.Post("/memory/repair/run", s.handleRunMemoryRepair)
@@ -441,6 +488,7 @@ func (s *Server) Handler() http.Handler {
 
 			r.Get("/gateway/tools", s.handleGatewayTools)
 			r.Get("/gateway/capabilities", s.handleGatewayCapabilities)
+			r.Patch("/gateway/capabilities/{id}/status", s.handleGatewayCapabilityStatusUpdate)
 			r.Post("/gateway/invoke", s.handleGatewayInvoke)
 			r.Get("/gateway/invocations", s.handleGatewayInvocations)
 
@@ -490,6 +538,14 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	embeddingDims := loadSetting(s.st.DB, "embedding_dims", "128")
 	retrievalWeightKeyword := loadSetting(s.st.DB, "retrieval_weight_keyword", "0.45")
 	retrievalWeightSemantic := loadSetting(s.st.DB, "retrieval_weight_semantic", "0.55")
+	retrievalVSAMode := loadSetting(s.st.DB, "retrieval_vsa_mode", "off")
+	retrievalVSADims := loadSetting(s.st.DB, "retrieval_vsa_dims", "128")
+	retrievalVSASeed := loadSetting(s.st.DB, "retrieval_vsa_seed", "17")
+	retrievalVSAWeightAssociative := loadSetting(s.st.DB, "retrieval_vsa_weight_associative", "0.06")
+	retrievalVSAWeightRoleMatch := loadSetting(s.st.DB, "retrieval_vsa_weight_role_match", "0.04")
+	retrievalVSAWeightRelational := loadSetting(s.st.DB, "retrieval_vsa_weight_relational", "0.03")
+	retrievalVSAWeightFeedback := loadSetting(s.st.DB, "retrieval_vsa_weight_feedback", "0.03")
+	retrievalVSAMaxAdditive := loadSetting(s.st.DB, "retrieval_vsa_max_additive", "0.12")
 	chatPersonalityPrompt := loadSetting(s.st.DB, "chat_personality_prompt", defaultChatOperatorSystemPrompt())
 	remoteAccessEnabled := parseRemoteBool(loadSetting(s.st.DB, remoteAccessEnabledKey, "false"))
 	remoteAccessToken := strings.TrimSpace(loadSetting(s.st.DB, remoteAccessTokenKey, ""))
@@ -502,27 +558,43 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	discordCrossChatContext := parseRemoteBool(loadSetting(s.st.DB, discordGatewayCrossChatContextKey, "false"))
 	remoteDefaultThreadID := strings.TrimSpace(loadSetting(s.st.DB, remoteDefaultThreadIDKey, ""))
 	writeJSON(w, http.StatusOK, map[string]any{
-		"extensionsCsv":           ext,
-		"theme":                   theme,
-		"ollamaBaseUrl":           ollamaBase,
-		"ollamaModel":             ollamaModel,
-		"embeddingProvider":       embeddingProvider,
-		"embeddingModel":          embeddingModel,
-		"embeddingDims":           embeddingDims,
-		"retrievalWeightKeyword":  retrievalWeightKeyword,
-		"retrievalWeightSemantic": retrievalWeightSemantic,
-		"chatPersonalityPrompt":   chatPersonalityPrompt,
-		"chatPromptDefault":       defaultChatOperatorSystemPrompt(),
-		"remoteAccessEnabled":     remoteAccessEnabled,
-		"remoteAccessToken":       remoteAccessToken,
-		"remoteCrossChatContext":  remoteCrossChatContext,
-		"remoteDefaultThreadId":   remoteDefaultThreadID,
-		"telegramBotToken":        telegramBotToken,
-		"telegramDefaultChatId":   telegramDefaultChatID,
-		"discordBotToken":         discordBotToken,
-		"discordDefaultChannelId": discordDefaultChannelID,
-		"discordWebhookUrl":       discordWebhookURL,
-		"discordCrossChatContext": discordCrossChatContext,
+		"extensionsCsv":                 ext,
+		"theme":                         theme,
+		"ollamaBaseUrl":                 ollamaBase,
+		"ollamaModel":                   ollamaModel,
+		"embeddingProvider":             embeddingProvider,
+		"embeddingModel":                embeddingModel,
+		"embeddingDims":                 embeddingDims,
+		"retrievalWeightKeyword":        retrievalWeightKeyword,
+		"retrievalWeightSemantic":       retrievalWeightSemantic,
+		"retrievalVSAMode":              retrievalVSAMode,
+		"retrievalVSADims":              retrievalVSADims,
+		"retrievalVSASeed":              retrievalVSASeed,
+		"retrievalVSAWeightAssociative": retrievalVSAWeightAssociative,
+		"retrievalVSAWeightRoleMatch":   retrievalVSAWeightRoleMatch,
+		"retrievalVSAWeightRelational":  retrievalVSAWeightRelational,
+		"retrievalVSAWeightFeedback":    retrievalVSAWeightFeedback,
+		"retrievalVSAMaxAdditive":       retrievalVSAMaxAdditive,
+		"retrievalVsaMode":              retrievalVSAMode,
+		"retrievalVsaDims":              retrievalVSADims,
+		"retrievalVsaSeed":              retrievalVSASeed,
+		"retrievalVsaWeightAssociative": retrievalVSAWeightAssociative,
+		"retrievalVsaWeightRoleMatch":   retrievalVSAWeightRoleMatch,
+		"retrievalVsaWeightRelational":  retrievalVSAWeightRelational,
+		"retrievalVsaWeightFeedback":    retrievalVSAWeightFeedback,
+		"retrievalVsaMaxAdditive":       retrievalVSAMaxAdditive,
+		"chatPersonalityPrompt":         chatPersonalityPrompt,
+		"chatPromptDefault":             defaultChatOperatorSystemPrompt(),
+		"remoteAccessEnabled":           remoteAccessEnabled,
+		"remoteAccessToken":             remoteAccessToken,
+		"remoteCrossChatContext":        remoteCrossChatContext,
+		"remoteDefaultThreadId":         remoteDefaultThreadID,
+		"telegramBotToken":              telegramBotToken,
+		"telegramDefaultChatId":         telegramDefaultChatID,
+		"discordBotToken":               discordBotToken,
+		"discordDefaultChannelId":       discordDefaultChannelID,
+		"discordWebhookUrl":             discordWebhookURL,
+		"discordCrossChatContext":       discordCrossChatContext,
 	})
 }
 
@@ -606,6 +678,86 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		if err := upsertSetting(ctx, s.st.DB, "retrieval_weight_semantic", strconv.FormatFloat(v, 'f', 4, 64)); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+	}
+	modeRaw, hasMode := body["retrievalVSAMode"]
+	if !hasMode {
+		modeRaw = body["retrievalVsaMode"]
+	}
+	if v, ok := modeRaw.(string); ok {
+		mode := strings.ToLower(strings.TrimSpace(v))
+		if mode != "off" && mode != "shadow" && mode != "active" {
+			mode = "off"
+		}
+		if err := upsertSetting(ctx, s.st.DB, "retrieval_vsa_mode", mode); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	dimsRaw, hasDims := body["retrievalVSADims"]
+	if !hasDims {
+		dimsRaw = body["retrievalVsaDims"]
+	}
+	switch v := dimsRaw.(type) {
+	case string:
+		if err := upsertSetting(ctx, s.st.DB, "retrieval_vsa_dims", strings.TrimSpace(v)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	case float64:
+		if err := upsertSetting(ctx, s.st.DB, "retrieval_vsa_dims", strconv.Itoa(int(v))); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	seedRaw, hasSeed := body["retrievalVSASeed"]
+	if !hasSeed {
+		seedRaw = body["retrievalVsaSeed"]
+	}
+	switch v := seedRaw.(type) {
+	case string:
+		if err := upsertSetting(ctx, s.st.DB, "retrieval_vsa_seed", strings.TrimSpace(v)); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	case float64:
+		if err := upsertSetting(ctx, s.st.DB, "retrieval_vsa_seed", strconv.Itoa(int(v))); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	for _, item := range []struct {
+		BodyKeys   []string
+		SettingKey string
+	}{
+		{BodyKeys: []string{"retrievalVSAWeightAssociative", "retrievalVsaWeightAssociative"}, SettingKey: "retrieval_vsa_weight_associative"},
+		{BodyKeys: []string{"retrievalVSAWeightRoleMatch", "retrievalVsaWeightRoleMatch"}, SettingKey: "retrieval_vsa_weight_role_match"},
+		{BodyKeys: []string{"retrievalVSAWeightRelational", "retrievalVsaWeightRelational"}, SettingKey: "retrieval_vsa_weight_relational"},
+		{BodyKeys: []string{"retrievalVSAWeightFeedback", "retrievalVsaWeightFeedback"}, SettingKey: "retrieval_vsa_weight_feedback"},
+		{BodyKeys: []string{"retrievalVSAMaxAdditive", "retrievalVsaMaxAdditive"}, SettingKey: "retrieval_vsa_max_additive"},
+	} {
+		var (
+			raw any
+			ok  bool
+		)
+		for _, key := range item.BodyKeys {
+			if raw, ok = body[key]; ok {
+				break
+			}
+		}
+		if ok {
+			switch v := raw.(type) {
+			case string:
+				if err := upsertSetting(ctx, s.st.DB, item.SettingKey, strings.TrimSpace(v)); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+			case float64:
+				if err := upsertSetting(ctx, s.st.DB, item.SettingKey, strconv.FormatFloat(v, 'f', 4, 64)); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+			}
 		}
 	}
 	if v, ok := body["remoteAccessEnabled"]; ok {
@@ -943,29 +1095,53 @@ func (s *Server) handleAdapters(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"adapters": list})
 }
 
-func (s *Server) handleAdapterInvoke(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	id := chi.URLParam(r, "id")
-	var req adapters.InvokeRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
-		return
+func (s *Server) withLegacyMemoryMutationGate(baseAction string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		subjectID := strings.TrimSpace(chi.URLParam(r, "id"))
+		if subjectID == "" {
+			subjectID = "new"
+		}
+		meta := requestAuditMetaForBackup(r, "", "", "", "legacy.memory.mutation")
+		if !strings.EqualFold(strings.TrimSpace(os.Getenv("FORGE_ALLOW_LEGACY_MEMORY_MUTATIONS")), "true") {
+			if s.auditSvc != nil {
+				_, _ = s.auditSvc.Record(r.Context(), audit.CreateRequest{
+					CorrelationID: meta.CorrelationID,
+					Category:      "memory",
+					Action:        baseAction + ".blocked",
+					Actor:         "api",
+					SubjectType:   "observation",
+					SubjectID:     subjectID,
+					Outcome:       "denied",
+					Summary:       "legacy memory mutation blocked by policy",
+					Payload: requestAuditPayload(map[string]any{
+						"method":               r.Method,
+						"path":                 r.URL.Path,
+						"legacyMemoryMutation": true,
+					}, meta),
+				})
+			}
+			http.Error(w, "legacy memory mutation endpoints are disabled by default; use authoritative syscall path via /api/gateway/invoke", http.StatusForbidden)
+			return
+		}
+		if s.auditSvc != nil {
+			_, _ = s.auditSvc.Record(r.Context(), audit.CreateRequest{
+				CorrelationID: meta.CorrelationID,
+				Category:      "memory",
+				Action:        baseAction + ".used",
+				Actor:         "api",
+				SubjectType:   "observation",
+				SubjectID:     subjectID,
+				Outcome:       "ok",
+				Summary:       "legacy memory mutation executed",
+				Payload: requestAuditPayload(map[string]any{
+					"method":               r.Method,
+					"path":                 r.URL.Path,
+					"legacyMemoryMutation": true,
+				}, meta),
+			})
+		}
+		next(w, r)
 	}
-	if strings.TrimSpace(req.AdapterID) == "" {
-		req.AdapterID = id
-	}
-	a, err := s.adapters.Get(id)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-	res, err := a.Invoke(ctx, req)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	_ = s.log.Emit(ctx, "adapter.invoked", map[string]any{"adapter": id, "capability": req.Capability, "ok": res.OK})
-	writeJSON(w, http.StatusOK, res)
 }
 
 type cmdBody struct {
@@ -1055,6 +1231,28 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+type requestAuditMeta struct {
+	CorrelationID string
+	TraceID       string
+	WorkspaceID   string
+}
+
+func firstNonEmptyTrimmed(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
+func profileIDOrEmpty(p *permissions.Profile) string {
+	if p == nil {
+		return ""
+	}
+	return p.ID
 }
 
 func loadSetting(db *sql.DB, key, def string) string {

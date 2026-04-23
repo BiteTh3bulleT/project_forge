@@ -473,3 +473,92 @@ func TestAuditRecordShapesAcrossOutcomes(t *testing.T) {
 		t.Fatalf("expected dry-run record success=true dryRun=true, got %+v", dry)
 	}
 }
+
+func TestCompileContextSnapshotPersistenceOptIn(t *testing.T) {
+	ctx := context.Background()
+	k, store, _ := newTestKernel()
+	mustCreateNote(ctx, k, "note-ctx-a", "ctx a")
+	mustCreateNote(ctx, k, "note-ctx-b", "ctx b")
+
+	readOnly := validBaseRequest(domain.ActionCompileContext)
+	readOnly.ID = "compile-context-optout-1"
+	readOnly.Payload = map[string]any{
+		"query":  "summarize blockers",
+		"budget": map[string]any{"maxTokens": 50, "maxEvents": 10, "maxNotes": 10},
+	}
+	readOnlyRes, err := k.Process(ctx, readOnly)
+	if err != nil || !readOnlyRes.Success {
+		t.Fatalf("compile context opt-out failed: err=%v res=%+v", err, readOnlyRes)
+	}
+	if len(readOnlyRes.CommittedObjectIDs) != 0 {
+		t.Fatalf("persistSnapshot=false should keep committed ids empty, got %v", readOnlyRes.CommittedObjectIDs)
+	}
+	if len(store.snapshot().contextSnapshots) != 0 || len(store.snapshot().artifacts) != 0 {
+		t.Fatalf("persistSnapshot=false should not write snapshot evidence")
+	}
+	if len(readOnlyRes.Warnings) != 1 || readOnlyRes.Warnings[0] != "compile_context is deterministic Phase 2 stub" {
+		t.Fatalf("expected unchanged warning for persistSnapshot=false, got %v", readOnlyRes.Warnings)
+	}
+
+	persisted := validBaseRequest(domain.ActionCompileContext)
+	persisted.ID = "compile-context-optin-1"
+	persisted.Payload = map[string]any{
+		"query":              "summarize blockers",
+		"budget":             map[string]any{"maxTokens": 50, "maxEvents": 10, "maxNotes": 10},
+		"persistSnapshot":    true,
+		"renderSnapshotCard": true,
+		"snapshotKind":       "restore",
+	}
+	persistedRes, err := k.Process(ctx, persisted)
+	if err != nil || !persistedRes.Success {
+		t.Fatalf("compile context opt-in failed: err=%v res=%+v", err, persistedRes)
+	}
+	state := store.snapshot()
+	if len(state.contextSnapshots) != 1 {
+		t.Fatalf("expected one persisted context snapshot, got %d", len(state.contextSnapshots))
+	}
+	if len(state.artifacts) != 1 {
+		t.Fatalf("expected one persisted artifact ref, got %d", len(state.artifacts))
+	}
+	packetID := persistedRes.StateSummary["contextPacketId"]
+	packet, ok := state.contextSnapshots[packetID.(string)]
+	if !ok {
+		t.Fatalf("missing persisted packet %v", packetID)
+	}
+	if packet.RestoreSnapshot == nil || packet.CompileOptions == nil {
+		t.Fatalf("expected persisted restore snapshot metadata")
+	}
+	if !packet.CompileOptions.PersistSnapshot || !packet.CompileOptions.RenderSnapshotCard {
+		t.Fatalf("expected persisted compile options, got %+v", packet.CompileOptions)
+	}
+	if got := readString(packet.RestoreSnapshot.Metadata, "rendered_card_artifact_id"); got == "" {
+		t.Fatalf("expected snapshot evidence to link rendered card artifact")
+	}
+	if persistedRes.StateSummary["snapshotFingerprint"] == "" {
+		t.Fatalf("expected snapshot fingerprint in summary")
+	}
+}
+
+func TestCompileContextSnapshotDryRunDoesNotWrite(t *testing.T) {
+	ctx := context.Background()
+	k, store, _ := newTestKernel()
+
+	req := validBaseRequest(domain.ActionCompileContext)
+	req.ID = "compile-context-dryrun-snapshot-1"
+	req.DryRun = true
+	req.Payload = map[string]any{
+		"query":              "summarize blockers",
+		"budget":             map[string]any{"maxTokens": 50, "maxEvents": 10, "maxNotes": 10},
+		"persistSnapshot":    true,
+		"renderSnapshotCard": true,
+		"snapshotKind":       "restore",
+	}
+	res, err := k.Process(ctx, req)
+	if err != nil || !res.Success || !res.DryRun {
+		t.Fatalf("compile context dry-run failed: err=%v res=%+v", err, res)
+	}
+	state := store.snapshot()
+	if len(state.contextSnapshots) != 0 || len(state.artifacts) != 0 {
+		t.Fatalf("dry-run must not write snapshot rows or artifact refs")
+	}
+}

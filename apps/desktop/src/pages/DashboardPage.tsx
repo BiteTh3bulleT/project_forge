@@ -3,6 +3,7 @@ import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { FoldSection } from "../components/FoldSection";
 import {
   api,
   type AutonomyBudgetRecord,
@@ -38,6 +39,8 @@ type SimilarityEdge = {
   reasons: string[];
 };
 
+type DashboardView = "all" | "telemetry" | "queues" | "runtime";
+
 export function DashboardPage() {
   const navigate = useNavigate();
   const setStatus = useUiStore((s) => s.setStatusLine);
@@ -54,7 +57,9 @@ export function DashboardPage() {
   const [capabilities, setCapabilities] = useState<CapabilityRecord[]>([]);
   const [invocations, setInvocations] = useState<InvocationRecord[]>([]);
   const [observations, setObservations] = useState<MemoryObservation[]>([]);
+  const [similarityNotice, setSimilarityNotice] = useState<string | null>(null);
   const [pendingReviews, setPendingReviews] = useState<ReviewRecord[]>([]);
+  const [dashboardView, setDashboardView] = useState<DashboardView>("all");
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number>(Date.now());
@@ -72,7 +77,6 @@ export function DashboardPage() {
         chartersRes,
         gatewayCaps,
         gatewayInvs,
-        memoryObs,
       ] = await Promise.all([
         api.dashboard.summary(),
         api.reviews.list({ status: "pending", limit: 20 }),
@@ -83,8 +87,11 @@ export function DashboardPage() {
         api.autonomy.charters(true),
         api.gateway.capabilities(),
         api.gateway.invocations({ limit: 120 }),
-        api.memory.listObservations({ limit: 64 }),
       ]);
+      const memoryObs = await api.memory.listObservations({ limit: 64 }).catch((error: unknown) => {
+        setSimilarityNotice(`Similarity feed unavailable: ${error instanceof Error ? error.message : String(error)}`);
+        return { observations: [] as MemoryObservation[] };
+      });
       const [discordGateway, telegramGateway] = await Promise.allSettled([api.discord.status(), api.telegram.status()]);
       setSummary(dash);
       setPendingReviews(rev.reviews);
@@ -98,6 +105,9 @@ export function DashboardPage() {
       setCapabilities(Array.isArray(gatewayCaps.capabilities) ? gatewayCaps.capabilities : []);
       setInvocations(Array.isArray(gatewayInvs.invocations) ? gatewayInvs.invocations : []);
       setObservations(Array.isArray(memoryObs.observations) ? memoryObs.observations : []);
+      if (Array.isArray(memoryObs.observations) && memoryObs.observations.length > 0) {
+        setSimilarityNotice(null);
+      }
       setLastUpdatedAt(Date.now());
       setErr(null);
     } catch (e) {
@@ -158,6 +168,15 @@ export function DashboardPage() {
         }
         actions={
           <div className="flex items-center gap-2">
+            <label className="text-[11px] text-forge-mist">
+              View
+              <select className="forge-input ml-2 px-2 py-1 text-[11px]" value={dashboardView} onChange={(e) => setDashboardView(e.target.value as DashboardView)}>
+                <option value="all">All</option>
+                <option value="telemetry">Telemetry</option>
+                <option value="queues">Queues</option>
+                <option value="runtime">Runtime</option>
+              </select>
+            </label>
             <GhostButton onClick={() => void load()} disabled={loading}>{loading ? "Refreshing..." : "Refresh"}</GhostButton>
             <GhostButton onClick={() => navigate("/autonomy")}>Open Autonomy</GhostButton>
             <GhostButton onClick={() => navigate("/gateway")}>Open Gateway</GhostButton>
@@ -168,22 +187,24 @@ export function DashboardPage() {
         {!summary ? (
           <div className="text-sm text-forge-mist">Loading dashboard telemetry...</div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Metric title="Active Jobs" value={String(summary.activeJobs.length)} hint="queued/preparing/running" onClick={() => navigate("/jobs")} />
-            <Metric title="Attention Queue" value={String(attentionCount)} hint="approvals + reviews" onClick={() => navigate("/approvals")} />
-            <Metric title="Active Intents" value={String(activeIntentCount)} hint="autonomy intent queue" onClick={() => navigate("/autonomy")} />
-            <Metric title="Capabilities" value={String(capabilities.length)} hint="registered tool capabilities" onClick={() => navigate("/gateway")} />
-            <Metric
-              title="Discord Gateway"
-              value={discordConnected ? "connected" : discordStatus?.enabled ? "starting" : "disabled"}
-              hint="external operator I/O surface"
-              onClick={() => setStatus(`Discord gateway ${discordConnected ? "connected" : "not connected"}`)}
-            />
-            <Metric title="Active Charters" value={String(activeCharterCount)} hint="bounded autonomy authority" onClick={() => navigate("/autonomy")} />
-            <Metric title="Active Budgets" value={String(activeBudgetCount)} hint="freedom budget envelopes" onClick={() => navigate("/autonomy")} />
-            <Metric title="Tool Invocations" value={String(invocations.length)} hint="recent gateway calls" onClick={() => navigate("/gateway")} />
-            <Metric title="Memory Links" value={String(similarityGraph.edges.length)} hint="live similarity edges" onClick={() => navigate("/memory")} />
-          </div>
+          <FoldSection title="Mission Snapshot" subtitle="Core operational counters and queue pressure." defaultOpen>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Metric title="Active Jobs" value={String(summary.activeJobs.length)} hint="queued/preparing/running" onClick={() => navigate("/jobs")} />
+              <Metric title="Attention Queue" value={String(attentionCount)} hint="approvals + reviews" onClick={() => navigate("/approvals")} />
+              <Metric title="Active Intents" value={String(activeIntentCount)} hint="autonomy intent queue" onClick={() => navigate("/autonomy")} />
+              <Metric title="Capabilities" value={String(capabilities.length)} hint="registered tool capabilities" onClick={() => navigate("/gateway")} />
+              <Metric
+                title="Discord Gateway"
+                value={discordConnected ? "connected" : discordStatus?.enabled ? "starting" : "disabled"}
+                hint="external operator I/O surface"
+                onClick={() => setStatus(`Discord gateway ${discordConnected ? "connected" : "not connected"}`)}
+              />
+              <Metric title="Active Charters" value={String(activeCharterCount)} hint="bounded autonomy authority" onClick={() => navigate("/autonomy")} />
+              <Metric title="Active Budgets" value={String(activeBudgetCount)} hint="freedom budget envelopes" onClick={() => navigate("/autonomy")} />
+              <Metric title="Tool Invocations" value={String(invocations.length)} hint="recent gateway calls" onClick={() => navigate("/gateway")} />
+              <Metric title="Memory Links" value={String(similarityGraph.edges.length)} hint="live similarity edges" onClick={() => navigate("/memory")} />
+            </div>
+          </FoldSection>
         )}
         <div className="mt-4 grid gap-2 md:grid-cols-4">
           <PrimaryButton onClick={() => navigate("/jobs")}>Open Jobs</PrimaryButton>
@@ -199,12 +220,14 @@ export function DashboardPage() {
         </div>
       </Panel>
 
+      {(dashboardView === "all" || dashboardView === "telemetry") ? (
       <div className="grid gap-6 2xl:grid-cols-[1.45fr_1fr]">
         <Panel
           title="Live Similarity Connections"
           subtitle="Obsidian-style correlation map of recent memory observations based on shared tags/entities/context. This view is diagnostic evidence, not canonical truth."
           actions={<GhostButton onClick={() => navigate("/memory")}>Open Memory</GhostButton>}
         >
+          {similarityNotice ? <div className="mb-2 rounded border border-forge-ember/30 bg-forge-ember/10 p-2 text-xs text-forge-ash">{similarityNotice}</div> : null}
           <SimilarityNetwork graph={similarityGraph} />
         </Panel>
 
@@ -248,6 +271,8 @@ export function DashboardPage() {
                 ["approval_only", capabilityStatusCounts.approval_only ?? 0],
                 ["stubbed", capabilityStatusCounts.stubbed ?? 0],
                 ["disabled", capabilityStatusCounts.disabled ?? 0],
+                ["deferred", capabilityStatusCounts.deferred ?? 0],
+                ["deprecated", capabilityStatusCounts.deprecated ?? 0],
               ]}
             />
             <div className="mt-4">
@@ -259,7 +284,9 @@ export function DashboardPage() {
           </Panel>
         </div>
       </div>
+      ) : null}
 
+      {(dashboardView === "all" || dashboardView === "queues") ? (
       <div className="grid gap-6 xl:grid-cols-2">
         <Panel title="Active Jobs" subtitle="Current execution pressure and lane occupancy.">
           {!summary || summary.activeJobs.length === 0 ? (
@@ -309,8 +336,9 @@ export function DashboardPage() {
           </div>
         </Panel>
       </div>
+      ) : null}
 
-      {uiMode === "guided" ? null : (
+      {(dashboardView === "all" || dashboardView === "runtime") && uiMode !== "guided" ? (
         <Panel title="Core Runtime Snapshot" subtitle="Canonical system status values rendered as operator-readable fields.">
           {!summary ? (
             <div className="text-sm text-forge-mist">No status yet.</div>
@@ -324,9 +352,9 @@ export function DashboardPage() {
             </div>
           )}
         </Panel>
-      )}
+      ) : null}
 
-      {uiMode === "guided" ? null : (
+      {(dashboardView === "all" || dashboardView === "runtime") && uiMode !== "guided" ? (
         <Panel
           title="Remote Channel Status"
           subtitle="Telegram and Discord ingress health for operator control surfaces."
@@ -376,7 +404,7 @@ export function DashboardPage() {
             </div>
           </div>
         </Panel>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -646,6 +674,10 @@ function buildSimilarityGraph(observations: MemoryObservation[]) {
         weight += 1;
         reasons.push("same project key");
       }
+      if (left.dossierId != null && right.dossierId != null && left.dossierId === right.dossierId) {
+        weight += 1;
+        reasons.push("same dossier");
+      }
 
       if (weight >= 2) {
         edges.push({
@@ -660,7 +692,17 @@ function buildSimilarityGraph(observations: MemoryObservation[]) {
   }
 
   edges.sort((a, b) => b.weight - a.weight);
-  const trimmedEdges = edges.slice(0, 70);
+  let trimmedEdges = edges.slice(0, 70);
+  if (trimmedEdges.length === 0 && sampled.length > 1) {
+    // Fallback so the panel stays useful when semantic overlap is sparse.
+    trimmedEdges = sampled.slice(1).map((observation, idx) => ({
+      id: `fallback-${sampled[idx].id}-${observation.id}`,
+      from: sampled[idx].id,
+      to: observation.id,
+      weight: 1,
+      reasons: ["temporal adjacency"],
+    }));
+  }
 
   const degreeMap = new Map<number, number>();
   for (const edge of trimmedEdges) {

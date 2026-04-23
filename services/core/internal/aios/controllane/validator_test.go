@@ -205,10 +205,58 @@ func TestActionValidationMatrix(t *testing.T) {
 			}(),
 		},
 		{
+			name: "valid compile context with snapshot options",
+			req: func() domain.SyscallRequest {
+				r := validBaseRequest(domain.ActionCompileContext)
+				r.Payload = map[string]any{
+					"query":              "summarize",
+					"budget":             map[string]any{"maxTokens": 10, "maxEvents": 5, "maxNotes": 5},
+					"persistSnapshot":    true,
+					"renderSnapshotCard": false,
+					"snapshotKind":       "restore",
+					"restoreSnapshot": map[string]any{
+						"snapshotKind": "restore",
+						"snapshotId":   "ctx-snap-1",
+						"evidence":     map[string]any{"source": "seed"},
+					},
+				}
+				return r
+			}(),
+		},
+		{
 			name: "invalid compile context",
 			req: func() domain.SyscallRequest {
 				r := validBaseRequest(domain.ActionCompileContext)
 				r.Payload = map[string]any{"budget": map[string]any{"maxTokens": 0, "maxEvents": 1, "maxNotes": 1}}
+				return r
+			}(),
+			wantErr: true,
+		},
+		{
+			name: "invalid compile context snapshot options",
+			req: func() domain.SyscallRequest {
+				r := validBaseRequest(domain.ActionCompileContext)
+				r.Payload = map[string]any{
+					"query":              "summarize",
+					"budget":             map[string]any{"maxTokens": 10, "maxEvents": 5, "maxNotes": 5},
+					"persistSnapshot":    "yes",
+					"renderSnapshotCard": true,
+				}
+				return r
+			}(),
+			wantErr: true,
+		},
+		{
+			name: "invalid compile context restore snapshot",
+			req: func() domain.SyscallRequest {
+				r := validBaseRequest(domain.ActionCompileContext)
+				r.Payload = map[string]any{
+					"query":  "summarize",
+					"budget": map[string]any{"maxTokens": 10, "maxEvents": 5, "maxNotes": 5},
+					"restoreSnapshot": map[string]any{
+						"snapshotId": "ctx-snap-1",
+					},
+				}
 				return r
 			}(),
 			wantErr: true,

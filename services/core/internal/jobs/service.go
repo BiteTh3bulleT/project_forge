@@ -403,6 +403,7 @@ func (s *Service) execute(ctx context.Context, jobID string, job *Job, meta jobM
 		}
 		reqPaths := readStringSlice(meta.RequestPayload, "paths")
 		invokeInput := readMap(meta.RequestPayload, "input")
+		invokeInput = enrichGatewayActionInput(toolID, invokeInput, meta.UserRequest)
 		dryRun := readBool(meta.RequestPayload, "dryRun", false)
 		packetID := packetID(packet)
 		result, err := s.gateway.Execute(ctx, gateway.Request{
@@ -523,6 +524,27 @@ func (s *Service) execute(ctx context.Context, jobID string, job *Job, meta jobM
 	})
 
 	return nonEmpty(res.Message, "Adapter execution completed"), nil
+}
+
+func enrichGatewayActionInput(toolID string, input map[string]any, userRequest string) map[string]any {
+	if strings.TrimSpace(toolID) != "desktop.open" {
+		return input
+	}
+	if input == nil {
+		input = map[string]any{}
+	}
+	if raw, ok := input["query"]; ok && strings.TrimSpace(fmt.Sprintf("%v", raw)) != "" {
+		return input
+	}
+	text := strings.TrimSpace(userRequest)
+	if text == "" {
+		return input
+	}
+	if strings.HasPrefix(strings.ToLower(text), "chat gateway:") {
+		return input
+	}
+	input["query"] = text
+	return input
 }
 
 func (s *Service) buildAdapterInput(meta jobMetadata, tpl Template, packet *packets.Packet) map[string]any {

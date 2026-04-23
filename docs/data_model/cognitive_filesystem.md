@@ -300,6 +300,7 @@ Invariants:
 Purpose:
 
 - evidence snapshot of context assembly inputs/choices
+- Phase 6.25 restore evidence for `COMPILE_CONTEXT` snapshots, including optional SVG card rendering metadata
 
 Canonical fields:
 
@@ -324,7 +325,22 @@ Mutability:
 
 Non-canonical:
 
-- snapshot is evidence of load composition, not truth authority.
+- snapshot rows and any rendered SVG card are evidence of load composition, not truth authority.
+- restore metadata may describe how the snapshot was rehydrated, but it does not override canonical notes/state/history.
+
+Phase 6.25 restore fields (contract names):
+
+- `snapshot_kind`: classifies the snapshot intent for restore/review handling
+- `restore_source_snapshot_id`: links a restore back to the source snapshot row
+- `restore_scope_json`: records the workspace/lane/path scope used during restore
+- `restore_reason_json`: captures why the snapshot was restored or rendered
+- `rendered_card_artifact_id`: optional reference to the SVG card produced when snapshot cards are requested
+
+Purpose of the restore fields:
+
+- keep restore activity explainable and auditable
+- preserve deterministic scope boundaries during rehydration
+- make compiled context inspectable without promoting it to canonical truth
 
 ## 13) Audit linkage
 
@@ -382,7 +398,7 @@ Textual graph:
 - `REGISTER_CONTRADICTION` -> `contradiction_records` + `semantic_links(contradicts)` (+ journal event)
 - `DERIVE_MODEL` -> `derived_models` (+ journal event)
 - `ARCHIVE_NOTE` -> status transition in `memory_notes` (+ journal event)
-- `COMPILE_CONTEXT` -> deterministic read (snapshot repository is available but not auto-written by default)
+- `COMPILE_CONTEXT` -> deterministic read; snapshot persistence is opt-in via `persistSnapshot`, `renderSnapshotCard`, and `snapshotKind`
 
 ## Current truth vs history
 

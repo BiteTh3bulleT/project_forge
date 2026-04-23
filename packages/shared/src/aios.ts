@@ -134,10 +134,25 @@ export type AdaptivePolicyModel = {
   createdAt: number;
 };
 
+export type ContextCompileOptions = {
+  persistSnapshot?: boolean;
+  renderSnapshotCard?: boolean;
+  snapshotKind?: string;
+};
+
+export type ContextRestoreSnapshot = {
+  snapshotId?: string;
+  snapshotKind: string;
+  evidence?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+};
+
 export type ContextPacket = {
   id: string;
   query: string;
   scope: ForgeScope;
+  compileOptions?: ContextCompileOptions;
+  restoreSnapshot?: ContextRestoreSnapshot;
   activeState: StateItem[];
   openLoops: OpenLoop[];
   notes: MemoryNote[];
@@ -518,7 +533,13 @@ export type AutonomyRunSummary = {
   traceId?: string;
 };
 
-export type ToolCapabilityStatus = "active" | "disabled" | "stubbed" | "approval_only" | "deprecated";
+export type ToolCapabilityStatus =
+  | "active"
+  | "disabled"
+  | "stubbed"
+  | "approval_only"
+  | "deprecated"
+  | "deferred";
 export type ToolLane = "control" | "io" | "compute";
 export type ToolEffect = "read" | "write" | "execute" | "network" | "external" | "privileged" | "destructive";
 export type ToolRisk = "none" | "low" | "medium" | "high" | "critical";
@@ -670,6 +691,63 @@ export function validateContextPacket(packet: ContextPacket): string[] {
   if (!packet.budget || packet.budget.maxTokens <= 0) errors.push("budget.maxTokens must be positive");
   if (!packet.budget || packet.budget.maxEvents <= 0) errors.push("budget.maxEvents must be positive");
   if (!packet.budget || packet.budget.maxNotes <= 0) errors.push("budget.maxNotes must be positive");
+  if (packet.compileOptions) errors.push(...validateContextCompileOptions(packet.compileOptions));
+  if (packet.restoreSnapshot) errors.push(...validateContextRestoreSnapshot(packet.restoreSnapshot));
+  return errors;
+}
+
+function validateContextCompileOptions(options: ContextCompileOptions): string[] {
+  const errors: string[] = [];
+  if (Object.prototype.hasOwnProperty.call(options, "persistSnapshot") && typeof options.persistSnapshot !== "boolean") {
+    errors.push("compileOptions.persistSnapshot must be a boolean");
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(options, "renderSnapshotCard") &&
+    typeof options.renderSnapshotCard !== "boolean"
+  ) {
+    errors.push("compileOptions.renderSnapshotCard must be a boolean");
+  }
+  if (Object.prototype.hasOwnProperty.call(options, "snapshotKind")) {
+    if (typeof options.snapshotKind !== "string") {
+      errors.push("compileOptions.snapshotKind must be a string");
+    } else if (!options.snapshotKind.trim()) {
+      errors.push("compileOptions.snapshotKind must not be empty");
+    }
+  }
+  if ((options.persistSnapshot || options.renderSnapshotCard) && !options.snapshotKind?.trim()) {
+    errors.push("compileOptions.snapshotKind is required when snapshot options are enabled");
+  }
+  return errors;
+}
+
+function validateContextRestoreSnapshot(snapshot: ContextRestoreSnapshot): string[] {
+  const errors: string[] = [];
+  if (typeof snapshot.snapshotKind !== "string") {
+    errors.push("restoreSnapshot.snapshotKind must be a string");
+  } else if (!snapshot.snapshotKind.trim()) {
+    errors.push("restoreSnapshot.snapshotKind is required");
+  }
+  if (Object.prototype.hasOwnProperty.call(snapshot, "snapshotId") && typeof snapshot.snapshotId !== "string") {
+    errors.push("restoreSnapshot.snapshotId must be a string");
+  }
+  if (Object.prototype.hasOwnProperty.call(snapshot, "evidence")) {
+    if (
+      typeof snapshot.evidence !== "object" ||
+      snapshot.evidence === null ||
+      Array.isArray(snapshot.evidence)
+    ) {
+      errors.push("restoreSnapshot.evidence must be an object");
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(snapshot, "metadata")) {
+    if (
+      typeof snapshot.metadata !== "object" ||
+      snapshot.metadata === null ||
+      Array.isArray(snapshot.metadata)
+    ) {
+      errors.push("restoreSnapshot.metadata must be an object");
+    }
+  }
   return errors;
 }
 

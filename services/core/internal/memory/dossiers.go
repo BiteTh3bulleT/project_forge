@@ -90,5 +90,8 @@ LIMIT ?`, dossierID, dossierID, limit)
 		return nil, err
 	}
 	view.RecentAlignmentNotes = alignments
+	if summary, summaryErr := s.DossierVSASummary(ctx, dossierID); summaryErr == nil {
+		view.VSASummary = summary
+	}
 	return view, nil
 }

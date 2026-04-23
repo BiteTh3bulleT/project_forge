@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "validate": "npm run typecheck && npm run build",
     "preview": "vite preview",
     "tauri": "tauri"
   },

@@ -13,7 +13,22 @@ const (
 	ToolCapabilityStubbed      ToolCapabilityStatus = "stubbed"
 	ToolCapabilityApprovalOnly ToolCapabilityStatus = "approval_only"
 	ToolCapabilityDeprecated   ToolCapabilityStatus = "deprecated"
+	ToolCapabilityDeferred     ToolCapabilityStatus = "deferred"
 )
+
+func IsKnownToolCapabilityStatus(value ToolCapabilityStatus) bool {
+	switch strings.TrimSpace(strings.ToLower(string(value))) {
+	case string(ToolCapabilityActive),
+		string(ToolCapabilityDisabled),
+		string(ToolCapabilityStubbed),
+		string(ToolCapabilityApprovalOnly),
+		string(ToolCapabilityDeprecated),
+		string(ToolCapabilityDeferred):
+		return true
+	default:
+		return false
+	}
+}
 
 type ToolLane string
 
@@ -143,6 +158,8 @@ func (c ToolCapability) Validate() []ToolExecutionError {
 	}
 	if strings.TrimSpace(string(c.Status)) == "" {
 		issues = append(issues, ToolExecutionError{Code: ToolErrInvalidPayload, Field: "status", Message: "capability status is required"})
+	} else if !IsKnownToolCapabilityStatus(c.Status) {
+		issues = append(issues, ToolExecutionError{Code: ToolErrInvalidPayload, Field: "status", Message: "capability status must be one of active, disabled, stubbed, approval_only, deprecated, deferred"})
 	}
 	if strings.TrimSpace(string(c.Risk)) == "" {
 		issues = append(issues, ToolExecutionError{Code: ToolErrInvalidPayload, Field: "risk", Message: "capability risk is required"})

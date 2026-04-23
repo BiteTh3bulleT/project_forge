@@ -26,6 +26,7 @@ Each observation keeps summary counters:
 - `noise_count`
 
 Scores are updated on each usefulness event and used as ranking hints.
+When VSA data exists for an observation, usefulness/noise feedback also updates VSA binding/association reliability counters.
 
 ## Drift / Staleness Controls
 
@@ -42,7 +43,9 @@ Operators can mark stale or re-verified from the Memory page.
 2. Mark stale/noisy/useful explicitly.
 3. Review retrieval runs that repeatedly surface noisy memory.
 4. Adjust dossier high-value/noisy file lists.
-5. Re-run retrieval and verify selection reasons.
+5. Inspect VSA breakdown for noisy results (associative/role/relational/feedback).
+6. Trigger VSA reindex if pointers/bindings are stale or missing.
+7. Re-run retrieval and verify selection reasons.
 
 ## Repair Runs
 
@@ -59,6 +62,18 @@ Operator controls:
 - run repair now from `#/memory`
 - inspect run history and per-item outcomes
 - verify repaired/skipped/failed counts and notes
+
+## VSA Reindex Runs
+
+FORGE also persists VSA-specific indexing maintenance:
+
+- `memory_vsa_reindex_runs`: run-level mode/status/totals/settings snapshot
+- `memory_vsa_reindex_items`: per-observation before/after fingerprints and status
+
+Operator controls:
+- run VSA reindex from `#/memory`
+- inspect VSA run history and per-item transitions
+- verify indexed/skipped/failed totals and notes
 
 ## Why This Exists
 

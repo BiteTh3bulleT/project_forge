@@ -187,20 +187,36 @@ type ContextBudget struct {
 	MaxNotes  int `json:"maxNotes"`
 }
 
+type ContextCompileOptions struct {
+	PersistSnapshot    bool   `json:"persistSnapshot,omitempty"`
+	RenderSnapshotCard bool   `json:"renderSnapshotCard,omitempty"`
+	SnapshotKind       string `json:"snapshotKind,omitempty"`
+}
+
+// ContextRestoreSnapshot is non-canonical evidence describing a restored snapshot.
+type ContextRestoreSnapshot struct {
+	SnapshotID   string         `json:"snapshotId,omitempty"`
+	SnapshotKind string         `json:"snapshotKind"`
+	Evidence     map[string]any `json:"evidence,omitempty"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
+}
+
 type ContextPacket struct {
-	ID               string                `json:"id"`
-	Query            string                `json:"query"`
-	Scope            ForgeScope            `json:"scope"`
-	ActiveState      []StateItem           `json:"activeState"`
-	OpenLoops        []OpenLoop            `json:"openLoops"`
-	Notes            []MemoryNote          `json:"notes"`
-	LinkedNotes      []SemanticLink        `json:"linkedNotes"`
-	Models           []AdaptivePolicyModel `json:"models"`
-	Artifacts        []ArtifactRef         `json:"artifacts"`
-	RawEvents        []JournalEvent        `json:"rawEvents"`
-	Budget           ContextBudget         `json:"budget"`
-	InclusionReasons map[string]string     `json:"inclusionReasons"`
-	CreatedAt        int64                 `json:"createdAt"`
+	ID               string                  `json:"id"`
+	Query            string                  `json:"query"`
+	Scope            ForgeScope              `json:"scope"`
+	CompileOptions   *ContextCompileOptions  `json:"compileOptions,omitempty"`
+	RestoreSnapshot  *ContextRestoreSnapshot `json:"restoreSnapshot,omitempty"`
+	ActiveState      []StateItem             `json:"activeState"`
+	OpenLoops        []OpenLoop              `json:"openLoops"`
+	Notes            []MemoryNote            `json:"notes"`
+	LinkedNotes      []SemanticLink          `json:"linkedNotes"`
+	Models           []AdaptivePolicyModel   `json:"models"`
+	Artifacts        []ArtifactRef           `json:"artifacts"`
+	RawEvents        []JournalEvent          `json:"rawEvents"`
+	Budget           ContextBudget           `json:"budget"`
+	InclusionReasons map[string]string       `json:"inclusionReasons"`
+	CreatedAt        int64                   `json:"createdAt"`
 }
 
 type SemanticActionType string

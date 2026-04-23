@@ -17,7 +17,7 @@
   - `gateway_invocations`, `audit_records`
   - `artifacts`
   - `task_packets`
-  - memory/retrieval/policy tables.
+  - memory/retrieval/policy tables, including VSA inspectability tables.
 
 ## Current transaction strategy
 
@@ -79,6 +79,19 @@ Added in SQLite schema (`internal/store/migrate.go`):
 - `supersession_records`
 - `context_packet_snapshots`
 - `semantic_idempotency_keys`
+
+## Retrieval + Memory VSA persistence
+
+Added for inspectable VSA behavior in retrieval/memory lanes:
+
+- `memory_vsa_pointers`
+- `memory_vsa_role_bindings`
+- `memory_vsa_associations`
+- `retrieval_result_vsa_signals`
+- `memory_vsa_reindex_runs`
+- `memory_vsa_reindex_items`
+
+These remain in the existing memory/retrieval subsystem (not canonical cognitive syscall state), and are linked to observations/results for operator inspection.
 
 ## Reused concepts
 

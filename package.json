@@ -7,15 +7,24 @@
     "packages/ui"
   ],
   "scripts": {
-    "core": "cd services/core && go run .",
+    "core": "bash ./scripts/forge-core.sh",
     "forge-core": "npm run core",
-    "build:core": "cd services/core && go build ./...",
+    "build:core": "bash ./scripts/check-vsa-files.sh --require-tracked && cd services/core && go build ./...",
     "build:desktop": "npm -w @forge/desktop run build",
+    "typecheck:desktop": "npm -w @forge/desktop run typecheck",
+    "validate:desktop": "npm -w @forge/desktop run validate",
+    "test:core": "bash ./scripts/check-vsa-files.sh --require-tracked && cd services/core && go test ./...",
+    "vet:core": "bash ./scripts/check-vsa-files.sh --require-tracked && cd services/core && go vet ./...",
+    "test": "npm run test:core",
+    "lint": "npm run vet:core",
+    "typecheck": "npm run typecheck:desktop",
     "build": "npm run build:desktop && npm run build:core",
-    "install": "npm install",
-    "desktop": "npm -w @forge/desktop run tauri -- dev",
+    "desktop:clean-port": "bash ./scripts/desktop-clean-port.sh 5173",
+    "desktop:check": "bash ./scripts/check-desktop-deps.sh",
+    "desktop": "npm run desktop:clean-port && npm run desktop:check && npm -w @forge/desktop run tauri -- dev",
     "dev": "npm run desktop",
     "up": "node ./scripts/forge-up.mjs",
-    "down": "node ./scripts/forge-down.mjs"
+    "down": "node ./scripts/forge-down.mjs",
+    "smoke": "bash ./scripts/forge-smoke.sh"
   }
 }

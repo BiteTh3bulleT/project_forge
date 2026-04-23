@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"forge/projectforge/services/core/internal/artifacts"
+	"forge/projectforge/services/core/internal/audit"
 	"forge/projectforge/services/core/internal/canvas"
 	"forge/projectforge/services/core/internal/jobs"
 )
@@ -205,6 +206,30 @@ func (s *Server) handleChatAttachmentUpload(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	_ = s.log.Emit(ctx, "chat.attachment.uploaded", map[string]any{"threadId": threadID, "artifactId": art.ID, "bytes": bytesWritten})
+	if s.auditSvc != nil {
+		meta := requestAuditMetaForBackup(r, "", "", "", "artifact.upload")
+		if strings.TrimSpace(meta.WorkspaceID) == "" {
+			meta.WorkspaceID = workspaceIDFromPath(s.cfg.WorkspaceDir)
+		}
+		_, _ = s.auditSvc.Record(ctx, audit.CreateRequest{
+			CorrelationID: meta.CorrelationID,
+			Category:      "artifact",
+			Action:        "artifact.uploaded",
+			Actor:         "api",
+			SubjectType:   "artifact",
+			SubjectID:     strconv.FormatInt(art.ID, 10),
+			Outcome:       "ok",
+			Summary:       "chat attachment stored as artifact",
+			Payload: requestAuditPayload(map[string]any{
+				"threadId":    threadID,
+				"artifactId":  art.ID,
+				"bytes":       bytesWritten,
+				"fileName":    filename,
+				"mimeType":    mime,
+				"requestPath": r.URL.Path,
+			}, meta),
+		})
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"artifact":    art,
 		"bytes":       bytesWritten,
@@ -409,4 +434,12 @@ func (s *Server) handleArtifactContent(w http.ResponseWriter, r *http.Request) {
 		"content":        body,
 		"previewLimited": !textual,
 	})
+}
+
+func workspaceIDFromPath(path string) string {
+	base := strings.TrimSpace(filepath.Base(strings.TrimSpace(path)))
+	if base == "" || base == "." || base == string(filepath.Separator) {
+		return "workspace:default"
+	}
+	return "workspace:" + base
 }

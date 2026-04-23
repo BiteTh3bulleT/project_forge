@@ -5,7 +5,7 @@ The capability registry is FORGE's normalized catalog of tool primitives.
 It stores typed descriptors with:
 
 - capability id (`domain.primitive`)
-- status (`active`, `disabled`, `stubbed`, `approval_only`, `deprecated`)
+- status (`active`, `disabled`, `stubbed`, `approval_only`, `deprecated`, `deferred`)
 - lane/effect/risk metadata
 - approval and autonomy flags
 - resource cost + resource limits
@@ -32,7 +32,7 @@ The full taxonomy is registered.
 Current execution coverage is intentionally partial:
 
 - existing gateway tools are mapped to `active`/`approval_only` capabilities
-- non-implemented primitives are present as `stubbed`/`approval_only`
+- non-implemented primitives are present as `stubbed`/`approval_only` and roadmap-gated ones can be marked `deferred` to keep capability discoverability without enabling execution
 
 This gives a stable policy and UI surface now, without enabling unsafe operations.
 

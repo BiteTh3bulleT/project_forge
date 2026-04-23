@@ -74,6 +74,9 @@ var smallTalkTurns = map[string]struct{}{
 
 // ForcedChatModelName returns a forge_* function name when the user text clearly maps to one gateway tool.
 func ForcedChatModelName(user string) string {
+	if wantsCompositeFilesystemWorkflow(user) {
+		return ""
+	}
 	if wantsFilesystemMkdir(user) {
 		return ChatModelName("fs.mkdir")
 	}
@@ -93,6 +96,28 @@ func ForcedChatModelName(user string) string {
 		return ChatModelName("git.status")
 	}
 	return ""
+}
+
+func wantsCompositeFilesystemWorkflow(user string) bool {
+	s := strings.TrimSpace(strings.ToLower(user))
+	if s == "" {
+		return false
+	}
+	if !wantsFilesystemMkdir(user) {
+		return false
+	}
+	hasFollowOnCreate := wantsWriteFile(user) ||
+		strings.Contains(s, "python app") ||
+		strings.Contains(s, "inside that directory") ||
+		strings.Contains(s, "inside the directory") ||
+		strings.Contains(s, "inside that folder") ||
+		strings.Contains(s, "inside the folder")
+	if !hasFollowOnCreate {
+		return false
+	}
+	return strings.Contains(s, " and ") ||
+		strings.Contains(s, " then ") ||
+		strings.Contains(s, " inside ")
 }
 
 func wantsFilesystemMkdir(user string) bool {
@@ -164,6 +189,9 @@ func wantsWriteFile(user string) bool {
 		return true
 	}
 	if strings.Contains(s, "create a script") || strings.Contains(s, "create script") {
+		return true
+	}
+	if strings.Contains(s, "create a python app") || strings.Contains(s, "create python app") {
 		return true
 	}
 	if strings.Contains(s, "python script") || strings.Contains(s, ".py") {

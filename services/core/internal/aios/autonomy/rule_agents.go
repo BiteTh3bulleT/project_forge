@@ -69,8 +69,9 @@ func (r *RuleAgentRuntime) RunOnce(ctx context.Context, in RuleAgentInput) ([]do
 		if len(res.Actions) == 0 {
 			continue
 		}
-		run, runErr := r.runner.Run(ctx, res.Intent, res.Actions, domain.RunModeCommitIfAuthorized, r.autonomyMode)
+		run, runErr := r.runner.Run(ctx, res.Intent, res.Actions, domain.RunModeProposeOnly, r.autonomyMode)
 		run.Warnings = append(run.Warnings, res.Warnings...)
+		run.Warnings = append(run.Warnings, "rule-agent runtime is propose-only; commits require explicit downstream approval path")
 		out = append(out, run)
 		if runErr != nil {
 			continue
@@ -167,29 +168,11 @@ func (CleanupProposalAgent) Evaluate(_ context.Context, in RuleAgentInput) (Rule
 		CreatedAt:     in.NowMillis,
 		UpdatedAt:     in.NowMillis,
 	}
-	action := domain.SyscallRequest{
-		ID:     "action-cleanup-proposal-" + shortHash(in.Scope.WorkspaceID, fmt.Sprintf("%d", in.NowMillis)),
-		Action: domain.ActionArchiveNote,
-		Actor:  domain.ActorIdentity{ID: "rule_agent.cleanup_proposal", Kind: "rule_agent"},
-		Source: domain.SourceSystem,
-		Scope:  in.Scope,
-		Payload: map[string]any{
-			"noteId":        "candidate-note",
-			"noteStatus":    "active",
-			"ageDays":       1,
-			"archiveReason": "cleanup_review",
-		},
-		Provenance:    domain.Provenance{Actor: "rule_agent.cleanup_proposal", ActorType: "rule_agent", Source: "autonomy.rule_agent", TraceID: in.TraceID},
-		CorrelationID: in.CorrelationID,
-		TraceID:       in.TraceID,
-		RequestedAt:   in.NowMillis,
-		Metadata:      map[string]any{"proposedOnly": true},
-	}
 	return RuleAgentResult{
 		AgentID:  "CleanupProposalAgent",
 		Intent:   intent,
-		Actions:  []domain.SyscallRequest{action},
-		Warnings: []string{"cleanup proposal uses conservative default and may require approval"},
+		Actions:  nil,
+		Warnings: []string{"cleanup proposal currently has no deterministic cleanup target; proposals are safe-only pending stronger signal"},
 	}, nil
 }
 

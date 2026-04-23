@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -540,6 +541,19 @@ func (s *Service) EnsureDefaults(ctx context.Context, workspaceDir string) error
 			RiskClass:        "privileged",
 			Builtin:          true,
 			Enabled:          true,
+		},
+		{
+			ID:                "legacy.adapter.invoke",
+			Name:              "Legacy adapter invoke compatibility",
+			Description:       "Gateway lane for env-gated legacy adapter compatibility route.",
+			ActionType:        "legacy.adapter.invoke",
+			AllowedPaths:      []string{filepath.Clean(string(filepath.Separator))},
+			WriteIntent:       false,
+			RequiresApproval:  false,
+			RiskClass:         "low",
+			ExpectedArtifacts: []string{"legacyAdapterInvocation"},
+			Builtin:           true,
+			Enabled:           true,
 		},
 	}
 	for _, l := range builtins {

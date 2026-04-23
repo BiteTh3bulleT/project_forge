@@ -523,3 +523,205 @@ func TestSQLiteContextCompileDryRunAndReadOnlyPath(t *testing.T) {
 		t.Fatalf("unexpected context packet id: %q", pkt.ID)
 	}
 }
+
+func TestSQLiteContextCompilePersistsSnapshotEvidence(t *testing.T) {
+	ctx := context.Background()
+	k, txRunner, st := newSQLiteKernel(t, nil)
+	read := txRunner.read
+	scope := ScopeFilter{WorkspaceID: "ws-main", LaneID: "control.semantic"}
+
+	mustCreateNote(ctx, k, "ctx-note-a", "ctx a")
+	mustCreateNote(ctx, k, "ctx-note-b", "ctx b")
+	loopReq := validSQLiteRequest(domain.ActionOpenLoop, "ctx-loop-1", scope.WorkspaceID)
+	loopReq.Payload = map[string]any{
+		"id":       "ctx-loop-a",
+		"title":    "ctx loop",
+		"state":    string(domain.LoopBlocked),
+		"priority": "high",
+		"blocker":  "awaiting evidence",
+	}
+	if res, err := k.Process(ctx, loopReq); err != nil || !res.Success {
+		t.Fatalf("seed loop failed: err=%v res=%+v", err, res)
+	}
+
+	req := validSQLiteRequest(domain.ActionCompileContext, "ctx-compile-persist-1", scope.WorkspaceID)
+	req.Payload = map[string]any{
+		"query":              "summarize blockers",
+		"budget":             map[string]any{"maxTokens": 50, "maxEvents": 20, "maxNotes": 20},
+		"persistSnapshot":    true,
+		"renderSnapshotCard": true,
+		"snapshotKind":       "restore",
+	}
+	res, err := k.Process(ctx, req)
+	if err != nil || !res.Success {
+		t.Fatalf("persisting compile context failed: err=%v res=%+v", err, res)
+	}
+
+	packet, ok := read.FindLatestContextSnapshot(req.Scope, "summarize blockers", "restore")
+	if !ok {
+		t.Fatalf("expected persisted context snapshot")
+	}
+	if packet.RestoreSnapshot == nil || packet.CompileOptions == nil {
+		t.Fatalf("expected restore snapshot metadata on packet")
+	}
+	if got := readString(packet.RestoreSnapshot.Metadata, "rendered_card_artifact_id"); got == "" {
+		t.Fatalf("expected rendered card artifact link")
+	}
+	if packet.RestoreSnapshot.SnapshotID != packet.ID {
+		t.Fatalf("expected restore snapshot id to align with packet id, got packet=%q restore=%q", packet.ID, packet.RestoreSnapshot.SnapshotID)
+	}
+
+	var corr, traceID, syscallID, auditID, proposedBy, committedBy, metadataRaw string
+	var snapshotKind, snapshotFingerprint, parentSnapshotID, headerJSON, graphJSON, deltaJSON, restoreScoresJSON, renderArtifactRefID, resumeHintsJSON string
+	if err := st.DB.QueryRowContext(ctx, `
+SELECT correlation_id, trace_id, syscall_id, audit_id, proposed_by, committed_by, metadata_json,
+       snapshot_kind, snapshot_fingerprint, parent_snapshot_id, header_json, graph_json, delta_json,
+       restore_scores_json, render_artifact_ref_id, resume_hints_json
+FROM context_packet_snapshots
+WHERE id = ?`, packet.ID).Scan(
+		&corr,
+		&traceID,
+		&syscallID,
+		&auditID,
+		&proposedBy,
+		&committedBy,
+		&metadataRaw,
+		&snapshotKind,
+		&snapshotFingerprint,
+		&parentSnapshotID,
+		&headerJSON,
+		&graphJSON,
+		&deltaJSON,
+		&restoreScoresJSON,
+		&renderArtifactRefID,
+		&resumeHintsJSON,
+	); err != nil {
+		t.Fatalf("query persisted snapshot metadata: %v", err)
+	}
+	if corr != req.CorrelationID || traceID != req.TraceID || syscallID != req.ID || auditID == "" {
+		t.Fatalf("unexpected snapshot lineage corr=%q trace=%q syscall=%q audit=%q resultAudit=%q warnings=%v", corr, traceID, syscallID, auditID, res.AuditID, res.Warnings)
+	}
+	if proposedBy == "" || committedBy != "forge_kernel" {
+		t.Fatalf("unexpected proposed/committed metadata proposed=%q committed=%q", proposedBy, committedBy)
+	}
+	if !strings.Contains(metadataRaw, `"snapshot_kind":"restore"`) {
+		t.Fatalf("expected snapshot metadata to carry snapshot_kind, got %s", metadataRaw)
+	}
+	if snapshotKind != "restore" {
+		t.Fatalf("expected snapshot_kind column to persist restore, got %q", snapshotKind)
+	}
+	if snapshotFingerprint == "" {
+		t.Fatalf("expected snapshot_fingerprint column to be populated")
+	}
+	if parentSnapshotID != "" {
+		t.Fatalf("first persisted snapshot should not set parent snapshot id, got %q", parentSnapshotID)
+	}
+	if headerJSON == "{}" || graphJSON == "{}" || deltaJSON == "{}" {
+		t.Fatalf("expected header/graph/delta columns to persist non-empty snapshot evidence")
+	}
+	if restoreScoresJSON != "{}" {
+		t.Fatalf("expected restore_scores_json to default to {}, got %s", restoreScoresJSON)
+	}
+	if renderArtifactRefID == "" {
+		t.Fatalf("expected render_artifact_ref_id column to persist rendered card artifact")
+	}
+	if resumeHintsJSON != "{}" {
+		t.Fatalf("expected resume_hints_json to default to {}, got %s", resumeHintsJSON)
+	}
+
+	renderedArtifactID := readString(packet.RestoreSnapshot.Metadata, "rendered_card_artifact_id")
+	var artifactCorr, artifactTrace, artifactSyscall, artifactAudit, artifactProposed, artifactCommitted string
+	if err := st.DB.QueryRowContext(ctx, `
+SELECT correlation_id, trace_id, syscall_id, audit_id, proposed_by, committed_by
+FROM artifact_refs
+WHERE id = ?`, renderedArtifactID).Scan(&artifactCorr, &artifactTrace, &artifactSyscall, &artifactAudit, &artifactProposed, &artifactCommitted); err != nil {
+		t.Fatalf("query rendered card artifact: %v", err)
+	}
+	if artifactCorr != req.CorrelationID || artifactTrace != req.TraceID || artifactSyscall != req.ID || artifactAudit == "" {
+		t.Fatalf("unexpected artifact lineage corr=%q trace=%q syscall=%q audit=%q", artifactCorr, artifactTrace, artifactSyscall, artifactAudit)
+	}
+	if artifactProposed == "" || artifactCommitted != "forge_kernel" {
+		t.Fatalf("unexpected artifact proposed/committed metadata proposed=%q committed=%q", artifactProposed, artifactCommitted)
+	}
+	if res.StateSummary["snapshotFingerprint"] == "" {
+		t.Fatalf("expected snapshot fingerprint in syscall summary")
+	}
+}
+
+func TestSQLiteContextCompileRepeatedFingerprintLinksParent(t *testing.T) {
+	ctx := context.Background()
+	k, txRunner, _ := newSQLiteKernel(t, nil)
+
+	mustCreateNote(ctx, k, "ctx-repeat-a", "repeat a")
+	mustCreateNote(ctx, k, "ctx-repeat-b", "repeat b")
+
+	first := validSQLiteRequest(domain.ActionCompileContext, "ctx-repeat-compile-1", "ws-main")
+	first.Payload = map[string]any{
+		"query":           "summarize blockers",
+		"budget":          map[string]any{"maxTokens": 50, "maxEvents": 20, "maxNotes": 20},
+		"persistSnapshot": true,
+		"snapshotKind":    "restore",
+	}
+	firstRes, err := k.Process(ctx, first)
+	if err != nil || !firstRes.Success {
+		t.Fatalf("first persisted compile failed: err=%v res=%+v", err, firstRes)
+	}
+
+	second := validSQLiteRequest(domain.ActionCompileContext, "ctx-repeat-compile-2", "ws-main")
+	second.RequestedAt = first.RequestedAt + 1000
+	second.Payload = first.Payload
+	secondRes, err := k.Process(ctx, second)
+	if err != nil || !secondRes.Success {
+		t.Fatalf("second persisted compile failed: err=%v res=%+v", err, secondRes)
+	}
+
+	packet, ok := txRunner.read.FindLatestContextSnapshot(second.Scope, "summarize blockers", "restore")
+	if !ok || packet.RestoreSnapshot == nil {
+		t.Fatalf("expected latest repeated snapshot")
+	}
+	if parent := readString(packet.RestoreSnapshot.Metadata, "parent_snapshot_id"); parent == "" {
+		t.Fatalf("expected parent snapshot linkage on repeated compile")
+	}
+	var parentSnapshotID string
+	if err := txRunner.db.QueryRowContext(ctx, `
+SELECT parent_snapshot_id
+FROM context_packet_snapshots
+WHERE id = ?`, packet.ID).Scan(&parentSnapshotID); err != nil {
+		t.Fatalf("query parent_snapshot_id: %v", err)
+	}
+	if strings.TrimSpace(parentSnapshotID) == "" {
+		t.Fatalf("expected parent_snapshot_id column to persist repeated lineage")
+	}
+	if reason, ok := packet.RestoreSnapshot.Metadata["restore_reason_json"].(map[string]any); !ok || reason["fingerprint_matched"] != true {
+		t.Fatalf("expected fingerprint matched restore reason, got %#v", packet.RestoreSnapshot.Metadata["restore_reason_json"])
+	}
+	if got := packet.RestoreSnapshot.Evidence["delta"]; got == nil {
+		t.Fatalf("expected persisted delta evidence")
+	}
+}
+
+func TestSQLiteContextCompileNoDirectPersistenceByReadStore(t *testing.T) {
+	ctx := context.Background()
+	_, txRunner, _ := newSQLiteKernel(t, nil)
+
+	_ = txRunner.read.BuildContext("summarize blockers", domain.ForgeScope{WorkspaceID: "ws-main", LaneID: "control.semantic"}, domain.ContextBudget{
+		MaxTokens: 50,
+		MaxEvents: 20,
+		MaxNotes:  20,
+	}, 1760001007777)
+
+	var snapshotCount int
+	if err := txRunner.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM context_packet_snapshots`).Scan(&snapshotCount); err != nil {
+		t.Fatalf("count context snapshots: %v", err)
+	}
+	if snapshotCount != 0 {
+		t.Fatalf("read-store BuildContext must not persist snapshot rows, got %d", snapshotCount)
+	}
+	var artifactCount int
+	if err := txRunner.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM artifact_refs`).Scan(&artifactCount); err != nil {
+		t.Fatalf("count artifact refs: %v", err)
+	}
+	if artifactCount != 0 {
+		t.Fatalf("read-store BuildContext must not persist artifact refs, got %d", artifactCount)
+	}
+}

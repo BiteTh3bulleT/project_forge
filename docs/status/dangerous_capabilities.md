@@ -1,0 +1,93 @@
+# Dangerous Capability Inventory (Phase 5.99)
+
+Date: 2026-04-21
+Scope: preserve full taxonomy, enforce explicit executable posture
+
+## Taxonomy preserved
+
+FORGE keeps the full capability universe across domains (`filesystem`, `process`, `network`, `identity`, `external`, `code`, `ui`, etc.).
+Registered does not mean executable.
+
+## Classification buckets
+
+### 1) Known disabled
+- No broad default disabled blocklist in current static registry snapshot.
+- Runtime disable overrides are possible; registry status for many ids remains advisory and must be persisted through policy review workflow.
+
+### 2) Known stubbed
+- Most taxonomy entries remain `stubbed` (no active adapter path).
+- This is expected for deferred surface breadth.
+
+### 3) Known approval-only
+High-risk mappings are explicitly `approval_only` in `activeMappings`, including (selection):
+- `filesystem.delete_file`
+- `filesystem.set_permissions`
+- `filesystem.restore_snapshot`
+- `process.spawn_process`
+- `process.kill_process`
+- `network.http_request`
+- `network.open_socket`
+- `network.scan_network`
+- `network.open_tunnel`
+- `network.intercept_traffic`
+- `network.set_firewall_rule`
+- `code.run_shell`
+- `code.eval_code`
+- `config.restore`
+- `backup.restore`
+- `config.migrate_schema`
+- `config.backup`
+- `identity.retrieve_secret`
+- `identity.decrypt`
+- `identity.sudo`
+- `identity.switch_user`
+- `identity.issue_token`
+- `identity.set_policy`
+- `external.send_email`
+- `external.post_message`
+- `external.call_api`
+- `external.create_issue`
+- `external.update_issue`
+- `filesystem.sync_to_remote`
+- `ui.open_url`
+- `ui.inject_input`
+- `device.capture_camera`
+- `device.capture_audio`
+
+### 4) Active and safe
+- `filesystem.read_file`
+- `filesystem.list_dir`
+- `network.dns_resolve`
+- `code.diff_code`
+- `ui.show_notification`
+- `time.get_system_time`
+
+### 5) Active and risky
+- `filesystem.write_file` (medium)
+- `filesystem.move_file` (medium)
+- `observability.read_logs` (medium)
+
+### 6) Unknown status
+- Runtime-mutated capability statuses (if changed after registry initialization) are unknown in this report.
+
+### 7) Not directly executable in default runtime (by design)
+- `backup.restore` remains high-risk and requires explicit tooling/adapter wiring before production use.
+
+## Policy behavior
+
+- `approval_only` returns `approval_required` decision path with structured tool error.
+- `disabled` and `deprecated` deny execution with structured error.
+- `stubbed` without adapter returns deterministic unsupported operation.
+- `deferred` returns deterministic unsupported operation.
+- Self-initiated high-risk execution requires autonomy policy/approval flow.
+- `future_iris` does not bypass policy in current tests.
+- Gateway terminal status decisions (`needs_approval`, `unsupported`, `disabled`) produce explicit audit entries (`tool.needs_approval`, `tool.unsupported`, `tool.disabled`).
+- Capability status governance is operator-visible and auditable through `PATCH /api/gateway/capabilities/{id}/status`.
+- Transitions into `deferred`/`disabled`/`stubbed`/`deprecated` require explicit reason text at the API boundary.
+
+## Remaining hardening backlog
+
+1. Add explicit default `disabled` coverage for ultra-sensitive capabilities with no intended short-term execution path.
+2. Persist capability status transition intent (currently in-memory registry + audit trail only).
+3. Expand tests for capability-level workspace path boundaries and policy overrides.
+4. Continue shrinking non-capability legacy mutation boundaries (for example env-gated legacy adapter/memory mutation routes).

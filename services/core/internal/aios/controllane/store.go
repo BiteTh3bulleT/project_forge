@@ -75,6 +75,7 @@ type SemanticReadStore interface {
 	FindStateByKey(key string) (domain.StateItem, bool)
 	FindStateByScopeKey(scope domain.ForgeScope, key string) (domain.StateItem, bool)
 	GetIdempotency(key string) (IdempotencyRecord, bool)
+	FindLatestContextSnapshot(scope domain.ForgeScope, query, snapshotKind string) (domain.ContextPacket, bool)
 	BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket
 }
 
@@ -90,6 +91,8 @@ type SemanticStore interface {
 	UpdateModel(model domain.AdaptivePolicyModel) error
 	CreateContradiction(record ContradictionRecord) error
 	CreateSupersession(record SupersessionRecord) error
+	CreateArtifactRef(ref domain.ArtifactRef) error
+	CreateContextSnapshot(pkt domain.ContextPacket) error
 	SetIdempotency(key string, rec IdempotencyRecord)
 }
 
@@ -98,28 +101,32 @@ type CommitAwareStore interface {
 }
 
 type memoryState struct {
-	notes          map[string]domain.MemoryNote
-	links          map[string]domain.SemanticLink
-	states         map[string]domain.StateItem
-	stateByScopeKey map[string][]string
-	loops          map[string]domain.OpenLoop
-	models         map[string]domain.AdaptivePolicyModel
-	contradictions map[string]ContradictionRecord
-	supersessions  map[string]SupersessionRecord
-	idempotency    map[string]IdempotencyRecord
+	notes            map[string]domain.MemoryNote
+	links            map[string]domain.SemanticLink
+	states           map[string]domain.StateItem
+	stateByScopeKey  map[string][]string
+	loops            map[string]domain.OpenLoop
+	artifacts        map[string]domain.ArtifactRef
+	models           map[string]domain.AdaptivePolicyModel
+	contextSnapshots map[string]domain.ContextPacket
+	contradictions   map[string]ContradictionRecord
+	supersessions    map[string]SupersessionRecord
+	idempotency      map[string]IdempotencyRecord
 }
 
 func newMemoryState() memoryState {
 	return memoryState{
-		notes:          map[string]domain.MemoryNote{},
-		links:          map[string]domain.SemanticLink{},
-		states:         map[string]domain.StateItem{},
-		stateByScopeKey: map[string][]string{},
-		loops:          map[string]domain.OpenLoop{},
-		models:         map[string]domain.AdaptivePolicyModel{},
-		contradictions: map[string]ContradictionRecord{},
-		supersessions:  map[string]SupersessionRecord{},
-		idempotency:    map[string]IdempotencyRecord{},
+		notes:            map[string]domain.MemoryNote{},
+		links:            map[string]domain.SemanticLink{},
+		states:           map[string]domain.StateItem{},
+		stateByScopeKey:  map[string][]string{},
+		loops:            map[string]domain.OpenLoop{},
+		artifacts:        map[string]domain.ArtifactRef{},
+		models:           map[string]domain.AdaptivePolicyModel{},
+		contextSnapshots: map[string]domain.ContextPacket{},
+		contradictions:   map[string]ContradictionRecord{},
+		supersessions:    map[string]SupersessionRecord{},
+		idempotency:      map[string]IdempotencyRecord{},
 	}
 }
 
@@ -142,8 +149,14 @@ func cloneState(in memoryState) memoryState {
 	for k, v := range in.loops {
 		out.loops[k] = v
 	}
+	for k, v := range in.artifacts {
+		out.artifacts[k] = v
+	}
 	for k, v := range in.models {
 		out.models[k] = v
+	}
+	for k, v := range in.contextSnapshots {
+		out.contextSnapshots[k] = v
 	}
 	for k, v := range in.contradictions {
 		out.contradictions[k] = v
@@ -211,6 +224,9 @@ func (s *InMemorySemanticStore) ExistsObject(id string) bool {
 	if _, ok := s.state.loops[id]; ok {
 		return true
 	}
+	if _, ok := s.state.artifacts[id]; ok {
+		return true
+	}
 	if _, ok := s.state.models[id]; ok {
 		return true
 	}
@@ -260,6 +276,32 @@ func (s *InMemorySemanticStore) GetIdempotency(key string) (IdempotencyRecord, b
 	defer s.mu.RUnlock()
 	v, ok := s.state.idempotency[key]
 	return v, ok
+}
+
+func (s *InMemorySemanticStore) FindLatestContextSnapshot(scope domain.ForgeScope, query, snapshotKind string) (domain.ContextPacket, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var latest domain.ContextPacket
+	var found bool
+	for _, pkt := range s.state.contextSnapshots {
+		if strings.TrimSpace(pkt.Scope.WorkspaceID) != strings.TrimSpace(scope.WorkspaceID) {
+			continue
+		}
+		if strings.TrimSpace(scope.LaneID) != "" && strings.TrimSpace(pkt.Scope.LaneID) != strings.TrimSpace(scope.LaneID) {
+			continue
+		}
+		if strings.TrimSpace(pkt.Query) != strings.TrimSpace(query) {
+			continue
+		}
+		if contextSnapshotKind(pkt) != strings.TrimSpace(snapshotKind) {
+			continue
+		}
+		if !found || pkt.CreatedAt > latest.CreatedAt {
+			latest = pkt
+			found = true
+		}
+	}
+	return latest, found
 }
 
 func (s *InMemorySemanticStore) SetIdempotency(key string, rec IdempotencyRecord) {
@@ -370,6 +412,26 @@ func (s *InMemorySemanticStore) CreateSupersession(record SupersessionRecord) er
 	return nil
 }
 
+func (s *InMemorySemanticStore) CreateArtifactRef(ref domain.ArtifactRef) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.state.artifacts[ref.ID]; ok {
+		return fmt.Errorf("artifact %q already exists", ref.ID)
+	}
+	s.state.artifacts[ref.ID] = ref
+	return nil
+}
+
+func (s *InMemorySemanticStore) CreateContextSnapshot(pkt domain.ContextPacket) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.state.contextSnapshots[pkt.ID]; ok {
+		return fmt.Errorf("context snapshot %q already exists", pkt.ID)
+	}
+	s.state.contextSnapshots[pkt.ID] = pkt
+	return nil
+}
+
 func (s *InMemorySemanticStore) BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -428,6 +490,16 @@ func (s *InMemorySemanticStore) BuildContext(query string, scope domain.ForgeSco
 		}
 	}
 
+	artifactIDs := keys(s.state.artifacts)
+	sort.Strings(artifactIDs)
+	artifacts := make([]domain.ArtifactRef, 0, len(artifactIDs))
+	for _, id := range artifactIDs {
+		artifacts = append(artifacts, s.state.artifacts[id])
+		if len(artifacts) >= budget.MaxNotes {
+			break
+		}
+	}
+
 	return domain.ContextPacket{
 		ID:          "ctx-" + strings.ReplaceAll(query, " ", "_") + "-" + fmt.Sprintf("%d", now),
 		Query:       query,
@@ -437,7 +509,7 @@ func (s *InMemorySemanticStore) BuildContext(query string, scope domain.ForgeSco
 		Notes:       notes,
 		LinkedNotes: links,
 		Models:      models,
-		Artifacts:   []domain.ArtifactRef{},
+		Artifacts:   artifacts,
 		RawEvents:   []domain.JournalEvent{},
 		Budget:      budget,
 		InclusionReasons: map[string]string{
@@ -522,6 +594,9 @@ func (s *TransactionalSemanticStore) ExistsObject(id string) bool {
 	if _, ok := s.state.loops[id]; ok {
 		return true
 	}
+	if _, ok := s.state.artifacts[id]; ok {
+		return true
+	}
 	if _, ok := s.state.models[id]; ok {
 		return true
 	}
@@ -565,6 +640,30 @@ func (s *TransactionalSemanticStore) FindStateByScopeKey(scope domain.ForgeScope
 func (s *TransactionalSemanticStore) GetIdempotency(key string) (IdempotencyRecord, bool) {
 	v, ok := s.state.idempotency[key]
 	return v, ok
+}
+
+func (s *TransactionalSemanticStore) FindLatestContextSnapshot(scope domain.ForgeScope, query, snapshotKind string) (domain.ContextPacket, bool) {
+	var latest domain.ContextPacket
+	var found bool
+	for _, pkt := range s.state.contextSnapshots {
+		if strings.TrimSpace(pkt.Scope.WorkspaceID) != strings.TrimSpace(scope.WorkspaceID) {
+			continue
+		}
+		if strings.TrimSpace(scope.LaneID) != "" && strings.TrimSpace(pkt.Scope.LaneID) != strings.TrimSpace(scope.LaneID) {
+			continue
+		}
+		if strings.TrimSpace(pkt.Query) != strings.TrimSpace(query) {
+			continue
+		}
+		if contextSnapshotKind(pkt) != strings.TrimSpace(snapshotKind) {
+			continue
+		}
+		if !found || pkt.CreatedAt > latest.CreatedAt {
+			latest = pkt
+			found = true
+		}
+	}
+	return latest, found
 }
 
 func (s *TransactionalSemanticStore) SetIdempotency(key string, rec IdempotencyRecord) {
@@ -658,6 +757,32 @@ func (s *TransactionalSemanticStore) CreateSupersession(record SupersessionRecor
 	return nil
 }
 
+func (s *TransactionalSemanticStore) CreateArtifactRef(ref domain.ArtifactRef) error {
+	if _, ok := s.state.artifacts[ref.ID]; ok {
+		return fmt.Errorf("artifact %q already exists", ref.ID)
+	}
+	s.state.artifacts[ref.ID] = ref
+	return nil
+}
+
+func (s *TransactionalSemanticStore) CreateContextSnapshot(pkt domain.ContextPacket) error {
+	if _, ok := s.state.contextSnapshots[pkt.ID]; ok {
+		return fmt.Errorf("context snapshot %q already exists", pkt.ID)
+	}
+	s.state.contextSnapshots[pkt.ID] = pkt
+	return nil
+}
+
 func stateScopeKey(scope domain.ForgeScope, key string) string {
 	return strings.TrimSpace(scope.WorkspaceID) + "|" + strings.TrimSpace(scope.LaneID) + "|" + strings.TrimSpace(key)
+}
+
+func contextSnapshotKind(pkt domain.ContextPacket) string {
+	if pkt.RestoreSnapshot != nil && strings.TrimSpace(pkt.RestoreSnapshot.SnapshotKind) != "" {
+		return strings.TrimSpace(pkt.RestoreSnapshot.SnapshotKind)
+	}
+	if pkt.CompileOptions != nil {
+		return strings.TrimSpace(pkt.CompileOptions.SnapshotKind)
+	}
+	return ""
 }

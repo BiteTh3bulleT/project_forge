@@ -48,7 +48,9 @@ Implementation path: `services/core/internal/aios/autonomy`
   - charter/intent/budget/decision models
   - typed autonomy errors
 - `autonomy/repositories.go`
-  - in-memory repos for charters, intents, budgets, decisions, reservations, curiosity
+  - repository interfaces + in-memory implementations
+- `autonomy/sqlite_repositories.go`
+  - SQLite-backed repositories for charters, intents, budgets, decisions, reservations, curiosity
 - `autonomy/risk.go`
   - deterministic risk classification + guardrail escalation
 - `autonomy/charter.go`
@@ -133,7 +135,7 @@ Explanation APIs expose intent and decision history for inspection.
 
 ## Current persistence note
 
-Phase 5.75 lands repository interfaces + in-memory implementations for autonomy entities. Durable SQLite persistence for autonomy entities can be added incrementally in a later phase without changing policy/runner contracts.
+Phase 5.99 adds durable SQLite-backed autonomy repositories and wires the default maintenance loop to them. Repository records are stored under `settings` keys with `autonomy_repo.*` prefixes. In-memory fallback remains only for nil-DB/test scenarios. Backup/export restore parity for these records is still pending.
 
 ## Future IRIS relationship
 

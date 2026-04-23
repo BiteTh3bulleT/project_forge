@@ -2,10 +2,12 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/approvals"
@@ -63,6 +65,82 @@ func TestToolCapabilityRegistryCoverageAndDuplicateRejection(t *testing.T) {
 	}
 }
 
+func TestToolCapabilityRegistryRejectsUnknownStatusAtRegistrationBoundaries(t *testing.T) {
+	t.Parallel()
+	reg := NewToolCapabilityRegistry()
+
+	if _, _, err := reg.UpdateStatus("filesystem.read_file", domain.ToolCapabilityStatus("unknown_value")); err == nil {
+		t.Fatalf("expected unknown status update to fail")
+	}
+
+	err := reg.Register(domain.ToolCapability{
+		ID:          "custom.test_capability",
+		Domain:      "custom",
+		Name:        "test_capability",
+		Description: "test",
+		Status:      domain.ToolCapabilityStatus("unknown_value"),
+		Lane:        domain.ToolLaneIO,
+		Effect:      []domain.ToolEffect{domain.ToolEffectRead},
+		Risk:        domain.ToolRiskLow,
+	})
+	if err == nil {
+		t.Fatalf("expected registration with unknown status to fail")
+	}
+}
+
+func TestToolCapabilityRegistryDangerousDefaultsNotFreelyActive(t *testing.T) {
+	t.Parallel()
+	reg := NewToolCapabilityRegistry()
+	dangerous := []string{
+		"filesystem.delete_file",
+		"filesystem.set_permissions",
+		"filesystem.restore_snapshot",
+		"config.restore",
+		"config.migrate_schema",
+		"process.spawn_process",
+		"process.kill_process",
+		"code.run_shell",
+		"code.eval_code",
+		"network.http_request",
+		"network.open_socket",
+		"network.scan_network",
+		"network.open_tunnel",
+		"network.intercept_traffic",
+		"network.set_firewall_rule",
+		"identity.retrieve_secret",
+		"identity.decrypt",
+		"identity.sudo",
+		"identity.switch_user",
+		"identity.issue_token",
+		"identity.set_policy",
+		"config.backup",
+		"backup.restore",
+		"external.send_email",
+		"external.post_message",
+		"external.call_api",
+		"external.create_issue",
+		"external.update_issue",
+		"filesystem.sync_to_remote",
+		"ui.inject_input",
+		"device.capture_camera",
+		"device.capture_audio",
+		"ui.open_url",
+	}
+	for _, id := range dangerous {
+		id := id
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			capability, ok := reg.Get(id)
+			if !ok {
+				t.Fatalf("missing capability %s", id)
+			}
+			if capability.Status == domain.ToolCapabilityActive {
+				t.Fatalf("dangerous capability %s must not default to active", id)
+			}
+		})
+	}
+}
+
 func TestToolPolicyEvaluatorCoreDecisions(t *testing.T) {
 	t.Parallel()
 	evaluator := NewToolPolicyEvaluator("", DeterministicToolRiskClassifier{}, nil)
@@ -94,6 +172,9 @@ func TestToolPolicyEvaluatorCoreDecisions(t *testing.T) {
 	if disabledDecision.Status != StatusDisabled {
 		t.Fatalf("expected disabled status, got %s", disabledDecision.Status)
 	}
+	if disabledDecision.Error == nil || disabledDecision.Error.Code != domain.ToolErrToolDisabled {
+		t.Fatalf("expected structured disabled error, got %#v", disabledDecision.Error)
+	}
 
 	approvalOnly := disabled
 	approvalOnly.Status = domain.ToolCapabilityApprovalOnly
@@ -107,6 +188,9 @@ func TestToolPolicyEvaluatorCoreDecisions(t *testing.T) {
 	if approvalOnlyDecision.Status != StatusNeedsApprov {
 		t.Fatalf("expected approval-required status, got %s", approvalOnlyDecision.Status)
 	}
+	if approvalOnlyDecision.Error == nil || approvalOnlyDecision.Error.Code != domain.ToolErrApprovalRequired {
+		t.Fatalf("expected structured approval-required error, got %#v", approvalOnlyDecision.Error)
+	}
 
 	stubbed := disabled
 	stubbed.Status = domain.ToolCapabilityStubbed
@@ -119,19 +203,28 @@ func TestToolPolicyEvaluatorCoreDecisions(t *testing.T) {
 	if stubbedDecision.Status != StatusUnsupported {
 		t.Fatalf("expected unsupported status, got %s", stubbedDecision.Status)
 	}
+	if stubbedDecision.Error == nil || stubbedDecision.Error.Code != domain.ToolErrUnsupportedOperation {
+		t.Fatalf("expected structured unsupported error, got %#v", stubbedDecision.Error)
+	}
+
+	deferred := disabled
+	deferred.Status = domain.ToolCapabilityDeferred
+	deferredDecision := evaluator.Evaluate(context.Background(), ToolPolicyInput{
+		Request:       req,
+		Capability:    deferred,
+		ResolvedPaths: nil,
+		HasAdapter:    true,
+	})
+	if deferredDecision.Status != StatusUnsupported {
+		t.Fatalf("expected unsupported status for deferred capability, got %s", deferredDecision.Status)
+	}
+	if deferredDecision.Error == nil || deferredDecision.Error.Code != domain.ToolErrUnsupportedOperation {
+		t.Fatalf("expected deferred capability to return unsupported error, got %#v", deferredDecision.Error)
+	}
 
 	irisReq := req
 	irisReq.Source = string(domain.SourceFutureIRIS)
 	irisReq.IntentID = ""
-	irisDecision := evaluator.Evaluate(context.Background(), ToolPolicyInput{
-		Request:       irisReq,
-		Capability:    disabled,
-		ResolvedPaths: nil,
-		HasAdapter:    true,
-	})
-	if irisDecision.Status != StatusDisabled {
-		// Disabled status blocks first; validate source behavior with active capability.
-	}
 	active := disabled
 	active.Status = domain.ToolCapabilityActive
 	activeDecision := evaluator.Evaluate(context.Background(), ToolPolicyInput{
@@ -142,6 +235,36 @@ func TestToolPolicyEvaluatorCoreDecisions(t *testing.T) {
 	})
 	if activeDecision.Status != StatusDenied {
 		t.Fatalf("expected self-initiated request without intent to deny, got %s", activeDecision.Status)
+	}
+	if activeDecision.Error == nil || activeDecision.Error.Code != domain.ToolErrPolicyDenied {
+		t.Fatalf("expected structured policy-denied error, got %#v", activeDecision.Error)
+	}
+
+	irisReq.IntentID = "intent-1"
+	approvalOnlyDecision = evaluator.Evaluate(context.Background(), ToolPolicyInput{
+		Request:       irisReq,
+		Capability:    approvalOnly,
+		ResolvedPaths: nil,
+		HasAdapter:    true,
+	})
+	if approvalOnlyDecision.Status != StatusNeedsApprov {
+		t.Fatalf("expected future_iris approval-only capability to require approval, got %s", approvalOnlyDecision.Status)
+	}
+	if approvalOnlyDecision.Error == nil || approvalOnlyDecision.Error.Code != domain.ToolErrApprovalRequired {
+		t.Fatalf("expected structured approval-required error for future_iris approval-only capability, got %#v", approvalOnlyDecision.Error)
+	}
+
+	deferredIrisDecision := evaluator.Evaluate(context.Background(), ToolPolicyInput{
+		Request:       irisReq,
+		Capability:    deferred,
+		ResolvedPaths: nil,
+		HasAdapter:    true,
+	})
+	if deferredIrisDecision.Status != StatusUnsupported {
+		t.Fatalf("expected future_iris deferred capability to stay unsupported, got %s", deferredIrisDecision.Status)
+	}
+	if deferredIrisDecision.Error == nil || deferredIrisDecision.Error.Code != domain.ToolErrUnsupportedOperation {
+		t.Fatalf("expected future_iris deferred capability to return unsupported error, got %#v", deferredIrisDecision.Error)
 	}
 }
 
@@ -160,13 +283,14 @@ func TestGatewayToolSurfacePolicyAndDryRun(t *testing.T) {
 		t.Fatalf("missing capability filesystem.read_file")
 	}
 	disabledCapability.Status = domain.ToolCapabilityDisabled
-	if _, ok := gw.capabilities.UpdateStatus(disabledCapability.ID, domain.ToolCapabilityDisabled); !ok {
+	if _, ok, err := gw.capabilities.UpdateStatus(disabledCapability.ID, domain.ToolCapabilityDisabled); err != nil || !ok {
 		t.Fatalf("failed to disable capability")
 	}
 	disabledRes, err := gw.Execute(ctx, Request{
 		ToolID:              "filesystem.read_file",
 		LaneID:              "fs.read",
 		CorrelationID:       "corr-disabled",
+		TraceID:             "trace-disabled",
 		Source:              "user",
 		WorkspaceID:         "workspace:test",
 		ProvenanceActor:     "tester",
@@ -180,7 +304,7 @@ func TestGatewayToolSurfacePolicyAndDryRun(t *testing.T) {
 	if disabledRes.Status != StatusDisabled {
 		t.Fatalf("expected disabled status, got %s", disabledRes.Status)
 	}
-	if _, ok := gw.capabilities.UpdateStatus(disabledCapability.ID, domain.ToolCapabilityActive); !ok {
+	if _, ok, err := gw.capabilities.UpdateStatus(disabledCapability.ID, domain.ToolCapabilityActive); err != nil || !ok {
 		t.Fatalf("failed to re-enable capability")
 	}
 
@@ -208,12 +332,206 @@ func TestGatewayToolSurfacePolicyAndDryRun(t *testing.T) {
 	}
 
 	var deniedAuditCount int
-	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM audit_records WHERE action IN ('tool.disabled', 'tool.denied')`).Scan(&deniedAuditCount); err != nil {
+	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM audit_records WHERE correlation_id = ? AND action = 'tool.disabled'`, "corr-disabled").Scan(&deniedAuditCount); err != nil {
 		t.Fatalf("query audit records: %v", err)
 	}
 	if deniedAuditCount == 0 {
-		t.Fatalf("expected audit record for blocked execution")
+		t.Fatalf("expected disabled audit record for blocked execution")
 	}
+	payload := mustAuditPayloadByActionAndCorrelation(t, st, "tool.disabled", "corr-disabled")
+	assertAuditContext(t, payload, "corr-disabled", "trace-disabled", "workspace:test")
+}
+
+func TestGatewayDeferredCapabilityProducesUnsupportedAudit(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	gw, st, workspace := newToolSurfaceGatewayHarness(t)
+
+	sample := filepath.Join(workspace, "sample-deferred.txt")
+	if err := os.WriteFile(sample, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("seed sample: %v", err)
+	}
+
+	capability, ok := gw.capabilities.Get("filesystem.read_file")
+	if !ok {
+		t.Fatalf("missing capability filesystem.read_file")
+	}
+	if _, ok, err := gw.capabilities.UpdateStatus(capability.ID, domain.ToolCapabilityDeferred); err != nil || !ok {
+		t.Fatalf("failed to defer capability: ok=%v err=%v", ok, err)
+	}
+
+	correlationID := "corr-deferred"
+	res, err := gw.Execute(ctx, Request{
+		ToolID:              "filesystem.read_file",
+		LaneID:              "fs.read",
+		CorrelationID:       correlationID,
+		TraceID:             "trace-deferred",
+		Source:              "user",
+		WorkspaceID:         "workspace:test",
+		ProvenanceActor:     "tester",
+		ProvenanceActorType: "test",
+		Paths:               []string{"sample-deferred.txt"},
+		Initiator:           "tester",
+	})
+	if err != nil {
+		t.Fatalf("deferred execute error: %v", err)
+	}
+	if res.Status != StatusUnsupported {
+		t.Fatalf("expected deferred capability to return unsupported, got %s", res.Status)
+	}
+
+	var invocationCount int
+	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM gateway_invocations WHERE correlation_id = ? AND status = 'unsupported'`, correlationID).Scan(&invocationCount); err != nil {
+		t.Fatalf("query invocation count: %v", err)
+	}
+	if invocationCount == 0 {
+		t.Fatalf("expected unsupported gateway invocation record")
+	}
+
+	var auditCount int
+	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM audit_records WHERE correlation_id = ? AND action = 'tool.unsupported'`, correlationID).Scan(&auditCount); err != nil {
+		t.Fatalf("query audit count: %v", err)
+	}
+	if auditCount == 0 {
+		t.Fatalf("expected tool.unsupported audit record for deferred capability")
+	}
+	payload := mustAuditPayloadByActionAndCorrelation(t, st, "tool.unsupported", correlationID)
+	assertAuditContext(t, payload, correlationID, "trace-deferred", "workspace:test")
+}
+
+func TestGatewayApprovalOnlyCapabilityProducesNeedsApprovalAudit(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	gw, st, workspace := newToolSurfaceGatewayHarness(t)
+
+	sample := filepath.Join(workspace, "sample-approval-only.txt")
+	if err := os.WriteFile(sample, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("seed sample: %v", err)
+	}
+
+	capability, ok := gw.capabilities.Get("filesystem.read_file")
+	if !ok {
+		t.Fatalf("missing capability filesystem.read_file")
+	}
+	if _, ok, err := gw.capabilities.UpdateStatus(capability.ID, domain.ToolCapabilityApprovalOnly); err != nil || !ok {
+		t.Fatalf("failed to set approval_only capability: ok=%v err=%v", ok, err)
+	}
+
+	correlationID := "corr-approval-only"
+	res, err := gw.Execute(ctx, Request{
+		ToolID:              "filesystem.read_file",
+		LaneID:              "fs.read",
+		CorrelationID:       correlationID,
+		TraceID:             "trace-approval-only",
+		Source:              "user",
+		WorkspaceID:         "workspace:test",
+		ProvenanceActor:     "tester",
+		ProvenanceActorType: "test",
+		Paths:               []string{"sample-approval-only.txt"},
+		Initiator:           "tester",
+	})
+	if err != nil {
+		t.Fatalf("approval-only execute error: %v", err)
+	}
+	if res.Status != StatusNeedsApprov {
+		t.Fatalf("expected approval-only capability to require approval, got %s", res.Status)
+	}
+
+	var auditCount int
+	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM audit_records WHERE correlation_id = ? AND action = 'tool.needs_approval'`, correlationID).Scan(&auditCount); err != nil {
+		t.Fatalf("query audit count: %v", err)
+	}
+	if auditCount == 0 {
+		t.Fatalf("expected tool.needs_approval audit record for approval-only capability")
+	}
+	payload := mustAuditPayloadByActionAndCorrelation(t, st, "tool.needs_approval", correlationID)
+	assertAuditContext(t, payload, correlationID, "trace-approval-only", "workspace:test")
+}
+
+func TestGatewayFutureIrisCannotBypassCapabilityStatusPolicy(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	gw, st, workspace := newToolSurfaceGatewayHarness(t)
+
+	sample := filepath.Join(workspace, "sample-future-iris.txt")
+	if err := os.WriteFile(sample, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("seed sample: %v", err)
+	}
+
+	capability, ok := gw.capabilities.Get("filesystem.read_file")
+	if !ok {
+		t.Fatalf("missing capability filesystem.read_file")
+	}
+
+	if _, ok, err := gw.capabilities.UpdateStatus(capability.ID, domain.ToolCapabilityDeferred); err != nil || !ok {
+		t.Fatalf("failed to defer capability: ok=%v err=%v", ok, err)
+	}
+	deferredCorrelation := "corr-future-iris-deferred"
+	deferredRes, err := gw.Execute(ctx, Request{
+		ToolID:              "filesystem.read_file",
+		LaneID:              "fs.read",
+		CorrelationID:       deferredCorrelation,
+		TraceID:             "trace-future-iris-deferred",
+		Source:              string(domain.SourceFutureIRIS),
+		WorkspaceID:         "workspace:test",
+		IntentID:            "intent-future-iris",
+		CharterID:           "charter-future-iris",
+		BudgetID:            "budget-future-iris",
+		ProvenanceActor:     "iris.service",
+		ProvenanceActorType: "future_iris",
+		Paths:               []string{"sample-future-iris.txt"},
+		Initiator:           "iris.service",
+	})
+	if err != nil {
+		t.Fatalf("future_iris deferred execute error: %v", err)
+	}
+	if deferredRes.Status != StatusUnsupported {
+		t.Fatalf("expected future_iris deferred capability to remain unsupported, got %s", deferredRes.Status)
+	}
+	var deferredAuditCount int
+	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM audit_records WHERE correlation_id = ? AND action = 'tool.unsupported'`, deferredCorrelation).Scan(&deferredAuditCount); err != nil {
+		t.Fatalf("query deferred audit count: %v", err)
+	}
+	if deferredAuditCount == 0 {
+		t.Fatalf("expected tool.unsupported audit for future_iris deferred capability")
+	}
+	deferredPayload := mustAuditPayloadByActionAndCorrelation(t, st, "tool.unsupported", deferredCorrelation)
+	assertAuditContext(t, deferredPayload, deferredCorrelation, "trace-future-iris-deferred", "workspace:test")
+
+	if _, ok, err := gw.capabilities.UpdateStatus(capability.ID, domain.ToolCapabilityApprovalOnly); err != nil || !ok {
+		t.Fatalf("failed to set approval_only capability: ok=%v err=%v", ok, err)
+	}
+	approvalCorrelation := "corr-future-iris-approval-only"
+	approvalRes, err := gw.Execute(ctx, Request{
+		ToolID:              "filesystem.read_file",
+		LaneID:              "fs.read",
+		CorrelationID:       approvalCorrelation,
+		TraceID:             "trace-future-iris-approval-only",
+		Source:              string(domain.SourceFutureIRIS),
+		WorkspaceID:         "workspace:test",
+		IntentID:            "intent-future-iris",
+		CharterID:           "charter-future-iris",
+		BudgetID:            "budget-future-iris",
+		ProvenanceActor:     "iris.service",
+		ProvenanceActorType: "future_iris",
+		Paths:               []string{"sample-future-iris.txt"},
+		Initiator:           "iris.service",
+	})
+	if err != nil {
+		t.Fatalf("future_iris approval-only execute error: %v", err)
+	}
+	if approvalRes.Status != StatusNeedsApprov {
+		t.Fatalf("expected future_iris approval-only capability to require approval, got %s", approvalRes.Status)
+	}
+	var approvalAuditCount int
+	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM audit_records WHERE correlation_id = ? AND action = 'tool.needs_approval'`, approvalCorrelation).Scan(&approvalAuditCount); err != nil {
+		t.Fatalf("query approval audit count: %v", err)
+	}
+	if approvalAuditCount == 0 {
+		t.Fatalf("expected tool.needs_approval audit for future_iris approval-only capability")
+	}
+	approvalPayload := mustAuditPayloadByActionAndCorrelation(t, st, "tool.needs_approval", approvalCorrelation)
+	assertAuditContext(t, approvalPayload, approvalCorrelation, "trace-future-iris-approval-only", "workspace:test")
 }
 
 func TestGatewayAutonomyPolicyIntegration(t *testing.T) {
@@ -253,10 +571,134 @@ func TestGatewayAutonomyPolicyIntegration(t *testing.T) {
 	}
 }
 
-func TestGatewayScopeBoundaryFromCapabilityLimits(t *testing.T) {
+func TestGatewayDangerousCapabilityNotFreelyExecutable(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	gw, _, workspace := newToolSurfaceGatewayHarness(t)
+
+	target := filepath.Join(workspace, "to-delete.txt")
+	if err := os.WriteFile(target, []byte("keep"), 0o644); err != nil {
+		t.Fatalf("seed delete target: %v", err)
+	}
+
+	res, err := gw.Execute(ctx, Request{
+		ToolID:              "fs.delete",
+		LaneID:              "fs.write.bounded",
+		CorrelationID:       "corr-dangerous-not-free",
+		Source:              "user",
+		WorkspaceID:         "workspace:test",
+		ProvenanceActor:     "tester",
+		ProvenanceActorType: "test",
+		Paths:               []string{"to-delete.txt"},
+		Initiator:           "tester",
+	})
+	if err != nil {
+		t.Fatalf("dangerous execute: %v", err)
+	}
+	if res.Status != StatusNeedsApprov {
+		t.Fatalf("expected dangerous tool to require approval, got %s", res.Status)
+	}
+}
+
+func TestGatewaySafeReadOnlyCapabilityAllowed(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	gw, st, workspace := newToolSurfaceGatewayHarness(t)
+
+	target := filepath.Join(workspace, "read-only.txt")
+	if err := os.WriteFile(target, []byte("ok"), 0o644); err != nil {
+		t.Fatalf("seed read target: %v", err)
+	}
+
+	res, err := gw.Execute(ctx, Request{
+		ToolID:              "fs.read",
+		LaneID:              "fs.read",
+		CorrelationID:       "corr-safe-read",
+		TraceID:             "trace-safe-read",
+		Source:              "user",
+		WorkspaceID:         "workspace:test",
+		ProvenanceActor:     "tester",
+		ProvenanceActorType: "test",
+		Paths:               []string{"read-only.txt"},
+		Initiator:           "tester",
+	})
+	if err != nil {
+		t.Fatalf("safe read execute: %v", err)
+	}
+	if res.Status != StatusOK {
+		t.Fatalf("expected safe read-only capability to execute, got %s", res.Status)
+	}
+	payload := mustAuditPayloadByActionAndCorrelation(t, st, "tool.executed", "corr-safe-read")
+	assertAuditContext(t, payload, "corr-safe-read", "trace-safe-read", "workspace:test")
+}
+
+func TestGatewayExecutedAuditIncludesArtifactSummaries(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	gw, st, _ := newToolSurfaceGatewayHarness(t)
+
+	now := time.Now().UnixMilli()
+	jobID := "job_artifact_summary"
+	if _, err := st.DB.ExecContext(ctx, `
+INSERT INTO jobs(
+  id, created_at, updated_at, queued_at,
+  title, requested_action, target_adapter, initiating_source,
+  execution_boundary, risk_class, status, approval_status, write_intent, metadata_json
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		jobID, now, now, now,
+		"artifact summary write", "gateway.action", "forge", "test",
+		"command_execution", "safe_write", "awaiting_approval", "granted", 1, "{}",
+	); err != nil {
+		t.Fatalf("seed approved job: %v", err)
+	}
+
+	res, err := gw.Execute(ctx, Request{
+		ToolID:              "fs.write",
+		LaneID:              "fs.write.bounded",
+		CorrelationID:       "corr-artifact-summary",
+		TraceID:             "trace-artifact-summary",
+		Source:              "user",
+		WorkspaceID:         "workspace:test",
+		ProvenanceActor:     "tester",
+		ProvenanceActorType: "test",
+		Paths:               []string{"scratch/artifact-summary.txt"},
+		Input:               map[string]any{"contents": "artifact payload trace"},
+		JobID:               &jobID,
+		Initiator:           "tester",
+	})
+	if err != nil {
+		t.Fatalf("write execute: %v", err)
+	}
+	if res.Status != StatusOK {
+		t.Fatalf("expected status ok, got %s (%s)", res.Status, res.DeniedReason)
+	}
+
+	payload := mustAuditPayloadByActionAndCorrelation(t, st, "tool.executed", "corr-artifact-summary")
+	assertAuditContext(t, payload, "corr-artifact-summary", "trace-artifact-summary", "workspace:test")
+
+	if got, ok := payload["artifactCount"].(float64); !ok || int(got) != 1 {
+		t.Fatalf("expected artifactCount=1, got %#v", payload["artifactCount"])
+	}
+	artifacts, ok := payload["artifacts"].([]any)
+	if !ok || len(artifacts) != 1 {
+		t.Fatalf("expected one artifact summary, got %#v", payload["artifacts"])
+	}
+	entry, ok := artifacts[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected artifact summary object, got %#v", artifacts[0])
+	}
+	if got := strings.TrimSpace(asString(entry["type"])); got != "writtenFile" {
+		t.Fatalf("artifact type = %q want writtenFile", got)
+	}
+	if got := strings.TrimSpace(asString(entry["path"])); !strings.HasSuffix(got, "scratch/artifact-summary.txt") {
+		t.Fatalf("artifact path = %q missing expected suffix", got)
+	}
+}
+
+func TestGatewayScopeBoundaryFromCapabilityLimits(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	gw, st, workspace := newToolSurfaceGatewayHarness(t)
 
 	capability, ok := gw.capabilities.Get("filesystem.read_file")
 	if !ok {
@@ -274,6 +716,7 @@ func TestGatewayScopeBoundaryFromCapabilityLimits(t *testing.T) {
 		ToolID:              "filesystem.read_file",
 		LaneID:              "fs.read",
 		CorrelationID:       "corr-scope-boundary",
+		TraceID:             "trace-scope-boundary",
 		Source:              "user",
 		WorkspaceID:         "workspace:test",
 		ProvenanceActor:     "tester",
@@ -290,6 +733,8 @@ func TestGatewayScopeBoundaryFromCapabilityLimits(t *testing.T) {
 	if !strings.Contains(strings.ToLower(res.DeniedReason), "resource limits") {
 		t.Fatalf("expected resource-limit denial reason, got %q", res.DeniedReason)
 	}
+	payload := mustAuditPayloadByActionAndCorrelation(t, st, "tool.denied", "corr-scope-boundary")
+	assertAuditContext(t, payload, "corr-scope-boundary", "trace-scope-boundary", "workspace:test")
 }
 
 func newToolSurfaceGatewayHarness(t *testing.T, authorizer ...ToolAutonomyAuthorizer) (*Gateway, *store.Store, string) {
@@ -358,4 +803,45 @@ func firstAuthorizer(items []ToolAutonomyAuthorizer) ToolAutonomyAuthorizer {
 		return nil
 	}
 	return items[0]
+}
+
+func mustAuditPayloadByActionAndCorrelation(t *testing.T, st *store.Store, action, correlation string) map[string]any {
+	t.Helper()
+	var payload string
+	if err := st.DB.QueryRowContext(context.Background(), `
+SELECT payload_json
+FROM audit_records
+WHERE correlation_id = ? AND action = ?
+ORDER BY id DESC LIMIT 1`,
+		correlation, action,
+	).Scan(&payload); err != nil {
+		t.Fatalf("query audit payload action=%s correlation=%s: %v", action, correlation, err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(payload), &out); err != nil {
+		t.Fatalf("decode audit payload action=%s correlation=%s: %v payload=%s", action, correlation, err, payload)
+	}
+	return out
+}
+
+func assertAuditContext(t *testing.T, payload map[string]any, correlation, traceID, workspaceID string) {
+	t.Helper()
+	if got := strings.TrimSpace(asString(payload["correlationId"])); got != correlation {
+		t.Fatalf("audit correlationId = %q want %q", got, correlation)
+	}
+	if got := strings.TrimSpace(asString(payload["traceId"])); got != traceID {
+		t.Fatalf("audit traceId = %q want %q", got, traceID)
+	}
+	if got := strings.TrimSpace(asString(payload["workspaceId"])); got != workspaceID {
+		t.Fatalf("audit workspaceId = %q want %q", got, workspaceID)
+	}
+}
+
+func asString(v any) string {
+	switch x := v.(type) {
+	case string:
+		return x
+	default:
+		return ""
+	}
 }

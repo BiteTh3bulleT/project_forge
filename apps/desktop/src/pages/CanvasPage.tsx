@@ -1,6 +1,6 @@
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import { api, type CanvasBoard, type CanvasBoardDetail, type CanvasNote } from "../lib/api";
 import { formatTime } from "../lib/format";
@@ -25,7 +25,9 @@ export function CanvasPage() {
   const [active, setActive] = useState<CanvasBoardDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [newNote, setNewNote] = useState({ title: "", body: "", x: 40, y: 40 });
+  const [newNote, setNewNote] = useState({ title: "", body: "" });
+  const [nextPlacement, setNextPlacement] = useState({ x: 40, y: 40 });
+  const [selectedNoteId, setSelectedNoteId] = useState<number | null>(null);
 
   const refreshBoards = useCallback(async () => {
     const res = await api.canvas.boards.list(80);
@@ -37,6 +39,11 @@ export function CanvasPage() {
       const b = await api.canvas.boards.get(id);
       setActive(normalizeBoardDetail(b));
       setParams({ boardId: String(id) });
+      setSelectedNoteId((prev) => {
+        if (b.notes.length === 0) return null;
+        if (prev && b.notes.some((note) => note.id === prev)) return prev;
+        return b.notes[0].id;
+      });
     },
     [setParams],
   );
@@ -52,11 +59,15 @@ export function CanvasPage() {
         const fromUrl = boardIdParam ? Number(boardIdParam) : NaN;
         if (Number.isFinite(fromUrl) && fromUrl > 0) {
           const b = await api.canvas.boards.get(fromUrl);
-          if (!cancelled) setActive(normalizeBoardDetail(b));
+          if (!cancelled) {
+            setActive(normalizeBoardDetail(b));
+            setSelectedNoteId(b.notes[0]?.id ?? null);
+          }
         } else if (nextBoards.length > 0 && !cancelled) {
           const b = await api.canvas.boards.get(nextBoards[0].id);
           if (!cancelled) {
             setActive(normalizeBoardDetail(b));
+            setSelectedNoteId(b.notes[0]?.id ?? null);
             setParams({ boardId: String(b.id) });
           }
         }
@@ -92,12 +103,13 @@ export function CanvasPage() {
       await api.canvas.boards.createNote(active.id, {
         title: newNote.title || "Note",
         body: newNote.body,
-        x: newNote.x,
-        y: newNote.y,
+        x: nextPlacement.x,
+        y: nextPlacement.y,
         width: 280,
         height: 200,
       });
-      setNewNote({ title: "", body: "", x: newNote.x + 28, y: newNote.y + 28 });
+      setNewNote({ title: "", body: "" });
+      setNextPlacement((prev) => ({ x: prev.x + 28, y: prev.y + 28 }));
       await loadBoard(active.id);
       await refreshBoards();
     } catch (e) {
@@ -107,18 +119,41 @@ export function CanvasPage() {
     }
   }
 
-  async function saveNote(n: CanvasNote, patch: Record<string, unknown>) {
-    if (!active) return;
-    setBusy(true);
+  const saveNote = useCallback(
+    async (n: CanvasNote, patch: Record<string, unknown>) => {
+      if (!active) return;
+      try {
+        await api.canvas.boards.patchNote(active.id, n.id, patch);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [active],
+  );
+
+  async function deleteSelectedNote() {
+    if (!active || selectedNoteId == null) return;
     try {
-      await api.canvas.boards.patchNote(active.id, n.id, patch);
+      await api.canvas.boards.deleteNote(active.id, selectedNoteId);
       await loadBoard(active.id);
+      setStatus(`Note ${selectedNoteId} deleted.`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
     }
   }
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!active || selectedNoteId == null) return;
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const target = e.target;
+      if (target instanceof Element && target.closest("input, textarea, [contenteditable='true']")) return;
+      e.preventDefault();
+      void deleteSelectedNote();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [active, selectedNoteId]);
 
   return (
     <div className="grid min-h-[560px] gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
@@ -153,7 +188,7 @@ export function CanvasPage() {
 
       <Panel
         title={active ? active.title : "Canvas"}
-        subtitle="Freeform notes with explicit coordinates. Drag cards directly, then save to persist updated layout."
+        subtitle="Obsidian-style editing: inline edits auto-save. Click-hold header to drag and pull the corner handle to resize. Delete selected note with Delete/Backspace."
         actions={
           active ? (
             <GhostButton
@@ -178,8 +213,8 @@ export function CanvasPage() {
           <div className="space-y-4">
             <div className="rounded border border-white/10 bg-black/25 p-3 text-xs text-forge-mist">
               <div className="font-semibold text-forge-ash">Add note</div>
-              <div className="mt-2 grid gap-2 md:grid-cols-4">
-                <label className="md:col-span-2">
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                <label>
                   <span className="text-[10px] uppercase tracking-wide">Title</span>
                   <input
                     aria-label="New note title"
@@ -189,26 +224,12 @@ export function CanvasPage() {
                   />
                 </label>
                 <label>
-                  <span className="text-[10px] uppercase tracking-wide">X</span>
-                  <input
-                    aria-label="New note X position"
-                    type="number"
-                    className="forge-input mt-1 w-full"
-                    value={newNote.x}
-                    onChange={(e) => setNewNote((n) => ({ ...n, x: Number(e.target.value) }))}
-                  />
+                  <span className="text-[10px] uppercase tracking-wide">Placement</span>
+                  <div className="mt-1 rounded border border-white/10 bg-black/30 px-2 py-2 text-[11px] text-forge-mist">
+                    {nextPlacement.x}, {nextPlacement.y}
+                  </div>
                 </label>
-                <label>
-                  <span className="text-[10px] uppercase tracking-wide">Y</span>
-                  <input
-                    aria-label="New note Y position"
-                    type="number"
-                    className="forge-input mt-1 w-full"
-                    value={newNote.y}
-                    onChange={(e) => setNewNote((n) => ({ ...n, y: Number(e.target.value) }))}
-                  />
-                </label>
-                <label className="md:col-span-4">
+                <label className="md:col-span-2">
                   <span className="text-[10px] uppercase tracking-wide">Body</span>
                   <textarea
                     aria-label="New note body"
@@ -229,7 +250,16 @@ export function CanvasPage() {
               {active.notes.length === 0 ? (
                 <div className="p-4 text-sm text-forge-mist">Board is empty. Add a note block above.</div>
               ) : (
-                active.notes.map((n) => <NoteCard key={n.id} boardId={active.id} note={n} busy={busy} onSave={saveNote} onReload={() => void loadBoard(active.id)} />)
+                active.notes.map((n) => (
+                  <NoteCard
+                    key={n.id}
+                    note={n}
+                    busy={busy}
+                    selected={selectedNoteId === n.id}
+                    onSelect={() => setSelectedNoteId(n.id)}
+                    onSave={saveNote}
+                  />
+                ))
               )}
             </div>
 
@@ -245,13 +275,15 @@ export function CanvasPage() {
 }
 
 function NoteCard(props: {
-  boardId: number;
   note: CanvasNote;
   busy: boolean;
+  selected: boolean;
+  onSelect: () => void;
   onSave: (n: CanvasNote, patch: Record<string, unknown>) => void | Promise<void>;
-  onReload: () => void | Promise<void>;
 }) {
-  const { note, busy, onSave, onReload } = props;
+  const { note, busy, onSave, onSelect, selected } = props;
+  const minWidth = 220;
+  const minHeight = 150;
   const [title, setTitle] = useState(note.title);
   const [body, setBody] = useState(note.body);
   const [x, setX] = useState(note.x);
@@ -260,7 +292,10 @@ function NoteCard(props: {
   const [h, setH] = useState(note.height);
   const [pinned, setPinned] = useState(note.pinned);
   const [dragging, setDragging] = useState(false);
-  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const [resizing, setResizing] = useState(false);
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number; currentX: number; currentY: number } | null>(null);
+  const resizeRef = useRef<{ pointerId: number; startX: number; startY: number; originW: number; originH: number; currentW: number; currentH: number } | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setTitle(note.title);
@@ -272,10 +307,34 @@ function NoteCard(props: {
     setPinned(note.pinned);
   }, [note]);
 
-  function startDrag(e: React.PointerEvent<HTMLButtonElement>) {
+  useEffect(() => {
+    if (title === note.title && body === note.body && pinned === note.pinned) {
+      return;
+    }
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = setTimeout(() => {
+      void onSave(note, { title, body, pinned });
+    }, 450);
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, [body, note, onSave, pinned, title]);
+
+  function isInteractiveTarget(target: EventTarget | null) {
+    if (!(target instanceof Element)) return false;
+    return Boolean(target.closest("input, textarea, button, a, label"));
+  }
+
+  function startDrag(e: React.PointerEvent<HTMLDivElement>) {
     if (busy) return;
+    if (isInteractiveTarget(e.target)) return;
+    onSelect();
     e.preventDefault();
-    const current = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, originX: x, originY: y };
+    const current = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, originX: x, originY: y, currentX: x, currentY: y };
     dragRef.current = current;
     setDragging(true);
 
@@ -284,8 +343,12 @@ function NoteCard(props: {
       if (!drag || ev.pointerId !== drag.pointerId) return;
       const dx = ev.clientX - drag.startX;
       const dy = ev.clientY - drag.startY;
-      setX(Math.max(0, Math.round(drag.originX + dx)));
-      setY(Math.max(0, Math.round(drag.originY + dy)));
+      const nextX = Math.max(0, Math.round(drag.originX + dx));
+      const nextY = Math.max(0, Math.round(drag.originY + dy));
+      drag.currentX = nextX;
+      drag.currentY = nextY;
+      setX(nextX);
+      setY(nextY);
     };
 
     const stop = (ev: PointerEvent) => {
@@ -296,6 +359,45 @@ function NoteCard(props: {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
+      void onSave(note, { x: drag.currentX, y: drag.currentY });
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  }
+
+  function startResize(e: React.PointerEvent<HTMLButtonElement>) {
+    if (busy) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onSelect();
+    const current = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, originW: w, originH: h, currentW: w, currentH: h };
+    resizeRef.current = current;
+    setResizing(true);
+
+    const onMove = (ev: PointerEvent) => {
+      const resize = resizeRef.current;
+      if (!resize || ev.pointerId !== resize.pointerId) return;
+      const dw = ev.clientX - resize.startX;
+      const dh = ev.clientY - resize.startY;
+      const nextW = Math.max(minWidth, Math.round(resize.originW + dw));
+      const nextH = Math.max(minHeight, Math.round(resize.originH + dh));
+      resize.currentW = nextW;
+      resize.currentH = nextH;
+      setW(nextW);
+      setH(nextH);
+    };
+
+    const stop = (ev: PointerEvent) => {
+      const resize = resizeRef.current;
+      if (!resize || ev.pointerId !== resize.pointerId) return;
+      resizeRef.current = null;
+      setResizing(false);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      void onSave(note, { width: resize.currentW, height: resize.currentH });
     };
 
     window.addEventListener("pointermove", onMove);
@@ -306,22 +408,18 @@ function NoteCard(props: {
   return (
     <div
       className={[
-        "absolute rounded border border-white/15 bg-forge-iron/80 shadow-lg backdrop-blur",
-        dragging ? "ring-1 ring-inset ring-forge-ember/40" : "",
+        "absolute rounded border bg-forge-iron/80 shadow-lg backdrop-blur",
+        selected ? "border-forge-ember/45 ring-1 ring-inset ring-forge-ember/35" : "border-white/15",
+        dragging || resizing ? "ring-1 ring-inset ring-forge-ember/40" : "",
       ].join(" ")}
       style={{ left: x, top: y, width: w, height: h, zIndex: note.pinned ? 2 : 1 }}
+      onPointerDown={() => onSelect()}
     >
-      <div className="flex items-center justify-between gap-1 border-b border-white/10 px-2 py-1">
-        <button
-          type="button"
-          className="forge-btn forge-btn--ghost mr-1 cursor-move px-1.5 py-0 text-[10px] text-forge-mist/85"
-          aria-label="Drag note"
-          title="Drag note"
-          disabled={busy}
-          onPointerDown={startDrag}
-        >
-          drag
-        </button>
+      <div
+        className="flex cursor-move items-center justify-between gap-1 border-b border-white/10 px-2 py-1"
+        onPointerDown={startDrag}
+        title="Click and hold to drag"
+      >
         <input
           aria-label="Note title"
           className="min-w-0 flex-1 bg-transparent text-xs font-semibold text-forge-ash outline-none"
@@ -335,61 +433,20 @@ function NoteCard(props: {
       </div>
       <textarea
         aria-label="Note body"
-        className="h-[calc(100%-88px)] w-full resize-none bg-transparent p-2 text-[11px] leading-relaxed text-forge-mist outline-none"
+        className="h-[calc(100%-66px)] w-full resize-none bg-transparent p-2 pb-12 text-[11px] leading-relaxed text-forge-mist outline-none"
         value={body}
         onChange={(e) => setBody(e.target.value)}
       />
       <div className="absolute bottom-0 left-0 right-0 space-y-1 border-t border-white/10 bg-black/40 p-2 text-[10px] text-forge-mist">
-        <div className="grid grid-cols-4 gap-1">
-          <input aria-label="Note X" type="number" className="forge-input px-1 py-0.5" value={x} onChange={(e) => setX(Number(e.target.value))} title="x" />
-          <input aria-label="Note Y" type="number" className="forge-input px-1 py-0.5" value={y} onChange={(e) => setY(Number(e.target.value))} title="y" />
-          <input aria-label="Note width" type="number" className="forge-input px-1 py-0.5" value={w} onChange={(e) => setW(Number(e.target.value))} title="w" />
-          <input aria-label="Note height" type="number" className="forge-input px-1 py-0.5" value={h} onChange={(e) => setH(Number(e.target.value))} title="h" />
-        </div>
-        <div className="flex flex-wrap gap-1">
-          <button
-            type="button"
-            className="forge-btn forge-btn--primary px-2 py-0.5 text-[10px]"
-            disabled={busy}
-            onClick={() =>
-              void onSave(note, {
-                title,
-                body,
-                x,
-                y,
-                width: w,
-                height: h,
-                pinned,
-              })
-            }
-          >
-            Save
-          </button>
-          <button type="button" className="forge-btn forge-btn--ghost px-2 py-0.5 text-[10px]" disabled={busy} onClick={() => void onReload()}>
-            Reset
-          </button>
-          <button
-            type="button"
-            className="forge-btn forge-btn--ghost px-2 py-0.5 text-[10px] text-forge-emberSoft"
-            disabled={busy}
-            onClick={async () => {
-              if (!window.confirm("Delete this note?")) return;
-              await api.canvas.boards.deleteNote(props.boardId, note.id);
-              await onReload();
-            }}
-          >
-            Delete
-          </button>
-        </div>
-        <div className="flex gap-2 text-[10px]">
-          <Link className="text-forge-emberSoft underline" to="/chat">
-            Chat
-          </Link>
-          <Link className="text-forge-emberSoft underline" to="/workbench">
-            Workbench
-          </Link>
-        </div>
+        <div className="text-[10px]">Auto-saved · select and press Delete/Backspace to remove</div>
       </div>
+      <button
+        type="button"
+        aria-label="Resize note"
+        title="Click and pull to resize"
+        className="absolute bottom-1 right-1 h-4 w-4 cursor-nwse-resize rounded-sm border border-white/20 bg-white/10"
+        onPointerDown={startResize}
+      />
     </div>
   );
 }

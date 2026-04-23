@@ -85,6 +85,7 @@ export const navGroups: readonly NavGroup[] = [
     items: [
       { to: "/sources", label: "Source Folders", blurb: "Manage indexed folders.", mode: "both" },
       { to: "/adapters", label: "Adapters", blurb: "Adapter status and invoke tests.", mode: "both" },
+      { to: "/models", label: "Models", blurb: "Manage FORGE model runtime assets.", mode: "both" },
       { to: "/settings", label: "Settings", blurb: "Connection and retrieval defaults.", mode: "both" },
     ],
   },
@@ -104,5 +105,6 @@ export const routeHelp: Record<string, { title: string; text: string }> = {
   "/strategies": { title: "Strategies", text: "Define repeatable execution strategies and success criteria." },
   "/automation": { title: "Automation", text: "Run bounded automation rules with dry-run previews and history." },
   "/workbench": { title: "Artifacts", text: "Open generated files and compare text artifacts quickly." },
+  "/models": { title: "Models", text: "Import, verify, load, disable, archive, and inspect FORGE-managed model runtime assets." },
   "/settings": { title: "Settings", text: "Configure adapters, embedding defaults, and retrieval weighting." },
 };

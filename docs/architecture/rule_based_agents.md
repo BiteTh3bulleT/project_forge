@@ -40,7 +40,7 @@ Flow:
   - proposes low-risk warning note
 - `CleanupProposalAgent`
   - emits memory-cleanup intent
-  - proposes conservative archive candidate (typically proposal/approval path)
+  - currently emits no direct syscall actions by default (safe proposal-only posture while deterministic targeting remains narrow)
 
 ## Design constraints
 

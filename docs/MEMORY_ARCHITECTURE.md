@@ -11,6 +11,7 @@ FORGE memory is observation-based. It does not use a single merged memory blob.
 2. `Warm memory`
 - Summaries, structural metadata, tags/entities, dossier scope, retrieval selection reasons, and usefulness stats.
 - Includes retrieval result linkage and packet alignment notes.
+- Includes VSA pointer/binding/association records used for inspectable additive reranking.
 
 3. `Hot working memory`
 - Active retrieval run results selected for packet assembly.
@@ -42,6 +43,9 @@ Relations:
 - `memory_observation_links`
 - `retrieval_result_observations`
 - `memory_usefulness_events`
+- `memory_vsa_pointers`
+- `memory_vsa_role_bindings`
+- `memory_vsa_associations`
 
 ## Structural Metadata Routing
 
@@ -59,6 +63,15 @@ Every run stores:
 - selected-for-packet flag
 - per-result selection reason JSON (`retrieval_result_selection`)
 - linked observation id for each result (when generated)
+- optional per-result VSA signal breakdown (`retrieval_result_vsa_signals`)
+
+## VSA Inspectability
+
+Operator UI/API now exposes:
+- observation-level VSA pointer/binding/association detail
+- retrieval-result VSA component scores (associative/role/relational/feedback/additive/applied)
+- dossier-level VSA coverage/health summary
+- persisted VSA reindex run/item history
 
 ## Packet Alignment
 
@@ -77,6 +90,7 @@ Implemented:
 - usefulness event recording and score aggregation
 - stale flags + verification timestamp updates
 - persisted repair runs with before/after item traces
+- persisted VSA reindex runs/items with fingerprint transitions
 - dossier memory view API
 - packet alignment notes
 

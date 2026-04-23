@@ -7,6 +7,7 @@ Provide inspectable retrieval behavior for packet and job preparation using:
 - keyword retrieval (FTS)
 - semantic retrieval (embeddings)
 - hybrid fusion (weighted)
+- optional VSA additive scoring (shadow/active)
 
 ## Embedding Pipeline
 
@@ -66,6 +67,24 @@ Hybrid score is an explicit weighted combination of normalized keyword and seman
 
 No black-box ranking: score components are visible in API and UI.
 
+## VSA Settings + Signals
+
+VSA behavior is controlled by settings:
+
+- `retrieval_vsa_mode` (`off`, `shadow`, `active`)
+- `retrieval_vsa_dims`
+- `retrieval_vsa_seed`
+- `retrieval_vsa_weight_associative`
+- `retrieval_vsa_weight_role_match`
+- `retrieval_vsa_weight_relational`
+- `retrieval_vsa_weight_feedback`
+- `retrieval_vsa_max_additive`
+
+Persisted inspectability:
+
+- `retrieval_result_vsa_signals` stores per-result VSA score components and explain payload.
+- Retrieval UI renders component-level breakdown and matched observation context when present.
+
 ## Usefulness Evidence
 
 Marking a retrieval result as `useful`, `not_useful`, `noisy`, or `insufficient` updates:
@@ -82,3 +101,5 @@ Job packet preparation can consume selected retrieval-run items directly.
 - retrieval run created during packet prep
 - selected results attached to packet context
 - run-to-packet linkage persisted for traceability
+
+VSA data remains inspectable even when mode is `shadow` (no ranking mutation).

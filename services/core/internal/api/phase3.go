@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -116,19 +117,19 @@ func (s *Server) handleReembed(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCreateRetrievalRun(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Query          string      `json:"query"`
-		Mode           string      `json:"mode"`
-		Limit          int         `json:"limit"`
-		SelectForPacket int        `json:"selectForPacket"`
-		DossierID      optionalInt64 `json:"dossierId"`
-		SourceIDs      []int64     `json:"sourceIds"`
-		WeightKeyword  float64     `json:"weightKeyword"`
-		WeightSemantic float64     `json:"weightSemantic"`
-		Provider       string      `json:"provider"`
-		Model          string      `json:"model"`
-		JobID          *string     `json:"jobId"`
-		PacketID       optionalInt64 `json:"packetId"`
-		Notes          string      `json:"notes"`
+		Query           string        `json:"query"`
+		Mode            string        `json:"mode"`
+		Limit           int           `json:"limit"`
+		SelectForPacket int           `json:"selectForPacket"`
+		DossierID       optionalInt64 `json:"dossierId"`
+		SourceIDs       []int64       `json:"sourceIds"`
+		WeightKeyword   float64       `json:"weightKeyword"`
+		WeightSemantic  float64       `json:"weightSemantic"`
+		Provider        string        `json:"provider"`
+		Model           string        `json:"model"`
+		JobID           *string       `json:"jobId"`
+		PacketID        optionalInt64 `json:"packetId"`
+		Notes           string        `json:"notes"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)
@@ -189,6 +190,38 @@ func (s *Server) handleGetRetrievalRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"run": run})
+}
+
+func (s *Server) handleGetRetrievalRunVSASignals(w http.ResponseWriter, r *http.Request) {
+	runID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	signals, err := s.memory.RetrievalRunVSASignals(r.Context(), runID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"signals": signals})
+}
+
+func (s *Server) handleGetRetrievalResultVSASignal(w http.ResponseWriter, r *http.Request) {
+	resultID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	signal, err := s.memory.RetrievalResultVSASignal(r.Context(), resultID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"signal": signal})
 }
 
 func (s *Server) handleMarkRetrievalUsefulness(w http.ResponseWriter, r *http.Request) {
@@ -334,32 +367,32 @@ func (s *Server) handleAdapterMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 type cloneMetadata struct {
-	TemplateID             string         `json:"templateId"`
-	UserRequest            string         `json:"userRequest"`
-	Objective              string         `json:"objective"`
-	Query                  string         `json:"query"`
-	Scope                  jobs.ScopeInput `json:"scope"`
-	SourceContextRecordIDs []int64        `json:"sourceContextRecordIds"`
-	Constraints            []string       `json:"constraints"`
-	Instructions           string         `json:"instructions"`
-	ExecutionMode          string         `json:"executionMode"`
-	ExpectedOutput         map[string]any `json:"expectedOutput"`
-	RequestPayload         map[string]any `json:"requestPayload"`
-}
-
-type cloneRequest struct {
 	TemplateID             string          `json:"templateId"`
-	Title                  string          `json:"title"`
 	UserRequest            string          `json:"userRequest"`
 	Objective              string          `json:"objective"`
 	Query                  string          `json:"query"`
-	Scope                  *jobs.ScopeInput `json:"scope"`
+	Scope                  jobs.ScopeInput `json:"scope"`
 	SourceContextRecordIDs []int64         `json:"sourceContextRecordIds"`
 	Constraints            []string        `json:"constraints"`
 	Instructions           string          `json:"instructions"`
 	ExecutionMode          string          `json:"executionMode"`
+	ExpectedOutput         map[string]any  `json:"expectedOutput"`
 	RequestPayload         map[string]any  `json:"requestPayload"`
-	Note                   string          `json:"note"`
+}
+
+type cloneRequest struct {
+	TemplateID             string           `json:"templateId"`
+	Title                  string           `json:"title"`
+	UserRequest            string           `json:"userRequest"`
+	Objective              string           `json:"objective"`
+	Query                  string           `json:"query"`
+	Scope                  *jobs.ScopeInput `json:"scope"`
+	SourceContextRecordIDs []int64          `json:"sourceContextRecordIds"`
+	Constraints            []string         `json:"constraints"`
+	Instructions           string           `json:"instructions"`
+	ExecutionMode          string           `json:"executionMode"`
+	RequestPayload         map[string]any   `json:"requestPayload"`
+	Note                   string           `json:"note"`
 }
 
 func (s *Server) handleReplayJob(w http.ResponseWriter, r *http.Request) {
@@ -430,13 +463,13 @@ func (s *Server) cloneJobWithRelation(w http.ResponseWriter, r *http.Request, re
 		"relationType": relation,
 		"note":         strings.TrimSpace(body.Note),
 		"changes": map[string]any{
-			"templateId":      diffString(meta.TemplateID, req.TemplateID),
-			"query":           diffString(meta.Query, req.Query),
-			"executionMode":   diffString(meta.ExecutionMode, req.ExecutionMode),
-			"instructions":    diffString(meta.Instructions, req.Instructions),
-			"constraints":     req.Constraints,
-			"scope":           req.Scope.ToMap(),
-			"requestPayload":  req.RequestPayload,
+			"templateId":     diffString(meta.TemplateID, req.TemplateID),
+			"query":          diffString(meta.Query, req.Query),
+			"executionMode":  diffString(meta.ExecutionMode, req.ExecutionMode),
+			"instructions":   diffString(meta.Instructions, req.Instructions),
+			"constraints":    req.Constraints,
+			"scope":          req.Scope.ToMap(),
+			"requestPayload": req.RequestPayload,
 		},
 	}
 	oldTpl, _ := jobs.TemplateByID(meta.TemplateID)
@@ -587,8 +620,8 @@ func mergeMaps(a, b map[string]any) map[string]any {
 
 func diffString(before, after string) map[string]any {
 	return map[string]any{
-		"before": before,
-		"after":  after,
+		"before":  before,
+		"after":   after,
 		"changed": strings.TrimSpace(before) != strings.TrimSpace(after),
 	}
 }

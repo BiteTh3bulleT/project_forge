@@ -96,7 +96,15 @@ type rankedCandidate struct {
 	usefulnessBoost    float64
 	structuralBoost    float64
 	recencyBoost       float64
+	vsaAdditiveScore   float64
+	vsaAppliedScore    float64
+	vsaSignal          memory.RetrievalResultVSASignal
 	selectionDiversity float64
+}
+
+type vsaRuntimeConfig struct {
+	Mode        string
+	MaxAdditive float64
 }
 
 func New(db *sql.DB, searchSvc *search.Service, embedSvc *embeddings.Service, memorySvc *memory.Service) *Service {
@@ -125,6 +133,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*Run, error) {
 	}
 
 	wKeyword, wSemantic := s.resolveWeights(ctx, req.WeightKeyword, req.WeightSemantic)
+	vsaCfg := s.runtimeVSAConfig(ctx)
 
 	agg := map[int64]*aggregateHit{}
 
@@ -176,7 +185,26 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*Run, error) {
 	}
 
 	if len(agg) == 0 {
-		return s.persistRun(ctx, query, mode, req, wKeyword, wSemantic, nil)
+		return s.persistRun(ctx, query, mode, req, wKeyword, wSemantic, vsaCfg, nil, nil)
+	}
+
+	vsaSignalsByChunk := map[int64]memory.RetrievalResultVSASignal{}
+	if s.memory != nil && (vsaCfg.Mode == "shadow" || vsaCfg.Mode == "active") {
+		candidates := make([]memory.VSAQueryCandidate, 0, len(agg))
+		for _, item := range agg {
+			candidates = append(candidates, memory.VSAQueryCandidate{
+				ChunkID: item.ChunkID,
+				AbsPath: item.AbsPath,
+				RelPath: item.RelPath,
+			})
+		}
+		signals, signalErr := s.memory.ComputeVSAQuerySignals(ctx, memory.VSAQuerySignalsRequest{
+			Query:      query,
+			Candidates: candidates,
+		})
+		if signalErr == nil {
+			vsaSignalsByChunk = signals
+		}
 	}
 
 	pathUsefulness, _ := s.pathUsefulnessScores(ctx)
@@ -213,14 +241,34 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*Run, error) {
 		if v.KeywordScore > 0 && v.SemanticScore > 0 {
 			recencyBoost = 0.02
 		}
-		score := base + usefulnessBoost + structuralBoost + recencyBoost
+		vsaSignal := memory.RetrievalResultVSASignal{
+			ChunkID: v.ChunkID,
+			Mode:    vsaCfg.Mode,
+		}
+		if signal, ok := vsaSignalsByChunk[v.ChunkID]; ok {
+			vsaSignal = signal
+			vsaSignal.ChunkID = v.ChunkID
+			if strings.TrimSpace(vsaSignal.Mode) == "" {
+				vsaSignal.Mode = vsaCfg.Mode
+			}
+		}
+		vsaSignal.AdditiveScore = round(vsaSignal.AdditiveScore)
+		vsaApplied := 0.0
+		if vsaCfg.Mode == "active" {
+			vsaApplied = clampFloat(vsaSignal.AdditiveScore, -vsaCfg.MaxAdditive, vsaCfg.MaxAdditive)
+		}
+		vsaSignal.AppliedScore = round(vsaApplied)
+		score := base + usefulnessBoost + structuralBoost + recencyBoost + vsaSignal.AppliedScore
 		rankedRows = append(rankedRows, rankedCandidate{
-			item:            v,
-			score:           score,
-			baseScore:       base,
-			usefulnessBoost: usefulnessBoost,
-			structuralBoost: structuralBoost,
-			recencyBoost:    recencyBoost,
+			item:             v,
+			score:            score,
+			baseScore:        base,
+			usefulnessBoost:  usefulnessBoost,
+			structuralBoost:  structuralBoost,
+			recencyBoost:     recencyBoost,
+			vsaAdditiveScore: vsaSignal.AdditiveScore,
+			vsaAppliedScore:  vsaSignal.AppliedScore,
+			vsaSignal:        vsaSignal,
 		})
 	}
 	sort.Slice(rankedRows, func(i, j int) bool { return rankedRows[i].score > rankedRows[j].score })
@@ -234,11 +282,17 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*Run, error) {
 		chunk := row.item.ChunkID
 		file := row.item.FileID
 		_, selected := selectedIndices[idx]
+		vsaExplain := map[string]any{}
+		if len(row.vsaSignal.Explain) > 0 {
+			_ = json.Unmarshal(row.vsaSignal.Explain, &vsaExplain)
+		}
 		reasonPayload, _ := json.Marshal(map[string]any{
 			"baseScore":         round(row.baseScore),
 			"usefulnessBoost":   round(row.usefulnessBoost),
 			"structuralBoost":   round(row.structuralBoost),
 			"recencyBoost":      round(row.recencyBoost),
+			"vsaAdditiveScore":  round(row.vsaAdditiveScore),
+			"vsaAppliedScore":   round(row.vsaAppliedScore),
 			"selectedForPacket": selected,
 			"coverageBucket": func() string {
 				if strings.TrimSpace(row.item.RelPath) == "" {
@@ -246,6 +300,18 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*Run, error) {
 				}
 				return strings.Split(strings.TrimSpace(row.item.RelPath), "/")[0]
 			}(),
+			"vsa": map[string]any{
+				"mode":             nonEmpty(strings.TrimSpace(row.vsaSignal.Mode), "off"),
+				"observationId":    row.vsaSignal.ObservationID,
+				"associativeScore": round(row.vsaSignal.AssociativeScore),
+				"roleMatchScore":   round(row.vsaSignal.RoleMatchScore),
+				"relationalScore":  round(row.vsaSignal.RelationalScore),
+				"feedbackScore":    round(row.vsaSignal.FeedbackScore),
+				"additiveScore":    round(row.vsaSignal.AdditiveScore),
+				"appliedScore":     round(row.vsaSignal.AppliedScore),
+				"maxAdditive":      round(vsaCfg.MaxAdditive),
+				"explain":          vsaExplain,
+			},
 		})
 		results = append(results, Result{
 			ChunkID:           &chunk,
@@ -263,15 +329,27 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*Run, error) {
 		})
 	}
 
-	return s.persistRun(ctx, query, mode, req, wKeyword, wSemantic, results)
+	return s.persistRun(ctx, query, mode, req, wKeyword, wSemantic, vsaCfg, vsaSignalsByChunk, results)
 }
 
-func (s *Service) persistRun(ctx context.Context, query string, mode Mode, req RunRequest, wKeyword, wSemantic float64, results []Result) (*Run, error) {
+func (s *Service) persistRun(
+	ctx context.Context,
+	query string,
+	mode Mode,
+	req RunRequest,
+	wKeyword,
+	wSemantic float64,
+	vsaCfg vsaRuntimeConfig,
+	vsaSignalsByChunk map[int64]memory.RetrievalResultVSASignal,
+	results []Result,
+) (*Run, error) {
 	now := time.Now().UnixMilli()
 	weighting, _ := json.Marshal(map[string]any{
-		"keyword":  wKeyword,
-		"semantic": wSemantic,
-		"mode":     mode,
+		"keyword":        wKeyword,
+		"semantic":       wSemantic,
+		"mode":           mode,
+		"vsaMode":        vsaCfg.Mode,
+		"vsaMaxAdditive": round(vsaCfg.MaxAdditive),
 	})
 	res, err := s.db.ExecContext(ctx, `
 INSERT INTO retrieval_runs(created_at, query, mode, dossier_id, packet_id, job_id, weighting_json, notes)
@@ -285,6 +363,18 @@ VALUES(?,?,?,?,?,?,?,?)`,
 
 	for i := range results {
 		row := &results[i]
+		vsaSignal := memory.RetrievalResultVSASignal{Mode: vsaCfg.Mode}
+		if row.ChunkID != nil && vsaSignalsByChunk != nil {
+			if signal, ok := vsaSignalsByChunk[*row.ChunkID]; ok {
+				vsaSignal = signal
+			}
+		}
+		if row.ChunkID != nil {
+			vsaSignal.ChunkID = *row.ChunkID
+		}
+		if strings.TrimSpace(vsaSignal.Mode) == "" {
+			vsaSignal.Mode = vsaCfg.Mode
+		}
 		resultRes, err := s.db.ExecContext(ctx, `
 INSERT INTO retrieval_results(
   retrieval_run_id, chunk_id, file_id, abs_path, rel_path,
@@ -336,6 +426,15 @@ INSERT INTO retrieval_results(
 			if obsErr == nil && obs != nil {
 				row.ObservationID = &obs.ID
 				_ = s.memory.LinkResultObservation(ctx, id, obs.ID, "Created from retrieval result persistence")
+			}
+			if vsaCfg.Mode != "off" {
+				if vsaSignal.ObservationID == nil && row.ObservationID != nil {
+					vsaSignal.ObservationID = row.ObservationID
+				}
+				vsaSignal.RetrievalResultID = id
+				vsaSignal.RetrievalRunID = runID
+				vsaSignal.AppliedScore = round(clampFloat(vsaSignal.AppliedScore, -vsaCfg.MaxAdditive, vsaCfg.MaxAdditive))
+				_ = s.memory.SaveRetrievalResultVSASignal(ctx, vsaSignal)
 			}
 		}
 	}
@@ -555,6 +654,7 @@ func (s *Service) MarkUsefulness(ctx context.Context, resultID int64, label, not
 				Weight:            1,
 				Note:              note,
 			})
+			_ = s.memory.TouchVSAReliabilityFromUsefulness(ctx, *obsID, label, 1)
 		}
 	}
 	_, err := s.db.ExecContext(ctx, `
@@ -689,6 +789,18 @@ func (s *Service) setting(ctx context.Context, key, def string) string {
 	return strings.TrimSpace(v)
 }
 
+func (s *Service) runtimeVSAConfig(ctx context.Context) vsaRuntimeConfig {
+	mode := strings.ToLower(strings.TrimSpace(s.setting(ctx, "retrieval_vsa_mode", "off")))
+	if mode != "off" && mode != "shadow" && mode != "active" {
+		mode = "off"
+	}
+	maxAdditive := clampFloat(parseFloat(s.setting(ctx, "retrieval_vsa_max_additive", "0.12"), 0.12), 0, 1)
+	return vsaRuntimeConfig{
+		Mode:        mode,
+		MaxAdditive: maxAdditive,
+	}
+}
+
 func boolToInt(v bool) int {
 	if v {
 		return 1
@@ -717,6 +829,16 @@ func parseFloat(raw string, def float64) float64 {
 		return def
 	}
 	return f
+}
+
+func clampFloat(v, minVal, maxVal float64) float64 {
+	if v < minVal {
+		return minVal
+	}
+	if v > maxVal {
+		return maxVal
+	}
+	return v
 }
 
 func coverageSelectIndices(rows []rankedCandidate, selectCount int) map[int]struct{} {

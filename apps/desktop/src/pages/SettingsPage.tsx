@@ -1,8 +1,12 @@
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useState } from "react";
 
+import { FoldSection } from "../components/FoldSection";
 import { api, type DiscordGatewayStatusResponse, type TelegramStatusResponse } from "../lib/api";
+import { getDesktopSystemDiagnostics, type DesktopSystemDiagnostics, isTauriDesktop } from "../lib/desktop";
 import { useUiStore } from "../stores/uiStore";
+
+type SettingsView = "all" | "core" | "remote" | "retrieval" | "chat" | "display" | "diagnostics";
 
 export function SettingsPage() {
   const [extensionsCsv, setExtensionsCsv] = useState("");
@@ -14,6 +18,14 @@ export function SettingsPage() {
   const [embeddingDims, setEmbeddingDims] = useState("128");
   const [retrievalWeightKeyword, setRetrievalWeightKeyword] = useState("0.45");
   const [retrievalWeightSemantic, setRetrievalWeightSemantic] = useState("0.55");
+  const [retrievalVSAMode, setRetrievalVSAMode] = useState<"off" | "shadow" | "active">("off");
+  const [retrievalVSADims, setRetrievalVSADims] = useState("128");
+  const [retrievalVSASeed, setRetrievalVSASeed] = useState("17");
+  const [retrievalVSAWeightAssociative, setRetrievalVSAWeightAssociative] = useState("0.06");
+  const [retrievalVSAWeightRoleMatch, setRetrievalVSAWeightRoleMatch] = useState("0.04");
+  const [retrievalVSAWeightRelational, setRetrievalVSAWeightRelational] = useState("0.03");
+  const [retrievalVSAWeightFeedback, setRetrievalVSAWeightFeedback] = useState("0.03");
+  const [retrievalVSAMaxAdditive, setRetrievalVSAMaxAdditive] = useState("0.12");
   const [chatPersonalityPrompt, setChatPersonalityPrompt] = useState("");
   const [chatPromptDefault, setChatPromptDefault] = useState("");
   const [remoteAccessEnabled, setRemoteAccessEnabled] = useState(false);
@@ -41,7 +53,30 @@ export function SettingsPage() {
   const [ollamaModelsError, setOllamaModelsError] = useState<string | null>(null);
   const [ollamaModelsLoading, setOllamaModelsLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [pcDiagnostics, setPcDiagnostics] = useState<{
+    userAgent: string;
+    platform: string;
+    language: string;
+    languages: string;
+    cores: string;
+    memoryGiB: string;
+    screenWidth: number;
+    screenHeight: number;
+    availWidth: number;
+    availHeight: number;
+    colorDepth: number;
+    pixelRatio: number;
+    runtime: string;
+    memoryUsedMB: string;
+    memoryLimitMB: string;
+    desktop: DesktopSystemDiagnostics | null;
+  } | null>(null);
+  const [settingsView, setSettingsView] = useState<SettingsView>("all");
   const setStatus = useUiStore((s) => s.setStatusLine);
+  const contrastPreference = useUiStore((s) => s.contrastPreference);
+  const effectsPreference = useUiStore((s) => s.effectsPreference);
+  const setContrastPreference = useUiStore((s) => s.setContrastPreference);
+  const setEffectsPreference = useUiStore((s) => s.setEffectsPreference);
 
   async function loadOllamaModelsFromAdapters() {
     const adapters = await api.adapters.list();
@@ -93,6 +128,14 @@ export function SettingsPage() {
       setEmbeddingDims(s.embeddingDims || "128");
       setRetrievalWeightKeyword(s.retrievalWeightKeyword || "0.45");
       setRetrievalWeightSemantic(s.retrievalWeightSemantic || "0.55");
+      setRetrievalVSAMode(s.retrievalVSAMode === "active" || s.retrievalVSAMode === "shadow" ? s.retrievalVSAMode : "off");
+      setRetrievalVSADims(s.retrievalVSADims || "128");
+      setRetrievalVSASeed(s.retrievalVSASeed || "17");
+      setRetrievalVSAWeightAssociative(s.retrievalVSAWeightAssociative || "0.06");
+      setRetrievalVSAWeightRoleMatch(s.retrievalVSAWeightRoleMatch || "0.04");
+      setRetrievalVSAWeightRelational(s.retrievalVSAWeightRelational || "0.03");
+      setRetrievalVSAWeightFeedback(s.retrievalVSAWeightFeedback || "0.03");
+      setRetrievalVSAMaxAdditive(s.retrievalVSAMaxAdditive || "0.12");
       setChatPersonalityPrompt(s.chatPersonalityPrompt || "");
       setChatPromptDefault(s.chatPromptDefault || "");
       setRemoteAccessEnabled(Boolean(s.remoteAccessEnabled));
@@ -137,6 +180,10 @@ export function SettingsPage() {
 
   useEffect(() => {
     void load();
+  }, []);
+
+  useEffect(() => {
+    void refreshDiagnostics();
   }, []);
 
   useEffect(() => {
@@ -229,12 +276,58 @@ export function SettingsPage() {
     discordReady,
   };
 
+  async function refreshDiagnostics() {
+    const memory = (performance as Performance & { memory?: { usedJSHeapSize?: number; jsHeapSizeLimit?: number } }).memory;
+    const browserNavigator = navigator as Navigator & { deviceMemory?: number };
+    const desktop = isTauriDesktop() ? await getDesktopSystemDiagnostics() : null;
+    setPcDiagnostics({
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      language: navigator.language,
+      languages: navigator.languages?.join(", ") || navigator.language,
+      cores: typeof navigator.hardwareConcurrency === "number" ? String(navigator.hardwareConcurrency) : "unknown",
+      memoryGiB: typeof browserNavigator.deviceMemory === "number" ? `${browserNavigator.deviceMemory} GB` : "unknown",
+      screenWidth: screen.width,
+      screenHeight: screen.height,
+      availWidth: screen.availWidth,
+      availHeight: screen.availHeight,
+      colorDepth: screen.colorDepth,
+      pixelRatio: window.devicePixelRatio,
+      runtime: window.performance?.timeOrigin ? `timeOrigin ${new Date(window.performance.timeOrigin).toLocaleString()}` : "unavailable",
+      memoryUsedMB: memory?.usedJSHeapSize ? `${Math.round(memory.usedJSHeapSize / 1024 / 1024)} MB` : "unavailable",
+      memoryLimitMB: memory?.jsHeapSizeLimit ? `${Math.round(memory.jsHeapSizeLimit / 1024 / 1024)} MB` : "unavailable",
+      desktop,
+    });
+  }
+
   return (
     <div className="space-y-6">
-      <Panel title="Settings" subtitle="Local-only configuration for indexing, adapter defaults, and workspace controls." actions={<GhostButton onClick={() => void load()}>Reload</GhostButton>}>
+      <Panel
+        title="Settings"
+        subtitle="Local-only configuration for indexing, adapter defaults, and workspace controls."
+        actions={
+          <div className="flex items-center gap-2">
+            <label className="text-[11px] text-forge-mist">
+              View
+              <select className="forge-input ml-2 min-w-[160px] px-2 py-1 text-[11px]" value={settingsView} onChange={(e) => setSettingsView(e.target.value as SettingsView)}>
+                <option value="all">All sections</option>
+                <option value="core">Core model + indexing</option>
+                <option value="remote">Remote channels</option>
+                <option value="retrieval">Retrieval + embeddings</option>
+                <option value="chat">Chat prompt</option>
+                <option value="display">Theme/display + workspace</option>
+                <option value="diagnostics">Diagnostics</option>
+              </select>
+            </label>
+            <GhostButton onClick={() => void load()}>Reload</GhostButton>
+          </div>
+        }
+      >
         {err ? <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
       </Panel>
 
+      {(settingsView === "all" || settingsView === "core") ? (
+      <FoldSection title="Core Model and Indexing" subtitle="Base scanning and local model adapter defaults." defaultOpen>
       <Panel title="Indexing" subtitle="Comma-separated extension allowlist used by source scans.">
         <label className="text-xs font-semibold tracking-wide text-forge-mist">Supported extensions</label>
         <textarea className="forge-input mt-2 min-h-[96px] font-mono text-xs" value={extensionsCsv} onChange={(e) => setExtensionsCsv(e.target.value)} />
@@ -250,7 +343,7 @@ export function SettingsPage() {
         </div>
       </Panel>
 
-        <Panel title="Ollama" subtitle="Local adapter endpoint + model defaults used for reasoning jobs.">
+      <Panel title="Ollama" subtitle="Local adapter endpoint + model defaults used for reasoning jobs.">
         <div className="grid gap-3 md:grid-cols-2">
           <div>
             <label className="text-xs font-semibold tracking-wide text-forge-mist">Base URL</label>
@@ -293,7 +386,11 @@ export function SettingsPage() {
           </PrimaryButton>
         </div>
       </Panel>
+      </FoldSection>
+      ) : null}
 
+      {(settingsView === "all" || settingsView === "remote") ? (
+      <FoldSection title="Remote Channels and Ingress" subtitle="Telegram/Discord setup, status, and probes." defaultOpen>
       <Panel title="Remote Channels" subtitle="Telegram + Discord transport controls with health checks, probes, and scoped threading behavior.">
         <div className="grid gap-3 md:grid-cols-2">
           <label className="flex items-center gap-2 md:col-span-2">
@@ -521,8 +618,12 @@ export function SettingsPage() {
           ) : null}
         </div>
       </Panel>
+      </FoldSection>
+      ) : null}
 
-      <Panel title="Retrieval + Embeddings" subtitle="Hybrid ranking weights and semantic embedding provider configuration.">
+      {(settingsView === "all" || settingsView === "retrieval") ? (
+      <FoldSection title="Retrieval and Embeddings" subtitle="Ranking controls and optional VSA reranking." defaultOpen>
+      <Panel title="Retrieval + Embeddings" subtitle="Hybrid ranking weights, semantic embeddings, and optional VSA reranking controls.">
         <div className="grid gap-3 md:grid-cols-2">
           <div>
             <label className="text-xs font-semibold tracking-wide text-forge-mist">Embedding provider</label>
@@ -549,6 +650,50 @@ export function SettingsPage() {
               <input className="forge-input mt-1" value={retrievalWeightSemantic} onChange={(e) => setRetrievalWeightSemantic(e.target.value)} />
             </div>
           </div>
+
+          <div className="md:col-span-2 rounded border border-white/10 bg-black/20 p-3">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-forge-mist">VSA Reranking</div>
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <div>
+                <label className="text-xs font-semibold tracking-wide text-forge-mist">Mode</label>
+                <select className="forge-input mt-1" value={retrievalVSAMode} onChange={(e) => setRetrievalVSAMode(e.target.value as "off" | "shadow" | "active")}>
+                  <option value="off">off</option>
+                  <option value="shadow">shadow</option>
+                  <option value="active">active</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold tracking-wide text-forge-mist">Dims</label>
+                <input className="forge-input mt-1" value={retrievalVSADims} onChange={(e) => setRetrievalVSADims(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs font-semibold tracking-wide text-forge-mist">Seed</label>
+                <input className="forge-input mt-1" value={retrievalVSASeed} onChange={(e) => setRetrievalVSASeed(e.target.value)} />
+              </div>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-5">
+              <div>
+                <label className="text-xs font-semibold tracking-wide text-forge-mist">Associative weight</label>
+                <input className="forge-input mt-1" value={retrievalVSAWeightAssociative} onChange={(e) => setRetrievalVSAWeightAssociative(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs font-semibold tracking-wide text-forge-mist">Role match weight</label>
+                <input className="forge-input mt-1" value={retrievalVSAWeightRoleMatch} onChange={(e) => setRetrievalVSAWeightRoleMatch(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs font-semibold tracking-wide text-forge-mist">Relational weight</label>
+                <input className="forge-input mt-1" value={retrievalVSAWeightRelational} onChange={(e) => setRetrievalVSAWeightRelational(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs font-semibold tracking-wide text-forge-mist">Feedback weight</label>
+                <input className="forge-input mt-1" value={retrievalVSAWeightFeedback} onChange={(e) => setRetrievalVSAWeightFeedback(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs font-semibold tracking-wide text-forge-mist">Max additive clamp</label>
+                <input className="forge-input mt-1" value={retrievalVSAMaxAdditive} onChange={(e) => setRetrievalVSAMaxAdditive(e.target.value)} />
+              </div>
+            </div>
+          </div>
         </div>
         <div className="mt-3 flex gap-2">
           <PrimaryButton
@@ -559,15 +704,27 @@ export function SettingsPage() {
                 embeddingDims,
                 retrievalWeightKeyword,
                 retrievalWeightSemantic,
+                retrievalVSAMode,
+                retrievalVSADims,
+                retrievalVSASeed,
+                retrievalVSAWeightAssociative,
+                retrievalVSAWeightRoleMatch,
+                retrievalVSAWeightRelational,
+                retrievalVSAWeightFeedback,
+                retrievalVSAMaxAdditive,
               });
-              setStatus("Retrieval + embedding settings saved.");
+              setStatus("Retrieval, embedding, and VSA settings saved.");
             }}
           >
             Save retrieval settings
           </PrimaryButton>
         </div>
       </Panel>
+      </FoldSection>
+      ) : null}
 
+      {(settingsView === "all" || settingsView === "chat") ? (
+      <FoldSection title="Chat Prompt" subtitle="System prompt and default restoration controls." defaultOpen>
       <Panel title="Chat Personality Prompt" subtitle="Live system prompt for chat replies. Changes apply on the next assistant response.">
         <label className="text-xs font-semibold tracking-wide text-forge-mist">System prompt</label>
         <textarea
@@ -603,7 +760,11 @@ export function SettingsPage() {
           </GhostButton>
         </div>
       </Panel>
+      </FoldSection>
+      ) : null}
 
+      {(settingsView === "all" || settingsView === "display") ? (
+      <FoldSection title="Display and Workspace" subtitle="Theme, readability, and local paths." defaultOpen>
       <Panel title="Theme" subtitle="Dark is the intended operator default.">
         <div className="flex flex-wrap gap-2">
           <button
@@ -631,6 +792,92 @@ export function SettingsPage() {
         </div>
       </Panel>
 
+      <Panel title="Display Preferences" subtitle="Local contrast and visual effects for operator readability.">
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="text-xs font-semibold tracking-wide text-forge-mist">
+            Contrast
+            <select className="forge-input mt-1" value={contrastPreference} onChange={(e) => setContrastPreference(e.target.value as "high" | "normal")}>
+              <option value="high">High</option>
+              <option value="normal">Normal</option>
+            </select>
+          </label>
+          <label className="text-xs font-semibold tracking-wide text-forge-mist">
+            Effects
+            <select className="forge-input mt-1" value={effectsPreference} onChange={(e) => setEffectsPreference(e.target.value as "subtle" | "off")}>
+              <option value="subtle">Subtle</option>
+              <option value="off">Off</option>
+            </select>
+          </label>
+        </div>
+        <div className="mt-2 text-xs text-forge-mist">Changes are local and persist on this machine.</div>
+      </Panel>
+      </FoldSection>
+      ) : null}
+
+      {(settingsView === "all" || settingsView === "diagnostics") ? (
+      <FoldSection title="Diagnostics" subtitle="Machine/runtime visibility and host metrics." defaultOpen>
+      <Panel title="PC Diagnostics" subtitle="Local process-level and rendering context visibility used for monitor/resource audits.">
+        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+          {pcDiagnostics ? (
+            <div className="space-y-2 text-sm text-forge-mist">
+              <MetricRow label="Platform" value={pcDiagnostics.platform} />
+              <MetricRow label="Language" value={pcDiagnostics.language} />
+              <MetricRow label="Languages" value={pcDiagnostics.languages} />
+              <MetricRow label="Processor Cores" value={pcDiagnostics.cores} />
+              <MetricRow label="Device Memory" value={pcDiagnostics.memoryGiB} />
+              <MetricRow label="Screen" value={`${pcDiagnostics.screenWidth}×${pcDiagnostics.screenHeight} @ DPR ${pcDiagnostics.pixelRatio}`} />
+              <MetricRow label="Screen Available" value={`${pcDiagnostics.availWidth}×${pcDiagnostics.availHeight} (${pcDiagnostics.colorDepth}-bit)`} />
+              <MetricRow label="JS Heap Used / Limit" value={`${pcDiagnostics.memoryUsedMB} / ${pcDiagnostics.memoryLimitMB}`} />
+              <MetricRow label="User Agent" value={pcDiagnostics.userAgent} />
+              <MetricRow label="Runtime Origin" value={pcDiagnostics.runtime} />
+              {pcDiagnostics.desktop ? (
+                <div className="mt-3 border-t border-white/10 pt-3">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-forge-mist">Host / process diagnostics</div>
+                  <MetricRow
+                    label="Host"
+                    value={`${pcDiagnostics.desktop.hostName} · ${pcDiagnostics.desktop.osName} ${pcDiagnostics.desktop.osVersion} ${pcDiagnostics.desktop.architecture ?? ""}`}
+                  />
+                  <MetricRow label="Kernel" value={pcDiagnostics.desktop.kernelVersion ?? "unavailable"} />
+                  <MetricRow
+                    label="Uptime"
+                    value={`${Math.floor(pcDiagnostics.desktop.uptimeSeconds / 3600)}h ${Math.floor((pcDiagnostics.desktop.uptimeSeconds % 3600) / 60)}m`}
+                  />
+                  <MetricRow
+                    label="CPU"
+                    value={`${pcDiagnostics.desktop.cpuCount} logical cores${pcDiagnostics.desktop.process ? ` · process ${pcDiagnostics.desktop.process.cpuUsagePercent.toFixed(1)}%` : ""}`}
+                  />
+                  <MetricRow
+                    label="Memory"
+                    value={`${Math.round(pcDiagnostics.desktop.usedMemoryBytes / 1024 / 1024 / 1024)} GB used / ${Math.round(pcDiagnostics.desktop.totalMemoryBytes / 1024 / 1024 / 1024)} GB total`}
+                  />
+                  <MetricRow
+                    label="Swap"
+                    value={`${Math.round(pcDiagnostics.desktop.usedSwapBytes / 1024 / 1024)} MB used / ${Math.round(pcDiagnostics.desktop.totalSwapBytes / 1024 / 1024)} MB total`}
+                  />
+                  <MetricRow
+                    label="Process"
+                    value={
+                      pcDiagnostics.desktop.process
+                        ? `${pcDiagnostics.desktop.process.name} (${pcDiagnostics.desktop.process.pid})`
+                        : "Unavailable"
+                    }
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="text-sm text-forge-mist">Diagnostics unavailable.</div>
+          )}
+        </div>
+        <div className="mt-3">
+          <GhostButton onClick={() => refreshDiagnostics()}>Refresh diagnostics</GhostButton>
+        </div>
+      </Panel>
+      </FoldSection>
+      ) : null}
+
+      {(settingsView === "all" || settingsView === "display") ? (
+      <FoldSection title="Workspace Paths" subtitle="Core data/database/workspace roots.">
       <Panel title="Workspace" subtitle="Local paths used by FORGE core for persistence and context generation.">
         {meta ? (
           <div className="space-y-2 text-sm text-forge-mist">
@@ -648,6 +895,8 @@ export function SettingsPage() {
           <div className="text-sm text-forge-mist">Core offline — metadata unavailable.</div>
         )}
       </Panel>
+      </FoldSection>
+      ) : null}
     </div>
   );
 }
@@ -677,6 +926,15 @@ function StatusRow(props: { label: string; value: string; tone?: "normal" | "war
     <div className="flex items-start justify-between gap-4 border-b border-white/5 pb-1">
       <span className="text-forge-mist/75">{props.label}</span>
       <span className={props.tone === "warn" ? "text-right text-forge-emberSoft" : "text-right text-forge-ash"}>{props.value}</span>
+    </div>
+  );
+}
+
+function MetricRow(props: { label: string; value: string }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-[11px] text-forge-mist">
+      <span className="text-forge-mist/65">{props.label}</span>
+      <span className="text-right text-forge-ash">{props.value}</span>
     </div>
   );
 }

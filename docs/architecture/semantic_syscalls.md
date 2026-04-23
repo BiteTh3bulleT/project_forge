@@ -125,7 +125,7 @@ Phase 3 durable mapping:
 - `REGISTER_CONTRADICTION` -> `contradiction_records` + contradicts link
 - `DERIVE_MODEL` -> `derived_models`
 - `ARCHIVE_NOTE` -> note status transition in `memory_notes`
-- `COMPILE_CONTEXT` -> deterministic read path (snapshot repository available; not auto-committed by default)
+- `COMPILE_CONTEXT` -> deterministic read path; snapshot persistence/rendering are opt-in via `persistSnapshot`, `renderSnapshotCard`, and `snapshotKind`
 
 Committed semantic actions also append a `journal_events` row as semantic truth trace.
 
@@ -293,7 +293,29 @@ Rule remains: **IRIS proposes. FORGE validates. FORGE commits.**
   "action": "COMPILE_CONTEXT",
   "payload": {
     "query": "summarize active blockers",
-    "budget": { "maxTokens": 4000, "maxEvents": 50, "maxNotes": 50 }
+    "budget": { "maxTokens": 4000, "maxEvents": 50, "maxNotes": 50 },
+    "persistSnapshot": true,
+    "renderSnapshotCard": true,
+    "snapshotKind": "restore"
   }
 }
 ```
+
+## Phase 6.25 context restore snapshots
+
+Phase 6.25 extends `COMPILE_CONTEXT` with context restore snapshots. This is not a new memory subsystem. It stays inside the syscall-bound context compilation path and uses the same kernel validation, transaction, audit, and scope rules as every other semantic action.
+
+Request knobs:
+
+- `persistSnapshot` enables writing a `context_packet_snapshots` evidence row for the compiled context.
+- `renderSnapshotCard` enables rendering an SVG card for operator inspection.
+- `snapshotKind` tags the snapshot intent so restore flows can distinguish compile evidence from restore/review evidence.
+
+Invariants remain enforced:
+
+- snapshot writes still occur only inside the syscall transaction boundary
+- snapshot rows keep `workspace_id`, `lane_id`, `selected_paths_json`, `syscall_id`, `correlation_id`, `trace_id`, and `audit_id` linkage
+- scope, provenance, capability, and approval checks are unchanged
+- the snapshot row and any SVG card are evidence only, not truth authority
+
+When `persistSnapshot` is false, `COMPILE_CONTEXT` remains a deterministic read path and may still return a transient compiled packet result without durable snapshot storage.

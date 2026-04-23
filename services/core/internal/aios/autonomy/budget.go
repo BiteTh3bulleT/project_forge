@@ -40,6 +40,16 @@ func NewFreedomBudgetService(repo BudgetRepository, reservationRepo ReservationR
 	return &FreedomBudgetService{repo: repo, reservationRepo: reservationRepo, nowMillis: nowMillis}
 }
 
+func (s *FreedomBudgetService) HasDurableBacking() bool {
+	if s == nil || s.repo == nil || s.reservationRepo == nil {
+		return false
+	}
+	if isInMemoryBudgetRepository(s.repo) || isInMemoryReservationRepository(s.reservationRepo) {
+		return false
+	}
+	return true
+}
+
 func (s *FreedomBudgetService) CheckBudget(ctx context.Context, req BudgetCheckRequest) (BudgetCheckResult, error) {
 	if strings.TrimSpace(req.Scope.WorkspaceID) == "" {
 		return BudgetCheckResult{Allowed: false, Decision: domain.DecisionBlockedByScope, Reasons: []string{"missing workspace scope"}}, nil
@@ -289,6 +299,24 @@ func (s *FreedomBudgetService) nextResetAt(budget domain.FreedomBudget) int64 {
 		return budget.ResetsAt
 	default:
 		return now + int64(24*60*60*1000)
+	}
+}
+
+func isInMemoryBudgetRepository(repo BudgetRepository) bool {
+	switch repo.(type) {
+	case *InMemoryBudgetRepository:
+		return true
+	default:
+		return false
+	}
+}
+
+func isInMemoryReservationRepository(repo ReservationRepository) bool {
+	switch repo.(type) {
+	case *InMemoryReservationRepository:
+		return true
+	default:
+		return false
 	}
 }
 

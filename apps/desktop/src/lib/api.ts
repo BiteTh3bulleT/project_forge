@@ -11,6 +11,7 @@ import type {
   DossierProfile,
   Dossier,
   DossierDetail,
+  DossierVSASummary,
   EmbeddingConfig,
   EvaluationRecord,
   ExecutionStrategy,
@@ -36,10 +37,16 @@ import type {
   MemoryObservationDetail,
   MemoryRepairRun,
   MemoryRepairRunDetail,
+  ObservationVSADetail,
   SearchHit,
   SourceEmbeddingStatus,
   SourceRow,
   TaskPacket,
+  ToolCapability,
+  ToolCapabilityStatus,
+  RetrievalResultVSASignal,
+  VSAReindexRun,
+  VSAReindexRunDetail,
 } from "@forge/shared";
 
 /** Persisted chat thread (SQLite). */
@@ -104,6 +111,7 @@ export type ChatToolGatewayActivity = {
   userRequestSummary?: string;
   toolManifest?: unknown;
   stages?: unknown;
+  toolCallsExecuted?: number;
   toolCallEmitted?: boolean;
   toolSelected?: string;
   toolArgs?: Record<string, unknown>;
@@ -280,6 +288,14 @@ export type SettingsRecord = {
   embeddingDims: string;
   retrievalWeightKeyword: string;
   retrievalWeightSemantic: string;
+  retrievalVSAMode?: string;
+  retrievalVSADims?: string;
+  retrievalVSASeed?: string;
+  retrievalVSAWeightAssociative?: string;
+  retrievalVSAWeightRoleMatch?: string;
+  retrievalVSAWeightRelational?: string;
+  retrievalVSAWeightFeedback?: string;
+  retrievalVSAMaxAdditive?: string;
   chatPersonalityPrompt: string;
   chatPromptDefault: string;
   remoteAccessEnabled: boolean;
@@ -328,6 +344,7 @@ export type DiscordGatewayStatusSnapshot = {
   enableText?: boolean;
   enablePassive?: boolean;
   enableOutbound?: boolean;
+  crossChatContext?: boolean;
   registeredCommands?: string[];
   lastError?: string;
   startedAtMs?: number;
@@ -341,6 +358,101 @@ export type DiscordGatewayStatusResponse = {
   enabled: boolean;
   status: "disabled" | DiscordGatewayStatusSnapshot;
   reason?: string;
+};
+
+export type ModelRuntimeModel = {
+  id: string;
+  displayName?: string;
+  family?: string;
+  backend?: string;
+  format?: string;
+  status?: string;
+  capabilities?: string[];
+  metadata?: Record<string, unknown>;
+};
+
+export type ModelRuntimeImportResult = {
+  model: ModelRuntimeModel;
+  duplicate: boolean;
+  managedPath?: string;
+  sourcePath?: string;
+  warnings?: string[];
+};
+
+export type ModelRuntimeLoadResult = {
+  modelId: string;
+  backend?: string;
+  status?: string;
+  loaded: boolean;
+  metadata?: Record<string, unknown>;
+  warnings?: string[];
+  loadedAtMs?: number;
+  details?: Record<string, string>;
+};
+
+export type ModelRuntimeCompatibility = {
+  modelId: string;
+  backend?: string;
+  status?: string;
+  loaded: boolean;
+  backendConfigured: boolean;
+  backendHealthy: boolean;
+  supportedByBackend: boolean;
+  canGenerate: boolean;
+  preferred?: boolean;
+  warnings?: string[];
+  details?: Record<string, unknown>;
+};
+
+export type ModelRuntimeHealth = {
+  ok: boolean;
+  status?: string;
+  backend?: string;
+  details?: Record<string, unknown>;
+};
+
+export type ModelRuntimeQueueStatus = {
+  depth: number;
+  active?: Record<string, string>;
+  pending?: string[];
+  scheduler?: string;
+  policyState?: string;
+};
+
+export type ModelRuntimeLoadedModel = {
+  modelId: string;
+  backend?: string;
+  status?: string;
+  loadedAtMs?: number;
+  metadata?: Record<string, unknown>;
+};
+
+export type ModelRuntimeLoadedStatus = {
+  count: number;
+  models: ModelRuntimeLoadedModel[];
+};
+
+export type ModelRuntimeBackendStatus = {
+  kind: string;
+  name: string;
+  healthy: boolean;
+  detail?: string;
+  loadedModel?: string;
+  meta?: Record<string, unknown>;
+};
+
+export type ModelRuntimeUsageSummary = {
+  registered: number;
+  imported: number;
+  verified: number;
+  available: number;
+  disabled: number;
+  archived: number;
+  loaded: number;
+  queueDepth: number;
+  running: number;
+  completed: number;
+  backends?: Record<string, Record<string, unknown>>;
 };
 
 export const api = {
@@ -360,6 +472,124 @@ export const api = {
       const path = `/api/settings/ollama-models${q.toString() ? `?${q.toString()}` : ""}`;
       return j<{ models: string[]; baseUrl: string; status: string; error?: string }>(path);
     },
+  },
+  modelRuntime: {
+    list: () => j<{ models: ModelRuntimeModel[]; correlationId?: string; traceId?: string; workspaceId?: string }>("/forge/models"),
+    get: (id: string) =>
+      j<{ model: ModelRuntimeModel; correlationId?: string; traceId?: string; workspaceId?: string }>(
+        `/forge/models/${encodeURIComponent(id)}`,
+      ),
+    import: (body: {
+      path: string;
+      id?: string;
+      displayName?: string;
+      family?: string;
+      backend?: string;
+      capabilities?: string[];
+      license?: string;
+      quantization?: string;
+      contextLength?: number;
+      preferred?: boolean;
+      actor?: string;
+      source?: string;
+      metadata?: Record<string, unknown>;
+    }) =>
+      j<{ result: ModelRuntimeImportResult; correlationId?: string; traceId?: string; workspaceId?: string }>("/forge/models/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    scan: (body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+      j<{ models: ModelRuntimeModel[]; count: number; correlationId?: string; traceId?: string; workspaceId?: string }>("/forge/models/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body ?? {}),
+      }),
+    verify: (id: string, body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+      j<{ model: ModelRuntimeModel; correlationId?: string; traceId?: string; workspaceId?: string }>(
+        `/forge/models/${encodeURIComponent(id)}/verify`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body ?? {}),
+        },
+      ),
+    enable: (id: string, body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+      j<{ model: ModelRuntimeModel; correlationId?: string; traceId?: string; workspaceId?: string }>(
+        `/forge/models/${encodeURIComponent(id)}/enable`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body ?? {}),
+        },
+      ),
+    disable: (id: string, body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+      j<{ model: ModelRuntimeModel; correlationId?: string; traceId?: string; workspaceId?: string }>(
+        `/forge/models/${encodeURIComponent(id)}/disable`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body ?? {}),
+        },
+      ),
+    archive: (id: string, body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+      j<{ model: ModelRuntimeModel; correlationId?: string; traceId?: string; workspaceId?: string }>(
+        `/forge/models/${encodeURIComponent(id)}/archive`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body ?? {}),
+        },
+      ),
+    remove: (id: string, body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+      j<{ result: { modelId: string; removedPath?: string }; correlationId?: string; traceId?: string; workspaceId?: string }>(
+        `/forge/models/${encodeURIComponent(id)}/remove`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body ?? {}),
+        },
+      ),
+    load: (id: string, body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+      j<{ result: ModelRuntimeLoadResult; correlationId?: string; traceId?: string; workspaceId?: string }>(
+        `/forge/models/${encodeURIComponent(id)}/load`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body ?? {}),
+        },
+      ),
+    unload: (id: string, body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+      j<{ result: ModelRuntimeLoadResult; correlationId?: string; traceId?: string; workspaceId?: string }>(
+        `/forge/models/${encodeURIComponent(id)}/unload`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body ?? {}),
+        },
+      ),
+    compatibility: (id: string) =>
+      j<{ compatibility: ModelRuntimeCompatibility; correlationId?: string; traceId?: string; workspaceId?: string }>(
+        `/forge/models/${encodeURIComponent(id)}/compatibility`,
+      ),
+    health: () =>
+      j<{ health: ModelRuntimeHealth; correlationId?: string; traceId?: string; workspaceId?: string }>("/forge/model-runtime/health"),
+    backends: () =>
+      j<{ backends: ModelRuntimeBackendStatus[]; correlationId?: string; traceId?: string; workspaceId?: string }>(
+        "/forge/model-runtime/backends",
+      ),
+    usage: () =>
+      j<{ usage: ModelRuntimeUsageSummary; correlationId?: string; traceId?: string; workspaceId?: string }>(
+        "/forge/model-runtime/usage",
+      ),
+    queue: () =>
+      j<{ queue: ModelRuntimeQueueStatus; correlationId?: string; traceId?: string; workspaceId?: string }>(
+        "/forge/model-runtime/queue",
+      ),
+    loaded: () =>
+      j<{ loaded: ModelRuntimeLoadedStatus; correlationId?: string; traceId?: string; workspaceId?: string }>(
+        "/forge/model-runtime/loaded",
+      ),
   },
   remote: {
     telegram: (body: RemoteTelegramPayload, token?: string) =>
@@ -428,12 +658,65 @@ export const api = {
   },
   adapters: {
     list: () => j<{ adapters: AdapterInfo[] }>("/api/adapters"),
-    invoke: (id: string, body: AdapterInvokeRequest) =>
-      j<InvokeResult>(`/api/adapters/${encodeURIComponent(id)}/invoke`, {
+    invoke: async (id: string, body: AdapterInvokeRequest) => {
+      const scope = body.scope ?? { allowedPaths: [], forbiddenPaths: [], selectedPaths: [] };
+      const paths = [...scope.selectedPaths, ...scope.allowedPaths, ...scope.forbiddenPaths]
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0);
+      const correlationId = body.correlationId?.trim() || `legacy.adapter.invoke:${id}:${Date.now()}`;
+      const gatewayResponse = await j<{
+        result: {
+          status?: string;
+          message?: string;
+          deniedReason?: string;
+          data?: Record<string, unknown>;
+        };
+      }>("/api/gateway/invoke", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
+        body: JSON.stringify({
+          toolId: "legacy.adapter.invoke",
+          laneId: "legacy.adapter.invoke",
+          action: "invoke",
+          source: "api",
+          initiator: "api",
+          correlationId,
+          paths,
+          input: {
+            adapterId: id,
+            capability: body.capability,
+            scope,
+            writeIntent: body.writeIntent ?? false,
+            timeoutMs: body.timeoutMs ?? 0,
+            dryRun: body.dryRun ?? false,
+            correlationId,
+            input: body.input ?? {},
+            ...(body.taskPacketRef != null ? { taskPacketRef: body.taskPacketRef } : {}),
+          },
+          metadata: {
+            legacyAdapterCompatibilityWrapper: true,
+            legacyIngressRemoved: "/api/adapters/{id}/invoke",
+          },
+        }),
+      });
+
+      const gwResult = gatewayResponse.result ?? {};
+      if ((gwResult.status ?? "").toLowerCase() !== "ok") {
+        throw new Error(gwResult.message?.trim() || gwResult.deniedReason?.trim() || "adapter invocation denied");
+      }
+
+      const rawResult = (gwResult.data as { result?: unknown } | undefined)?.result;
+      if (!rawResult || typeof rawResult !== "object") {
+        throw new Error("gateway response missing adapter invocation result");
+      }
+      const typed = rawResult as Partial<InvokeResult>;
+      return {
+        ok: Boolean(typed.ok),
+        message: typeof typed.message === "string" ? typed.message : "adapter invocation completed",
+        ...(typeof typed.failureCode === "string" ? { failureCode: typed.failureCode } : {}),
+        data: typeof typed.data === "object" && typed.data != null ? typed.data : {},
+      };
+    },
   },
   jobs: {
     templates: () => j<{ templates: JobTemplate[] }>("/api/jobs/templates"),
@@ -541,6 +824,8 @@ export const api = {
       return j<{ runs: RetrievalRun[] }>(`/api/retrieval/runs${q ? `?${q}` : ""}`);
     },
     getRun: (id: number) => j<{ run: RetrievalRun }>(`/api/retrieval/runs/${id}`),
+    getRunVSASignals: (runId: number) =>
+      j<{ signals: RetrievalResultVSASignal[] }>(`/api/retrieval/runs/${encodeURIComponent(String(runId))}/vsa-signals`),
     markUsefulness: (id: number, body: Record<string, unknown>) =>
       j<{ ok: boolean; resultId: number }>(`/api/retrieval/results/${id}/usefulness`, {
         method: "POST",
@@ -572,6 +857,8 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }),
+    getObservationVSA: (id: number) =>
+      j<{ detail: ObservationVSADetail }>(`/api/memory/observations/${encodeURIComponent(String(id))}/vsa`),
     markObservationUsefulness: (id: number, body: Record<string, unknown>) =>
       j<{ ok: boolean; observationId: number }>(`/api/memory/observations/${encodeURIComponent(String(id))}/usefulness`, {
         method: "POST",
@@ -598,6 +885,32 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }),
+    listVSAReindexRuns: (params?: { limit?: number; dossierId?: number }) => {
+      const qs = new URLSearchParams();
+      if (params?.limit != null) qs.set("limit", String(params.limit));
+      if (params?.dossierId != null) qs.set("dossierId", String(params.dossierId));
+      const q = qs.toString();
+      return j<{ runs: VSAReindexRun[] }>(`/api/memory/vsa/reindex-runs${q ? `?${q}` : ""}`);
+    },
+    getVSAReindexRun: (id: number) =>
+      j<{ detail: VSAReindexRunDetail }>(`/api/memory/vsa/reindex-runs/${encodeURIComponent(String(id))}`),
+    runVSAReindex: (body: {
+      dossierId?: number;
+      mode?: string;
+      triggeredBy?: string;
+      reason?: string;
+      note?: string;
+      limit?: number;
+      staleOnly?: boolean;
+      force?: boolean;
+    }) =>
+      j<{ detail: VSAReindexRunDetail }>("/api/memory/vsa/reindex/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    dossierVSASummary: (dossierId: number) =>
+      j<{ summary: DossierVSASummary }>(`/api/memory/dossiers/${encodeURIComponent(String(dossierId))}/vsa-summary`),
   },
   dossiers: {
     list: (limit = 120) => j<{ dossiers: Dossier[] }>(`/api/dossiers?limit=${encodeURIComponent(String(limit))}`),
@@ -847,7 +1160,7 @@ export const api = {
           usesNetwork: boolean;
           writeIntent: boolean;
           capabilityId?: string;
-          capabilityStatus?: string;
+          capabilityStatus?: ToolCapabilityStatus;
           capabilityRisk?: string;
           adapterId?: string;
           requiresApprovalByDefault?: boolean;
@@ -855,35 +1168,16 @@ export const api = {
           allowedInDryRun?: boolean;
         }>;
       }>("/api/gateway/tools"),
-    capabilities: () =>
-      j<{
-        capabilities: Array<{
-          id: string;
-          domain: string;
-          name: string;
-          description: string;
-          status: string;
-          lane: string;
-          effect: string[];
-          risk: string;
-          requiresWorkspace: boolean;
-          requiresIntent: boolean;
-          requiresApprovalByDefault: boolean;
-          autonomyEligible: boolean;
-          allowedInDryRun: boolean;
-          requiredCapabilities?: string[];
-          policyTags?: string[];
-          resourceCost: Record<string, unknown>;
-          resourceLimits: Record<string, unknown>;
-          inputSchema?: Record<string, unknown>;
-          outputSchema?: Record<string, unknown>;
-          auditLevel: string;
-          artifactBehavior: string;
-          rollbackSupport: boolean;
-          adapterId?: string;
-          metadata?: Record<string, unknown>;
-        }>;
-      }>("/api/gateway/capabilities"),
+    capabilities: () => j<{ capabilities: ToolCapability[] }>("/api/gateway/capabilities"),
+    updateCapabilityStatus: (id: string, body: { status: ToolCapabilityStatus; reason?: string }) =>
+      j<{ capability: ToolCapability; previousStatus: ToolCapabilityStatus; auditCategory: string }>(
+        `/api/gateway/capabilities/${encodeURIComponent(id)}/status`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      ),
     invoke: (body: Record<string, unknown>) =>
       j<{ result: Record<string, unknown> }>("/api/gateway/invoke", {
         method: "POST",
@@ -967,7 +1261,9 @@ export const api = {
       return j<{ records: unknown[] }>(`/api/audit${q ? `?${q}` : ""}`);
     },
     trace: (correlationId: string) =>
-      j<{ correlationId: string; records: unknown[] }>(`/api/audit/trace/${encodeURIComponent(correlationId)}`),
+      j<{ correlationId: string; records: unknown[]; report?: Record<string, unknown> }>(
+        `/api/audit/trace/${encodeURIComponent(correlationId)}`,
+      ),
   },
   backup: {
     bundles: (limit?: number) => {

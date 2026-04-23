@@ -1,7 +1,116 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use serde::Serialize;
+use sysinfo::{Disks, Pid, System};
+
+#[derive(Serialize)]
+struct HostProcess {
+    pid: u32,
+    name: String,
+    memory_bytes: u64,
+    virtual_memory_bytes: u64,
+    cpu_usage_percent: f32,
+    run_time_seconds: u64,
+}
+
+#[derive(Serialize)]
+struct HostDisk {
+    name: String,
+    mount_point: String,
+    file_system: String,
+    total_bytes: u64,
+    available_bytes: u64,
+    used_bytes: u64,
+}
+
+#[derive(Serialize)]
+struct HostDiagnostics {
+    host_name: String,
+    os_name: String,
+    os_version: String,
+    kernel_version: Option<String>,
+    architecture: Option<String>,
+    uptime_seconds: u64,
+    cpu_count: usize,
+    total_memory_bytes: u64,
+    available_memory_bytes: u64,
+    used_memory_bytes: u64,
+    total_swap_bytes: u64,
+    available_swap_bytes: u64,
+    used_swap_bytes: u64,
+    process: Option<HostProcess>,
+    disks: Vec<HostDisk>,
+}
+
+#[tauri::command]
+fn read_system_diagnostics() -> Result<HostDiagnostics, String> {
+    let mut system = System::new_all();
+    system.refresh_all();
+
+    let host_name = System::host_name().unwrap_or_else(|| "unknown".to_string());
+    let os_name = System::name().unwrap_or_else(|| "unknown".to_string());
+    let os_version = System::os_version().unwrap_or_else(|| "unknown".to_string());
+    let kernel_version = System::kernel_version();
+    let architecture = System::cpu_arch();
+    let uptime_seconds = System::uptime();
+    let cpu_count = system.cpus().len();
+
+    let total_memory_bytes = system.total_memory();
+    let available_memory_bytes = system.available_memory();
+    let used_memory_bytes = total_memory_bytes.saturating_sub(available_memory_bytes);
+    let total_swap_bytes = system.total_swap();
+    let available_swap_bytes = system.free_swap();
+    let used_swap_bytes = total_swap_bytes.saturating_sub(available_swap_bytes);
+
+    let process = sysinfo::get_current_pid()
+        .ok()
+        .and_then(|pid: Pid| {
+            system.process(pid).map(|proc| HostProcess {
+                pid: pid.as_u32(),
+                name: proc.name().to_string_lossy().into_owned(),
+                memory_bytes: proc.memory(),
+                virtual_memory_bytes: proc.virtual_memory(),
+                cpu_usage_percent: proc.cpu_usage(),
+                run_time_seconds: proc.run_time(),
+            })
+        });
+
+    let mut disks = Vec::new();
+    for disk in Disks::new_with_refreshed_list().list() {
+        let total_bytes = disk.total_space();
+        let available_bytes = disk.available_space();
+        disks.push(HostDisk {
+            name: disk.name().to_string_lossy().into_owned(),
+            mount_point: disk.mount_point().to_string_lossy().into_owned(),
+            file_system: disk.file_system().to_string_lossy().into_owned(),
+            total_bytes,
+            available_bytes,
+            used_bytes: total_bytes.saturating_sub(available_bytes),
+        });
+    }
+
+    Ok(HostDiagnostics {
+        host_name,
+        os_name,
+        os_version,
+        kernel_version,
+        architecture,
+        uptime_seconds,
+        cpu_count,
+        total_memory_bytes,
+        available_memory_bytes,
+        used_memory_bytes,
+        total_swap_bytes,
+        available_swap_bytes,
+        used_swap_bytes,
+        process,
+        disks,
+    })
+}
+
 fn main() {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![read_system_diagnostics])
         .run(tauri::generate_context!())
         .expect("error while running FORGE desktop");
 }

@@ -80,3 +80,19 @@ func TestShouldAttachChatTools(t *testing.T) {
 		})
 	}
 }
+
+func TestForcedChatModelNameCompositeWorkflowNotForced(t *testing.T) {
+	t.Parallel()
+	in := `Open konsole, cd to Projects/. run mkdir and create new directory called "MyFirstTele". Inside that directory create a python app that is a clock that tells jokes on the hour.`
+	if got := ForcedChatModelName(in); got != "" {
+		t.Fatalf("ForcedChatModelName should not force single tool for composite workflow, got %q", got)
+	}
+}
+
+func TestForcedChatModelNameSimpleMkdirStillForced(t *testing.T) {
+	t.Parallel()
+	in := `create a directory called "MyFirstTele"`
+	if got := ForcedChatModelName(in); got != ChatModelName("fs.mkdir") {
+		t.Fatalf("ForcedChatModelName should force fs.mkdir for simple mkdir, got %q", got)
+	}
+}

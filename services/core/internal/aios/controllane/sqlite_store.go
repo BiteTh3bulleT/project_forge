@@ -397,6 +397,27 @@ func (s *SQLiteSemanticStore) GetIdempotency(key string) (IdempotencyRecord, boo
 	return IdempotencyRecord{Action: domain.SemanticActionType(action), Result: result}, true
 }
 
+func (s *SQLiteSemanticStore) FindLatestContextSnapshot(scope domain.ForgeScope, query, snapshotKind string) (domain.ContextPacket, bool) {
+	rows, err := s.exec.QueryContext(s.background, `
+SELECT id, query, workspace_id, lane_id, selected_paths_json, budget_json, inclusion_reasons_json, created_at,
+       metadata_json, snapshot_kind, snapshot_fingerprint, parent_snapshot_id, header_json, graph_json, delta_json,
+       restore_scores_json, render_artifact_ref_id, resume_hints_json
+FROM context_packet_snapshots
+WHERE workspace_id = ? AND (? = '' OR lane_id = ?) AND query = ?
+  AND (? = '' OR snapshot_kind = ? OR (snapshot_kind = '' AND json_extract(metadata_json, '$.snapshot_kind') = ?))
+ORDER BY created_at DESC
+LIMIT 1`, scope.WorkspaceID, scope.LaneID, scope.LaneID, query, snapshotKind, snapshotKind, snapshotKind)
+	if err != nil {
+		return domain.ContextPacket{}, false
+	}
+	defer rows.Close()
+	packets, err := scanContextPacketRows(rows)
+	if err != nil || len(packets) == 0 {
+		return domain.ContextPacket{}, false
+	}
+	return packets[0], true
+}
+
 func (s *SQLiteSemanticStore) BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket {
 	notes, _ := s.ListActive(context.Background(), toScopeFilter(scope))
 	if len(notes) > budget.MaxNotes {
@@ -1152,37 +1173,45 @@ func (s *SQLiteSemanticStore) GetCurrentSuccessor(ctx context.Context, objectID 
 
 // ContextPacketRepository
 func (s *SQLiteSemanticStore) CreateSnapshot(ctx context.Context, pkt domain.ContextPacket, syscallID, correlationID, traceID string, metadata map[string]any) error {
+	metadata = contextSnapshotMetadata(pkt, metadata)
+	cols := buildContextSnapshotColumns(pkt, metadata)
 	_, err := s.exec.ExecContext(ctx, `
 INSERT INTO context_packet_snapshots(
-  id, query, workspace_id, lane_id, selected_paths_json,
+  id, query, workspace_id, lane_id, snapshot_kind, snapshot_fingerprint, parent_snapshot_id, selected_paths_json,
   included_state_json, included_open_loops_json, included_notes_json, included_links_json, included_models_json,
-  included_artifacts_json, included_events_json, budget_json, inclusion_reasons_json,
+  included_artifacts_json, included_events_json, header_json, graph_json, delta_json, restore_scores_json, render_artifact_ref_id, resume_hints_json, budget_json, inclusion_reasons_json,
   created_at, correlation_id, trace_id, syscall_id, metadata_json, proposed_by, committed_by, audit_id
-) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		pkt.ID, pkt.Query, pkt.Scope.WorkspaceID, pkt.Scope.LaneID, encodeStringSlice(pkt.Scope.SelectedPaths),
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		pkt.ID, pkt.Query, pkt.Scope.WorkspaceID, pkt.Scope.LaneID, cols.SnapshotKind, cols.SnapshotFingerprint, cols.ParentSnapshotID, encodeStringSlice(pkt.Scope.SelectedPaths),
 		encodeIDsState(pkt.ActiveState), encodeIDsLoops(pkt.OpenLoops), encodeIDsNotes(pkt.Notes), encodeIDsLinks(pkt.LinkedNotes), encodeIDsModels(pkt.Models),
-		encodeIDsArtifacts(pkt.Artifacts), encodeIDsEvents(pkt.RawEvents), encodeJSON(pkt.Budget), encodeJSON(pkt.InclusionReasons),
+		encodeIDsArtifacts(pkt.Artifacts), encodeIDsEvents(pkt.RawEvents), cols.HeaderJSON, cols.GraphJSON, cols.DeltaJSON, cols.RestoreScoresJSON, cols.RenderArtifactRefID, cols.ResumeHintsJSON, encodeJSON(pkt.Budget), encodeJSON(pkt.InclusionReasons),
 		pkt.CreatedAt, correlationID, traceID, syscallID, encodeJSON(nonNilMap(metadata)), string(s.meta.Source), nonEmpty(s.meta.CommittedBy, "forge_kernel"), "",
 	)
 	return err
 }
 
+func (s *SQLiteSemanticStore) CreateContextSnapshot(pkt domain.ContextPacket) error {
+	return s.CreateSnapshot(s.background, pkt, s.meta.SyscallID, s.meta.CorrelationID, s.meta.TraceID, nil)
+}
+
 func (s *SQLiteSemanticStore) GetSnapshotByID(ctx context.Context, id string) (domain.ContextPacket, bool, error) {
-	row := s.exec.QueryRowContext(ctx, `
-SELECT id, query, workspace_id, lane_id, selected_paths_json, budget_json, inclusion_reasons_json, created_at
+	rows, err := s.exec.QueryContext(ctx, `
+SELECT id, query, workspace_id, lane_id, selected_paths_json, budget_json, inclusion_reasons_json, created_at,
+       metadata_json, snapshot_kind, snapshot_fingerprint, parent_snapshot_id, header_json, graph_json, delta_json,
+       restore_scores_json, render_artifact_ref_id, resume_hints_json
 FROM context_packet_snapshots WHERE id = ?`, id)
-	var pkt domain.ContextPacket
-	var selected, budgetRaw, reasonsRaw string
-	if err := row.Scan(&pkt.ID, &pkt.Query, &pkt.Scope.WorkspaceID, &pkt.Scope.LaneID, &selected, &budgetRaw, &reasonsRaw, &pkt.CreatedAt); err != nil {
-		if err == sql.ErrNoRows {
-			return domain.ContextPacket{}, false, nil
-		}
+	if err != nil {
 		return domain.ContextPacket{}, false, err
 	}
-	pkt.Scope.SelectedPaths = decodeStringSlice(selected)
-	_ = json.Unmarshal([]byte(budgetRaw), &pkt.Budget)
-	_ = json.Unmarshal([]byte(reasonsRaw), &pkt.InclusionReasons)
-	return pkt, true, nil
+	defer rows.Close()
+	out, err := scanContextPacketRows(rows)
+	if err != nil {
+		return domain.ContextPacket{}, false, err
+	}
+	if len(out) == 0 {
+		return domain.ContextPacket{}, false, nil
+	}
+	return out[0], true, nil
 }
 
 func (s *SQLiteSemanticStore) ListSnapshotsByScope(ctx context.Context, scope ScopeFilter, limit int) ([]domain.ContextPacket, error) {
@@ -1190,7 +1219,9 @@ func (s *SQLiteSemanticStore) ListSnapshotsByScope(ctx context.Context, scope Sc
 		limit = 50
 	}
 	rows, err := s.exec.QueryContext(ctx, `
-SELECT id, query, workspace_id, lane_id, selected_paths_json, budget_json, inclusion_reasons_json, created_at
+SELECT id, query, workspace_id, lane_id, selected_paths_json, budget_json, inclusion_reasons_json, created_at,
+       metadata_json, snapshot_kind, snapshot_fingerprint, parent_snapshot_id, header_json, graph_json, delta_json,
+       restore_scores_json, render_artifact_ref_id, resume_hints_json
 FROM context_packet_snapshots
 WHERE workspace_id = ? AND (? = '' OR lane_id = ?)
 ORDER BY created_at DESC
@@ -1199,19 +1230,7 @@ LIMIT ?`, scope.WorkspaceID, scope.LaneID, scope.LaneID, limit)
 		return nil, err
 	}
 	defer rows.Close()
-	out := []domain.ContextPacket{}
-	for rows.Next() {
-		var pkt domain.ContextPacket
-		var selected, budgetRaw, reasonsRaw string
-		if err := rows.Scan(&pkt.ID, &pkt.Query, &pkt.Scope.WorkspaceID, &pkt.Scope.LaneID, &selected, &budgetRaw, &reasonsRaw, &pkt.CreatedAt); err != nil {
-			return nil, err
-		}
-		pkt.Scope.SelectedPaths = decodeStringSlice(selected)
-		_ = json.Unmarshal([]byte(budgetRaw), &pkt.Budget)
-		_ = json.Unmarshal([]byte(reasonsRaw), &pkt.InclusionReasons)
-		out = append(out, pkt)
-	}
-	return out, rows.Err()
+	return scanContextPacketRows(rows)
 }
 
 func (s *SQLiteSemanticStore) ListSnapshotsByCorrelation(ctx context.Context, correlationID string, limit int) ([]domain.ContextPacket, error) {
@@ -1219,7 +1238,9 @@ func (s *SQLiteSemanticStore) ListSnapshotsByCorrelation(ctx context.Context, co
 		limit = 50
 	}
 	rows, err := s.exec.QueryContext(ctx, `
-SELECT id, query, workspace_id, lane_id, selected_paths_json, budget_json, inclusion_reasons_json, created_at
+SELECT id, query, workspace_id, lane_id, selected_paths_json, budget_json, inclusion_reasons_json, created_at,
+       metadata_json, snapshot_kind, snapshot_fingerprint, parent_snapshot_id, header_json, graph_json, delta_json,
+       restore_scores_json, render_artifact_ref_id, resume_hints_json
 FROM context_packet_snapshots
 WHERE correlation_id = ?
 ORDER BY created_at DESC
@@ -1228,19 +1249,31 @@ LIMIT ?`, correlationID, limit)
 		return nil, err
 	}
 	defer rows.Close()
-	out := []domain.ContextPacket{}
-	for rows.Next() {
-		var pkt domain.ContextPacket
-		var selected, budgetRaw, reasonsRaw string
-		if err := rows.Scan(&pkt.ID, &pkt.Query, &pkt.Scope.WorkspaceID, &pkt.Scope.LaneID, &selected, &budgetRaw, &reasonsRaw, &pkt.CreatedAt); err != nil {
-			return nil, err
-		}
-		pkt.Scope.SelectedPaths = decodeStringSlice(selected)
-		_ = json.Unmarshal([]byte(budgetRaw), &pkt.Budget)
-		_ = json.Unmarshal([]byte(reasonsRaw), &pkt.InclusionReasons)
-		out = append(out, pkt)
+	return scanContextPacketRows(rows)
+}
+
+func (s *SQLiteSemanticStore) FindLatestSnapshotByQueryAndKind(ctx context.Context, scope ScopeFilter, query, snapshotKind string) (domain.ContextPacket, bool, error) {
+	rows, err := s.exec.QueryContext(ctx, `
+SELECT id, query, workspace_id, lane_id, selected_paths_json, budget_json, inclusion_reasons_json, created_at,
+       metadata_json, snapshot_kind, snapshot_fingerprint, parent_snapshot_id, header_json, graph_json, delta_json,
+       restore_scores_json, render_artifact_ref_id, resume_hints_json
+FROM context_packet_snapshots
+WHERE workspace_id = ? AND (? = '' OR lane_id = ?) AND query = ?
+  AND (? = '' OR snapshot_kind = ? OR (snapshot_kind = '' AND json_extract(metadata_json, '$.snapshot_kind') = ?))
+ORDER BY created_at DESC
+LIMIT 1`, scope.WorkspaceID, scope.LaneID, scope.LaneID, query, snapshotKind, snapshotKind, snapshotKind)
+	if err != nil {
+		return domain.ContextPacket{}, false, err
 	}
-	return out, rows.Err()
+	defer rows.Close()
+	out, err := scanContextPacketRows(rows)
+	if err != nil {
+		return domain.ContextPacket{}, false, err
+	}
+	if len(out) == 0 {
+		return domain.ContextPacket{}, false, nil
+	}
+	return out[0], true, nil
 }
 
 // Extra read helpers used by tests and context compilation.
@@ -1302,7 +1335,6 @@ func linkAuditOnExecutor(ctx context.Context, exec sqlExecutor, correlationID, s
 		"derived_models",
 		"contradiction_records",
 		"supersession_records",
-		"journal_events",
 		"context_packet_snapshots",
 	}
 	for _, tbl := range tables {
@@ -1490,6 +1522,301 @@ LIMIT ?`
 	}
 	defer rows.Close()
 	return scanSupersessionRows(rows)
+}
+
+func contextSnapshotMetadata(pkt domain.ContextPacket, metadata map[string]any) map[string]any {
+	out := cloneMap(metadata)
+	if pkt.CompileOptions != nil {
+		out["compileOptions"] = pkt.CompileOptions
+		if strings.TrimSpace(pkt.CompileOptions.SnapshotKind) != "" {
+			out["snapshot_kind"] = strings.TrimSpace(pkt.CompileOptions.SnapshotKind)
+		}
+	}
+	if pkt.RestoreSnapshot != nil {
+		out["restoreSnapshot"] = pkt.RestoreSnapshot
+		if strings.TrimSpace(pkt.RestoreSnapshot.SnapshotKind) != "" {
+			out["snapshot_kind"] = strings.TrimSpace(pkt.RestoreSnapshot.SnapshotKind)
+		}
+		if strings.TrimSpace(pkt.RestoreSnapshot.SnapshotID) != "" {
+			out["snapshot_id"] = strings.TrimSpace(pkt.RestoreSnapshot.SnapshotID)
+		}
+		if v := readString(pkt.RestoreSnapshot.Metadata, "restore_source_snapshot_id"); v != "" {
+			out["restore_source_snapshot_id"] = v
+		}
+		if v := pkt.RestoreSnapshot.Metadata["restore_scope_json"]; v != nil {
+			out["restore_scope_json"] = v
+		}
+		if v := pkt.RestoreSnapshot.Metadata["restore_reason_json"]; v != nil {
+			out["restore_reason_json"] = v
+		}
+		if v := readString(pkt.RestoreSnapshot.Metadata, "rendered_card_artifact_id"); v != "" {
+			out["rendered_card_artifact_id"] = v
+		}
+	}
+	return out
+}
+
+type contextSnapshotColumns struct {
+	SnapshotKind        string
+	SnapshotFingerprint string
+	ParentSnapshotID    string
+	HeaderJSON          string
+	GraphJSON           string
+	DeltaJSON           string
+	RestoreScoresJSON   string
+	RenderArtifactRefID string
+	ResumeHintsJSON     string
+}
+
+func buildContextSnapshotColumns(pkt domain.ContextPacket, metadata map[string]any) contextSnapshotColumns {
+	cols := contextSnapshotColumns{
+		SnapshotKind:        strings.TrimSpace(readString(metadata, "snapshot_kind")),
+		SnapshotFingerprint: strings.TrimSpace(readString(metadata, "snapshot_fingerprint")),
+		ParentSnapshotID:    strings.TrimSpace(readString(metadata, "parent_snapshot_id")),
+		HeaderJSON:          encodeAnyJSONOrDefault(metadata["header_json"], "{}"),
+		GraphJSON:           encodeAnyJSONOrDefault(metadata["graph_json"], "{}"),
+		DeltaJSON:           encodeAnyJSONOrDefault(metadata["delta_json"], "{}"),
+		RestoreScoresJSON:   encodeAnyJSONOrDefault(metadata["restore_scores_json"], "{}"),
+		RenderArtifactRefID: strings.TrimSpace(readString(metadata, "render_artifact_ref_id")),
+		ResumeHintsJSON:     encodeAnyJSONOrDefault(metadata["resume_hints_json"], "{}"),
+	}
+	if pkt.CompileOptions != nil && strings.TrimSpace(pkt.CompileOptions.SnapshotKind) != "" {
+		cols.SnapshotKind = strings.TrimSpace(pkt.CompileOptions.SnapshotKind)
+	}
+	if pkt.RestoreSnapshot != nil {
+		if strings.TrimSpace(pkt.RestoreSnapshot.SnapshotKind) != "" {
+			cols.SnapshotKind = strings.TrimSpace(pkt.RestoreSnapshot.SnapshotKind)
+		}
+		if v := strings.TrimSpace(readString(pkt.RestoreSnapshot.Metadata, "fingerprint")); v != "" {
+			cols.SnapshotFingerprint = v
+		}
+		if v := strings.TrimSpace(readString(pkt.RestoreSnapshot.Metadata, "parent_snapshot_id")); v != "" {
+			cols.ParentSnapshotID = v
+		}
+		if v := strings.TrimSpace(readString(pkt.RestoreSnapshot.Metadata, "restore_source_snapshot_id")); v != "" && cols.ParentSnapshotID == "" {
+			cols.ParentSnapshotID = v
+		}
+		if v := strings.TrimSpace(readString(pkt.RestoreSnapshot.Metadata, "rendered_card_artifact_id")); v != "" {
+			cols.RenderArtifactRefID = v
+		}
+		if v := encodeAnyJSONOrDefault(pkt.RestoreSnapshot.Evidence["header"], "{}"); v != "{}" {
+			cols.HeaderJSON = v
+		}
+		if v := encodeAnyJSONOrDefault(pkt.RestoreSnapshot.Evidence["graph"], "{}"); v != "{}" {
+			cols.GraphJSON = v
+		}
+		if v := encodeAnyJSONOrDefault(pkt.RestoreSnapshot.Evidence["delta"], "{}"); v != "{}" {
+			cols.DeltaJSON = v
+		}
+		if v := encodeAnyJSONOrDefault(pkt.RestoreSnapshot.Metadata["restore_scores_json"], "{}"); v != "{}" {
+			cols.RestoreScoresJSON = v
+		}
+		if v := encodeAnyJSONOrDefault(pkt.RestoreSnapshot.Metadata["resume_hints_json"], "{}"); v != "{}" {
+			cols.ResumeHintsJSON = v
+		}
+	}
+	if cols.RenderArtifactRefID == "" {
+		cols.RenderArtifactRefID = strings.TrimSpace(readString(metadata, "rendered_card_artifact_id"))
+	}
+	return cols
+}
+
+func encodeAnyJSONOrDefault(v any, fallback string) string {
+	switch value := v.(type) {
+	case nil:
+		return fallback
+	case string:
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			return fallback
+		}
+		if json.Valid([]byte(trimmed)) {
+			return trimmed
+		}
+		raw, _ := json.Marshal(value)
+		if string(raw) == "null" || len(raw) == 0 {
+			return fallback
+		}
+		return string(raw)
+	default:
+		raw, err := json.Marshal(value)
+		if err != nil || string(raw) == "null" || len(raw) == 0 {
+			return fallback
+		}
+		return string(raw)
+	}
+}
+
+func decodeJSONAny(raw string) (any, bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" || trimmed == "null" {
+		return nil, false
+	}
+	var out any
+	if err := json.Unmarshal([]byte(trimmed), &out); err != nil {
+		return nil, false
+	}
+	return out, true
+}
+
+func hasSnapshotJSONContent(raw string) bool {
+	trimmed := strings.TrimSpace(raw)
+	switch trimmed {
+	case "", "null", "{}", "[]":
+		return false
+	default:
+		return true
+	}
+}
+
+func applyContextSnapshotColumns(pkt *domain.ContextPacket, cols contextSnapshotColumns) {
+	if pkt == nil {
+		return
+	}
+	snapshotKind := strings.TrimSpace(cols.SnapshotKind)
+	if snapshotKind != "" {
+		if pkt.CompileOptions == nil {
+			pkt.CompileOptions = &domain.ContextCompileOptions{}
+		}
+		pkt.CompileOptions.SnapshotKind = snapshotKind
+	}
+	hasEvidence := hasSnapshotJSONContent(cols.HeaderJSON) || hasSnapshotJSONContent(cols.GraphJSON) || hasSnapshotJSONContent(cols.DeltaJSON)
+	hasMetadata := strings.TrimSpace(cols.SnapshotFingerprint) != "" || strings.TrimSpace(cols.ParentSnapshotID) != "" ||
+		strings.TrimSpace(cols.RenderArtifactRefID) != "" || hasSnapshotJSONContent(cols.RestoreScoresJSON) || hasSnapshotJSONContent(cols.ResumeHintsJSON)
+	if snapshotKind == "" && !hasEvidence && !hasMetadata {
+		return
+	}
+	if pkt.RestoreSnapshot == nil {
+		pkt.RestoreSnapshot = &domain.ContextRestoreSnapshot{
+			SnapshotID:   pkt.ID,
+			SnapshotKind: snapshotKind,
+			Evidence:     map[string]any{},
+			Metadata:     map[string]any{},
+		}
+	}
+	if pkt.RestoreSnapshot.Evidence == nil {
+		pkt.RestoreSnapshot.Evidence = map[string]any{}
+	}
+	if pkt.RestoreSnapshot.Metadata == nil {
+		pkt.RestoreSnapshot.Metadata = map[string]any{}
+	}
+	if pkt.RestoreSnapshot.SnapshotID == "" {
+		pkt.RestoreSnapshot.SnapshotID = pkt.ID
+	}
+	if snapshotKind != "" {
+		pkt.RestoreSnapshot.SnapshotKind = snapshotKind
+	}
+	if hasSnapshotJSONContent(cols.HeaderJSON) {
+		if v, ok := decodeJSONAny(cols.HeaderJSON); ok {
+			pkt.RestoreSnapshot.Evidence["header"] = v
+		}
+	}
+	if hasSnapshotJSONContent(cols.GraphJSON) {
+		if v, ok := decodeJSONAny(cols.GraphJSON); ok {
+			pkt.RestoreSnapshot.Evidence["graph"] = v
+		}
+	}
+	if hasSnapshotJSONContent(cols.DeltaJSON) {
+		if v, ok := decodeJSONAny(cols.DeltaJSON); ok {
+			pkt.RestoreSnapshot.Evidence["delta"] = v
+		}
+	}
+	if strings.TrimSpace(cols.SnapshotFingerprint) != "" {
+		pkt.RestoreSnapshot.Metadata["fingerprint"] = strings.TrimSpace(cols.SnapshotFingerprint)
+	}
+	if strings.TrimSpace(cols.ParentSnapshotID) != "" {
+		parent := strings.TrimSpace(cols.ParentSnapshotID)
+		pkt.RestoreSnapshot.Metadata["parent_snapshot_id"] = parent
+		pkt.RestoreSnapshot.Metadata["restore_source_snapshot_id"] = parent
+	}
+	if strings.TrimSpace(cols.RenderArtifactRefID) != "" {
+		pkt.RestoreSnapshot.Metadata["rendered_card_artifact_id"] = strings.TrimSpace(cols.RenderArtifactRefID)
+	}
+	if hasSnapshotJSONContent(cols.RestoreScoresJSON) {
+		if v, ok := decodeJSONAny(cols.RestoreScoresJSON); ok {
+			pkt.RestoreSnapshot.Metadata["restore_scores_json"] = v
+		}
+	}
+	if hasSnapshotJSONContent(cols.ResumeHintsJSON) {
+		if v, ok := decodeJSONAny(cols.ResumeHintsJSON); ok {
+			pkt.RestoreSnapshot.Metadata["resume_hints_json"] = v
+		}
+	}
+}
+
+func applyContextSnapshotMetadata(pkt *domain.ContextPacket, raw string) {
+	if pkt == nil || strings.TrimSpace(raw) == "" {
+		return
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(raw), &metadata); err != nil || metadata == nil {
+		return
+	}
+	if v, ok := metadata["compileOptions"]; ok {
+		var opts domain.ContextCompileOptions
+		if decodeSnapshotValue(v, &opts) {
+			pkt.CompileOptions = &opts
+		}
+	}
+	if v, ok := metadata["restoreSnapshot"]; ok {
+		var snapshot domain.ContextRestoreSnapshot
+		if decodeSnapshotValue(v, &snapshot) {
+			pkt.RestoreSnapshot = &snapshot
+		}
+	}
+	if pkt.CompileOptions == nil {
+		if snapshotKind := readString(metadata, "snapshot_kind"); snapshotKind != "" {
+			pkt.CompileOptions = &domain.ContextCompileOptions{SnapshotKind: snapshotKind}
+		}
+	}
+	if pkt.RestoreSnapshot == nil {
+		if snapshotKind := readString(metadata, "snapshot_kind"); snapshotKind != "" {
+			pkt.RestoreSnapshot = &domain.ContextRestoreSnapshot{
+				SnapshotID:   readString(metadata, "snapshot_id"),
+				SnapshotKind: snapshotKind,
+				Evidence:     map[string]any{},
+				Metadata:     map[string]any{},
+			}
+		}
+	}
+}
+
+func scanContextPacketRows(rows *sql.Rows) ([]domain.ContextPacket, error) {
+	out := []domain.ContextPacket{}
+	for rows.Next() {
+		var pkt domain.ContextPacket
+		var selected, budgetRaw, reasonsRaw, metadataRaw string
+		var cols contextSnapshotColumns
+		if err := rows.Scan(
+			&pkt.ID,
+			&pkt.Query,
+			&pkt.Scope.WorkspaceID,
+			&pkt.Scope.LaneID,
+			&selected,
+			&budgetRaw,
+			&reasonsRaw,
+			&pkt.CreatedAt,
+			&metadataRaw,
+			&cols.SnapshotKind,
+			&cols.SnapshotFingerprint,
+			&cols.ParentSnapshotID,
+			&cols.HeaderJSON,
+			&cols.GraphJSON,
+			&cols.DeltaJSON,
+			&cols.RestoreScoresJSON,
+			&cols.RenderArtifactRefID,
+			&cols.ResumeHintsJSON,
+		); err != nil {
+			return nil, err
+		}
+		pkt.Scope.SelectedPaths = decodeStringSlice(selected)
+		_ = json.Unmarshal([]byte(budgetRaw), &pkt.Budget)
+		_ = json.Unmarshal([]byte(reasonsRaw), &pkt.InclusionReasons)
+		applyContextSnapshotMetadata(&pkt, metadataRaw)
+		applyContextSnapshotColumns(&pkt, cols)
+		out = append(out, pkt)
+	}
+	return out, rows.Err()
 }
 
 func scanJournalRows(rows *sql.Rows) ([]domain.JournalEvent, error) {

@@ -378,24 +378,9 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ollamaAdapter, err := s.adapters.Get("ollama")
-	if err != nil {
-		am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", "Ollama adapter is not registered; cannot generate a reply.", map[string]any{
-			"error": err.Error(), "replyToUserMessageId": um.ID,
-		})
-		out["assistantMessage"] = am
-		writeJSON(w, http.StatusOK, out)
-		return
-	}
-	info := ollamaAdapter.Info(ctx)
-	if info.Status != adapters.StatusReady {
-		msg := fmt.Sprintf("Ollama is not ready (%s): %s", info.Status, info.Detail)
-		am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", msg, map[string]any{
-			"adapterStatus": string(info.Status), "replyToUserMessageId": um.ID,
-		})
-		out["assistantMessage"] = am
-		writeJSON(w, http.StatusOK, out)
-		return
+	var ollamaAdapter adapters.Adapter
+	if adapter, getErr := s.adapters.Get("ollama"); getErr == nil {
+		ollamaAdapter = adapter
 	}
 
 	// Dry-run is always synchronous and fast.
@@ -414,7 +399,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 		async = false
 	}
 
-	if body.Stream {
+	if body.Stream && chatOllamaStreamCapable(ctx, ollamaAdapter) {
 		out["assistantPending"] = true
 		out["stream"] = true
 		writeJSON(w, http.StatusOK, out)
@@ -840,6 +825,14 @@ func chatInflightKey(threadID, userMessageID int64) string {
 	return fmt.Sprintf("%d-%d", threadID, userMessageID)
 }
 
+func chatOllamaStreamCapable(ctx context.Context, ollamaAdapter adapters.Adapter) bool {
+	ol, ok := ollamaAdapter.(adapters.Ollama)
+	if !ok {
+		return false
+	}
+	return strings.TrimSpace(ol.ModelForChat(ctx)) != ""
+}
+
 func (s *Server) completeAssistantSync(ctx context.Context, threadID, userMessageID int64, th *chat.ThreadDetail, lastUserContent string, ollamaAdapter adapters.Adapter, dryRun bool) *chat.Message {
 	return s.completeAssistantWithGatewayTools(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, dryRun, nil)
 }
@@ -859,7 +852,7 @@ func (s *Server) runChatAssistantAsync(key string, threadID, userMessageID int64
 	}
 }
 
-// handleChatAssistantStream streams Ollama tokens over SSE, then persists the assistant message.
+// handleChatAssistantStream streams when the Ollama streaming path is available, then persists the assistant message.
 func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	threadID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
@@ -902,33 +895,6 @@ func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	ollamaAdapter, err := s.adapters.Get("ollama")
-	if err != nil {
-		http.Error(w, "ollama not registered", http.StatusServiceUnavailable)
-		return
-	}
-	ol, ok := ollamaAdapter.(adapters.Ollama)
-	if !ok {
-		http.Error(w, "ollama adapter type mismatch", http.StatusInternalServerError)
-		return
-	}
-	info := ollamaAdapter.Info(ctx)
-	if info.Status != adapters.StatusReady {
-		msg := fmt.Sprintf("Ollama is not ready (%s): %s", info.Status, info.Detail)
-		am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", msg, map[string]any{"adapterStatus": string(info.Status), "replyToUserMessageId": userMessageID})
-		s.initSSE(w)
-		s.writeSSEEvent(w, map[string]any{"assistantMessage": am})
-		return
-	}
-
-	model := ol.ModelForChat(ctx)
-	if strings.TrimSpace(model) == "" {
-		am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", "ollama model is not configured in Settings.", map[string]any{"replyToUserMessageId": userMessageID})
-		s.initSSE(w)
-		s.writeSSEEvent(w, map[string]any{"assistantMessage": am})
-		return
-	}
-
 	if _, ok := w.(http.Flusher); !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 		return
@@ -940,6 +906,23 @@ func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Reques
 			umContent = m.Content
 			break
 		}
+	}
+
+	var ollamaAdapter adapters.Adapter
+	if adapter, getErr := s.adapters.Get("ollama"); getErr == nil {
+		ollamaAdapter = adapter
+	}
+	if !chatOllamaStreamCapable(ctx, ollamaAdapter) {
+		s.initSSE(w)
+		am := s.completeAssistantSync(ctx, threadID, userMessageID, th, umContent, ollamaAdapter, false)
+		if am == nil {
+			b, _ := json.Marshal(map[string]any{"message": "assistant reply could not be saved"})
+			fmt.Fprintf(w, "event: error\ndata: %s\n\n", string(b))
+			w.(http.Flusher).Flush()
+			return
+		}
+		s.writeSSEEvent(w, map[string]any{"assistantMessage": am})
+		return
 	}
 
 	s.initSSE(w)

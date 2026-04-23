@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/approvals"
 	"forge/projectforge/services/core/internal/audit"
 	"forge/projectforge/services/core/internal/lanes"
@@ -117,6 +118,34 @@ func TestGatewayAllRegisteredToolsSmoke(t *testing.T) {
 			}
 			if res == nil {
 				t.Fatalf("nil result")
+			}
+			if capability, ok := gw.capabilities.Resolve(tool.ID); ok {
+				switch capability.Status {
+				case domain.ToolCapabilityApprovalOnly:
+					if res.Status != StatusNeedsApprov {
+						t.Fatalf("expected needs_approval for approval-only capability %s, got %s (%s)", capability.ID, res.Status, res.DeniedReason)
+					}
+					if res.InvocationID <= 0 {
+						t.Fatalf("missing invocation id")
+					}
+					return
+				case domain.ToolCapabilityDeferred:
+					if res.Status != StatusUnsupported {
+						t.Fatalf("expected unsupported for deferred capability %s, got %s (%s)", capability.ID, res.Status, res.DeniedReason)
+					}
+					if res.InvocationID <= 0 {
+						t.Fatalf("missing invocation id")
+					}
+					return
+				case domain.ToolCapabilityDisabled, domain.ToolCapabilityDeprecated:
+					if res.Status != StatusDisabled {
+						t.Fatalf("expected disabled for disabled capability %s, got %s (%s)", capability.ID, res.Status, res.DeniedReason)
+					}
+					if res.InvocationID <= 0 {
+						t.Fatalf("missing invocation id")
+					}
+					return
+				}
 			}
 			if res.Status == StatusDenied {
 				t.Fatalf("unexpected denied result: %s", res.DeniedReason)

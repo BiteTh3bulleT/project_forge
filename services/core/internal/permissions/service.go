@@ -172,6 +172,7 @@ func (s *Service) EnsureGatewayToolPolicy(ctx context.Context, workspaceDir stri
 			continue
 		}
 		p.AllowedTools = mergeUniqueStrings(p.AllowedTools, gatewayTools)
+		p.AllowedReadPaths = mergeUniqueStrings(p.AllowedReadPaths, []string{workspaceDir})
 		p.AllowedExecutePaths = mergeUniqueStrings(p.AllowedExecutePaths, []string{workspaceDir})
 		if id == "workspace-write" {
 			p.AllowedWritePaths = mergeUniqueStrings(p.AllowedWritePaths, []string{

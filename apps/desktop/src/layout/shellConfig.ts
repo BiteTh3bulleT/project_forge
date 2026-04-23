@@ -14,6 +14,7 @@ export type ShellToolId =
   | "dashboard"
   | "command"
   | "memory"
+  | "models"
   | "job-detail"
   | "other";
 
@@ -35,6 +36,7 @@ export const primaryShellTools: readonly ShellToolDefinition[] = [
   { id: "reviews", label: "Reviews", shortLabel: "RV", route: "/reviews", description: "Human review decisions for imports and generated outputs.", primary: true },
   { id: "approvals", label: "Approvals", shortLabel: "AP", route: "/approvals", description: "Risk-gated approval queue with explicit request and decision records.", primary: true },
   { id: "autonomy", label: "Autonomy", shortLabel: "AU", route: "/autonomy", description: "Dream-state, intents, charters, budgets, and self-initiated decision telemetry.", primary: true },
+  { id: "models", label: "Models", shortLabel: "MD", route: "/models", description: "FORGE-native model runtime inventory, lifecycle controls, and runtime inspection.", primary: true },
   { id: "settings", label: "Settings", shortLabel: "ST", route: "/settings", description: "Local workspace configuration, models, and retrieval defaults.", primary: true },
 ] as const;
 

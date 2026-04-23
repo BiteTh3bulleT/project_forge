@@ -1,6 +1,7 @@
 # Tool Gateway
 
 The gateway is the only authorized tool execution boundary in FORGE.
+Last updated: 2026-04-22.
 
 ## Pipeline
 
@@ -23,6 +24,10 @@ The gateway is the only authorized tool execution boundary in FORGE.
 ## Adapter Boundary
 
 No direct shell/filesystem/network operations are allowed outside registered gateway tools/adapters.
+
+Legacy compatibility note:
+- `/api/adapters/{id}/invoke` is removed and no longer routed.
+- Adapter execution must go through `/api/gateway/invoke` (for example `toolId=legacy.adapter.invoke`, `laneId=legacy.adapter.invoke` for compatibility probing).
 
 Phase 5.9 uses:
 

@@ -233,6 +233,10 @@ func (r *SelfInitiatedSyscallRunner) commitAllowedActions(ctx context.Context, i
 	committedIDs := []string{}
 	errs := []domain.AutonomyError{}
 	for _, action := range decision.AllowedActions {
+		if guardErr := validateAutonomyCommitAction(intent, action); guardErr != nil {
+			errs = append(errs, *guardErr)
+			continue
+		}
 		call := annotateSelfAction(action, intent, decision.ID)
 		call.DryRun = false
 		res, err := r.kernel.Process(ctx, call)
@@ -338,4 +342,63 @@ func uniqueStrings(in []string) []string {
 		out = append(out, item)
 	}
 	return out
+}
+
+func validateAutonomyCommitAction(intent domain.AutonomyIntent, action domain.SyscallRequest) *domain.AutonomyError {
+	if intent.Source == domain.IntentSourceRuleAgent && isDestructiveAutonomyAction(action.Action) {
+		err := domain.AutonomyError{
+			Code:    domain.AutonomyErrKernelBlocked,
+			Field:   string(action.Action),
+			Message: "rule-agent intents cannot directly commit destructive actions",
+		}
+		return &err
+	}
+	if action.Action == domain.ActionArchiveNote && hasPlaceholderArchiveTarget(action.Payload) {
+		err := domain.AutonomyError{
+			Code:    domain.AutonomyErrKernelBlocked,
+			Field:   "payload.noteId",
+			Message: "cleanup placeholder target cannot be committed",
+		}
+		return &err
+	}
+	return nil
+}
+
+func isDestructiveAutonomyAction(action domain.SemanticActionType) bool {
+	name := strings.ToUpper(strings.TrimSpace(string(action)))
+	if name == "" {
+		return false
+	}
+	switch action {
+	case domain.ActionArchiveNote:
+		return true
+	}
+	for _, token := range []string{"DELETE", "DESTROY", "PURGE", "RESTORE", "KILL"} {
+		if strings.Contains(name, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasPlaceholderArchiveTarget(payload map[string]any) bool {
+	if len(payload) == 0 {
+		return false
+	}
+	ids := []string{
+		fmt.Sprintf("%v", payload["noteId"]),
+		fmt.Sprintf("%v", payload["id"]),
+		fmt.Sprintf("%v", payload["targetId"]),
+		fmt.Sprintf("%v", payload["objectId"]),
+	}
+	for _, raw := range ids {
+		id := strings.ToLower(strings.TrimSpace(raw))
+		if id == "" {
+			continue
+		}
+		if id == "candidate-note" || strings.HasPrefix(id, "candidate-") || strings.HasPrefix(id, "fake-") || strings.HasPrefix(id, "placeholder-") {
+			return true
+		}
+	}
+	return false
 }

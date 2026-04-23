@@ -36,6 +36,20 @@ VALUES(?,?,?,?,?,?)`,
 		return nil, err
 	}
 	runID, _ := res.LastInsertId()
+	var vsaRunID *int64
+	vsaIndexed := 0
+	vsaSkipped := 0
+	vsaFailed := 0
+	if id, runErr := s.createVSAReindexRun(ctx, RunVSAReindexRequest{
+		DossierID:   req.DossierID,
+		Mode:        "repair",
+		Limit:       req.Limit,
+		TriggeredBy: "memory_repair",
+		Reason:      "repair_flow",
+		Note:        fmt.Sprintf("repair_run_id=%d %s", runID, strings.TrimSpace(req.Note)),
+	}); runErr == nil {
+		vsaRunID = &id
+	}
 
 	candidates, err := s.repairCandidates(ctx, req.DossierID, req.MaxAgeDays, req.Limit)
 	if err != nil {
@@ -46,9 +60,12 @@ VALUES(?,?,?,?,?,?)`,
 	failed := 0
 	items := make([]RepairItem, 0, len(candidates))
 	for _, obs := range candidates {
-		item, action, repairErr := s.repairObservation(ctx, runID, obs)
+		item, action, vsaAction, repairErr := s.repairObservation(ctx, runID, obs, vsaRunID)
 		if repairErr != nil {
 			failed++
+			if vsaRunID != nil {
+				vsaFailed++
+			}
 			items = append(items, RepairItem{
 				RepairRunID:   runID,
 				ObservationID: obs.ID,
@@ -69,6 +86,14 @@ VALUES(?,?,?,?,?,?)`,
 		default:
 			skipped++
 		}
+		switch vsaAction {
+		case "indexed":
+			vsaIndexed++
+		case "failed":
+			vsaFailed++
+		default:
+			vsaSkipped++
+		}
 		items = append(items, *item)
 	}
 	completed := time.Now().UnixMilli()
@@ -83,6 +108,9 @@ WHERE id = ?`,
 		failed,
 		runID,
 	)
+	if vsaRunID != nil {
+		s.completeVSAReindexRun(ctx, *vsaRunID, len(candidates), vsaIndexed, vsaSkipped, vsaFailed)
+	}
 	return s.GetRepairRun(ctx, runID)
 }
 
@@ -103,30 +131,40 @@ WHERE (stale = 1 OR usefulness_score < -0.5 OR noise_count > usefulness_count OR
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []Observation{}
+	ids := []int64{}
 	for rows.Next() {
 		var id int64
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		detail, err := s.GetObservation(ctx, id)
-		if err != nil {
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return nil, err
+	}
+	_ = rows.Close()
+
+	out := make([]Observation, 0, len(ids))
+	for _, id := range ids {
+		detail, detailErr := s.GetObservation(ctx, id)
+		if detailErr != nil {
 			continue
 		}
 		out = append(out, detail.Observation)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
-func (s *Service) repairObservation(ctx context.Context, runID int64, obs Observation) (*RepairItem, string, error) {
-	before, _ := json.Marshal(map[string]any{
+func (s *Service) repairObservation(ctx context.Context, runID int64, obs Observation, vsaRunID *int64) (*RepairItem, string, string, error) {
+	beforeState := map[string]any{
 		"summary":           obs.Summary,
 		"verificationState": obs.VerificationState,
 		"stale":             obs.Stale,
 		"lastVerifiedAtMs":  obs.LastVerifiedAtMs,
 		"rawContent":        obs.RawContent,
-	})
+	}
+	before, _ := json.Marshal(beforeState)
 	now := time.Now().UnixMilli()
 	newRaw := strings.TrimSpace(obs.RawContent)
 	newSummary := strings.TrimSpace(obs.Summary)
@@ -174,15 +212,16 @@ WHERE id = ?`,
 		obs.ID,
 	)
 	if err != nil {
-		return nil, "failed", err
+		return nil, "failed", "failed", err
 	}
-	after, _ := json.Marshal(map[string]any{
+	afterState := map[string]any{
 		"summary":           newSummary,
 		"verificationState": newVerification,
 		"stale":             false,
 		"lastVerifiedAtMs":  now,
 		"rawContent":        newRaw,
-	})
+	}
+	after, _ := json.Marshal(afterState)
 	status := "skipped"
 	issue := "no_change"
 	if changed {
@@ -205,7 +244,7 @@ VALUES(?,?,?,?,?,?,?,?)`,
 		now,
 	)
 	if err != nil {
-		return nil, "failed", err
+		return nil, "failed", "failed", err
 	}
 	itemID, _ := res.LastInsertId()
 	item := &RepairItem{
@@ -219,7 +258,27 @@ VALUES(?,?,?,?,?,?,?,?)`,
 		Note:          note,
 		CreatedAtMs:   now,
 	}
-	return item, status, nil
+	vsaStatus := "skipped"
+	if vsaRunID != nil {
+		_, _, vsaStatusOut, reindexErr := s.reindexObservationVSAWithEvidence(
+			ctx,
+			obs.ID,
+			"repair_flow",
+			vsaRunID,
+			false,
+			beforeState,
+			afterState,
+			fmt.Sprintf("repair_run_id=%d repair_item_id=%d status=%s", runID, itemID, status),
+		)
+		if reindexErr != nil {
+			vsaStatus = "failed"
+			item.Note = strings.TrimSpace(item.Note + "; vsa reindex failed: " + reindexErr.Error())
+			_, _ = s.db.ExecContext(ctx, `UPDATE memory_repair_items SET note = ? WHERE id = ?`, item.Note, itemID)
+		} else {
+			vsaStatus = vsaStatusOut
+		}
+	}
+	return item, status, vsaStatus, nil
 }
 
 func (s *Service) ListRepairRuns(ctx context.Context, limit int, dossierID *int64) ([]RepairRun, error) {

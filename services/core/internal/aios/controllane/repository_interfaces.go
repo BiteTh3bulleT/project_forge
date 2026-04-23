@@ -103,6 +103,7 @@ type ContextPacketRepository interface {
 	GetSnapshotByID(ctx context.Context, id string) (domain.ContextPacket, bool, error)
 	ListSnapshotsByScope(ctx context.Context, scope ScopeFilter, limit int) ([]domain.ContextPacket, error)
 	ListSnapshotsByCorrelation(ctx context.Context, correlationID string, limit int) ([]domain.ContextPacket, error)
+	FindLatestByQueryAndKind(ctx context.Context, scope ScopeFilter, query, snapshotKind string) (domain.ContextPacket, bool, error)
 }
 
 type StateVersionRecord struct {

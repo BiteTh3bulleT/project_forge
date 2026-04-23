@@ -263,3 +263,6 @@ func (r *SQLiteContextPacketRepository) ListSnapshotsByScope(ctx context.Context
 func (r *SQLiteContextPacketRepository) ListSnapshotsByCorrelation(ctx context.Context, correlationID string, limit int) ([]domain.ContextPacket, error) {
 	return r.store.ListSnapshotsByCorrelation(ctx, correlationID, limit)
 }
+func (r *SQLiteContextPacketRepository) FindLatestByQueryAndKind(ctx context.Context, scope ScopeFilter, query, snapshotKind string) (domain.ContextPacket, bool, error) {
+	return r.store.FindLatestSnapshotByQueryAndKind(ctx, scope, query, snapshotKind)
+}

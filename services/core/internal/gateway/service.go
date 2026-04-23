@@ -206,6 +206,23 @@ func (g *Gateway) registerBuiltinTools() {
 	register(&validateContextTool{workspace: g.workspace, dataDir: g.dataDir})
 }
 
+// RegisterTool adds a non-builtin tool to the gateway registry.
+// It is intended for compatibility shims and bounded extension points.
+func (g *Gateway) RegisterTool(t Tool) error {
+	if t == nil {
+		return errors.New("tool is nil")
+	}
+	id := strings.TrimSpace(t.ID())
+	if id == "" {
+		return errors.New("tool id required")
+	}
+	if _, exists := g.tools[id]; exists {
+		return fmt.Errorf("tool %q already registered in gateway", id)
+	}
+	g.tools[id] = t
+	return nil
+}
+
 // Tools returns a sorted snapshot of the registered tools for UI inspection.
 func (g *Gateway) Tools() []ToolInfo {
 	out := make([]ToolInfo, 0, len(g.tools))
@@ -275,6 +292,31 @@ func (g *Gateway) Capabilities() []domain.ToolCapability {
 		return []domain.ToolCapability{}
 	}
 	return g.capabilities.List()
+}
+
+func (g *Gateway) Capability(id string) (domain.ToolCapability, bool) {
+	if g.capabilities == nil {
+		return domain.ToolCapability{}, false
+	}
+	return g.capabilities.Get(id)
+}
+
+func (g *Gateway) UpdateCapabilityStatus(id string, status domain.ToolCapabilityStatus) (domain.ToolCapability, domain.ToolCapability, bool, error) {
+	if g.capabilities == nil {
+		return domain.ToolCapability{}, domain.ToolCapability{}, false, fmt.Errorf("capability registry unavailable")
+	}
+	previous, found := g.capabilities.Get(id)
+	if !found {
+		return domain.ToolCapability{}, domain.ToolCapability{}, false, nil
+	}
+	updated, ok, err := g.capabilities.UpdateStatus(id, status)
+	if err != nil {
+		return domain.ToolCapability{}, domain.ToolCapability{}, false, err
+	}
+	if !ok {
+		return domain.ToolCapability{}, domain.ToolCapability{}, false, nil
+	}
+	return previous, updated, true, nil
 }
 
 // Execute runs the full pipeline: lane resolution, permission check,
@@ -495,6 +537,7 @@ WHERE id=?`, now, string(resultBytes), invID)
 			RiskClass:           risk,
 			Outcome:             "error",
 			Summary:             fmt.Sprintf("tool %q error: %v", tool.ID(), execErr),
+			Payload:             gatewayAuditContextPayload(req, map[string]any{"error": execErr.Error()}),
 		})
 		return &Result{
 			InvocationID:   invID,
@@ -553,10 +596,12 @@ WHERE id=?`, now, string(resultBytes), string(artifactsBytes), invID)
 		RiskClass:           risk,
 		Outcome:             "ok",
 		Summary:             fmt.Sprintf("tool %q via lane %q", tool.ID(), lane.ID),
-		Payload: map[string]any{
-			"paths":  paths,
-			"action": req.Action,
-		},
+		Payload: gatewayAuditContextPayload(req, map[string]any{
+			"paths":         paths,
+			"action":        req.Action,
+			"artifactCount": len(execResult.Artifacts),
+			"artifacts":     summarizeResultArtifacts(execResult.Artifacts),
+		}),
 	})
 
 	return &execResult, nil
@@ -653,7 +698,10 @@ INSERT INTO gateway_invocations(
 		RiskClass:           risk,
 		Outcome:             "denied",
 		Summary:             reason,
-		Payload:             map[string]any{"paths": req.Paths, "lane": laneID},
+		Payload: gatewayAuditContextPayload(req, map[string]any{
+			"paths": req.Paths,
+			"lane":  laneID,
+		}),
 	})
 	return &Result{
 		InvocationID:   id,
@@ -848,6 +896,7 @@ func (g *Gateway) recordNeedsApproval(ctx context.Context, req Request, lane *la
 		RiskClass:           risk,
 		Outcome:             "needs_approval",
 		Summary:             reason,
+		Payload:             gatewayAuditContextPayload(req, map[string]any{"reason": reason}),
 	})
 	data := map[string]any{
 		"jobId": effectiveJobID,
@@ -902,9 +951,21 @@ func (g *Gateway) insertChatGatewayApprovalJob(ctx context.Context, req Request,
 	if tool.WriteIntent() {
 		writeIntent = 1
 	}
+	userRequest := fmt.Sprintf("Chat gateway: %s (correlation %s)", tool.ID(), req.CorrelationID)
+	if raw := strings.TrimSpace(metadataString(req.Metadata, "chatUserRequest")); raw != "" {
+		userRequest = raw
+	}
+	approvalInput := cloneToolOutput(nonNilMap(req.Input))
+	if tool.ID() == "desktop.open" {
+		if _, ok := approvalInput["query"]; !ok || strings.TrimSpace(fmt.Sprintf("%v", approvalInput["query"])) == "" {
+			if raw := strings.TrimSpace(metadataString(req.Metadata, "chatUserRequest")); raw != "" {
+				approvalInput["query"] = raw
+			}
+		}
+	}
 	meta := map[string]any{
 		"templateId":    "gateway_action",
-		"userRequest":   fmt.Sprintf("Chat gateway: %s (correlation %s)", tool.ID(), req.CorrelationID),
+		"userRequest":   userRequest,
 		"objective":     fmt.Sprintf("Execute %s after operator approval", tool.ID()),
 		"executionMode": "governed_tool",
 		"createdBy":     nonEmpty(req.Initiator, "chat"),
@@ -917,7 +978,7 @@ func (g *Gateway) insertChatGatewayApprovalJob(ctx context.Context, req Request,
 			"executionLevel": level,
 			"correlationId":  req.CorrelationID,
 			"paths":          req.Paths,
-			"input":          nonNilMap(req.Input),
+			"input":          approvalInput,
 			"dryRun":         req.DryRun,
 		},
 	}
@@ -969,6 +1030,7 @@ func (g *Gateway) recordDryRun(ctx context.Context, req Request, lane *lanes.Lan
 		RiskClass:           risk,
 		Outcome:             "dry_run",
 		Summary:             fmt.Sprintf("dry-run of tool %q", tool.ID()),
+		Payload:             gatewayAuditContextPayload(req, map[string]any{"dryRun": true}),
 	})
 	return &Result{
 		InvocationID:   id,
@@ -1062,7 +1124,7 @@ INSERT INTO gateway_invocations(
 		RiskClass:           nonEmpty(risk, gatewayRiskClassFromToolRisk(policy.Risk.Risk)),
 		Outcome:             outcome,
 		Summary:             deniedReason,
-		Payload:             payload,
+		Payload:             gatewayAuditContextPayload(req, payload),
 	})
 	return &Result{
 		InvocationID:   id,
@@ -1138,6 +1200,33 @@ FROM gateway_invocations %s ORDER BY id DESC LIMIT ?`, where)
 		return nil, err
 	}
 	defer rows.Close()
+	return scanInvocationRows(rows)
+}
+
+// ListInvocationsByCorrelation returns invocation rows for one correlation id.
+func (g *Gateway) ListInvocationsByCorrelation(ctx context.Context, correlationID string, limit int) ([]InvocationRecord, error) {
+	correlationID = strings.TrimSpace(correlationID)
+	if correlationID == "" {
+		return []InvocationRecord{}, nil
+	}
+	if limit <= 0 || limit > 1000 {
+		limit = 500
+	}
+	rows, err := g.db.QueryContext(ctx, `
+SELECT id, correlation_id, created_at, completed_at, tool_id, lane_id, job_id, packet_id,
+       initiator, action, risk_class, write_intent, scope_json, input_json,
+       status, denied_reason, result_json, artifacts_json, permission_profile_id, approval_request_id
+FROM gateway_invocations
+WHERE correlation_id = ?
+ORDER BY id ASC LIMIT ?`, correlationID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanInvocationRows(rows)
+}
+
+func scanInvocationRows(rows *sql.Rows) ([]InvocationRecord, error) {
 	out := []InvocationRecord{}
 	for rows.Next() {
 		var r InvocationRecord
@@ -1973,14 +2062,326 @@ func (t *desktopOpenTool) ExecutionLevel() string { return "L1" }
 func (t *desktopOpenTool) Executes() bool         { return true }
 func (t *desktopOpenTool) UsesNetwork() bool      { return false }
 func (t *desktopOpenTool) WriteIntent() bool      { return true }
-func (t *desktopOpenTool) Description() string    { return "Open file/folder using desktop session" }
+func (t *desktopOpenTool) Description() string {
+	return "Open file/folder/URL or launch desktop app using desktop session"
+}
 func (t *desktopOpenTool) Execute(ctx context.Context, req Request) (Result, error) {
-	target, err := firstPath(req.Paths, t.workspace)
+	if len(req.Paths) > 0 {
+		target, err := firstPath(req.Paths, t.workspace)
+		if err != nil {
+			return Result{}, err
+		}
+		out, err := runCmd(ctx, "", "xdg-open", target)
+		return Result{
+			Data:    map[string]any{"mode": "path", "path": target, "output": out, "ok": err == nil},
+			Message: "open attempted",
+		}, nil
+	}
+
+	candidate := desktopInputCandidate(req.Input)
+	if candidate == "" {
+		return Result{}, errors.New("desktop.open requires either paths[] or input.path|input.url|input.application")
+	}
+	appHint, inlineCommand := desktopSplitAppAndCommand(candidate)
+	if len(inlineCommand) == 0 {
+		inlineCommand = desktopInlineCommandFromInput(req.Input)
+	}
+
+	if desktopLooksLikeURL(appHint) {
+		out, err := runCmd(ctx, "", "xdg-open", appHint)
+		return Result{
+			Data:    map[string]any{"mode": "url", "target": appHint, "output": out, "ok": err == nil},
+			Message: "open attempted",
+		}, nil
+	}
+
+	if desktopLooksLikePath(appHint) {
+		target, err := firstPath([]string{appHint}, t.workspace)
+		if err != nil {
+			return Result{}, err
+		}
+		if !pathContains(t.workspace, target) {
+			return Result{}, errors.New("desktop.open input.path must resolve inside workspace")
+		}
+		out, err := runCmd(ctx, "", "xdg-open", target)
+		return Result{
+			Data:    map[string]any{"mode": "path", "path": target, "output": out, "ok": err == nil},
+			Message: "open attempted",
+		}, nil
+	}
+
+	command, args, appName, err := desktopResolveAppLaunch(appHint)
 	if err != nil {
 		return Result{}, err
 	}
-	out, err := runCmd(ctx, "", "xdg-open", target)
-	return Result{Data: map[string]any{"path": target, "output": out, "ok": err == nil}, Message: "open attempted"}, nil
+	if len(inlineCommand) > 0 {
+		terminalArgs, ok := desktopTerminalLaunchArgs(command, inlineCommand)
+		if !ok {
+			return Result{}, fmt.Errorf("application %q does not support inline command execution", appName)
+		}
+		args = append(args, terminalArgs...)
+	}
+	parts := append([]string{command}, args...)
+	pid, runErr := runDetachedCmd("", parts...)
+	out := ""
+	return Result{
+		Data: map[string]any{
+			"mode":        "application",
+			"application": appName,
+			"command":     command,
+			"args":        args,
+			"inlineCmd":   inlineCommand,
+			"pid":         pid,
+			"output":      out,
+			"ok":          runErr == nil,
+		},
+		Message: "application launch attempted",
+	}, nil
+}
+
+func desktopInputCandidate(input map[string]any) string {
+	if input == nil {
+		return ""
+	}
+	keys := []string{"path", "url", "uri", "application", "app", "target", "query", "request", "text", "name", "input"}
+	for _, key := range keys {
+		raw, ok := input[key]
+		if !ok {
+			continue
+		}
+		switch value := raw.(type) {
+		case string:
+			s := strings.TrimSpace(value)
+			if s != "" {
+				return s
+			}
+		case fmt.Stringer:
+			s := strings.TrimSpace(value.String())
+			if s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func desktopInlineCommandFromInput(input map[string]any) []string {
+	if input == nil {
+		return nil
+	}
+	keys := []string{"query", "request", "text", "input", "target", "application", "app", "name"}
+	for _, key := range keys {
+		raw, ok := input[key]
+		if !ok {
+			continue
+		}
+		text := ""
+		switch value := raw.(type) {
+		case string:
+			text = strings.TrimSpace(value)
+		case fmt.Stringer:
+			text = strings.TrimSpace(value.String())
+		}
+		if text == "" {
+			continue
+		}
+		_, cmd := desktopSplitAppAndCommand(text)
+		if len(cmd) > 0 {
+			return cmd
+		}
+	}
+	return nil
+}
+
+func desktopLooksLikeURL(v string) bool {
+	v = strings.TrimSpace(strings.ToLower(v))
+	return strings.HasPrefix(v, "http://") || strings.HasPrefix(v, "https://") || strings.HasPrefix(v, "mailto:")
+}
+
+func desktopLooksLikePath(v string) bool {
+	s := strings.TrimSpace(v)
+	if s == "" {
+		return false
+	}
+	if strings.HasPrefix(s, "/") || strings.HasPrefix(s, "./") || strings.HasPrefix(s, "../") || strings.HasPrefix(s, "~") {
+		return true
+	}
+	return strings.Contains(s, "/")
+}
+
+func desktopSplitAppAndCommand(raw string) (appHint string, command []string) {
+	normalized := desktopNormalizeAppHint(raw)
+	if normalized == "" {
+		return "", nil
+	}
+	if strings.HasPrefix(normalized, "ping ") {
+		target := desktopExtractPingTarget(strings.TrimSpace(strings.TrimPrefix(normalized, "ping ")))
+		if target != "" {
+			return "terminal", []string{"ping", target}
+		}
+		return normalized, nil
+	}
+	delims := []string{
+		" and run ping ",
+		" and ping ",
+		" to run ping ",
+		" to ping ",
+		" then ping ",
+	}
+	for _, delim := range delims {
+		idx := strings.Index(normalized, delim)
+		if idx <= 0 {
+			continue
+		}
+		target := desktopExtractPingTarget(strings.TrimSpace(normalized[idx+len(delim):]))
+		if target == "" {
+			return normalized, nil
+		}
+		app := strings.TrimSpace(normalized[:idx])
+		if app == "" {
+			app = "terminal"
+		}
+		return app, []string{"ping", target}
+	}
+	return normalized, nil
+}
+
+func desktopExtractPingTarget(raw string) string {
+	fields := strings.Fields(strings.TrimSpace(raw))
+	if len(fields) == 0 {
+		return ""
+	}
+	token := strings.Trim(fields[0], `"'`)
+	if !desktopSafePingTarget(token) {
+		return ""
+	}
+	return token
+}
+
+func desktopSafePingTarget(token string) bool {
+	if token == "" {
+		return false
+	}
+	for _, r := range token {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= '0' && r <= '9':
+		case r == '.', r == '-', r == ':':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func desktopTerminalLaunchArgs(command string, cmd []string) ([]string, bool) {
+	if len(cmd) == 0 {
+		return nil, false
+	}
+	switch command {
+	case "konsole":
+		return append([]string{"--noclose", "-e"}, cmd...), true
+	case "x-terminal-emulator", "xfce4-terminal", "alacritty":
+		return append([]string{"-e"}, cmd...), true
+	case "gnome-terminal":
+		return append([]string{"--"}, cmd...), true
+	case "kitty":
+		return append([]string{}, cmd...), true
+	default:
+		return nil, false
+	}
+}
+
+func desktopResolveAppLaunch(raw string) (command string, args []string, appName string, err error) {
+	hint := desktopNormalizeAppHint(raw)
+	if hint == "" {
+		return "", nil, "", errors.New("desktop.open input.application cannot be empty")
+	}
+
+	candidates := desktopLaunchCandidates(hint)
+	for _, candidate := range candidates {
+		if len(candidate) == 0 {
+			continue
+		}
+		if _, lookErr := exec.LookPath(candidate[0]); lookErr == nil {
+			return candidate[0], candidate[1:], hint, nil
+		}
+	}
+	return "", nil, "", fmt.Errorf("no launcher found for %q on this system", hint)
+}
+
+func desktopNormalizeAppHint(raw string) string {
+	s := strings.TrimSpace(strings.ToLower(raw))
+	if s == "" {
+		return ""
+	}
+	s = strings.Trim(s, `"'`)
+	s = strings.TrimSuffix(s, ".")
+	for _, prefix := range []string{"open ", "launch ", "start "} {
+		if strings.HasPrefix(s, prefix) {
+			s = strings.TrimSpace(strings.TrimPrefix(s, prefix))
+		}
+		if strings.HasPrefix(s, "the "+prefix) {
+			s = strings.TrimSpace(strings.TrimPrefix(s, "the "+prefix))
+		}
+	}
+	s = strings.TrimPrefix(s, "the ")
+	s = strings.Join(strings.Fields(s), " ")
+	return s
+}
+
+func desktopLaunchCandidates(hint string) [][]string {
+	normalized := strings.TrimSpace(strings.ToLower(hint))
+	switch {
+	case normalized == "konsole" || strings.Contains(normalized, "konsole"):
+		return [][]string{
+			{"konsole"},
+			{"gtk-launch", "org.kde.konsole.desktop"},
+		}
+	case strings.Contains(normalized, "terminal"):
+		return [][]string{
+			{"x-terminal-emulator"},
+			{"konsole"},
+			{"gnome-terminal"},
+			{"xfce4-terminal"},
+			{"kitty"},
+			{"alacritty"},
+		}
+	case strings.Contains(normalized, "software center"),
+		strings.Contains(normalized, "software manager"),
+		strings.Contains(normalized, "app store"),
+		strings.Contains(normalized, "discover"):
+		return [][]string{
+			{"plasma-discover"},
+			{"discover"},
+			{"gnome-software"},
+			{"snap-store"},
+			{"gtk-launch", "org.kde.discover.desktop"},
+			{"gtk-launch", "org.gnome.Software.desktop"},
+		}
+	default:
+		fields := strings.Fields(normalized)
+		if len(fields) > 0 && desktopSafeCommandToken(fields[0]) {
+			return [][]string{{fields[0]}}
+		}
+	}
+	return nil
+}
+
+func desktopSafeCommandToken(token string) bool {
+	if token == "" {
+		return false
+	}
+	for _, r := range token {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= '0' && r <= '9':
+		case r == '-', r == '_', r == '.', r == '+':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 type networkInterfacesTool struct{}
@@ -2277,6 +2678,38 @@ func mergeGatewayMetadata(base map[string]any, add map[string]any) map[string]an
 			continue
 		}
 		out[key] = value
+	}
+	return out
+}
+
+func gatewayAuditContextPayload(req Request, payload map[string]any) map[string]any {
+	out := map[string]any{
+		"correlationId": req.CorrelationID,
+	}
+	if strings.TrimSpace(req.TraceID) != "" {
+		out["traceId"] = req.TraceID
+	}
+	if strings.TrimSpace(req.WorkspaceID) != "" {
+		out["workspaceId"] = req.WorkspaceID
+	}
+	for key, value := range payload {
+		out[key] = value
+	}
+	return out
+}
+
+func summarizeResultArtifacts(items []ResultArtifact) []map[string]any {
+	if len(items) == 0 {
+		return []map[string]any{}
+	}
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		entry := map[string]any{
+			"type":    strings.TrimSpace(item.Type),
+			"path":    strings.TrimSpace(item.Path),
+			"summary": strings.TrimSpace(item.Summary),
+		}
+		out = append(out, entry)
 	}
 	return out
 }
@@ -2580,6 +3013,25 @@ func runCmd(ctx context.Context, dir string, parts ...string) (string, error) {
 	}
 	out, err := cmd.CombinedOutput()
 	return string(out), err
+}
+
+func runDetachedCmd(dir string, parts ...string) (int, error) {
+	if len(parts) == 0 {
+		return 0, errors.New("command required")
+	}
+	cmd := exec.Command(parts[0], parts[1:]...)
+	if strings.TrimSpace(dir) != "" {
+		cmd.Dir = dir
+	}
+	if err := cmd.Start(); err != nil {
+		return 0, err
+	}
+	pid := 0
+	if cmd.Process != nil {
+		pid = cmd.Process.Pid
+		_ = cmd.Process.Release()
+	}
+	return pid, nil
 }
 
 func readFloat(in map[string]any, key string, def float64) float64 {

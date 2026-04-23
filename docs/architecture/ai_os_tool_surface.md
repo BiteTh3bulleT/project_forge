@@ -16,6 +16,7 @@ All capabilities use namespaced ids:
 - `filesystem.read_file`
 - `code.run_tests`
 - `external.send_email`
+- `model.chat`
 
 ## Domains and Taxonomy
 
@@ -207,15 +208,65 @@ All capabilities use namespaced ids:
 - `external.create_event`
 - `external.search_web`
 
+### `model.*` (M3 Runtime Capability Envelope)
+
+Capability envelope ids tracked for policy/taxonomy honesty:
+
+- `model.list`
+- `model.inspect`
+- `model.load`
+- `model.unload`
+- `model.chat`
+- `model.generate`
+- `model.import`
+- `model.verify`
+- `model.enable`
+- `model.disable`
+- `model.archive`
+- `model.remove_registration`
+- `model.backend.list`
+- `model.embed`
+- `model.delete_file`
+- `model.benchmark`
+
+Branch snapshot status on 2026-04-22:
+
+- Model runtime API paths are implemented (`/forge/models*` and gated `/v1/*`) through `modelruntime.Service`.
+- Runtime execution is scheduler-governed with FIFO queueing, bounded admission, lifecycle controls, deterministic model/backend selection, and policy hooks.
+- Model management flows are implemented for import, verify, enable, disable, archive, and remove-registration.
+- Dedicated `model.*` gateway capability registry entries remain a follow-up; this section documents the capability envelope, not gateway alias completion.
+
 ## Capability Status
 
-Phase 5.9 registers the complete taxonomy, with mixed status:
+Phase 5.9 registers the current in-code taxonomy with mixed status:
 
 - `active`: mapped to existing gateway tools.
 - `approval_only`: implemented but always approval-gated or high-risk.
 - `stubbed`: deterministic unsupported path (metadata-only capability).
 - `disabled`: present but denied.
 - `deprecated`: present but blocked by policy.
+- `deferred`: registered but intentionally not executable until roadmap gates release it.
+
+Model-runtime capability honesty:
+
+| Capability | Current branch status | Notes |
+|---|---|---|
+| `model.list` | real via runtime API | gateway taxonomy aliasing remains pending |
+| `model.inspect` | real via runtime API | gateway taxonomy aliasing remains pending |
+| `model.load` | real via runtime API | explicit lifecycle path; approval posture can be tightened later |
+| `model.unload` | real via runtime API | explicit lifecycle path; approval posture can be tightened later |
+| `model.chat` | partial via runtime API | non-streaming M3 behavior with FIFO scheduler and policy hooks |
+| `model.generate` | partial via runtime API | non-streaming M3 behavior with FIFO scheduler and policy hooks |
+| `model.import` | real via runtime API | local GGUF and manifest-backed directory registration only |
+| `model.verify` | real via runtime API | checksum/file verification where metadata exists |
+| `model.enable` | real via runtime API | re-enables disabled managed models |
+| `model.disable` | real via runtime API | blocks inference while preserving metadata |
+| `model.archive` | real via runtime API | archives metadata/managed directory without deleting bytes |
+| `model.remove_registration` | real via runtime API | removes runtime registration without destructive delete |
+| `model.backend.list` | real via runtime API | reports configured runtime backend availability |
+| `model.embed` | deferred | out of current runtime scope |
+| `model.delete_file` | deferred | approval-required design target; not implemented |
+| `model.benchmark` | deferred | deferred |
 
 ## Risk Model
 

@@ -413,6 +413,83 @@ func validateCompileContext(req domain.SyscallRequest) []domain.SyscallError {
 			issues = append(issues, errField(domain.ErrInvalidPayload, "payload.budget.maxNotes", "maxNotes must be positive"))
 		}
 	}
+	issues = append(issues, validateCompileContextOptions(req.Payload, "payload")...)
+	if raw, ok := req.Payload["restoreSnapshot"]; ok {
+		if raw == nil {
+			issues = append(issues, errField(domain.ErrInvalidPayload, "payload.restoreSnapshot", "restoreSnapshot must be an object"))
+		} else if restore, ok := raw.(map[string]any); ok {
+			issues = append(issues, validateRestoreSnapshotOptions(restore, "payload.restoreSnapshot")...)
+		} else {
+			issues = append(issues, errField(domain.ErrInvalidPayload, "payload.restoreSnapshot", "restoreSnapshot must be an object"))
+		}
+	}
+	if raw, ok := req.Payload["compileOptions"]; ok {
+		if raw == nil {
+			issues = append(issues, errField(domain.ErrInvalidPayload, "payload.compileOptions", "compileOptions must be an object"))
+		} else if opts, ok := raw.(map[string]any); ok {
+			issues = append(issues, validateCompileContextOptions(opts, "payload.compileOptions")...)
+		} else {
+			issues = append(issues, errField(domain.ErrInvalidPayload, "payload.compileOptions", "compileOptions must be an object"))
+		}
+	}
+	return issues
+}
+
+func validateCompileContextOptions(payload map[string]any, prefix string) []domain.SyscallError {
+	var issues []domain.SyscallError
+	if payload == nil {
+		return issues
+	}
+	persistSnapshot, persistPresent, persistValid := readOptionalBool(payload, "persistSnapshot")
+	if persistPresent && !persistValid {
+		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".persistSnapshot", "persistSnapshot must be a boolean"))
+	}
+	renderSnapshotCard, renderPresent, renderValid := readOptionalBool(payload, "renderSnapshotCard")
+	if renderPresent && !renderValid {
+		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".renderSnapshotCard", "renderSnapshotCard must be a boolean"))
+	}
+	snapshotKind := ""
+	if snapshotKindRaw, snapshotKindPresent := payload["snapshotKind"]; snapshotKindPresent {
+		if snapshotKindRaw == nil {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".snapshotKind", "snapshotKind must be a string"))
+		} else if kind, ok := snapshotKindRaw.(string); ok {
+			snapshotKind = strings.TrimSpace(kind)
+			if snapshotKind == "" {
+				issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".snapshotKind", "snapshotKind must not be empty"))
+			}
+		} else {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".snapshotKind", "snapshotKind must be a string"))
+		}
+	}
+	if (persistPresent && persistSnapshot) || (renderPresent && renderSnapshotCard) {
+		if snapshotKind == "" {
+			issues = append(issues, errField(domain.ErrMissingRequiredField, prefix+".snapshotKind", "snapshotKind is required when snapshot options are enabled"))
+		}
+	}
+	return issues
+}
+
+func validateRestoreSnapshotOptions(payload map[string]any, prefix string) []domain.SyscallError {
+	var issues []domain.SyscallError
+	if payload == nil {
+		return issues
+	}
+	if snapshotKindRaw, snapshotKindPresent := payload["snapshotKind"]; snapshotKindPresent {
+		if snapshotKindRaw == nil {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".snapshotKind", "snapshotKind must be a string"))
+			return issues
+		}
+		kind, ok := snapshotKindRaw.(string)
+		if !ok {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".snapshotKind", "snapshotKind must be a string"))
+			return issues
+		}
+		if strings.TrimSpace(kind) == "" {
+			issues = append(issues, errField(domain.ErrMissingRequiredField, prefix+".snapshotKind", "snapshotKind is required"))
+		}
+	} else {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, prefix+".snapshotKind", "snapshotKind is required"))
+	}
 	return issues
 }
 
@@ -534,6 +611,24 @@ func readString(m map[string]any, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(fmt.Sprintf("%v", v))
+}
+
+func readOptionalBool(m map[string]any, key string) (value bool, present bool, valid bool) {
+	if m == nil {
+		return false, false, true
+	}
+	v, ok := m[key]
+	if !ok {
+		return false, false, true
+	}
+	if v == nil {
+		return false, true, false
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return false, true, false
+	}
+	return b, true, true
 }
 
 func readStringSlice(m map[string]any, key string) []string {

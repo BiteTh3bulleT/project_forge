@@ -1,7 +1,9 @@
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import type { ToolCapabilityStatus } from "@forge/shared";
 
+import { FoldSection } from "../components/FoldSection";
 import { api } from "../lib/api";
 import { useUiStore } from "../stores/uiStore";
 
@@ -16,7 +18,7 @@ type ToolRow = {
   usesNetwork: boolean;
   writeIntent: boolean;
   capabilityId?: string;
-  capabilityStatus?: string;
+  capabilityStatus?: ToolCapabilityStatus;
   capabilityRisk?: string;
   adapterId?: string;
   requiresApprovalByDefault?: boolean;
@@ -29,7 +31,7 @@ type CapabilityRow = {
   domain: string;
   name: string;
   description: string;
-  status: string;
+  status: ToolCapabilityStatus;
   lane: string;
   effect: string[];
   risk: string;
@@ -112,6 +114,9 @@ export function ToolGatewayPage() {
   const [dryRun, setDryRun] = useState(true);
   const [last, setLast] = useState<Record<string, unknown> | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [statusDraftById, setStatusDraftById] = useState<Record<string, ToolCapabilityStatus>>({});
+  const [statusReasonById, setStatusReasonById] = useState<Record<string, string>>({});
+  const [statusUpdateBusy, setStatusUpdateBusy] = useState<string | null>(null);
 
   function newCorrelationId() {
     try {
@@ -122,6 +127,39 @@ export function ToolGatewayPage() {
   }
 
   const selectedTool = useMemo(() => tools.find((x) => x.id === toolId) ?? null, [toolId, tools]);
+  const selectedLane = useMemo(() => lanes.find((row) => row.id === laneId) ?? null, [laneId, lanes]);
+  const selectedCapability = useMemo(() => {
+    if (!selectedTool?.capabilityId) return null;
+    return capabilities.find((row) => row.id === selectedTool.capabilityId) ?? null;
+  }, [capabilities, selectedTool?.capabilityId]);
+  const parsedInput = useMemo(() => {
+    try {
+      return { ok: true as const, value: parseInput(inputRaw), error: "" };
+    } catch (e) {
+      return { ok: false as const, value: {}, error: e instanceof Error ? e.message : String(e) };
+    }
+  }, [inputRaw]);
+  const canExecuteLocally = useMemo(() => {
+    const capabilityStatus = selectedCapability?.status ?? selectedTool?.capabilityStatus ?? "unknown";
+    const capabilityAllowed = capabilityStatus === "active" || capabilityStatus === "approval_only";
+    return Boolean(selectedTool && selectedLane && selectedLane.enabled && capabilityAllowed && parsedInput.ok);
+  }, [parsedInput.ok, selectedCapability?.status, selectedLane, selectedTool]);
+  const preflightGates = useMemo(
+    () => [
+      { label: "if tool is selected", pass: Boolean(selectedTool) },
+      { label: "and lane is selected", pass: Boolean(selectedLane) },
+      { label: "and lane is enabled", pass: Boolean(selectedLane?.enabled) },
+      {
+        label: "and capability status is active/approval_only",
+        pass: (() => {
+          const status = selectedCapability?.status ?? selectedTool?.capabilityStatus ?? "";
+          return status === "active" || status === "approval_only";
+        })(),
+      },
+      { label: "and input JSON is valid", pass: parsedInput.ok },
+    ],
+    [parsedInput.ok, selectedCapability?.status, selectedLane, selectedTool],
+  );
 
   async function refresh() {
     try {
@@ -132,11 +170,18 @@ export function ToolGatewayPage() {
         api.meta(),
         api.gateway.invocations({ limit: 80, status: statusFilter || undefined }),
       ]);
-      const toolRows = Array.isArray(t.tools) ? t.tools : [];
-      const capabilityRows = Array.isArray(c.capabilities) ? c.capabilities : [];
+      const toolRows = (Array.isArray(t.tools) ? t.tools : []) as ToolRow[];
+      const capabilityRows = (Array.isArray(c.capabilities) ? c.capabilities : []) as CapabilityRow[];
       const laneRows = (Array.isArray(l.lanes) ? l.lanes : []) as LaneRow[];
       setTools(toolRows);
       setCapabilities(capabilityRows);
+      setStatusDraftById((prev) => {
+        const next = { ...prev };
+        for (const row of capabilityRows) {
+          if (!next[row.id]) next[row.id] = row.status;
+        }
+        return next;
+      });
       setLanes(laneRows);
       setInvs(Array.isArray(i.invocations) ? i.invocations : []);
       setWorkspace(m.workspaceDir);
@@ -188,6 +233,8 @@ export function ToolGatewayPage() {
               <option value="dry_run">dry_run</option>
               <option value="needs_approval">needs_approval</option>
               <option value="denied">denied</option>
+              <option value="unsupported">unsupported</option>
+              <option value="disabled">disabled</option>
               <option value="error">error</option>
             </select>
             <GhostButton className="ml-2" onClick={() => void refresh()}>Apply</GhostButton>
@@ -196,72 +243,105 @@ export function ToolGatewayPage() {
       </Panel>
 
       <Panel title="Invoke Action" subtitle="Typed request contract: tool + lane + risk + execution level + scoped targets + structured input.">
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="text-xs text-forge-mist">
-            Tool
-            <select className="forge-input mt-1" value={toolId} onChange={(e) => setToolId(e.target.value)}>
-              {tools.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.id} · {t.domain} · {t.executionLevel}
-                </option>
+        <div className="space-y-3">
+          <FoldSection title="1) Target and lane" subtitle="Choose exactly what you want to invoke." defaultOpen>
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="text-xs text-forge-mist">
+                Tool
+                <select className="forge-input mt-1" value={toolId} onChange={(e) => setToolId(e.target.value)}>
+                  {tools.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.id} · {t.domain} · {t.executionLevel}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs text-forge-mist">
+                Lane
+                <select className="forge-input mt-1" value={laneId} onChange={(e) => setLaneId(e.target.value)}>
+                  {lanes.map((ln) => (
+                    <option key={ln.id} value={ln.id}>
+                      {ln.id} · {ln.riskClass}
+                      {!ln.enabled ? " (disabled)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </FoldSection>
+
+          <FoldSection title="2) Risk and execution" subtitle="Explicitly set intent level before running." defaultOpen>
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="text-xs text-forge-mist">
+                Action label
+                <input className="forge-input mt-1" value={action} onChange={(e) => setAction(e.target.value)} />
+              </label>
+              <label className="text-xs text-forge-mist">
+                Risk class
+                <select className="forge-input mt-1" value={riskClass} onChange={(e) => setRiskClass(e.target.value)}>
+                  <option value="read_only">read_only</option>
+                  <option value="safe_write">safe_write</option>
+                  <option value="scoped_execute">scoped_execute</option>
+                  <option value="privileged">privileged</option>
+                  <option value="dangerous">dangerous</option>
+                </select>
+              </label>
+              <label className="text-xs text-forge-mist">
+                Execution level
+                <select className="forge-input mt-1" value={executionLevel} onChange={(e) => setExecutionLevel(e.target.value)}>
+                  <option value="L0">L0</option>
+                  <option value="L1">L1</option>
+                  <option value="L2">L2</option>
+                  <option value="L3">L3</option>
+                  <option value="L4">L4</option>
+                </select>
+              </label>
+            </div>
+          </FoldSection>
+
+          <FoldSection title="3) Scope and payload" subtitle="Constrain paths and provide structured input.">
+            <label className="block text-xs text-forge-mist">
+              Paths (comma-separated, relative to workspace or absolute if policy allows)
+              <input className="forge-input mt-1 font-mono text-xs" value={paths} onChange={(e) => setPaths(e.target.value)} placeholder="README.md, docs" />
+            </label>
+            <label className="mt-3 block text-xs text-forge-mist">
+              Input JSON
+              <textarea className="forge-input mt-1 min-h-[120px] font-mono text-xs" value={inputRaw} onChange={(e) => setInputRaw(e.target.value)} />
+            </label>
+            {!parsedInput.ok ? <div className="mt-2 text-xs text-forge-emberSoft">Input error: {parsedInput.error}</div> : null}
+            <label className="mt-3 flex items-center gap-2 text-xs text-forge-mist">
+              <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
+              Dry run
+            </label>
+          </FoldSection>
+
+          <FoldSection
+            title="4) Preflight gates"
+            subtitle="UI gate preview: if/and checks before execute. Kernel policy remains authoritative."
+            defaultOpen
+          >
+            <div className="space-y-1 rounded border border-white/10 bg-black/25 p-3 text-xs">
+              {preflightGates.map((gate, idx) => (
+                <GateLine key={gate.label} prefix={idx === 0 ? "IF" : "AND"} label={gate.label} pass={gate.pass} />
               ))}
-            </select>
-          </label>
-          <label className="text-xs text-forge-mist">
-            Lane
-            <select className="forge-input mt-1" value={laneId} onChange={(e) => setLaneId(e.target.value)}>
-              {lanes.map((ln) => (
-                <option key={ln.id} value={ln.id}>
-                  {ln.id} · {ln.riskClass}
-                  {!ln.enabled ? " (disabled)" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
+            </div>
+            <div className="mt-2 text-[11px] text-forge-mist">
+              Selected capability:{" "}
+              <span className="text-forge-ash">{selectedCapability?.id ?? selectedTool?.capabilityId ?? "—"}</span> · status{" "}
+              <span className="text-forge-ash">{selectedCapability?.status ?? selectedTool?.capabilityStatus ?? "unknown"}</span>
+            </div>
+          </FoldSection>
         </div>
-        <div className="mt-3 grid gap-3 md:grid-cols-3">
-          <label className="text-xs text-forge-mist">
-            Action label
-            <input className="forge-input mt-1" value={action} onChange={(e) => setAction(e.target.value)} />
-          </label>
-          <label className="text-xs text-forge-mist">
-            Risk class
-            <select className="forge-input mt-1" value={riskClass} onChange={(e) => setRiskClass(e.target.value)}>
-              <option value="read_only">read_only</option>
-              <option value="safe_write">safe_write</option>
-              <option value="scoped_execute">scoped_execute</option>
-              <option value="privileged">privileged</option>
-              <option value="dangerous">dangerous</option>
-            </select>
-          </label>
-          <label className="text-xs text-forge-mist">
-            Execution level
-            <select className="forge-input mt-1" value={executionLevel} onChange={(e) => setExecutionLevel(e.target.value)}>
-              <option value="L0">L0</option>
-              <option value="L1">L1</option>
-              <option value="L2">L2</option>
-              <option value="L3">L3</option>
-              <option value="L4">L4</option>
-            </select>
-          </label>
-        </div>
-        <label className="mt-3 block text-xs text-forge-mist">
-          Paths (comma-separated, relative to workspace or absolute if policy allows)
-          <input className="forge-input mt-1 font-mono text-xs" value={paths} onChange={(e) => setPaths(e.target.value)} placeholder="README.md, docs" />
-        </label>
-        <label className="mt-3 block text-xs text-forge-mist">
-          Input JSON
-          <textarea className="forge-input mt-1 min-h-[120px] font-mono text-xs" value={inputRaw} onChange={(e) => setInputRaw(e.target.value)} />
-        </label>
-        <label className="mt-3 flex items-center gap-2 text-xs text-forge-mist">
-          <input type="checkbox" checked={dryRun} onChange={(e) => setDryRun(e.target.checked)} />
-          Dry run
-        </label>
         <div className="mt-4 flex gap-2">
           <PrimaryButton
+            disabled={!canExecuteLocally}
             onClick={async () => {
               try {
-                const input = parseInput(inputRaw);
+                if (!canExecuteLocally) {
+                  setErr("Preflight gates are not satisfied. Resolve IF/AND checks before execute.");
+                  return;
+                }
+                const input = parsedInput.value;
                 const pathList = paths
                   .split(",")
                   .map((s) => s.trim())
@@ -288,7 +368,7 @@ export function ToolGatewayPage() {
               }
             }}
           >
-            Execute
+            {canExecuteLocally ? "Execute" : "Blocked by preflight"}
           </PrimaryButton>
           {last && typeof last.approvalRequestId === "number" ? (
             <GhostButton onClick={() => navigate("/approvals")}>Open approvals</GhostButton>
@@ -308,6 +388,7 @@ export function ToolGatewayPage() {
               <div className="mt-1 text-[11px]">
                 capability {t.capabilityId ?? "—"} · status {t.capabilityStatus ?? "—"} · risk {t.capabilityRisk ?? "—"} · adapter {t.adapterId ?? "—"}
               </div>
+              <div className="mt-1 text-[11px] text-forge-mist/90">status reason: {capabilityStatusReason(t.capabilityStatus, t.adapterId)}</div>
               <div className="mt-1">{t.description}</div>
             </div>
           ))}
@@ -327,7 +408,60 @@ export function ToolGatewayPage() {
                 effects {cap.effect.join(", ")} · intent {cap.requiresIntent ? "required" : "optional"} · dry-run{" "}
                 {cap.allowedInDryRun ? "allowed" : "blocked"} · autonomy {cap.autonomyEligible ? "eligible" : "not eligible"}
               </div>
+              <div className="mt-1 text-[11px] text-forge-mist/90">status reason: {capabilityStatusReason(cap.status, cap.adapterId)}</div>
               <div className="mt-1">{cap.description}</div>
+              <div className="mt-2 grid gap-2 md:grid-cols-[180px,1fr,auto]">
+                <select
+                  className="forge-input"
+                  value={statusDraftById[cap.id] ?? cap.status}
+                  onChange={(e) =>
+                    setStatusDraftById((prev) => ({
+                      ...prev,
+                      [cap.id]: e.target.value as ToolCapabilityStatus,
+                    }))
+                  }
+                >
+                  {CAPABILITY_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  className="forge-input"
+                  value={statusReasonById[cap.id] ?? ""}
+                  onChange={(e) =>
+                    setStatusReasonById((prev) => ({
+                      ...prev,
+                      [cap.id]: e.target.value,
+                    }))
+                  }
+                  placeholder="Transition reason (required for disabled/stubbed/deferred/deprecated)"
+                />
+                <GhostButton
+                  onClick={async () => {
+                    const nextStatus = statusDraftById[cap.id] ?? cap.status;
+                    const reason = (statusReasonById[cap.id] ?? "").trim();
+                    if (requiresStatusReason(nextStatus) && reason === "") {
+                      setErr(`Status ${nextStatus} for ${cap.id} requires an explicit reason.`);
+                      return;
+                    }
+                    setStatusUpdateBusy(cap.id);
+                    try {
+                      const res = await api.gateway.updateCapabilityStatus(cap.id, { status: nextStatus, reason: reason || undefined });
+                      setStatus(`Capability ${res.capability.id} status -> ${res.capability.status}`);
+                      await refresh();
+                    } catch (error) {
+                      setErr(error instanceof Error ? error.message : String(error));
+                    } finally {
+                      setStatusUpdateBusy(null);
+                    }
+                  }}
+                  disabled={statusUpdateBusy === cap.id}
+                >
+                  {statusUpdateBusy === cap.id ? "Applying..." : "Apply status"}
+                </GhostButton>
+              </div>
             </div>
           ))}
         </div>
@@ -346,6 +480,9 @@ export function ToolGatewayPage() {
               <div className="font-mono text-[11px] text-forge-ash">#{row.id} · {row.toolId} · {row.status} · {row.policyOutcome}</div>
               <div className="mt-1">{formatTime(row.createdAtMs)} · lane {row.laneId ?? "—"} · risk {row.riskClass} · {row.executionLevel}</div>
               <div className="mt-1">{row.deniedReason || row.correlationId}</div>
+              {row.status === "unsupported" ? (
+                <div className="mt-1 text-[11px] text-forge-mist/90">Unsupported reason: {row.deniedReason || "Capability is deferred or not implemented."}</div>
+              ) : null}
               {row.jobId ? <div className="mt-1 text-[11px]">Job: {row.jobId}</div> : null}
               {typeof row.approvalRequestId === "number" ? <div className="mt-1 text-[11px]">Approval request: {row.approvalRequestId}</div> : null}
             </button>
@@ -430,4 +567,44 @@ function summarizeOutput(value: unknown) {
   if (Array.isArray(value)) return `${value.length} item(s)`;
   if (typeof value === "object") return `${Object.keys(value as Record<string, unknown>).length} field(s)`;
   return "";
+}
+
+const CAPABILITY_STATUS_OPTIONS: ToolCapabilityStatus[] = ["active", "approval_only", "disabled", "stubbed", "deferred", "deprecated"];
+
+function requiresStatusReason(status: ToolCapabilityStatus) {
+  return status === "disabled" || status === "stubbed" || status === "deferred" || status === "deprecated";
+}
+
+function capabilityStatusReason(status?: ToolCapabilityStatus, adapterId?: string) {
+  switch (status) {
+    case "active":
+      return "Executable through the gateway when policy and scope checks pass.";
+    case "approval_only":
+      return "Execution is blocked until an explicit approval decision is granted.";
+    case "disabled":
+      return "Capability is registered but disabled by default policy.";
+    case "stubbed":
+      if (!adapterId) return "Capability is registered but implementation is incomplete and currently unsupported.";
+      return `Capability wiring is incomplete; adapter ${adapterId} is not considered executable in default policy.`;
+    case "deferred":
+      return "Capability is intentionally deferred and returns unsupported until promoted.";
+    case "deprecated":
+      return "Capability remains registered for taxonomy completeness but is intentionally non-executable.";
+    default:
+      return "Capability status is unknown; execution is denied until status is corrected.";
+  }
+}
+
+function GateLine(props: { prefix: "IF" | "AND"; label: string; pass: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-1 last:border-b-0 last:pb-0">
+      <div className="font-mono text-[11px] text-forge-mist">
+        <span className="mr-2 text-forge-mist/60">{props.prefix}</span>
+        {props.label}
+      </div>
+      <div className={props.pass ? "text-[11px] font-semibold text-forge-electric" : "text-[11px] font-semibold text-forge-emberSoft"}>
+        {props.pass ? "pass" : "fail"}
+      </div>
+    </div>
+  );
 }

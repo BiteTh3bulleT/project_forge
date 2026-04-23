@@ -610,7 +610,7 @@ func newDefaultAutonomyMaintenanceLoop(db *sql.DB, cfg config.Config, ev *events
 		},
 		NowMillis: nowFn,
 	})
-	bundle := autonomy.NewInMemoryBundle()
+	bundle := autonomy.NewSQLiteBundle(db)
 	for _, budget := range autonomy.DefaultBudgets(scope, nowFn(), "forge.autonomy") {
 		_ = bundle.Budgets.Create(context.Background(), budget)
 	}

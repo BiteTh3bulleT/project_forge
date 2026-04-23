@@ -1,6 +1,7 @@
 import { emit } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { availableMonitors, getAllWindows, getCurrentWindow, type Monitor, type Window } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 
 export const WORKSPACE_LAYOUT_EVENT = "forge://workspace-layouts-updated";
 export const WORKSPACE_NAVIGATE_EVENT = "forge://workspace-navigate";
@@ -21,6 +22,38 @@ export type RuntimeWindowSnapshot = {
   isFocused: boolean;
   monitorId: string | null;
   bounds: { x: number; y: number; width: number; height: number } | null;
+};
+
+export type DesktopSystemDiagnostics = {
+  hostName: string;
+  osName: string;
+  osVersion: string;
+  kernelVersion?: string | null;
+  architecture?: string | null;
+  uptimeSeconds: number;
+  cpuCount: number;
+  totalMemoryBytes: number;
+  availableMemoryBytes: number;
+  usedMemoryBytes: number;
+  totalSwapBytes: number;
+  availableSwapBytes: number;
+  usedSwapBytes: number;
+  process?: {
+    pid: number;
+    name: string;
+    memoryBytes: number;
+    virtualMemoryBytes: number;
+    cpuUsagePercent: number;
+    runTimeSeconds: number;
+  } | null;
+  disks?: Array<{
+    name: string;
+    mountPoint: string;
+    fileSystem: string;
+    totalBytes: number;
+    availableBytes: number;
+    usedBytes: number;
+  }> | null;
 };
 
 export function isTauriDesktop() {
@@ -176,6 +209,52 @@ export function buildWindowUrl(route: string) {
   return `${baseWindowUrl()}#${route}`;
 }
 
+function parseDiagnosticsPayload(raw: unknown): DesktopSystemDiagnostics | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Partial<DesktopSystemDiagnostics>;
+  const hostName = (value as Record<string, unknown>).hostName ?? (raw as Record<string, unknown>).host_name;
+  const osName = (value as Record<string, unknown>).osName ?? (raw as Record<string, unknown>).os_name;
+  const osVersion = (value as Record<string, unknown>).osVersion ?? (raw as Record<string, unknown>).os_version;
+  const kernelVersion = (value as Record<string, unknown>).kernelVersion ?? (raw as Record<string, unknown>).kernel_version;
+  const architecture = (value as Record<string, unknown>).architecture ?? (raw as Record<string, unknown>).architecture;
+  if (typeof hostName !== "string" || typeof osName !== "string" || typeof osVersion !== "string") {
+    return null;
+  }
+  return {
+    hostName: String(hostName),
+    osName: String(osName),
+    osVersion: String(osVersion),
+    kernelVersion: typeof kernelVersion === "string" ? kernelVersion : null,
+    architecture: typeof architecture === "string" ? architecture : null,
+    uptimeSeconds: Number((value as Record<string, unknown>).uptimeSeconds ?? (raw as Record<string, unknown>).uptime_seconds) || 0,
+    cpuCount: Number((value as Record<string, unknown>).cpuCount ?? (raw as Record<string, unknown>).cpu_count) || 0,
+    totalMemoryBytes: Number((value as Record<string, unknown>).totalMemoryBytes ?? (raw as Record<string, unknown>).total_memory_bytes) || 0,
+    availableMemoryBytes: Number((value as Record<string, unknown>).availableMemoryBytes ?? (raw as Record<string, unknown>).available_memory_bytes) || 0,
+    usedMemoryBytes: Number((value as Record<string, unknown>).usedMemoryBytes ?? (raw as Record<string, unknown>).used_memory_bytes) || 0,
+    totalSwapBytes: Number((value as Record<string, unknown>).totalSwapBytes ?? (raw as Record<string, unknown>).total_swap_bytes) || 0,
+    availableSwapBytes: Number((value as Record<string, unknown>).availableSwapBytes ?? (raw as Record<string, unknown>).available_swap_bytes) || 0,
+    usedSwapBytes: Number((value as Record<string, unknown>).usedSwapBytes ?? (raw as Record<string, unknown>).used_swap_bytes) || 0,
+    process: value.process && typeof value.process === "object" ? {
+      pid: Number((value.process as { pid?: unknown }).pid || (value.process as { pid?: unknown })?.["pid"] || (value.process as { process_id?: unknown })?.["process_id"]) || 0,
+      name: String((value.process as { name?: unknown }).name || ""),
+      memoryBytes: Number((value.process as { memoryBytes?: unknown }).memoryBytes || (value.process as { memory_bytes?: unknown })?.["memory_bytes"]) || 0,
+      virtualMemoryBytes: Number((value.process as { virtualMemoryBytes?: unknown }).virtualMemoryBytes || (value.process as { virtual_memory_bytes?: unknown })?.["virtual_memory_bytes"]) || 0,
+      cpuUsagePercent: Number((value.process as { cpuUsagePercent?: unknown }).cpuUsagePercent || (value.process as { cpu_usage_percent?: unknown })?.["cpu_usage_percent"]) || 0,
+      runTimeSeconds: Number((value.process as { runTimeSeconds?: unknown }).runTimeSeconds || (value.process as { run_time_seconds?: unknown })?.["run_time_seconds"]) || 0,
+    } : null,
+    disks: Array.isArray(value.disks)
+      ? value.disks.map((disk) => ({
+          name: String((disk as { name?: unknown })?.name || ""),
+          mountPoint: String((disk as { mountPoint?: unknown })?.mountPoint || ""),
+          fileSystem: String((disk as { fileSystem?: unknown })?.fileSystem || ""),
+          totalBytes: Number((disk as { totalBytes?: unknown }).totalBytes || (disk as { total_bytes?: unknown })?.["total_bytes"]) || 0,
+          availableBytes: Number((disk as { availableBytes?: unknown }).availableBytes || (disk as { available_bytes?: unknown })?.["available_bytes"]) || 0,
+          usedBytes: Number((disk as { usedBytes?: unknown }).usedBytes || (disk as { used_bytes?: unknown })?.["used_bytes"]) || 0,
+      }))
+      : null,
+  };
+}
+
 export async function createShellWindow(options: {
   label: string;
   route: string;
@@ -228,4 +307,14 @@ export async function listRuntimeWindows(): Promise<Window[]> {
 export async function emitWorkspaceSync(origin: string) {
   if (!isTauriDesktop()) return;
   await emit(WORKSPACE_LAYOUT_EVENT, { origin, atMs: Date.now() });
+}
+
+export async function getDesktopSystemDiagnostics(): Promise<DesktopSystemDiagnostics | null> {
+  if (!isTauriDesktop()) return null;
+  try {
+    const diagnostics = await invoke("read_system_diagnostics");
+    return parseDiagnosticsPayload(diagnostics);
+  } catch {
+    return null;
+  }
 }

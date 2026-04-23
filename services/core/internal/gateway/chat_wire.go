@@ -130,6 +130,9 @@ func chatToolDescription(ti ToolInfo) string {
 	b.WriteString("\n\nInvoke with JSON arguments { \"path\"?: string, \"paths\"?: string[], \"input\"?: object }.")
 	b.WriteString(" Put tool-specific fields inside \"input\" (e.g. {\"command\":\"go version\"} for proc.run, {\"contents\":\"...\"} for fs.write).")
 	b.WriteString(" Paths are workspace-relative unless absolute and still inside the workspace.")
+	if ti.ID == "desktop.open" {
+		b.WriteString(" For desktop.open use one of: path/paths for files, input.url for URLs, or input.application for desktop apps (e.g. {\"input\":{\"application\":\"konsole\"}}).")
+	}
 	return b.String()
 }
 

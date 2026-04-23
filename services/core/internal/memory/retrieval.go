@@ -125,7 +125,11 @@ INSERT INTO memory_usefulness_events(
 	if err != nil {
 		return err
 	}
-	return s.refreshObservationUsefulness(ctx, req.ObservationID)
+	if err := s.refreshObservationUsefulness(ctx, req.ObservationID); err != nil {
+		return err
+	}
+	_ = s.TouchVSAReliabilityFromUsefulness(ctx, req.ObservationID, signal, weight)
+	return nil
 }
 
 func (s *Service) refreshObservationUsefulness(ctx context.Context, observationID int64) error {

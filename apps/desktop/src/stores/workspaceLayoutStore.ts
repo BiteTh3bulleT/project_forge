@@ -16,9 +16,17 @@ import {
   type MonitorSnapshot,
 } from "../lib/desktop";
 
-const STORAGE_KEY = "forge.workspace.layouts.v1";
+const STORAGE_KEY = "forge.workspace.layouts.v2";
+const STORAGE_KEY_LEGACY = "forge.workspace.layouts.v1";
 
 type WindowRole = "chat" | "workbench" | "canvas" | "dossier" | "ops" | "review" | "settings" | "mixed";
+
+type MonitorDesignation = {
+  mainMonitorId: string | null;
+  customLabels: Record<string, string>;
+};
+
+type MonitorRoleMap = Record<string, string>;
 
 type LayoutWindowRecord = {
   id: string;
@@ -29,6 +37,7 @@ type LayoutWindowRecord = {
   activeRoute: string;
   targetMonitorId: string | null;
   targetMonitorOrdinal: number;
+  targetMonitorRole: string | null;
   bounds: { x: number; y: number; width: number; height: number } | null;
   fallbackReason: string | null;
 };
@@ -56,7 +65,8 @@ type RuntimeWindowRecord = {
 };
 
 type LayoutDoc = {
-  version: 1;
+  version: 2;
+  monitorDesignations: MonitorDesignation;
   activeLayoutId: string | null;
   selectedLayoutId: string | null;
   layouts: LayoutPreset[];
@@ -71,6 +81,8 @@ type WorkspaceLayoutState = {
   ready: boolean;
   supported: boolean;
   currentWindowLabel: string;
+  monitorDesignations: MonitorDesignation;
+  monitorRoleMap: MonitorRoleMap;
   activeLayoutId: string | null;
   selectedLayoutId: string | null;
   layouts: LayoutPreset[];
@@ -80,6 +92,8 @@ type WorkspaceLayoutState = {
   hydrate: (pathname: string) => Promise<void>;
   refreshEnvironment: () => Promise<void>;
   syncCurrentRoute: (pathname: string) => Promise<void>;
+  setMainMonitor: (monitorId: string) => void;
+  setMonitorRoleLabel: (monitorId: string, label: string) => void;
   createLayout: (name: string) => void;
   selectLayout: (layoutId: string) => void;
   renameLayout: (layoutId: string, name: string) => void;
@@ -95,6 +109,15 @@ type WorkspaceLayoutState = {
 
 function nowMs() {
   return Date.now();
+}
+
+function parseMonitorRole(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  if (raw === "main") return "main";
+  const secondary = /^secondary_(\d+)$/.exec(raw);
+  if (!secondary) return null;
+  const n = Number(secondary[1]);
+  return Number.isFinite(n) && n > 0 ? `secondary_${n}` : null;
 }
 
 function uid(prefix: string) {
@@ -133,8 +156,109 @@ function defaultWindowForLayout(input: {
     activeRoute: input.activeRoute ?? routes[0] ?? "/chat",
     targetMonitorId: null,
     targetMonitorOrdinal: input.targetMonitorOrdinal,
+    targetMonitorRole: null,
     bounds: null,
     fallbackReason: null,
+  };
+}
+
+function normalizeMonitorDesignations(raw: unknown): MonitorDesignation {
+  if (!raw || typeof raw !== "object") {
+    return { mainMonitorId: null, customLabels: {} };
+  }
+  const input = raw as { mainMonitorId?: unknown; customLabels?: unknown };
+  const rawMainMonitorId = typeof input.mainMonitorId === "string" ? input.mainMonitorId : null;
+  const customLabels: Record<string, string> = {};
+  if (typeof input.customLabels === "object" && input.customLabels !== null) {
+    for (const [monitorId, value] of Object.entries(input.customLabels)) {
+      if (typeof monitorId !== "string") continue;
+      if (typeof value === "string" && value.trim()) {
+        customLabels[monitorId] = value.trim();
+      }
+    }
+  }
+  return { mainMonitorId: rawMainMonitorId, customLabels };
+}
+
+function canonicalMonitorDesignations(monitors: MonitorSnapshot[], incoming: MonitorDesignation) {
+  const monitorIds = new Set(monitors.map((monitor) => monitor.id));
+  const keptLabels: Record<string, string> = {};
+  for (const [monitorId, label] of Object.entries(incoming.customLabels)) {
+    if (monitorIds.has(monitorId) && label.trim()) {
+      keptLabels[monitorId] = label.trim();
+    }
+  }
+  const preferredMain = incoming.mainMonitorId;
+  const mainMonitorId = preferredMain && monitorIds.has(preferredMain) ? preferredMain : monitors[0]?.id ?? null;
+  return { mainMonitorId, customLabels: keptLabels };
+}
+
+function buildMonitorRoleCatalog(monitors: MonitorSnapshot[], designations: MonitorDesignation) {
+  const sortedMonitors = [...monitors].sort((a, b) => a.ordinal - b.ordinal);
+  const canonical = canonicalMonitorDesignations(sortedMonitors, designations);
+  const roleByMonitorId: MonitorRoleMap = {};
+  const monitorByRole: Record<string, MonitorSnapshot> = {};
+
+  let secondary = 1;
+  for (const monitor of sortedMonitors) {
+    const role = monitor.id === canonical.mainMonitorId ? "main" : `secondary_${secondary++}`;
+    roleByMonitorId[monitor.id] = role;
+    monitorByRole[role] = monitor;
+  }
+  return { roleByMonitorId, monitorByRole, canonical };
+}
+
+function roleToMonitor(monitors: MonitorSnapshot[], designations: MonitorDesignation, role: string | null) {
+  if (!role) return null;
+  const normalizedRole = parseMonitorRole(role);
+  if (!normalizedRole) return null;
+  const catalog = buildMonitorRoleCatalog(monitors, designations);
+  return catalog.monitorByRole[normalizedRole] ?? null;
+}
+
+function monitorStateFromDesignations(monitors: MonitorSnapshot[], designations: MonitorDesignation) {
+  const catalog = buildMonitorRoleCatalog(monitors, designations);
+  return {
+    monitorDesignations: catalog.canonical,
+    monitorRoleMap: catalog.roleByMonitorId,
+  };
+}
+
+function ensureDocMonitors(doc: LayoutDoc, monitors: MonitorSnapshot[]) {
+  const state = monitorStateFromDesignations(monitors, doc.monitorDesignations);
+  doc.monitorDesignations = state.monitorDesignations;
+  return state;
+}
+
+function deriveMonitorState(monitors: MonitorSnapshot[], doc: LayoutDoc) {
+  const state = ensureDocMonitors(doc, monitors);
+  return {
+    monitorDesignations: state.monitorDesignations,
+    monitorRoleMap: state.monitorRoleMap,
+  };
+}
+
+function resolveWindowPlacement(windowRecord: LayoutWindowRecord, monitors: MonitorSnapshot[], designations: MonitorDesignation) {
+  const roleMatch = roleToMonitor(monitors, designations, windowRecord.targetMonitorRole);
+  const preferred = windowRecord.targetMonitorId ? monitors.find((monitor) => monitor.id === windowRecord.targetMonitorId) : null;
+  const ordinal = monitors[windowRecord.targetMonitorOrdinal] ?? null;
+  const chosen = roleMatch ?? preferred ?? ordinal ?? monitors[0] ?? null;
+  const fallbackReason = !chosen
+    ? "No displays available."
+    : windowRecord.targetMonitorRole && !roleMatch
+      ? `Monitor role ${windowRecord.targetMonitorRole} unavailable for ${windowRecord.title}; placed on ${chosen.name ?? `display ${chosen.ordinal + 1}`}.`
+    : preferred
+      ? null
+      : windowRecord.targetMonitorId
+        ? `Target display unavailable for ${windowRecord.title}; placed on ${chosen.name ?? `display ${chosen.ordinal + 1}`}.`
+        : monitors[windowRecord.targetMonitorOrdinal] == null && monitors.length > 0
+          ? `Expected display ${windowRecord.targetMonitorOrdinal + 1} unavailable; placed on ${chosen.name ?? `display ${chosen.ordinal + 1}`}.`
+          : null;
+
+  return {
+    monitor: chosen,
+    bounds: windowRecord.bounds ?? (chosen ? logicalBoundsForMonitor(chosen, windowRecord.targetMonitorOrdinal) : { x: 60, y: 60, width: 1200, height: 780 }),
+    fallbackReason,
   };
 }
 
@@ -190,7 +314,8 @@ function seedLayouts(): LayoutPreset[] {
 
 function emptyDoc(): LayoutDoc {
   return {
-    version: 1,
+    version: 2,
+    monitorDesignations: { mainMonitorId: null, customLabels: {} },
     activeLayoutId: "build",
     selectedLayoutId: "build",
     layouts: seedLayouts(),
@@ -202,21 +327,89 @@ function emptyDoc(): LayoutDoc {
   };
 }
 
-function loadDoc(): LayoutDoc {
+function normalizeLayoutDoc(raw: LayoutDoc | null, monitors: MonitorSnapshot[] = []) {
+  const doc = {
+    ...emptyDoc(),
+    ...(raw ?? {}),
+    version: 2,
+  } as LayoutDoc;
+
+  if (!Array.isArray(doc.layouts) || doc.layouts.length === 0) {
+    doc.layouts = seedLayouts();
+  }
+  doc.layouts = doc.layouts.map((layout) => {
+    const source = layout as LayoutPreset & { windows?: unknown };
+    return {
+      id: typeof source.id === "string" && source.id ? source.id : uid("layout"),
+      name: typeof source.name === "string" && source.name ? source.name : "Recovered Layout",
+      createdAtMs: typeof source.createdAtMs === "number" && Number.isFinite(source.createdAtMs) ? source.createdAtMs : nowMs(),
+      updatedAtMs: typeof source.updatedAtMs === "number" && Number.isFinite(source.updatedAtMs) ? source.updatedAtMs : nowMs(),
+      lastActivatedAtMs:
+        typeof source.lastActivatedAtMs === "number" && Number.isFinite(source.lastActivatedAtMs) ? source.lastActivatedAtMs : null,
+      windows: Array.isArray(source.windows) && source.windows.length > 0
+        ? source.windows.map((windowRecord) => {
+            const windowSource = windowRecord as LayoutWindowRecord & { fallbackReason?: unknown; assignedRoutes?: unknown; targetMonitorRole?: unknown };
+            return {
+              id: typeof windowSource.id === "string" && windowSource.id ? windowSource.id : uid("window"),
+              runtimeLabel: typeof windowSource.runtimeLabel === "string" && windowSource.runtimeLabel ? windowSource.runtimeLabel : uid("window"),
+              title: typeof windowSource.title === "string" && windowSource.title ? windowSource.title : "FORGE Window",
+              role: windowSource.role === "chat" || windowSource.role === "workbench" || windowSource.role === "canvas" || windowSource.role === "dossier" || windowSource.role === "ops" ||
+                windowSource.role === "review" || windowSource.role === "settings" || windowSource.role === "mixed"
+                ? windowSource.role
+                : "mixed",
+              assignedRoutes: sanitizeRoutes(
+                Array.isArray(windowSource.assignedRoutes)
+                  ? (windowSource.assignedRoutes.filter((route) => typeof route === "string") as string[])
+                  : defaultRoutesForRole(windowSource.role === "chat" || windowSource.role === "workbench" || windowSource.role === "canvas" || windowSource.role === "dossier" || windowSource.role === "ops" || windowSource.role === "review" || windowSource.role === "settings" || windowSource.role === "mixed" ? windowSource.role : "mixed"),
+              ),
+              activeRoute: typeof windowSource.activeRoute === "string" && windowSource.activeRoute ? windowSource.activeRoute : "/chat",
+              targetMonitorId: typeof windowSource.targetMonitorId === "string" && windowSource.targetMonitorId.length > 0 ? windowSource.targetMonitorId : null,
+              targetMonitorOrdinal: typeof windowSource.targetMonitorOrdinal === "number" && Number.isFinite(windowSource.targetMonitorOrdinal) ? windowSource.targetMonitorOrdinal : 0,
+              targetMonitorRole: parseMonitorRole(windowSource.targetMonitorRole),
+              bounds:
+                windowSource.bounds &&
+                typeof windowSource.bounds === "object" &&
+                Number.isFinite(windowSource.bounds.x) &&
+                Number.isFinite(windowSource.bounds.y) &&
+                Number.isFinite(windowSource.bounds.width) &&
+                Number.isFinite(windowSource.bounds.height)
+                  ? windowSource.bounds
+                  : null,
+              fallbackReason: typeof windowSource.fallbackReason === "string" && windowSource.fallbackReason.length > 0 ? windowSource.fallbackReason : null,
+            };
+          })
+        : [defaultWindowForLayout({ runtimeLabel: "main", title: "FORGE Window", role: "mixed", targetMonitorOrdinal: 0, activeRoute: "/chat" })],
+    };
+  });
+
+  doc.monitorDesignations = normalizeMonitorDesignations(doc.monitorDesignations);
+  ensureDocMonitors(doc, monitors);
+  doc.runtimeWindows = Array.isArray(doc.runtimeWindows) ? doc.runtimeWindows : [];
+  doc.lastKnownMonitors = Array.isArray(doc.lastKnownMonitors) ? doc.lastKnownMonitors : [];
+  doc.lastMonitorSignature = typeof doc.lastMonitorSignature === "string" ? doc.lastMonitorSignature : "";
+  doc.fallbackNotice = typeof doc.fallbackNotice === "string" ? doc.fallbackNotice : null;
+  doc.lastRestoreAtMs =
+    typeof doc.lastRestoreAtMs === "number" && Number.isFinite(doc.lastRestoreAtMs) ? doc.lastRestoreAtMs : null;
+  return ensureActiveLayout(doc);
+}
+
+function parseStoredDoc(raw: string | null): LayoutDoc | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as LayoutDoc;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function loadDoc(monitors: MonitorSnapshot[] = []): LayoutDoc {
   if (typeof window === "undefined") return emptyDoc();
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return emptyDoc();
-    const parsed = JSON.parse(raw) as LayoutDoc;
-    if (!Array.isArray(parsed.layouts) || parsed.layouts.length === 0) return emptyDoc();
-    const next: LayoutDoc = {
-      ...emptyDoc(),
-      ...parsed,
-      layouts: parsed.layouts,
-      runtimeWindows: Array.isArray(parsed.runtimeWindows) ? parsed.runtimeWindows : [],
-      lastKnownMonitors: Array.isArray(parsed.lastKnownMonitors) ? parsed.lastKnownMonitors : [],
-    };
-    return ensureActiveLayout(next);
+    const latest = parseStoredDoc(window.localStorage.getItem(STORAGE_KEY));
+    const legacy = latest ? null : parseStoredDoc(window.localStorage.getItem(STORAGE_KEY_LEGACY));
+    return normalizeLayoutDoc(latest ?? legacy, monitors);
   } catch {
     return emptyDoc();
   }
@@ -330,26 +523,6 @@ function logicalBoundsForMonitor(monitor: MonitorSnapshot, index: number) {
   return { x, y, width: Math.min(width, workWidth), height: Math.min(height, workHeight) };
 }
 
-function resolveWindowPlacement(windowRecord: LayoutWindowRecord, monitors: MonitorSnapshot[]) {
-  const preferred = monitors.find((monitor) => monitor.id === windowRecord.targetMonitorId);
-  const ordinal = monitors[windowRecord.targetMonitorOrdinal] ?? null;
-  const chosen = preferred ?? ordinal ?? monitors[0] ?? null;
-  const fallbackReason = !chosen
-    ? "No displays available."
-    : preferred
-      ? null
-      : windowRecord.targetMonitorId
-        ? `Target display unavailable for ${windowRecord.title}; placed on ${chosen.name ?? `display ${chosen.ordinal + 1}`}.`
-        : monitors[windowRecord.targetMonitorOrdinal] == null && monitors.length > 0
-          ? `Expected display ${windowRecord.targetMonitorOrdinal + 1} unavailable; placed on ${chosen.name ?? `display ${chosen.ordinal + 1}`}.`
-          : null;
-  return {
-    monitor: chosen,
-    bounds: windowRecord.bounds ?? (chosen ? logicalBoundsForMonitor(chosen, windowRecord.targetMonitorOrdinal) : { x: 60, y: 60, width: 1200, height: 780 }),
-    fallbackReason,
-  };
-}
-
 function mergeRuntimeWindow(doc: LayoutDoc, next: RuntimeWindowRecord) {
   const runtimeWindows = doc.runtimeWindows.filter((item) => item.runtimeLabel !== next.runtimeLabel);
   runtimeWindows.push(next);
@@ -368,10 +541,10 @@ async function navigateWindow(runtimeLabel: string, route: string) {
   await target.emit(WORKSPACE_NAVIGATE_EVENT, { route });
 }
 
-async function syncCurrentRuntimeWindow(pathname: string) {
+async function syncCurrentRuntimeWindow(pathname: string, monitors: MonitorSnapshot[] = []) {
   const currentLabel = await getCurrentWindowLabel();
   const snapshot = await getCurrentWindowSnapshot();
-  const doc = loadDoc();
+  const doc = loadDoc(monitors);
   const activeLayout = findLayout(doc, doc.activeLayoutId);
   const layoutWindow = activeLayout?.windows.find((item) => item.runtimeLabel === currentLabel) ?? null;
   const next: RuntimeWindowRecord = {
@@ -399,23 +572,25 @@ async function syncCurrentRuntimeWindow(pathname: string) {
   return doc;
 }
 
-async function applyLayout(layoutId: string, markRestore = false) {
-  if (!isTauriDesktop()) return loadDoc();
-  const doc = loadDoc();
+async function applyLayout(layoutId: string, markRestore = false, monitors: MonitorSnapshot[] = []) {
+  if (!isTauriDesktop()) return loadDoc(monitors);
+  const resolvedMonitors = monitors.length > 0 ? monitors : await listAvailableMonitors();
+  const doc = loadDoc(resolvedMonitors);
   const layout = findLayout(doc, layoutId);
   if (!layout) return doc;
   const currentLabel = await getCurrentWindowLabel();
-  const monitors = await listAvailableMonitors();
+  const resolvedMonitorState = ensureDocMonitors(doc, resolvedMonitors);
   const fallbacks: string[] = [];
   doc.activeLayoutId = layoutId;
   doc.selectedLayoutId = layoutId;
-  doc.lastKnownMonitors = monitors;
-  doc.lastMonitorSignature = monitorSignature(monitors);
+  doc.lastKnownMonitors = resolvedMonitors;
+  doc.lastMonitorSignature = monitorSignature(resolvedMonitors);
+  doc.monitorDesignations = resolvedMonitorState.monitorDesignations;
   doc.lastRestoreAtMs = markRestore ? nowMs() : doc.lastRestoreAtMs;
 
   for (const windowRecord of layout.windows) {
     if (!windowRecord.runtimeLabel) continue;
-    const resolved = resolveWindowPlacement(windowRecord, monitors);
+    const resolved = resolveWindowPlacement(windowRecord, resolvedMonitors, doc.monitorDesignations);
     windowRecord.fallbackReason = resolved.fallbackReason;
     if (resolved.fallbackReason) fallbacks.push(resolved.fallbackReason);
 
@@ -479,6 +654,8 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
   ready: false,
   supported: false,
   currentWindowLabel: "main",
+  monitorDesignations: { mainMonitorId: null, customLabels: {} },
+  monitorRoleMap: {},
   activeLayoutId: null,
   selectedLayoutId: null,
   layouts: [],
@@ -488,14 +665,16 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
   hydrate: async (pathname) => {
     const supported = isTauriDesktop();
     const currentWindowLabel = await getCurrentWindowLabel();
-    let doc = loadDoc();
+    const monitors = supported ? await listAvailableMonitors() : [];
+    let doc = loadDoc(monitors);
     doc = ensureActiveLayout(doc);
     if (supported) {
-      doc = await syncCurrentRuntimeWindow(pathname);
+      doc = await syncCurrentRuntimeWindow(pathname, monitors);
       if (currentWindowLabel === "main" && doc.activeLayoutId) {
-        doc = await applyLayout(doc.activeLayoutId, true);
+        doc = await applyLayout(doc.activeLayoutId, true, monitors);
       }
     }
+    const monitorState = deriveMonitorState(monitors, doc);
     set({
       ready: true,
       supported,
@@ -504,28 +683,43 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
       selectedLayoutId: doc.selectedLayoutId,
       layouts: clone(doc.layouts),
       runtimeWindows: clone(doc.runtimeWindows),
-      monitors: clone(doc.lastKnownMonitors),
+      monitors: clone(monitors),
+      monitorDesignations: clone(monitorState.monitorDesignations),
+      monitorRoleMap: monitorState.monitorRoleMap,
       fallbackNotice: doc.fallbackNotice,
     });
   },
   refreshEnvironment: async () => {
     const supported = get().supported;
     if (!supported) return;
-    const currentWindowLabel = get().currentWindowLabel;
+  const currentWindowLabel = get().currentWindowLabel;
     const monitors = await listAvailableMonitors();
     const signature = monitorSignature(monitors);
-    let doc = loadDoc();
+    const doc = loadDoc(monitors);
     const changed = doc.lastMonitorSignature !== signature;
     doc.lastKnownMonitors = monitors;
     doc.lastMonitorSignature = signature;
     persistDoc(doc);
     if (changed && currentWindowLabel === "main" && doc.activeLayoutId) {
-      doc = await applyLayout(doc.activeLayoutId, false);
+      const refreshed = await applyLayout(doc.activeLayoutId, false, monitors);
+      doc.layouts = refreshed.layouts;
+      doc.runtimeWindows = refreshed.runtimeWindows;
+      doc.fallbackNotice = refreshed.fallbackNotice;
+      doc.lastRestoreAtMs = refreshed.lastRestoreAtMs;
+      doc.monitorDesignations = refreshed.monitorDesignations;
     } else {
-      doc = await syncCurrentRuntimeWindow(get().runtimeWindows.find((item) => item.runtimeLabel === currentWindowLabel)?.currentRoute ?? "/chat");
+      const route = doc.runtimeWindows.find((item) => item.runtimeLabel === currentWindowLabel)?.currentRoute ?? "/chat";
+      const refreshed = await syncCurrentRuntimeWindow(route, monitors);
+      doc.layouts = refreshed.layouts;
+      doc.runtimeWindows = refreshed.runtimeWindows;
+      doc.fallbackNotice = refreshed.fallbackNotice;
+      doc.lastRestoreAtMs = refreshed.lastRestoreAtMs;
     }
+    const monitorState = deriveMonitorState(monitors, doc);
     set({
       layouts: clone(doc.layouts),
+      monitorDesignations: monitorState.monitorDesignations,
+      monitorRoleMap: monitorState.monitorRoleMap,
       monitors: clone(doc.lastKnownMonitors),
       runtimeWindows: clone(doc.runtimeWindows),
       fallbackNotice: doc.fallbackNotice,
@@ -534,17 +728,20 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
     });
   },
   syncCurrentRoute: async (pathname) => {
-    const doc = await syncCurrentRuntimeWindow(pathname);
+    const doc = await syncCurrentRuntimeWindow(pathname, get().monitors);
+    const monitorState = deriveMonitorState(get().monitors, doc);
     set({
       activeLayoutId: doc.activeLayoutId,
       selectedLayoutId: doc.selectedLayoutId,
       layouts: clone(doc.layouts),
+      monitorDesignations: monitorState.monitorDesignations,
+      monitorRoleMap: monitorState.monitorRoleMap,
       runtimeWindows: clone(doc.runtimeWindows),
       fallbackNotice: doc.fallbackNotice,
     });
   },
   createLayout: (name) => {
-    const doc = loadDoc();
+    const doc = loadDoc(get().monitors);
     const label = name.trim() || "New Layout";
     const layoutId = uid("layout");
     const createdAtMs = nowMs();
@@ -561,13 +758,13 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
     set({ layouts: clone(doc.layouts), selectedLayoutId: layoutId });
   },
   selectLayout: (layoutId) => {
-    const doc = loadDoc();
+    const doc = loadDoc(get().monitors);
     doc.selectedLayoutId = layoutId;
     persistDoc(doc);
     set({ selectedLayoutId: layoutId });
   },
   renameLayout: (layoutId, name) => {
-    const doc = loadDoc();
+    const doc = loadDoc(get().monitors);
     const layout = findLayout(doc, layoutId);
     if (!layout) return;
     layout.name = name.trim() || layout.name;
@@ -576,7 +773,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
     set({ layouts: clone(doc.layouts) });
   },
   duplicateLayout: (layoutId) => {
-    const doc = loadDoc();
+    const doc = loadDoc(get().monitors);
     const layout = findLayout(doc, layoutId);
     if (!layout) return;
     const createdAtMs = nowMs();
@@ -597,7 +794,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
     set({ layouts: clone(doc.layouts), selectedLayoutId: cloneLayout.id });
   },
   deleteLayout: async (layoutId) => {
-    const doc = loadDoc();
+    const doc = loadDoc(get().monitors);
     if (doc.layouts.length <= 1) return;
     doc.layouts = doc.layouts.filter((layout) => layout.id !== layoutId);
     if (doc.activeLayoutId === layoutId) {
@@ -608,7 +805,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
     }
     persistDoc(doc);
     if (doc.activeLayoutId) {
-      await applyLayout(doc.activeLayoutId);
+      await applyLayout(doc.activeLayoutId, false, get().monitors);
     }
     set({
       layouts: clone(doc.layouts),
@@ -617,7 +814,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
     });
   },
   addLayoutWindow: (layoutId) => {
-    const doc = loadDoc();
+    const doc = loadDoc(get().monitors);
     const layout = findLayout(doc, layoutId);
     if (!layout) return;
     const nextIndex = layout.windows.length;
@@ -627,7 +824,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
     set({ layouts: clone(doc.layouts) });
   },
   removeLayoutWindow: (layoutId, windowId) => {
-    const doc = loadDoc();
+    const doc = loadDoc(get().monitors);
     const layout = findLayout(doc, layoutId);
     if (!layout) return;
     if (layout.windows.length <= 1) return;
@@ -639,7 +836,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
     set({ layouts: clone(doc.layouts) });
   },
   updateLayoutWindow: (layoutId, windowId, patch) => {
-    const doc = loadDoc();
+    const doc = loadDoc(get().monitors);
     const layout = findLayout(doc, layoutId);
     if (!layout) return;
     const target = layout.windows.find((item) => item.id === windowId);
@@ -656,22 +853,57 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
       target.runtimeLabel = "main";
     }
     layout.updatedAtMs = nowMs();
+    const monitorState = deriveMonitorState(get().monitors, doc);
     persistDoc(doc);
-    set({ layouts: clone(doc.layouts) });
+    set({ layouts: clone(doc.layouts), monitorDesignations: monitorState.monitorDesignations, monitorRoleMap: monitorState.monitorRoleMap });
+  },
+  setMainMonitor: (monitorId) => {
+    const currentMonitors = get().monitors;
+    const doc = loadDoc(currentMonitors);
+    const hasMonitor = currentMonitors.some((monitor) => monitor.id === monitorId);
+    if (!hasMonitor) return;
+    doc.monitorDesignations.mainMonitorId = monitorId;
+    doc.monitorDesignations.customLabels = normalizeMonitorDesignations(doc.monitorDesignations).customLabels;
+    const next = monitorStateFromDesignations(currentMonitors, doc.monitorDesignations);
+    doc.monitorDesignations = next.monitorDesignations;
+    persistDoc(doc);
+    set({ monitorDesignations: next.monitorDesignations, monitorRoleMap: next.monitorRoleMap });
+    const activeLayoutId = doc.activeLayoutId;
+    if (activeLayoutId) {
+      void applyLayout(activeLayoutId, false, currentMonitors).catch(() => undefined);
+    }
+  },
+  setMonitorRoleLabel: (monitorId, label) => {
+    const currentMonitors = get().monitors;
+    const doc = loadDoc(currentMonitors);
+    const cleanLabel = label.trim();
+    if (!currentMonitors.some((monitor) => monitor.id === monitorId)) return;
+    if (cleanLabel.length === 0) {
+      delete doc.monitorDesignations.customLabels[monitorId];
+    } else {
+      doc.monitorDesignations.customLabels[monitorId] = cleanLabel;
+    }
+    const next = monitorStateFromDesignations(currentMonitors, doc.monitorDesignations);
+    doc.monitorDesignations = next.monitorDesignations;
+    persistDoc(doc);
+    set({ monitorDesignations: next.monitorDesignations, monitorRoleMap: next.monitorRoleMap });
   },
   activateLayout: async (layoutId) => {
-    const doc = await applyLayout(layoutId);
+    const doc = await applyLayout(layoutId, false, get().monitors);
+    const monitorState = deriveMonitorState(get().monitors, doc);
     set({
       activeLayoutId: doc.activeLayoutId,
       selectedLayoutId: doc.selectedLayoutId,
       layouts: clone(doc.layouts),
+      monitorDesignations: monitorState.monitorDesignations,
+      monitorRoleMap: monitorState.monitorRoleMap,
       runtimeWindows: clone(doc.runtimeWindows),
       monitors: clone(doc.lastKnownMonitors),
       fallbackNotice: doc.fallbackNotice,
     });
   },
   captureRuntimeIntoLayout: async (layoutId) => {
-    const doc = loadDoc();
+    const doc = loadDoc(get().monitors);
     const layout = findLayout(doc, layoutId);
     if (!layout) return;
     for (const runtimeWindow of doc.runtimeWindows) {
@@ -682,16 +914,19 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) =
       layoutWindow.targetMonitorId = runtimeWindow.monitorId;
       const matchedMonitor = doc.lastKnownMonitors.find((monitor) => monitor.id === runtimeWindow.monitorId);
       layoutWindow.targetMonitorOrdinal = matchedMonitor?.ordinal ?? layoutWindow.targetMonitorOrdinal;
+      layoutWindow.targetMonitorRole = matchedMonitor ? (monitorStateFromDesignations(doc.lastKnownMonitors, doc.monitorDesignations).monitorRoleMap[matchedMonitor.id] ?? null) : layoutWindow.targetMonitorRole;
       layoutWindow.title = runtimeWindow.title;
     }
     layout.updatedAtMs = nowMs();
+    const monitorState = deriveMonitorState(get().monitors, doc);
     persistDoc(doc);
-    set({ layouts: clone(doc.layouts) });
+    set({ layouts: clone(doc.layouts), monitorDesignations: monitorState.monitorDesignations, monitorRoleMap: monitorState.monitorRoleMap });
   },
   clearFallbackNotice: () => {
-    const doc = loadDoc();
+    const doc = loadDoc(get().monitors);
     doc.fallbackNotice = null;
+    const monitorState = deriveMonitorState(get().monitors, doc);
     persistDoc(doc);
-    set({ fallbackNotice: null });
+    set({ fallbackNotice: null, monitorDesignations: monitorState.monitorDesignations, monitorRoleMap: monitorState.monitorRoleMap });
   },
 }));

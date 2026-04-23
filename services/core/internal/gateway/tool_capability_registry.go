@@ -120,17 +120,21 @@ func (r *ToolCapabilityRegistry) ListByRisk(risk domain.ToolRisk) []domain.ToolC
 	return out
 }
 
-func (r *ToolCapabilityRegistry) UpdateStatus(id string, status domain.ToolCapabilityStatus) (domain.ToolCapability, bool) {
+func (r *ToolCapabilityRegistry) UpdateStatus(id string, status domain.ToolCapabilityStatus) (domain.ToolCapability, bool, error) {
+	status = domain.ToolCapabilityStatus(strings.TrimSpace(strings.ToLower(string(status))))
+	if !domain.IsKnownToolCapabilityStatus(status) {
+		return domain.ToolCapability{}, false, fmt.Errorf("tool capability status %q is unknown", status)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	key := strings.TrimSpace(strings.ToLower(id))
 	row, ok := r.byID[key]
 	if !ok {
-		return domain.ToolCapability{}, false
+		return domain.ToolCapability{}, false, fmt.Errorf("tool capability not found: %s", key)
 	}
 	row.Status = status
 	r.byID[key] = row
-	return row, true
+	return row, true, nil
 }
 
 func defaultToolCapabilities() []domain.ToolCapability {
@@ -171,6 +175,9 @@ func defaultToolCapabilities() []domain.ToolCapability {
 		"config": {
 			"get_config", "set_config", "watch_config", "get_env", "set_env", "feature_flag_read", "feature_flag_set", "migrate_schema", "backup", "restore", "diff_config",
 		},
+		"backup": {
+			"restore",
+		},
 		"external": {
 			"call_llm", "query_database", "call_api", "read_email", "send_email", "post_message", "create_issue", "update_issue", "read_calendar", "create_event", "search_web",
 		},
@@ -182,21 +189,44 @@ func defaultToolCapabilities() []domain.ToolCapability {
 		"filesystem.write_file": {"gatewayToolId": "fs.write", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskMedium, "lane": domain.ToolLaneIO},
 		"filesystem.move_file":  {"gatewayToolId": "fs.rename", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskMedium, "lane": domain.ToolLaneIO},
 		"filesystem.delete_file": {
-			"gatewayToolId": "fs.delete", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskCritical, "lane": domain.ToolLaneIO,
+			"gatewayToolId": "fs.delete", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskCritical, "lane": domain.ToolLaneIO,
 		},
-		"filesystem.set_permissions": {"gatewayToolId": "fs.chmod", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
-		"process.spawn_process":      {"gatewayToolId": "proc.run", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
-		"process.kill_process":       {"gatewayToolId": "proc.terminate", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskCritical, "lane": domain.ToolLaneIO},
-		"network.dns_resolve":        {"gatewayToolId": "net.dns_lookup", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskLow, "lane": domain.ToolLaneIO},
-		"network.http_request":       {"gatewayToolId": "net.fetch", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
-		"network.scan_network":       {"gatewayToolId": "net.connectivity", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
-		"code.diff_code":             {"gatewayToolId": "git.diff", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskLow, "lane": domain.ToolLaneCompute},
-		"code.run_shell":             {"gatewayToolId": "proc.run", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneCompute},
-		"observability.read_logs":    {"gatewayToolId": "system.logs", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskMedium, "lane": domain.ToolLaneIO},
-		"identity.retrieve_secret":   {"gatewayToolId": "secret.get", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneControl},
-		"ui.show_notification":       {"gatewayToolId": "desktop.notify", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskLow, "lane": domain.ToolLaneIO},
-		"ui.open_url":                {"gatewayToolId": "desktop.open", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
-		"time.get_system_time":       {"gatewayToolId": "time.now", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskNone, "lane": domain.ToolLaneIO},
+		"filesystem.restore_snapshot": {"gatewayToolId": "fs.restore_snapshot", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
+		"filesystem.set_permissions":  {"gatewayToolId": "fs.chmod", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
+		"process.spawn_process":       {"gatewayToolId": "proc.run", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
+		"process.kill_process":        {"gatewayToolId": "proc.terminate", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskCritical, "lane": domain.ToolLaneIO},
+		"network.dns_resolve":         {"gatewayToolId": "net.dns_lookup", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskLow, "lane": domain.ToolLaneIO},
+		"network.http_request":        {"gatewayToolId": "net.fetch", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
+		"network.open_socket":         {"gatewayToolId": "net.socket", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
+		"network.open_tunnel":         {"gatewayToolId": "net.tunnel", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskCritical, "lane": domain.ToolLaneIO},
+		"network.set_firewall_rule":   {"gatewayToolId": "net.firewall", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskCritical, "lane": domain.ToolLaneControl},
+		"network.scan_network":        {"gatewayToolId": "net.connectivity", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
+		"network.intercept_traffic":   {"gatewayToolId": "net.intercept", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskCritical, "lane": domain.ToolLaneControl},
+		"code.diff_code":              {"gatewayToolId": "git.diff", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskLow, "lane": domain.ToolLaneCompute},
+		"code.run_shell":              {"gatewayToolId": "proc.run", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneCompute},
+		"code.eval_code":              {"gatewayToolId": "code.eval", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskCritical, "lane": domain.ToolLaneCompute},
+		"observability.read_logs":     {"gatewayToolId": "system.logs", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskMedium, "lane": domain.ToolLaneIO},
+		"identity.retrieve_secret":    {"gatewayToolId": "secret.get", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneControl},
+		"identity.decrypt":            {"gatewayToolId": "secret.decrypt", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskCritical, "lane": domain.ToolLaneControl},
+		"identity.sudo":               {"gatewayToolId": "identity.sudo", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskCritical, "lane": domain.ToolLaneControl},
+		"identity.switch_user":        {"gatewayToolId": "identity.switch_user", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneControl},
+		"identity.issue_token":        {"gatewayToolId": "identity.issue_token", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneControl},
+		"identity.set_policy":         {"gatewayToolId": "identity.set_policy", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneControl},
+		"config.restore":              {"gatewayToolId": "config.restore", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskCritical, "lane": domain.ToolLaneControl},
+		"backup.restore":              {"gatewayToolId": "backup.restore", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskCritical, "lane": domain.ToolLaneControl},
+		"config.migrate_schema":       {"gatewayToolId": "config.migrate_schema", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskCritical, "lane": domain.ToolLaneControl},
+		"config.backup":               {"gatewayToolId": "config.backup", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneControl},
+		"ui.show_notification":        {"gatewayToolId": "desktop.notify", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskLow, "lane": domain.ToolLaneIO},
+		"ui.open_url":                 {"gatewayToolId": "desktop.open", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
+		"ui.inject_input":             {"gatewayToolId": "desktop.inject_input", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskCritical, "lane": domain.ToolLaneIO},
+		"device.capture_camera":       {"gatewayToolId": "device.capture_camera", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
+		"device.capture_audio":        {"gatewayToolId": "device.capture_audio", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
+		"external.send_email":         {"gatewayToolId": "external.send_email", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
+		"external.post_message":       {"gatewayToolId": "external.post_message", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
+		"external.call_api":           {"gatewayToolId": "external.call_api", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
+		"external.create_issue":       {"gatewayToolId": "external.create_issue", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
+		"external.update_issue":       {"gatewayToolId": "external.update_issue", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
+		"time.get_system_time":        {"gatewayToolId": "time.now", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskNone, "lane": domain.ToolLaneIO},
 	}
 
 	out := make([]domain.ToolCapability, 0, 160)

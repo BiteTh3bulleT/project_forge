@@ -263,6 +263,14 @@ func (e *AutonomyPolicyEvaluator) Evaluate(ctx context.Context, in EvaluationInp
 		}
 	}
 
+	if SupportsSelfCommit(in.Mode) && !e.hasDurableSelfCommitBacking() {
+		decision.Decision = domain.DecisionAllowProposeOnly
+		decision.DeniedReasons = append(decision.DeniedReasons, "durable charter+budget backing required for maintain/mission auto-commit")
+		decision.Warnings = append(decision.Warnings, "autonomy self-commit is quarantined while autonomy repositories are in-memory")
+		decision.Explanation = "persistence gate blocks auto-commit in maintain/mission modes"
+		return decision, nil
+	}
+
 	decision.Decision = domain.DecisionAllowAutoCommit
 	decision.Explanation = "charter, kernel preview, and budget authorize auto-commit"
 	return decision, nil
@@ -337,4 +345,23 @@ func isMissionCharter(charter domain.AutonomyCharter) bool {
 	}
 	name := strings.ToLower(strings.TrimSpace(charter.Name + " " + charter.Purpose))
 	return strings.Contains(name, "mission")
+}
+
+func (e *AutonomyPolicyEvaluator) hasDurableSelfCommitBacking() bool {
+	if e == nil || e.charters == nil || e.budgets == nil {
+		return false
+	}
+	if isInMemoryCharterRepository(e.charters) {
+		return false
+	}
+	return e.budgets.HasDurableBacking()
+}
+
+func isInMemoryCharterRepository(repo CharterRepository) bool {
+	switch repo.(type) {
+	case *InMemoryCharterRepository:
+		return true
+	default:
+		return false
+	}
 }

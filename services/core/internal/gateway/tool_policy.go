@@ -126,6 +126,18 @@ func (e ToolPolicyEvaluator) Evaluate(ctx context.Context, in ToolPolicyInput) T
 		decision.Reason = decision.Error.Message
 		return decision
 	}
+	if !domain.IsKnownToolCapabilityStatus(in.Capability.Status) {
+		decision.Status = StatusUnsupported
+		decision.Error = &domain.ToolExecutionError{Code: domain.ToolErrUnsupportedOperation, Field: "status", Message: "capability status is unsupported"}
+		decision.Reason = decision.Error.Message
+		return decision
+	}
+	if in.Capability.Status == domain.ToolCapabilityDeferred {
+		decision.Status = StatusUnsupported
+		decision.Error = &domain.ToolExecutionError{Code: domain.ToolErrUnsupportedOperation, Field: "status", Message: "capability is deferred"}
+		decision.Reason = decision.Error.Message
+		return decision
+	}
 	if in.Capability.Status == domain.ToolCapabilityDisabled || in.Capability.Status == domain.ToolCapabilityDeprecated {
 		decision.Status = StatusDisabled
 		decision.Error = &domain.ToolExecutionError{Code: domain.ToolErrToolDisabled, Field: "status", Message: "capability is disabled"}
@@ -190,12 +202,14 @@ func (e ToolPolicyEvaluator) Evaluate(ctx context.Context, in ToolPolicyInput) T
 			if autonomyDecision.RequiresApproval {
 				decision.Status = StatusNeedsApprov
 				decision.RequiresApproval = true
+				decision.Error = createToolExecutionError(domain.ToolErrApprovalRequired, "autonomy", "autonomy policy requires approval")
 				decision.Reason = nonEmpty(autonomyDecision.Reason, "autonomy policy requires approval")
 				return decision
 			}
 		} else if strings.TrimSpace(in.Request.CharterID) == "" || strings.TrimSpace(in.Request.BudgetID) == "" {
 			decision.Status = StatusNeedsApprov
 			decision.RequiresApproval = true
+			decision.Error = createToolExecutionError(domain.ToolErrApprovalRequired, "autonomy", "self-initiated tool call is missing charter or budget context")
 			decision.Reason = "self-initiated tool call is missing charter or budget context"
 			return decision
 		}
@@ -204,12 +218,14 @@ func (e ToolPolicyEvaluator) Evaluate(ctx context.Context, in ToolPolicyInput) T
 	if in.Capability.Status == domain.ToolCapabilityApprovalOnly {
 		decision.Status = StatusNeedsApprov
 		decision.RequiresApproval = true
+		decision.Error = createToolExecutionError(domain.ToolErrApprovalRequired, "status", "capability requires approval")
 		decision.Reason = "tool risk or policy requires approval"
 		return decision
 	}
 	if (risk.RequiresApproval || in.Capability.RequiresApprovalByDefault) && selfInitiated {
 		decision.Status = StatusNeedsApprov
 		decision.RequiresApproval = true
+		decision.Error = createToolExecutionError(domain.ToolErrApprovalRequired, "risk", "self-initiated high-risk capability requires approval")
 		decision.Reason = "self-initiated high-risk capability requires approval"
 		return decision
 	}

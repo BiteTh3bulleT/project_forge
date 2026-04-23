@@ -63,6 +63,31 @@ npm run core
 npm run desktop
 ```
 
+If the desktop window does not open, first check Tauri startup logs. The most common blockers are:
+
+- **port conflict on `5173`** (existing Vite/dev server)
+- **missing Linux webkit libs** (linker errors for `webkit2gtk-4.1` / `javascriptcoregtk-4.1`)
+
+`npm run desktop` now performs a preflight check and clears stale FORGE-local Vite listeners on `5173` automatically.
+If another non-FORGE process owns `5173`, startup will stop and print that process so you can resolve it.
+
+Typical fixes:
+
+```bash
+# if something is already serving 5173, stop it first
+sudo lsof -ti :5173 | xargs -r kill -9
+
+# Linux dependencies (Debian/Ubuntu)
+sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libgtk-3-dev
+
+# Linux dependencies (openSUSE)
+sudo zypper install -y webkitgtk3-devel gtk3-devel
+
+# if package names differ on your snapshot, locate providers
+zypper search --provides 'pkgconfig(webkit2gtk-4.1)'
+zypper search --provides 'pkgconfig(javascriptcoregtk-4.1)'
+```
+
 Build commands:
 
 ```bash

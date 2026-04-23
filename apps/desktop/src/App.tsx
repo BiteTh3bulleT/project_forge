@@ -28,6 +28,7 @@ import { JobsPage } from "./pages/JobsPage";
 import { LineagePage } from "./pages/LineagePage";
 import { MemoryDetailPage } from "./pages/MemoryDetailPage";
 import { MemoryPage } from "./pages/MemoryPage";
+import { ModelsPage } from "./pages/ModelsPage";
 import { DossiersPage } from "./pages/DossiersPage";
 import { ProjectContextPage } from "./pages/ProjectContextPage";
 import { ReleasePage } from "./pages/ReleasePage";
@@ -42,6 +43,7 @@ import { WorkspaceLayoutsPage } from "./pages/WorkspaceLayoutsPage";
 import { useDesktopShellStore } from "./stores/desktopShellStore";
 import { useWorkspaceLayoutStore } from "./stores/workspaceLayoutStore";
 import { useWorkspaceStore } from "./stores/workspaceStore";
+import { useUiStore } from "./stores/uiStore";
 
 function RoutedViews() {
   const location = useLocation();
@@ -78,6 +80,7 @@ function RoutedViews() {
         <Route path="/release" element={<ReleasePage />} />
         <Route path="/sources" element={<SourcesPage />} />
         <Route path="/adapters" element={<AdaptersPage />} />
+        <Route path="/models" element={<ModelsPage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/autonomy" element={<AutonomyPage />} />
         <Route path="/settings" element={<SettingsPage />} />
@@ -100,10 +103,17 @@ export default function App() {
   const locationRef = useRef(`${location.pathname}${location.search}`);
   const currentWindowLabel = useWorkspaceLayoutStore((s) => s.currentWindowLabel);
   const isMainWindow = layoutReady && currentWindowLabel === "main";
+  const contrastPreference = useUiStore((s) => s.contrastPreference);
+  const effectsPreference = useUiStore((s) => s.effectsPreference);
 
   useEffect(() => {
     locationRef.current = `${location.pathname}${location.search}`;
   }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    document.documentElement.dataset.contrast = contrastPreference;
+    document.documentElement.dataset.effects = effectsPreference;
+  }, [contrastPreference, effectsPreference]);
 
   useEffect(() => {
     if (!isMainWindow) return;
@@ -186,7 +196,7 @@ export default function App() {
   }, [navigate, refreshEnvironment, isMainWindow, currentWindowLabel]);
 
   return (
-    <AppShell>
+    <AppShell isMainWindow={isMainWindow}>
       <RoutedViews />
     </AppShell>
   );

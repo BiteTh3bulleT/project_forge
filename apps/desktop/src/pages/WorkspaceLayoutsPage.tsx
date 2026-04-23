@@ -5,12 +5,19 @@ import { assignableShellTools } from "../layout/shellConfig";
 import { useWorkspaceLayoutStore } from "../stores/workspaceLayoutStore";
 
 const roleOptions = ["chat", "workbench", "canvas", "dossier", "ops", "review", "settings", "mixed"] as const;
+const roleDisplay = (role: string | null) => {
+  if (role === "main") return "Main";
+  const secondary = /^secondary_(\d+)$/.exec(role ?? "");
+  return secondary ? `Secondary ${secondary[1]}` : (role ?? "secondary");
+};
 
 export function WorkspaceLayoutsPage() {
   const activeLayoutId = useWorkspaceLayoutStore((s) => s.activeLayoutId);
   const selectedLayoutId = useWorkspaceLayoutStore((s) => s.selectedLayoutId);
   const layouts = useWorkspaceLayoutStore((s) => s.layouts);
   const monitors = useWorkspaceLayoutStore((s) => s.monitors);
+  const monitorDesignations = useWorkspaceLayoutStore((s) => s.monitorDesignations);
+  const monitorRoleMap = useWorkspaceLayoutStore((s) => s.monitorRoleMap);
   const runtimeWindows = useWorkspaceLayoutStore((s) => s.runtimeWindows);
   const fallbackNotice = useWorkspaceLayoutStore((s) => s.fallbackNotice);
   const supported = useWorkspaceLayoutStore((s) => s.supported);
@@ -25,8 +32,22 @@ export function WorkspaceLayoutsPage() {
   const activateLayout = useWorkspaceLayoutStore((s) => s.activateLayout);
   const captureRuntimeIntoLayout = useWorkspaceLayoutStore((s) => s.captureRuntimeIntoLayout);
   const clearFallbackNotice = useWorkspaceLayoutStore((s) => s.clearFallbackNotice);
+  const setMainMonitor = useWorkspaceLayoutStore((s) => s.setMainMonitor);
+  const setMonitorRoleLabel = useWorkspaceLayoutStore((s) => s.setMonitorRoleLabel);
 
   const selectedLayout = useMemo(() => layouts.find((layout) => layout.id === selectedLayoutId) ?? layouts[0] ?? null, [layouts, selectedLayoutId]);
+  const monitorRoleCatalog = useMemo(
+    () =>
+      [...monitors]
+        .sort((a, b) => a.ordinal - b.ordinal)
+        .map((monitor) => ({
+          id: monitor.id,
+          role: monitorRoleMap[monitor.id] || "secondary",
+          label: monitor.name || `Display ${monitor.ordinal + 1}`,
+          customLabel: monitorDesignations.customLabels[monitor.id] ?? "",
+        })),
+    [monitors, monitorRoleMap, monitorDesignations.customLabels],
+  );
 
   return (
     <div className="space-y-6">
@@ -51,6 +72,48 @@ export function WorkspaceLayoutsPage() {
           <MetricCard label="Open windows" value={String(runtimeWindows.length)} detail={runtimeWindows.length > 0 ? runtimeWindows.map((windowRecord) => windowRecord.runtimeLabel).join(" · ") : "No runtime windows registered yet."} />
         </div>
       </Panel>
+
+      {supported ? (
+        <Panel title="Monitor Roles" subtitle="Assign one monitor as Main and add optional labels to the role list.">
+          <div className="space-y-3">
+            {monitorRoleCatalog.length === 0 ? <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">No displays detected yet.</div> : null}
+            {monitorRoleCatalog.map((monitor) => {
+              const isMain = monitor.id === monitorDesignations.mainMonitorId;
+              return (
+                <div key={monitor.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-semibold text-forge-ash">
+                        {monitor.label}
+                      </div>
+                      <div className="text-xs text-forge-mist">Role: {roleDisplay(monitor.role)}</div>
+                      <div className="mt-1 text-[11px] text-forge-mist">Current monitor role target: {monitor.role}</div>
+                    </div>
+                    <label className="text-xs text-forge-mist">
+                      <input type="radio" checked={isMain} onChange={() => setMainMonitor(monitor.id)} />
+                      <span className="ml-1">Main</span>
+                    </label>
+                  </div>
+                  <label className="mt-3 block text-xs text-forge-mist">
+                    Custom role label
+                    <input
+                      className="forge-input mt-1"
+                      value={monitor.customLabel}
+                      onChange={(e) => setMonitorRoleLabel(monitor.id, e.target.value)}
+                      placeholder="e.g. Focus +1"
+                    />
+                  </label>
+                </div>
+              );
+            })}
+            <div className="rounded-xl border border-forge-ember/25 bg-forge-ember/6 p-3 text-xs leading-relaxed text-forge-mist">
+              Role order is currently inferred from detected monitor index: <b>Main</b> first, then <b>Secondary N</b> by ordinal.
+              <br />
+              You can override layout bindings per-window using the role selector.
+            </div>
+          </div>
+        </Panel>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
         <Panel title="Preset List" subtitle="Create, select, duplicate, rename, delete, and activate named workspace layouts.">
@@ -139,7 +202,30 @@ export function WorkspaceLayoutsPage() {
                         </select>
                       </label>
                       <label className="text-xs text-forge-mist">
-                        Target display
+                        Target monitor role
+                          <select
+                            className="forge-input mt-1"
+                            value={windowRecord.targetMonitorRole ?? "none"}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            updateLayoutWindow(selectedLayout.id, windowRecord.id, {
+                              targetMonitorRole: value === "none" ? null : value,
+                            });
+                          }}
+                        >
+                          <option value="none">No role binding</option>
+                          {monitorRoleCatalog.map((roleEntry) => (
+                            <option key={roleEntry.id} value={roleEntry.role}>
+                              {roleDisplay(roleEntry.role)}
+                              {roleEntry.customLabel ? ` (${roleEntry.customLabel})` : ""}
+                              {" · "}
+                              {roleEntry.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="text-xs text-forge-mist">
+                        Target display override
                         <select
                           className="forge-input mt-1"
                           value={windowRecord.targetMonitorId ?? `ordinal:${windowRecord.targetMonitorOrdinal}`}
@@ -156,6 +242,8 @@ export function WorkspaceLayoutsPage() {
                           {monitors.map((monitor) => (
                             <option key={monitor.id} value={monitor.id}>
                               {monitor.name ?? `Display ${monitor.ordinal + 1}`} · {monitor.workArea.width}x{monitor.workArea.height}
+                              {monitor.id === monitorDesignations.mainMonitorId ? " · main role" : ""}
+                              {monitorRoleMap[monitor.id] === `secondary_${monitor.ordinal + 1}` ? " · secondary role" : ""}
                             </option>
                           ))}
                         </select>

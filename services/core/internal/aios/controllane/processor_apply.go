@@ -386,12 +386,62 @@ func applyCompileContext(store SemanticStore, req domain.SyscallRequest) ([]stri
 		budget.MaxNotes = readInt(raw, "maxNotes", budget.MaxNotes)
 	}
 	packet := store.BuildContext(query, req.Scope, budget, req.RequestedAt)
-	return []string{}, map[string]any{
-		"contextPacketId": packet.ID,
-		"notes":           len(packet.Notes),
-		"openLoops":       len(packet.OpenLoops),
-		"models":          len(packet.Models),
-	}, []string{"compile_context is deterministic Phase 2 stub"}, nil
+	opts := mergeCompileContextOptions(req.Payload)
+	if !opts.PersistSnapshot {
+		return []string{}, map[string]any{
+			"contextPacketId": packet.ID,
+			"notes":           len(packet.Notes),
+			"openLoops":       len(packet.OpenLoops),
+			"models":          len(packet.Models),
+		}, []string{"compile_context is deterministic Phase 2 stub"}, nil
+	}
+
+	var prior *compiledContextSnapshot
+	if priorPacket, ok := store.FindLatestContextSnapshot(req.Scope, packet.Query, opts.SnapshotKind); ok {
+		if decoded, ok := compiledContextSnapshotFromDomain(priorPacket.RestoreSnapshot); ok {
+			prior = &decoded
+		}
+	}
+
+	snapshot := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
+		Packet:        packet,
+		SnapshotID:    packet.ID,
+		SnapshotKind:  opts.SnapshotKind,
+		CorrelationID: req.CorrelationID,
+		TraceID:       req.TraceID,
+		SyscallID:     req.ID,
+		ProposedBy:    string(req.Source),
+		CommittedBy:   "forge_kernel",
+	}, prior)
+
+	committedIDs := []string{}
+	if opts.RenderSnapshotCard {
+		svg := renderCompiledContextSnapshotSVG(snapshot)
+		artifact := contextSnapshotArtifactRef(packet, snapshot, svg)
+		if err := store.CreateArtifactRef(artifact); err != nil {
+			return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrConflict, Field: "payload.renderSnapshotCard", Message: err.Error()}}
+		}
+		snapshot.Header.RenderedCardArtifactID = artifact.ID
+		committedIDs = append(committedIDs, artifact.ID)
+	}
+
+	applyCompiledSnapshotToPacket(&packet, snapshot, opts)
+	if err := store.CreateContextSnapshot(packet); err != nil {
+		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrConflict, Field: "payload.persistSnapshot", Message: err.Error()}}
+	}
+	committedIDs = append([]string{packet.ID}, committedIDs...)
+
+	return committedIDs, map[string]any{
+		"contextPacketId":        packet.ID,
+		"notes":                  len(packet.Notes),
+		"openLoops":              len(packet.OpenLoops),
+		"models":                 len(packet.Models),
+		"persistedSnapshot":      true,
+		"snapshotKind":           snapshot.Header.SnapshotKind,
+		"snapshotFingerprint":    snapshot.Header.Fingerprint,
+		"parentSnapshotId":       snapshot.Header.ParentSnapshotID,
+		"renderedCardArtifactId": snapshot.Header.RenderedCardArtifactID,
+	}, []string{"compile_context snapshot evidence is non-canonical"}, nil
 }
 
 func defaultBudget() domain.ContextBudget {

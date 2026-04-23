@@ -368,7 +368,7 @@ func TestPolicyEvaluatorModesAndApprovalEscalation(t *testing.T) {
 	}
 }
 
-func TestRunnerCommitsLowRiskCharteredAction(t *testing.T) {
+func TestRunnerQuarantinesAutoCommitWithoutDurableBacking(t *testing.T) {
 	h := newAutonomyHarness(t)
 	ctx := context.Background()
 	intent := h.newIntent("runner-commit", domain.IntentSourceForge, "charter_memory_maintenance")
@@ -376,16 +376,18 @@ func TestRunnerCommitsLowRiskCharteredAction(t *testing.T) {
 
 	summary, err := h.runner.Run(ctx, intent, []domain.SyscallRequest{action}, domain.RunModeCommitIfAuthorized, domain.AutonomyModeMaintain)
 	if err != nil {
-		t.Fatalf("runner commit failed: %v", err)
+		t.Fatalf("runner execution failed: %v", err)
 	}
-	if summary.Decision != domain.DecisionAllowAutoCommit {
-		t.Fatalf("expected allow_auto_commit, got %+v", summary)
+	if summary.Decision == domain.DecisionAllowAutoCommit {
+		t.Fatalf("expected persistence gate to block auto-commit, got %+v", summary)
 	}
-	if len(summary.CommittedObjectIDs) == 0 {
-		t.Fatalf("expected committed object ids")
+	if len(summary.CommittedObjectIDs) != 0 {
+		t.Fatalf("expected no committed object ids in quarantine mode, got %+v", summary.CommittedObjectIDs)
 	}
-	if _, ok, err := h.noteRepo.GetByID(ctx, "note-runner-commit"); err != nil || !ok {
-		t.Fatalf("expected committed note through kernel path err=%v ok=%v", err, ok)
+	if _, ok, err := h.noteRepo.GetByID(ctx, "note-runner-commit"); err != nil {
+		t.Fatalf("expected note lookup success err=%v", err)
+	} else if ok {
+		t.Fatalf("expected no committed note in quarantine mode")
 	}
 	explain, err := h.explainer.ExplainIntent(ctx, intent.ID)
 	if err != nil {
@@ -444,14 +446,14 @@ func TestRuleAgentIntegrationStaleLoopIntent(t *testing.T) {
 	if len(runs) == 0 {
 		t.Fatalf("expected at least one autonomy run from staleness agent")
 	}
-	found := false
+	foundProposeOnly := false
 	for _, run := range runs {
-		if run.Decision == domain.DecisionAllowAutoCommit && len(run.CommittedObjectIDs) > 0 {
-			found = true
+		if run.Decision == domain.DecisionAllowProposeOnly && len(run.CommittedObjectIDs) == 0 {
+			foundProposeOnly = true
 		}
 	}
-	if !found {
-		t.Fatalf("expected staleness agent commit under charter")
+	if !foundProposeOnly {
+		t.Fatalf("expected staleness agent to run in propose-only mode")
 	}
 }
 

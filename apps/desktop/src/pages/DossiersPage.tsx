@@ -5,6 +5,7 @@ import type {
   DossierDetail,
   DossierMemoryView,
   DossierProfile,
+  DossierVSASummary,
   ExecutionStrategy,
   ReviewRecord,
   SourceRow,
@@ -13,6 +14,7 @@ import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
+import { FoldSection } from "../components/FoldSection";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -35,6 +37,11 @@ function csv(raw: string[]): string {
   return raw.join(", ");
 }
 
+function isOptionalEndpointMissing(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes("404") || message.includes("not found");
+}
+
 export function DossiersPage() {
   const [params, setParams] = useSearchParams();
   const uiMode = useUiStore((s) => s.uiMode);
@@ -51,6 +58,7 @@ export function DossiersPage() {
 
   const [profile, setProfile] = useState<DossierProfile | null>(null);
   const [memoryView, setMemoryView] = useState<DossierMemoryView | null>(null);
+  const [vsaSummary, setVSASummary] = useState<DossierVSASummary | null>(null);
   const [presets, setPresets] = useState<ApprovalPreset[]>([]);
   const [strategies, setStrategies] = useState<ExecutionStrategy[]>([]);
   const [rules, setRules] = useState<AutomationRule[]>([]);
@@ -68,6 +76,7 @@ export function DossiersPage() {
   const [err, setErr] = useState<string | null>(null);
   const setStatus = useUiStore((s) => s.setStatusLine);
   const [showAdvancedProfile, setShowAdvancedProfile] = useState(false);
+  const [dossiersView, setDossiersView] = useState<"all" | "create" | "detail" | "policy">("all");
 
   async function loadList() {
     try {
@@ -98,10 +107,21 @@ export function DossiersPage() {
 
   async function loadDetail(id: number) {
     try {
-      const [d, p, mem] = await Promise.all([api.dossiers.detail(id), api.policy.getDossierProfile(id), api.memory.dossierView(id, 30)]);
+      const [d, p, mem, vsa] = await Promise.all([
+        api.dossiers.detail(id),
+        api.policy.getDossierProfile(id),
+        api.memory.dossierView(id, 30),
+        api.memory.dossierVSASummary(id).catch((error: unknown) => {
+          if (isOptionalEndpointMissing(error)) {
+            return { summary: null as DossierVSASummary | null };
+          }
+          throw error;
+        }),
+      ]);
       setDetail(d.detail);
       setProfile(p.profile);
       setMemoryView(mem.view);
+      setVSASummary(vsa.summary ?? mem.view.vsaSummary ?? d.detail.vsaSummary ?? null);
       if (p.profile) {
         setPreferredStrategiesRaw(csv(p.profile.preferredStrategies));
         setPreferredAdaptersRaw(csv(p.profile.preferredAdapters));
@@ -127,6 +147,7 @@ export function DossiersPage() {
       setDetail(null);
       setProfile(null);
       setMemoryView(null);
+      setVSASummary(null);
     }
   }
 
@@ -162,69 +183,85 @@ export function DossiersPage() {
             ? "Project memory profiles. Create a dossier, link sources, and review recent work."
             : "Durable project memory profiles that scope retrieval, packets, jobs, and policy behavior."
         }
-        actions={<GhostButton onClick={() => void loadList()}>Refresh</GhostButton>}
+        actions={
+          <div className="flex items-center gap-2">
+            <label className="text-[11px] text-forge-mist">
+              View
+              <select className="forge-input ml-2 px-2 py-1 text-[11px]" value={dossiersView} onChange={(e) => setDossiersView(e.target.value as "all" | "create" | "detail" | "policy")}>
+                <option value="all">All</option>
+                <option value="create">Create + list</option>
+                <option value="detail">Detail</option>
+                <option value="policy">Policy profile</option>
+              </select>
+            </label>
+            <GhostButton onClick={() => void loadList()}>Refresh</GhostButton>
+          </div>
+        }
       >
         {err ? <div className="rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
-        <div className="grid gap-3 md:grid-cols-2">
-          <div>
-            <label className="text-xs font-semibold tracking-wide text-forge-mist">Name</label>
-            <input
-              aria-label="Dossier name"
-              className="forge-input mt-1"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. ProjectForge Core"
+        <FoldSection title="Create dossier" subtitle="Define a scoped project memory profile and source links." defaultOpen>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="text-xs font-semibold tracking-wide text-forge-mist">Name</label>
+              <input
+                aria-label="Dossier name"
+                className="forge-input mt-1"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. ProjectForge Core"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold tracking-wide text-forge-mist">Source ids (comma separated)</label>
+              <input
+                aria-label="Source ids"
+                className="forge-input mt-1"
+                value={sourceIDsRaw}
+                onChange={(e) => setSourceIDsRaw(e.target.value)}
+                placeholder="1,2"
+              />
+            </div>
+          </div>
+          <div className="mt-3">
+            <label className="text-xs font-semibold tracking-wide text-forge-mist">Description</label>
+            <textarea
+              aria-label="Dossier description"
+              className="forge-input mt-1 min-h-[80px]"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
             />
           </div>
-          <div>
-            <label className="text-xs font-semibold tracking-wide text-forge-mist">Source ids (comma separated)</label>
-            <input
-              aria-label="Source ids"
-              className="forge-input mt-1"
-              value={sourceIDsRaw}
-              onChange={(e) => setSourceIDsRaw(e.target.value)}
-              placeholder="1,2"
-            />
+          <div className="mt-3 flex flex-wrap gap-2">
+            <PrimaryButton
+              onClick={async () => {
+                const sourceIds = parseIDs(sourceIDsRaw);
+                const res = await api.dossiers.create({
+                  name,
+                  description,
+                  sourceIds,
+                  primaryPaths: [],
+                  relatedRepos: [],
+                  constraints: [],
+                  preferredAdapters: ["ollama", "codex", "claude_code"],
+                  importantFiles: [],
+                });
+                setStatus(`Dossier created: ${res.dossier.name}`);
+                setName("");
+                setDescription("");
+                setSourceIDsRaw("");
+                await loadList();
+                setSelectedID(res.dossier.id);
+                setParams({ dossierId: String(res.dossier.id) });
+              }}
+            >
+              Create Dossier
+            </PrimaryButton>
           </div>
-        </div>
-        <div className="mt-3">
-          <label className="text-xs font-semibold tracking-wide text-forge-mist">Description</label>
-          <textarea
-            aria-label="Dossier description"
-            className="forge-input mt-1 min-h-[80px]"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <PrimaryButton
-            onClick={async () => {
-              const sourceIds = parseIDs(sourceIDsRaw);
-              const res = await api.dossiers.create({
-                name,
-                description,
-                sourceIds,
-                primaryPaths: [],
-                relatedRepos: [],
-                constraints: [],
-                preferredAdapters: ["ollama", "codex", "claude_code"],
-                importantFiles: [],
-              });
-              setStatus(`Dossier created: ${res.dossier.name}`);
-              setName("");
-              setDescription("");
-              setSourceIDsRaw("");
-              await loadList();
-              setSelectedID(res.dossier.id);
-              setParams({ dossierId: String(res.dossier.id) });
-            }}
-          >
-            Create Dossier
-          </PrimaryButton>
-        </div>
-        {sourceHint ? <div className="mt-3 text-[11px] text-forge-mist">Known sources: {sourceHint}</div> : null}
+          {sourceHint ? <div className="mt-3 text-[11px] text-forge-mist">Known sources: {sourceHint}</div> : null}
+        </FoldSection>
       </Panel>
 
+      {(dossiersView === "all" || dossiersView === "create") ? (
       <Panel title="Dossier List" subtitle="Choose a dossier to inspect linked sources, recent jobs, briefs, reviews, and policy profile.">
         {dossiers.length === 0 ? (
           <div className="text-sm text-forge-mist">No dossiers yet.</div>
@@ -251,7 +288,9 @@ export function DossiersPage() {
           </div>
         )}
       </Panel>
+      ) : null}
 
+      {(dossiersView === "all" || dossiersView === "detail") ? (
       <Panel
         title="Dossier Detail"
         subtitle="Project brief, scope anchors, linked reviews, and recent execution memory."
@@ -351,6 +390,24 @@ export function DossiersPage() {
                     observations {memoryView.observationCount} · stale {memoryView.staleObservationCount} · signals {memoryView.recentSignals.length}
                   </div>
                   <div className="rounded border border-white/10 bg-black/30 p-2">
+                    <div className="text-[11px] font-semibold text-forge-ash">VSA Coverage + Health</div>
+                    {!vsaSummary ? (
+                      <div className="mt-1 text-[11px]">No VSA summary available.</div>
+                    ) : (
+                      <div className="mt-1 space-y-1 text-[11px]">
+                        <div>
+                          health {vsaSummary.health || "unknown"} · coverage {(vsaSummary.coverageScore * 100).toFixed(1)}%
+                        </div>
+                        <div>
+                          pointers {vsaSummary.pointerCount} · bindings {vsaSummary.bindingCount} · associations {vsaSummary.associationCount}
+                        </div>
+                        <div>
+                          last reindex run {vsaSummary.lastReindexRunId ?? "none"} · {vsaSummary.lastReindexAtMs ? formatTime(vsaSummary.lastReindexAtMs) : "never"}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="rounded border border-white/10 bg-black/30 p-2">
                     <div className="text-[11px] font-semibold text-forge-ash">Recent observations</div>
                     {memoryView.recentObservations.length === 0 ? (
                       <div className="mt-1 text-[11px]">No observations yet.</div>
@@ -384,7 +441,9 @@ export function DossiersPage() {
           </div>
         )}
       </Panel>
+      ) : null}
 
+      {(dossiersView === "all" || dossiersView === "policy") ? (
       <Panel title="Dossier Policy Profile" subtitle="Dossier-specific strategy, adapter, retrieval, approval, and automation preferences.">
         {!detail ? (
           <div className="text-sm text-forge-mist">Select a dossier first.</div>
@@ -518,6 +577,7 @@ export function DossiersPage() {
           </div>
         )}
       </Panel>
+      ) : null}
     </div>
   );
 }

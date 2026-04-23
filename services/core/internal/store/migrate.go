@@ -408,6 +408,94 @@ CREATE TABLE IF NOT EXISTS memory_repair_items (
   created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS memory_vsa_pointers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  observation_id INTEGER NOT NULL UNIQUE REFERENCES memory_observations(id) ON DELETE CASCADE,
+  dims INTEGER NOT NULL DEFAULT 128,
+  pointer_json TEXT NOT NULL DEFAULT '[]',
+  norm REAL NOT NULL DEFAULT 0,
+  source_fingerprint TEXT NOT NULL DEFAULT '',
+  stale INTEGER NOT NULL DEFAULT 0,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS memory_vsa_role_bindings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  observation_id INTEGER NOT NULL REFERENCES memory_observations(id) ON DELETE CASCADE,
+  role TEXT NOT NULL,
+  filler TEXT NOT NULL,
+  weight REAL NOT NULL DEFAULT 1,
+  support_count INTEGER NOT NULL DEFAULT 0,
+  noise_count INTEGER NOT NULL DEFAULT 0,
+  binding_json TEXT NOT NULL DEFAULT '[]',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(observation_id, role, filler)
+);
+
+CREATE TABLE IF NOT EXISTS memory_vsa_associations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_observation_id INTEGER NOT NULL REFERENCES memory_observations(id) ON DELETE CASCADE,
+  to_observation_id INTEGER NOT NULL REFERENCES memory_observations(id) ON DELETE CASCADE,
+  association_type TEXT NOT NULL DEFAULT 'related',
+  strength REAL NOT NULL DEFAULT 0,
+  support_count INTEGER NOT NULL DEFAULT 0,
+  noise_count INTEGER NOT NULL DEFAULT 0,
+  evidence_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(from_observation_id, to_observation_id, association_type)
+);
+
+CREATE TABLE IF NOT EXISTS retrieval_result_vsa_signals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  retrieval_result_id INTEGER NOT NULL UNIQUE REFERENCES retrieval_results(id) ON DELETE CASCADE,
+  retrieval_run_id INTEGER NOT NULL REFERENCES retrieval_runs(id) ON DELETE CASCADE,
+  observation_id INTEGER REFERENCES memory_observations(id) ON DELETE SET NULL,
+  mode TEXT NOT NULL DEFAULT 'off',
+  associative_score REAL NOT NULL DEFAULT 0,
+  role_match_score REAL NOT NULL DEFAULT 0,
+  relational_score REAL NOT NULL DEFAULT 0,
+  feedback_score REAL NOT NULL DEFAULT 0,
+  additive_score REAL NOT NULL DEFAULT 0,
+  applied_score REAL NOT NULL DEFAULT 0,
+  explain_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS memory_vsa_reindex_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_at INTEGER NOT NULL,
+  started_at INTEGER NOT NULL,
+  completed_at INTEGER,
+  dossier_id INTEGER REFERENCES dossiers(id) ON DELETE SET NULL,
+  mode TEXT NOT NULL DEFAULT 'manual',
+  status TEXT NOT NULL DEFAULT 'running',
+  candidates INTEGER NOT NULL DEFAULT 0,
+  indexed INTEGER NOT NULL DEFAULT 0,
+  skipped INTEGER NOT NULL DEFAULT 0,
+  failed INTEGER NOT NULL DEFAULT 0,
+  triggered_by TEXT NOT NULL DEFAULT '',
+  note TEXT NOT NULL DEFAULT '',
+  settings_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS memory_vsa_reindex_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  reindex_run_id INTEGER NOT NULL REFERENCES memory_vsa_reindex_runs(id) ON DELETE CASCADE,
+  observation_id INTEGER NOT NULL REFERENCES memory_observations(id) ON DELETE CASCADE,
+  status TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  before_fingerprint TEXT NOT NULL DEFAULT '',
+  after_fingerprint TEXT NOT NULL DEFAULT '',
+  before_json TEXT NOT NULL DEFAULT '{}',
+  after_json TEXT NOT NULL DEFAULT '{}',
+  note TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS evaluation_records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at INTEGER NOT NULL,
@@ -625,6 +713,7 @@ CREATE INDEX IF NOT EXISTS idx_memory_obs_type ON memory_observations(type, obse
 CREATE INDEX IF NOT EXISTS idx_memory_obs_dossier ON memory_observations(dossier_id, observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_memory_obs_origin ON memory_observations(origin_kind, origin_id);
 CREATE INDEX IF NOT EXISTS idx_memory_obs_stale ON memory_observations(stale, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_obs_source_path ON memory_observations(source_path, observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_memory_links_from ON memory_observation_links(from_observation_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_memory_links_to ON memory_observation_links(to_observation_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_result_obs_obs ON retrieval_result_observations(observation_id, created_at DESC);
@@ -633,6 +722,18 @@ CREATE INDEX IF NOT EXISTS idx_packet_alignment_packet ON packet_alignment_notes
 CREATE INDEX IF NOT EXISTS idx_memory_repair_runs_created ON memory_repair_runs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_memory_repair_runs_dossier ON memory_repair_runs(dossier_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_memory_repair_items_run ON memory_repair_items(repair_run_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_vsa_pointers_obs ON memory_vsa_pointers(observation_id);
+CREATE INDEX IF NOT EXISTS idx_memory_vsa_pointers_fp ON memory_vsa_pointers(source_fingerprint, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_vsa_bindings_obs ON memory_vsa_role_bindings(observation_id, role);
+CREATE INDEX IF NOT EXISTS idx_memory_vsa_assoc_from ON memory_vsa_associations(from_observation_id, strength DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_vsa_assoc_to ON memory_vsa_associations(to_observation_id, strength DESC);
+CREATE INDEX IF NOT EXISTS idx_result_vsa_signals_run ON retrieval_result_vsa_signals(retrieval_run_id, retrieval_result_id);
+CREATE INDEX IF NOT EXISTS idx_result_vsa_signals_obs ON retrieval_result_vsa_signals(observation_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_result_vsa_signals_mode ON retrieval_result_vsa_signals(mode, applied_score DESC, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_vsa_reindex_runs_created ON memory_vsa_reindex_runs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_vsa_reindex_runs_dossier ON memory_vsa_reindex_runs(dossier_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_vsa_reindex_items_run ON memory_vsa_reindex_items(reindex_run_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_memory_vsa_reindex_items_obs ON memory_vsa_reindex_items(observation_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_eval_job ON evaluation_records(job_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_eval_dossier ON evaluation_records(dossier_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_lineage_parent ON job_lineage(parent_job_id, created_at DESC);
@@ -756,6 +857,48 @@ CREATE TABLE IF NOT EXISTS release_artifacts (
   notes TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS model_manifests (
+  id TEXT PRIMARY KEY,
+  schema_version TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  family TEXT NOT NULL,
+  format TEXT NOT NULL,
+  backend TEXT NOT NULL,
+  model_path TEXT NOT NULL,
+  sha256 TEXT NOT NULL DEFAULT '',
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  quantization TEXT NOT NULL DEFAULT '',
+  context_length INTEGER NOT NULL DEFAULT 0,
+  capabilities_json TEXT NOT NULL DEFAULT '[]',
+  default_runtime_json TEXT NOT NULL DEFAULT '{}',
+  license_json TEXT NOT NULL DEFAULT '{}',
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  discovered_at INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS model_registry_status (
+  model_id TEXT PRIMARY KEY REFERENCES model_manifests(id) ON DELETE CASCADE,
+  backend TEXT NOT NULL,
+  status TEXT NOT NULL,
+  updated_at INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT NOT NULL DEFAULT '',
+  metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS model_runtime_loads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  model_id TEXT NOT NULL REFERENCES model_manifests(id) ON DELETE CASCADE,
+  backend TEXT NOT NULL,
+  status TEXT NOT NULL,
+  loaded_at INTEGER NOT NULL,
+  unloaded_at INTEGER,
+  endpoint TEXT NOT NULL DEFAULT '',
+  pid INTEGER NOT NULL DEFAULT 0,
+  resource_usage_json TEXT NOT NULL DEFAULT '{}',
+  metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
 CREATE INDEX IF NOT EXISTS idx_gateway_created ON gateway_invocations(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gateway_job ON gateway_invocations(job_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_gateway_tool ON gateway_invocations(tool_id, created_at DESC);
@@ -767,6 +910,11 @@ CREATE INDEX IF NOT EXISTS idx_permission_active ON permission_profiles(active);
 CREATE INDEX IF NOT EXISTS idx_action_lanes_enabled ON action_lanes(enabled, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_backup_bundles_created ON backup_bundles(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_release_artifacts_created ON release_artifacts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_model_manifests_backend ON model_manifests(backend, id);
+CREATE INDEX IF NOT EXISTS idx_model_manifests_format ON model_manifests(format, id);
+CREATE INDEX IF NOT EXISTS idx_model_registry_status_status ON model_registry_status(status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_model_runtime_loads_model ON model_runtime_loads(model_id, loaded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_model_runtime_loads_status ON model_runtime_loads(status, loaded_at DESC);
 
 CREATE TABLE IF NOT EXISTS provenance_records (
   id TEXT PRIMARY KEY,
@@ -1026,6 +1174,9 @@ CREATE TABLE IF NOT EXISTS context_packet_snapshots (
   query TEXT NOT NULL,
   workspace_id TEXT NOT NULL,
   lane_id TEXT NOT NULL DEFAULT '',
+  snapshot_kind TEXT NOT NULL DEFAULT '',
+  snapshot_fingerprint TEXT NOT NULL DEFAULT '',
+  parent_snapshot_id TEXT NOT NULL DEFAULT '',
   selected_paths_json TEXT NOT NULL DEFAULT '[]',
   included_state_json TEXT NOT NULL DEFAULT '[]',
   included_open_loops_json TEXT NOT NULL DEFAULT '[]',
@@ -1034,6 +1185,12 @@ CREATE TABLE IF NOT EXISTS context_packet_snapshots (
   included_models_json TEXT NOT NULL DEFAULT '[]',
   included_artifacts_json TEXT NOT NULL DEFAULT '[]',
   included_events_json TEXT NOT NULL DEFAULT '[]',
+  header_json TEXT NOT NULL DEFAULT '{}',
+  graph_json TEXT NOT NULL DEFAULT '{}',
+  delta_json TEXT NOT NULL DEFAULT '{}',
+  restore_scores_json TEXT NOT NULL DEFAULT '{}',
+  render_artifact_ref_id TEXT NOT NULL DEFAULT '',
+  resume_hints_json TEXT NOT NULL DEFAULT '{}',
   budget_json TEXT NOT NULL DEFAULT '{}',
   inclusion_reasons_json TEXT NOT NULL DEFAULT '{}',
   created_at INTEGER NOT NULL,
@@ -1134,5 +1291,70 @@ func migrate(db *sql.DB) error {
 	if _, err := db.Exec(schema); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
+	if err := ensureContextPacketSnapshotColumns(db); err != nil {
+		return fmt.Errorf("migrate context_packet_snapshots: %w", err)
+	}
 	return nil
+}
+
+func ensureContextPacketSnapshotColumns(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(context_packet_snapshots)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	existing := make(map[string]struct{})
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, colType string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &defaultValue, &pk); err != nil {
+			return err
+		}
+		existing[name] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	additions := []struct {
+		name string
+		ddl  string
+	}{
+		{name: "snapshot_kind", ddl: "TEXT NOT NULL DEFAULT ''"},
+		{name: "snapshot_fingerprint", ddl: "TEXT NOT NULL DEFAULT ''"},
+		{name: "parent_snapshot_id", ddl: "TEXT NOT NULL DEFAULT ''"},
+		{name: "header_json", ddl: "TEXT NOT NULL DEFAULT '{}'"},
+		{name: "graph_json", ddl: "TEXT NOT NULL DEFAULT '{}'"},
+		{name: "delta_json", ddl: "TEXT NOT NULL DEFAULT '{}'"},
+		{name: "restore_scores_json", ddl: "TEXT NOT NULL DEFAULT '{}'"},
+		{name: "render_artifact_ref_id", ddl: "TEXT NOT NULL DEFAULT ''"},
+		{name: "resume_hints_json", ddl: "TEXT NOT NULL DEFAULT '{}'"},
+	}
+
+	for _, col := range additions {
+		if _, ok := existing[col.name]; ok {
+			continue
+		}
+		if _, err := db.Exec(fmt.Sprintf(
+			"ALTER TABLE context_packet_snapshots ADD COLUMN %s %s",
+			col.name, col.ddl,
+		)); err != nil {
+			return err
+		}
+	}
+
+	_, err = db.Exec(`
+UPDATE context_packet_snapshots
+SET snapshot_kind = COALESCE(snapshot_kind, ''),
+    snapshot_fingerprint = COALESCE(snapshot_fingerprint, ''),
+    parent_snapshot_id = COALESCE(parent_snapshot_id, ''),
+    header_json = COALESCE(header_json, '{}'),
+    graph_json = COALESCE(graph_json, '{}'),
+    delta_json = COALESCE(delta_json, '{}'),
+    restore_scores_json = COALESCE(restore_scores_json, '{}'),
+    render_artifact_ref_id = COALESCE(render_artifact_ref_id, ''),
+    resume_hints_json = COALESCE(resume_hints_json, '{}')`)
+	return err
 }

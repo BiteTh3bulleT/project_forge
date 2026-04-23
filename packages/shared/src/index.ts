@@ -257,6 +257,117 @@ export type ReembedResult = {
 };
 
 export type RetrievalMode = "keyword" | "semantic" | "hybrid";
+export type VSAMode = "off" | "shadow" | "active";
+
+export type VSAPointer = {
+  id: number;
+  observationId: number;
+  dims: number;
+  pointer: number[];
+  norm: number;
+  sourceFingerprint: string;
+  stale: boolean;
+  metadata: Record<string, unknown>;
+  createdAtMs: number;
+  updatedAtMs: number;
+};
+
+export type VSARoleBinding = {
+  id: number;
+  observationId: number;
+  role: string;
+  filler: string;
+  weight: number;
+  supportCount: number;
+  noiseCount: number;
+  binding: number[];
+  createdAtMs: number;
+  updatedAtMs: number;
+};
+
+export type VSAAssociation = {
+  id: number;
+  fromObservationId: number;
+  toObservationId: number;
+  associationType: string;
+  strength: number;
+  supportCount: number;
+  noiseCount: number;
+  evidence: Record<string, unknown>;
+  createdAtMs: number;
+  updatedAtMs: number;
+};
+
+export type ObservationVSADetail = {
+  observationId: number;
+  pointer?: VSAPointer;
+  roleBindings: VSARoleBinding[];
+  associations: VSAAssociation[];
+};
+
+export type RetrievalResultVSASignal = {
+  id: number;
+  retrievalResultId: number;
+  retrievalRunId: number;
+  chunkId?: number | null;
+  observationId: number | null;
+  mode: string;
+  associativeScore: number;
+  roleMatchScore: number;
+  relationalScore: number;
+  feedbackScore: number;
+  additiveScore: number;
+  appliedScore: number;
+  explain: Record<string, unknown>;
+  createdAtMs: number;
+};
+
+export type VSAReindexRun = {
+  id: number;
+  createdAtMs: number;
+  startedAtMs: number;
+  completedAtMs: number | null;
+  dossierId: number | null;
+  mode: string;
+  status: string;
+  candidates: number;
+  indexed: number;
+  skipped: number;
+  failed: number;
+  triggeredBy: string;
+  note: string;
+  settings: Record<string, unknown>;
+};
+
+export type VSAReindexItem = {
+  id: number;
+  reindexRunId: number;
+  observationId: number;
+  status: string;
+  reason: string;
+  beforeFingerprint: string;
+  afterFingerprint: string;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  note: string;
+  createdAtMs: number;
+};
+
+export type VSAReindexRunDetail = {
+  run: VSAReindexRun;
+  items: VSAReindexItem[];
+};
+
+export type DossierVSASummary = {
+  dossierId: number;
+  pointerCount: number;
+  bindingCount: number;
+  associationCount: number;
+  lastReindexRunId: number | null;
+  lastReindexAtMs: number | null;
+  coverageScore: number;
+  health: string;
+};
 
 export type RetrievalResult = {
   id: number;
@@ -275,6 +386,7 @@ export type RetrievalResult = {
   usefulnessNote: string;
   selectionReason: Record<string, unknown>;
   observationId: number | null;
+  vsaSignal?: RetrievalResultVSASignal | null;
 };
 
 export type RetrievalRun = {
@@ -288,6 +400,7 @@ export type RetrievalRun = {
   weighting: Record<string, unknown>;
   notes: string;
   results: RetrievalResult[];
+  vsaSignals?: RetrievalResultVSASignal[];
 };
 
 export type MemoryObservation = {
@@ -316,6 +429,7 @@ export type MemoryObservation = {
   usefulnessScore: number;
   usefulnessCount: number;
   noiseCount: number;
+  vsaPointerId?: number | null;
 };
 
 export type MemoryObservationLink = {
@@ -345,6 +459,7 @@ export type MemoryObservationDetail = {
   incomingLinks: MemoryObservationLink[];
   outgoingLinks: MemoryObservationLink[];
   signals: MemoryUsefulnessEvent[];
+  vsa?: ObservationVSADetail | null;
 };
 
 export type RetrievalSelectionReason = {
@@ -369,6 +484,7 @@ export type DossierMemoryView = {
   recentObservations: MemoryObservation[];
   recentSignals: MemoryUsefulnessEvent[];
   recentAlignmentNotes: PacketAlignmentNote[];
+  vsaSummary?: DossierVSASummary | null;
 };
 
 export type MemoryRepairRun = {
@@ -446,6 +562,7 @@ export type DossierDetail = {
   sources: DossierSourceLink[];
   recentJobs: DossierJobSnapshot[];
   briefs: DossierBrief[];
+  vsaSummary?: DossierVSASummary | null;
 };
 
 export type EvaluationRecord = {

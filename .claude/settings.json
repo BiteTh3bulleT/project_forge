@@ -1,0 +1,73 @@
+{
+  "tui": "fullscreen",
+  "effortLevel": "high",
+  "permissions": {
+    "allow": [
+      "Bash(pwd)",
+      "Bash(ls *)",
+      "Bash(rg *)",
+      "Bash(rg --files *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git show *)",
+      "Bash(git log *)",
+      "Bash(npm run build)",
+      "Bash(npm run build:core)",
+      "Bash(npm run build:desktop)",
+      "Bash(npm run desktop)",
+      "Bash(npm run dev)",
+      "Bash(npm run up)",
+      "Bash(npm run down)",
+      "Bash(cd services/core)",
+      "Bash(go test ./...)",
+      "Bash(go vet ./...)",
+      "Bash(go build ./...)"
+    ],
+    "deny": [
+      "Bash(git reset --hard)",
+      "Bash(git reset --hard *)",
+      "Bash(git checkout -- *)",
+      "Bash(git clean -fd)",
+      "Bash(git clean -fd *)",
+      "Bash(git clean -fdx)",
+      "Bash(git clean -fdx *)",
+      "Bash(rm -rf /)",
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf / *)",
+      "Bash(sudo rm -rf /)",
+      "Bash(sudo rm -rf /*)",
+      "Bash(sudo rm -rf / *)",
+      "Read(/.env)",
+      "Read(/.env.*)",
+      "Read(/**/.env)",
+      "Read(/**/.env.*)",
+      "Read(/secrets/**)",
+      "Read(/**/*.pem)",
+      "Read(/**/*.key)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.mjs\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/pretool-bash-guard.mjs\""
+          }
+        ]
+      }
+    ]
+  }
+}

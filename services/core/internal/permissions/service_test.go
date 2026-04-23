@@ -41,6 +41,9 @@ func TestEnsureGatewayToolPolicyUpgradesStandardProfile(t *testing.T) {
 	if !contains(standard.AllowedExecutePaths, filepath.Clean(workspace)) {
 		t.Fatalf("expected workspace execute scope in standard profile: %v", standard.AllowedExecutePaths)
 	}
+	if !contains(standard.AllowedReadPaths, filepath.Clean(workspace)) {
+		t.Fatalf("expected workspace read scope in standard profile: %v", standard.AllowedReadPaths)
+	}
 	for _, tool := range []string{"proc.run", "git.status", "fs.write", "net.fetch"} {
 		if !contains(standard.AllowedTools, tool) {
 			t.Fatalf("expected tool %q in standard allowlist", tool)

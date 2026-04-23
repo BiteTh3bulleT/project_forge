@@ -156,8 +156,7 @@ All durable writes must pass through validated FORGE APIs/syscalls (`jobs`, `gat
 | audit trace | `internal/audit` trace by correlation id | implemented | expand observability/API surfaces in Phase 9 |
 | cognitive filesystem | memory/notes/links/state spread across tables | partial, distributed | normalize persistence model in Phase 3 and Phase 5 |
 | internal librarian cells | retrieval/memory/repair services | partial, functionally present | formal cell runtime and scheduling in Phase 4 |
-| context compiler | project context + packet assembly | partial | full context compiler contract in Phase 6 |
+| context compiler | project context + packet assembly | partial | full context compiler contract in Phase 6; restore snapshots in Phase 6.25 |
 | workspace/runtime isolation | workspace paths + permission scopes | partial | explicit workspace runtime/event bus in Phase 7 |
 | adaptive policy algebra | policy + guidance + insights snapshots | partial advisory | algebraic/adaptive layer in Phase 8 |
 | IRIS integration seam | none as first-class service yet | planned only | seam + eval harness in Phase 10 |
-

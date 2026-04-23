@@ -54,5 +54,27 @@ func (p ContextPacket) Validate() []SyscallError {
 	if p.Budget.MaxNotes <= 0 {
 		issues = append(issues, SyscallError{Code: ErrInvalidPayload, Field: "budget.maxNotes", Message: "budget.maxNotes must be positive"})
 	}
+	if p.CompileOptions != nil {
+		issues = append(issues, p.CompileOptions.Validate()...)
+	}
+	if p.RestoreSnapshot != nil {
+		issues = append(issues, p.RestoreSnapshot.Validate()...)
+	}
+	return issues
+}
+
+func (o ContextCompileOptions) Validate() []SyscallError {
+	var issues []SyscallError
+	if strings.TrimSpace(o.SnapshotKind) == "" && (o.PersistSnapshot || o.RenderSnapshotCard) {
+		issues = append(issues, SyscallError{Code: ErrMissingRequiredField, Field: "compileOptions.snapshotKind", Message: "snapshotKind is required when snapshot options are enabled"})
+	}
+	return issues
+}
+
+func (s ContextRestoreSnapshot) Validate() []SyscallError {
+	var issues []SyscallError
+	if strings.TrimSpace(s.SnapshotKind) == "" {
+		issues = append(issues, SyscallError{Code: ErrMissingRequiredField, Field: "restoreSnapshot.snapshotKind", Message: "snapshotKind is required"})
+	}
 	return issues
 }

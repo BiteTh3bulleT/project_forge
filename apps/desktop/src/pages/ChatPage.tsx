@@ -387,10 +387,11 @@ function ToolGatewayActivityPanel(props: { activity: ChatToolGatewayActivity }) 
     if (gatewayJobId == null || !approvalResolved || approvalState === "denied" || gatewayJobTerminal) {
       return;
     }
+    const resolvedGatewayJobId = gatewayJobId;
     let cancelled = false;
     async function refreshGatewayJob() {
       try {
-        const detail = await api.jobs.detail(gatewayJobId, 0);
+        const detail = await api.jobs.detail(resolvedGatewayJobId, 0);
         if (cancelled) return;
         const status = String(detail.job?.status ?? "").trim().toLowerCase();
         const summary = String(detail.job?.resultSummary ?? "").trim();

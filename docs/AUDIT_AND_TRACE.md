@@ -32,7 +32,7 @@ Audit records persist:
 
 - `GET /api/gateway/invocations`
 - `GET /api/audit`
-- `GET /api/audit/trace/{correlationId}`
+- `GET /api/audit/trace/{correlationId}` (correlation-first report: gateway invocations, audit records, artifact records, provenance records, journal events, artifact refs, and explicit link edges)
 
 Desktop pages:
 
