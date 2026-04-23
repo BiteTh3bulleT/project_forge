@@ -218,10 +218,30 @@ func TestActionValidationMatrix(t *testing.T) {
 						"snapshotKind": "restore",
 						"snapshotId":   "ctx-snap-1",
 						"evidence":     map[string]any{"source": "seed"},
+						"resumeHints": map[string]any{
+							"preferredSnapshotId": "ctx-snap-1",
+							"minimumScore":        0.55,
+							"freshCompileOnly":    false,
+						},
 					},
 				}
 				return r
 			}(),
+		},
+		{
+			name: "invalid compile context resume hints",
+			req: func() domain.SyscallRequest {
+				r := validBaseRequest(domain.ActionCompileContext)
+				r.Payload = map[string]any{
+					"query":           "summarize",
+					"budget":          map[string]any{"maxTokens": 10, "maxEvents": 5, "maxNotes": 5},
+					"persistSnapshot": true,
+					"snapshotKind":    "restore",
+					"resumeHints":     "not-an-object",
+				}
+				return r
+			}(),
+			wantErr: true,
 		},
 		{
 			name: "invalid compile context",

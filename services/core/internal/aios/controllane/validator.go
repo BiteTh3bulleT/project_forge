@@ -414,6 +414,9 @@ func validateCompileContext(req domain.SyscallRequest) []domain.SyscallError {
 		}
 	}
 	issues = append(issues, validateCompileContextOptions(req.Payload, "payload")...)
+	if raw, ok := req.Payload["resumeHints"]; ok {
+		issues = append(issues, validateResumeHints(raw, "payload.resumeHints")...)
+	}
 	if raw, ok := req.Payload["restoreSnapshot"]; ok {
 		if raw == nil {
 			issues = append(issues, errField(domain.ErrInvalidPayload, "payload.restoreSnapshot", "restoreSnapshot must be an object"))
@@ -466,6 +469,9 @@ func validateCompileContextOptions(payload map[string]any, prefix string) []doma
 			issues = append(issues, errField(domain.ErrMissingRequiredField, prefix+".snapshotKind", "snapshotKind is required when snapshot options are enabled"))
 		}
 	}
+	if raw, ok := payload["resumeHints"]; ok {
+		issues = append(issues, validateResumeHints(raw, prefix+".resumeHints")...)
+	}
 	return issues
 }
 
@@ -489,6 +495,53 @@ func validateRestoreSnapshotOptions(payload map[string]any, prefix string) []dom
 		}
 	} else {
 		issues = append(issues, errField(domain.ErrMissingRequiredField, prefix+".snapshotKind", "snapshotKind is required"))
+	}
+	if raw, ok := payload["resumeHints"]; ok {
+		issues = append(issues, validateResumeHints(raw, prefix+".resumeHints")...)
+	}
+	return issues
+}
+
+func validateResumeHints(raw any, prefix string) []domain.SyscallError {
+	var issues []domain.SyscallError
+	if raw == nil {
+		return []domain.SyscallError{errField(domain.ErrInvalidPayload, prefix, "resumeHints must be an object")}
+	}
+	hints, ok := raw.(map[string]any)
+	if !ok {
+		return []domain.SyscallError{errField(domain.ErrInvalidPayload, prefix, "resumeHints must be an object")}
+	}
+	if preferred, exists := hints["preferredSnapshotId"]; exists {
+		value, ok := preferred.(string)
+		if !ok || strings.TrimSpace(value) == "" {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".preferredSnapshotId", "preferredSnapshotId must be a non-empty string"))
+		}
+	}
+	if preferredLegacy, exists := hints["preferred_snapshot_id"]; exists {
+		value, ok := preferredLegacy.(string)
+		if !ok || strings.TrimSpace(value) == "" {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".preferred_snapshot_id", "preferred_snapshot_id must be a non-empty string"))
+		}
+	}
+	if minimum, exists := hints["minimumScore"]; exists {
+		if !isNumeric(minimum) {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".minimumScore", "minimumScore must be a number between 0 and 1"))
+		} else if value := readFloat(hints, "minimumScore", -1); value < 0 || value > 1 {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".minimumScore", "minimumScore must be between 0 and 1"))
+		}
+	}
+	if minimumLegacy, exists := hints["minimum_score"]; exists {
+		if !isNumeric(minimumLegacy) {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".minimum_score", "minimum_score must be a number between 0 and 1"))
+		} else if value := readFloat(hints, "minimum_score", -1); value < 0 || value > 1 {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".minimum_score", "minimum_score must be between 0 and 1"))
+		}
+	}
+	if _, present, valid := readOptionalBool(hints, "freshCompileOnly"); present && !valid {
+		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".freshCompileOnly", "freshCompileOnly must be a boolean"))
+	}
+	if _, present, valid := readOptionalBool(hints, "fresh_compile_only"); present && !valid {
+		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".fresh_compile_only", "fresh_compile_only must be a boolean"))
 	}
 	return issues
 }
@@ -682,6 +735,15 @@ func readFloat(m map[string]any, key string, def float64) float64 {
 		return float64(x)
 	default:
 		return def
+	}
+}
+
+func isNumeric(v any) bool {
+	switch v.(type) {
+	case float64, float32, int, int64, int32, uint, uint64, uint32:
+		return true
+	default:
+		return false
 	}
 }
 

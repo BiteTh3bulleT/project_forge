@@ -624,6 +624,32 @@ func TestOpenAICompatStreamingUnsupported(t *testing.T) {
 	}
 }
 
+func TestForgeModelRuntimeStreamingUnsupported(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := newModelRuntimeHarness(t)
+	srv.modelRuntime = newFakeModelRuntime()
+
+	raw := []byte(`{"messages":[{"role":"user","content":"hello"}],"stream":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/forge/models/mistral-7b-instruct/chat", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusNotImplemented {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	var payload struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode forge stream unsupported response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.Error.Code != "STREAM_UNSUPPORTED" {
+		t.Fatalf("error code=%q want STREAM_UNSUPPORTED", payload.Error.Code)
+	}
+}
+
 func TestModelRuntimeLoadUnloadDeterministic(t *testing.T) {
 	t.Parallel()
 
@@ -720,9 +746,9 @@ func TestOpenAICompatRoutesAreAvailableWhenAutoEnabledViaCompatFlag(t *testing.T
 	t.Cleanup(func() { _ = st.Close() })
 
 	srv := NewServer(st, config.Config{
-		DataDir:              dataDir,
-		WorkspaceDir:         workspaceDir,
-		EnableOpenAICompatAPI: true,
+		DataDir:                   dataDir,
+		WorkspaceDir:              workspaceDir,
+		EnableOpenAICompatAPI:     true,
 		ModelOpenAICompatEndpoint: "http://127.0.0.1:11434",
 	})
 	t.Cleanup(func() { srv.ShutdownWatch() })

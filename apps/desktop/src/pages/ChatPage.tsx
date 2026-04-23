@@ -9,6 +9,7 @@ import {
   type ChatThreadDetail,
   type ChatThreadSummary,
   type ChatToolGatewayActivity,
+  type ModelRuntimeModel,
 } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -77,6 +78,72 @@ function readJobId(meta: Record<string, unknown> | undefined): string | null {
   const raw = meta.jobId;
   if (typeof raw === "string" && raw.trim()) return raw.trim();
   return null;
+}
+
+function readCorrelationId(meta: Record<string, unknown> | undefined): string | null {
+  if (!meta) return null;
+  const raw = meta.correlationId;
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  return null;
+}
+
+function readTraceId(meta: Record<string, unknown> | undefined): string | null {
+  if (!meta) return null;
+  const raw = meta.traceId;
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  return null;
+}
+
+const CHAT_MODEL_SELECTION_CACHE_KEY = "forge.chat.requestedModelId.v1";
+
+function readCachedChatModelSelection(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    const raw = window.localStorage.getItem(CHAT_MODEL_SELECTION_CACHE_KEY);
+    return typeof raw === "string" ? raw.trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+function writeCachedChatModelSelection(value: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      window.localStorage.removeItem(CHAT_MODEL_SELECTION_CACHE_KEY);
+      return;
+    }
+    window.localStorage.setItem(CHAT_MODEL_SELECTION_CACHE_KEY, trimmed);
+  } catch {
+    return;
+  }
+}
+
+function extractApiErrorMessage(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const trimmed = message.trim();
+  if (!trimmed.startsWith("{")) return trimmed;
+  try {
+    const parsed = JSON.parse(trimmed) as { error?: { message?: string } };
+    return parsed?.error?.message?.trim() || trimmed;
+  } catch {
+    return trimmed;
+  }
+}
+
+function supportsChatCapability(model: ModelRuntimeModel): boolean {
+  const caps = Array.isArray(model.capabilities) ? model.capabilities : [];
+  if (caps.length === 0) return true;
+  return caps.some((cap) => {
+    const normalized = String(cap).trim().toLowerCase();
+    return normalized === "chat" || normalized === "completion";
+  });
+}
+
+function usableChatStatus(model: ModelRuntimeModel): boolean {
+  const status = String(model.status ?? "").trim().toLowerCase();
+  return status !== "disabled" && status !== "archived" && status !== "unavailable" && status !== "error";
 }
 
 function readAttachments(meta: Record<string, unknown> | undefined): ChatAttachment[] {
@@ -711,6 +778,10 @@ export function ChatPage() {
   const [inspectorMode, setInspectorMode] = useState<"code" | "files">("code");
   const [selectedSnippetKey, setSelectedSnippetKey] = useState<string>("");
   const [selectedAttachmentId, setSelectedAttachmentId] = useState<number>(0);
+  const [chatModels, setChatModels] = useState<ModelRuntimeModel[]>([]);
+  const [chatModelLoadState, setChatModelLoadState] = useState<"idle" | "loading" | "ready" | "unavailable" | "error">("idle");
+  const [chatModelMessage, setChatModelMessage] = useState("");
+  const [selectedChatModelId, setSelectedChatModelId] = useState<string>(() => readCachedChatModelSelection());
 
   const [jobForm, setJobForm] = useState<{
     templateId: string;
@@ -748,6 +819,33 @@ export function ChatPage() {
   const refreshThreads = useCallback(async () => {
     const res = await api.chat.threads.list(120);
     setThreads(Array.isArray(res?.threads) ? res.threads : []);
+  }, []);
+
+  const refreshChatModels = useCallback(async () => {
+    setChatModelLoadState("loading");
+    setChatModelMessage("");
+    try {
+      const res = await api.modelRuntime.list();
+      const next = (Array.isArray(res.models) ? res.models : [])
+        .filter((model) => supportsChatCapability(model) && usableChatStatus(model))
+        .sort((a, b) => a.id.localeCompare(b.id));
+      setChatModels(next);
+      setSelectedChatModelId((prev) => (prev && next.some((item) => item.id === prev) ? prev : ""));
+      setChatModelLoadState("ready");
+      if (next.length === 0) {
+        setChatModelMessage("No chat-capable runtime models are currently available.");
+      }
+    } catch (e) {
+      const message = extractApiErrorMessage(e);
+      setChatModels([]);
+      if ((e instanceof Error ? e.message : String(e)).includes("MODEL_RUNTIME_UNAVAILABLE")) {
+        setChatModelLoadState("unavailable");
+        setChatModelMessage("Model runtime is unavailable. Chat will use configured adapter fallback.");
+      } else {
+        setChatModelLoadState("error");
+        setChatModelMessage(message || "Model runtime model list could not be loaded.");
+      }
+    }
   }, []);
 
   const loadThread = useCallback(
@@ -811,6 +909,14 @@ export function ChatPage() {
       cancelled = true;
     };
   }, [threadIdParam, setParams]);
+
+  useEffect(() => {
+    writeCachedChatModelSelection(selectedChatModelId);
+  }, [selectedChatModelId]);
+
+  useEffect(() => {
+    void refreshChatModels();
+  }, [refreshChatModels]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -905,6 +1011,10 @@ export function ChatPage() {
       requestAssistant,
       assistantDryRun,
     };
+    const requestedModel = selectedChatModelId.trim();
+    if (requestedModel) {
+      body.modelId = requestedModel;
+    }
     if (useStream) body.stream = true;
     else if (useSyncBlock) body.syncAssistant = true;
     else if (useAsyncPoll) body.asyncAssistant = true;
@@ -1456,6 +1566,26 @@ export function ChatPage() {
                     />
                     Use assistant
                   </label>
+                  <label className="inline-flex items-center gap-2">
+                    <span className="text-[11px] text-forge-mist/80">Model</span>
+                    <select
+                      aria-label="Chat runtime model"
+                      className="forge-input h-8 min-w-[240px] py-1 text-xs"
+                      value={selectedChatModelId}
+                      onChange={(e) => setSelectedChatModelId(e.target.value)}
+                      disabled={chatModelLoadState === "loading"}
+                    >
+                      <option value="">Auto (runtime default / adapter fallback)</option>
+                      {selectedChatModelId && !chatModels.some((model) => model.id === selectedChatModelId) ? (
+                        <option value={selectedChatModelId}>Saved: {selectedChatModelId} (not in current runtime list)</option>
+                      ) : null}
+                      {chatModels.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.displayName?.trim() || model.id}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <button
                     type="button"
                     onClick={() => setShowAdvanced((v) => !v)}
@@ -1464,6 +1594,16 @@ export function ChatPage() {
                     {showAdvanced ? "Hide advanced" : "Advanced"}
                   </button>
                 </div>
+                {chatModelMessage ? (
+                  <div className="mb-2 text-[10px] text-forge-mist/75">
+                    {chatModelMessage}{" "}
+                    {(chatModelLoadState === "unavailable" || chatModelLoadState === "error") && (
+                      <Link to="/models" className="text-forge-emberSoft underline underline-offset-2 hover:text-forge-ash">
+                        Open Models
+                      </Link>
+                    )}
+                  </div>
+                ) : null}
 
                 {showAdvanced ? (
                   <div className="mb-3 grid gap-2 md:grid-cols-3">
@@ -1686,6 +1826,8 @@ function MessageRow(props: { message: ChatMessage; onInspectAttachment: (artifac
   const isUser = role === "user";
   const isAssistant = role === "assistant";
   const jobId = readJobId(message.metadata);
+  const correlationId = readCorrelationId(message.metadata);
+  const traceId = readTraceId(message.metadata);
   const attachments = readAttachments(message.metadata);
   const toolActivity = isAssistant ? readToolGatewayActivity(message.metadata) : null;
 
@@ -1738,6 +1880,28 @@ function MessageRow(props: { message: ChatMessage; onInspectAttachment: (artifac
               <Link to={`/jobs/${encodeURIComponent(jobId)}`} className="underline underline-offset-2 hover:text-forge-ash">
                 Open Job {jobId}
               </Link>
+            </div>
+          ) : null}
+          {correlationId || traceId ? (
+            <div className="mt-3 border-t border-white/10 pt-2 text-xs text-forge-mist">
+              <div className="flex flex-wrap gap-3">
+                {correlationId ? (
+                  <Link
+                    to={`/inspectors?correlationId=${encodeURIComponent(correlationId)}`}
+                    className="underline underline-offset-2 hover:text-forge-ash"
+                  >
+                    Inspect correlation {correlationId}
+                  </Link>
+                ) : null}
+                {traceId ? (
+                  <Link
+                    to={`/inspectors?traceId=${encodeURIComponent(traceId)}`}
+                    className="underline underline-offset-2 hover:text-forge-ash"
+                  >
+                    Inspect trace {traceId}
+                  </Link>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </div>

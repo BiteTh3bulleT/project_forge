@@ -281,7 +281,7 @@ func (s *Server) runRemoteAssistantAsync(
 	asyncCtx, cancel := context.WithTimeout(asyncCtx, remoteAssistantTimeout)
 	defer cancel()
 
-	am := s.completeAssistantSync(asyncCtx, threadID, userMessageID, th, content, ollamaAdapter, false)
+	am := s.completeAssistantSync(asyncCtx, threadID, userMessageID, th, content, ollamaAdapter, false, "")
 	if am == nil {
 		_ = sendReply(asyncCtx, "Assistant reply could not be generated.")
 		return

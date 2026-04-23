@@ -100,6 +100,8 @@ var (
 	ErrModelSelectionAmbiguous    = errors.New("model selection is ambiguous")
 	ErrImportPathInvalid          = errors.New("model import path invalid")
 	ErrUnsupportedBackendOverride = errors.New("requested backend override is unsupported")
+	ErrProviderCooldownActive     = errors.New("model provider cooldown active")
+	ErrChatRetryExhausted         = errors.New("chat execution retry exhausted")
 )
 
 func ValidateGenerateRequest(req GenerateRequest) error {

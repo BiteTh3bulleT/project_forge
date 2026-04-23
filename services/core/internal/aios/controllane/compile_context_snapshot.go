@@ -423,24 +423,33 @@ func compiledContextSnapshotToDomain(snapshot compiledContextSnapshot) *domain.C
 }
 
 func compiledContextSnapshotFromDomain(snapshot *domain.ContextRestoreSnapshot) (compiledContextSnapshot, bool) {
-	if snapshot == nil || snapshot.Evidence == nil {
-		return compiledContextSnapshot{}, false
-	}
-	headerRaw, ok := snapshot.Evidence["header"]
+	header, ok := compiledContextSnapshotHeaderFromDomain(snapshot)
 	if !ok {
 		return compiledContextSnapshot{}, false
 	}
-	graphRaw, ok := snapshot.Evidence["graph"]
-	if !ok {
-		return compiledContextSnapshot{}, false
+
+	graph := compiledContextSnapshotGraph{
+		Objective: compiledContextSnapshotNode{
+			ID:    objectiveNodeID(header.Query),
+			Type:  "objective",
+			Label: truncateSnapshotText(header.Query, 64),
+		},
+		Rails: []compiledContextSnapshotRail{
+			{Name: "constraints", Label: "Constraints"},
+			{Name: "evidence", Label: "Evidence"},
+			{Name: "hypotheses", Label: "Hypotheses"},
+			{Name: "loops", Label: "Loops"},
+		},
+		Nodes: []compiledContextSnapshotNode{},
+		Edges: []compiledContextSnapshotEdge{},
 	}
-	var header compiledContextSnapshotHeader
-	if !decodeSnapshotValue(headerRaw, &header) {
-		return compiledContextSnapshot{}, false
-	}
-	var graph compiledContextSnapshotGraph
-	if !decodeSnapshotValue(graphRaw, &graph) {
-		return compiledContextSnapshot{}, false
+	if snapshot != nil && snapshot.Evidence != nil {
+		if graphRaw, hasGraph := snapshot.Evidence["graph"]; hasGraph {
+			var decoded compiledContextSnapshotGraph
+			if decodeSnapshotValue(graphRaw, &decoded) {
+				graph = decoded
+			}
+		}
 	}
 	delta := compiledContextSnapshotDelta{
 		AddedNodeIDs:   []string{},
@@ -450,20 +459,66 @@ func compiledContextSnapshotFromDomain(snapshot *domain.ContextRestoreSnapshot) 
 		RemovedEdgeIDs: []string{},
 		ChangedEdgeIDs: []string{},
 	}
-	if deltaRaw, ok := snapshot.Evidence["delta"]; ok {
-		_ = decodeSnapshotValue(deltaRaw, &delta)
-	}
-	if header.SnapshotID == "" {
-		header.SnapshotID = snapshot.SnapshotID
-	}
-	if header.SnapshotKind == "" {
-		header.SnapshotKind = snapshot.SnapshotKind
+	if snapshot != nil && snapshot.Evidence != nil {
+		if deltaRaw, hasDelta := snapshot.Evidence["delta"]; hasDelta {
+			_ = decodeSnapshotValue(deltaRaw, &delta)
+		}
 	}
 	return compiledContextSnapshot{
 		Header: header,
 		Graph:  graph,
 		Delta:  delta,
 	}, true
+}
+
+func compiledContextSnapshotHeaderFromDomain(snapshot *domain.ContextRestoreSnapshot) (compiledContextSnapshotHeader, bool) {
+	if snapshot == nil {
+		return compiledContextSnapshotHeader{}, false
+	}
+	header := compiledContextSnapshotHeader{
+		SnapshotID:   strings.TrimSpace(snapshot.SnapshotID),
+		SnapshotKind: strings.TrimSpace(snapshot.SnapshotKind),
+	}
+	if snapshot.Evidence != nil {
+		if headerRaw, ok := snapshot.Evidence["header"]; ok {
+			var decoded compiledContextSnapshotHeader
+			if decodeSnapshotValue(headerRaw, &decoded) {
+				header = decoded
+			}
+		}
+	}
+	if header.SnapshotID == "" {
+		header.SnapshotID = strings.TrimSpace(snapshot.SnapshotID)
+	}
+	if header.SnapshotKind == "" {
+		header.SnapshotKind = strings.TrimSpace(snapshot.SnapshotKind)
+	}
+	if snapshot.Metadata != nil {
+		if header.Fingerprint == "" {
+			header.Fingerprint = strings.TrimSpace(readString(snapshot.Metadata, "fingerprint"))
+		}
+		if header.ParentSnapshotID == "" {
+			header.ParentSnapshotID = strings.TrimSpace(nonEmpty(
+				readString(snapshot.Metadata, "parent_snapshot_id"),
+				readString(snapshot.Metadata, "restore_source_snapshot_id"),
+			))
+		}
+		if header.Query == "" {
+			header.Query = strings.TrimSpace(readString(snapshot.Metadata, "query"))
+		}
+		if header.CreatedAt == 0 {
+			header.CreatedAt = readInt64(snapshot.Metadata, "created_at")
+		}
+		if header.Scope.WorkspaceID == "" {
+			if scopeRaw, ok := snapshot.Metadata["restore_scope_json"]; ok {
+				_ = decodeSnapshotValue(scopeRaw, &header.Scope)
+			}
+		}
+	}
+	if header.SnapshotID == "" {
+		return compiledContextSnapshotHeader{}, false
+	}
+	return header, true
 }
 
 func mergeCompileContextOptions(payload map[string]any) compileContextSnapshotOptions {
@@ -556,6 +611,28 @@ func decodeSnapshotValue(raw any, out any) bool {
 func canonicalJSONString(v any) string {
 	raw, _ := json.Marshal(v)
 	return string(raw)
+}
+
+func readInt64(m map[string]any, key string) int64 {
+	if m == nil {
+		return 0
+	}
+	v, ok := m[key]
+	if !ok || v == nil {
+		return 0
+	}
+	switch x := v.(type) {
+	case int64:
+		return x
+	case int:
+		return int64(x)
+	case float64:
+		return int64(x)
+	case float32:
+		return int64(x)
+	default:
+		return 0
+	}
 }
 
 func objectiveNodeID(query string) string {

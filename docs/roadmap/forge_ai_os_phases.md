@@ -1,6 +1,6 @@
 # FORGE AI-OS Phases (Reality-Based Status)
 
-Status date: 2026-04-22 (branch-local reality snapshot).
+Status date: 2026-04-23 (branch-local reality snapshot).
 
 Allowed statuses: `complete`, `mostly complete`, `partial`, `blocked`, `scaffold`, `deferred`.
 
@@ -10,16 +10,16 @@ Allowed statuses: `complete`, `mostly complete`, `partial`, `blocked`, `scaffold
 | Phase 2 (semantic syscall kernel) | mostly complete | deterministic registry/validator/processor/audit path | broaden edge-case/API coverage |
 | Phase 3 (cognitive filesystem persistence) | partial | durable core cognitive tables and history model | close remaining durability/restore gaps |
 | Phase 4 (ingest + librarian cells) | mostly complete | proposal-first cells wired through syscall commits | strengthen negative-path/quality guards |
-| Phase 5 (truth engine) | mostly complete | current/history/contradiction/supersession services are real | improve repair/explain completeness |
+| Phase 5 (truth engine) | partial | current/history/contradiction/supersession services are real and kernel-backed, but they are not yet the only runtime memory/state authority | finish repair/explain/operator surfacing and reduce parallel truth paths |
 | Phase 5.5 (rule agents) | partial | safe propose-only agents with destructive guards | expand deterministic agent coverage |
-| Phase 5.75 (autonomy layer) | partial | durable default repos + policy/budget/approval gates | broaden trace visibility + remaining parity |
+| Phase 5.75 (autonomy layer) | partial | durable default repos + policy/budget/approval gates plus bounded maintenance loop are real | broaden trace visibility, review default mode posture, and continue parity work |
 | Phase 5.9 (tool surface/capability policy) | partial | governed taxonomy + policy + audit path | continue hardening dangerous/default posture |
-| Phase 6.25 (context restore snapshots) | scaffold | `COMPILE_CONTEXT` extension that can persist snapshot evidence and optionally render an SVG card; restore rows stay syscall-bound, scope-linked, and non-canonical | Phase 6.5 adds restore scoring/ranking on top of persisted snapshots |
+| Phase 6.25 (context restore snapshots) | partial | `COMPILE_CONTEXT` can persist snapshot evidence, render optional SVG cards, and apply deterministic restore candidate ranking with inspectable `restore_scores_json` / `resume_hints_json`; restore rows stay syscall-bound, scope-linked, and non-canonical | broaden operator-facing restore inspection and continue Phase 6.5 scoring refinement |
 | Phase M1 (model runtime foundation) | mostly complete | FORGE-native modelruntime subsystem is live (manifest/store/registry/backends/runtime service/internal API plus gated OpenAI-compatible minimum API) | keep M1 truth aligned under later governance work |
 | Phase M2 (model runtime governance) | mostly complete | FIFO scheduler, bounded admission, lifecycle controls, policy/workspace hooks, richer audit/usage accounting, runtime queue/loaded endpoints | M3 management/backend expansion now landed; gateway `model.*` aliasing and streaming remain |
 | Phase M3 (model runtime management) | partial (implemented) | import/register/reconcile flows, persistent lifecycle state, enable/disable/archive/remove-registration operations, OpenAI-compatible backend, vLLM-compatible path, compatibility/usage/backend inspection, deterministic selection | M4: streaming, delete-file approval flow, stronger backend/process supervision, deeper scheduling/load balancing, gateway `model.*` aliasing |
 | Phase 5.95 (v1/v2 cutover) | partial | authoritative paths clearer; legacy boundaries explicitly gated | continue reducing side doors |
-| Phase 5.996 (current pass) | partial (improved) | restore parity includes project context/evaluations/audit/gateway sections; restore reports `atomicScope` + non-DB warnings; legacy boundary request/audit hardening improved | resolve authoritative VSA source tracking + VSA export-only restore posture + legacy adapter side-door convergence |
+| Phase 5.996 (current pass) | partial (improved) | branch-local convergence now includes gateway-only adapter execution ingress, deterministic restore candidate scoring metadata, and clearer authority/runtime docs | keep shrinking legacy write/event side paths and improve operator trace visibility |
 | Phase N1 (light Nix foundation) | partial | flake/shell/check scaffolding present | authoritative validation blocked by local nix daemon availability |
 
 ## Before Phase 6 must be true
@@ -30,6 +30,7 @@ Allowed statuses: `complete`, `mostly complete`, `partial`, `blocked`, `scaffold
 4. JS/TS validation has at least build+typecheck+lint/test baseline.
 5. Traceability chain is inspectable for gateway/syscall/autonomy/artifact flows.
 6. Model runtime authority exists as a FORGE-owned subsystem (not only adapter-level Ollama coupling).
+7. Phase 5 truth/autonomy/tool-policy claims stay aligned with code rather than with target architecture language.
 
 ## M4 Preview
 

@@ -146,6 +146,25 @@ func (s *Server) handleAutonomyEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"events": rows})
 }
 
+func (s *Server) handleAutonomyMaintenanceSweep(w http.ResponseWriter, r *http.Request) {
+	if s == nil || s.autonomy == nil {
+		http.Error(w, "autonomy loop is not configured", http.StatusNotFound)
+		return
+	}
+	var body AutonomyMaintenanceSweepRequest
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	report, err := s.autonomy.RunSweep(r.Context(), body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	status := http.StatusOK
+	if report.Status == "skipped" {
+		status = http.StatusConflict
+	}
+	writeJSON(w, status, map[string]any{"report": report})
+}
+
 func parseAutonomyLimit(r *http.Request, fallback int) int {
 	if fallback <= 0 {
 		fallback = 100

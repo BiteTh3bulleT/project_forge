@@ -76,6 +76,7 @@ type SemanticReadStore interface {
 	FindStateByScopeKey(scope domain.ForgeScope, key string) (domain.StateItem, bool)
 	GetIdempotency(key string) (IdempotencyRecord, bool)
 	FindLatestContextSnapshot(scope domain.ForgeScope, query, snapshotKind string) (domain.ContextPacket, bool)
+	ListContextSnapshots(scope domain.ForgeScope, query, snapshotKind string, limit int) []domain.ContextPacket
 	BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket
 }
 
@@ -281,27 +282,17 @@ func (s *InMemorySemanticStore) GetIdempotency(key string) (IdempotencyRecord, b
 func (s *InMemorySemanticStore) FindLatestContextSnapshot(scope domain.ForgeScope, query, snapshotKind string) (domain.ContextPacket, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var latest domain.ContextPacket
-	var found bool
-	for _, pkt := range s.state.contextSnapshots {
-		if strings.TrimSpace(pkt.Scope.WorkspaceID) != strings.TrimSpace(scope.WorkspaceID) {
-			continue
-		}
-		if strings.TrimSpace(scope.LaneID) != "" && strings.TrimSpace(pkt.Scope.LaneID) != strings.TrimSpace(scope.LaneID) {
-			continue
-		}
-		if strings.TrimSpace(pkt.Query) != strings.TrimSpace(query) {
-			continue
-		}
-		if contextSnapshotKind(pkt) != strings.TrimSpace(snapshotKind) {
-			continue
-		}
-		if !found || pkt.CreatedAt > latest.CreatedAt {
-			latest = pkt
-			found = true
-		}
+	matches := filterContextSnapshots(s.state.contextSnapshots, scope, query, snapshotKind, 1)
+	if len(matches) == 0 {
+		return domain.ContextPacket{}, false
 	}
-	return latest, found
+	return matches[0], true
+}
+
+func (s *InMemorySemanticStore) ListContextSnapshots(scope domain.ForgeScope, query, snapshotKind string, limit int) []domain.ContextPacket {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return filterContextSnapshots(s.state.contextSnapshots, scope, query, snapshotKind, limit)
 }
 
 func (s *InMemorySemanticStore) SetIdempotency(key string, rec IdempotencyRecord) {
@@ -663,31 +654,55 @@ func (s *TransactionalSemanticStore) GetIdempotency(key string) (IdempotencyReco
 }
 
 func (s *TransactionalSemanticStore) FindLatestContextSnapshot(scope domain.ForgeScope, query, snapshotKind string) (domain.ContextPacket, bool) {
-	var latest domain.ContextPacket
-	var found bool
-	for _, pkt := range s.state.contextSnapshots {
-		if strings.TrimSpace(pkt.Scope.WorkspaceID) != strings.TrimSpace(scope.WorkspaceID) {
-			continue
-		}
-		if strings.TrimSpace(scope.LaneID) != "" && strings.TrimSpace(pkt.Scope.LaneID) != strings.TrimSpace(scope.LaneID) {
-			continue
-		}
-		if strings.TrimSpace(pkt.Query) != strings.TrimSpace(query) {
-			continue
-		}
-		if contextSnapshotKind(pkt) != strings.TrimSpace(snapshotKind) {
-			continue
-		}
-		if !found || pkt.CreatedAt > latest.CreatedAt {
-			latest = pkt
-			found = true
-		}
+	matches := filterContextSnapshots(s.state.contextSnapshots, scope, query, snapshotKind, 1)
+	if len(matches) == 0 {
+		return domain.ContextPacket{}, false
 	}
-	return latest, found
+	return matches[0], true
+}
+
+func (s *TransactionalSemanticStore) ListContextSnapshots(scope domain.ForgeScope, query, snapshotKind string, limit int) []domain.ContextPacket {
+	return filterContextSnapshots(s.state.contextSnapshots, scope, query, snapshotKind, limit)
 }
 
 func (s *TransactionalSemanticStore) SetIdempotency(key string, rec IdempotencyRecord) {
 	s.state.idempotency[key] = rec
+}
+
+func filterContextSnapshots(all map[string]domain.ContextPacket, scope domain.ForgeScope, query, snapshotKind string, limit int) []domain.ContextPacket {
+	workspaceID := strings.TrimSpace(scope.WorkspaceID)
+	laneID := strings.TrimSpace(scope.LaneID)
+	trimmedQuery := strings.TrimSpace(query)
+	trimmedKind := strings.TrimSpace(snapshotKind)
+	if limit <= 0 {
+		limit = 50
+	}
+	matches := make([]domain.ContextPacket, 0, limit)
+	for _, pkt := range all {
+		if strings.TrimSpace(pkt.Scope.WorkspaceID) != workspaceID {
+			continue
+		}
+		if laneID != "" && strings.TrimSpace(pkt.Scope.LaneID) != laneID {
+			continue
+		}
+		if trimmedQuery != "" && strings.TrimSpace(pkt.Query) != trimmedQuery {
+			continue
+		}
+		if trimmedKind != "" && contextSnapshotKind(pkt) != trimmedKind {
+			continue
+		}
+		matches = append(matches, pkt)
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		if matches[i].CreatedAt == matches[j].CreatedAt {
+			return matches[i].ID > matches[j].ID
+		}
+		return matches[i].CreatedAt > matches[j].CreatedAt
+	})
+	if len(matches) > limit {
+		matches = matches[:limit]
+	}
+	return matches
 }
 
 func (s *TransactionalSemanticStore) BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket {

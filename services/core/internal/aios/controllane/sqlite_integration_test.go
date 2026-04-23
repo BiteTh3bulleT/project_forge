@@ -619,14 +619,14 @@ WHERE id = ?`, packet.ID).Scan(
 	if headerJSON == "{}" || graphJSON == "{}" || deltaJSON == "{}" {
 		t.Fatalf("expected header/graph/delta columns to persist non-empty snapshot evidence")
 	}
-	if restoreScoresJSON != "{}" {
-		t.Fatalf("expected restore_scores_json to default to {}, got %s", restoreScoresJSON)
+	if restoreScoresJSON == "{}" {
+		t.Fatalf("expected restore_scores_json to persist scored selection metadata, got %s", restoreScoresJSON)
 	}
 	if renderArtifactRefID == "" {
 		t.Fatalf("expected render_artifact_ref_id column to persist rendered card artifact")
 	}
-	if resumeHintsJSON != "{}" {
-		t.Fatalf("expected resume_hints_json to default to {}, got %s", resumeHintsJSON)
+	if resumeHintsJSON == "{}" {
+		t.Fatalf("expected resume_hints_json to persist resume contract metadata, got %s", resumeHintsJSON)
 	}
 
 	renderedArtifactID := readString(packet.RestoreSnapshot.Metadata, "rendered_card_artifact_id")
@@ -645,6 +645,9 @@ WHERE id = ?`, renderedArtifactID).Scan(&artifactCorr, &artifactTrace, &artifact
 	}
 	if res.StateSummary["snapshotFingerprint"] == "" {
 		t.Fatalf("expected snapshot fingerprint in syscall summary")
+	}
+	if readString(res.StateSummary, "restoreDecision") == "" {
+		t.Fatalf("expected restoreDecision summary field")
 	}
 }
 
@@ -695,8 +698,58 @@ WHERE id = ?`, packet.ID).Scan(&parentSnapshotID); err != nil {
 	if reason, ok := packet.RestoreSnapshot.Metadata["restore_reason_json"].(map[string]any); !ok || reason["fingerprint_matched"] != true {
 		t.Fatalf("expected fingerprint matched restore reason, got %#v", packet.RestoreSnapshot.Metadata["restore_reason_json"])
 	}
+	scores, ok := packet.RestoreSnapshot.Metadata["restore_scores_json"].(map[string]any)
+	if !ok || scores["decision"] != "selected" {
+		t.Fatalf("expected selected restore_scores_json metadata, got %#v", packet.RestoreSnapshot.Metadata["restore_scores_json"])
+	}
 	if got := packet.RestoreSnapshot.Evidence["delta"]; got == nil {
 		t.Fatalf("expected persisted delta evidence")
+	}
+}
+
+func TestSQLiteListContextSnapshotsFiltersByScopeQueryAndKind(t *testing.T) {
+	ctx := context.Background()
+	k, txRunner, _ := newSQLiteKernel(t, nil)
+	read := txRunner.read
+
+	mustCreateNote(ctx, k, "ctx-list-note-a", "list a")
+
+	first := validSQLiteRequest(domain.ActionCompileContext, "ctx-list-compile-1", "ws-main")
+	first.Payload = map[string]any{
+		"query":           "summarize blockers",
+		"budget":          map[string]any{"maxTokens": 50, "maxEvents": 20, "maxNotes": 20},
+		"persistSnapshot": true,
+		"snapshotKind":    "restore",
+	}
+	if res, err := k.Process(ctx, first); err != nil || !res.Success {
+		t.Fatalf("first compile failed: err=%v res=%+v", err, res)
+	}
+
+	second := validSQLiteRequest(domain.ActionCompileContext, "ctx-list-compile-2", "ws-main")
+	second.RequestedAt = first.RequestedAt + 1000
+	second.Payload = first.Payload
+	if res, err := k.Process(ctx, second); err != nil || !res.Success {
+		t.Fatalf("second compile failed: err=%v res=%+v", err, res)
+	}
+
+	otherKind := validSQLiteRequest(domain.ActionCompileContext, "ctx-list-compile-3", "ws-main")
+	otherKind.RequestedAt = second.RequestedAt + 1000
+	otherKind.Payload = map[string]any{
+		"query":           "summarize blockers",
+		"budget":          map[string]any{"maxTokens": 50, "maxEvents": 20, "maxNotes": 20},
+		"persistSnapshot": true,
+		"snapshotKind":    "review",
+	}
+	if res, err := k.Process(ctx, otherKind); err != nil || !res.Success {
+		t.Fatalf("other-kind compile failed: err=%v res=%+v", err, res)
+	}
+
+	list := read.ListContextSnapshots(domain.ForgeScope{WorkspaceID: "ws-main", LaneID: "control.semantic"}, "summarize blockers", "restore", 10)
+	if len(list) != 2 {
+		t.Fatalf("expected 2 restore snapshots, got %d", len(list))
+	}
+	if list[0].CreatedAt < list[1].CreatedAt {
+		t.Fatalf("expected descending created_at order, got %d then %d", list[0].CreatedAt, list[1].CreatedAt)
 	}
 }
 

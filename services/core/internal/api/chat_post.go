@@ -114,6 +114,25 @@ func messageAttachmentIDs(metadata map[string]any) []int64 {
 	return out
 }
 
+func readRequestedModelID(metadata map[string]any) string {
+	if metadata == nil {
+		return ""
+	}
+	for _, key := range []string{"requestedModelId", "modelId"} {
+		raw, ok := metadata[key]
+		if !ok || raw == nil {
+			continue
+		}
+		if value, ok := raw.(string); ok {
+			trimmed := strings.TrimSpace(value)
+			if trimmed != "" {
+				return trimmed
+			}
+		}
+	}
+	return ""
+}
+
 func (s *Server) buildThreadAttachmentContext(ctx context.Context, th *chat.ThreadDetail) string {
 	type attachmentRef struct {
 		messageID   int64
@@ -246,6 +265,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Content               string  `json:"content"`
+		ModelID               string  `json:"modelId"`
 		RequestAssistant      bool    `json:"requestAssistant"`
 		AssistantDryRun       bool    `json:"assistantDryRun"`
 		Stream                bool    `json:"stream"`
@@ -258,11 +278,15 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body.Content = strings.TrimSpace(body.Content)
+	body.ModelID = strings.TrimSpace(body.ModelID)
 	if body.Content == "" {
 		http.Error(w, "content required", http.StatusBadRequest)
 		return
 	}
 	userMeta := map[string]any{"source": "operator"}
+	if body.ModelID != "" {
+		userMeta["requestedModelId"] = body.ModelID
+	}
 	if len(body.AttachmentArtifactIDs) > 0 {
 		attachments, err := s.resolveAttachmentMetadata(ctx, threadID, body.AttachmentArtifactIDs)
 		if err != nil {
@@ -385,7 +409,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 
 	// Dry-run is always synchronous and fast.
 	if body.AssistantDryRun {
-		am := s.completeAssistantSync(ctx, threadID, um.ID, th, um.Content, ollamaAdapter, body.AssistantDryRun)
+		am := s.completeAssistantSync(ctx, threadID, um.ID, th, um.Content, ollamaAdapter, body.AssistantDryRun, body.ModelID)
 		out["assistantMessage"] = am
 		writeJSON(w, http.StatusOK, out)
 		return
@@ -412,14 +436,14 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "assistant generation already in progress for this message", http.StatusConflict)
 			return
 		}
-		go s.runChatAssistantAsync(key, threadID, um.ID, th, um.Content, ollamaAdapter)
+		go s.runChatAssistantAsync(key, threadID, um.ID, th, um.Content, ollamaAdapter, body.ModelID)
 		out["assistantPending"] = true
 		out["asyncAssistant"] = true
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
 
-	am := s.completeAssistantSync(ctx, threadID, um.ID, th, um.Content, ollamaAdapter, false)
+	am := s.completeAssistantSync(ctx, threadID, um.ID, th, um.Content, ollamaAdapter, false, body.ModelID)
 	out["assistantMessage"] = am
 	writeJSON(w, http.StatusOK, out)
 }
@@ -833,11 +857,26 @@ func chatOllamaStreamCapable(ctx context.Context, ollamaAdapter adapters.Adapter
 	return strings.TrimSpace(ol.ModelForChat(ctx)) != ""
 }
 
-func (s *Server) completeAssistantSync(ctx context.Context, threadID, userMessageID int64, th *chat.ThreadDetail, lastUserContent string, ollamaAdapter adapters.Adapter, dryRun bool) *chat.Message {
-	return s.completeAssistantWithGatewayTools(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, dryRun, nil)
+func (s *Server) completeAssistantSync(
+	ctx context.Context,
+	threadID, userMessageID int64,
+	th *chat.ThreadDetail,
+	lastUserContent string,
+	ollamaAdapter adapters.Adapter,
+	dryRun bool,
+	requestedModelID string,
+) *chat.Message {
+	return s.completeAssistantWithGatewayTools(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, dryRun, nil, requestedModelID)
 }
 
-func (s *Server) runChatAssistantAsync(key string, threadID, userMessageID int64, th *chat.ThreadDetail, lastUserContent string, ollamaAdapter adapters.Adapter) {
+func (s *Server) runChatAssistantAsync(
+	key string,
+	threadID, userMessageID int64,
+	th *chat.ThreadDetail,
+	lastUserContent string,
+	ollamaAdapter adapters.Adapter,
+	requestedModelID string,
+) {
 	defer s.chatAssistInflight.Delete(key)
 	ctx, cancel := context.WithTimeout(context.Background(), 185*time.Second)
 	defer cancel()
@@ -846,7 +885,7 @@ func (s *Server) runChatAssistantAsync(key string, threadID, userMessageID int64
 		_, _ = s.chat.AppendMessage(ctx, threadID, "assistant", "Could not load thread for assistant reply.", map[string]any{"failure": true, "replyToUserMessageId": userMessageID})
 		return
 	}
-	am := s.completeAssistantSync(ctx, threadID, userMessageID, th2, lastUserContent, ollamaAdapter, false)
+	am := s.completeAssistantSync(ctx, threadID, userMessageID, th2, lastUserContent, ollamaAdapter, false, requestedModelID)
 	if am == nil {
 		_, _ = s.chat.AppendMessage(ctx, threadID, "assistant", "Assistant reply could not be saved.", map[string]any{"failure": true, "replyToUserMessageId": userMessageID})
 	}
@@ -901,9 +940,11 @@ func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Reques
 	}
 
 	var umContent string
+	var requestedModelID string
 	for _, m := range th.Messages {
 		if m.ID == userMessageID && m.Role == "user" {
 			umContent = m.Content
+			requestedModelID = readRequestedModelID(m.Metadata)
 			break
 		}
 	}
@@ -914,7 +955,7 @@ func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Reques
 	}
 	if !chatOllamaStreamCapable(ctx, ollamaAdapter) {
 		s.initSSE(w)
-		am := s.completeAssistantSync(ctx, threadID, userMessageID, th, umContent, ollamaAdapter, false)
+		am := s.completeAssistantSync(ctx, threadID, userMessageID, th, umContent, ollamaAdapter, false, requestedModelID)
 		if am == nil {
 			b, _ := json.Marshal(map[string]any{"message": "assistant reply could not be saved"})
 			fmt.Fprintf(w, "event: error\ndata: %s\n\n", string(b))
@@ -929,7 +970,7 @@ func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Reques
 	emit := func(event string, payload map[string]any) {
 		s.writeNamedSSEEvent(w, event, payload)
 	}
-	am := s.completeAssistantWithGatewayTools(ctx, threadID, userMessageID, th, umContent, ollamaAdapter, false, emit)
+	am := s.completeAssistantWithGatewayTools(ctx, threadID, userMessageID, th, umContent, ollamaAdapter, false, emit, requestedModelID)
 	if am == nil {
 		b, _ := json.Marshal(map[string]any{"message": "assistant reply could not be saved"})
 		fmt.Fprintf(w, "event: error\ndata: %s\n\n", string(b))

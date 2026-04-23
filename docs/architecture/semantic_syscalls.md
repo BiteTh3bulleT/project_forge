@@ -1,4 +1,6 @@
-# Semantic Syscalls (Phase 2)
+# Semantic Syscalls
+
+Status date: 2026-04-23.
 
 Semantic syscalls are the deterministic mutation boundary for FORGE AI-OS Control Lane.
 
@@ -11,7 +13,7 @@ They turn candidate semantic actions into a kernel-validated flow:
 - keeps canonical memory/state mutation inside FORGE kernel boundaries
 - enforces workspace-scoped, auditable writes
 - prevents LLM/agent/future IRIS direct mutation of canonical truth
-- provides a stable contract for Phase 3 persistence backends
+- provides a stable contract for durable cognitive persistence plus later ingest/autonomy layers
 
 ## Lifecycle
 
@@ -102,7 +104,7 @@ Deterministic error categories include:
 - `PERSISTENCE_UNAVAILABLE`
 - `INTERNAL_ERROR`
 
-## Supported actions (Phase 2)
+## Supported actions
 
 - `CREATE_NOTE`
 - `CREATE_LINK`
@@ -113,7 +115,7 @@ Deterministic error categories include:
 - `REGISTER_CONTRADICTION`
 - `DERIVE_MODEL`
 - `ARCHIVE_NOTE`
-- `COMPILE_CONTEXT` (read-only deterministic context stub in Phase 2)
+- `COMPILE_CONTEXT` (deterministic context compile path with optional snapshot evidence persistence)
 
 Phase 3 durable mapping:
 
@@ -125,7 +127,7 @@ Phase 3 durable mapping:
 - `REGISTER_CONTRADICTION` -> `contradiction_records` + contradicts link
 - `DERIVE_MODEL` -> `derived_models`
 - `ARCHIVE_NOTE` -> note status transition in `memory_notes`
-- `COMPILE_CONTEXT` -> deterministic read path; snapshot persistence/rendering are opt-in via `persistSnapshot`, `renderSnapshotCard`, and `snapshotKind`
+- `COMPILE_CONTEXT` -> deterministic read path with optional snapshot persistence/rendering plus scope/query/kind restore candidate ranking and inspectable restore metadata
 
 Committed semantic actions also append a `journal_events` row as semantic truth trace.
 
@@ -319,3 +321,31 @@ Invariants remain enforced:
 - the snapshot row and any SVG card are evidence only, not truth authority
 
 When `persistSnapshot` is false, `COMPILE_CONTEXT` remains a deterministic read path and may still return a transient compiled packet result without durable snapshot storage.
+
+### Restore candidate scoring and resume contract (Phase 2 arterial runtime)
+
+`COMPILE_CONTEXT` restore selection now performs deterministic candidate ranking across persisted snapshots in the same scope/query/kind window.
+
+Selection behavior:
+
+- candidates are listed by `workspace/lane + query + snapshotKind`
+- ranking is deterministic and inspectable (no LLM scoring)
+- stale and contradiction-heavy snapshots are penalized
+- score threshold controls whether a prior snapshot is selected or a fresh compile is forced
+- no candidate or low score results in explicit fresh-compile fallback
+- header-only snapshot evidence can still participate in candidate ranking with a penalty rather than failing restore selection outright
+
+Resume hints contract:
+
+- request may include `resumeHints` (top-level or under `restoreSnapshot` / `compileOptions`)
+- supported keys:
+  - `preferredSnapshotId`
+  - `minimumScore` (0..1)
+  - `freshCompileOnly` (boolean hard override)
+- result persists both:
+  - `restore_scores_json` (candidate score breakdown + decision)
+  - `resume_hints_json` (next-run hint package)
+
+These fields remain non-canonical evidence. They describe restore selection and operator inspectability, not truth authority.
+
+Detailed scoring contract: `docs/architecture/context_restore_scoring.md`.

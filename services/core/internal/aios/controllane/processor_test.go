@@ -534,8 +534,134 @@ func TestCompileContextSnapshotPersistenceOptIn(t *testing.T) {
 	if got := readString(packet.RestoreSnapshot.Metadata, "rendered_card_artifact_id"); got == "" {
 		t.Fatalf("expected snapshot evidence to link rendered card artifact")
 	}
+	if scores, ok := packet.RestoreSnapshot.Metadata["restore_scores_json"].(map[string]any); !ok || len(scores) == 0 {
+		t.Fatalf("expected non-empty restore_scores_json metadata, got %#v", packet.RestoreSnapshot.Metadata["restore_scores_json"])
+	}
+	if hints, ok := packet.RestoreSnapshot.Metadata["resume_hints_json"].(map[string]any); !ok || len(hints) == 0 {
+		t.Fatalf("expected non-empty resume_hints_json metadata, got %#v", packet.RestoreSnapshot.Metadata["resume_hints_json"])
+	}
+	if decision := readString(persistedRes.StateSummary, "restoreDecision"); decision == "" {
+		t.Fatalf("expected restoreDecision in state summary")
+	}
 	if persistedRes.StateSummary["snapshotFingerprint"] == "" {
 		t.Fatalf("expected snapshot fingerprint in summary")
+	}
+	if decision := readString(persistedRes.StateSummary, "restoreDecision"); decision != "fresh_compile_no_candidates" {
+		t.Fatalf("expected first persisted compile to report no candidates decision, got %q", decision)
+	}
+}
+
+func TestCompileContextSnapshotResumeHintsCanForceFreshCompile(t *testing.T) {
+	ctx := context.Background()
+	k, store, _ := newTestKernel()
+
+	mustCreateNote(ctx, k, "note-resume-a", "resume a")
+
+	first := validBaseRequest(domain.ActionCompileContext)
+	first.ID = "compile-context-resume-first"
+	first.Payload = map[string]any{
+		"query":           "summarize blockers",
+		"budget":          map[string]any{"maxTokens": 50, "maxEvents": 10, "maxNotes": 10},
+		"persistSnapshot": true,
+		"snapshotKind":    "restore",
+	}
+	firstRes, err := k.Process(ctx, first)
+	if err != nil || !firstRes.Success {
+		t.Fatalf("first compile failed: err=%v res=%+v", err, firstRes)
+	}
+	if firstPacketID := readString(firstRes.StateSummary, "contextPacketId"); firstPacketID == "" {
+		t.Fatalf("expected first contextPacketId")
+	}
+
+	second := validBaseRequest(domain.ActionCompileContext)
+	second.ID = "compile-context-resume-second"
+	second.RequestedAt = first.RequestedAt + 1000
+	second.Payload = map[string]any{
+		"query":           "summarize blockers",
+		"budget":          map[string]any{"maxTokens": 50, "maxEvents": 10, "maxNotes": 10},
+		"persistSnapshot": true,
+		"snapshotKind":    "restore",
+		"resumeHints": map[string]any{
+			"freshCompileOnly": true,
+		},
+	}
+	secondRes, err := k.Process(ctx, second)
+	if err != nil || !secondRes.Success {
+		t.Fatalf("second compile failed: err=%v res=%+v", err, secondRes)
+	}
+	if decision := readString(secondRes.StateSummary, "restoreDecision"); decision != "fresh_compile_forced" {
+		t.Fatalf("expected forced fresh compile decision, got %q", decision)
+	}
+	if parent := readString(secondRes.StateSummary, "parentSnapshotId"); parent != "" {
+		t.Fatalf("forced fresh compile should not set parentSnapshotId, got %q", parent)
+	}
+	state := store.snapshot()
+	packetID := readString(secondRes.StateSummary, "contextPacketId")
+	packet, ok := state.contextSnapshots[packetID]
+	if !ok {
+		t.Fatalf("missing second persisted packet %q", packetID)
+	}
+	if parent := readString(packet.RestoreSnapshot.Metadata, "parent_snapshot_id"); parent != "" {
+		t.Fatalf("forced fresh compile should not persist parent snapshot id, got %q", parent)
+	}
+	if source := readString(packet.RestoreSnapshot.Metadata, "restore_source_snapshot_id"); source != "" {
+		t.Fatalf("forced fresh compile should not persist restore source snapshot id, got %q", source)
+	}
+	if sourceSummary := readString(secondRes.StateSummary, "restoreSourceSnapshotId"); sourceSummary != "" {
+		t.Fatalf("forced fresh compile should not set restoreSourceSnapshotId summary, got %q", sourceSummary)
+	}
+}
+
+func TestCompileContextSnapshotBelowThresholdFallsBackToFreshCompile(t *testing.T) {
+	ctx := context.Background()
+	k, store, _ := newTestKernel()
+
+	mustCreateNote(ctx, k, "note-threshold-a", "threshold a")
+
+	first := validBaseRequest(domain.ActionCompileContext)
+	first.ID = "compile-context-threshold-first"
+	first.Payload = map[string]any{
+		"query":           "summarize blockers",
+		"budget":          map[string]any{"maxTokens": 50, "maxEvents": 10, "maxNotes": 10},
+		"persistSnapshot": true,
+		"snapshotKind":    "restore",
+	}
+	if res, err := k.Process(ctx, first); err != nil || !res.Success {
+		t.Fatalf("first compile failed: err=%v res=%+v", err, res)
+	}
+	// Shift semantic input so restore scoring is no longer a perfect fingerprint match.
+	mustCreateNote(ctx, k, "note-threshold-b", "threshold b")
+
+	second := validBaseRequest(domain.ActionCompileContext)
+	second.ID = "compile-context-threshold-second"
+	second.RequestedAt = first.RequestedAt + 1000
+	second.Payload = map[string]any{
+		"query":           "summarize blockers",
+		"budget":          map[string]any{"maxTokens": 50, "maxEvents": 10, "maxNotes": 10},
+		"persistSnapshot": true,
+		"snapshotKind":    "restore",
+		"resumeHints": map[string]any{
+			"minimumScore": 0.99,
+		},
+	}
+	secondRes, err := k.Process(ctx, second)
+	if err != nil || !secondRes.Success {
+		t.Fatalf("second compile failed: err=%v res=%+v", err, secondRes)
+	}
+	if decision := readString(secondRes.StateSummary, "restoreDecision"); decision != "fresh_compile_below_threshold" {
+		t.Fatalf("expected below-threshold fallback decision, got %q", decision)
+	}
+	if parent := readString(secondRes.StateSummary, "parentSnapshotId"); parent != "" {
+		t.Fatalf("below-threshold fallback should not set parentSnapshotId, got %q", parent)
+	}
+	state := store.snapshot()
+	packetID := readString(secondRes.StateSummary, "contextPacketId")
+	packet, ok := state.contextSnapshots[packetID]
+	if !ok {
+		t.Fatalf("missing second persisted packet %q", packetID)
+	}
+	if parent := readString(packet.RestoreSnapshot.Metadata, "parent_snapshot_id"); parent != "" {
+		t.Fatalf("below-threshold fallback should not persist parent snapshot id, got %q", parent)
 	}
 }
 

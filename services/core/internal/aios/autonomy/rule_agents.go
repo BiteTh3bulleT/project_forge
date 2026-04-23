@@ -31,6 +31,12 @@ type RuleAgentResult struct {
 	Warnings []string
 }
 
+type RuleAgentEvaluation struct {
+	AgentID string
+	Result  RuleAgentResult
+	Error   error
+}
+
 type RuleAgentRuntime struct {
 	agents       []RuleAgent
 	runner       *SelfInitiatedSyscallRunner
@@ -48,24 +54,37 @@ func NewRuleAgentRuntime(agents []RuleAgent, runner *SelfInitiatedSyscallRunner,
 	return &RuleAgentRuntime{agents: append([]RuleAgent{}, agents...), runner: runner, autonomyMode: autonomyMode, nowMillis: nowMillis}
 }
 
+func (r *RuleAgentRuntime) EvaluateOnce(ctx context.Context, in RuleAgentInput) []RuleAgentEvaluation {
+	out := make([]RuleAgentEvaluation, 0, len(r.agents))
+	for _, agent := range r.agents {
+		res, err := agent.Evaluate(ctx, in)
+		out = append(out, RuleAgentEvaluation{
+			AgentID: agent.ID(),
+			Result:  res,
+			Error:   err,
+		})
+	}
+	return out
+}
+
 func (r *RuleAgentRuntime) RunOnce(ctx context.Context, in RuleAgentInput) ([]domain.AutonomyRunSummary, error) {
 	out := []domain.AutonomyRunSummary{}
 	if r.runner == nil || len(r.agents) == 0 {
 		return out, nil
 	}
-	for _, agent := range r.agents {
-		res, err := agent.Evaluate(ctx, in)
-		if err != nil {
+	for _, eval := range r.EvaluateOnce(ctx, in) {
+		if eval.Error != nil {
 			out = append(out, domain.AutonomyRunSummary{
 				IntentID:      "",
 				Decision:      domain.DecisionDeny,
-				Warnings:      []string{"rule agent failed: " + err.Error()},
-				Errors:        []domain.AutonomyError{{Code: domain.AutonomyErrInvalidInput, Field: agent.ID(), Message: err.Error()}},
+				Warnings:      []string{"rule agent failed: " + eval.Error.Error()},
+				Errors:        []domain.AutonomyError{{Code: domain.AutonomyErrInvalidInput, Field: eval.AgentID, Message: eval.Error.Error()}},
 				CorrelationID: in.CorrelationID,
 				TraceID:       in.TraceID,
 			})
 			continue
 		}
+		res := eval.Result
 		if len(res.Actions) == 0 {
 			continue
 		}
@@ -78,6 +97,30 @@ func (r *RuleAgentRuntime) RunOnce(ctx context.Context, in RuleAgentInput) ([]do
 		}
 	}
 	return out, nil
+}
+
+func (r *RuleAgentRuntime) PlanOnce(ctx context.Context, in RuleAgentInput) ([]RuleAgentResult, []domain.AutonomyRunSummary) {
+	plans := []RuleAgentResult{}
+	diagnostics := []domain.AutonomyRunSummary{}
+	for _, agent := range r.agents {
+		res, err := agent.Evaluate(ctx, in)
+		if err != nil {
+			diagnostics = append(diagnostics, domain.AutonomyRunSummary{
+				IntentID:      "",
+				Decision:      domain.DecisionDeny,
+				Warnings:      []string{"rule agent failed: " + err.Error()},
+				Errors:        []domain.AutonomyError{{Code: domain.AutonomyErrInvalidInput, Field: agent.ID(), Message: err.Error()}},
+				CorrelationID: in.CorrelationID,
+				TraceID:       in.TraceID,
+			})
+			continue
+		}
+		if len(res.Actions) == 0 {
+			continue
+		}
+		plans = append(plans, res)
+	}
+	return plans, diagnostics
 }
 
 type OpenLoopStalenessAgent struct {

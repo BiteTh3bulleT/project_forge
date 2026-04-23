@@ -331,10 +331,14 @@ Non-canonical:
 Phase 6.25 restore fields (contract names):
 
 - `snapshot_kind`: classifies the snapshot intent for restore/review handling
+- `snapshot_fingerprint`: deterministic semantic fingerprint of the snapshot graph
+- `parent_snapshot_id`: lineage edge to the selected predecessor snapshot
 - `restore_source_snapshot_id`: links a restore back to the source snapshot row
 - `restore_scope_json`: records the workspace/lane/path scope used during restore
 - `restore_reason_json`: captures why the snapshot was restored or rendered
+- `restore_scores_json`: deterministic candidate ranking + score breakdown for restore selection
 - `rendered_card_artifact_id`: optional reference to the SVG card produced when snapshot cards are requested
+- `resume_hints_json`: deterministic hints package for follow-up compile/restore requests
 
 Purpose of the restore fields:
 

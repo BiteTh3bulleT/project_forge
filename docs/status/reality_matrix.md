@@ -1,7 +1,7 @@
 # FORGE Reality Matrix
 
-Date: 2026-04-21  
-Evidence basis: repository code paths + local command runs in this workspace.
+Date: 2026-04-23  
+Evidence basis: repository code paths + focused local tests in this workspace, with broader build/smoke notes preserved only where already documented elsewhere in-repo.
 
 Status values used: `real`, `partial`, `scaffold`, `stubbed`, `placeholder`, `example-only`, `docs-only`, `duplicated`, `risky`, `blocked`, `unknown`.
 
@@ -25,14 +25,14 @@ Status values used: `real`, `partial`, `scaffold`, `stubbed`, `placeholder`, `ex
 | Syscall processor/committer | docs claim kernel validates then commits | `aios/controllane/processor.go` + `processor_apply.go` | tests pass | yes | yes | no | real | Dry-run and commit paths exist with audit linkage. |
 | Raw semantic journal (`journal_events`) | docs claim append-only events truth | `journal_events` table + triggers in `store/migrate.go`, append in processor | tests pass | yes | yes | no | real | DB triggers enforce append-only semantics. |
 | Legacy event stream (`events`) | docs map events as truth | `internal/events/logger.go` writes `events` table | boots/runs | yes | partial | yes (`/api/events`) | duplicated | Two event streams (`events` and `journal_events`) are both active. |
-| Cognitive filesystem (notes/links/state/loops/models/etc.) | docs claim Phase 3 cognitive FS | tables and repos in `controllane` + `store/migrate.go` | core tests pass | yes | partial | partial | partial | Durable core exists; v1 memory APIs still bypass syscall path. |
+| Cognitive filesystem (notes/links/state/loops/models/etc.) | docs claim Phase 3 cognitive FS | tables and repos in `controllane` + `store/migrate.go` | focused control-lane tests pass | yes | partial | partial | partial | Durable core exists; authority guard now bounds new direct write paths, but v1 memory APIs still bypass syscall path. |
 | Memory observations (v1 memory path) | v1 docs describe observation memory architecture | `internal/memory/service.go` direct DB writes and links | boots/runs | yes | partial | yes | duplicated | Writes bypass semantic syscall kernel; coexists with v2 memory notes model. |
 | Active state + history | docs claim current vs historical truth separation | `state_items`, `state_versions` tables + truth engine | tests pass (`truth/engine_test.go`) | yes | yes | partial | partial | Real engine logic; limited UI/API surfacing for v2 truth objects. |
 | Open loops | docs claim loop lifecycle | `open_loops` table + truth engine loop APIs | tests pass | yes | yes | partial | partial | Lifecycle logic exists; no dedicated full-feature loop management UI. |
 | Contradictions + supersessions | docs claim contradiction/supersession handling | repos + truth engine methods and tests | tests pass | yes | yes | partial | partial | Data model and tests exist; backend/UI inspection remains limited. |
 | Derived models | docs claim evidence-backed derived models | `derived_models` table + syscall action | tests pass | yes | partial | partial | partial | Implemented as advisory layer; not fully surfaced in UI. |
-| Context packet snapshots | docs claim compile context syscall support | `context_packet_snapshots` table + `COMPILE_CONTEXT` action | tests pass | yes | partial | no | partial | Exists in core; no strong UI for packet snapshot inspection. |
-| Truth engine | docs claim current-truth engine | `aios/truth/engine.go` + tests | tests pass | yes | yes | no | partial | Engine is real but not the only memory/state authority in runtime. |
+| Context packet snapshots | docs claim compile context syscall support | `context_packet_snapshots` table + `COMPILE_CONTEXT` action | focused control-lane tests pass | yes | partial | no | partial | Exists in core with deterministic scope/query/kind candidate listing, header-first decode, and inspectable restore metadata (`restore_scores_json`, `resume_hints_json`); operator UI inspection remains limited. |
+| Truth engine | docs claim current-truth engine | `aios/truth/engine.go` + tests | code-backed and exercised by package tests | yes | yes | no | partial | Engine is real but not the only memory/state authority in runtime. |
 | Projection rebuild/repair | docs describe rebuild/repair | `RebuildProjection` in truth engine exists | tests pass for dry-run deterministic report | yes | yes | no | partial | Dry-run/report exists; not a complete operator repair workflow. |
 | Ingest pipeline + librarian cells | docs claim event->cell->action->syscall flow | `aios/compute/librarian/pipeline.go`, `cells_phase4.go` | tests pass (`pipeline_phase4_test.go`) | yes (through syscall commits) | yes | no | partial | Real pipeline and cells exist in core; not surfaced as explicit external API workflow. |
 | Semantic inference seam | docs claim no live LLM required | `NoopSemanticInference` in `inference.go` | boots/runs | n/a | yes | no | scaffold | Seam exists with no-op default; non-noop inference remains optional future work. |
@@ -42,11 +42,11 @@ Status values used: `real`, `partial`, `scaffold`, `stubbed`, `placeholder`, `ex
 | Future IRIS seam | docs claim future service cannot bypass policy | source enum + policy checks/tests (`future_iris`) | n/a | n/a | yes | no | scaffold | Boundary enforcement is real; no IRIS runtime service implemented. |
 | Desktop approvals/audit/tool surfaces | docs claim inspection shell | pages exist: `ApprovalsPage`, `AuditPage`, `ToolGatewayPage` | build passes | API-backed | partial | yes | partial | Surfaces exist; trace-depth and explainability remain incomplete. |
 | Desktop trace/explain surface | architecture expects traceability | no dedicated route/page for end-to-end trace drilldown | n/a | n/a | no | no | blocked | Correlation exists in backend, but operator-facing trace UX is missing. |
-| Go test surface | docs claim Go test command | `cd services/core && go test ./...` | pass | n/a | yes | n/a | real | Current workspace run passed. |
-| Go vet surface | docs mark optional static checks | `cd services/core && go vet ./...` | pass | n/a | yes | n/a | real | Current workspace run passed. |
-| Root JS/TS test surface | AGENTS says no dedicated root test script | root `package.json` has no `test` script | `npm test` fails | n/a | no | n/a | blocked | Missing script blocks unified JS regression gate. |
-| Root lint surface | AGENTS says no dedicated root lint script | root `package.json` has no `lint` | `npm run lint` fails | n/a | no | n/a | blocked | Missing static quality gate at root. |
-| Root typecheck surface | AGENTS says no dedicated root typecheck script | root `package.json` has no `typecheck` | `npm run typecheck` fails | n/a | no | n/a | blocked | Missing global TS validation command. |
+| Go test surface | docs claim Go test command | `cd services/core && go test ./...` | available | n/a | yes | n/a | real | Focused package tests were run in this pass; full suite was not rerun here. |
+| Go vet surface | docs mark optional static checks | `cd services/core && go vet ./...` | available | n/a | yes | n/a | real | Not rerun in this pass. |
+| Root test surface | AGENTS defines root aggregate test command | root `package.json` runs `test:core` (`check-vsa-files` + Go test suite) | `npm test` passes | n/a | yes (core path) | n/a | partial | Root test command exists and is enforced; still no dedicated JS unit test suite. |
+| Root lint surface | AGENTS defines root lint command | root `package.json` runs `vet:core` (`check-vsa-files` + `go vet`) | `npm run lint` passes | n/a | yes (core path) | n/a | partial | Root lint command exists for Go core; no dedicated frontend lint pipeline yet. |
+| Root typecheck surface | AGENTS defines root typecheck command | root `package.json` runs desktop TS checks | `npm run typecheck` passes | n/a | yes (desktop TS path) | n/a | partial | Root typecheck exists and is green; coverage is desktop-focused. |
 | Desktop build validation | docs describe desktop build | `npm -w @forge/desktop run build`, `cargo check` | pass | n/a | partial | n/a | real | Build is green; no desktop unit/integration tests. |
 | Smoke validation | runbook/status docs claim smoke script | `scripts/forge-smoke.sh`, `npm run smoke` | pass | n/a | yes | n/a | real | Exercises core health/meta/autonomy/adapters/jobs endpoints. |
 | Migration validation | docs mention migration tests | `internal/store/migrate_vsa_test.go` + store tests | `go test` pass | n/a | partial | n/a | partial | Some migration coverage exists; restore parity tests remain narrow. |
@@ -60,12 +60,6 @@ Status values used: `real`, `partial`, `scaffold`, `stubbed`, `placeholder`, `ex
 
 ## Command evidence captured in this pass
 
-- `cd services/core && go test ./...` -> pass
-- `cd services/core && go vet ./...` -> pass
-- `npm run build` -> pass
-- `npm run smoke` -> pass
-- `cd apps/desktop/src-tauri && cargo check` -> pass
-- `npm test` -> missing script
-- `npm run lint` -> missing script
-- `npm run typecheck` -> missing script
-- `nix ... flake check/build/develop` -> failed: daemon socket unavailable
+- Focused control-lane tests passed after the convergence test/doc updates.
+- Focused API-side runtime tests were attempted, but the `internal/api` package is currently blocked by an unrelated `internal/modelruntime/service.go` compile error (`ChatExecutionCheckpoint` missing in branch-local in-flight code).
+- Full-repo Go, desktop, smoke, npm, and nix validation were not rerun in this pass.

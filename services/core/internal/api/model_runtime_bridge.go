@@ -491,23 +491,26 @@ func (b *modelRuntimeBridge) Chat(ctx context.Context, req ModelRuntimeChatReque
 		})
 	}
 
-	result, err := b.runtime.Generate(ctx, modelruntime.GenerateRequest{
-		ModelID:       strings.TrimSpace(req.ModelID),
-		Backend:       modelruntime.ParseModelBackendKind(req.Backend),
-		WorkspaceID:   strings.TrimSpace(req.Meta.WorkspaceID),
-		Scope:         strings.TrimSpace(req.Meta.WorkspaceID),
-		Actor:         firstNonEmptyTrimmed(req.Actor, "api"),
-		Source:        firstNonEmptyTrimmed(req.Source, "forge_api"),
-		Messages:      messages,
-		Prompt:        strings.TrimSpace(req.Prompt),
-		Parameters:    cloneAnyMap(req.Parameters),
-		MaxTokens:     req.MaxTokens,
-		TimeoutMs:     req.TimeoutMs,
-		Stream:        req.Stream,
-		CorrelationID: strings.TrimSpace(req.Meta.CorrelationID),
-		TraceID:       strings.TrimSpace(req.Meta.TraceID),
-		Provenance:    cloneAnyMap(req.Provenance),
-		Metadata:      cloneAnyMap(req.Metadata),
+	result, err := b.runtime.ExecuteChatRole(ctx, modelruntime.ChatExecutionRequest{
+		Role: modelruntime.ChatExecutionRoleAssistant,
+		GenerateRequest: modelruntime.GenerateRequest{
+			ModelID:       strings.TrimSpace(req.ModelID),
+			Backend:       modelruntime.ParseModelBackendKind(req.Backend),
+			WorkspaceID:   strings.TrimSpace(req.Meta.WorkspaceID),
+			Scope:         strings.TrimSpace(req.Meta.WorkspaceID),
+			Actor:         firstNonEmptyTrimmed(req.Actor, "api"),
+			Source:        firstNonEmptyTrimmed(req.Source, "forge_api"),
+			Messages:      messages,
+			Prompt:        strings.TrimSpace(req.Prompt),
+			Parameters:    cloneAnyMap(req.Parameters),
+			MaxTokens:     req.MaxTokens,
+			TimeoutMs:     req.TimeoutMs,
+			Stream:        req.Stream,
+			CorrelationID: strings.TrimSpace(req.Meta.CorrelationID),
+			TraceID:       strings.TrimSpace(req.Meta.TraceID),
+			Provenance:    cloneAnyMap(req.Provenance),
+			Metadata:      cloneAnyMap(req.Metadata),
+		},
 	})
 	if err != nil {
 		return ModelRuntimeChatResult{}, mapModelRuntimeBridgeError(err)
@@ -783,6 +786,10 @@ func mapModelRuntimeBridgeError(err error) error {
 		return &modelRuntimeError{status: 400, code: "WORKSPACE_REQUIRED", message: err.Error()}
 	case errors.Is(err, modelruntime.ErrStreamingUnsupported):
 		return &modelRuntimeError{status: 501, code: "STREAM_UNSUPPORTED", message: err.Error()}
+	case errors.Is(err, modelruntime.ErrProviderCooldownActive):
+		return &modelRuntimeError{status: 429, code: "MODEL_PROVIDER_COOLDOWN", message: err.Error()}
+	case errors.Is(err, modelruntime.ErrChatRetryExhausted):
+		return &modelRuntimeError{status: 503, code: "MODEL_CHAT_RETRY_EXHAUSTED", message: err.Error()}
 	case errors.Is(err, context.Canceled):
 		return &modelRuntimeError{status: 408, code: "MODEL_REQUEST_CANCELED", message: "model request canceled"}
 	case errors.Is(err, context.DeadlineExceeded):

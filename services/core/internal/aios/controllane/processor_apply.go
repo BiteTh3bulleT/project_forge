@@ -396,12 +396,20 @@ func applyCompileContext(store SemanticStore, req domain.SyscallRequest) ([]stri
 		}, []string{"compile_context is deterministic Phase 2 stub"}, nil
 	}
 
-	var prior *compiledContextSnapshot
-	if priorPacket, ok := store.FindLatestContextSnapshot(req.Scope, packet.Query, opts.SnapshotKind); ok {
-		if decoded, ok := compiledContextSnapshotFromDomain(priorPacket.RestoreSnapshot); ok {
-			prior = &decoded
-		}
-	}
+	restoreInput := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
+		Packet:        packet,
+		SnapshotID:    packet.ID,
+		SnapshotKind:  opts.SnapshotKind,
+		CorrelationID: req.CorrelationID,
+		TraceID:       req.TraceID,
+		SyscallID:     req.ID,
+		ProposedBy:    string(req.Source),
+		CommittedBy:   "forge_kernel",
+	}, nil)
+	resumeHints := readCompileContextResumeHints(req.Payload)
+	candidates := store.ListContextSnapshots(req.Scope, packet.Query, opts.SnapshotKind, defaultRestoreCandidateLimit)
+	restoreSelection := selectCompileContextRestoreCandidate(req.RequestedAt, restoreInput, candidates, opts.SnapshotKind, resumeHints)
+	prior := restoreSelection.selectedPrior()
 
 	snapshot := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
 		Packet:        packet,
@@ -426,22 +434,56 @@ func applyCompileContext(store SemanticStore, req domain.SyscallRequest) ([]stri
 	}
 
 	applyCompiledSnapshotToPacket(&packet, snapshot, opts)
+	if packet.RestoreSnapshot != nil {
+		if packet.RestoreSnapshot.Metadata == nil {
+			packet.RestoreSnapshot.Metadata = map[string]any{}
+		}
+		packet.RestoreSnapshot.Metadata["restore_scores_json"] = restoreSelection.restoreScoresMetadata()
+		packet.RestoreSnapshot.Metadata["resume_hints_json"] = restoreSelection.resumeHintsMetadata()
+		packet.RestoreSnapshot.Metadata["restore_reason_json"] = map[string]any{
+			"mode":                  "compile_context_restore_selection",
+			"decision":              restoreSelection.Decision,
+			"threshold":             restoreSelection.Threshold,
+			"candidate_count":       len(restoreSelection.Candidates),
+			"selected_snapshot_id":  restoreSelection.selectedSnapshotID(),
+			"fingerprint_matched":   snapshot.Delta.FingerprintMatched,
+			"resume_hint_overrides": map[string]any{"preferredSnapshotId": resumeHints.PreferredSnapshotID, "minimumScore": resumeHints.MinimumScore, "freshCompileOnly": resumeHints.FreshCompileOnly},
+		}
+		if selectedID := strings.TrimSpace(restoreSelection.selectedSnapshotID()); selectedID != "" {
+			packet.RestoreSnapshot.Metadata["restore_source_snapshot_id"] = selectedID
+		}
+	}
 	if err := store.CreateContextSnapshot(packet); err != nil {
 		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrConflict, Field: "payload.persistSnapshot", Message: err.Error()}}
 	}
 	committedIDs = append([]string{packet.ID}, committedIDs...)
 
+	warnings := []string{"compile_context snapshot evidence is non-canonical"}
+	switch restoreSelection.Decision {
+	case "fresh_compile_no_candidates":
+		warnings = append(warnings, "restore selection found no candidates; fresh compile used")
+	case "fresh_compile_below_threshold":
+		warnings = append(warnings, "restore selection score below threshold; fresh compile used")
+	case "fresh_compile_forced":
+		warnings = append(warnings, "restore selection forced to fresh compile by resume hints")
+	}
+
 	return committedIDs, map[string]any{
-		"contextPacketId":        packet.ID,
-		"notes":                  len(packet.Notes),
-		"openLoops":              len(packet.OpenLoops),
-		"models":                 len(packet.Models),
-		"persistedSnapshot":      true,
-		"snapshotKind":           snapshot.Header.SnapshotKind,
-		"snapshotFingerprint":    snapshot.Header.Fingerprint,
-		"parentSnapshotId":       snapshot.Header.ParentSnapshotID,
-		"renderedCardArtifactId": snapshot.Header.RenderedCardArtifactID,
-	}, []string{"compile_context snapshot evidence is non-canonical"}, nil
+		"contextPacketId":         packet.ID,
+		"notes":                   len(packet.Notes),
+		"openLoops":               len(packet.OpenLoops),
+		"models":                  len(packet.Models),
+		"persistedSnapshot":       true,
+		"snapshotKind":            snapshot.Header.SnapshotKind,
+		"snapshotFingerprint":     snapshot.Header.Fingerprint,
+		"parentSnapshotId":        snapshot.Header.ParentSnapshotID,
+		"renderedCardArtifactId":  snapshot.Header.RenderedCardArtifactID,
+		"restoreDecision":         restoreSelection.Decision,
+		"restoreThreshold":        restoreSelection.Threshold,
+		"restoreTopScore":         restoreSelection.TopScore,
+		"restoreCandidateCount":   len(restoreSelection.Candidates),
+		"restoreSourceSnapshotId": restoreSelection.selectedSnapshotID(),
+	}, warnings, nil
 }
 
 func defaultBudget() domain.ContextBudget {

@@ -160,6 +160,76 @@ export type ForgeArtifact = {
   metadata: unknown;
 };
 
+export type ContextSnapshotInspectorCounts = {
+  state: number;
+  openLoops: number;
+  notes: number;
+  links: number;
+  models: number;
+  artifacts: number;
+  events: number;
+};
+
+export type ContextSnapshotInspectorSummary = {
+  id: string;
+  query: string;
+  workspaceId: string;
+  laneId: string;
+  selectedPaths: string[];
+  snapshotKind: string;
+  snapshotFingerprint: string;
+  parentSnapshotId: string;
+  renderArtifactRefId: string;
+  createdAtMs: number;
+  correlationId: string;
+  traceId: string;
+  syscallId: string;
+  auditId: string;
+  proposedBy: string;
+  committedBy: string;
+  counts: ContextSnapshotInspectorCounts;
+  hasHeader: boolean;
+  hasGraph: boolean;
+  hasDelta: boolean;
+  hasRestoreScores: boolean;
+  hasResumeHints: boolean;
+};
+
+export type ContextSnapshotInspectorDetail = {
+  summary: ContextSnapshotInspectorSummary;
+  budget: Record<string, unknown>;
+  inclusionReasons: Record<string, string>;
+  header: Record<string, unknown>;
+  graph: Record<string, unknown>;
+  delta: Record<string, unknown>;
+  restoreScores: Record<string, unknown>;
+  resumeHints: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  includedStateIds: string[];
+  includedOpenLoops: string[];
+  includedNoteIds: string[];
+  includedLinkIds: string[];
+  includedModelIds: string[];
+  includedArtifactIds: string[];
+  includedEventIds: string[];
+};
+
+export type AuditTraceLookupReport = {
+  correlationId: string;
+  records: unknown[];
+  report: Record<string, unknown>;
+};
+
+export type AuditTraceLookupResponse = {
+  mode: "correlation" | "trace";
+  correlationId?: string;
+  traceId?: string;
+  records?: unknown[];
+  report?: Record<string, unknown>;
+  correlationIds?: string[];
+  reports: AuditTraceLookupReport[];
+};
+
 export type AutonomyScope = {
   workspaceId: string;
   laneId?: string;
@@ -1264,6 +1334,35 @@ export const api = {
       j<{ correlationId: string; records: unknown[]; report?: Record<string, unknown> }>(
         `/api/audit/trace/${encodeURIComponent(correlationId)}`,
       ),
+    lookup: (params: { correlationId?: string; traceId?: string }) => {
+      const qs = new URLSearchParams();
+      if (params.correlationId) qs.set("correlationId", params.correlationId);
+      if (params.traceId) qs.set("traceId", params.traceId);
+      const q = qs.toString();
+      return j<AuditTraceLookupResponse>(`/api/audit/trace${q ? `?${q}` : ""}`);
+    },
+  },
+  contextInspector: {
+    listSnapshots: (params?: {
+      limit?: number;
+      workspaceId?: string;
+      laneId?: string;
+      correlationId?: string;
+      snapshotKind?: string;
+      query?: string;
+    }) => {
+      const qs = new URLSearchParams();
+      if (params?.limit != null) qs.set("limit", String(params.limit));
+      if (params?.workspaceId) qs.set("workspaceId", params.workspaceId);
+      if (params?.laneId) qs.set("laneId", params.laneId);
+      if (params?.correlationId) qs.set("correlationId", params.correlationId);
+      if (params?.snapshotKind) qs.set("snapshotKind", params.snapshotKind);
+      if (params?.query) qs.set("query", params.query);
+      const q = qs.toString();
+      return j<{ snapshots: ContextSnapshotInspectorSummary[] }>(`/api/context-inspector/snapshots${q ? `?${q}` : ""}`);
+    },
+    getSnapshot: (id: string) =>
+      j<{ snapshot: ContextSnapshotInspectorDetail }>(`/api/context-inspector/snapshots/${encodeURIComponent(id)}`),
   },
   backup: {
     bundles: (limit?: number) => {
@@ -1310,6 +1409,7 @@ export const api = {
         id: number,
         body: {
           content: string;
+          modelId?: string;
           attachmentArtifactIds?: number[];
           requestAssistant?: boolean;
           assistantDryRun?: boolean;

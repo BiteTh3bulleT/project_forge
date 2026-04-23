@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -175,6 +176,46 @@ func TestHandleAutonomyIntentExplain(t *testing.T) {
 	}
 	if got := intent["id"]; got != intentID {
 		t.Fatalf("intent id = %v, want %s", got, intentID)
+	}
+}
+
+func TestHandleAutonomyMaintenanceSweep(t *testing.T) {
+	t.Parallel()
+
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer st.Close()
+
+	now := int64(1_900_300_000_000)
+	if err := insertRepairCandidateObservation(st, now); err != nil {
+		t.Fatalf("insert repair candidate: %v", err)
+	}
+	loop := buildOperationalAutonomyLoop(t, st, now)
+	s := &Server{st: st, autonomy: loop}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/autonomy/maintenance/sweep", bytes.NewBufferString(`{"dryRun":true,"reason":"operator_diagnostic"}`))
+	rr := httptest.NewRecorder()
+	s.handleAutonomyMaintenanceSweep(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("maintenance sweep code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var payload struct {
+		Report AutonomyMaintenanceSweepReport `json:"report"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode maintenance sweep response: %v", err)
+	}
+	if !payload.Report.DryRun {
+		t.Fatalf("expected dry-run report, got %+v", payload.Report)
+	}
+	if payload.Report.Trigger != "manual_api" {
+		t.Fatalf("expected manual_api trigger, got %+v", payload.Report)
+	}
+	if len(payload.Report.Improvement.Actions) != 2 {
+		t.Fatalf("expected improvement action preview, got %+v", payload.Report.Improvement.Actions)
 	}
 }
 

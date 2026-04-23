@@ -364,6 +364,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/autonomy/budgets", s.handleAutonomyBudgets)
 			r.Get("/autonomy/charters", s.handleAutonomyCharters)
 			r.Get("/autonomy/events", s.handleAutonomyEvents)
+			r.Post("/autonomy/maintenance/sweep", s.handleAutonomyMaintenanceSweep)
 
 			r.Get("/adapters", s.handleAdapters)
 
@@ -403,6 +404,8 @@ func (s *Server) Handler() http.Handler {
 			r.Post("/approvals/{id}/cancel", s.handleCancelRequest)
 
 			r.Get("/packets/{id}", s.handleGetPacket)
+			r.Get("/context-inspector/snapshots", s.handleContextSnapshotList)
+			r.Get("/context-inspector/snapshots/{id}", s.handleContextSnapshotGet)
 			r.Get("/project-context", s.handleGetProjectContext)
 			r.Post("/project-context/import", s.handleImportProjectContext)
 			r.Post("/project-context/regenerate", s.handleRegenerateProjectContext)
@@ -502,6 +505,7 @@ func (s *Server) Handler() http.Handler {
 			r.Delete("/permissions/profiles/{id}", s.handleDeletePermissionProfile)
 
 			r.Get("/audit", s.handleAuditList)
+			r.Get("/audit/trace", s.handleAuditTraceLookup)
 			r.Get("/audit/trace/{correlationId}", s.handleAuditTrace)
 
 			r.Get("/backup/bundles", s.handleListBundles)

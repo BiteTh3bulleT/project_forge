@@ -37,6 +37,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { ToolGatewayPage } from "./pages/ToolGatewayPage";
 import { WorkbenchPage } from "./pages/WorkbenchPage";
 import { InsightsPage } from "./pages/InsightsPage";
+import { InspectorsPage } from "./pages/InspectorsPage";
 import { SourcesPage } from "./pages/SourcesPage";
 import { StrategiesPage } from "./pages/StrategiesPage";
 import { WorkspaceLayoutsPage } from "./pages/WorkspaceLayoutsPage";
@@ -60,6 +61,7 @@ function RoutedViews() {
         <Route path="/memory" element={<MemoryPage />} />
         <Route path="/memory/chunk/:id" element={<MemoryDetailPage />} />
         <Route path="/project-context" element={<ProjectContextPage />} />
+        <Route path="/inspectors" element={<InspectorsPage />} />
         <Route path="/policy" element={<PolicyPage />} />
         <Route path="/strategies" element={<StrategiesPage />} />
         <Route path="/automation" element={<AutomationPage />} />

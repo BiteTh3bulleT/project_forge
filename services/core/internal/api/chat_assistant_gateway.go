@@ -36,6 +36,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 	ollamaAdapter adapters.Adapter,
 	dryRun bool,
 	emit func(event string, payload map[string]any),
+	requestedModelID string,
 ) *chat.Message {
 	if decision, ok := parseChatApprovalDirective(lastUserContent); ok {
 		return s.handleChatApprovalDirective(ctx, threadID, userMessageID, decision)
@@ -74,7 +75,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 
 	if !gateway.ShouldAttachChatTools(lastUserContent) {
 		pushStage("tools_skipped", map[string]any{"reason": "non_operational_turn"})
-		return s.completeAssistantWithoutTools(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, corr, stages, pushStage)
+		return s.completeAssistantWithoutTools(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, corr, stages, pushStage, requestedModelID)
 	}
 
 	if s.gateway == nil {
@@ -167,7 +168,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 	if !ok {
 		pushStage("adapter_mismatch", map[string]any{"detail": "ollama concrete type required for /api/chat tools"})
 		pushStage("runtime_fallback", map[string]any{"reason": "ollama adapter not registered"})
-		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama adapter not registered")
+		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama adapter not registered", requestedModelID)
 		if am != nil {
 			return am
 		}
@@ -189,7 +190,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 	model := ol.ModelForChat(ctx)
 	if strings.TrimSpace(model) == "" {
 		pushStage("runtime_fallback", map[string]any{"reason": "ollama model is not configured"})
-		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama model is not configured")
+		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama model is not configured", requestedModelID)
 		if am != nil {
 			return am
 		}
@@ -253,7 +254,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 		if err != nil {
 			pushStage("ollama_chat_error", map[string]any{"turn": turn, "error": err.Error()})
 			pushStage("runtime_fallback", map[string]any{"reason": "ollama /api/chat failed", "turn": turn})
-			am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama /api/chat failed: "+err.Error())
+			am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama /api/chat failed: "+err.Error(), requestedModelID)
 			if am != nil {
 				return am
 			}
@@ -779,6 +780,7 @@ func (s *Server) completeAssistantWithoutTools(
 	corr string,
 	stages []map[string]any,
 	pushStage func(string, map[string]any),
+	requestedModelID string,
 ) *chat.Message {
 	recordStage := func(stage string, data map[string]any) {
 		row := map[string]any{"stage": stage, "atMs": time.Now().UnixMilli()}
@@ -796,7 +798,7 @@ func (s *Server) completeAssistantWithoutTools(
 
 	if s.modelRuntime != nil {
 		recordStage("runtime_primary", map[string]any{"reason": "plain chat prefers model runtime"})
-		if am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "model-runtime-first plain chat path"); am != nil {
+		if am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "model-runtime-first plain chat path", requestedModelID); am != nil {
 			return am
 		} else if strings.TrimSpace(reason) != "" {
 			recordStage("runtime_fallback", map[string]any{"reason": "model runtime plain-chat path failed: " + reason})
@@ -805,7 +807,7 @@ func (s *Server) completeAssistantWithoutTools(
 
 	ol, ok := ollamaAdapter.(adapters.Ollama)
 	if !ok {
-		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama adapter not registered")
+		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama adapter not registered", requestedModelID)
 		if am != nil {
 			return am
 		}
@@ -827,7 +829,7 @@ func (s *Server) completeAssistantWithoutTools(
 	baseURL := ol.BaseURLForChat(ctx)
 	model := ol.ModelForChat(ctx)
 	if strings.TrimSpace(model) == "" {
-		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama model is not configured")
+		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama model is not configured", requestedModelID)
 		if am != nil {
 			return am
 		}
@@ -853,7 +855,7 @@ func (s *Server) completeAssistantWithoutTools(
 	}
 	raw, err := ol.OllamaChat(ctx, baseURL, model, msgs, nil, nil, 120*time.Second)
 	if err != nil {
-		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama /api/chat failed: "+err.Error())
+		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama /api/chat failed: "+err.Error(), requestedModelID)
 		if am != nil {
 			return am
 		}
@@ -910,6 +912,7 @@ func (s *Server) completeAssistantWithModelRuntime(
 	manifests []map[string]any,
 	stages []map[string]any,
 	fallbackReason string,
+	requestedModelID string,
 ) (*chat.Message, string) {
 	if s.modelRuntime == nil {
 		return nil, "model runtime is unavailable"
@@ -921,7 +924,7 @@ func (s *Server) completeAssistantWithModelRuntime(
 		WorkspaceID:   workspaceID,
 	}
 
-	modelID, resolveReason := s.resolveChatModelRuntimeModel(ctx, meta)
+	modelID, resolveReason := s.resolveChatModelRuntimeModel(ctx, meta, requestedModelID)
 	if strings.TrimSpace(modelID) == "" {
 		return nil, resolveReason
 	}
@@ -965,6 +968,9 @@ func (s *Server) completeAssistantWithModelRuntime(
 		"modelId":            nonEmpty(strings.TrimSpace(result.ModelID), modelID),
 		"backend":            strings.TrimSpace(result.Backend),
 	}
+	if requested := strings.TrimSpace(requestedModelID); requested != "" {
+		activity["requestedModelId"] = requested
+	}
 	if trimmed := strings.TrimSpace(fallbackReason); trimmed != "" {
 		activity["fallbackReason"] = trimmed
 	}
@@ -978,6 +984,9 @@ func (s *Server) completeAssistantWithModelRuntime(
 		"toolManifest":         manifests,
 		"toolPipeline":         map[string]any{"stages": stages},
 		"toolGatewayActivity":  activity,
+	}
+	if requested := strings.TrimSpace(requestedModelID); requested != "" {
+		metadata["modelRuntimeRequestedModelId"] = requested
 	}
 	if trimmed := strings.TrimSpace(result.AuditID); trimmed != "" {
 		metadata["modelRuntimeAuditId"] = trimmed
@@ -993,7 +1002,7 @@ func (s *Server) completeAssistantWithModelRuntime(
 	return am, ""
 }
 
-func (s *Server) resolveChatModelRuntimeModel(ctx context.Context, meta ModelRuntimeRequestMeta) (string, string) {
+func (s *Server) resolveChatModelRuntimeModel(ctx context.Context, meta ModelRuntimeRequestMeta, requestedModelID string) (string, string) {
 	if s.modelRuntime == nil {
 		return "", "model runtime is unavailable"
 	}
@@ -1008,6 +1017,23 @@ func (s *Server) resolveChatModelRuntimeModel(ctx context.Context, meta ModelRun
 	}
 	if len(models) == 0 {
 		return "", "no managed models are registered in model runtime"
+	}
+
+	requested := strings.TrimSpace(requestedModelID)
+	if requested != "" {
+		for _, model := range models {
+			if !strings.EqualFold(strings.TrimSpace(model.ID), requested) {
+				continue
+			}
+			if !modelRuntimeModelSupportsChat(model) {
+				return "", "requested model does not advertise chat/completion capability"
+			}
+			if !modelRuntimeModelUsableForChat(model) {
+				return "", "requested model is not available for chat"
+			}
+			return strings.TrimSpace(model.ID), ""
+		}
+		return "", fmt.Sprintf("requested model %q is not registered in model runtime", requested)
 	}
 
 	defaultID := strings.TrimSpace(s.cfg.ModelDefaultID)

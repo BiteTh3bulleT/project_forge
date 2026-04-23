@@ -207,6 +207,52 @@ func (r *SelfInitiatedSyscallRunner) Run(ctx context.Context, intent domain.Auto
 	}
 }
 
+func (r *SelfInitiatedSyscallRunner) Preview(ctx context.Context, intent domain.AutonomyIntent, actions []domain.SyscallRequest, autonomyMode domain.AutonomyMode) (domain.AutonomyRunSummary, error) {
+	summary := domain.AutonomyRunSummary{
+		IntentID:           strings.TrimSpace(intent.ID),
+		Decision:           domain.DecisionDeny,
+		CommittedObjectIDs: []string{},
+		CommittedActions:   []domain.SyscallResult{},
+		Approval:           domain.ApprovalEscalationResult{Status: domain.ApprovalAllowed},
+		Warnings:           []string{},
+		Errors:             []domain.AutonomyError{},
+		CorrelationID:      intent.CorrelationID,
+		TraceID:            intent.TraceID,
+	}
+	if r.policy == nil {
+		summary.Errors = append(summary.Errors, domain.AutonomyError{Code: domain.AutonomyErrInvalidInput, Field: "policy", Message: "autonomy policy evaluator is required"})
+		return summary, summary.Error()
+	}
+	if strings.TrimSpace(intent.Scope.WorkspaceID) == "" {
+		summary.Errors = append(summary.Errors, domain.AutonomyError{Code: domain.AutonomyErrInvalidScope, Field: "intent.scope.workspaceId", Message: "intent scope.workspaceId is required"})
+		return summary, summary.Error()
+	}
+	eval, err := r.policy.Evaluate(ctx, EvaluationInput{
+		Intent:      intent,
+		Actions:     actions,
+		Mode:        autonomyMode,
+		PreviewOnly: true,
+	})
+	if err != nil {
+		summary.Errors = append(summary.Errors, domain.AutonomyError{Code: domain.AutonomyErrInvalidInput, Field: "policy", Message: err.Error()})
+		return summary, summary.Error()
+	}
+	summary.DecisionID = eval.ID
+	summary.Decision = eval.Decision
+	if len(eval.DeniedReasons) > 0 {
+		summary.Warnings = append(summary.Warnings, strings.Join(eval.DeniedReasons, "; "))
+	}
+	switch eval.Decision {
+	case domain.DecisionAllowAutoCommit:
+		summary.Warnings = append(summary.Warnings, "preview only: commit suppressed")
+	case domain.DecisionApprovalRequired:
+		summary.Warnings = append(summary.Warnings, "preview only: approval would be required before commit")
+	case domain.DecisionAllowProposeOnly:
+		summary.Warnings = append(summary.Warnings, "preview only: propose_only decision")
+	}
+	return summary, nil
+}
+
 func (r *SelfInitiatedSyscallRunner) validateOnly(ctx context.Context, intent domain.AutonomyIntent, actions []domain.SyscallRequest) []domain.SyscallResult {
 	out := make([]domain.SyscallResult, 0, len(actions))
 	for _, action := range actions {

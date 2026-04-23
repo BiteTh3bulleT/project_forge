@@ -11,6 +11,7 @@ Last convergence sweep update: 2026-04-22 (branch-local status alignment).
 - **2026-04-15**: Phase 2 execution/approval/packet/context systems landed.
 - **2026-04-22**: Legacy adapter invoke ingress is removed from API routing; tool execution authority is gateway-only.
 - **2026-04-22**: Model Runtime M3 management is implemented (`/forge/models*` plus gated `/v1/*` with import/register flows, lifecycle governance, scheduler/limits/policy hooks, and managed backend selection); M4 items remain (streaming, delete-file approval flow, stronger backend/process control).
+- **2026-04-23**: `COMPILE_CONTEXT` restore selection now includes deterministic candidate listing/ranking (scope/query/kind), thresholded fresh-compile fallback, and persisted `restore_scores_json` + `resume_hints_json` metadata (still non-canonical evidence).
 - Append-only per-job event streams as execution truth
 - Approval gates with separated request and decision records
 - Context normalization into durable guidance files (`AGENTS.md`, `CLAUDE.md`, briefing, cursor rule)

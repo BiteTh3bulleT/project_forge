@@ -1,6 +1,6 @@
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
@@ -59,7 +59,17 @@ export function AuditPage() {
       <Panel
         title="Audit & trace"
         subtitle="Append-only audit records with correlation ids. Use trace view to answer what happened, in order, for one logical operation."
-        actions={<GhostButton onClick={() => void loadList()}>Refresh list</GhostButton>}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Link
+              to={correlation ? `/inspectors?correlationId=${encodeURIComponent(correlation)}` : "/inspectors"}
+              className="rounded border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
+            >
+              Open inspectors
+            </Link>
+            <GhostButton onClick={() => void loadList()}>Refresh list</GhostButton>
+          </div>
+        }
       >
         {jobId ? (
           <div className="mb-3 text-xs text-forge-mist">
@@ -117,6 +127,16 @@ export function AuditPage() {
               </div>
               <div className="mt-1">{rec.summary}</div>
               <div className="mt-1 text-[10px]">correlation: {rec.correlationId || "—"}</div>
+              {rec.correlationId ? (
+                <div className="mt-2">
+                  <Link
+                    to={`/inspectors?correlationId=${encodeURIComponent(rec.correlationId)}`}
+                    className="text-[11px] text-forge-emberSoft underline underline-offset-2 hover:text-forge-ash"
+                  >
+                    Inspect trace evidence
+                  </Link>
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

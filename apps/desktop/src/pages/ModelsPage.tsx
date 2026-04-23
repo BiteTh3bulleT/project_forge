@@ -17,6 +17,7 @@ import { useUiStore } from "../stores/uiStore";
 
 const CONTROL_ACTOR = "operator";
 const CONTROL_SOURCE = "desktop";
+const CHAT_MODEL_SELECTION_CACHE_KEY = "forge.chat.requestedModelId.v1";
 
 function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
@@ -63,6 +64,43 @@ function summarizeValue(value: unknown) {
   return String(value);
 }
 
+function supportsChatCapability(model: ModelRuntimeModel) {
+  const capabilities = Array.isArray(model.capabilities) ? model.capabilities : [];
+  if (capabilities.length === 0) return true;
+  return capabilities.some((capability) => {
+    const normalized = String(capability).trim().toLowerCase();
+    return normalized === "chat" || normalized === "completion";
+  });
+}
+
+function usableChatStatus(model: ModelRuntimeModel) {
+  const status = normalizeStatus(model.status);
+  return status !== "disabled" && status !== "archived" && status !== "unavailable" && status !== "error";
+}
+
+function readCachedChatModelSelection() {
+  if (typeof window === "undefined") return "";
+  try {
+    return (window.localStorage.getItem(CHAT_MODEL_SELECTION_CACHE_KEY) ?? "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function writeCachedChatModelSelection(value: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      window.localStorage.removeItem(CHAT_MODEL_SELECTION_CACHE_KEY);
+      return;
+    }
+    window.localStorage.setItem(CHAT_MODEL_SELECTION_CACHE_KEY, trimmed);
+  } catch {
+    return;
+  }
+}
+
 export function ModelsPage() {
   const setStatus = useUiStore((s) => s.setStatusLine);
   const [models, setModels] = useState<ModelRuntimeModel[]>([]);
@@ -86,6 +124,7 @@ export function ModelsPage() {
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number>(Date.now());
+  const [chatSelectedModelId, setChatSelectedModelId] = useState<string>(() => readCachedChatModelSelection());
 
   const selectedLoadedRecord = useMemo(
     () => loaded?.models.find((item) => item.modelId === selectedModelId) ?? null,
@@ -99,6 +138,16 @@ export function ModelsPage() {
       return acc;
     }, {});
   }, [models]);
+
+  const chatSelectableModels = useMemo(
+    () => models.filter((model) => supportsChatCapability(model) && usableChatStatus(model)),
+    [models],
+  );
+
+  const chatSelectionKnown = useMemo(
+    () => !chatSelectedModelId || models.some((model) => model.id === chatSelectedModelId),
+    [models, chatSelectedModelId],
+  );
 
   async function refreshOverview(preserveSelection = true, preferredSelection?: string) {
     setLoading(true);
@@ -166,6 +215,10 @@ export function ModelsPage() {
   useEffect(() => {
     void refreshSelectedModel(selectedModelId);
   }, [selectedModelId]);
+
+  useEffect(() => {
+    writeCachedChatModelSelection(chatSelectedModelId);
+  }, [chatSelectedModelId]);
 
   async function handleImport() {
     const path = importPath.trim();
@@ -277,6 +330,46 @@ export function ModelsPage() {
         }
       >
         {err ? <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
+        <div className="mt-4 rounded border border-white/10 bg-black/20 p-3">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-forge-mist">Chat Model Preference</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <select
+              className="forge-input h-9 min-w-[280px] py-1 text-sm"
+              value={chatSelectedModelId}
+              onChange={(event) => {
+                setChatSelectedModelId(event.target.value);
+                setStatus(event.target.value ? `Chat model preference set to ${event.target.value}` : "Chat model preference cleared (auto)");
+              }}
+            >
+              <option value="">Auto (runtime default / adapter fallback)</option>
+              {chatSelectedModelId && !chatSelectableModels.some((model) => model.id === chatSelectedModelId) ? (
+                <option value={chatSelectedModelId}>Saved: {chatSelectedModelId} (not in current runtime list)</option>
+              ) : null}
+              {chatSelectableModels.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.displayName?.trim() || model.id}
+                </option>
+              ))}
+            </select>
+            <GhostButton
+              onClick={() => {
+                setChatSelectedModelId("");
+                setStatus("Chat model preference cleared (auto).");
+              }}
+              disabled={!chatSelectedModelId}
+            >
+              Clear
+            </GhostButton>
+          </div>
+          <div className="mt-2 text-[11px] text-forge-mist">
+            Applies to chat assistant requests from the desktop shell.
+          </div>
+          {!chatSelectionKnown && chatSelectedModelId ? (
+            <div className="mt-2 text-[11px] text-forge-emberSoft">
+              Saved chat model `{chatSelectedModelId}` is no longer registered; chat will fail over unless you clear or update it.
+            </div>
+          ) : null}
+        </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <Metric label="Registered" value={usage?.registered ?? models.length} hint="known manifests" />
           <Metric label="Loaded" value={usage?.loaded ?? loaded?.count ?? 0} hint="active runtime state" />

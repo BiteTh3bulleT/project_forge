@@ -58,6 +58,10 @@ type ServiceOptions struct {
 	MaxConcurrentRequests int
 	CompletedHistoryLimit int
 	RequestValidator      GenerateRequestValidator
+	ChatMaxAttempts       int
+	ChatRetryBackoff      time.Duration
+	ChatProviderCooldown  time.Duration
+	ChatCheckpointLimit   int
 }
 
 type ModelInfo struct {
@@ -153,6 +157,16 @@ type Service struct {
 	maxQueueDepth         int
 	maxConcurrentRequests int
 	completedHistoryLimit int
+
+	chatMu                sync.Mutex
+	nextChatExecutionSeq  int64
+	chatMaxAttempts       int
+	chatRetryBackoff      time.Duration
+	chatProviderCooldown  time.Duration
+	chatCheckpointLimit   int
+	chatCheckpoints       map[string]ChatExecutionCheckpoint
+	chatCheckpointOrder   []string
+	chatProviderCooldowns map[ModelBackendKind]time.Time
 }
 
 func NewService(opts ServiceOptions) (*Service, error) {
@@ -202,6 +216,16 @@ func NewService(opts ServiceOptions) (*Service, error) {
 	if completedLimit <= 0 {
 		completedLimit = 128
 	}
+	chatMaxAttempts := positiveOrDefault(opts.ChatMaxAttempts, 3)
+	chatCheckpointLimit := positiveOrDefault(opts.ChatCheckpointLimit, 128)
+	chatRetryBackoff := opts.ChatRetryBackoff
+	if chatRetryBackoff < 0 {
+		chatRetryBackoff = 0
+	}
+	chatProviderCooldown := opts.ChatProviderCooldown
+	if chatProviderCooldown < 0 {
+		chatProviderCooldown = 0
+	}
 
 	svc := &Service{
 		backends:              backendMap,
@@ -228,6 +252,13 @@ func NewService(opts ServiceOptions) (*Service, error) {
 		maxQueueDepth:         maxQueueDepth,
 		maxConcurrentRequests: maxConcurrent,
 		completedHistoryLimit: completedLimit,
+		chatMaxAttempts:       chatMaxAttempts,
+		chatRetryBackoff:      chatRetryBackoff,
+		chatProviderCooldown:  chatProviderCooldown,
+		chatCheckpointLimit:   chatCheckpointLimit,
+		chatCheckpoints:       map[string]ChatExecutionCheckpoint{},
+		chatCheckpointOrder:   []string{},
+		chatProviderCooldowns: map[ModelBackendKind]time.Time{},
 	}
 	svc.schedulerCond = sync.NewCond(&svc.schedulerMu)
 	return svc, nil

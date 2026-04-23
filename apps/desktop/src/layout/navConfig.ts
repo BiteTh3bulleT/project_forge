@@ -45,6 +45,7 @@ export const navGroups: readonly NavGroup[] = [
     items: [
       { to: "/memory", label: "Search Memory", blurb: "Find indexed context fast.", mode: "both" },
       { to: "/project-context", label: "Project Context", blurb: "Normalize and regenerate guidance.", mode: "both" },
+      { to: "/inspectors", label: "Inspectors", blurb: "Read-only packet, snapshot, and trace evidence.", mode: "pro" },
       { to: "/dossiers", label: "Projects", blurb: "Dossiers and project preferences.", mode: "both" },
       { to: "/retrieval-runs", label: "Retrieval Runs", blurb: "Inspect keyword/semantic retrieval.", mode: "pro" },
       { to: "/lineage", label: "Retries & Lineage", blurb: "Compare retries/replays.", mode: "pro" },
@@ -100,6 +101,7 @@ export const routeHelp: Record<string, { title: string; text: string }> = {
   "/reviews": { title: "Reviews", text: "Approve, reject, or defer imported/generated outputs." },
   "/memory": { title: "Search Memory", text: "Find indexed context and inspect the source snippets used to build packets." },
   "/project-context": { title: "Project Context", text: "Import and normalize context into durable guidance files and project briefing docs." },
+  "/inspectors": { title: "Inspectors", text: "Read-only operator views for context snapshots, task packets, and execution trace evidence." },
   "/dossiers": { title: "Projects", text: "Manage project dossiers, profile preferences, and linked execution history." },
   "/policy": { title: "Policy", text: "Control approval presets and inspect recommendation evidence." },
   "/strategies": { title: "Strategies", text: "Define repeatable execution strategies and success criteria." },

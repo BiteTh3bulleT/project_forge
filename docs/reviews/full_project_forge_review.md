@@ -1,74 +1,61 @@
 # Full Project FORGE Review
 
-Date: 2026-04-22  
-Scope: convergence hardening audit after Phase 5.996 cutover pass.
+Date: 2026-04-23  
+Scope: concise convergence review update for Phase 3-5 status/docs alignment.
 
 ## 1) Executive Summary
 
-FORGE remains real, bootable, and materially implemented across v1 operational services and v2 control-lane/tool-policy/autonomy systems. This pass kept restore parity improvements, made restore guarantees more explicit (`atomicScope` + non-DB warnings), removed legacy adapter route execution in favor of gateway-only invocation, and moved VSA dependency files into authoritative tracked source state while preserving strict preflight checks. Runtime authority is clearer because gateway is now the only tool-execution path, and Model Runtime M3 now provides a FORGE-owned managed model runtime with scheduler, limits, import/register flows, lifecycle governance, backend selection, and audit coverage.
+FORGE remains materially implemented across control-lane persistence, ingest/cell runtime, truth services, autonomy policy, and governed tool/model execution. The current code supports real Phase 3 durable semantic persistence, real but bounded Phase 4 ingest/cell flow, and partial Phase 5 truth/autonomy/tool-policy layers. Tool execution authority is gateway-only, `COMPILE_CONTEXT` restore scoring is deterministic and persisted as evidence, and Model Runtime M3 remains real but non-streaming.
 
-## 2) What Improved In This Pass
+## 2) Current Code-Verified Reality
 
-1. Restore parity improved to near-complete for non-derived sections.
-- Newly restorable: `project_context_records`, `evaluation_records`, `audit_records`, `gateway_invocations`.
-- Remaining export-only set is now VSA-derived maintenance/state tables.
+1. Phase 3 persistence is landed in the control lane.
+- SQLite-backed notes/links/state/loops/models/contradictions/supersessions/context snapshots are committed behind the semantic syscall processor.
+- `journal_events` remains append-only, and audit linkage is attached by `syscall_id` + correlation.
 
-2. Restore failure safety improved materially.
-- Restore now uses one DB transaction across all supported selected sections.
-- Late failure rolls back already-applied sections.
-- Restore results now expose `atomic`, `atomicScope`, `globalAtomic`, `nonDbSideEffects`, `applied`, and `rolledBack` for honest guarantees.
+2. Phase 4 ingest runtime is landed but bounded.
+- Librarian pipeline and cells are real and route accepted actions back through the kernel.
+- Autonomy follow-on passes are depth-bounded and skipped for dry-run/validate-only execution.
 
-3. Legacy adapter execution side route is removed.
-- `/api/adapters/{id}/invoke` is no longer registered and returns `404 Not Found`.
-- Desktop probe flow now invokes adapters through `/api/gateway/invoke` (`toolId/laneId: legacy.adapter.invoke`).
-- Policy/permission/audit behavior for adapter invocation now applies only through gateway invocation records/audits.
+3. Phase 5 truth/autonomy/tool-policy layers are real but partial.
+- Truth engine services exist for current state, timelines, contradictions, supersessions, and explain paths.
+- Autonomy policy, charter/budget checks, and durable-backing quarantine are real.
+- Gateway capability status/risk/approval policy is real, and `future_iris` does not bypass it.
 
-4. Legacy v1 memory mutation boundary trace quality improved.
-- Legacy memory mutation audits now include correlation + trace/workspace payload context.
-- Default-off posture remains enforced by `FORGE_ALLOW_LEGACY_MEMORY_MUTATIONS=true`.
+4. Tool execution authority is clearer than before.
+- `/api/adapters/{id}/invoke` is not routed.
+- Legacy adapter execution remains only as gateway tool `legacy.adapter.invoke`.
 
-5. VSA status is authoritative source in this branch snapshot (not generated, not optional).
-- Added `scripts/check-vsa-files.sh`.
-- Required VSA sources are now tracked in repository state.
-- Core/smoke entrypoints require VSA files to be present and tracked in git for bring-up integrity posture.
-- Root `build:core`, `test:core`, and `vet:core` also enforce `--require-tracked` and fail early with actionable guidance.
+5. Context restore scoring is now deterministic and inspectable.
+- `COMPILE_CONTEXT` snapshot selection ranks candidates by scope/query/kind with stale, contradiction, and header-only penalties.
+- `restore_scores_json` and `resume_hints_json` persist as non-canonical evidence.
 
-6. Model Runtime M3 extends the native runtime into managed compute assets.
-- Local GGUF imports and manifest-backed directory registration are implemented.
-- Persistent lifecycle state now tracks imported, verified, disabled, archived, and preferred/default model metadata.
-- `openai_compat` backend support is real, with a vLLM-compatible path through the same transport shape.
-- Internal runtime APIs now cover import, verify, enable, disable, archive, remove-registration, compatibility, backend status, and usage.
-- Destructive file delete remains deferred; M3 keeps archive/remove-registration separate from deletion.
-
-7. Restore side-effect honesty is now explicit.
-- Restore reports `atomicScope=db-supported-sections-only`.
-- Restore reports warnings when sections include non-DB side effects (for example artifact file bytes are not imported/rollback-managed).
+6. Model Runtime M3 is real and still bounded.
+- Managed import/register/verify/enable/disable/archive/remove-registration flows exist.
+- `/forge/models*` and gated `/v1/*` surfaces are present.
+- Streaming remains unsupported, file deletion remains deferred, and dedicated gateway `model.*` aliasing is still absent.
 
 ## 3) Current Critical / High Blockers
 
-### Critical
-
-1. VSA-derived sections remain intentionally non-restorable (export-only policy), which still limits full parity but is now an explicit, tested posture rather than an unresolved policy gap.
-
 ### High
 
-1. End-to-end trace/explain visibility is still partial for some artifact-centric/operator inspection flows, even though API-level correlation inspection is now consolidated in `/api/audit/trace/{correlationId}` (gateway/audit/artifact/provenance/journal links in one report).
-2. Restore still does not provide cross-system rollback beyond the DB transaction boundary (for example filesystem artifacts already present on disk are not part of DB rollback semantics).
-3. Model Runtime M3 is implemented but still limited: no streaming response path yet, no delete-file workflow, no dedicated gateway `model.*` aliasing, and no stronger backend/process supervision beyond current scope.
+1. v1 memory mutation still bypasses the semantic syscall kernel, so Phase 5 truth services are not yet the sole runtime memory authority.
+2. Dual runtime event streams (`events` and `journal_events`) still coexist.
+3. End-to-end operator trace/explain visibility remains partial even though backend correlation data is present.
+4. Model Runtime M3 remains non-streaming and does not yet provide delete-file workflow, stronger backend/process supervision, or gateway `model.*` aliasing.
 
 ## 4) Medium Blockers
 
 1. Rule-agent set remains intentionally narrow (`OpenLoopStalenessAgent`, `CleanupProposalAgent`).
-2. Compute lane seam/runtime split remains documented but unresolved.
-3. Nix validation remains environment-blocked in this host (daemon unavailable).
+2. Lane split remains architectural doctrine, not a hard package/runtime isolation boundary.
+3. Operator UI inspection for snapshots/runtime traces still lags backend capability.
 
 ## 5) Reality Verdict
 
-FORGE is materially closer to one authoritative runtime: restore semantics are safer and more complete, tool execution authority is now gateway-only, and validation/bring-up truth is stronger. Remaining blockers are concentrated in inspection/trace completeness, non-DB rollback boundaries, and advancing Model Runtime M3 toward M4 capabilities.
+FORGE is materially closer to one authoritative runtime, but it is not fully converged. Phase 3 persistence is real, Phase 4 ingest runtime is real, and core Phase 5 services are real; the remaining gaps are legacy write/event paths, incomplete operator traceability, and unfinished Model Runtime M4 work.
 
 ## 6) Recommended Next Move
 
-Continue remaining cutover blockers or move to Model Runtime M4:
-1. Maintain the explicit VSA export-only restore policy (with recompute/reindex expectations) unless a controlled derivation-safe import mode is introduced.
-2. Extend trace/explain inspection coverage for artifact-linked flows.
-3. Continue Model Runtime M4 work (streaming, delete-file approval flow, stronger backend/process supervision, and gateway `model.*` capability aliasing) on top of the landed M3 foundation.
+1. Continue converging v1 memory/event side paths into the declared control-lane authority model.
+2. Extend operator-facing trace and snapshot inspection until the Phase 5 “explain what happened” bar is actually met.
+3. Continue Model Runtime M4 work on top of the landed M3 baseline without documenting M4 behavior as present before it exists.

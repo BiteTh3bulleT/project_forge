@@ -1,162 +1,140 @@
-# FORGE - AI-OS Architecture Baseline (Phase 1)
+# FORGE AI-OS Architecture Baseline
 
-## Decision framing
+Status date: 2026-04-23  
+Scope: branch-local architecture baseline after code inspection of the current Phase 3-5 surfaces.
 
-FORGE is the AI-OS.
+## Core rule
 
-IRIS is a future resident semantic service inside FORGE. IRIS is not the OS and cannot own canonical truth.
-
-FORGE owns:
-
-- kernel logic
-- memory/state authority
-- workspace scope
-- runtime and process lifecycle
-- permissions and capabilities
-- tool execution boundary
-- audit and trace
-- context compilation
+FORGE is the AI-OS.  
+IRIS is a future proposer inside FORGE, not a truth authority.
 
 Rule of operation:
 
 > IRIS proposes. FORGE validates. FORGE commits.
 
-## Existing FORGE doctrine mapped to AI-OS terms
+## Current authority map
 
-| FORGE doctrine | AI-OS interpretation | Current implementation evidence |
+| Concern | Current authority | Evidence |
 |---|---|---|
-| events are truth | system journal | `events`, `job_events`, `audit_records` tables; `internal/events`, `internal/jobs`, `internal/audit` |
-| jobs are projections | process lifecycle projection | `jobs` + `job_status_history`; `internal/jobs` |
-| packets are contracts | execution contract + working set | `task_packets`; `internal/packets` |
-| approvals are gates | kernel gate decisions before risky execution | `approval_requests`, `approval_decisions`; `internal/approvals`, `internal/permissions` |
-| artifacts are evidence | durable execution evidence | `artifacts`, `backup_bundles`, `release_artifacts`; `internal/artifacts`, `internal/backup`, `internal/release` |
-| adapters are bounded workers | user-space workers behind contracts | `internal/adapters` registry + typed invoke contract |
-| gateway is controlled boundary | controlled I/O + execution syscall boundary | `internal/gateway` + `gateway_invocations` |
-| action lanes | permissioned execution lanes | `internal/lanes` + `action_lanes` |
-| audit | kernel/system trace | `internal/audit` + correlation-id trace APIs |
+| Canonical semantic mutation | semantic syscall control lane | `services/core/internal/aios/controllane/processor.go`, `validator.go`, `processor_apply.go`, `sqlite_store.go` |
+| Tool execution | gateway only | `services/core/internal/gateway/service.go`, `/api/gateway/invoke` in `services/core/internal/api/server.go` |
+| Model execution and model management | model runtime service | `services/core/internal/modelruntime/service.go`, `management.go`, `store_management.go`, `services/core/internal/api/model_runtime*.go` |
+| Approval and capability gates | approvals + permissions + gateway/tool policy | `services/core/internal/approvals`, `services/core/internal/permissions`, `services/core/internal/gateway/tool_policy.go` |
+| Audit and trace linkage | audit service plus correlation/trace propagation | `services/core/internal/audit`, syscall/gateway/model-runtime bridge code |
 
-## Tri-lane architecture (target on current repo)
+## Landed Phase 3-5 architecture
 
-### Control Lane (kernel lane)
+### Phase 3: cognitive persistence is real
 
-Responsibilities:
+The control lane is no longer in-memory-only. Durable semantic persistence exists behind the same validator/processor path:
 
-- semantic syscall validation
-- permissions/capabilities checks
-- approvals/gates
-- state transitions and lifecycle enforcement
-- audit append
+- cognitive tables and history are stored through `services/core/internal/aios/controllane/sqlite_store.go`
+- commit boundaries run through `SQLiteTransactionRunner`
+- `journal_events` remains append-only at the DB level
+- context snapshot evidence persists in `context_packet_snapshots`
+- `COMPILE_CONTEXT` can persist non-canonical snapshot evidence and restore-selection metadata
 
-Current modules in this lane:
+This is real Phase 3 persistence, but not full mutation convergence across the whole repo.
 
-- `internal/jobs`
-- `internal/approvals`
-- `internal/permissions`
-- `internal/lanes`
-- `internal/gateway` (validation/decision path)
-- `internal/audit`
+### Phase 4: ingest and cell runtime are real but bounded
 
-### I/O Lane
+The compute-side ingest flow exists and routes proposed actions back through kernel authority:
 
-Responsibilities:
+- ingest pipeline: `services/core/internal/aios/compute/librarian/pipeline.go`
+- default cells and phase coverage: `cells_phase4.go`, `pipeline_phase4_test.go`
+- truth engine is constructed inside the ingest pipeline and receives syscall outcomes
+- autonomy pass is bounded by depth and skipped in dry-run or validate-only paths
 
-- tool gateway invocation
-- adapter ingress/egress
-- artifact writes and export/import
-- event ingestion of external sources
+What is not yet true:
 
-Current modules in this lane:
+- lane separation is still conceptual, not package-enforced
+- full operator-facing ingest/runtime inspection is still limited
+- maintenance/reporting depth is still narrower than the long-term lane model
 
-- `internal/gateway`
-- `internal/adapters`
-- `internal/artifacts`
-- `internal/imports`
-- `internal/ingest`
-- `internal/backup`
+### Phase 5: truth, autonomy, and tool policy are partially landed
+
+Three important Phase 5 families are now real:
+
+- truth engine services over current/history/contradiction/supersession:
+  `services/core/internal/aios/truth/engine.go`
+- bounded autonomy policy and maintenance runtime:
+  `services/core/internal/aios/autonomy/*`,
+  `services/core/internal/api/autonomy_maintenance_loop.go`
+- governed tool capability surface and policy enforcement:
+  `services/core/internal/gateway/tool_capability_registry.go`,
+  `tool_policy.go`
+
+What remains incomplete:
+
+- v1 memory writes still bypass the syscall kernel in `services/core/internal/memory/*`
+- dual event truth streams (`events` and `journal_events`) still coexist
+- operator trace/explain surfaces are weaker than backend trace data
+- many tool capabilities are intentionally `stubbed`, `deferred`, or `approval_only`
+
+## Runtime surfaces mapped to the AI-OS model
+
+### Control Lane
+
+Implemented responsibilities:
+
+- syscall validation and commit
+- approval and capability checks
+- tool policy decisions
+- autonomy policy preview/commit gating
+- audit append and correlation linkage
+
+Primary code:
+
+- `services/core/internal/aios/controllane/*`
+- `services/core/internal/approvals/*`
+- `services/core/internal/permissions/*`
+- `services/core/internal/gateway/*`
+- `services/core/internal/audit/*`
 
 ### Compute Lane
 
-Responsibilities:
+Implemented responsibilities:
 
-- internal librarian cells (retrieval/ranking/repair workers)
-- embedding/index workers
-- pattern/model workers
-- context compiler
-- future semantic inference seam for IRIS
+- ingest pipeline
+- cell proposal generation
+- truth projection/explanation services
+- deterministic context compilation and restore scoring
+- model runtime inference and management
 
-Current modules in this lane:
+Primary code:
 
-- `internal/retrieval`
-- `internal/embeddings`
-- `internal/memory`
-- `internal/packetopt`
-- `internal/failurepatterns`
-- `internal/policy`
-- `internal/projectcontext`
+- `services/core/internal/aios/compute/librarian/*`
+- `services/core/internal/aios/truth/*`
+- `services/core/internal/aios/autonomy/*`
+- `services/core/internal/modelruntime/*`
 
-Gap note: the lane boundary exists conceptually today but is not yet enforced by package-level kernel/compute namespaces. That is a forward phase item.
+### I/O Lane
 
-## Cognitive filesystem model (FORGE flavor)
+Implemented responsibilities:
 
-The cognitive filesystem in FORGE is inspectable storage and references, not an opaque memory blob.
+- gateway tool invocation
+- adapter compatibility routing through gateway
+- artifacts/imports/backup boundaries
+- API surfaces for operator and desktop clients
 
-| Cognitive filesystem element | Current repo mapping | Status |
-|---|---|---|
-| raw event journal | `events`, `job_events`, `audit_records` | implemented |
-| notes | `canvas_notes`, packet/project notes fields, dossier briefs | partial (distributed, no unified note taxonomy yet) |
-| typed links | `memory_observation_links`, `job_lineage` | implemented (initial) |
-| active state | `jobs.status`, `approval_requests.status`, active permission profile | implemented |
-| open loops | pending approvals/reviews/reconciliation states | partial (no dedicated `open_loops` domain yet) |
-| artifact refs | `artifacts`, `context_evidence`, packet/retrieval link tables | implemented |
-| derived models | `routing_policy_recommendations`, `packet_guidance_records`, `failure_pattern_snapshots`, `routing_insights` | implemented (advisory) |
-| context packets | `task_packets` + packet retrieval/alignment links | implemented |
+Primary code:
 
-## Exact truth vs derived policy
+- `services/core/internal/gateway/*`
+- `services/core/internal/adapters/*`
+- `services/core/internal/artifacts/*`
+- `services/core/internal/backup/*`
+- `services/core/internal/api/*`
 
-Exact truth (authoritative evidence) lives in:
+## Architecture boundaries that are true today
 
-- events and job/audit journals
-- memory observations and links
-- active lifecycle state
-- approvals and decisions
-- artifacts and references
+- No direct adapter invoke API route is registered; legacy adapter execution only remains as gateway tool `legacy.adapter.invoke`.
+- `future_iris` is a proposer source class, not a bypass for tool or syscall policy.
+- Model runtime is the owned inference substrate when enabled, but it is still non-streaming and does not yet expose dedicated gateway `model.*` aliases.
+- Context restore snapshots are evidence, not truth authority.
 
-Derived policy/model layers live in:
+## Known non-converged boundaries
 
-- routing recommendations
-- packet guidance scores
-- failure pattern snapshots
-- strategy/policy presets
-
-Derived layers are adaptive and can change. They are not canonical truth.
-
-## Kernel, heuristics, and user space boundary
-
-- LLM/generative systems are user-space proposers.
-- FORGE kernel rules are deterministic validators and committers.
-- Heuristics (ranking/scoring/prioritization) sit between them and remain advisory.
-
-No LLM or future IRIS service may directly mutate canonical state.
-
-All durable writes must pass through validated FORGE APIs/syscalls (`jobs`, `gateway`, `approvals`, `packets`, and related services).
-
-## Current vs target (phase-indexed)
-
-| AI-OS primitive | Existing FORGE concept | Current status | Phase needed |
-|---|---|---|---|
-| system journal | `events`, `job_events`, `audit_records` | implemented and append-style | harden replay/projection invariants in Phase 2 |
-| process projections | `jobs` + `job_status_history` | implemented | unify with kernel process semantics in Phase 2 |
-| execution contracts | `task_packets` | implemented | context packet schema expansion in Phase 6 |
-| approval gates | `approval_requests` + `approval_decisions` | implemented | wire all gateway approval flows end-to-end in Phase 2 |
-| evidence filesystem | `artifacts`, `backup_bundles`, `release_artifacts` | implemented | converge artifact refs into cognitive fs model in Phase 3 |
-| bounded workers | `internal/adapters` | implemented | maintain bounded contract; no direct state writes (ongoing) |
-| controlled I/O boundary | `internal/gateway` + `gateway_invocations` | implemented | formal semantic syscall surface in Phase 2 |
-| execution lanes | `action_lanes` + permission profiles | implemented | lane taxonomy aligned to 3-lane OS model in Phase 1/2 |
-| permission kernel | `internal/permissions` | implemented | capability model and syscall policy coupling in Phase 2 |
-| audit trace | `internal/audit` trace by correlation id | implemented | expand observability/API surfaces in Phase 9 |
-| cognitive filesystem | memory/notes/links/state spread across tables | partial, distributed | normalize persistence model in Phase 3 and Phase 5 |
-| internal librarian cells | retrieval/memory/repair services | partial, functionally present | formal cell runtime and scheduling in Phase 4 |
-| context compiler | project context + packet assembly | partial | full context compiler contract in Phase 6; restore snapshots in Phase 6.25 |
-| workspace/runtime isolation | workspace paths + permission scopes | partial | explicit workspace runtime/event bus in Phase 7 |
-| adaptive policy algebra | policy + guidance + insights snapshots | partial advisory | algebraic/adaptive layer in Phase 8 |
-| IRIS integration seam | none as first-class service yet | planned only | seam + eval harness in Phase 10 |
+- v1 memory mutation and v2 semantic mutation still coexist.
+- `events` and `journal_events` are both active runtime streams.
+- The tri-lane model is architectural doctrine, not yet a hard package/runtime isolation boundary.
+- Operator-facing trace exploration still lags the backend lineage that already exists in audit, gateway, syscall, and model-runtime records.

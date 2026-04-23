@@ -157,6 +157,66 @@ func TestChatPostStreamRequestDowngradesWhenOllamaStreamUnavailable(t *testing.T
 	}
 }
 
+func TestChatPostSyncUsesRequestedModelRuntimeModel(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.models["qwen-override"] = ModelRuntimeModel{
+		ID:           "qwen-override",
+		DisplayName:  "Qwen Override",
+		Backend:      "fake",
+		Format:       "gguf",
+		Status:       "available",
+		Capabilities: []string{"chat", "completion"},
+	}
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "runtime requested model", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+
+	raw := []byte(`{"content":"use requested runtime model","requestAssistant":true,"syncAssistant":true,"modelId":"qwen-override"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message in response")
+	}
+	if got := strings.TrimSpace(asString(payload.AssistantMessage.Metadata["modelRuntimeRequestedModelId"])); got != "qwen-override" {
+		t.Fatalf("expected modelRuntimeRequestedModelId=qwen-override, got=%q", got)
+	}
+	if got := strings.TrimSpace(fakeRuntime.lastChat.ModelID); got != "qwen-override" {
+		t.Fatalf("expected runtime chat to use requested model qwen-override, got=%q", got)
+	}
+
+	detail, err := srv.chat.GetThread(context.Background(), thread.ID)
+	if err != nil {
+		t.Fatalf("load thread: %v", err)
+	}
+	var userMeta map[string]any
+	for i := len(detail.Messages) - 1; i >= 0; i-- {
+		if detail.Messages[i].Role == "user" {
+			userMeta = detail.Messages[i].Metadata
+			break
+		}
+	}
+	if userMeta == nil {
+		t.Fatalf("expected user message in thread")
+	}
+	if got := strings.TrimSpace(readRequestedModelID(userMeta)); got != "qwen-override" {
+		t.Fatalf("expected user metadata requestedModelId=qwen-override, got=%q", got)
+	}
+}
+
 func TestChatAssistantStreamFallsBackToModelRuntimeWhenOllamaStreamUnavailable(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	fakeRuntime := newFakeModelRuntime()
@@ -191,5 +251,46 @@ func TestChatAssistantStreamFallsBackToModelRuntimeWhenOllamaStreamUnavailable(t
 	}
 	if fakeRuntime.chatCalls == 0 {
 		t.Fatalf("expected model runtime chat call")
+	}
+}
+
+func TestChatAssistantStreamRespectsRequestedModelFromUserMetadata(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.models["stream-override"] = ModelRuntimeModel{
+		ID:           "stream-override",
+		DisplayName:  "Stream Override",
+		Backend:      "fake",
+		Format:       "gguf",
+		Status:       "available",
+		Capabilities: []string{"chat", "completion"},
+	}
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "runtime stream model override", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	um, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "hello via stream requested model", map[string]any{
+		"source":           "operator",
+		"requestedModelId": "stream-override",
+	})
+	if err != nil {
+		t.Fatalf("append user message: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/assistant-stream?userMessageId="+strconv.FormatInt(um.ID, 10),
+		nil,
+	)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	if got := strings.TrimSpace(fakeRuntime.lastChat.ModelID); got != "stream-override" {
+		t.Fatalf("expected runtime chat to use requested model stream-override, got=%q", got)
 	}
 }

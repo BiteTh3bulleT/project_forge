@@ -398,24 +398,35 @@ func (s *SQLiteSemanticStore) GetIdempotency(key string) (IdempotencyRecord, boo
 }
 
 func (s *SQLiteSemanticStore) FindLatestContextSnapshot(scope domain.ForgeScope, query, snapshotKind string) (domain.ContextPacket, bool) {
+	packets := s.ListContextSnapshots(scope, query, snapshotKind, 1)
+	if len(packets) == 0 {
+		return domain.ContextPacket{}, false
+	}
+	return packets[0], true
+}
+
+func (s *SQLiteSemanticStore) ListContextSnapshots(scope domain.ForgeScope, query, snapshotKind string, limit int) []domain.ContextPacket {
+	if limit <= 0 {
+		limit = 50
+	}
 	rows, err := s.exec.QueryContext(s.background, `
 SELECT id, query, workspace_id, lane_id, selected_paths_json, budget_json, inclusion_reasons_json, created_at,
        metadata_json, snapshot_kind, snapshot_fingerprint, parent_snapshot_id, header_json, graph_json, delta_json,
        restore_scores_json, render_artifact_ref_id, resume_hints_json
 FROM context_packet_snapshots
-WHERE workspace_id = ? AND (? = '' OR lane_id = ?) AND query = ?
+WHERE workspace_id = ? AND (? = '' OR lane_id = ?) AND (? = '' OR query = ?)
   AND (? = '' OR snapshot_kind = ? OR (snapshot_kind = '' AND json_extract(metadata_json, '$.snapshot_kind') = ?))
 ORDER BY created_at DESC
-LIMIT 1`, scope.WorkspaceID, scope.LaneID, scope.LaneID, query, snapshotKind, snapshotKind, snapshotKind)
+LIMIT ?`, scope.WorkspaceID, scope.LaneID, scope.LaneID, query, query, snapshotKind, snapshotKind, snapshotKind, limit)
 	if err != nil {
-		return domain.ContextPacket{}, false
+		return nil
 	}
 	defer rows.Close()
 	packets, err := scanContextPacketRows(rows)
-	if err != nil || len(packets) == 0 {
-		return domain.ContextPacket{}, false
+	if err != nil {
+		return nil
 	}
-	return packets[0], true
+	return packets
 }
 
 func (s *SQLiteSemanticStore) BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket {
