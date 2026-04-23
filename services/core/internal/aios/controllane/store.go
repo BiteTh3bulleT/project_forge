@@ -440,7 +440,11 @@ func (s *InMemorySemanticStore) BuildContext(query string, scope domain.ForgeSco
 	sort.Strings(noteIDs)
 	notes := make([]domain.MemoryNote, 0, len(noteIDs))
 	for _, id := range noteIDs {
-		notes = append(notes, s.state.notes[id])
+		note := s.state.notes[id]
+		if !scopeMatchesBuildContext(scope, note.Scope) || note.Status != domain.NoteActive {
+			continue
+		}
+		notes = append(notes, note)
 		if len(notes) >= budget.MaxNotes {
 			break
 		}
@@ -450,7 +454,11 @@ func (s *InMemorySemanticStore) BuildContext(query string, scope domain.ForgeSco
 	sort.Strings(loopIDs)
 	loops := make([]domain.OpenLoop, 0, len(loopIDs))
 	for _, id := range loopIDs {
-		loops = append(loops, s.state.loops[id])
+		loop := s.state.loops[id]
+		if !scopeMatchesBuildContext(scope, loop.Scope) || !isActiveContextLoop(loop.State) {
+			continue
+		}
+		loops = append(loops, loop)
 		if len(loops) >= budget.MaxNotes {
 			break
 		}
@@ -461,7 +469,7 @@ func (s *InMemorySemanticStore) BuildContext(query string, scope domain.ForgeSco
 	activeState := make([]domain.StateItem, 0, len(stateIDs))
 	for _, id := range stateIDs {
 		item := s.state.states[id]
-		if item.Status == domain.StateArchived {
+		if !scopeMatchesBuildContext(scope, item.Scope) {
 			continue
 		}
 		activeState = append(activeState, item)
@@ -474,7 +482,11 @@ func (s *InMemorySemanticStore) BuildContext(query string, scope domain.ForgeSco
 	sort.Strings(linkIDs)
 	links := make([]domain.SemanticLink, 0, len(linkIDs))
 	for _, id := range linkIDs {
-		links = append(links, s.state.links[id])
+		link := s.state.links[id]
+		if !scopeMatchesBuildContext(scope, link.Scope) {
+			continue
+		}
+		links = append(links, link)
 		if len(links) >= budget.MaxNotes {
 			break
 		}
@@ -484,7 +496,11 @@ func (s *InMemorySemanticStore) BuildContext(query string, scope domain.ForgeSco
 	sort.Strings(modelIDs)
 	models := make([]domain.AdaptivePolicyModel, 0, len(modelIDs))
 	for _, id := range modelIDs {
-		models = append(models, s.state.models[id])
+		model := s.state.models[id]
+		if !scopeMatchesBuildContext(scope, model.Scope) {
+			continue
+		}
+		models = append(models, model)
 		if len(models) >= budget.MaxNotes {
 			break
 		}
@@ -494,7 +510,11 @@ func (s *InMemorySemanticStore) BuildContext(query string, scope domain.ForgeSco
 	sort.Strings(artifactIDs)
 	artifacts := make([]domain.ArtifactRef, 0, len(artifactIDs))
 	for _, id := range artifactIDs {
-		artifacts = append(artifacts, s.state.artifacts[id])
+		artifact := s.state.artifacts[id]
+		if !scopeMatchesBuildContext(scope, artifact.Scope) || isSnapshotCardArtifact(artifact) {
+			continue
+		}
+		artifacts = append(artifacts, artifact)
 		if len(artifacts) >= budget.MaxNotes {
 			break
 		}
@@ -785,4 +805,27 @@ func contextSnapshotKind(pkt domain.ContextPacket) string {
 		return strings.TrimSpace(pkt.CompileOptions.SnapshotKind)
 	}
 	return ""
+}
+
+func scopeMatchesBuildContext(target, object domain.ForgeScope) bool {
+	if strings.TrimSpace(target.WorkspaceID) == "" {
+		return false
+	}
+	if strings.TrimSpace(target.WorkspaceID) != strings.TrimSpace(object.WorkspaceID) {
+		return false
+	}
+	targetLane := strings.TrimSpace(target.LaneID)
+	if targetLane == "" {
+		return true
+	}
+	return targetLane == strings.TrimSpace(object.LaneID)
+}
+
+func isActiveContextLoop(state domain.OpenLoopState) bool {
+	switch state {
+	case domain.LoopOpen, domain.LoopInProgress, domain.LoopBlocked:
+		return true
+	default:
+		return false
+	}
 }

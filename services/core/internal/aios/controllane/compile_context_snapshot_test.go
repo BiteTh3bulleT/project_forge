@@ -86,6 +86,55 @@ func TestCompiledContextSnapshotRepeatedFingerprintDelta(t *testing.T) {
 	}
 }
 
+func TestCompiledContextSnapshotTracksParentAcrossEvolution(t *testing.T) {
+	packetA := createTestContextPacketSnapshot("ctx-evolve-a", "ws-main", 1760002004000)
+	packetA.Query = "summarize blockers"
+	packetB := createTestContextPacketSnapshot("ctx-evolve-b", "ws-main", 1760002005000)
+	packetB.Query = packetA.Query
+	packetB.Notes = append(packetB.Notes, domain.MemoryNote{
+		ID:      "note-evolved",
+		Type:    domain.NoteFact,
+		Title:   "new evidence",
+		Content: "a new fact changed semantic context",
+		Scope:   packetB.Scope,
+		Status:  domain.NoteActive,
+	})
+
+	first := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
+		Packet:        packetA,
+		SnapshotID:    packetA.ID,
+		SnapshotKind:  "restore",
+		CorrelationID: "corr-evolve-a",
+		TraceID:       "trace-evolve-a",
+		SyscallID:     "syscall-evolve-a",
+		ProposedBy:    "user",
+		CommittedBy:   "forge_kernel",
+	}, nil)
+	second := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
+		Packet:        packetB,
+		SnapshotID:    packetB.ID,
+		SnapshotKind:  "restore",
+		CorrelationID: "corr-evolve-b",
+		TraceID:       "trace-evolve-b",
+		SyscallID:     "syscall-evolve-b",
+		ProposedBy:    "user",
+		CommittedBy:   "forge_kernel",
+	}, &first)
+
+	if second.Header.ParentSnapshotID != first.Header.SnapshotID {
+		t.Fatalf("expected parent linkage across semantic evolution, got %q", second.Header.ParentSnapshotID)
+	}
+	if first.Header.Fingerprint == second.Header.Fingerprint {
+		t.Fatalf("expected fingerprint change after semantic evolution")
+	}
+	if second.Delta.FingerprintMatched {
+		t.Fatalf("expected FingerprintMatched=false for semantic evolution")
+	}
+	if len(second.Delta.AddedNodeIDs)+len(second.Delta.RemovedNodeIDs)+len(second.Delta.ChangedNodeIDs)+len(second.Delta.AddedEdgeIDs)+len(second.Delta.RemovedEdgeIDs)+len(second.Delta.ChangedEdgeIDs) == 0 {
+		t.Fatalf("expected non-empty delta for semantic evolution")
+	}
+}
+
 func TestContextSnapshotArtifactIgnoredFromGraphFingerprint(t *testing.T) {
 	packet := createTestContextPacketSnapshot("ctx-artifact-1", "ws-main", 1760002003000)
 	packet.Query = "summarize blockers"

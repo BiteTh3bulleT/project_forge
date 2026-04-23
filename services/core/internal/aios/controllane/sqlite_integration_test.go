@@ -725,3 +725,81 @@ func TestSQLiteContextCompileNoDirectPersistenceByReadStore(t *testing.T) {
 		t.Fatalf("read-store BuildContext must not persist artifact refs, got %d", artifactCount)
 	}
 }
+
+func TestSQLiteBuildContextPreFiltersSnapshotArtifactsAndCompileEvents(t *testing.T) {
+	ctx := context.Background()
+	_, txRunner, _ := newSQLiteKernel(t, nil)
+	read := txRunner.read
+	scope := domain.ForgeScope{WorkspaceID: "ws-main", LaneID: "control.semantic"}
+
+	if err := read.CreateArtifact(ctx, domain.ArtifactRef{
+		ID:          "artifact-regular",
+		Type:        "document",
+		URI:         "artifact://evidence/regular.txt",
+		Scope:       scope,
+		ContentHash: "sha1:regular",
+		CreatedAt:   1760001000100,
+		Metadata:    map[string]any{"kind": "evidence"},
+	}); err != nil {
+		t.Fatalf("seed regular artifact: %v", err)
+	}
+	if err := read.CreateArtifact(ctx, domain.ArtifactRef{
+		ID:          "artifact-snapshot-card",
+		Type:        "context_snapshot_card",
+		URI:         "artifact://context_snapshot/card.svg",
+		Scope:       scope,
+		ContentHash: "sha1:snapshot",
+		CreatedAt:   1760001000200,
+		Metadata:    map[string]any{"kind": "context_snapshot_card"},
+	}); err != nil {
+		t.Fatalf("seed snapshot-card artifact: %v", err)
+	}
+
+	if err := read.Append(ctx, domain.JournalEvent{
+		ID:            "evt-user",
+		Type:          "memory.note.created",
+		Source:        string(domain.SourceUser),
+		Scope:         scope,
+		Payload:       map[string]any{"ok": true},
+		CorrelationID: "corr-buildctx-1",
+		Provenance: domain.Provenance{
+			Actor:     "tester",
+			ActorType: "test",
+			Source:    "test",
+			TraceID:   "trace-buildctx-1",
+		},
+		Timestamp: 1760001000300,
+	}); err != nil {
+		t.Fatalf("seed non-compile event: %v", err)
+	}
+	if err := read.Append(ctx, domain.JournalEvent{
+		ID:            "evt-compile",
+		Type:          "semantic_syscall.compile_context",
+		Source:        string(domain.SourceSystem),
+		Scope:         scope,
+		Payload:       map[string]any{"internal": true},
+		CorrelationID: "corr-buildctx-2",
+		Provenance: domain.Provenance{
+			Actor:     "forge",
+			ActorType: "system",
+			Source:    "test",
+			TraceID:   "trace-buildctx-2",
+		},
+		Timestamp: 1760001000400,
+	}); err != nil {
+		t.Fatalf("seed compile event: %v", err)
+	}
+
+	packet := read.BuildContext("filter-check", scope, domain.ContextBudget{
+		MaxTokens: 100,
+		MaxEvents: 1,
+		MaxNotes:  1,
+	}, 1760001000500)
+
+	if len(packet.Artifacts) != 1 || packet.Artifacts[0].ID != "artifact-regular" {
+		t.Fatalf("expected build context to keep non-snapshot artifacts in-budget, got %+v", packet.Artifacts)
+	}
+	if len(packet.RawEvents) != 1 || packet.RawEvents[0].ID != "evt-user" {
+		t.Fatalf("expected build context to keep non-compile events in-budget, got %+v", packet.RawEvents)
+	}
+}

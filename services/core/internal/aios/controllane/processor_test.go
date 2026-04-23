@@ -562,3 +562,130 @@ func TestCompileContextSnapshotDryRunDoesNotWrite(t *testing.T) {
 		t.Fatalf("dry-run must not write snapshot rows or artifact refs")
 	}
 }
+
+func TestInMemoryBuildContextScopeAndEvidenceFiltering(t *testing.T) {
+	store := NewInMemorySemanticStore()
+	scopeMain := domain.ForgeScope{WorkspaceID: "ws-main", LaneID: "control.semantic"}
+	scopeOther := domain.ForgeScope{WorkspaceID: "ws-other", LaneID: "control.semantic"}
+
+	if err := store.CreateNote(domain.MemoryNote{
+		ID:        "note-main-active",
+		Type:      domain.NoteFact,
+		Title:     "main active",
+		Content:   "main active content",
+		Scope:     scopeMain,
+		Status:    domain.NoteActive,
+		CreatedAt: 100,
+		UpdatedAt: 100,
+	}); err != nil {
+		t.Fatalf("seed active main note: %v", err)
+	}
+	if err := store.CreateNote(domain.MemoryNote{
+		ID:        "note-main-archived",
+		Type:      domain.NoteFact,
+		Title:     "main archived",
+		Content:   "archived content",
+		Scope:     scopeMain,
+		Status:    domain.NoteArchived,
+		CreatedAt: 101,
+		UpdatedAt: 101,
+	}); err != nil {
+		t.Fatalf("seed archived main note: %v", err)
+	}
+	if err := store.CreateNote(domain.MemoryNote{
+		ID:        "note-other-active",
+		Type:      domain.NoteFact,
+		Title:     "other active",
+		Content:   "other content",
+		Scope:     scopeOther,
+		Status:    domain.NoteActive,
+		CreatedAt: 102,
+		UpdatedAt: 102,
+	}); err != nil {
+		t.Fatalf("seed other workspace note: %v", err)
+	}
+
+	if err := store.CreateLoop(domain.OpenLoop{
+		ID:        "loop-main-open",
+		Title:     "main open",
+		State:     domain.LoopOpen,
+		Priority:  "medium",
+		Scope:     scopeMain,
+		CreatedAt: 103,
+		UpdatedAt: 103,
+	}); err != nil {
+		t.Fatalf("seed open main loop: %v", err)
+	}
+	if err := store.CreateLoop(domain.OpenLoop{
+		ID:        "loop-main-resolved",
+		Title:     "main resolved",
+		State:     domain.LoopResolved,
+		Priority:  "medium",
+		Scope:     scopeMain,
+		CreatedAt: 104,
+		UpdatedAt: 104,
+	}); err != nil {
+		t.Fatalf("seed resolved main loop: %v", err)
+	}
+	if err := store.CreateLoop(domain.OpenLoop{
+		ID:        "loop-other-open",
+		Title:     "other open",
+		State:     domain.LoopOpen,
+		Priority:  "medium",
+		Scope:     scopeOther,
+		CreatedAt: 105,
+		UpdatedAt: 105,
+	}); err != nil {
+		t.Fatalf("seed open other loop: %v", err)
+	}
+
+	if err := store.CreateArtifactRef(domain.ArtifactRef{
+		ID:          "artifact-main-evidence",
+		Type:        "document",
+		URI:         "artifact://evidence/main.txt",
+		Scope:       scopeMain,
+		ContentHash: "sha1:main",
+		CreatedAt:   106,
+		Metadata:    map[string]any{"kind": "evidence"},
+	}); err != nil {
+		t.Fatalf("seed main evidence artifact: %v", err)
+	}
+	if err := store.CreateArtifactRef(domain.ArtifactRef{
+		ID:          "artifact-main-card",
+		Type:        "context_snapshot_card",
+		URI:         "artifact://snapshot/main.svg",
+		Scope:       scopeMain,
+		ContentHash: "sha1:card",
+		CreatedAt:   107,
+		Metadata:    map[string]any{"kind": "context_snapshot_card"},
+	}); err != nil {
+		t.Fatalf("seed main snapshot card artifact: %v", err)
+	}
+	if err := store.CreateArtifactRef(domain.ArtifactRef{
+		ID:          "artifact-other-evidence",
+		Type:        "document",
+		URI:         "artifact://evidence/other.txt",
+		Scope:       scopeOther,
+		ContentHash: "sha1:other",
+		CreatedAt:   108,
+		Metadata:    map[string]any{"kind": "evidence"},
+	}); err != nil {
+		t.Fatalf("seed other evidence artifact: %v", err)
+	}
+
+	packet := store.BuildContext("scope-check", scopeMain, domain.ContextBudget{
+		MaxTokens: 100,
+		MaxEvents: 10,
+		MaxNotes:  10,
+	}, 1760003000000)
+
+	if len(packet.Notes) != 1 || packet.Notes[0].ID != "note-main-active" {
+		t.Fatalf("expected only active scoped notes, got %+v", packet.Notes)
+	}
+	if len(packet.OpenLoops) != 1 || packet.OpenLoops[0].ID != "loop-main-open" {
+		t.Fatalf("expected only active scoped loops, got %+v", packet.OpenLoops)
+	}
+	if len(packet.Artifacts) != 1 || packet.Artifacts[0].ID != "artifact-main-evidence" {
+		t.Fatalf("expected scoped non-snapshot artifacts only, got %+v", packet.Artifacts)
+	}
+}

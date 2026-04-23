@@ -427,8 +427,8 @@ func (s *SQLiteSemanticStore) BuildContext(query string, scope domain.ForgeScope
 	states, _ := s.ListCurrent(context.Background(), toScopeFilter(scope), budget.MaxNotes)
 	links, _ := s.ListLinksByScope(context.Background(), toScopeFilter(scope), budget.MaxNotes)
 	models, _ := s.ListModelsByScope(context.Background(), toScopeFilter(scope), budget.MaxNotes)
-	artifacts, _ := s.ListByScopeArtifacts(context.Background(), toScopeFilter(scope), budget.MaxNotes)
-	events, _ := s.ListByScope(context.Background(), toScopeFilter(scope), budget.MaxEvents)
+	artifacts, _ := s.listContextEvidenceArtifacts(context.Background(), toScopeFilter(scope), budget.MaxNotes)
+	events, _ := s.listContextEvidenceEvents(context.Background(), toScopeFilter(scope), budget.MaxEvents)
 	return domain.ContextPacket{
 		ID:          "ctx-" + strings.ReplaceAll(query, " ", "_") + "-" + fmt.Sprintf("%d", now),
 		Query:       query,
@@ -446,6 +446,43 @@ func (s *SQLiteSemanticStore) BuildContext(query string, scope domain.ForgeScope
 		},
 		CreatedAt: now,
 	}
+}
+
+func (s *SQLiteSemanticStore) listContextEvidenceArtifacts(ctx context.Context, scope ScopeFilter, limit int) ([]domain.ArtifactRef, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	rows, err := s.exec.QueryContext(ctx, `
+SELECT id, type, uri, content_hash, workspace_id, lane_id, selected_paths_json, provenance_json, created_at, metadata_json
+FROM artifact_refs
+WHERE workspace_id = ? AND (? = '' OR lane_id = ?)
+  AND type != 'context_snapshot_card'
+  AND COALESCE(json_extract(metadata_json, '$.kind'), '') != 'context_snapshot_card'
+ORDER BY created_at DESC
+LIMIT ?`, scope.WorkspaceID, scope.LaneID, scope.LaneID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanArtifactRows(rows)
+}
+
+func (s *SQLiteSemanticStore) listContextEvidenceEvents(ctx context.Context, scope ScopeFilter, limit int) ([]domain.JournalEvent, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.exec.QueryContext(ctx, `
+SELECT id, type, source, actor, workspace_id, lane_id, selected_paths_json, payload_json, correlation_id, trace_id, provenance_json, created_at
+FROM journal_events
+WHERE workspace_id = ? AND (? = '' OR lane_id = ?)
+  AND lower(type) != 'semantic_syscall.compile_context'
+ORDER BY created_at DESC
+LIMIT ?`, scope.WorkspaceID, scope.LaneID, scope.LaneID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanJournalRows(rows)
 }
 
 // JournalRepository

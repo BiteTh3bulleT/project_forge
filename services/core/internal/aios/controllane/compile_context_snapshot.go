@@ -201,7 +201,7 @@ func buildCompiledContextSnapshot(input compiledSnapshotBuildInput, prior *compi
 		evidenceRank++
 	}
 	for _, evt := range sortedEventsForSnapshot(input.Packet.RawEvents) {
-		if strings.EqualFold(strings.TrimSpace(evt.Type), "semantic_syscall.compile_context") {
+		if isCompileContextJournalEvent(evt) {
 			continue
 		}
 		appendRailNode(compiledContextSnapshotNode{
@@ -311,10 +311,11 @@ func buildCompiledContextSnapshot(input compiledSnapshotBuildInput, prior *compi
 		},
 	}
 	current.Header.Fingerprint = compiledContextSnapshotFingerprint(current)
-	if prior != nil && strings.TrimSpace(prior.Header.Fingerprint) != "" && prior.Header.Fingerprint == current.Header.Fingerprint {
-		current.Header.ParentSnapshotID = prior.Header.SnapshotID
+	if prior != nil {
+		current.Header.ParentSnapshotID = strings.TrimSpace(prior.Header.SnapshotID)
 		current.Delta = computeCompiledSnapshotDelta(current, *prior)
-		current.Delta.FingerprintMatched = true
+		current.Delta.FingerprintMatched = strings.TrimSpace(prior.Header.Fingerprint) != "" &&
+			strings.TrimSpace(prior.Header.Fingerprint) == strings.TrimSpace(current.Header.Fingerprint)
 	}
 	return current
 }
@@ -670,4 +671,8 @@ func sortedLinksForSnapshot(in []domain.SemanticLink) []domain.SemanticLink {
 
 func isSnapshotCardArtifact(ref domain.ArtifactRef) bool {
 	return strings.TrimSpace(ref.Type) == "context_snapshot_card" || strings.TrimSpace(readString(ref.Metadata, "kind")) == "context_snapshot_card"
+}
+
+func isCompileContextJournalEvent(evt domain.JournalEvent) bool {
+	return strings.EqualFold(strings.TrimSpace(evt.Type), "semantic_syscall.compile_context")
 }
