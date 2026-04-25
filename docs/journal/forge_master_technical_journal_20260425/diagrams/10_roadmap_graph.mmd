@@ -1,0 +1,26 @@
+flowchart TB
+  P2[Phase 2 Syscall Kernel]
+  P3[Phase 3 Cognitive FS]
+  P59[Phase 5.9 Gateway]
+  MR3[Modelruntime M3]
+  AF[Approval Fingerprint]
+  MM[Model Management Governance]
+  BR[Backup/Restore Parity]
+  CR[Context Scoring Fix]
+  DR[Dream Report Persistence]
+  UI[Trace-first UI]
+  RC[Rule Cells / Hyperlane v0]
+  MR4[Modelruntime M4]
+
+  P2 --> P3
+  P2 --> P59
+  P59 --> AF
+  MR3 --> MM
+  P3 --> BR
+  P3 --> CR
+  CR --> UI
+  DR --> UI
+  AF --> MM
+  MM --> MR4
+  UI --> RC
+

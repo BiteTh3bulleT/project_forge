@@ -71,7 +71,7 @@ function Stop-PortListeners {
 
 Stop-FromPidFile -Name "desktop" -PidFile $DesktopPidFile
 Stop-FromPidFile -Name "core" -PidFile $CorePidFile
-Stop-PortListeners -Port 5173
+Stop-PortListeners -Port 1420
 Stop-PortListeners -Port 18492
 
 Get-Process -Name "forge_desktop" -ErrorAction SilentlyContinue | ForEach-Object {

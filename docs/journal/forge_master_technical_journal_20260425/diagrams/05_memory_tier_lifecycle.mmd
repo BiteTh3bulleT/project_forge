@@ -1,0 +1,14 @@
+flowchart LR
+  Evidence[Raw Evidence]
+  Short[Short-term Working Evidence]
+  Mid[Mid-term Useful Pattern]
+  Long[Long-term Canonical Candidate]
+  Syscall[Semantic Syscall]
+  Canonical[Canonical Memory / State]
+  Archive[Archived / Superseded History]
+
+  Evidence --> Short --> Mid --> Long
+  Long --> Syscall --> Canonical
+  Canonical --> Archive
+  Archive --> Mid
+

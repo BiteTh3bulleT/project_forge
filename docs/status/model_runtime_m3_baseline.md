@@ -9,6 +9,45 @@ in `docs/status/model_runtime_status.md` and `docs/architecture/model_runtime.md
 The "before M3 extension" limitations below are historical baseline notes, not
 the current runtime state.
 
+Status note (2026-04-25): model management mutations are now governed at the
+API authority boundary before they reach `modelruntime.Service`. Read-only
+inspection remains available without approval. Medium/high model management
+operations require explicit actor/source provenance and capability
+`model.management`. High-risk operations require an approval request whose
+stored fingerprint matches the request shape before the runtime mutation is
+allowed.
+
+## Model Management Governance Hardening
+
+Risk classes:
+
+| Risk | Operations | Gate |
+|---|---|---|
+| LOW / read-only | list models, inspect model, compatibility check, backend status, usage summary, health/queue/loaded inspection | no approval required |
+| MEDIUM | scan/reconcile local manifests, verify local model, enable/disable local model | actor, source, workspace scope, and `model.management` capability required |
+| HIGH | import external/local artifact, enable cloud/provider-backed model, enable default/preferred routing, archive/remove registration, load/unload execution availability | medium gates plus approval fingerprint match required |
+
+Approval fingerprint fields include operation, model id, normalized path,
+backend/provider, actor, source, workspace id, lane id when provided,
+capability id, risk class, write intent, preferred/default-routing intent, and
+approval request id once the grant exists. A grant for one model operation,
+path, actor, lane/workspace, or default-routing shape is rejected for a
+different shape with a deterministic governance error.
+
+Default safety posture:
+
+- Cloud/provider-backed models are not enabled as default routing by import or
+  discovery alone.
+- Provider-backed enablement is high-risk and requires explicit config,
+  capability, and approval.
+- Missing provider/runtime config remains a degraded or unavailable state, not
+  an implicit fallback to cloud.
+- Dry-run requests report required approval without committing a runtime
+  mutation.
+- Governance decisions and denials are written to audit with correlation,
+  trace, actor/source, capability, risk, approval id/request id, outcome, and
+  rejection reason.
+
 ## Baseline Verification
 
 ### M1 actually shipped

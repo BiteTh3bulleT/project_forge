@@ -65,6 +65,144 @@ func TestInitModelRuntimeServiceAutoEnablesForOpenAICompatEndpoint(t *testing.T)
 	}
 }
 
+func TestInitModelRuntimeServiceDiscoversLocalOllamaModels(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/tags":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"models": []map[string]any{
+					{
+						"name":  "llama3.2:latest",
+						"model": "llama3.2:latest",
+						"size":  1234,
+						"details": map[string]any{
+							"family":             "llama",
+							"format":             "gguf",
+							"quantization_level": "Q4_K_M",
+							"parameter_size":     "3.2B",
+						},
+					},
+					{
+						"name":        "qwen3-coder:480b-cloud",
+						"model":       "qwen3-coder:480b-cloud",
+						"remote_host": "https://ollama.com:443",
+						"size":        382,
+						"details": map[string]any{
+							"family":             "qwen3moe",
+							"format":             "",
+							"quantization_level": "BF16",
+						},
+					},
+				},
+			})
+		case "/v1/chat/completions":
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body["model"] != "llama3.2:latest" {
+				t.Errorf("unexpected model in chat request: %#v", body["model"])
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"choices": []map[string]any{
+					{
+						"message":       map[string]any{"role": "assistant", "content": "ollama ok"},
+						"finish_reason": "stop",
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("FORGE_ENABLE_MODEL_RUNTIME", "true")
+	t.Setenv("FORGE_ENABLE_OPENAI_COMPAT_API", "false")
+	t.Setenv("FORGE_MODEL_OPENAI_COMPAT_ENDPOINT", "")
+	t.Setenv("FORGE_MODEL_VLLM_ENDPOINT", "")
+	t.Setenv("FORGE_MODEL_POLICY_REQUIRE_WORKSPACE_SCOPE", "false")
+	t.Setenv("OLLAMA_BASE_URL", server.URL)
+	t.Setenv("FORGE_MODEL_HOME", t.TempDir())
+
+	svc := initModelRuntimeService(config.Load(), nil)
+	if svc == nil {
+		t.Fatalf("expected model runtime service")
+	}
+	models, err := svc.ListModels(context.Background(), ModelRuntimeListRequest{})
+	if err != nil {
+		t.Fatalf("list models: %v", err)
+	}
+	if !hasModelID(models, "llama3.2:latest") {
+		t.Fatalf("expected local ollama model in list, got=%#v", models)
+	}
+	if hasModelID(models, "qwen3-coder:480b-cloud") {
+		t.Fatalf("expected remote ollama cloud model to be excluded, got=%#v", models)
+	}
+	if _, err := svc.ScanModels(context.Background(), ModelRuntimeControlRequest{}); err != nil {
+		t.Fatalf("scan models should tolerate empty model home and preserve discovered ollama models: %v", err)
+	}
+	result, err := svc.Chat(context.Background(), ModelRuntimeChatRequest{
+		ModelID: "llama3.2:latest",
+		Messages: []ModelRuntimeChatMessage{
+			{Role: "user", Content: "hello"},
+		},
+		Actor:  "operator",
+		Source: "test",
+		Meta:   ModelRuntimeRequestMeta{WorkspaceID: "ws-test"},
+	})
+	if err != nil {
+		t.Fatalf("chat through discovered ollama model: %v", err)
+	}
+	if result.Content != "ollama ok" || result.Backend != "ollama_compat" {
+		t.Fatalf("unexpected chat result: %#v", result)
+	}
+}
+
+func TestInitModelRuntimeServiceCanExposeOllamaCloudModelsWhenEnabled(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tags" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"models": []map[string]any{
+				{
+					"name":        "qwen3-coder:480b-cloud",
+					"model":       "qwen3-coder:480b-cloud",
+					"remote_host": "https://ollama.com:443",
+					"size":        382,
+					"details": map[string]any{
+						"family":             "qwen3moe",
+						"format":             "",
+						"quantization_level": "BF16",
+					},
+				},
+			},
+		})
+	}))
+	defer server.Close()
+
+	t.Setenv("FORGE_ENABLE_MODEL_RUNTIME", "true")
+	t.Setenv("FORGE_ENABLE_OPENAI_COMPAT_API", "false")
+	t.Setenv("FORGE_MODEL_OPENAI_COMPAT_ENDPOINT", "")
+	t.Setenv("FORGE_MODEL_VLLM_ENDPOINT", "")
+	t.Setenv("FORGE_MODEL_POLICY_REQUIRE_WORKSPACE_SCOPE", "false")
+	t.Setenv("FORGE_MODELRUNTIME_ALLOW_OLLAMA_CLOUD_MODELS", "true")
+	t.Setenv("OLLAMA_BASE_URL", server.URL)
+	t.Setenv("FORGE_MODEL_HOME", t.TempDir())
+
+	svc := initModelRuntimeService(config.Load(), nil)
+	if svc == nil {
+		t.Fatalf("expected model runtime service")
+	}
+	models, err := svc.ListModels(context.Background(), ModelRuntimeListRequest{})
+	if err != nil {
+		t.Fatalf("list models: %v", err)
+	}
+	if !hasModelID(models, "qwen3-coder:480b-cloud") {
+		t.Fatalf("expected cloud ollama model when explicitly enabled, got=%#v", models)
+	}
+}
+
 func TestInitModelRuntimeServiceDisabledWithoutEnablement(t *testing.T) {
 	t.Setenv("FORGE_ENABLE_MODEL_RUNTIME", "false")
 	t.Setenv("FORGE_ENABLE_OPENAI_COMPAT_API", "false")

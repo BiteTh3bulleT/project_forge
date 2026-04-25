@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -115,6 +116,7 @@ type Server struct {
 
 func NewServer(st *store.Store, cfg config.Config) *Server {
 	bg := context.Background()
+	cfg = runtimeConfigFromSettings(st.DB, cfg)
 	ev := events.New(st.DB)
 	ext := loadSetting(st.DB, "extensions_csv", ingest.DefaultExtensionsCSV())
 	ing := ingest.New(st.DB, ev, ext)
@@ -681,6 +683,7 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	dreamModeAllowLongTermPromotion := parseRemoteBool(loadSetting(s.st.DB, "dream_mode_allow_long_term_promotion", "false"))
 	dreamModeRequireOperatorReviewForLongTerm := parseRemoteBool(loadSetting(s.st.DB, "dream_mode_require_operator_review_for_long_term", "true"))
 	dreamModeAllowCommits := parseRemoteBool(loadSetting(s.st.DB, "dream_mode_allow_commits", "false"))
+	runtimeControls := runtimeControlsFromSettings(s.st.DB, s.cfg)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"extensionsCsv":                 ext,
 		"theme":                         theme,
@@ -731,6 +734,7 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 			"requireOperatorReviewForLongTerm": dreamModeRequireOperatorReviewForLongTerm,
 			"allowCommits":                     dreamModeAllowCommits,
 		},
+		"runtimeControls": runtimeControls,
 	})
 }
 
@@ -1061,6 +1065,10 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if telegramConfigChanged {
 		s.reloadTelegramGateway(ctx)
+	}
+	if err := s.patchRuntimeControls(ctx, body); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	_ = s.log.Emit(ctx, "command.executed", map[string]any{"command": "settings.patch"})
 	s.handleGetSettings(w, r)
@@ -1429,6 +1437,89 @@ type requestAuditMeta struct {
 	CorrelationID string
 	TraceID       string
 	WorkspaceID   string
+}
+
+const (
+	runtimeGPUEnabledKey             = "runtime_gpu_enabled"
+	runtimeNVIDIADCGMEnabledKey      = "runtime_nvidia_dcgm_enabled"
+	runtimeIntelLevelZeroEnabledKey  = "runtime_intel_level_zero_enabled"
+	runtimeAllowOllamaCloudModelsKey = "modelruntime_allow_ollama_cloud_models"
+)
+
+func runtimeConfigFromSettings(db *sql.DB, cfg config.Config) config.Config {
+	cfg.GPUEnabled = parseRemoteBool(loadSetting(db, runtimeGPUEnabledKey, strconv.FormatBool(cfg.GPUEnabled)))
+	cfg.NVIDIADCGMEnabled = parseRemoteBool(loadSetting(db, runtimeNVIDIADCGMEnabledKey, strconv.FormatBool(cfg.NVIDIADCGMEnabled)))
+	cfg.IntelLevelZeroEnabled = parseRemoteBool(loadSetting(db, runtimeIntelLevelZeroEnabledKey, strconv.FormatBool(cfg.IntelLevelZeroEnabled)))
+	cfg.ModelRuntimeAllowOllamaCloudModels = parseRemoteBool(loadSetting(db, runtimeAllowOllamaCloudModelsKey, strconv.FormatBool(cfg.ModelRuntimeAllowOllamaCloudModels)))
+	return cfg
+}
+
+func runtimeControlsFromSettings(db *sql.DB, cfg config.Config) map[string]any {
+	effective := runtimeConfigFromSettings(db, cfg)
+	return map[string]any{
+		"gpuEnabled":              effective.GPUEnabled,
+		"nvidiaDcgmEnabled":       effective.NVIDIADCGMEnabled,
+		"intelLevelZeroEnabled":   effective.IntelLevelZeroEnabled,
+		"allowOllamaCloudModels":  effective.ModelRuntimeAllowOllamaCloudModels,
+		"safeModeForceCpuOnly":    effective.SafeModeForceCPUOnly,
+		"effectiveGpuEnabled":     effective.GPUEnabled && !effective.SafeModeForceCPUOnly,
+		"cloudModelsDefaultState": map[bool]string{true: "enabled", false: "disabled"}[effective.ModelRuntimeAllowOllamaCloudModels],
+	}
+}
+
+func (s *Server) patchRuntimeControls(ctx context.Context, body map[string]any) error {
+	raw, ok := body["runtimeControls"]
+	if !ok {
+		return nil
+	}
+	controls, ok := raw.(map[string]any)
+	if !ok {
+		return fmt.Errorf("runtimeControls must be an object")
+	}
+	changed := false
+	for _, item := range []struct {
+		bodyKey    string
+		settingKey string
+	}{
+		{bodyKey: "gpuEnabled", settingKey: runtimeGPUEnabledKey},
+		{bodyKey: "nvidiaDcgmEnabled", settingKey: runtimeNVIDIADCGMEnabledKey},
+		{bodyKey: "intelLevelZeroEnabled", settingKey: runtimeIntelLevelZeroEnabledKey},
+		{bodyKey: "allowOllamaCloudModels", settingKey: runtimeAllowOllamaCloudModelsKey},
+	} {
+		if v, exists := controls[item.bodyKey]; exists {
+			if err := upsertSetting(ctx, s.st.DB, item.settingKey, parseRemoteBoolValue(v)); err != nil {
+				return err
+			}
+			changed = true
+		}
+	}
+	if changed {
+		s.reloadRuntimeControls(ctx)
+	}
+	return nil
+}
+
+func (s *Server) reloadRuntimeControls(ctx context.Context) {
+	s.cfg = runtimeConfigFromSettings(s.st.DB, s.cfg)
+	s.gpuTelemetry = gpu.New(gpu.Options{
+		Enabled:                 s.cfg.NVIDIADCGMEnabled && !s.cfg.SafeModeForceCPUOnly,
+		Endpoint:                s.cfg.NVIDIADCGMEndpoint,
+		Timeout:                 time.Duration(s.cfg.NVIDIADCGMTimeoutMs) * time.Millisecond,
+		MemoryPressureThreshold: s.cfg.GPUBackgroundMemoryPressureBlockThreshold,
+	})
+	s.intelTelemetry = gpu.NewIntel(gpu.IntelOptions{
+		Enabled:     s.cfg.IntelLevelZeroEnabled && !s.cfg.SafeModeForceCPUOnly,
+		ZEInfoPath:  s.cfg.IntelLevelZeroZEInfoPath,
+		IntelGPUTop: s.cfg.IntelGPUTopPath,
+		Timeout:     time.Duration(s.cfg.IntelGPUTelemetryTimeoutMs) * time.Millisecond,
+	})
+	s.modelRuntime = initModelRuntimeService(s.cfg, s.auditSvc, s.gpuTelemetry, s.intelTelemetry)
+	_ = s.log.Emit(ctx, "runtime.controls.reloaded", map[string]any{
+		"gpuEnabled":             s.cfg.GPUEnabled,
+		"nvidiaDcgmEnabled":      s.cfg.NVIDIADCGMEnabled,
+		"intelLevelZeroEnabled":  s.cfg.IntelLevelZeroEnabled,
+		"allowOllamaCloudModels": s.cfg.ModelRuntimeAllowOllamaCloudModels,
+	})
 }
 
 func firstNonEmptyTrimmed(values ...string) string {

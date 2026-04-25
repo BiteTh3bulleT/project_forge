@@ -7,4 +7,5 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 bash "$ROOT_DIR/scripts/check-vsa-files.sh" --require-tracked
 
 cd "$ROOT_DIR/services/core"
+export FORGE_ENABLE_MODEL_RUNTIME="${FORGE_ENABLE_MODEL_RUNTIME:-true}"
 exec go run .

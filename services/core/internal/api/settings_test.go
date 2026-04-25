@@ -55,3 +55,46 @@ func TestPatchSettingsPersistsDreamModeSettings(t *testing.T) {
 		t.Fatalf("unexpected dreamMode settings: %#v", payload.DreamMode)
 	}
 }
+
+func TestPatchSettingsPersistsRuntimeControls(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv := NewServer(st, config.Config{
+		DataDir:               dataDir,
+		WorkspaceDir:          workspaceDir,
+		EnableModelRuntime:    true,
+		ModelRequestTimeoutMs: 1000,
+	})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	body := []byte(`{"runtimeControls":{"gpuEnabled":true,"nvidiaDcgmEnabled":true,"intelLevelZeroEnabled":false,"allowOllamaCloudModels":true}}`)
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/settings", bytes.NewReader(body))
+	patchRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(patchRR, patchReq)
+	if patchRR.Code != http.StatusOK {
+		t.Fatalf("patch settings status=%d body=%s", patchRR.Code, patchRR.Body.String())
+	}
+
+	var payload struct {
+		RuntimeControls map[string]any `json:"runtimeControls"`
+	}
+	if err := json.NewDecoder(patchRR.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode settings: %v", err)
+	}
+	if payload.RuntimeControls["gpuEnabled"] != true ||
+		payload.RuntimeControls["nvidiaDcgmEnabled"] != true ||
+		payload.RuntimeControls["intelLevelZeroEnabled"] != false ||
+		payload.RuntimeControls["allowOllamaCloudModels"] != true ||
+		payload.RuntimeControls["effectiveGpuEnabled"] != true {
+		t.Fatalf("unexpected runtimeControls settings: %#v", payload.RuntimeControls)
+	}
+	if !srv.cfg.GPUEnabled || !srv.cfg.NVIDIADCGMEnabled || srv.cfg.IntelLevelZeroEnabled || !srv.cfg.ModelRuntimeAllowOllamaCloudModels {
+		t.Fatalf("runtime controls were not applied to server config: %#v", srv.cfg)
+	}
+}

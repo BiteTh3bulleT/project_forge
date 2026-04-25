@@ -1183,7 +1183,7 @@ func pathAllowed(workspace, userPath string) bool {
 		return false
 	}
 	var target string
-	if filepath.IsAbs(p) {
+	if filepath.IsAbs(p) || strings.HasPrefix(p, "/") {
 		target = filepath.Clean(p)
 	} else {
 		target = filepath.Clean(filepath.Join(wsAbs, p))

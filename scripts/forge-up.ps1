@@ -8,7 +8,7 @@ $DesktopPidFile = Join-Path $RunDir "desktop.pid"
 $CoreLog = Join-Path $LogDir "core.log"
 $DesktopLog = Join-Path $LogDir "desktop.log"
 $CoreUrl = "http://127.0.0.1:18492/health"
-$DesktopPort = 5173
+$DesktopPort = 1420
 
 New-Item -ItemType Directory -Force -Path $RunDir | Out-Null
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null

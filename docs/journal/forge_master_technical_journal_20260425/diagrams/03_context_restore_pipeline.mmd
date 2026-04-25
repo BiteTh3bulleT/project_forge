@@ -1,0 +1,14 @@
+flowchart LR
+  Request[COMPILE_CONTEXT]
+  Scope[Scope + Query + Kind]
+  Candidates[List Snapshot Candidates]
+  Score[Deterministic Scoring]
+  Decision{Score >= Threshold?}
+  Restore[Header-first Restore Package]
+  Fresh[Fresh Compile Required]
+  Persist[Persist Snapshot Metadata]
+
+  Request --> Scope --> Candidates --> Score --> Decision
+  Decision -->|yes| Restore --> Persist
+  Decision -->|no| Fresh --> Persist
+

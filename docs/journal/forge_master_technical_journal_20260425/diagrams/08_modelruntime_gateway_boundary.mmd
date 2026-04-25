@@ -1,0 +1,15 @@
+flowchart TB
+  Caller[Chat/API/Operator]
+  Gateway[Gateway Tool Boundary]
+  Tool[Local Tool / Adapter Compatibility]
+  ModelAPI[Modelruntime API]
+  Runtime[Modelruntime Scheduler + Backend]
+  Audit[Audit / Usage]
+  Kernel[Kernel Truth Boundary]
+
+  Caller --> Gateway --> Tool --> Audit
+  Caller --> ModelAPI --> Runtime --> Audit
+  Runtime -.outputs are evidence.-> Caller
+  Gateway -.tool results are evidence.-> Caller
+  Caller -.semantic proposal.-> Kernel
+

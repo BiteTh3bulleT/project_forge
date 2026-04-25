@@ -216,6 +216,7 @@ INSERT INTO jobs(
 		JobID:         &jobID,
 		Initiator:     "test",
 	}
+	approveGatewayRequestForTest(t, ctx, gw, req, "approved write")
 	res, err := gw.Execute(ctx, req)
 	if err != nil {
 		t.Fatalf("execute: %v", err)

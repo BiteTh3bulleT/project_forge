@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,6 +23,7 @@ type fakeModelRuntime struct {
 	loaded      map[string]bool
 	chatErr     error
 	healthErr   error
+	importCalls int
 	listCalls   int
 	getCalls    int
 	loadCalls   int
@@ -31,6 +33,8 @@ type fakeModelRuntime struct {
 	queueCalls  int
 	loadedCalls int
 	lastMeta    ModelRuntimeRequestMeta
+	lastImport  ModelRuntimeImportRequest
+	lastControl ModelRuntimeControlRequest
 	lastChat    ModelRuntimeChatRequest
 }
 
@@ -80,6 +84,8 @@ func (f *fakeModelRuntime) GetModel(_ context.Context, modelID string, req Model
 func (f *fakeModelRuntime) ImportModel(_ context.Context, req ModelRuntimeImportRequest) (ModelRuntimeImportResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.importCalls++
+	f.lastImport = req
 	id := strings.TrimSpace(req.ID)
 	if id == "" {
 		id = "imported-model"
@@ -100,7 +106,10 @@ func (f *fakeModelRuntime) ImportModel(_ context.Context, req ModelRuntimeImport
 	return ModelRuntimeImportResult{Model: model, Duplicate: false, ManagedPath: "/tmp/" + id, SourcePath: req.Path}, nil
 }
 
-func (f *fakeModelRuntime) ScanModels(_ context.Context, _ ModelRuntimeControlRequest) ([]ModelRuntimeModel, error) {
+func (f *fakeModelRuntime) ScanModels(_ context.Context, req ModelRuntimeControlRequest) ([]ModelRuntimeModel, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.lastControl = req
 	out := make([]ModelRuntimeModel, 0, len(f.models))
 	for _, model := range f.models {
 		out = append(out, model)
@@ -108,25 +117,38 @@ func (f *fakeModelRuntime) ScanModels(_ context.Context, _ ModelRuntimeControlRe
 	return out, nil
 }
 
-func (f *fakeModelRuntime) VerifyModel(_ context.Context, modelID string, _ ModelRuntimeControlRequest) (ModelRuntimeModel, error) {
+func (f *fakeModelRuntime) VerifyModel(_ context.Context, modelID string, req ModelRuntimeControlRequest) (ModelRuntimeModel, error) {
+	f.mu.Lock()
+	f.lastControl = req
+	f.mu.Unlock()
 	return f.mutateStatus(modelID, "verified")
 }
 
-func (f *fakeModelRuntime) EnableModel(_ context.Context, modelID string, _ ModelRuntimeControlRequest) (ModelRuntimeModel, error) {
+func (f *fakeModelRuntime) EnableModel(_ context.Context, modelID string, req ModelRuntimeControlRequest) (ModelRuntimeModel, error) {
+	f.mu.Lock()
+	f.lastControl = req
+	f.mu.Unlock()
 	return f.mutateStatus(modelID, "verified")
 }
 
-func (f *fakeModelRuntime) DisableModel(_ context.Context, modelID string, _ ModelRuntimeControlRequest) (ModelRuntimeModel, error) {
+func (f *fakeModelRuntime) DisableModel(_ context.Context, modelID string, req ModelRuntimeControlRequest) (ModelRuntimeModel, error) {
+	f.mu.Lock()
+	f.lastControl = req
+	f.mu.Unlock()
 	return f.mutateStatus(modelID, "disabled")
 }
 
-func (f *fakeModelRuntime) ArchiveModel(_ context.Context, modelID string, _ ModelRuntimeControlRequest) (ModelRuntimeModel, error) {
+func (f *fakeModelRuntime) ArchiveModel(_ context.Context, modelID string, req ModelRuntimeControlRequest) (ModelRuntimeModel, error) {
+	f.mu.Lock()
+	f.lastControl = req
+	f.mu.Unlock()
 	return f.mutateStatus(modelID, "archived")
 }
 
-func (f *fakeModelRuntime) RemoveModel(_ context.Context, modelID string, _ ModelRuntimeControlRequest) (ModelRuntimeRemoveResult, error) {
+func (f *fakeModelRuntime) RemoveModel(_ context.Context, modelID string, req ModelRuntimeControlRequest) (ModelRuntimeRemoveResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.lastControl = req
 	delete(f.models, modelID)
 	delete(f.loaded, modelID)
 	return ModelRuntimeRemoveResult{ModelID: modelID, RemovedPath: "/tmp/removed/" + modelID}, nil
@@ -137,6 +159,7 @@ func (f *fakeModelRuntime) LoadModel(_ context.Context, modelID string, req Mode
 	defer f.mu.Unlock()
 	f.loadCalls++
 	f.lastMeta = req.Meta
+	f.lastControl = req
 	if _, ok := f.models[modelID]; !ok {
 		return ModelRuntimeLoadResult{}, &modelRuntimeError{status: http.StatusNotFound, code: "MODEL_NOT_FOUND", message: "model not found"}
 	}
@@ -155,6 +178,7 @@ func (f *fakeModelRuntime) UnloadModel(_ context.Context, modelID string, req Mo
 	defer f.mu.Unlock()
 	f.unloadCalls++
 	f.lastMeta = req.Meta
+	f.lastControl = req
 	if _, ok := f.models[modelID]; !ok {
 		return ModelRuntimeLoadResult{}, &modelRuntimeError{status: http.StatusNotFound, code: "MODEL_NOT_FOUND", message: "model not found"}
 	}
@@ -368,6 +392,14 @@ func TestModelRuntimeForgeChatAndOpenAICompat(t *testing.T) {
 
 	srv, _ := newModelRuntimeHarness(t)
 	fake := newFakeModelRuntime()
+	fake.models["llama3.2:latest"] = ModelRuntimeModel{
+		ID:           "llama3.2:latest",
+		DisplayName:  "llama3.2:latest",
+		Backend:      "ollama_compat",
+		Format:       "gguf",
+		Status:       "available",
+		Capabilities: []string{"chat", "completion"},
+	}
 	srv.modelRuntime = fake
 
 	forgeRaw := []byte(`{"messages":[{"role":"user","content":"hello forge"}],"correlationId":"corr-forge-chat","workspaceId":"ws-forge"}`)
@@ -395,6 +427,17 @@ func TestModelRuntimeForgeChatAndOpenAICompat(t *testing.T) {
 	}
 	if forgePayload.CorrelationID != "corr-forge-chat" || forgePayload.TraceID != "trace-forge" || forgePayload.WorkspaceID != "ws-forge" {
 		t.Fatalf("forge chat meta mismatch: %#v", forgePayload)
+	}
+
+	encodedRaw := []byte(`{"messages":[{"role":"user","content":"hello encoded"}],"workspaceId":"ws-forge"}`)
+	encodedReq := httptest.NewRequest(http.MethodPost, "/forge/models/llama3.2%3Alatest/chat", bytes.NewReader(encodedRaw))
+	encodedRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(encodedRR, encodedReq)
+	if encodedRR.Code != http.StatusOK {
+		t.Fatalf("encoded forge chat status=%d body=%s", encodedRR.Code, strings.TrimSpace(encodedRR.Body.String()))
+	}
+	if fake.lastChat.ModelID != "llama3.2:latest" {
+		t.Fatalf("expected decoded model id, got %q", fake.lastChat.ModelID)
 	}
 
 	oaRaw := []byte(`{"model":"mistral-7b-instruct","messages":[{"role":"user","content":"hello openai"}],"correlationId":"corr-v1-chat","workspaceId":"ws-v1"}`)
@@ -657,30 +700,30 @@ func TestModelRuntimeLoadUnloadDeterministic(t *testing.T) {
 	fake := newFakeModelRuntime()
 	srv.modelRuntime = fake
 
-	loadReq1 := httptest.NewRequest(http.MethodPost, "/forge/models/mistral-7b-instruct/load?correlationId=corr-load-1", bytes.NewReader([]byte(`{}`)))
-	loadRR1 := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(loadRR1, loadReq1)
+	loadBody := governanceBody(map[string]any{"correlationId": "corr-load-1"})
+	loadApprovalID := requestAndApproveModelGovernance(t, srv, "/forge/models/mistral-7b-instruct/load", loadBody)
+	loadBody["approvalId"] = fmt.Sprintf("%d", loadApprovalID)
+	loadRR1 := postModelRuntimeJSON(t, srv, "/forge/models/mistral-7b-instruct/load", loadBody)
 	if loadRR1.Code != http.StatusOK {
 		t.Fatalf("load1 status=%d body=%s", loadRR1.Code, strings.TrimSpace(loadRR1.Body.String()))
 	}
 
-	loadReq2 := httptest.NewRequest(http.MethodPost, "/forge/models/mistral-7b-instruct/load?correlationId=corr-load-2", bytes.NewReader([]byte(`{}`)))
-	loadRR2 := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(loadRR2, loadReq2)
+	loadBody["correlationId"] = "corr-load-2"
+	loadRR2 := postModelRuntimeJSON(t, srv, "/forge/models/mistral-7b-instruct/load", loadBody)
 	if loadRR2.Code != http.StatusOK {
 		t.Fatalf("load2 status=%d body=%s", loadRR2.Code, strings.TrimSpace(loadRR2.Body.String()))
 	}
 
-	unloadReq1 := httptest.NewRequest(http.MethodPost, "/forge/models/mistral-7b-instruct/unload?correlationId=corr-unload-1", bytes.NewReader([]byte(`{}`)))
-	unloadRR1 := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(unloadRR1, unloadReq1)
+	unloadBody := governanceBody(map[string]any{"correlationId": "corr-unload-1"})
+	unloadApprovalID := requestAndApproveModelGovernance(t, srv, "/forge/models/mistral-7b-instruct/unload", unloadBody)
+	unloadBody["approvalId"] = fmt.Sprintf("%d", unloadApprovalID)
+	unloadRR1 := postModelRuntimeJSON(t, srv, "/forge/models/mistral-7b-instruct/unload", unloadBody)
 	if unloadRR1.Code != http.StatusOK {
 		t.Fatalf("unload1 status=%d body=%s", unloadRR1.Code, strings.TrimSpace(unloadRR1.Body.String()))
 	}
 
-	unloadReq2 := httptest.NewRequest(http.MethodPost, "/forge/models/mistral-7b-instruct/unload?correlationId=corr-unload-2", bytes.NewReader([]byte(`{}`)))
-	unloadRR2 := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(unloadRR2, unloadReq2)
+	unloadBody["correlationId"] = "corr-unload-2"
+	unloadRR2 := postModelRuntimeJSON(t, srv, "/forge/models/mistral-7b-instruct/unload", unloadBody)
 	if unloadRR2.Code != http.StatusOK {
 		t.Fatalf("unload2 status=%d body=%s", unloadRR2.Code, strings.TrimSpace(unloadRR2.Body.String()))
 	}

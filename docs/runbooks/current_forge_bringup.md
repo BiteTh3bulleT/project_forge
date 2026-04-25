@@ -64,6 +64,8 @@ FORGE_CORE_PORT=18492 \
   npm run core
 ```
 
+`npm run core` enables the governed modelruntime management surface for local desktop development. It does not auto-configure cloud/provider fallback; configure `FORGE_LLAMA_CPP_ENDPOINT`, `FORGE_MODEL_OPENAI_COMPAT_ENDPOINT`, or `FORGE_MODEL_VLLM_ENDPOINT` explicitly when an inference backend is intended.
+
 In another terminal:
 
 ```sh
@@ -212,7 +214,9 @@ and the Pass-1 status docs under `docs/status/`. Highlights:
   tracked source files and guarded by strict preflight. See
   [vsa_authority_report.md](docs/status/vsa_authority_report.md).
 - **Backup/restore asymmetry** — only VSA-derived sections remain
-  export-only in this pass.
+  export-only/rebuildable. Full backup bundles include a section manifest,
+  per-section checksums, restore row counts, and schema verification; restore
+  remains DB-atomic only and does not import artifact file bytes.
 - **Projection repair** — scaffold only.
 - **JS/TS tests** — no dedicated JS/TS test suite; root `npm test`
   currently delegates to Go core tests.
@@ -242,7 +246,7 @@ and the Pass-1 status docs under `docs/status/`. Highlights:
 npm run down
 ```
 
-Kills core (port 18492) and desktop (port 5173) by PID file / port.
+Kills core (port 18492) and desktop (port 1420) by PID file / port.
 
 ### Reset local state
 
@@ -261,9 +265,9 @@ Next `go run .` starts against a clean DB.
 | `undefined: s.GetObservationVSA` at build time | VSA files not in working tree | Commit or fetch the VSA files; see §0 |
 | `cannot verify tracked-state for VSA files` | `--require-tracked` run without git or outside a git work tree | Install git and run from a real git checkout of this repo |
 | Port `18492` already in use | Previous core didn't shut down | `npm run down`, or `lsof -ti tcp:18492 \| xargs kill` |
-| Port `5173` already in use | Previous Vite didn't shut down | `bash scripts/desktop-clean-port.sh 5173` |
-| `check-desktop-deps.sh` fails | WebKit/GTK not installed | Follow the script's distro-specific hint, or `nix develop .#desktop` |
+| Port `1420` already in use | Previous Vite didn't shut down | `node scripts/desktop-clean-port.mjs 1420` |
+| `check-desktop-deps.mjs` fails | WebKit/GTK not installed | Follow the script's Linux dependency hint, or `nix develop .#desktop` |
 | `curl /health` hangs | Core still booting (first run runs migrations) | Wait up to 20 s, check `.forge/logs/core.log` |
 | `/api/autonomy/status` shows `available: false` | Autonomy loop never started | Check `.forge/logs/core.log` for a goroutine init error |
-| Desktop window never opens | Tauri/Vite still compiling; or missing native deps | Tail `.forge/logs/desktop.log`; verify `scripts/check-desktop-deps.sh` passes |
+| Desktop window never opens | Tauri/Vite still compiling; or missing native deps | Tail `.forge/logs/desktop.log`; verify `node scripts/check-desktop-deps.mjs` passes |
 | Ollama adapter `not ready` | Local Ollama not running | Start Ollama or ignore; other adapters still work |

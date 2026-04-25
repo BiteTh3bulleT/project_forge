@@ -1,0 +1,16 @@
+flowchart LR
+  Shell[Desktop Shell]
+  Cognitive[Cognitive State Viewer]
+  Metrics[Metrics Board]
+  Approval[Approval Console]
+  Work[Work Surface]
+
+  Shell --> Cognitive
+  Shell --> Metrics
+  Shell --> Approval
+  Shell --> Work
+  Cognitive --> Trace[Trace / Memory / Restore / Dream]
+  Metrics --> Health[Health / Jobs / Queues / GPU]
+  Approval --> Gates[Tools / Models / Syscalls]
+  Work --> Chat[Chat / Workbench / Canvas]
+

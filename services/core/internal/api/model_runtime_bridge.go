@@ -7,7 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -86,6 +89,23 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service, telemet
 		}
 		registerDiscoveredModels(registry, discovered)
 	}
+	ollamaEndpoint := localOllamaEndpoint()
+	if discovered, err := discoverLocalOllamaModels(context.Background(), ollamaEndpoint, cfg.ModelRuntimeAllowOllamaCloudModels); err != nil {
+		log.Printf("model runtime local ollama discovery warning: %v", err)
+	} else if len(discovered) > 0 {
+		for _, model := range discovered {
+			id := strings.ToLower(strings.TrimSpace(model.ID))
+			if id == "" {
+				continue
+			}
+			if _, exists := modelIDs[id]; exists {
+				continue
+			}
+			models = append(models, model)
+			modelIDs[id] = struct{}{}
+		}
+		registerDiscoveredModels(registry, discovered)
+	}
 
 	requiredBackends := map[modelruntime.ModelBackendKind]struct{}{}
 	backendKind := modelruntime.ParseModelBackendKind(cfg.ModelDefaultBackend)
@@ -95,13 +115,18 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service, telemet
 			backendKind = modelruntime.BackendOpenAICompat
 		case strings.TrimSpace(cfg.ModelVLLMEndpoint) != "":
 			backendKind = modelruntime.BackendVLLM
-		default:
+		case strings.TrimSpace(cfg.ModelLlamaCppEndpoint) != "" || strings.TrimSpace(cfg.ModelLlamaCppBinary) != "":
 			backendKind = modelruntime.BackendLlamaCpp
 		}
 	}
-	requiredBackends[backendKind] = struct{}{}
+	if backendKind != "" {
+		requiredBackends[backendKind] = struct{}{}
+	}
 	for _, model := range models {
 		requiredBackends[model.Backend] = struct{}{}
+	}
+	if len(requiredBackends) == 0 {
+		requiredBackends[modelruntime.BackendLlamaCpp] = struct{}{}
 	}
 
 	backends := make([]modelruntime.ModelBackend, 0, len(requiredBackends))
@@ -128,6 +153,14 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service, telemet
 				Kind:            modelruntime.BackendOpenAICompat,
 				Endpoint:        cfg.ModelOpenAICompatEndpoint,
 				APIKey:          cfg.ModelOpenAICompatAPIKey,
+				RequestTimeout:  time.Duration(cfg.ModelRequestTimeoutMs) * time.Millisecond,
+				MaxOutputTokens: cfg.ModelMaxOutputTokens,
+			}))
+		case modelruntime.BackendOllamaCompat:
+			backends = append(backends, modelruntime.NewOpenAICompatBackend(modelruntime.OpenAICompatOptions{
+				Name:            "ollama-local",
+				Kind:            modelruntime.BackendOllamaCompat,
+				Endpoint:        ollamaEndpoint,
 				RequestTimeout:  time.Duration(cfg.ModelRequestTimeoutMs) * time.Millisecond,
 				MaxOutputTokens: cfg.ModelMaxOutputTokens,
 			}))
@@ -294,6 +327,149 @@ type openAIModelsListResponse struct {
 type openAIModelDescriptor struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+}
+
+type ollamaTagsResponse struct {
+	Models []ollamaModelDescriptor `json:"models"`
+}
+
+type ollamaModelDescriptor struct {
+	Name       string `json:"name"`
+	Model      string `json:"model"`
+	RemoteHost string `json:"remote_host"`
+	Size       int64  `json:"size"`
+	Details    struct {
+		Family            string   `json:"family"`
+		Families          []string `json:"families"`
+		ParameterSize     string   `json:"parameter_size"`
+		QuantizationLevel string   `json:"quantization_level"`
+		Format            string   `json:"format"`
+	} `json:"details"`
+}
+
+func localOllamaEndpoint() string {
+	endpoint := strings.TrimSpace(os.Getenv("OLLAMA_BASE_URL"))
+	if endpoint == "" {
+		endpoint = "http://127.0.0.1:11434"
+	}
+	return strings.TrimRight(endpoint, "/")
+}
+
+func isLocalHTTPProvider(endpoint string) bool {
+	u, err := url.Parse(strings.TrimSpace(endpoint))
+	if err != nil {
+		return false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	host := strings.TrimSpace(u.Hostname())
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func discoverLocalOllamaModels(ctx context.Context, endpoint string, includeCloud bool) ([]modelruntime.ModelManifest, error) {
+	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	if endpoint == "" || !isLocalHTTPProvider(endpoint) {
+		return nil, nil
+	}
+	client := &http.Client{Timeout: 1500 * time.Millisecond}
+	ctx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"/api/tags", nil)
+	if err != nil {
+		return nil, fmt.Errorf("ollama model discovery: %w", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("ollama model discovery: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("ollama model discovery: endpoint returned %s", resp.Status)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return nil, fmt.Errorf("ollama model discovery: read body: %w", err)
+	}
+	var payload ollamaTagsResponse
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("ollama model discovery: unmarshal: %w", err)
+	}
+	out := make([]modelruntime.ModelManifest, 0, len(payload.Models))
+	for _, item := range payload.Models {
+		model, err := modelRuntimeOllamaManifest(item, endpoint)
+		if err != nil {
+			continue
+		}
+		if model.Metadata != nil {
+			if remote, _ := model.Metadata["remote"].(bool); remote && !includeCloud {
+				continue
+			}
+		}
+		out = append(out, model)
+	}
+	return out, nil
+}
+
+func modelRuntimeOllamaManifest(item ollamaModelDescriptor, endpoint string) (modelruntime.ModelManifest, error) {
+	id := strings.TrimSpace(firstNonEmptyTrimmed(item.Model, item.Name))
+	if id == "" {
+		return modelruntime.ModelManifest{}, fmt.Errorf("ollama model id required")
+	}
+	remoteHost := strings.TrimSpace(item.RemoteHost)
+	remote := remoteHost != "" || strings.Contains(strings.ToLower(id), ":cloud") || strings.Contains(strings.ToLower(id), "-cloud")
+	family := strings.TrimSpace(item.Details.Family)
+	if family == "" && len(item.Details.Families) > 0 {
+		family = strings.TrimSpace(item.Details.Families[0])
+	}
+	if family == "" {
+		family = "ollama"
+	}
+	format := modelruntime.ParseModelFormat(item.Details.Format)
+	if format == modelruntime.ModelFormatUnknown {
+		format = modelruntime.ModelFormatGGUF
+	}
+	quantization := strings.TrimSpace(item.Details.QuantizationLevel)
+	if quantization == "" {
+		quantization = "ollama"
+	}
+	capabilities := []modelruntime.ModelCapability{modelruntime.ModelCapabilityChat, modelruntime.ModelCapabilityCompletion}
+	if strings.Contains(strings.ToLower(id), "vl") {
+		capabilities = append(capabilities, modelruntime.ModelCapabilityVision)
+	}
+	manifest := modelruntime.ModelManifest{
+		SchemaVersion: "forge.model/v1",
+		ID:            id,
+		DisplayName:   id,
+		Family:        family,
+		Format:        format,
+		Backend:       modelruntime.BackendOllamaCompat,
+		FilePath:      "ollama://" + id,
+		SHA256:        "",
+		SizeBytes:     item.Size,
+		Quantization:  quantization,
+		ContextLength: 4096,
+		Capabilities:  capabilities,
+		License:       "ollama-local",
+		Metadata: map[string]any{
+			"source":        endpoint,
+			"provider":      "ollama",
+			"discovered":    true,
+			"managed":       false,
+			"localCloud":    map[bool]string{true: "cloud", false: "local"}[remote],
+			"remote":        remote,
+			"remoteHost":    remoteHost,
+			"parameterSize": strings.TrimSpace(item.Details.ParameterSize),
+		},
+	}
+	if err := modelruntime.ValidateManifest(manifest); err != nil {
+		return modelruntime.ModelManifest{}, err
+	}
+	return manifest, nil
 }
 
 func discoverOpenAICompatModels(ctx context.Context, cfg config.Config) ([]modelruntime.ModelManifest, error) {
@@ -872,6 +1048,10 @@ func (a *modelRuntimeAuditAdapter) RecordModelRuntime(ctx context.Context, recor
 	if outcome == "" {
 		outcome = "ok"
 	}
+	metadata := cloneAnyMap(record.Metadata)
+	riskClass := firstNonEmptyTrimmed(metadataStringAny(metadata, "riskClass"), "low")
+	approvalID := metadataStringAny(metadata, "approvalId")
+	capabilityID := metadataStringAny(metadata, "capabilityId")
 
 	payload := map[string]any{
 		"modelId":       record.ModelID,
@@ -890,7 +1070,10 @@ func (a *modelRuntimeAuditAdapter) RecordModelRuntime(ctx context.Context, recor
 		"outputTokens":  record.OutputTokens,
 		"outputBytes":   record.OutputBytes,
 		"error":         record.Error,
-		"metadata":      cloneAnyMap(record.Metadata),
+		"metadata":      metadata,
+		"riskClass":     riskClass,
+		"approvalId":    approvalID,
+		"capabilityId":  capabilityID,
 		"correlationId": record.CorrelationID,
 		"traceId":       record.TraceID,
 	}
@@ -902,7 +1085,7 @@ func (a *modelRuntimeAuditAdapter) RecordModelRuntime(ctx context.Context, recor
 		Actor:         firstNonEmptyTrimmed(record.Actor, "api"),
 		SubjectType:   "model",
 		SubjectID:     record.ModelID,
-		RiskClass:     "low",
+		RiskClass:     riskClass,
 		Outcome:       outcome,
 		Summary:       fmt.Sprintf("model runtime %s %s", action, outcome),
 		Payload:       payload,

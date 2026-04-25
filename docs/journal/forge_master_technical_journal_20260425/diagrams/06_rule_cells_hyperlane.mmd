@@ -1,0 +1,19 @@
+flowchart TB
+  Event[Input / State Change]
+  Router[Hyperlane Router]
+  RuleA[Rule Cell\nPath Guard]
+  RuleB[Rule Cell\nRisk Classifier]
+  RuleC[Rule Cell\nRestore Hint]
+  Trace[Rule Trace]
+  Escalate[Modelruntime Escalation]
+  Proposal[Proposal / Route / Score]
+  Kernel[Kernel or Gateway]
+
+  Event --> Router
+  Router --> RuleA --> Trace
+  Router --> RuleB --> Trace
+  Router --> RuleC --> Trace
+  Trace --> Proposal
+  Router -->|uncertain| Escalate --> Proposal
+  Proposal --> Kernel
+

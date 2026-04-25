@@ -29,7 +29,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"forge/projectforge/services/core/internal/aios/domain"
@@ -141,9 +140,9 @@ func (t *capabilityBackingTool) executeFilesystem(ctx context.Context, req Reque
 			return Result{}, err
 		}
 		data := map[string]any{"path": target, "mode": info.Mode().String(), "modeOctal": fmt.Sprintf("%#o", info.Mode().Perm()), "isDir": info.IsDir(), "size": info.Size()}
-		if stat, ok := info.Sys().(*syscall.Stat_t); ok {
-			data["uid"] = stat.Uid
-			data["gid"] = stat.Gid
+		if uid, gid, ok := fileOwnerIDs(info); ok {
+			data["uid"] = uid
+			data["gid"] = gid
 		}
 		return capabilityOK("stat completed", data), nil
 	case "archive", "create_snapshot":
@@ -261,14 +260,10 @@ func (t *capabilityBackingTool) executeProcess(ctx context.Context, req Request)
 	case "signal_process":
 		pid := inputInt(req.Input, "pid", 0)
 		sigName := strings.ToUpper(nonEmpty(inputString(req.Input, "signal"), "TERM"))
-		sig := syscall.SIGTERM
-		if sigName == "KILL" {
-			sig = syscall.SIGKILL
-		}
 		if pid <= 0 {
 			return Result{}, errors.New("process.signal_process requires input.pid")
 		}
-		return capabilityOK("signal sent", map[string]any{"pid": pid, "signal": sigName}), syscall.Kill(pid, sig)
+		return capabilityOK("signal sent", map[string]any{"pid": pid, "signal": sigName}), signalProcess(pid, sigName)
 	case "inspect_process":
 		pid := inputInt(req.Input, "pid", os.Getpid())
 		data := map[string]any{"pid": pid}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -162,12 +163,14 @@ func TestGatewayLegacyAdapterInvokeDeniedByPolicy(t *testing.T) {
 	srv, st := newLegacyAdapterInvokeHarness(t)
 	adapter := &testLegacyAdapter{id: "legacy-fake"}
 	srv.adapters.Register(adapter)
+	forbiddenDir := filepath.Join(srv.cfg.WorkspaceDir, "forbidden")
+	forbiddenFile := filepath.Join(forbiddenDir, "secret.txt")
 	setLegacyInvokePermissionProfile(t, srv, permissions.Profile{
 		ID:           "legacy-gw-denied",
 		Name:         "Legacy gateway denied",
 		AllowedTools: []string{"legacy.adapter.invoke"},
 		ForbiddenPaths: []string{
-			"/forbidden",
+			forbiddenDir,
 		},
 		Editable: true,
 		Active:   true,
@@ -181,11 +184,11 @@ func TestGatewayLegacyAdapterInvokeDeniedByPolicy(t *testing.T) {
 		"source":        "api",
 		"initiator":     "api",
 		"correlationId": correlation,
-		"paths":         []string{"/forbidden/secret.txt"},
+		"paths":         []string{forbiddenFile},
 		"input": map[string]any{
 			"adapterId":     "legacy-fake",
 			"capability":    "test.invoke",
-			"scope":         map[string]any{"allowedPaths": []string{}, "forbiddenPaths": []string{}, "selectedPaths": []string{"/forbidden/secret.txt"}},
+			"scope":         map[string]any{"allowedPaths": []string{}, "forbiddenPaths": []string{}, "selectedPaths": []string{forbiddenFile}},
 			"writeIntent":   false,
 			"timeoutMs":     5000,
 			"dryRun":        false,

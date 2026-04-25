@@ -8,16 +8,24 @@ import (
 func TestLoadDefaultsWorkspaceToRoot(t *testing.T) {
 	t.Setenv("FORGE_WORKSPACE_DIR", "")
 	cfg := Load()
-	if cfg.WorkspaceDir != "/" {
-		t.Fatalf("expected default workspace '/', got %q", cfg.WorkspaceDir)
+	want, err := filepath.Abs("/")
+	if err != nil {
+		t.Fatalf("resolve default workspace: %v", err)
+	}
+	if cfg.WorkspaceDir != want {
+		t.Fatalf("expected default workspace %q, got %q", want, cfg.WorkspaceDir)
 	}
 }
 
 func TestLoadRespectsWorkspaceOverride(t *testing.T) {
 	t.Setenv("FORGE_WORKSPACE_DIR", "/tmp")
 	cfg := Load()
-	if cfg.WorkspaceDir != "/tmp" {
-		t.Fatalf("expected workspace override '/tmp', got %q", cfg.WorkspaceDir)
+	want, err := filepath.Abs("/tmp")
+	if err != nil {
+		t.Fatalf("resolve workspace override: %v", err)
+	}
+	if cfg.WorkspaceDir != want {
+		t.Fatalf("expected workspace override %q, got %q", want, cfg.WorkspaceDir)
 	}
 }
 

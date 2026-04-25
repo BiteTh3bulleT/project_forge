@@ -6,11 +6,11 @@ export default defineConfig({
   clearScreen: false,
   appType: "spa",
   server: {
-    port: 5173,
+    port: 1420,
     strictPort: true,
   },
   preview: {
-    port: 5173,
+    port: 1420,
     strictPort: true,
   },
   envPrefix: ["VITE_", "TAURI_"],

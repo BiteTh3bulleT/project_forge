@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -73,7 +74,8 @@ func (s *Service) OpenRequestForJob(ctx context.Context, jobID string, in Create
 	if err != nil {
 		return nil, err
 	}
-	if existing != nil && existing.Status == "pending" {
+	incomingFingerprint := approvalFingerprintHashFromMap(in.ScopeSnapshot)
+	if existing != nil && existing.Status == "pending" && approvalRequestMatchesFingerprint(existing, incomingFingerprint) {
 		return existing, nil
 	}
 
@@ -106,6 +108,41 @@ INSERT INTO approval_requests(
 	}
 	id, _ := res.LastInsertId()
 	return s.GetRequest(ctx, id)
+}
+
+func approvalRequestMatchesFingerprint(req *Request, incoming string) bool {
+	if strings.TrimSpace(incoming) == "" {
+		return true
+	}
+	if req == nil {
+		return false
+	}
+	existing := approvalFingerprintHashFromJSON(req.ScopeSnapshot)
+	return existing != "" && existing == incoming
+}
+
+func approvalFingerprintHashFromMap(scope map[string]any) string {
+	if scope == nil {
+		return ""
+	}
+	if v, ok := scope["approvalShapeHash"].(string); ok {
+		return strings.TrimSpace(v)
+	}
+	if v, ok := scope["approvalFingerprintHash"].(string); ok {
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+func approvalFingerprintHashFromJSON(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var scope map[string]any
+	if err := json.Unmarshal(raw, &scope); err != nil {
+		return ""
+	}
+	return approvalFingerprintHashFromMap(scope)
 }
 
 func (s *Service) Decide(ctx context.Context, requestID int64, actor, decision, note string) (*Decision, error) {

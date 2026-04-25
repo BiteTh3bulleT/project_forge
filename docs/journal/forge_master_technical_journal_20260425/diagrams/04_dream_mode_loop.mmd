@@ -1,0 +1,13 @@
+flowchart TB
+  Trigger[Operator/API/Idle Trigger]
+  Read[Read Journal + Snapshots + Notes + State + Loops]
+  Select[Replay Candidate Selection]
+  Salience[Deterministic Salience Scoring]
+  Route[Short/Mid/Long-term Routing Proposal]
+  Report[Dry-run Report]
+  Review[Operator Review]
+  Syscall[Future Governed Syscall Commit]
+
+  Trigger --> Read --> Select --> Salience --> Route --> Report --> Review
+  Review -.future approved commit.-> Syscall
+

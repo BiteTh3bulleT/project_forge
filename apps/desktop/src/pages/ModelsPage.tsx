@@ -18,6 +18,7 @@ import { useUiStore } from "../stores/uiStore";
 
 const CONTROL_ACTOR = "operator";
 const CONTROL_SOURCE = "desktop";
+const MODEL_MANAGEMENT_CAPABILITY = "model.management";
 const CHAT_MODEL_SELECTION_CACHE_KEY = "forge.chat.requestedModelId.v1";
 
 function cx(...parts: Array<string | false | null | undefined>) {
@@ -102,6 +103,15 @@ function writeCachedChatModelSelection(value: string) {
   }
 }
 
+function modelManagementRequest(metadata?: Record<string, unknown>) {
+  return {
+    actor: CONTROL_ACTOR,
+    source: CONTROL_SOURCE,
+    capabilityId: MODEL_MANAGEMENT_CAPABILITY,
+    metadata,
+  };
+}
+
 function emptyModelRuntimeUsage(): ModelRuntimeUsageSummary {
   return {
     registered: 0,
@@ -145,6 +155,10 @@ export function ModelsPage() {
   const [err, setErr] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number>(Date.now());
   const [chatSelectedModelId, setChatSelectedModelId] = useState<string>(() => readCachedChatModelSelection());
+  const [runtimeGpuEnabled, setRuntimeGpuEnabled] = useState(false);
+  const [runtimeAllowOllamaCloudModels, setRuntimeAllowOllamaCloudModels] = useState(false);
+  const [runtimeEffectiveGpuEnabled, setRuntimeEffectiveGpuEnabled] = useState(false);
+  const [runtimePolicyBusy, setRuntimePolicyBusy] = useState(false);
 
   const selectedLoadedRecord = useMemo(
     () => loaded?.models.find((item) => item.modelId === selectedModelId) ?? null,
@@ -181,6 +195,10 @@ export function ModelsPage() {
   async function refreshOverview(preserveSelection = true, preferredSelection?: string) {
     setLoading(true);
     try {
+      const settings = await api.settings.get();
+      setRuntimeGpuEnabled(Boolean(settings.runtimeControls?.gpuEnabled));
+      setRuntimeAllowOllamaCloudModels(Boolean(settings.runtimeControls?.allowOllamaCloudModels));
+      setRuntimeEffectiveGpuEnabled(Boolean(settings.runtimeControls?.effectiveGpuEnabled));
       const coreHealth = await api.health();
       const available = coreHealth.modelRuntime?.available === true;
       setRuntimeAvailable(available);
@@ -228,6 +246,29 @@ export function ModelsPage() {
       setErr(error instanceof Error ? error.message : String(error));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function saveRuntimePolicy(next?: { gpuEnabled?: boolean; allowOllamaCloudModels?: boolean }) {
+    const gpuEnabled = next?.gpuEnabled ?? runtimeGpuEnabled;
+    const allowOllamaCloudModels = next?.allowOllamaCloudModels ?? runtimeAllowOllamaCloudModels;
+    setRuntimePolicyBusy(true);
+    try {
+      const updated = await api.settings.patch({
+        runtimeControls: {
+          gpuEnabled,
+          allowOllamaCloudModels,
+        },
+      });
+      setRuntimeGpuEnabled(Boolean(updated.runtimeControls?.gpuEnabled));
+      setRuntimeAllowOllamaCloudModels(Boolean(updated.runtimeControls?.allowOllamaCloudModels));
+      setRuntimeEffectiveGpuEnabled(Boolean(updated.runtimeControls?.effectiveGpuEnabled));
+      setStatus("Runtime model policy saved.");
+      await refreshOverview(true);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRuntimePolicyBusy(false);
     }
   }
 
@@ -284,8 +325,7 @@ export function ModelsPage() {
           .map((value) => value.trim())
           .filter(Boolean),
         preferred: importPreferred,
-        actor: CONTROL_ACTOR,
-        source: CONTROL_SOURCE,
+        ...modelManagementRequest(),
       });
       setImportPath("");
       setImportDisplayName("");
@@ -306,7 +346,7 @@ export function ModelsPage() {
   async function handleScan() {
     setScanBusy(true);
     try {
-      const result = await api.modelRuntime.scan({ actor: CONTROL_ACTOR, source: CONTROL_SOURCE });
+      const result = await api.modelRuntime.scan(modelManagementRequest());
       await refreshOverview(true);
       setStatus(`Scanned model home: ${result.count} registered models`);
       setErr(null);
@@ -323,28 +363,28 @@ export function ModelsPage() {
     try {
       switch (action) {
         case "verify":
-          await api.modelRuntime.verify(modelId, { actor: CONTROL_ACTOR, source: CONTROL_SOURCE });
+          await api.modelRuntime.verify(modelId, modelManagementRequest());
           break;
         case "enable":
-          await api.modelRuntime.enable(modelId, { actor: CONTROL_ACTOR, source: CONTROL_SOURCE });
+          await api.modelRuntime.enable(modelId, modelManagementRequest());
           break;
         case "disable":
-          await api.modelRuntime.disable(modelId, { actor: CONTROL_ACTOR, source: CONTROL_SOURCE });
+          await api.modelRuntime.disable(modelId, modelManagementRequest());
           break;
         case "archive":
-          await api.modelRuntime.archive(modelId, { actor: CONTROL_ACTOR, source: CONTROL_SOURCE });
+          await api.modelRuntime.archive(modelId, modelManagementRequest());
           break;
         case "remove":
-          await api.modelRuntime.remove(modelId, { actor: CONTROL_ACTOR, source: CONTROL_SOURCE });
+          await api.modelRuntime.remove(modelId, modelManagementRequest());
           if (selectedModelId === modelId) {
             setSelectedModelId("");
           }
           break;
         case "load":
-          await api.modelRuntime.load(modelId, { actor: CONTROL_ACTOR, source: CONTROL_SOURCE });
+          await api.modelRuntime.load(modelId, modelManagementRequest());
           break;
         case "unload":
-          await api.modelRuntime.unload(modelId, { actor: CONTROL_ACTOR, source: CONTROL_SOURCE });
+          await api.modelRuntime.unload(modelId, modelManagementRequest());
           break;
       }
       const nextSelection = selectedModelId === modelId && action === "remove" ? "" : modelId;
@@ -509,6 +549,37 @@ export function ModelsPage() {
               <Metric label="Completed" value={usage?.completed ?? 0} hint="finished requests" />
               <Metric label="Health" value={health?.status || (health?.ok ? "ok" : "unknown")} hint={health?.backend || "runtime"} />
               <Metric label="Available For Chat" value={chatSelectableModels.length} hint="enabled chat-capable models" />
+            </div>
+            <div className="mt-4 grid gap-2 rounded border border-white/10 bg-black/20 p-3 text-xs md:grid-cols-3">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={runtimeGpuEnabled}
+                  disabled={runtimePolicyBusy}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setRuntimeGpuEnabled(checked);
+                    void saveRuntimePolicy({ gpuEnabled: checked });
+                  }}
+                />
+                <span className="font-semibold tracking-wide text-forge-mist">GPU acceleration</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={runtimeAllowOllamaCloudModels}
+                  disabled={runtimePolicyBusy}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setRuntimeAllowOllamaCloudModels(checked);
+                    void saveRuntimePolicy({ allowOllamaCloudModels: checked });
+                  }}
+                />
+                <span className="font-semibold tracking-wide text-forge-mist">Ollama cloud models</span>
+              </label>
+              <div className="rounded border border-white/10 bg-black/25 px-3 py-2 text-forge-mist">
+                Effective GPU: <span className="text-forge-ash">{runtimeEffectiveGpuEnabled ? "on" : "off"}</span>
+              </div>
             </div>
             {health?.degradedReasons?.length || health?.policyWarnings?.length ? (
               <div className="mt-4 grid gap-2 text-xs text-forge-mist md:grid-cols-2">

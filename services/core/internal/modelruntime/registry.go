@@ -2,6 +2,7 @@ package modelruntime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -42,7 +43,10 @@ func (r *ModelRegistry) Scan(ctx context.Context) ([]RegisteredModel, error) {
 	}
 	records, err := r.store.Scan(ctx)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, ErrModelHomeMissing) && !errors.Is(err, ErrModelsDirMissing) {
+			return nil, err
+		}
+		records = nil
 	}
 
 	now := time.Now().UTC()

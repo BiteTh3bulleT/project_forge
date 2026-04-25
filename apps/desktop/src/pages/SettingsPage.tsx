@@ -38,6 +38,12 @@ export function SettingsPage() {
   const [discordDefaultChannelId, setDiscordDefaultChannelId] = useState("");
   const [discordWebhookUrl, setDiscordWebhookUrl] = useState("");
   const [discordCrossChatContext, setDiscordCrossChatContext] = useState(false);
+  const [runtimeGpuEnabled, setRuntimeGpuEnabled] = useState(false);
+  const [runtimeNvidiaDcgmEnabled, setRuntimeNvidiaDcgmEnabled] = useState(false);
+  const [runtimeIntelLevelZeroEnabled, setRuntimeIntelLevelZeroEnabled] = useState(false);
+  const [runtimeAllowOllamaCloudModels, setRuntimeAllowOllamaCloudModels] = useState(false);
+  const [runtimeEffectiveGpuEnabled, setRuntimeEffectiveGpuEnabled] = useState(false);
+  const [runtimeSafeModeForceCpuOnly, setRuntimeSafeModeForceCpuOnly] = useState(false);
   const [remoteProbeMessage, setRemoteProbeMessage] = useState("FORGE remote ingress smoke test");
   const [remoteProbeTelegramChatId, setRemoteProbeTelegramChatId] = useState("");
   const [remoteProbeDiscordChannelId, setRemoteProbeDiscordChannelId] = useState("");
@@ -148,6 +154,12 @@ export function SettingsPage() {
       setDiscordDefaultChannelId(s.discordDefaultChannelId || "");
       setDiscordWebhookUrl(s.discordWebhookUrl || "");
       setDiscordCrossChatContext(Boolean(s.discordCrossChatContext));
+      setRuntimeGpuEnabled(Boolean(s.runtimeControls?.gpuEnabled));
+      setRuntimeNvidiaDcgmEnabled(Boolean(s.runtimeControls?.nvidiaDcgmEnabled));
+      setRuntimeIntelLevelZeroEnabled(Boolean(s.runtimeControls?.intelLevelZeroEnabled));
+      setRuntimeAllowOllamaCloudModels(Boolean(s.runtimeControls?.allowOllamaCloudModels));
+      setRuntimeEffectiveGpuEnabled(Boolean(s.runtimeControls?.effectiveGpuEnabled));
+      setRuntimeSafeModeForceCpuOnly(Boolean(s.runtimeControls?.safeModeForceCpuOnly));
       await loadOllamaModels(s.ollamaBaseUrl || "http://127.0.0.1:11434");
       const m = await api.meta();
       setMeta(m);
@@ -383,6 +395,80 @@ export function SettingsPage() {
             }}
           >
             Save Ollama settings
+          </PrimaryButton>
+        </div>
+      </Panel>
+
+      <Panel title="Runtime Controls" subtitle="GPU acceleration and cloud model visibility for modelruntime.">
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="flex items-center gap-2 rounded border border-white/10 bg-black/20 p-3">
+            <input
+              type="checkbox"
+              checked={runtimeGpuEnabled}
+              onChange={(e) => setRuntimeGpuEnabled(e.target.checked)}
+            />
+            <span>
+              <span className="block text-xs font-semibold tracking-wide text-forge-mist">GPU acceleration</span>
+              <span className="block text-[11px] text-forge-ash">Use GPU-aware scheduling when hardware policy allows it.</span>
+            </span>
+          </label>
+          <label className="flex items-center gap-2 rounded border border-white/10 bg-black/20 p-3">
+            <input
+              type="checkbox"
+              checked={runtimeAllowOllamaCloudModels}
+              onChange={(e) => setRuntimeAllowOllamaCloudModels(e.target.checked)}
+            />
+            <span>
+              <span className="block text-xs font-semibold tracking-wide text-forge-mist">Ollama cloud models</span>
+              <span className="block text-[11px] text-forge-ash">Show remote Ollama cloud entries in the model list.</span>
+            </span>
+          </label>
+          <label className="flex items-center gap-2 rounded border border-white/10 bg-black/20 p-3">
+            <input
+              type="checkbox"
+              checked={runtimeNvidiaDcgmEnabled}
+              onChange={(e) => setRuntimeNvidiaDcgmEnabled(e.target.checked)}
+            />
+            <span>
+              <span className="block text-xs font-semibold tracking-wide text-forge-mist">NVIDIA DCGM telemetry</span>
+              <span className="block text-[11px] text-forge-ash">Enable DCGM health and VRAM admission checks.</span>
+            </span>
+          </label>
+          <label className="flex items-center gap-2 rounded border border-white/10 bg-black/20 p-3">
+            <input
+              type="checkbox"
+              checked={runtimeIntelLevelZeroEnabled}
+              onChange={(e) => setRuntimeIntelLevelZeroEnabled(e.target.checked)}
+            />
+            <span>
+              <span className="block text-xs font-semibold tracking-wide text-forge-mist">Intel Level Zero telemetry</span>
+              <span className="block text-[11px] text-forge-ash">Enable local Intel GPU telemetry probes.</span>
+            </span>
+          </label>
+        </div>
+        <div className="mt-3 grid gap-2 rounded border border-white/10 bg-black/20 p-3 text-xs md:grid-cols-3">
+          <RemoteStateChip label="Effective GPU" ok={runtimeEffectiveGpuEnabled} okText="on" offText="off" />
+          <RemoteStateChip label="Safe mode" ok={!runtimeSafeModeForceCpuOnly} okText="clear" offText="cpu only" />
+          <RemoteStateChip label="Cloud models" ok={runtimeAllowOllamaCloudModels} okText="visible" offText="hidden" />
+        </div>
+        <div className="mt-3 flex gap-2">
+          <PrimaryButton
+            onClick={async () => {
+              const updated = await api.settings.patch({
+                runtimeControls: {
+                  gpuEnabled: runtimeGpuEnabled,
+                  nvidiaDcgmEnabled: runtimeNvidiaDcgmEnabled,
+                  intelLevelZeroEnabled: runtimeIntelLevelZeroEnabled,
+                  allowOllamaCloudModels: runtimeAllowOllamaCloudModels,
+                },
+              });
+              setRuntimeEffectiveGpuEnabled(Boolean(updated.runtimeControls?.effectiveGpuEnabled));
+              setRuntimeSafeModeForceCpuOnly(Boolean(updated.runtimeControls?.safeModeForceCpuOnly));
+              await loadOllamaModels(ollamaBaseUrl);
+              setStatus("Runtime controls saved.");
+            }}
+          >
+            Save runtime controls
           </PrimaryButton>
         </div>
       </Panel>

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -487,14 +488,38 @@ func (g *Gateway) Execute(ctx context.Context, req Request) (*Result, error) {
 
 	requiresApproval := decision.RequiresApproval || lane.RequiresApproval || metadataBool(req.Metadata, "policyApprovalRequired")
 	policyApprovalReason := metadataString(req.Metadata, "policyApprovalReason")
-	if requiresApproval {
-		granted, grantErr := g.approvalGrantPresent(ctx, req)
+	if req.DryRun {
+		return g.recordDryRun(ctx, req, lane, tool, risk, level, profileID)
+	}
+	approvalGranted := false
+	if strings.TrimSpace(req.ApprovalID) != "" {
+		granted, grantErr := g.approvalGrantPresent(ctx, req, lane, tool, risk, level, paths)
 		if grantErr != nil {
 			return g.denied(ctx, req, lane.ID, tool.ID(), risk, fmt.Sprintf("approval check failed: %v", grantErr))
 		}
-		if granted {
-			requiresApproval = false
+		if !granted {
+			return g.denied(ctx, req, lane.ID, tool.ID(), risk, fmt.Sprintf("approval request %s is not approved", strings.TrimSpace(req.ApprovalID)))
 		}
+		approvalGranted = true
+	} else if g.jobApprovalStatusGranted(ctx, req.JobID) {
+		granted, grantErr := g.jobApprovalFingerprintGranted(ctx, req, lane, tool, risk, level, paths)
+		if grantErr != nil {
+			return g.denied(ctx, req, lane.ID, tool.ID(), risk, fmt.Sprintf("approval check failed: %v", grantErr))
+		}
+		if !granted {
+			return g.denied(ctx, req, lane.ID, tool.ID(), risk, "approved job is missing matching gateway approval fingerprint")
+		}
+		approvalGranted = true
+	}
+	if requiresApproval {
+		if !approvalGranted {
+			granted, grantErr := g.approvalGrantPresent(ctx, req, lane, tool, risk, level, paths)
+			if grantErr != nil {
+				return g.denied(ctx, req, lane.ID, tool.ID(), risk, fmt.Sprintf("approval check failed: %v", grantErr))
+			}
+			approvalGranted = granted
+		}
+		requiresApproval = !approvalGranted
 	}
 	if requiresApproval {
 		needsApprovalReason := strings.TrimSpace(decision.Reason)
@@ -507,10 +532,6 @@ func (g *Gateway) Execute(ctx context.Context, req Request) (*Result, error) {
 		}
 		return g.recordNeedsApproval(ctx, req, lane, tool, risk, level, profileID, needsApprovalReason)
 	}
-	if req.DryRun {
-		return g.recordDryRun(ctx, req, lane, tool, risk, level, profileID)
-	}
-
 	invID, err := g.openInvocation(ctx, req, lane, tool, risk, level, profileID, "running", nil)
 	if err != nil {
 		return nil, err
@@ -977,29 +998,42 @@ func (g *Gateway) recordNeedsApproval(ctx context.Context, req Request, lane *la
 	reqForInv.JobID = jobIDPtr
 
 	if g.approvals != nil && strings.TrimSpace(effectiveJobID) != "" {
+		fingerprintHash, fingerprintFields := g.approvalFingerprint(reqForInv, lane, tool, risk, level, resolvePaths(g.workspace, reqForInv.Paths))
+		scopeSnapshot := map[string]any{
+			"laneId":                     lane.ID,
+			"toolId":                     tool.ID(),
+			"paths":                      req.Paths,
+			"executionLevel":             level,
+			"domain":                     tool.Domain(),
+			"action":                     tool.Action(),
+			"correlationId":              req.CorrelationID,
+			"initiator":                  req.Initiator,
+			"permissionNotes":            reason,
+			"approvalFingerprintVersion": "gateway.v1",
+			"approvalShapeHash":          fingerprintHash,
+			"approvalFingerprintHash":    fingerprintHash,
+			"approvalFingerprintFields":  fingerprintFields,
+		}
 		ar, err := g.approvals.OpenRequestForJob(ctx, effectiveJobID, approvals.CreateRequestInput{
 			JobID:            effectiveJobID,
 			RequestedAction:  fmt.Sprintf("%s.%s", tool.Domain(), tool.Action()),
 			RiskClass:        risk,
 			RequestedAdapter: "gateway",
 			WriteIntent:      tool.WriteIntent(),
-			ScopeSnapshot: map[string]any{
-				"laneId":          lane.ID,
-				"toolId":          tool.ID(),
-				"paths":           req.Paths,
-				"executionLevel":  level,
-				"domain":          tool.Domain(),
-				"action":          tool.Action(),
-				"correlationId":   req.CorrelationID,
-				"initiator":       req.Initiator,
-				"permissionNotes": reason,
-			},
-			TaskPacketID:   req.PacketID,
-			RequestSummary: fmt.Sprintf("Gateway action %s via lane %s", tool.ID(), lane.ID),
+			ScopeSnapshot:    scopeSnapshot,
+			TaskPacketID:     req.PacketID,
+			RequestSummary:   fmt.Sprintf("Gateway action %s via lane %s", tool.ID(), lane.ID),
 		})
 		if err == nil && ar != nil {
 			v := ar.ID
 			approvalReqID = &v
+			grantHash, grantFields := g.approvalFingerprintForRequestID(reqForInv, lane, tool, risk, level, resolvePaths(g.workspace, reqForInv.Paths), ar.ID)
+			scopeSnapshot["approvalRequestId"] = ar.ID
+			scopeSnapshot["approvalFingerprintHash"] = grantHash
+			scopeSnapshot["approvalFingerprintFields"] = grantFields
+			if err := g.updateApprovalRequestScopeSnapshot(ctx, ar.ID, scopeSnapshot); err != nil {
+				return nil, fmt.Errorf("store approval fingerprint: %w", err)
+			}
 		}
 	}
 	id, err := g.openInvocation(ctx, reqForInv, lane, tool, risk, level, profileID, StatusNeedsApprov, approvalReqID)
@@ -3001,7 +3035,7 @@ func nonEmpty(v, def string) string {
 	return strings.TrimSpace(v)
 }
 
-func (g *Gateway) approvalGrantPresent(ctx context.Context, req Request) (bool, error) {
+func (g *Gateway) approvalGrantPresent(ctx context.Context, req Request, lane *lanes.Lane, tool Tool, risk, level string, resolvedPaths []string) (bool, error) {
 	if strings.TrimSpace(req.ApprovalID) != "" && g.approvals != nil {
 		requestID, err := strconv.ParseInt(strings.TrimSpace(req.ApprovalID), 10, 64)
 		if err != nil {
@@ -3014,6 +3048,19 @@ func (g *Gateway) approvalGrantPresent(ctx context.Context, req Request) (bool, 
 		if req.JobID != nil && strings.TrimSpace(*req.JobID) != "" && strings.TrimSpace(approvalReq.JobID) != strings.TrimSpace(*req.JobID) {
 			return false, fmt.Errorf("approval request %d belongs to job %q, not %q", requestID, approvalReq.JobID, strings.TrimSpace(*req.JobID))
 		}
+		reqForFingerprint := req
+		if reqForFingerprint.JobID == nil || strings.TrimSpace(*reqForFingerprint.JobID) == "" {
+			jid := strings.TrimSpace(approvalReq.JobID)
+			reqForFingerprint.JobID = &jid
+		}
+		actualHash, _ := g.approvalFingerprintForRequestID(reqForFingerprint, lane, tool, risk, level, resolvedPaths, requestID)
+		expectedHash := approvalFingerprintHashFromScope(approvalReq.ScopeSnapshot)
+		if expectedHash == "" {
+			return false, fmt.Errorf("approval request %d is missing gateway approval fingerprint", requestID)
+		}
+		if actualHash != expectedHash {
+			return false, fmt.Errorf("approval request %d fingerprint mismatch", requestID)
+		}
 		if approvalReq.Decision != nil && strings.EqualFold(strings.TrimSpace(approvalReq.Decision.Decision), "approved") {
 			return true, nil
 		}
@@ -3022,23 +3069,160 @@ func (g *Gateway) approvalGrantPresent(ctx context.Context, req Request) (bool, 
 	return g.jobApprovalGranted(ctx, req.JobID)
 }
 
+func (g *Gateway) approvalFingerprint(req Request, lane *lanes.Lane, tool Tool, risk, level string, resolvedPaths []string) (string, map[string]any) {
+	return g.approvalFingerprintForRequestID(req, lane, tool, risk, level, resolvedPaths, 0)
+}
+
+func (g *Gateway) approvalFingerprintForRequestID(req Request, lane *lanes.Lane, tool Tool, risk, level string, resolvedPaths []string, approvalRequestID int64) (string, map[string]any) {
+	jobID := ""
+	if req.JobID != nil {
+		jobID = strings.TrimSpace(*req.JobID)
+	}
+	fields := map[string]any{
+		"version":          "gateway.v1",
+		"actorId":          nonEmpty(req.ProvenanceActor, req.Initiator),
+		"actorKind":        nonEmpty(req.ProvenanceActorType, req.Source),
+		"initiator":        nonEmpty(req.Initiator, "operator"),
+		"source":           nonEmpty(req.Source, "user"),
+		"workspaceId":      nonEmpty(req.WorkspaceID, workspaceIDFromPath(g.workspace)),
+		"laneId":           lane.ID,
+		"toolId":           tool.ID(),
+		"capabilityId":     capabilityIDFromRequest(req),
+		"riskClass":        strings.TrimSpace(risk),
+		"executionLevel":   strings.TrimSpace(level),
+		"writeIntent":      tool.WriteIntent(),
+		"jobId":            jobID,
+		"domain":           nonEmpty(req.Domain, tool.Domain()),
+		"action":           nonEmpty(req.Action, tool.Action()),
+		"requestedPaths":   normalizedApprovalPaths(req.Paths),
+		"resolvedPaths":    normalizedApprovalPaths(resolvedPaths),
+		"inputActionShape": normalizeApprovalFingerprintValue(nonNilMap(req.Input)),
+	}
+	if approvalRequestID > 0 {
+		fields["approvalRequestId"] = approvalRequestID
+	}
+	body, _ := json.Marshal(fields)
+	sum := sha256.Sum256(body)
+	return "sha256:" + hex.EncodeToString(sum[:]), fields
+}
+
+func (g *Gateway) updateApprovalRequestScopeSnapshot(ctx context.Context, requestID int64, scope map[string]any) error {
+	scopeJSON, err := json.Marshal(scope)
+	if err != nil {
+		return err
+	}
+	_, err = g.db.ExecContext(ctx, `UPDATE approval_requests SET scope_snapshot_json = ? WHERE id = ?`, string(scopeJSON), requestID)
+	return err
+}
+
+func approvalFingerprintHashFromScope(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var scope map[string]any
+	if err := json.Unmarshal(raw, &scope); err != nil {
+		return ""
+	}
+	if v, ok := scope["approvalFingerprintHash"].(string); ok {
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+func normalizedApprovalPaths(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	seen := map[string]struct{}{}
+	for _, p := range paths {
+		p = filepath.Clean(strings.TrimSpace(p))
+		if p == "." || p == "" {
+			continue
+		}
+		key := strings.ToLower(filepath.ToSlash(p))
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, filepath.ToSlash(p))
+	}
+	sort.Strings(out)
+	return out
+}
+
+func normalizeApprovalFingerprintValue(v any) any {
+	switch typed := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		for k, item := range typed {
+			out[k] = normalizeApprovalFingerprintValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, normalizeApprovalFingerprintValue(item))
+		}
+		return out
+	case []string:
+		out := append([]string(nil), typed...)
+		sort.Strings(out)
+		return out
+	default:
+		return typed
+	}
+}
+
 func (g *Gateway) jobApprovalGranted(ctx context.Context, jobID *string) (bool, error) {
-	if jobID == nil {
+	if !g.jobApprovalStatusGranted(ctx, jobID) {
 		return false, nil
+	}
+	return true, nil
+}
+
+func (g *Gateway) jobApprovalStatusGranted(ctx context.Context, jobID *string) bool {
+	if jobID == nil {
+		return false
 	}
 	id := strings.TrimSpace(*jobID)
 	if id == "" {
-		return false, nil
+		return false
 	}
 	var status string
 	err := g.db.QueryRowContext(ctx, `SELECT approval_status FROM jobs WHERE id = ?`, id).Scan(&status)
 	if err != nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(status), "granted")
+}
+
+func (g *Gateway) jobApprovalFingerprintGranted(ctx context.Context, req Request, lane *lanes.Lane, tool Tool, risk, level string, resolvedPaths []string) (bool, error) {
+	if req.JobID == nil || strings.TrimSpace(*req.JobID) == "" {
+		return false, nil
+	}
+	jobID := strings.TrimSpace(*req.JobID)
+	row := g.db.QueryRowContext(ctx, `
+SELECT ar.id, ar.scope_snapshot_json
+FROM approval_requests ar
+JOIN approval_decisions ad ON ad.request_id = ar.id
+WHERE ar.job_id = ? AND ar.status = 'resolved' AND lower(ad.decision) = 'approved'
+ORDER BY ad.id DESC
+LIMIT 1`, jobID)
+	var requestID int64
+	var scope string
+	if err := row.Scan(&requestID, &scope); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
 		}
 		return false, err
 	}
-	return strings.EqualFold(strings.TrimSpace(status), "granted"), nil
+	expectedHash := approvalFingerprintHashFromScope(json.RawMessage(scope))
+	if expectedHash == "" {
+		return false, fmt.Errorf("approval request %d is missing gateway approval fingerprint", requestID)
+	}
+	actualHash, _ := g.approvalFingerprintForRequestID(req, lane, tool, risk, level, resolvedPaths, requestID)
+	if actualHash != expectedHash {
+		return false, fmt.Errorf("approval request %d fingerprint mismatch", requestID)
+	}
+	return true, nil
 }
 
 func toolDomainFromID(id string) string {

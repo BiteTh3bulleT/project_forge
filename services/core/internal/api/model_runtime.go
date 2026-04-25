@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -56,6 +57,20 @@ type ModelRuntimeControlRequest struct {
 	Actor    string                  `json:"actor,omitempty"`
 	Source   string                  `json:"source,omitempty"`
 	Metadata map[string]any          `json:"metadata,omitempty"`
+}
+
+type modelRuntimeManagementBody struct {
+	CorrelationID string         `json:"correlationId"`
+	TraceID       string         `json:"traceId"`
+	WorkspaceID   string         `json:"workspaceId"`
+	LaneID        string         `json:"laneId"`
+	Actor         string         `json:"actor"`
+	Source        string         `json:"source"`
+	CapabilityID  string         `json:"capabilityId"`
+	ApprovalID    string         `json:"approvalId"`
+	DryRun        bool           `json:"dryRun"`
+	Preferred     bool           `json:"preferred"`
+	Metadata      map[string]any `json:"metadata"`
 }
 
 type ModelRuntimeChatMessage struct {
@@ -263,6 +278,17 @@ type modelRuntimeCodeCarrier interface {
 	ErrorCode() string
 }
 
+func modelRuntimeRouteID(r *http.Request) string {
+	raw := strings.TrimSpace(chi.URLParam(r, "id"))
+	if raw == "" {
+		return ""
+	}
+	if decoded, err := url.PathUnescape(raw); err == nil {
+		return strings.TrimSpace(decoded)
+	}
+	return raw
+}
+
 func (s *Server) handleForgeModelsList(w http.ResponseWriter, r *http.Request) {
 	runtimeSvc, meta, ok := s.requireModelRuntime(w, r, "model.runtime.list")
 	if !ok {
@@ -304,10 +330,14 @@ func (s *Server) handleForgeModelImport(w http.ResponseWriter, r *http.Request) 
 		Preferred     bool           `json:"preferred"`
 		Actor         string         `json:"actor"`
 		Source        string         `json:"source"`
+		CapabilityID  string         `json:"capabilityId"`
+		ApprovalID    string         `json:"approvalId"`
+		DryRun        bool           `json:"dryRun"`
 		Metadata      map[string]any `json:"metadata"`
 		CorrelationID string         `json:"correlationId"`
 		TraceID       string         `json:"traceId"`
 		WorkspaceID   string         `json:"workspaceId"`
+		LaneID        string         `json:"laneId"`
 	}
 	if err := decodeOptionalJSONBody(r, &body); err != nil {
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "INVALID_JSON", message: "invalid json body"}, initialMeta)
@@ -319,6 +349,31 @@ func (s *Server) handleForgeModelImport(w http.ResponseWriter, r *http.Request) 
 	}
 	meta := requestAuditMetaForBackup(r, body.CorrelationID, body.TraceID, body.WorkspaceID, "model.runtime.import")
 	metaReq := modelRuntimeMetaFromRequestAudit(meta)
+	govReq := modelManagementGovernanceRequest{
+		Operation:     "import",
+		ModelID:       strings.TrimSpace(body.ID),
+		Path:          strings.TrimSpace(body.Path),
+		Backend:       strings.TrimSpace(body.Backend),
+		Actor:         strings.TrimSpace(body.Actor),
+		Source:        strings.TrimSpace(body.Source),
+		WorkspaceID:   metaReq.WorkspaceID,
+		LaneID:        strings.TrimSpace(body.LaneID),
+		CorrelationID: metaReq.CorrelationID,
+		TraceID:       metaReq.TraceID,
+		CapabilityID:  strings.TrimSpace(body.CapabilityID),
+		ApprovalID:    strings.TrimSpace(body.ApprovalID),
+		Preferred:     body.Preferred,
+		DryRun:        body.DryRun,
+		Metadata:      body.Metadata,
+	}
+	decision, err := s.enforceModelManagementGovernance(r.Context(), runtimeSvc, govReq)
+	if err != nil {
+		s.writeModelRuntimeError(w, err, metaReq)
+		return
+	}
+	if s.writeModelManagementGovernanceResult(w, r, metaReq, govReq, decision) {
+		return
+	}
 	result, err := runtimeSvc.ImportModel(r.Context(), ModelRuntimeImportRequest{
 		Path:          strings.TrimSpace(body.Path),
 		ID:            strings.TrimSpace(body.ID),
@@ -332,7 +387,7 @@ func (s *Server) handleForgeModelImport(w http.ResponseWriter, r *http.Request) 
 		Preferred:     body.Preferred,
 		Actor:         strings.TrimSpace(body.Actor),
 		Source:        strings.TrimSpace(body.Source),
-		Metadata:      body.Metadata,
+		Metadata:      modelManagementMetadata(body.Metadata, decision),
 		Meta:          metaReq,
 	})
 	if err != nil {
@@ -347,21 +402,35 @@ func (s *Server) handleForgeModelsScan(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var body struct {
-		CorrelationID string         `json:"correlationId"`
-		TraceID       string         `json:"traceId"`
-		WorkspaceID   string         `json:"workspaceId"`
-		Actor         string         `json:"actor"`
-		Source        string         `json:"source"`
-		Metadata      map[string]any `json:"metadata"`
-	}
+	var body modelRuntimeManagementBody
 	if err := decodeOptionalJSONBody(r, &body); err != nil {
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "INVALID_JSON", message: "invalid json body"}, initialMeta)
 		return
 	}
 	meta := requestAuditMetaForBackup(r, body.CorrelationID, body.TraceID, body.WorkspaceID, "model.runtime.scan")
 	metaReq := modelRuntimeMetaFromRequestAudit(meta)
-	models, err := runtimeSvc.ScanModels(r.Context(), ModelRuntimeControlRequest{Meta: metaReq, Actor: strings.TrimSpace(body.Actor), Source: strings.TrimSpace(body.Source), Metadata: body.Metadata})
+	govReq := modelManagementGovernanceRequest{
+		Operation:     "scan",
+		Actor:         strings.TrimSpace(body.Actor),
+		Source:        strings.TrimSpace(body.Source),
+		WorkspaceID:   metaReq.WorkspaceID,
+		LaneID:        strings.TrimSpace(body.LaneID),
+		CorrelationID: metaReq.CorrelationID,
+		TraceID:       metaReq.TraceID,
+		CapabilityID:  strings.TrimSpace(body.CapabilityID),
+		ApprovalID:    strings.TrimSpace(body.ApprovalID),
+		DryRun:        body.DryRun,
+		Metadata:      body.Metadata,
+	}
+	decision, err := s.enforceModelManagementGovernance(r.Context(), runtimeSvc, govReq)
+	if err != nil {
+		s.writeModelRuntimeError(w, err, metaReq)
+		return
+	}
+	if s.writeModelManagementGovernanceResult(w, r, metaReq, govReq, decision) {
+		return
+	}
+	models, err := runtimeSvc.ScanModels(r.Context(), ModelRuntimeControlRequest{Meta: metaReq, Actor: strings.TrimSpace(body.Actor), Source: strings.TrimSpace(body.Source), Metadata: modelManagementMetadata(body.Metadata, decision)})
 	if err != nil {
 		s.writeModelRuntimeError(w, err, metaReq)
 		return
@@ -374,7 +443,7 @@ func (s *Server) handleForgeModelGet(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	id := modelRuntimeRouteID(r)
 	if id == "" {
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "MODEL_ID_REQUIRED", message: "model id is required"}, meta)
 		return
@@ -397,7 +466,7 @@ func (s *Server) handleForgeModelCompatibility(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	id := modelRuntimeRouteID(r)
 	if id == "" {
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "MODEL_ID_REQUIRED", message: "model id is required"}, meta)
 		return
@@ -443,20 +512,13 @@ func (s *Server) handleForgeModelControl(w http.ResponseWriter, r *http.Request,
 	if !ok {
 		return
 	}
-	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	id := modelRuntimeRouteID(r)
 	if id == "" {
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "MODEL_ID_REQUIRED", message: "model id is required"}, initialMeta)
 		return
 	}
 
-	var body struct {
-		CorrelationID string         `json:"correlationId"`
-		TraceID       string         `json:"traceId"`
-		WorkspaceID   string         `json:"workspaceId"`
-		Actor         string         `json:"actor"`
-		Source        string         `json:"source"`
-		Metadata      map[string]any `json:"metadata"`
-	}
+	var body modelRuntimeManagementBody
 	if err := decodeOptionalJSONBody(r, &body); err != nil {
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "INVALID_JSON", message: "invalid json body"}, initialMeta)
 		return
@@ -464,17 +526,40 @@ func (s *Server) handleForgeModelControl(w http.ResponseWriter, r *http.Request,
 
 	meta := requestAuditMetaForBackup(r, body.CorrelationID, body.TraceID, body.WorkspaceID, "model.runtime.control")
 	metaReq := modelRuntimeMetaFromRequestAudit(meta)
+	action := "unload"
+	if load {
+		action = "load"
+	}
+	govReq := modelManagementGovernanceRequest{
+		Operation:     action,
+		ModelID:       id,
+		Actor:         strings.TrimSpace(body.Actor),
+		Source:        strings.TrimSpace(body.Source),
+		WorkspaceID:   metaReq.WorkspaceID,
+		LaneID:        strings.TrimSpace(body.LaneID),
+		CorrelationID: metaReq.CorrelationID,
+		TraceID:       metaReq.TraceID,
+		CapabilityID:  strings.TrimSpace(body.CapabilityID),
+		ApprovalID:    strings.TrimSpace(body.ApprovalID),
+		DryRun:        body.DryRun,
+		Metadata:      body.Metadata,
+	}
+	decision, err := s.enforceModelManagementGovernance(r.Context(), runtimeSvc, govReq)
+	if err != nil {
+		s.writeModelRuntimeError(w, err, metaReq)
+		return
+	}
+	if s.writeModelManagementGovernanceResult(w, r, metaReq, govReq, decision) {
+		return
+	}
 	controlReq := ModelRuntimeControlRequest{
 		Meta:     metaReq,
 		Actor:    strings.TrimSpace(body.Actor),
 		Source:   strings.TrimSpace(body.Source),
-		Metadata: body.Metadata,
+		Metadata: modelManagementMetadata(body.Metadata, decision),
 	}
 
-	var (
-		result ModelRuntimeLoadResult
-		err    error
-	)
+	var result ModelRuntimeLoadResult
 	if load {
 		result, err = runtimeSvc.LoadModel(r.Context(), id, controlReq)
 	} else {
@@ -497,26 +582,42 @@ func (s *Server) handleForgeModelManagement(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	id := modelRuntimeRouteID(r)
 	if id == "" {
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "MODEL_ID_REQUIRED", message: "model id is required"}, initialMeta)
 		return
 	}
-	var body struct {
-		CorrelationID string         `json:"correlationId"`
-		TraceID       string         `json:"traceId"`
-		WorkspaceID   string         `json:"workspaceId"`
-		Actor         string         `json:"actor"`
-		Source        string         `json:"source"`
-		Metadata      map[string]any `json:"metadata"`
-	}
+	var body modelRuntimeManagementBody
 	if err := decodeOptionalJSONBody(r, &body); err != nil {
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "INVALID_JSON", message: "invalid json body"}, initialMeta)
 		return
 	}
 	meta := requestAuditMetaForBackup(r, body.CorrelationID, body.TraceID, body.WorkspaceID, "model.runtime."+action)
 	metaReq := modelRuntimeMetaFromRequestAudit(meta)
-	controlReq := ModelRuntimeControlRequest{Meta: metaReq, Actor: strings.TrimSpace(body.Actor), Source: strings.TrimSpace(body.Source), Metadata: body.Metadata}
+	govReq := modelManagementGovernanceRequest{
+		Operation:     action,
+		ModelID:       id,
+		Actor:         strings.TrimSpace(body.Actor),
+		Source:        strings.TrimSpace(body.Source),
+		WorkspaceID:   metaReq.WorkspaceID,
+		LaneID:        strings.TrimSpace(body.LaneID),
+		CorrelationID: metaReq.CorrelationID,
+		TraceID:       metaReq.TraceID,
+		CapabilityID:  strings.TrimSpace(body.CapabilityID),
+		ApprovalID:    strings.TrimSpace(body.ApprovalID),
+		Preferred:     body.Preferred,
+		DryRun:        body.DryRun,
+		Metadata:      body.Metadata,
+	}
+	decision, err := s.enforceModelManagementGovernance(r.Context(), runtimeSvc, govReq)
+	if err != nil {
+		s.writeModelRuntimeError(w, err, metaReq)
+		return
+	}
+	if s.writeModelManagementGovernanceResult(w, r, metaReq, govReq, decision) {
+		return
+	}
+	controlReq := ModelRuntimeControlRequest{Meta: metaReq, Actor: strings.TrimSpace(body.Actor), Source: strings.TrimSpace(body.Source), Metadata: modelManagementMetadata(body.Metadata, decision)}
 	switch action {
 	case "verify":
 		model, err := runtimeSvc.VerifyModel(r.Context(), id, controlReq)
@@ -563,7 +664,7 @@ func (s *Server) handleForgeModelChat(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pathModelID := strings.TrimSpace(chi.URLParam(r, "id"))
+	pathModelID := modelRuntimeRouteID(r)
 	if pathModelID == "" {
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "MODEL_ID_REQUIRED", message: "model id is required"}, initialMeta)
 		return

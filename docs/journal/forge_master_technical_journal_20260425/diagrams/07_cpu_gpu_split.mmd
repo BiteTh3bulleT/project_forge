@@ -1,0 +1,21 @@
+flowchart LR
+  subgraph CPU[CPU/RAM Authority]
+    Kernel[Kernel / Control Lane]
+    Gateway[Gateway]
+    Audit[Audit / Journal / State]
+    Restore[Restore Scoring]
+  end
+  subgraph GPU[GPU Accelerator Pool]
+    MR[Modelruntime]
+    Infer[Inference]
+    Embed[Embeddings / Rerank]
+    Telemetry[DCGM / Level Zero Telemetry]
+  end
+  Kernel --> Audit
+  Gateway --> Audit
+  Restore --> Kernel
+  Kernel -.governed request.-> MR
+  MR --> Infer
+  MR --> Embed
+  Telemetry -.diagnostics only.-> MR
+

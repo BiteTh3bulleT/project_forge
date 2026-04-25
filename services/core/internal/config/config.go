@@ -62,6 +62,7 @@ type Config struct {
 	ModelPolicyAllowAutoLoad                    bool
 	ModelPolicyAllowCrossWorkspace              bool
 	ModelPolicyRequireWorkspaceScope            bool
+	ModelRuntimeAllowOllamaCloudModels          bool
 	ModelChatMaxAttempts                        int
 	ModelChatRetryBackoffMs                     int
 	ModelChatProviderCooldownMs                 int
@@ -163,6 +164,7 @@ func Load() Config {
 		ModelPolicyAllowAutoLoad:            envBool("FORGE_MODEL_POLICY_ALLOW_AUTO_LOAD", false),
 		ModelPolicyAllowCrossWorkspace:      envBool("FORGE_MODEL_POLICY_ALLOW_CROSS_WORKSPACE", false),
 		ModelPolicyRequireWorkspaceScope:    envBool("FORGE_MODEL_POLICY_REQUIRE_WORKSPACE_SCOPE", true),
+		ModelRuntimeAllowOllamaCloudModels:  envBool("FORGE_MODELRUNTIME_ALLOW_OLLAMA_CLOUD_MODELS", false),
 		ModelChatMaxAttempts:                envInt("FORGE_MODEL_CHAT_MAX_ATTEMPTS", 3, 1),
 		ModelChatRetryBackoffMs:             envInt("FORGE_MODEL_CHAT_RETRY_BACKOFF_MS", 250, 0),
 		ModelChatProviderCooldownMs:         envInt("FORGE_MODEL_CHAT_PROVIDER_COOLDOWN_MS", 5000, 0),

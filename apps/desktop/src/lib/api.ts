@@ -437,6 +437,15 @@ export type SettingsRecord = {
     requireOperatorReviewForLongTerm: boolean;
     allowCommits: boolean;
   };
+  runtimeControls?: {
+    gpuEnabled: boolean;
+    nvidiaDcgmEnabled: boolean;
+    intelLevelZeroEnabled: boolean;
+    allowOllamaCloudModels: boolean;
+    safeModeForceCpuOnly?: boolean;
+    effectiveGpuEnabled?: boolean;
+    cloudModelsDefaultState?: string;
+  };
 };
 
 export type TelegramStatusResponse = {
@@ -517,6 +526,18 @@ export type ModelRuntimeLoadResult = {
   warnings?: string[];
   loadedAtMs?: number;
   details?: Record<string, string>;
+};
+
+export type ModelRuntimeManagementRequest = {
+  actor?: string;
+  source?: string;
+  workspaceId?: string;
+  laneId?: string;
+  capabilityId?: string;
+  approvalId?: string;
+  dryRun?: boolean;
+  preferred?: boolean;
+  metadata?: Record<string, unknown>;
 };
 
 export type ModelRuntimeCompatibility = {
@@ -636,6 +657,11 @@ export const api = {
       preferred?: boolean;
       actor?: string;
       source?: string;
+      workspaceId?: string;
+      laneId?: string;
+      capabilityId?: string;
+      approvalId?: string;
+      dryRun?: boolean;
       metadata?: Record<string, unknown>;
     }) =>
       j<{ result: ModelRuntimeImportResult; correlationId?: string; traceId?: string; workspaceId?: string }>("/forge/models/import", {
@@ -643,13 +669,13 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }),
-    scan: (body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+    scan: (body?: ModelRuntimeManagementRequest) =>
       j<{ models: ModelRuntimeModel[]; count: number; correlationId?: string; traceId?: string; workspaceId?: string }>("/forge/models/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body ?? {}),
       }),
-    verify: (id: string, body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+    verify: (id: string, body?: ModelRuntimeManagementRequest) =>
       j<{ model: ModelRuntimeModel; correlationId?: string; traceId?: string; workspaceId?: string }>(
         `/forge/models/${encodeURIComponent(id)}/verify`,
         {
@@ -658,7 +684,7 @@ export const api = {
           body: JSON.stringify(body ?? {}),
         },
       ),
-    enable: (id: string, body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+    enable: (id: string, body?: ModelRuntimeManagementRequest) =>
       j<{ model: ModelRuntimeModel; correlationId?: string; traceId?: string; workspaceId?: string }>(
         `/forge/models/${encodeURIComponent(id)}/enable`,
         {
@@ -667,7 +693,7 @@ export const api = {
           body: JSON.stringify(body ?? {}),
         },
       ),
-    disable: (id: string, body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+    disable: (id: string, body?: ModelRuntimeManagementRequest) =>
       j<{ model: ModelRuntimeModel; correlationId?: string; traceId?: string; workspaceId?: string }>(
         `/forge/models/${encodeURIComponent(id)}/disable`,
         {
@@ -676,7 +702,7 @@ export const api = {
           body: JSON.stringify(body ?? {}),
         },
       ),
-    archive: (id: string, body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+    archive: (id: string, body?: ModelRuntimeManagementRequest) =>
       j<{ model: ModelRuntimeModel; correlationId?: string; traceId?: string; workspaceId?: string }>(
         `/forge/models/${encodeURIComponent(id)}/archive`,
         {
@@ -685,7 +711,7 @@ export const api = {
           body: JSON.stringify(body ?? {}),
         },
       ),
-    remove: (id: string, body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+    remove: (id: string, body?: ModelRuntimeManagementRequest) =>
       j<{ result: { modelId: string; removedPath?: string }; correlationId?: string; traceId?: string; workspaceId?: string }>(
         `/forge/models/${encodeURIComponent(id)}/remove`,
         {
@@ -694,7 +720,7 @@ export const api = {
           body: JSON.stringify(body ?? {}),
         },
       ),
-    load: (id: string, body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+    load: (id: string, body?: ModelRuntimeManagementRequest) =>
       j<{ result: ModelRuntimeLoadResult; correlationId?: string; traceId?: string; workspaceId?: string }>(
         `/forge/models/${encodeURIComponent(id)}/load`,
         {
@@ -703,7 +729,7 @@ export const api = {
           body: JSON.stringify(body ?? {}),
         },
       ),
-    unload: (id: string, body?: { actor?: string; source?: string; metadata?: Record<string, unknown> }) =>
+    unload: (id: string, body?: ModelRuntimeManagementRequest) =>
       j<{ result: ModelRuntimeLoadResult; correlationId?: string; traceId?: string; workspaceId?: string }>(
         `/forge/models/${encodeURIComponent(id)}/unload`,
         {

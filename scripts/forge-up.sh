@@ -9,7 +9,7 @@ DESKTOP_PID_FILE="$RUN_DIR/desktop.pid"
 CORE_LOG="$LOG_DIR/core.log"
 DESKTOP_LOG="$LOG_DIR/desktop.log"
 CORE_URL="http://127.0.0.1:18492/health"
-DESKTOP_PORT="5173"
+DESKTOP_PORT="1420"
 
 mkdir -p "$RUN_DIR" "$LOG_DIR"
 

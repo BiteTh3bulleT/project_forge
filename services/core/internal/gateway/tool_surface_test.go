@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -292,6 +293,211 @@ func TestGatewayExecuteAndWaitDeniedApprovalReturnsDenied(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(workspace, target)); !os.IsNotExist(err) {
 		t.Fatalf("denied write should not create target, stat err=%v", err)
+	}
+}
+
+func TestGatewayApprovalFingerprintRejectsReplayForDifferentShape(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	gw, st, workspace := newToolSurfaceGatewayHarness(t)
+	laneID := "approval.fingerprint.write"
+	if _, err := gw.lanes.Save(ctx, lanes.Lane{
+		ID:               laneID,
+		Name:             "Approval Fingerprint Write",
+		Description:      "Approval-gated write lane for fingerprint tests",
+		ActionType:       "invoke",
+		AllowedPaths:     []string{workspace},
+		WriteIntent:      true,
+		RequiresApproval: true,
+		RiskClass:        "safe_write",
+		MaxBytes:         1024,
+		Enabled:          true,
+	}); err != nil {
+		t.Fatalf("save write lane: %v", err)
+	}
+	readLaneID := "approval.fingerprint.read"
+	if _, err := gw.lanes.Save(ctx, lanes.Lane{
+		ID:               readLaneID,
+		Name:             "Approval Fingerprint Read",
+		Description:      "Approval-gated read lane for fingerprint tests",
+		ActionType:       "invoke",
+		AllowedPaths:     []string{workspace},
+		WriteIntent:      false,
+		RequiresApproval: true,
+		RiskClass:        "read_only",
+		MaxBytes:         1024,
+		Enabled:          true,
+	}); err != nil {
+		t.Fatalf("save read lane: %v", err)
+	}
+
+	baseReq := Request{
+		ToolID:              "fs.write",
+		LaneID:              laneID,
+		Action:              "invoke",
+		CorrelationID:       "corr-approval-fingerprint-open",
+		TraceID:             "trace-approval-fingerprint-open",
+		Source:              "user",
+		WorkspaceID:         "workspace:fingerprint",
+		ProvenanceActor:     "operator-a",
+		ProvenanceActorType: "user",
+		Paths:               []string{"scratch/fingerprint-approved.txt"},
+		Input:               map[string]any{"contents": "approved\n"},
+		Initiator:           "operator-a",
+	}
+	first, err := gw.Execute(ctx, baseReq)
+	if err != nil {
+		t.Fatalf("open approval: %v", err)
+	}
+	if first.Status != StatusNeedsApprov {
+		t.Fatalf("expected needs_approval, got %s (%s)", first.Status, first.DeniedReason)
+	}
+	approvalID := approvalRequestIDFromResult(first)
+	if approvalID <= 0 {
+		t.Fatalf("missing approval request id in %#v", first.Data)
+	}
+	if _, err := gw.approvals.Decide(ctx, approvalID, "operator-a", "approved", "fingerprint test approval"); err != nil {
+		t.Fatalf("approve request: %v", err)
+	}
+	approvalIDText := strconv.FormatInt(approvalID, 10)
+
+	matching := baseReq
+	matching.CorrelationID = "corr-approval-fingerprint-match"
+	matching.ApprovalID = approvalIDText
+	matchRes, err := gw.Execute(ctx, matching)
+	if err != nil {
+		t.Fatalf("matching execute: %v", err)
+	}
+	if matchRes.Status != StatusOK {
+		t.Fatalf("matching approval should succeed, got %s (%s)", matchRes.Status, matchRes.DeniedReason)
+	}
+
+	cases := []struct {
+		name   string
+		mutate func(Request) Request
+	}{
+		{
+			name: "different_tool",
+			mutate: func(req Request) Request {
+				req.ToolID = "fs.read"
+				req.LaneID = readLaneID
+				req.Paths = []string{"sample.txt"}
+				req.Input = nil
+				return req
+			},
+		},
+		{
+			name: "different_path",
+			mutate: func(req Request) Request {
+				req.Paths = []string{"scratch/fingerprint-other.txt"}
+				return req
+			},
+		},
+		{
+			name: "different_actor",
+			mutate: func(req Request) Request {
+				req.ProvenanceActor = "operator-b"
+				req.Initiator = "operator-b"
+				return req
+			},
+		},
+		{
+			name: "different_lane",
+			mutate: func(req Request) Request {
+				req.LaneID = "fs.write.bounded"
+				return req
+			},
+		},
+		{
+			name: "different_workspace",
+			mutate: func(req Request) Request {
+				req.WorkspaceID = "workspace:other"
+				return req
+			},
+		},
+		{
+			name: "different_risk",
+			mutate: func(req Request) Request {
+				req.RiskClass = "dangerous"
+				return req
+			},
+		},
+		{
+			name: "different_input_shape",
+			mutate: func(req Request) Request {
+				req.Input = map[string]any{"contents": "changed\n"}
+				return req
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			req := tc.mutate(baseReq)
+			req.CorrelationID = "corr-approval-fingerprint-" + tc.name
+			req.ApprovalID = approvalIDText
+			res, err := gw.Execute(ctx, req)
+			if err != nil {
+				t.Fatalf("execute mismatch: %v", err)
+			}
+			if res.Status != StatusDenied {
+				t.Fatalf("expected denied for %s, got %s", tc.name, res.Status)
+			}
+			if !strings.Contains(res.DeniedReason, "fingerprint mismatch") {
+				t.Fatalf("expected fingerprint mismatch reason, got %q", res.DeniedReason)
+			}
+			mustGatewayInvocationDeniedReasonContains(t, st, req.CorrelationID, "fingerprint mismatch")
+			mustAuditActionCount(t, st, "tool.denied", req.CorrelationID)
+		})
+	}
+}
+
+func TestGatewayApprovalFingerprintDryRunDoesNotOpenApproval(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	gw, st, workspace := newToolSurfaceGatewayHarness(t)
+	laneID := "approval.fingerprint.dryrun"
+	if _, err := gw.lanes.Save(ctx, lanes.Lane{
+		ID:               laneID,
+		Name:             "Approval Fingerprint Dry Run",
+		Description:      "Approval-gated dry run lane",
+		ActionType:       "invoke",
+		AllowedPaths:     []string{workspace},
+		WriteIntent:      true,
+		RequiresApproval: true,
+		RiskClass:        "safe_write",
+		MaxBytes:         1024,
+		Enabled:          true,
+	}); err != nil {
+		t.Fatalf("save lane: %v", err)
+	}
+	res, err := gw.Execute(ctx, Request{
+		ToolID:              "fs.write",
+		LaneID:              laneID,
+		Action:              "invoke",
+		CorrelationID:       "corr-approval-fingerprint-dryrun",
+		Source:              "user",
+		WorkspaceID:         "workspace:fingerprint",
+		ProvenanceActor:     "operator-a",
+		ProvenanceActorType: "user",
+		Paths:               []string{"scratch/dryrun-fingerprint.txt"},
+		Input:               map[string]any{"contents": "dry run\n"},
+		Initiator:           "operator-a",
+		DryRun:              true,
+	})
+	if err != nil {
+		t.Fatalf("dry run execute: %v", err)
+	}
+	if res.Status != StatusDryRun {
+		t.Fatalf("expected dry_run, got %s (%s)", res.Status, res.DeniedReason)
+	}
+	var count int
+	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM approval_requests WHERE job_id LIKE 'chat-gw-%'`).Scan(&count); err != nil {
+		t.Fatalf("count approval requests: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("dry-run should not open approval request, got %d", count)
 	}
 }
 
@@ -845,7 +1051,7 @@ INSERT INTO jobs(
 		t.Fatalf("seed approved job: %v", err)
 	}
 
-	res, err := gw.Execute(ctx, Request{
+	req := Request{
 		ToolID:              "fs.write",
 		LaneID:              "fs.write.bounded",
 		CorrelationID:       "corr-artifact-summary",
@@ -858,7 +1064,10 @@ INSERT INTO jobs(
 		Input:               map[string]any{"contents": "artifact payload trace"},
 		JobID:               &jobID,
 		Initiator:           "tester",
-	})
+	}
+	approvalID := approveGatewayRequestForTest(t, ctx, gw, req, "artifact summary write approved")
+	req.ApprovalID = strconv.FormatInt(approvalID, 10)
+	res, err := gw.Execute(ctx, req)
 	if err != nil {
 		t.Fatalf("write execute: %v", err)
 	}
@@ -883,7 +1092,7 @@ INSERT INTO jobs(
 	if got := strings.TrimSpace(asString(entry["type"])); got != "writtenFile" {
 		t.Fatalf("artifact type = %q want writtenFile", got)
 	}
-	if got := strings.TrimSpace(asString(entry["path"])); !strings.HasSuffix(got, "scratch/artifact-summary.txt") {
+	if got := strings.TrimSpace(asString(entry["path"])); !strings.HasSuffix(filepath.ToSlash(got), "scratch/artifact-summary.txt") {
 		t.Fatalf("artifact path = %q missing expected suffix", got)
 	}
 }
@@ -1015,6 +1224,117 @@ ORDER BY id DESC LIMIT 1`,
 		t.Fatalf("decode audit payload action=%s correlation=%s: %v payload=%s", action, correlation, err, payload)
 	}
 	return out
+}
+
+func mustAuditActionCount(t *testing.T, st *store.Store, action, correlation string) {
+	t.Helper()
+	var count int
+	if err := st.DB.QueryRowContext(context.Background(), `
+SELECT COUNT(1)
+FROM audit_records
+WHERE correlation_id = ? AND action = ?`,
+		correlation, action,
+	).Scan(&count); err != nil {
+		t.Fatalf("query audit count action=%s correlation=%s: %v", action, correlation, err)
+	}
+	if count == 0 {
+		t.Fatalf("expected audit action=%s correlation=%s", action, correlation)
+	}
+}
+
+func mustGatewayInvocationDeniedReasonContains(t *testing.T, st *store.Store, correlation, want string) {
+	t.Helper()
+	var reason string
+	if err := st.DB.QueryRowContext(context.Background(), `
+SELECT denied_reason
+FROM gateway_invocations
+WHERE correlation_id = ?
+ORDER BY id DESC LIMIT 1`,
+		correlation,
+	).Scan(&reason); err != nil {
+		t.Fatalf("query gateway invocation denied reason: %v", err)
+	}
+	if !strings.Contains(reason, want) {
+		t.Fatalf("gateway denied reason = %q, want substring %q", reason, want)
+	}
+}
+
+func approveGatewayRequestForTest(t *testing.T, ctx context.Context, gw *Gateway, req Request, note string) int64 {
+	t.Helper()
+	req = normalizeGatewayRequestForApprovalTest(gw, req)
+	lane, err := gw.lanes.Get(ctx, req.LaneID)
+	if err != nil {
+		t.Fatalf("get lane: %v", err)
+	}
+	tool, ok := gw.tools[req.ToolID]
+	if !ok {
+		t.Fatalf("tool %q not registered", req.ToolID)
+	}
+	capabilityRiskClass := ""
+	if gw.capabilities != nil {
+		if capability, ok := gw.capabilities.Resolve(req.ToolID); ok {
+			capabilityRiskClass = gatewayRiskClassFromToolRisk(capability.Risk)
+		}
+	}
+	risk := effectiveRiskClass(req.RiskClass, lane.RiskClass, tool.RiskClass(), capabilityRiskClass)
+	level := normalizeExecutionLevel(req.ExecutionLevel)
+	if level == "" {
+		level = normalizeExecutionLevel(tool.ExecutionLevel())
+	}
+	if level == "" {
+		level = executionLevelFromRisk(risk)
+	}
+	res, err := gw.recordNeedsApproval(ctx, req, lane, tool, risk, level, "test", note)
+	if err != nil {
+		t.Fatalf("record approval request: %v", err)
+	}
+	approvalID := approvalRequestIDFromResult(res)
+	if approvalID <= 0 {
+		t.Fatalf("missing approval request id in %#v", res.Data)
+	}
+	if _, err := gw.approvals.Decide(ctx, approvalID, "tester", "approved", note); err != nil {
+		t.Fatalf("approve gateway request: %v", err)
+	}
+	return approvalID
+}
+
+func normalizeGatewayRequestForApprovalTest(gw *Gateway, req Request) Request {
+	if strings.TrimSpace(req.CorrelationID) == "" {
+		req.CorrelationID = newCorrelationID()
+	}
+	if strings.TrimSpace(req.Initiator) == "" {
+		req.Initiator = "operator"
+	}
+	if strings.TrimSpace(req.Source) == "" {
+		req.Source = "user"
+	}
+	if gw.capabilities != nil {
+		if capability, ok := gw.capabilities.Resolve(req.ToolID); ok {
+			if strings.TrimSpace(req.Domain) == "" {
+				req.Domain = capability.Domain
+			}
+			req.Metadata = mergeGatewayMetadata(req.Metadata, map[string]any{
+				"toolCapabilityId": capability.ID,
+				"toolRisk":         capability.Risk,
+			})
+		}
+	}
+	if strings.TrimSpace(req.WorkspaceID) == "" {
+		req.WorkspaceID = workspaceIDFromPath(gw.workspace)
+	}
+	if strings.TrimSpace(req.ProvenanceActor) == "" {
+		req.ProvenanceActor = req.Initiator
+	}
+	if strings.TrimSpace(req.ProvenanceActorType) == "" {
+		req.ProvenanceActorType = "service"
+	}
+	if strings.TrimSpace(req.Domain) == "" {
+		req.Domain = toolDomainFromID(req.ToolID)
+	}
+	if strings.TrimSpace(req.LaneID) == "" {
+		req.LaneID = req.ToolID
+	}
+	return req
 }
 
 func assertAuditContext(t *testing.T, payload map[string]any, correlation, traceID, workspaceID string) {

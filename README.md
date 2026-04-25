@@ -73,6 +73,8 @@ Implemented with explicit limits:
 npm run core
 ```
 
+The development core launcher enables the governed modelruntime surface by default so the desktop Models and Chat model selectors can connect. It does not configure a remote/cloud provider or default model automatically; provider endpoints still require explicit `FORGE_MODEL_*` configuration.
+
 2. Start the desktop shell:
 
 ```bash
@@ -81,17 +83,17 @@ npm run desktop
 
 If the desktop window does not open, first check Tauri startup logs. The most common blockers are:
 
-- **port conflict on `5173`** (existing Vite/dev server)
+- **port conflict on `1420`** (existing Vite/Tauri dev server)
 - **missing Linux webkit libs** (linker errors for `webkit2gtk-4.1` / `javascriptcoregtk-4.1`)
 
-`npm run desktop` now performs a preflight check and clears stale FORGE-local Vite listeners on `5173` automatically.
-If another non-FORGE process owns `5173`, startup will stop and print that process so you can resolve it.
+`npm run desktop` now performs a preflight check and clears stale FORGE-local Vite listeners on `1420` automatically.
+If another non-FORGE process owns `1420`, startup will stop and print that process so you can resolve it.
 
 Typical fixes:
 
 ```bash
-# if something is already serving 5173, stop it first
-sudo lsof -ti :5173 | xargs -r kill -9
+# if something is already serving 1420, stop it first
+sudo lsof -ti :1420 | xargs -r kill -9
 
 # Linux dependencies (Debian/Ubuntu)
 sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libgtk-3-dev
@@ -115,7 +117,7 @@ npm run build:core
 Default endpoints:
 
 - Core API: `http://127.0.0.1:18492`
-- Desktop dev server: `http://localhost:5173`
+- Desktop dev server: `http://localhost:1420`
 - Default shell route: `#/chat`
 
 Dry-run maintenance endpoints:

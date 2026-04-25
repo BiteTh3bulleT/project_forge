@@ -777,7 +777,7 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (result Gen
 	_, loaded := s.loaded[req.ModelID]
 	s.mu.RUnlock()
 	if !loaded {
-		if !s.autoLoad {
+		if !s.autoLoad && manifest.Backend != BackendOllamaCompat {
 			err = ErrModelNotLoaded
 			s.recordAudit(ctx, ModelRuntimeAuditRecord{
 				Operation:     "generate",

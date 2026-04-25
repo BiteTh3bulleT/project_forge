@@ -14,15 +14,15 @@
   --forge-text-rgb: 237 246 242;
   --forge-muted-rgb: 174 194 196;
   --forge-dim-rgb: 122 143 146;
-  --forge-cyan-rgb: 104 231 255;
-  --forge-mint-rgb: 104 255 204;
-  --forge-amber-rgb: 255 158 79;
-  --forge-amber-soft-rgb: 255 208 120;
+  --forge-cyan-rgb: 63 81 217;
+  --forge-mint-rgb: 126 166 255;
+  --forge-amber-rgb: 255 109 138;
+  --forge-amber-soft-rgb: 255 154 176;
   --forge-danger-rgb: 255 109 109;
   --forge-focus-rgb: 255 194 103;
   --forge-shadow: 0 24px 72px rgba(0, 0, 0, 0.46);
   --forge-shadow-panel: 0 0 0 1px rgba(165, 214, 219, 0.12), 0 30px 80px rgba(0, 0, 0, 0.58);
-  --forge-highlight: linear-gradient(135deg, rgba(104, 231, 255, 0.18), rgba(104, 255, 204, 0.12) 52%, rgba(255, 158, 79, 0.12) 100%);
+  --forge-highlight: linear-gradient(135deg, rgba(63, 81, 217, 0.2), rgba(126, 166, 255, 0.1) 52%, rgba(255, 109, 138, 0.1) 100%);
   --forge-panel-gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01) 52%, transparent 100%);
   --forge-grid-opacity: 0.22;
   --forge-noise-opacity: 0.18;
@@ -49,9 +49,9 @@ body {
   color: rgb(var(--forge-text-rgb));
   background-color: rgb(var(--forge-bg-rgb));
   background-image:
-    radial-gradient(circle at 14% -8%, rgba(104, 231, 255, 0.2), transparent 34%),
-    radial-gradient(circle at 88% 0%, rgba(255, 158, 79, 0.16), transparent 30%),
-    radial-gradient(circle at 50% 120%, rgba(104, 255, 204, 0.12), transparent 42%),
+    radial-gradient(circle at 14% -8%, rgba(63, 81, 217, 0.24), transparent 34%),
+    radial-gradient(circle at 88% 0%, rgba(126, 166, 255, 0.12), transparent 30%),
+    radial-gradient(circle at 50% 120%, rgba(255, 109, 138, 0.08), transparent 42%),
     linear-gradient(155deg, #04080a 0%, #071116 34%, #081217 68%, #04080a 100%);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -65,8 +65,8 @@ body::before {
   pointer-events: none;
   opacity: var(--forge-grid-opacity);
   background-image:
-    linear-gradient(rgba(104, 231, 255, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(104, 231, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(rgba(63, 81, 217, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(63, 81, 217, 0.12) 1px, transparent 1px),
     linear-gradient(transparent 94%, rgba(255, 255, 255, 0.04) 96%),
     repeating-linear-gradient(
       0deg,
@@ -89,8 +89,8 @@ body::after {
   opacity: var(--forge-noise-opacity);
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.05), transparent 28%),
-    radial-gradient(circle at 0% 100%, rgba(104, 255, 204, 0.06), transparent 34%),
-    radial-gradient(circle at 100% 0%, rgba(255, 158, 79, 0.05), transparent 28%);
+    radial-gradient(circle at 0% 100%, rgba(126, 166, 255, 0.05), transparent 34%),
+    radial-gradient(circle at 100% 0%, rgba(255, 109, 138, 0.04), transparent 28%);
   mix-blend-mode: screen;
 }
 
@@ -140,7 +140,7 @@ body::after {
 }
 
 ::selection {
-  background: rgba(104, 231, 255, 0.34);
+  background: rgba(63, 81, 217, 0.34);
   color: rgb(var(--forge-text-rgb));
 }
 
@@ -162,16 +162,16 @@ html[data-theme="light"] {
   --forge-dim-rgb: 93 112 118;
   --forge-shadow: 0 22px 54px rgba(12, 24, 28, 0.12);
   --forge-shadow-panel: 0 0 0 1px rgba(51, 96, 102, 0.08), 0 24px 64px rgba(12, 24, 28, 0.1);
-  --forge-highlight: linear-gradient(135deg, rgba(104, 231, 255, 0.1), rgba(104, 255, 204, 0.08) 52%, rgba(255, 158, 79, 0.08) 100%);
+  --forge-highlight: linear-gradient(135deg, rgba(63, 81, 217, 0.11), rgba(126, 166, 255, 0.06) 52%, rgba(255, 109, 138, 0.06) 100%);
   --forge-grid-opacity: 0.08;
   --forge-noise-opacity: 0.08;
 }
 
 html[data-theme="light"] body {
   background-image:
-    radial-gradient(circle at 12% -8%, rgba(104, 231, 255, 0.12), transparent 30%),
-    radial-gradient(circle at 88% 0%, rgba(255, 158, 79, 0.1), transparent 28%),
-    radial-gradient(circle at 50% 112%, rgba(104, 255, 204, 0.08), transparent 34%),
+    radial-gradient(circle at 12% -8%, rgba(63, 81, 217, 0.12), transparent 30%),
+    radial-gradient(circle at 88% 0%, rgba(126, 166, 255, 0.08), transparent 28%),
+    radial-gradient(circle at 50% 112%, rgba(255, 109, 138, 0.06), transparent 34%),
     linear-gradient(160deg, #edf3f0 0%, #e6efeb 42%, #f4f8f7 100%);
 }
 

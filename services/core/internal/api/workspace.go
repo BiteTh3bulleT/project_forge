@@ -16,6 +16,7 @@ import (
 	"forge/projectforge/services/core/internal/artifacts"
 	"forge/projectforge/services/core/internal/audit"
 	"forge/projectforge/services/core/internal/canvas"
+	"forge/projectforge/services/core/internal/chat"
 	"forge/projectforge/services/core/internal/jobs"
 )
 
@@ -64,7 +65,73 @@ func (s *Server) handleChatThreadGet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, http.StatusOK, d)
+	writeJSON(w, http.StatusOK, chatThreadDetailForAPI(d))
+}
+
+func chatThreadDetailForAPI(d *chat.ThreadDetail) *chat.ThreadDetail {
+	if d == nil {
+		return nil
+	}
+	out := *d
+	if len(d.Messages) == 0 {
+		out.Messages = []chat.Message{}
+		return &out
+	}
+	out.Messages = make([]chat.Message, len(d.Messages))
+	for i, msg := range d.Messages {
+		next := msg
+		next.Metadata = chatMetadataForAPI(msg.Metadata)
+		out.Messages[i] = next
+	}
+	return &out
+}
+
+func chatMetadataForAPI(meta map[string]any) map[string]any {
+	if len(meta) == 0 {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(meta))
+	for key, value := range meta {
+		switch key {
+		case "toolManifest":
+			out["toolManifestSummary"] = omittedJSONSummary(value)
+		case "toolGatewayActivity":
+			out[key] = chatToolGatewayActivityForAPI(value)
+		default:
+			out[key] = value
+		}
+	}
+	return out
+}
+
+func chatToolGatewayActivityForAPI(value any) any {
+	activity, ok := value.(map[string]any)
+	if !ok || activity == nil {
+		return value
+	}
+	out := make(map[string]any, len(activity))
+	for key, nested := range activity {
+		if key == "toolManifest" {
+			out["toolManifestSummary"] = omittedJSONSummary(nested)
+			continue
+		}
+		out[key] = nested
+	}
+	return out
+}
+
+func omittedJSONSummary(value any) map[string]any {
+	summary := map[string]any{
+		"omitted": true,
+		"reason":  "omitted_from_chat_thread_api_response",
+	}
+	switch typed := value.(type) {
+	case []any:
+		summary["count"] = len(typed)
+	case map[string]any:
+		summary["keys"] = len(typed)
+	}
+	return summary
 }
 
 func (s *Server) handleChatThreadPatch(w http.ResponseWriter, r *http.Request) {

@@ -55,10 +55,18 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 		"project_context_records", "evaluation_records", "gateway_invocations", "audit_records",
 		"autonomy_settings",
 		"permission_profiles", "approval_presets", "execution_strategies",
+		"model_manifests", "model_registry_status", "model_runtime_loads",
+		"chat_threads", "chat_messages", "canvas_boards", "canvas_notes", "tool_capability_overrides",
 	}
 	for _, section := range requiredSections {
 		if _, ok := doc.Entities[section]; !ok {
 			t.Fatalf("full_backup missing required section %q", section)
+		}
+		if !bundleManifestContains(doc.Manifest, section) {
+			t.Fatalf("full_backup manifest missing required section %q", section)
+		}
+		if doc.Checksums[section] == "" {
+			t.Fatalf("full_backup missing checksum for section %q", section)
 		}
 	}
 
@@ -83,6 +91,14 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 		"audit_records":             1,
 		"semantic_idempotency_keys": 1,
 		"autonomy_settings":         1,
+		"model_manifests":           1,
+		"model_registry_status":     1,
+		"model_runtime_loads":       1,
+		"chat_threads":              1,
+		"chat_messages":             1,
+		"canvas_boards":             1,
+		"canvas_notes":              1,
+		"tool_capability_overrides": 1,
 	}
 	for section, want := range expectedExportCounts {
 		if got := doc.EntityCounts[section]; got != want {
@@ -112,6 +128,8 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 			"gateway_invocations", "audit_records",
 			"semantic_idempotency_keys",
 			"evaluation_records", "project_context_records",
+			"model_runtime_loads", "model_registry_status", "model_manifests",
+			"chat_messages", "chat_threads", "canvas_notes", "canvas_boards", "tool_capability_overrides",
 		},
 	})
 	if err != nil {
@@ -166,6 +184,14 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 		"audit_records":             1,
 		"semantic_idempotency_keys": 1,
 		"autonomy_settings":         1,
+		"model_manifests":           1,
+		"model_registry_status":     1,
+		"model_runtime_loads":       1,
+		"chat_threads":              1,
+		"chat_messages":             1,
+		"canvas_boards":             1,
+		"canvas_notes":              1,
+		"tool_capability_overrides": 1,
 	}
 	for section, want := range expectedRestoreCounts {
 		if got := restore.Imported[section]; got != want {
@@ -311,6 +337,34 @@ FROM audit_records WHERE id = ?`, 604).Scan(&auditCategory, &auditAction, &audit
 		t.Fatalf("semantic idempotency action mismatch: got %q", idempotencyAction)
 	}
 
+	var modelStatus string
+	if err := target.DB.QueryRowContext(ctx, `SELECT status FROM model_registry_status WHERE model_id = ?`, "local-chat").Scan(&modelStatus); err != nil {
+		t.Fatalf("query restored model registry status: %v", err)
+	}
+	if modelStatus != "available" {
+		t.Fatalf("model registry status mismatch: got %q", modelStatus)
+	}
+
+	var chatContent string
+	if err := target.DB.QueryRowContext(ctx, `SELECT content FROM chat_messages WHERE id = ?`, 802).Scan(&chatContent); err != nil {
+		t.Fatalf("query restored chat message: %v", err)
+	}
+	if chatContent != "hello restored chat" {
+		t.Fatalf("chat message mismatch: got %q", chatContent)
+	}
+
+	var capabilityStatus string
+	if err := target.DB.QueryRowContext(ctx, `SELECT status FROM tool_capability_overrides WHERE capability_id = ?`, "filesystem.write_file").Scan(&capabilityStatus); err != nil {
+		t.Fatalf("query restored capability override: %v", err)
+	}
+	if capabilityStatus != "approval_only" {
+		t.Fatalf("capability override status mismatch: got %q", capabilityStatus)
+	}
+
+	if verificationState := restore.Verification["schema"]; verificationState != "passed" {
+		t.Fatalf("expected restore verification schema passed, got %#v", verificationState)
+	}
+
 	var ignored string
 	err = target.DB.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, "ui.theme").Scan(&ignored)
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -327,6 +381,15 @@ FROM audit_records WHERE id = ?`, 604).Scan(&auditCategory, &auditAction, &audit
 	if len(secondRestore.Errors) != 0 || secondRestore.RolledBack {
 		t.Fatalf("second restore should be idempotent for immutable sections: result=%+v", secondRestore)
 	}
+}
+
+func bundleManifestContains(manifest []SectionManifest, section string) bool {
+	for _, entry := range manifest {
+		if entry.Name == section {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRestoreBundleContextPacketSnapshotColumns(t *testing.T) {
@@ -657,6 +720,67 @@ func TestRestoreBundleExplicitlyReportsUnsupportedSections(t *testing.T) {
 	}
 }
 
+func TestRestoreBundleIntegrityDetectsMissingCriticalTable(t *testing.T) {
+	ctx := context.Background()
+	dataDir := t.TempDir()
+
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	mustExec(t, ctx, st.DB, `DROP TABLE chat_messages`)
+
+	doc := BundleDoc{
+		Schema:      BundleSchemaVersion,
+		GeneratedAt: 1234,
+		Kind:        "full_backup",
+		Label:       "missing-critical-table",
+		EntityCounts: map[string]int{
+			"chat_messages": 1,
+		},
+		Entities: map[string][]any{
+			"chat_messages": {
+				map[string]any{
+					"id":            1,
+					"thread_id":     1,
+					"role":          "user",
+					"content":       "must not import",
+					"created_at":    100,
+					"metadata_json": `{}`,
+				},
+			},
+		},
+	}
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal bundle doc: %v", err)
+	}
+	filePath := filepath.Join(dataDir, "missing-critical-table.json")
+	if err := os.WriteFile(filePath, raw, 0o644); err != nil {
+		t.Fatalf("write bundle doc: %v", err)
+	}
+
+	svc := New(st.DB, dataDir)
+	result, err := svc.RestoreBundle(ctx, RestoreBundleRequest{FilePath: filePath})
+	if err != nil {
+		t.Fatalf("restore bundle: %v", err)
+	}
+	if len(result.Errors) == 0 {
+		t.Fatalf("expected schema integrity error")
+	}
+	if result.Applied || result.Atomic || result.RolledBack {
+		t.Fatalf("schema validation should fail before transaction, got applied=%t atomic=%t rolledBack=%t", result.Applied, result.Atomic, result.RolledBack)
+	}
+	if got := strings.Join(result.Errors, "\n"); !strings.Contains(got, `critical table "chat_messages" is missing`) {
+		t.Fatalf("missing table error should be deterministic, got %q", got)
+	}
+	if result.Verification["schema"] != "failed" {
+		t.Fatalf("expected verification schema failed, got %#v", result.Verification["schema"])
+	}
+}
+
 func TestRestoreBundleRollsBackOnLateSectionFailure(t *testing.T) {
 	ctx := context.Background()
 	dataDir := t.TempDir()
@@ -912,6 +1036,42 @@ INSERT INTO artifact_refs(
 ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		"aref-1", "file", "file:///tmp/result.txt", "sha256:abc", "workspace-1", "lane-a", `["/tmp/result.txt"]`, "prov-1",
 		`{"id":"prov-1"}`, 1700, `{"kind":"result"}`, "worker-1", "forge_kernel", "sys-123", "corr-123", "trace-123", "audit-123")
+
+	mustExec(t, ctx, db, `
+INSERT INTO model_manifests(
+  id, schema_version, display_name, family, format, backend, model_path, sha256, size_bytes,
+  quantization, context_length, capabilities_json, default_runtime_json, license_json,
+  metadata_json, discovered_at, updated_at
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"local-chat", "forge.model/v1", "Local Chat", "llama", "gguf", "llama_cpp", "model.gguf", "sha-model", 12345,
+		"q4", 4096, `["chat","completion"]`, `{"maxTokens":256}`, `{"name":"unknown"}`,
+		`{"managed":true}`, 2500, 2501)
+	mustExec(t, ctx, db, `
+INSERT INTO model_registry_status(model_id, backend, status, updated_at, last_error, metadata_json)
+VALUES(?,?,?,?,?,?)`,
+		"local-chat", "llama_cpp", "available", 2502, "", `{"verified":true}`)
+	mustExec(t, ctx, db, `
+INSERT INTO model_runtime_loads(
+  id, model_id, backend, status, loaded_at, unloaded_at, endpoint, pid, resource_usage_json, metadata_json
+) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+		801, "local-chat", "llama_cpp", "loaded", 2503, nil, "http://127.0.0.1:8080", 0, `{"vram":0}`, `{"source":"test"}`)
+
+	mustExec(t, ctx, db, `INSERT INTO chat_threads(id, title, created_at, updated_at, dossier_id) VALUES(?,?,?,?,?)`,
+		801, "Restored Chat", 2600, 2601, 701)
+	mustExec(t, ctx, db, `INSERT INTO chat_messages(id, thread_id, role, content, created_at, metadata_json) VALUES(?,?,?,?,?,?)`,
+		802, 801, "user", "hello restored chat", 2602, `{"traceId":"trace-123"}`)
+
+	mustExec(t, ctx, db, `INSERT INTO canvas_boards(id, title, dossier_id, created_at, updated_at) VALUES(?,?,?,?,?)`,
+		803, "Restore Board", 701, 2700, 2701)
+	mustExec(t, ctx, db, `
+INSERT INTO canvas_notes(id, board_id, title, body, x, y, width, height, pinned, color, links_json, created_at, updated_at)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		804, 803, "Restore Note", "canvas state", 10, 20, 260, 180, 1, "blue", `[]`, 2702, 2703)
+
+	mustExec(t, ctx, db, `
+INSERT INTO tool_capability_overrides(capability_id, status, reason, actor, updated_at)
+VALUES(?,?,?,?,?)`,
+		"filesystem.write_file", "approval_only", "backup parity fixture", "operator", 2800)
 }
 
 func mustExec(t *testing.T, ctx context.Context, db *sql.DB, query string, args ...any) {

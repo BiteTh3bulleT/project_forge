@@ -1,0 +1,24 @@
+flowchart TB
+  Operator[Operator Surface / Desktop]
+  Neural[Neural Lane\nIngest + Evidence Admission]
+  Arterial[Arterial Lane\nContext + Reasoning + Planning]
+  Kernel[Kernel / Control Lane\nSemantic Syscalls]
+  Gateway[Gateway\nGoverned Tool Execution]
+  Modelruntime[Modelruntime\nGoverned Inference]
+  Dream[Lymphatic / Dream Mode\nDry-run Maintenance]
+  CFS[Cognitive Filesystem\nSQLite Truth + Evidence]
+  Audit[Audit / Trace / Provenance]
+
+  Operator --> Arterial
+  Neural --> Kernel
+  Arterial --> Kernel
+  Arterial --> Gateway
+  Arterial --> Modelruntime
+  Dream --> Arterial
+  Dream --> Kernel
+  Kernel --> CFS
+  Gateway --> Audit
+  Modelruntime --> Audit
+  Kernel --> Audit
+  CFS --> Arterial
+

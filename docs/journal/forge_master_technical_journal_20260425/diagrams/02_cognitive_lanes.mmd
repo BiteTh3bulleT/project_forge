@@ -1,0 +1,26 @@
+flowchart TB
+  subgraph Neural[Neural Lane]
+    N1[Ingest]
+    N2[Normalize]
+    N3[Classify Evidence]
+  end
+  subgraph Arterial[Arterial Lane]
+    A1[Restore Context]
+    A2[Working Memory]
+    A3[Plan / Respond]
+  end
+  subgraph Lymphatic[Lymphatic Lane]
+    L1[Dream Replay]
+    L2[Repair Proposals]
+    L3[Diagnostics]
+  end
+  subgraph Control[Kernel / Control Lane]
+    C1[Validate]
+    C2[Commit]
+    C3[Audit]
+  end
+  Neural --> Arterial
+  Arterial --> Control
+  Lymphatic --> Arterial
+  Lymphatic --> Control
+

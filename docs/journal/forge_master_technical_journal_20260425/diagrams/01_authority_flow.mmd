@@ -1,0 +1,16 @@
+flowchart LR
+  Proposal[Model / Agent / Dream / Rule Proposal]
+  Syscall[Semantic Syscall Request]
+  Validate[Normalize + Validate + Capability Check]
+  Approval{Approval Required?}
+  Commit[Transactional Commit]
+  Journal[Append Journal Event]
+  Audit[Audit + Trace Linkage]
+  Reject[Deterministic Rejection]
+
+  Proposal --> Syscall --> Validate
+  Validate -->|invalid| Reject --> Audit
+  Validate -->|valid| Approval
+  Approval -->|denied/missing| Reject
+  Approval -->|approved or not needed| Commit --> Journal --> Audit
+

@@ -58,10 +58,17 @@ func TestHandleBackupBundleAuditsCarryCorrelationAndTraceContext(t *testing.T) {
 	restoreCorrelation := "corr-backup-restore"
 	restoreTrace := "trace-backup-restore"
 	restoreWorkspace := "workspace-backup-restore"
+	restoreBody, err := json.Marshal(map[string]any{
+		"filePath": createResp.Bundle.FilePath,
+		"dryRun":   true,
+	})
+	if err != nil {
+		t.Fatalf("encode restore body: %v", err)
+	}
 	restoreReq := httptest.NewRequest(
 		http.MethodPost,
 		"/api/backup/restore?correlationId="+restoreCorrelation+"&traceId="+restoreTrace+"&workspaceId="+restoreWorkspace,
-		strings.NewReader(`{"filePath":"`+createResp.Bundle.FilePath+`","dryRun":true}`),
+		strings.NewReader(string(restoreBody)),
 	)
 	restoreRR := httptest.NewRecorder()
 	srv.handleRestoreBundle(restoreRR, restoreReq)

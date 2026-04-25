@@ -92,7 +92,7 @@ kill_port_listener() {
 # Stop desktop first, then core.
 stop_from_pid_file "desktop" "$DESKTOP_PID_FILE"
 stop_from_pid_file "core" "$CORE_PID_FILE"
-kill_port_listener 5173
+kill_port_listener 1420
 kill_port_listener 18492
 pkill -f "target/debug/forge_desktop" 2>/dev/null || true
 
