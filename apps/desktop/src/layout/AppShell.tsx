@@ -1,41 +1,132 @@
-import type { ApprovalRequest, DashboardSummary, JobDetail, ReviewRecord } from "@forge/shared";
+import type { DashboardSummary } from "@forge/shared";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { CommandBar } from "../components/CommandBar";
-import { api, type CanvasBoardDetail, type ChatThreadDetail, type ForgeArtifact } from "../lib/api";
-import { formatTime } from "../lib/format";
-import { useDesktopShellStore } from "../stores/desktopShellStore";
+import { api } from "../lib/api";
 import { useUiStore } from "../stores/uiStore";
 import { useWorkspaceLayoutStore } from "../stores/workspaceLayoutStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
 
-import { getShellTool, primaryShellTools } from "./shellConfig";
-
-function corePill(core: "online" | "offline" | "unknown") {
-  if (core === "online") return "forge-chip forge-chip--ok";
-  if (core === "offline") return "forge-chip forge-chip--warn";
-  return "forge-chip forge-chip--muted";
-}
-
-function extractJobId(pathname: string) {
-  const match = pathname.match(/^\/jobs\/([^/]+)/);
-  return match?.[1] ?? "";
-}
-
-function formatClock(now: number) {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    month: "short",
-    day: "numeric",
-  }).format(new Date(now));
-}
+import { getShellTool } from "./shellConfig";
 
 type AppShellProps = {
   children: ReactNode;
   isMainWindow: boolean;
 };
+
+type AttentionLevel = "none" | "low" | "medium" | "high";
+type FloatingKind = "inspector" | "snapshot" | "graph" | "memory" | "model" | "diagnostics" | "surfaces";
+
+type FloatingWindow = {
+  id: number;
+  kind: FloatingKind;
+  title: string;
+  pinned: boolean;
+  x: number;
+  y: number;
+};
+
+type NavItem = {
+  label: string;
+  route: string;
+  short: string;
+  mode?: "cognitive" | "metrics";
+};
+
+const navGroups: Array<{ label: string; items: NavItem[] }> = [
+  {
+    label: "Core",
+    items: [
+      { label: "Dashboard", route: "/dashboard", short: "DB", mode: "cognitive" },
+      { label: "Context", route: "/project-context", short: "CX", mode: "cognitive" },
+      { label: "Tasks", route: "/jobs", short: "TS", mode: "cognitive" },
+    ],
+  },
+  {
+    label: "Memory",
+    items: [
+      { label: "Episodes", route: "/memory", short: "EP", mode: "cognitive" },
+      { label: "Insights", route: "/insights", short: "IN", mode: "cognitive" },
+      { label: "Loops", route: "/lineage", short: "LP", mode: "cognitive" },
+    ],
+  },
+  {
+    label: "Models",
+    items: [
+      { label: "Runtime", route: "/models", short: "RT", mode: "cognitive" },
+      { label: "Registry", route: "/models?view=registry", short: "RG", mode: "cognitive" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { label: "Metrics", route: "/dashboard", short: "MX", mode: "metrics" },
+      { label: "Diagnostics", route: "/inspectors", short: "DG", mode: "metrics" },
+      { label: "Logs", route: "/events", short: "LG", mode: "metrics" },
+    ],
+  },
+  {
+    label: "Workspace",
+    items: [
+      { label: "Files", route: "/workbench", short: "FL", mode: "cognitive" },
+      { label: "Layouts", route: "/layouts", short: "LY", mode: "cognitive" },
+    ],
+  },
+];
+
+const surfaceDirectory: NavItem[] = [
+  { label: "Chat", route: "/chat", short: "CH" },
+  { label: "Canvas", route: "/canvas", short: "CV" },
+  { label: "Approvals", route: "/approvals", short: "AP" },
+  { label: "Reviews", route: "/reviews", short: "RV" },
+  { label: "Gateway", route: "/gateway", short: "GW" },
+  { label: "Action Lanes", route: "/action-lanes", short: "AL" },
+  { label: "Permissions", route: "/execution-permissions", short: "PR" },
+  { label: "Audit", route: "/audit", short: "AU" },
+  { label: "Policy", route: "/policy", short: "PL" },
+  { label: "Strategies", route: "/strategies", short: "ST" },
+  { label: "Automation", route: "/automation", short: "AM" },
+  { label: "Autonomy", route: "/autonomy", short: "AY" },
+  { label: "Dossiers", route: "/dossiers", short: "DS" },
+  { label: "Retrieval Runs", route: "/retrieval-runs", short: "RR" },
+  { label: "Evaluations", route: "/evaluations", short: "EV" },
+  { label: "Sources", route: "/sources", short: "SC" },
+  { label: "Adapters", route: "/adapters", short: "AD" },
+  { label: "Backup", route: "/backup", short: "BK" },
+  { label: "Release", route: "/release", short: "RL" },
+  { label: "Settings", route: "/settings", short: "SE" },
+  { label: "Command", route: "/command", short: "CM" },
+];
+
+function corePill(core: "online" | "offline" | "unknown") {
+  if (core === "online") return "forge-chip--ok";
+  if (core === "offline") return "forge-chip--warn";
+  return "forge-chip--muted";
+}
+
+function getWorkspaceLabel(workspaceDir: string | null | undefined) {
+  if (!workspaceDir) return "Workspace unavailable";
+  const parts = workspaceDir.split(/[\\/]/).filter(Boolean);
+  return parts.at(-1) ?? workspaceDir;
+}
+
+function attentionLevel(summary: DashboardSummary | null, core: "online" | "offline" | "unknown"): AttentionLevel {
+  if (core === "offline") return "high";
+  const approvals = summary?.approvalsPending ?? 0;
+  const reviews = summary?.reviewsPending ?? 0;
+  const failures = Array.isArray(summary?.recentFailures) ? summary.recentFailures.length : 0;
+  const active = Array.isArray(summary?.activeJobs) ? summary.activeJobs.length : 0;
+  const score = approvals * 2 + reviews + failures * 2 + Math.min(active, 3);
+  if (score <= 0) return "none";
+  if (score <= 2) return "low";
+  if (score <= 5) return "medium";
+  return "high";
+}
+
+function cx(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
+}
 
 export function AppShell(props: AppShellProps) {
   const navigate = useNavigate();
@@ -48,31 +139,17 @@ export function AppShell(props: AppShellProps) {
   const lastErr = useWorkspaceStore((s) => s.lastCoreError);
   const statusLine = useUiStore((s) => s.statusLine);
   const uiMode = useUiStore((s) => s.uiMode);
-  const toggleUiMode = useUiStore((s) => s.toggleUiMode);
-  const activeLayoutId = useWorkspaceLayoutStore((s) => s.activeLayoutId);
-  const layouts = useWorkspaceLayoutStore((s) => s.layouts);
-  const runtimeWindows = useWorkspaceLayoutStore((s) => s.runtimeWindows);
-  const monitors = useWorkspaceLayoutStore((s) => s.monitors);
+  const setUiMode = useUiStore((s) => s.setUiMode);
   const fallbackNotice = useWorkspaceLayoutStore((s) => s.fallbackNotice);
-  const currentWindowLabel = useWorkspaceLayoutStore((s) => s.currentWindowLabel);
-  const activateLayout = useWorkspaceLayoutStore((s) => s.activateLayout);
   const clearFallbackNotice = useWorkspaceLayoutStore((s) => s.clearFallbackNotice);
-
-  const openRoutes = useDesktopShellStore((s) => s.openRoutes);
-  const recentRoutes = useDesktopShellStore((s) => s.recentRoutes);
-  const openRoute = useDesktopShellStore((s) => s.openRoute);
-  const closeRoute = useDesktopShellStore((s) => s.closeRoute);
-  const touchRoute = useDesktopShellStore((s) => s.touchRoute);
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [shellErr, setShellErr] = useState<string | null>(null);
-  const [clockNow, setClockNow] = useState(() => Date.now());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set(["Core"]));
+  const [windows, setWindows] = useState<FloatingWindow[]>([]);
+  const [dragging, setDragging] = useState<{ id: number; dx: number; dy: number } | null>(null);
+  const [windowSeq, setWindowSeq] = useState(1);
   const isMainWindow = props.isMainWindow;
-
-  useEffect(() => {
-    openRoute(pathname);
-    touchRoute(pathname);
-  }, [openRoute, pathname, touchRoute]);
 
   useEffect(() => {
     if (!isMainWindow) return;
@@ -97,128 +174,187 @@ export function AppShell(props: AppShellProps) {
   }, [isMainWindow]);
 
   useEffect(() => {
-    const id = window.setInterval(() => setClockNow(Date.now()), 30000);
-    return () => window.clearInterval(id);
-  }, []);
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      if (event.ctrlKey && event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        switchMode(uiMode === "cognitive" ? "metrics" : "cognitive");
+      }
+      if (event.key === "Escape") {
+        setWindows((items) => items.filter((item) => item.pinned));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [uiMode]);
 
-  const chatFocused = pathname === "/chat";
-  const lockPageScroll = chatFocused;
-  const activeLayout = layouts.find((layout) => layout.id === activeLayoutId) ?? null;
-  const currentWindowRegistration = runtimeWindows.find((item) => item.runtimeLabel === currentWindowLabel) ?? null;
-  const currentMonitor = monitors.find((monitor) => monitor.id === currentWindowRegistration?.monitorId) ?? null;
-  const taskItems = openRoutes.map((route) => ({ route, tool: getShellTool(route) }));
-  const recentItems = recentRoutes
-    .filter((route) => route !== pathname)
-    .slice(0, 4)
-    .map((route) => ({ route, tool: getShellTool(route) }));
-  const summaryActiveJobs = Array.isArray(summary?.activeJobs) ? summary.activeJobs : [];
-  const activeJobCount = summaryActiveJobs.length;
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (event: PointerEvent) => {
+      setWindows((items) =>
+        items.map((item) =>
+          item.id === dragging.id
+            ? {
+                ...item,
+                x: Math.max(96, Math.min(window.innerWidth - 380, event.clientX - dragging.dx)),
+                y: Math.max(72, Math.min(window.innerHeight - 180, event.clientY - dragging.dy)),
+              }
+            : item,
+        ),
+      );
+    };
+    const onUp = () => setDragging(null);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [dragging]);
+
+  function switchMode(nextMode: "cognitive" | "metrics") {
+    setUiMode(nextMode);
+    navigate(nextMode === "metrics" ? "/dashboard" : "/chat");
+  }
+
+  function toggleGroup(label: string) {
+    setExpandedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  }
+
+  function openWindow(kind: FloatingKind, title: string) {
+    setWindows((items) => {
+      const existing = items.find((item) => item.kind === kind);
+      if (existing) {
+        return [...items.filter((item) => item.id !== existing.id), existing];
+      }
+      const next: FloatingWindow = {
+        id: windowSeq,
+        kind,
+        title,
+        pinned: false,
+        x: 128 + (items.length % 3) * 34,
+        y: 112 + (items.length % 3) * 28,
+      };
+      setWindowSeq((value) => value + 1);
+      return [...items, next];
+    });
+  }
+
+  function closeWindow(id: number) {
+    setWindows((items) => items.filter((item) => item.id !== id));
+  }
+
+  function togglePinned(id: number) {
+    setWindows((items) => items.map((item) => (item.id === id ? { ...item, pinned: !item.pinned } : item)));
+  }
+
   const approvalsPending = summary?.approvalsPending ?? 0;
   const reviewsPending = summary?.reviewsPending ?? 0;
-  const attentionCount = approvalsPending + reviewsPending;
+  const recentFailures = Array.isArray(summary?.recentFailures) ? summary.recentFailures : [];
+  const attentionCount = approvalsPending + reviewsPending + recentFailures.length;
+  const level = attentionLevel(summary, core);
+  const workspaceLabel = getWorkspaceLabel(meta?.workspaceDir);
+  const runtimeState = core === "offline" ? "offline" : shellErr ? "degraded" : "online";
+  const pinnedWindows = windows.filter((item) => item.pinned);
+  const floatingWindows = windows.filter((item) => !item.pinned);
 
   return (
     <div className="forge-shell-frame flex h-full min-h-0 flex-col text-forge-ash">
       {isMainWindow ? (
-        <header className="forge-topbar">
-        <div className="flex min-w-0 items-center gap-4">
+        <header className="forge-status-strip">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="forge-shell-brand">
-              FG
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-[11px] font-semibold uppercase tracking-[0.22em] text-forge-mist/55">FORGE Operator Desktop</div>
-              <div className="truncate text-sm text-forge-ash">{meta?.workspaceDir ?? "Workspace metadata unavailable"}</div>
+            <div className="forge-shell-brand h-9 w-9 text-[11px]">FG</div>
+            <div className="hidden min-w-0 sm:block">
+              <div className="truncate text-xs font-semibold text-forge-ash">{workspaceLabel}</div>
+              <div className="truncate text-[10px] uppercase tracking-[0.12em] text-forge-mist/55">{currentTool.label}</div>
             </div>
           </div>
-          {!chatFocused ? (
-            <div className="hidden min-w-0 items-center gap-2 xl:flex">
-              <span className="forge-chip forge-chip--muted px-3 py-1.5 text-[11px]">
-                <span className="mr-2 uppercase tracking-[0.16em] text-forge-mist/55">Surface</span>
-                {currentTool.label}
-              </span>
-              <span className="forge-chip forge-chip--muted px-3 py-1.5 text-[11px]">
-                <span className="mr-2 uppercase tracking-[0.16em] text-forge-mist/55">Layout</span>
-                {activeLayout?.name ?? "none"}
-              </span>
-            </div>
-          ) : null}
-        </div>
-
-        <div className="hidden min-w-0 flex-1 px-4 lg:block">
-          <CommandBar compact />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => navigate("/dashboard")}
-            className="forge-chip forge-chip--muted hidden px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] md:inline-flex"
-          >
-            Dashboard
-          </button>
-          <select
-            className="hidden forge-chip forge-chip--muted px-3 py-1.5 text-[11px] text-forge-mist outline-none lg:block"
-            value={activeLayoutId ?? ""}
-            onChange={(e) => void activateLayout(e.target.value)}
-          >
-            {layouts.map((layout) => (
-              <option key={layout.id} value={layout.id}>
-                {layout.name}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => navigate("/layouts")}
-            className="forge-chip forge-chip--muted hidden px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] md:inline-flex"
-          >
-            Layouts
-          </button>
-          <span className={["forge-chip", attentionCount > 0 ? "forge-chip--warn" : "forge-chip--muted", "text-[10px] font-semibold uppercase tracking-[0.16em]"].join(" ")}>
-            Attention {attentionCount}
-          </span>
-          <span className={["forge-chip", corePill(core), "text-[10px] font-semibold uppercase tracking-[0.16em]"].join(" ")}>
-            Core {core === "online" ? "online" : core === "offline" ? "offline" : "checking"}
-          </span>
-          <button
-            type="button"
-            onClick={() => toggleUiMode()}
-            className="forge-chip forge-chip--muted hidden px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] md:inline-flex"
-          >
-            {uiMode === "guided" ? "Guided" : "Pro"}
-          </button>
-          <div className="forge-chip forge-chip--muted hidden px-3 py-1.5 text-[11px] md:block">{formatClock(clockNow)}</div>
-        </div>
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-2 overflow-x-auto">
+            <span className={cx("forge-chip px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]", corePill(core))}>
+              Core: {core === "online" ? "online" : core === "offline" ? "offline" : "checking"}
+            </span>
+            <span className={cx("forge-chip px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]", runtimeState === "degraded" ? "forge-chip--warn" : "forge-chip--muted")}>
+              Runtime: {runtimeState}
+            </span>
+            <button
+              type="button"
+              onClick={() => openWindow("diagnostics", "Attention")}
+              className={cx("forge-chip px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]", level === "none" ? "forge-chip--muted" : level === "high" ? "forge-chip--warn" : "forge-chip--info")}
+            >
+              Queue: {level === "none" ? "clear" : `attention ${attentionCount}`}
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode(uiMode === "cognitive" ? "metrics" : "cognitive")}
+              className="forge-chip forge-chip--accent px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+              title="Ctrl+M"
+            >
+              Mode: {uiMode}
+            </button>
+          </div>
         </header>
       ) : null}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {!chatFocused ? (
-          <aside className="forge-dock">
-            <div className="flex flex-1 flex-col items-center gap-2 py-3">
-              {primaryShellTools.map((tool) => {
-                const active = pathname === tool.route || pathname.startsWith(`${tool.route}/`);
-                return (
+        <aside className="forge-category-rail">
+          <div className="px-3 py-3">
+            <CommandBar compact />
+          </div>
+          <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-3">
+            {navGroups.map((group) => {
+              const expanded = expandedGroups.has(group.label);
+              const groupActive = group.items.some((item) => pathname === item.route || pathname.startsWith(`${item.route}/`));
+              return (
+                <section key={group.label} className="forge-nav-group">
                   <button
-                    key={tool.id}
                     type="button"
-                    onClick={() => navigate(tool.route)}
-                    className={["forge-dock__item", active ? "forge-dock__item--active" : ""].join(" ")}
-                    title={`${tool.label} · ${tool.description}`}
-                    aria-label={tool.label}
+                    onClick={() => toggleGroup(group.label)}
+                    className={cx("forge-nav-group__trigger", groupActive && "forge-nav-group__trigger--active")}
+                    aria-expanded={expanded}
                   >
-                    <span className="forge-dock__glyph">{tool.shortLabel}</span>
-                    <span className="forge-dock__label">{tool.label}</span>
+                    <span>{group.label}</span>
+                    <span>{expanded ? "-" : "+"}</span>
                   </button>
-                );
-              })}
-            </div>
-            <div className="border-t border-white/10 p-3 text-[10px] leading-relaxed text-forge-mist/60">
-              {shellErr ? shellErr : statusLine || "Workspace idle."}
-            </div>
-          </aside>
-        ) : null}
+                  {expanded ? (
+                    <div className="mt-1 space-y-1">
+                      {group.items.map((item) => {
+                        const active = pathname === item.route || pathname.startsWith(`${item.route}/`);
+                        return (
+                          <button
+                            key={`${group.label}-${item.label}`}
+                            type="button"
+                            onClick={() => {
+                              if (item.mode) setUiMode(item.mode);
+                              navigate(item.route);
+                            }}
+                            className={cx("forge-nav-item", active && "forge-nav-item--active")}
+                            aria-current={active ? "page" : undefined}
+                          >
+                            <span className="forge-nav-item__short">{item.short}</span>
+                            <span className="min-w-0 truncate">{item.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })}
+          </nav>
+          <div className="border-t border-white/10 p-2">
+            <button type="button" onClick={() => openWindow("surfaces", "Surface Directory")} className="forge-nav-item w-full">
+              <span className="forge-nav-item__short">··</span>
+              <span>More</span>
+            </button>
+          </div>
+        </aside>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {fallbackNotice ? (
@@ -231,421 +367,199 @@ export function AppShell(props: AppShellProps) {
               </div>
             </div>
           ) : null}
-          <div className="forge-chat-toolbar backdrop-blur-md lg:hidden">
-            <CommandBar compact />
-          </div>
 
-          {!chatFocused ? (
-            <div className="forge-taskstrip">
-              <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto pb-1">
-                {taskItems.map(({ route, tool }) => {
-                  const active = route === pathname;
-                  return (
-                    <div key={route} className={["forge-task", active ? "forge-task--active" : ""].join(" ")}>
-                      <button type="button" onClick={() => navigate(route)} className="min-w-0 flex-1 truncate text-left">
-                        <div className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-forge-mist/55">{tool.label}</div>
-                        <div className="truncate text-sm text-forge-ash">{describeRoute(route)}</div>
-                      </button>
-                      {taskItems.length > 1 ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            closeRoute(route);
-                            if (route === pathname) {
-                              const fallback = taskItems.find((item) => item.route !== route)?.route ?? "/chat";
-                              navigate(fallback);
-                            }
-                          }}
-                          className="rounded-full border border-transparent px-2 py-1 text-[10px] text-forge-mist/60 transition hover:border-white/10 hover:text-forge-ash"
-                          aria-label={`Close ${tool.label}`}
-                        >
-                          x
-                        </button>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="hidden items-center gap-2 xl:flex">
-                <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] text-forge-mist">
-                  {activeJobCount} active jobs
-                </span>
-                <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] text-forge-mist">
-                  {attentionCount} attention items
-                </span>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(74,99,255,0.09),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0))]">
+          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(74,99,255,0.08),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0))]">
             <main className="forge-desktop-surface">
-              <div className="forge-window-frame">
-                {!chatFocused ? (
-                  <div className="forge-window-frame__head">
-                    <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-forge-mist/55">{currentTool.label}</div>
-                      <div className="mt-1 text-sm text-forge-mist/80">{currentTool.description}</div>
+              <div className="forge-window-frame forge-window-frame--focus">
+                <div className="forge-focus-head">
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist/55">
+                      {uiMode === "metrics" ? "System Metrics" : "Cognitive State"}
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-forge-mist/75">
-                      <span className="rounded-full border border-white/10 bg-black/25 px-2.5 py-1">
-                        {currentMonitor?.name ?? (currentMonitor ? `display ${currentMonitor.ordinal + 1}` : "display unknown")}
-                      </span>
-                      {lastErr && core === "offline" ? <span className="rounded-full border border-forge-ember/25 bg-forge-ember/10 px-2.5 py-1 text-forge-emberSoft">{lastErr}</span> : null}
-                    </div>
+                    <div className="mt-1 truncate text-sm font-semibold text-forge-ash">{currentTool.label}</div>
                   </div>
-                ) : null}
-                <div
-                  className={
-                    lockPageScroll
-                      ? "min-h-0 flex flex-1 overflow-hidden p-3 sm:p-4"
-                      : "min-h-0 flex-1 overflow-auto px-4 py-4 sm:px-5 lg:px-6"
-                  }
-                >
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {level !== "none" ? (
+                      <button type="button" onClick={() => openWindow("diagnostics", "Attention")} className="forge-chip forge-chip--warn px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
+                        Attention {attentionCount}
+                      </button>
+                    ) : null}
+                    <button type="button" onClick={() => openWindow("inspector", "Inspector")} className="forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
+                      Inspector
+                    </button>
+                    <button type="button" onClick={() => openWindow("snapshot", "Restore Snapshot")} className="forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
+                      Snapshot
+                    </button>
+                  </div>
+                </div>
+                <div className={pathname === "/chat" ? "min-h-0 flex flex-1 overflow-hidden p-3 sm:p-4" : "min-h-0 flex-1 overflow-auto px-4 py-4 sm:px-5 lg:px-6"}>
                   {props.children}
                 </div>
               </div>
             </main>
 
-            {!chatFocused ? (
-              <ShellContextPanel
-                pathname={pathname}
-                search={location.search}
-                summary={summary}
-                statusLine={statusLine}
-                recentItems={recentItems}
-                activeLayoutName={activeLayout?.name ?? null}
-                runtimeWindows={runtimeWindows}
-                monitors={monitors}
-              />
+            {pinnedWindows.length > 0 ? (
+              <aside className="forge-pinned-panel">
+                {pinnedWindows.map((item) => (
+                  <FloatingContent
+                    key={item.id}
+                    item={item}
+                    summary={summary}
+                    pathname={pathname}
+                    statusLine={statusLine}
+                    lastErr={lastErr}
+                    onClose={() => closeWindow(item.id)}
+                    onPin={() => togglePinned(item.id)}
+                  />
+                ))}
+              </aside>
             ) : null}
           </div>
         </div>
       </div>
+
+      {floatingWindows.map((item) => (
+        <div key={item.id} className="forge-floating-window" style={{ left: item.x, top: item.y }}>
+          <FloatingContent
+            item={item}
+            summary={summary}
+            pathname={pathname}
+            statusLine={statusLine}
+            lastErr={lastErr}
+            onClose={() => closeWindow(item.id)}
+            onPin={() => togglePinned(item.id)}
+            onDragStart={(clientX, clientY) => setDragging({ id: item.id, dx: clientX - item.x, dy: clientY - item.y })}
+          />
+        </div>
+      ))}
     </div>
   );
 }
 
-function describeRoute(route: string) {
-  if (route.startsWith("/jobs/")) return `Run ${route.replace("/jobs/", "")}`;
-  const tool = getShellTool(route);
-  return tool.primary ? tool.label : route;
-}
-
-function ShellContextPanel(props: {
-  pathname: string;
-  search: string;
+function FloatingContent(props: {
+  item: FloatingWindow;
   summary: DashboardSummary | null;
+  pathname: string;
   statusLine: string;
-  recentItems: Array<{ route: string; tool: ReturnType<typeof getShellTool> }>;
-  activeLayoutName: string | null;
-  runtimeWindows: Array<{ runtimeLabel: string; title: string; currentRoute: string; monitorId: string | null; isFocused: boolean }>;
-  monitors: Array<{ id: string; ordinal: number; name: string | null }>;
+  lastErr: string | null;
+  onClose: () => void;
+  onPin: () => void;
+  onDragStart?: (clientX: number, clientY: number) => void;
 }) {
   const navigate = useNavigate();
-  const params = useMemo(() => new URLSearchParams(props.search), [props.search]);
-  const [chatThread, setChatThread] = useState<ChatThreadDetail | null>(null);
-  const [board, setBoard] = useState<CanvasBoardDetail | null>(null);
-  const [artifact, setArtifact] = useState<ForgeArtifact | null>(null);
-  const [jobDetail, setJobDetail] = useState<JobDetail | null>(null);
-  const [dossier, setDossier] = useState<{ id: number; name: string; description: string; recentJobs: Array<{ id: string; title: string }> } | null>(null);
-  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
-  const [reviews, setReviews] = useState<ReviewRecord[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const threadMessages = Array.isArray(chatThread?.messages) ? chatThread.messages : [];
-  const boardNotes = Array.isArray(board?.notes) ? board.notes : [];
-  const dossierRecentJobs = Array.isArray(dossier?.recentJobs) ? dossier.recentJobs : [];
-  const jobEvents = Array.isArray(jobDetail?.events) ? jobDetail.events : [];
-  const summaryRecentFailures = Array.isArray(props.summary?.recentFailures) ? props.summary.recentFailures : [];
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      setLoading(true);
-      setErr(null);
-      setChatThread(null);
-      setBoard(null);
-      setArtifact(null);
-      setJobDetail(null);
-      setDossier(null);
-      try {
-        const tasks: Promise<void>[] = [];
-        if (props.pathname === "/chat") {
-          const threadId = Number(params.get("threadId"));
-          if (Number.isFinite(threadId) && threadId > 0) {
-            tasks.push(
-              api.chat.threads.get(threadId).then((data) => {
-                if (cancelled) return;
-                setChatThread({
-                  ...data,
-                  messages: Array.isArray(data.messages) ? data.messages : [],
-                });
-              }),
-            );
-          }
-        }
-        if (props.pathname === "/canvas") {
-          const boardId = Number(params.get("boardId"));
-          if (Number.isFinite(boardId) && boardId > 0) {
-            tasks.push(
-              api.canvas.boards.get(boardId).then((data) => {
-                if (cancelled) return;
-                setBoard({
-                  ...data,
-                  notes: Array.isArray(data.notes) ? data.notes : [],
-                });
-              }),
-            );
-          }
-        }
-        if (props.pathname === "/workbench") {
-          const artifactId = Number(params.get("artifactId"));
-          const jobId = params.get("jobId") ?? "";
-          if (Number.isFinite(artifactId) && artifactId > 0) {
-            tasks.push(api.artifacts.get(artifactId).then((data) => void (!cancelled && setArtifact(data))));
-          }
-          if (jobId.trim()) {
-            tasks.push(api.jobs.detail(jobId.trim(), 0).then((data) => void (!cancelled && setJobDetail(data))));
-          }
-        }
-        if (props.pathname.startsWith("/jobs/")) {
-          const jobId = extractJobId(props.pathname);
-          if (jobId) {
-            tasks.push(api.jobs.detail(jobId, 0).then((data) => void (!cancelled && setJobDetail(data))));
-          }
-        }
-        if (props.pathname === "/dossiers") {
-          const dossierId = Number(params.get("dossierId"));
-          if (Number.isFinite(dossierId) && dossierId > 0) {
-            tasks.push(
-              api.dossiers.detail(dossierId).then((data) => {
-                if (cancelled) return;
-                setDossier({
-                  id: data.detail.dossier.id,
-                  name: data.detail.dossier.name,
-                  description: data.detail.dossier.description || "",
-                  recentJobs: Array.isArray(data.detail.recentJobs) ? data.detail.recentJobs.slice(0, 3).map((job) => ({ id: job.jobId, title: job.title })) : [],
-                });
-              }),
-            );
-          }
-        }
-        if (props.pathname === "/approvals") {
-          tasks.push(api.approvals.list("pending", 8).then((data) => void (!cancelled && setApprovals(Array.isArray(data.approvals) ? data.approvals : []))));
-        }
-        if (props.pathname === "/reviews") {
-          tasks.push(api.reviews.list({ status: "pending", limit: 8 }).then((data) => void (!cancelled && setReviews(Array.isArray(data.reviews) ? data.reviews : []))));
-        }
-        await Promise.all(tasks);
-      } catch (e) {
-        if (!cancelled) setErr(e instanceof Error ? e.message : String(e));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [params, props.pathname]);
+  const activeJobs = Array.isArray(props.summary?.activeJobs) ? props.summary.activeJobs : [];
+  const recentFailures = Array.isArray(props.summary?.recentFailures) ? props.summary.recentFailures : [];
+  const recentImports = Array.isArray(props.summary?.recentImports) ? props.summary.recentImports : [];
 
   return (
-    <aside className="forge-context-panel">
-      <section className="forge-context-card">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forge-mist/45">Current Context</div>
-        <div className="mt-2 text-sm font-semibold text-forge-ash">{getShellTool(props.pathname).label}</div>
-        <div className="mt-1 text-[12px] leading-relaxed text-forge-mist/78">{getInspectorSummary(props.pathname)}</div>
-        <div className="mt-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-forge-mist/80">{props.statusLine || "No operator note recorded."}</div>
-      </section>
-
-      {loading ? <section className="forge-context-card text-sm text-forge-mist">Loading context…</section> : null}
-      {err ? <section className="forge-context-card text-sm text-forge-emberSoft">{err}</section> : null}
-
-      {chatThread ? (
-        <section className="forge-context-card">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forge-mist/45">Active Thread</div>
-          <div className="mt-2 text-sm font-semibold text-forge-ash">{chatThread.title}</div>
-          <div className="mt-2 text-[11px] text-forge-mist/78">{threadMessages.length} messages · updated {formatTime(chatThread.updatedAtMs)}</div>
-          {chatThread.dossierId ? <div className="mt-1 text-[11px] text-forge-mist/78">Dossier {chatThread.dossierId}</div> : null}
-        </section>
-      ) : null}
-
-      {board ? (
-        <section className="forge-context-card">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forge-mist/45">Active Board</div>
-          <div className="mt-2 text-sm font-semibold text-forge-ash">{board.title}</div>
-          <div className="mt-2 text-[11px] text-forge-mist/78">{boardNotes.length} notes · updated {formatTime(board.updatedAtMs)}</div>
-          <div className="mt-3 space-y-2">
-            {boardNotes.slice(0, 3).map((note) => (
-              <div key={note.id} className="rounded-xl border border-white/10 bg-black/25 p-2 text-[11px] text-forge-mist/80">
-                <div className="font-semibold text-forge-ash">{note.title}</div>
-                <div className="mt-1 line-clamp-3">{note.body || "No note body."}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {dossier ? (
-        <section className="forge-context-card">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forge-mist/45">Selected Dossier</div>
-          <div className="mt-2 text-sm font-semibold text-forge-ash">{dossier.name}</div>
-          <div className="mt-2 text-[11px] leading-relaxed text-forge-mist/78">{dossier.description || "No dossier description."}</div>
-          <div className="mt-3 space-y-2">
-            {dossierRecentJobs.length === 0 ? (
-              <div className="text-[11px] text-forge-mist/78">No recent jobs linked.</div>
-            ) : (
-              dossierRecentJobs.map((job) => (
-                <button
-                  key={job.id}
-                  type="button"
-                  onClick={() => navigate(`/jobs/${encodeURIComponent(job.id)}`)}
-                  className="w-full rounded-xl border border-white/10 bg-black/25 p-2 text-left text-[11px] text-forge-mist transition hover:border-white/20 hover:text-forge-ash"
-                >
-                  <div className="font-semibold text-forge-ash">{job.title}</div>
-                  <div className="mt-1">{job.id}</div>
-                </button>
-              ))
-            )}
-          </div>
-        </section>
-      ) : null}
-
-      {artifact ? (
-        <section className="forge-context-card">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forge-mist/45">Selected Artifact</div>
-          <div className="mt-2 text-sm font-semibold text-forge-ash">#{artifact.id} · {artifact.title}</div>
-          <div className="mt-2 break-all text-[11px] text-forge-mist/78">{artifact.filePath}</div>
-          <div className="mt-1 text-[11px] text-forge-mist/78">{artifact.mimeType || "unknown MIME"}</div>
-          {artifact.jobId ? (
-            <button type="button" className="mt-3 forge-inline-link" onClick={() => navigate(`/jobs/${encodeURIComponent(artifact.jobId as string)}`)}>
-              Open source job
-            </button>
-          ) : null}
-        </section>
-      ) : null}
-
-      {jobDetail ? (
-        <section className="forge-context-card">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forge-mist/45">Job Projection</div>
-          <div className="mt-2 text-sm font-semibold text-forge-ash">{jobDetail.job.title}</div>
-          <div className="mt-2 text-[11px] text-forge-mist/78">{jobDetail.job.status} · {jobDetail.job.targetAdapter} · packet {jobDetail.job.taskPacketId ?? "—"}</div>
-          {jobDetail.approvalRequest ? <div className="mt-1 text-[11px] text-forge-emberSoft">Approval {jobDetail.approvalRequest.status}</div> : null}
-          <div className="mt-3 space-y-2">
-            {jobEvents.slice(-3).reverse().map((event) => (
-              <div key={event.id} className="rounded-xl border border-white/10 bg-black/25 p-2 text-[11px] text-forge-mist/80">
-                <div className="font-semibold text-forge-ash">{event.type}</div>
-                <div className="mt-1">{event.message}</div>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {props.pathname === "/approvals" ? (
-        <section className="forge-context-card">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forge-mist/45">Pending Approvals</div>
-          {approvals.length === 0 ? (
-            <div className="mt-2 text-sm text-forge-mist">No pending requests.</div>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {approvals.map((approval) => (
-                <button
-                  key={approval.id}
-                  type="button"
-                  onClick={() => navigate(`/jobs/${encodeURIComponent(approval.jobId)}`)}
-                  className="w-full rounded-xl border border-white/10 bg-black/25 p-2 text-left text-[11px] text-forge-mist transition hover:border-white/20 hover:text-forge-ash"
-                >
-                  <div className="font-semibold text-forge-ash">#{approval.id} · {approval.requestedAction}</div>
-                  <div className="mt-1">{approval.riskClass} · {approval.requestedAdapter}</div>
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-      ) : null}
-
-      {props.pathname === "/reviews" ? (
-        <section className="forge-context-card">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forge-mist/45">Pending Reviews</div>
-          {reviews.length === 0 ? (
-            <div className="mt-2 text-sm text-forge-mist">No pending reviews.</div>
-          ) : (
-            <div className="mt-3 space-y-2">
-              {reviews.map((review) => (
-                <div key={review.id} className="rounded-xl border border-white/10 bg-black/25 p-2 text-[11px] text-forge-mist/80">
-                  <div className="font-semibold text-forge-ash">#{review.id} · {review.targetType}:{review.targetId}</div>
-                  <div className="mt-1 line-clamp-3">{review.summary || "No summary."}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      ) : null}
-
-      <section className="forge-context-card">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forge-mist/45">Workspace State</div>
-        <div className="mt-3 grid gap-2">
-          <MetricRow label="Active layout" value={props.activeLayoutName ?? "none"} />
-          <MetricRow label="Active jobs" value={String(props.summary?.activeJobs?.length ?? 0)} />
-          <MetricRow label="Approvals" value={String(props.summary?.approvalsPending ?? 0)} />
-          <MetricRow label="Reviews" value={String(props.summary?.reviewsPending ?? 0)} />
-          <MetricRow label="Recent failures" value={String(summaryRecentFailures.length)} />
+    <section className={props.item.pinned ? "forge-floating-card forge-floating-card--pinned" : "forge-floating-card"}>
+      <div
+        className="forge-floating-card__head"
+        onPointerDown={(event) => {
+          if (props.item.pinned || !props.onDragStart) return;
+          props.onDragStart(event.clientX, event.clientY);
+        }}
+      >
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist/55">{props.item.kind}</div>
+          <div className="mt-0.5 text-sm font-semibold text-forge-ash">{props.item.title}</div>
         </div>
-      </section>
-
-      <section className="forge-context-card">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forge-mist/45">Workspace Windows</div>
-        <div className="mt-3 space-y-2">
-          {props.runtimeWindows.length === 0 ? (
-            <div className="text-sm text-forge-mist">No window registrations yet.</div>
-          ) : (
-            props.runtimeWindows.map((windowRecord) => {
-              const monitor = props.monitors.find((item) => item.id === windowRecord.monitorId);
-              return (
-                <div key={windowRecord.runtimeLabel} className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-[11px] text-forge-mist/80">
-                  <div className="font-semibold text-forge-ash">{windowRecord.title}</div>
-                  <div className="mt-1">{windowRecord.runtimeLabel}</div>
-                  <div className="mt-1">{windowRecord.currentRoute} · {monitor?.name ?? (monitor ? `display ${monitor.ordinal + 1}` : "display unknown")}</div>
-                  <div className="mt-1">{windowRecord.isFocused ? "focused" : "background"}</div>
-                </div>
-              );
-            })
-          )}
+        <div className="flex gap-1">
+          <button type="button" className="forge-window-btn" onClick={props.onPin}>
+            {props.item.pinned ? "Float" : "Pin"}
+          </button>
+          <button type="button" className="forge-window-btn" onClick={props.onClose}>
+            Close
+          </button>
         </div>
-      </section>
-
-      <section className="forge-context-card">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-forge-mist/45">Recent Surfaces</div>
-        <div className="mt-3 space-y-2">
-          {props.recentItems.length === 0 ? (
-            <div className="text-sm text-forge-mist">No recent surfaces beyond the active tool.</div>
-          ) : (
-            props.recentItems.map(({ route, tool }) => (
+      </div>
+      <div className="space-y-3 p-3 text-sm text-forge-mist">
+        {props.item.kind === "surfaces" ? (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {surfaceDirectory.map((item) => (
               <button
-                key={route}
+                key={item.route}
                 type="button"
-                onClick={() => navigate(route)}
-                className="w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-left text-[11px] text-forge-mist transition hover:border-white/20 hover:text-forge-ash"
+                onClick={() => navigate(item.route)}
+                className="forge-surface-link"
               >
-                <div className="font-semibold text-forge-ash">{tool.label}</div>
-                <div className="mt-1 truncate">{describeRoute(route)}</div>
+                <span className="forge-nav-item__short">{item.short}</span>
+                <span className="truncate">{item.label}</span>
               </button>
-            ))
-          )}
-        </div>
-      </section>
-    </aside>
+            ))}
+          </div>
+        ) : null}
+
+        {props.item.kind === "diagnostics" ? (
+          <>
+            <WindowMetric label="Approvals pending" value={String(props.summary?.approvalsPending ?? 0)} onClick={() => navigate("/approvals")} />
+            <WindowMetric label="Reviews pending" value={String(props.summary?.reviewsPending ?? 0)} onClick={() => navigate("/reviews")} />
+            <WindowMetric label="Recent failures" value={String(recentFailures.length)} onClick={() => navigate("/events")} />
+            {props.lastErr ? <div className="rounded-xl border border-forge-ember/30 bg-forge-ember/10 p-3 text-xs text-forge-emberSoft">{props.lastErr}</div> : null}
+          </>
+        ) : null}
+
+        {props.item.kind === "inspector" ? (
+          <>
+            <div className="rounded-xl bg-black/20 p-3 text-xs leading-5">
+              <div className="font-semibold text-forge-ash">{getShellTool(props.pathname).label}</div>
+              <div className="mt-1">{getInspectorSummary(props.pathname)}</div>
+              <div className="mt-2 text-forge-mist/70">{props.statusLine || "No operator note recorded."}</div>
+            </div>
+            <WindowMetric label="Active jobs" value={String(activeJobs.length)} onClick={() => navigate("/jobs")} />
+            <WindowMetric label="Recent imports" value={String(recentImports.length)} onClick={() => navigate("/workbench")} />
+          </>
+        ) : null}
+
+        {props.item.kind === "snapshot" ? (
+          <>
+            <div className="rounded-xl bg-black/20 p-3 text-xs leading-5">
+              Restore scoring is header-first: the default view keeps full graph expansion out of the focus path until requested.
+            </div>
+            <button type="button" className="forge-window-action" onClick={() => navigate("/inspectors")}>
+              Open snapshot inspector
+            </button>
+            <button type="button" className="forge-window-action" onClick={() => navigate("/project-context")}>
+              Open context compiler
+            </button>
+          </>
+        ) : null}
+
+        {props.item.kind === "graph" || props.item.kind === "memory" ? (
+          <>
+            <button type="button" className="forge-window-action" onClick={() => navigate("/memory")}>
+              Recent episodes
+            </button>
+            <button type="button" className="forge-window-action" onClick={() => navigate("/insights")}>
+              Important insights
+            </button>
+            <button type="button" className="forge-window-action" onClick={() => navigate("/lineage")}>
+              Active loops
+            </button>
+          </>
+        ) : null}
+
+        {props.item.kind === "model" ? (
+          <>
+            <button type="button" className="forge-window-action" onClick={() => navigate("/models")}>
+              Runtime status
+            </button>
+            <button type="button" className="forge-window-action" onClick={() => navigate("/models?view=registry")}>
+              Model registry
+            </button>
+          </>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
-function MetricRow(props: { label: string; value: string }) {
+function WindowMetric(props: { label: string; value: string; onClick: () => void }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[11px] text-forge-mist/80">
+    <button type="button" onClick={props.onClick} className="forge-context-row w-full">
       <span>{props.label}</span>
       <span className="font-semibold text-forge-ash">{props.value}</span>
-    </div>
+    </button>
   );
 }
 
@@ -659,5 +573,5 @@ function getInspectorSummary(pathname: string) {
   if (pathname === "/approvals") return "Pending risk gates and recorded decisions. No silent escalation.";
   if (pathname === "/autonomy") return "Dream-state telemetry, autonomy intents, policy decisions, budgets, and charter boundaries.";
   if (pathname === "/settings") return "Local model, retrieval, and workspace configuration persisted by the core.";
-  return "Workspace surface details and recent operator context.";
+  return "Focused FORGE surface. Details are available on demand instead of occupying permanent screen space.";
 }

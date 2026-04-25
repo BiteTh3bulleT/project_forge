@@ -9,20 +9,20 @@ import (
 )
 
 type Record struct {
-	ID                    int64   `json:"id"`
-	CreatedAtMs           int64   `json:"createdAtMs"`
-	JobID                 string  `json:"jobId"`
-	DossierID             *int64  `json:"dossierId"`
-	Success               bool    `json:"success"`
-	QualityRating         int     `json:"qualityRating"`
-	UsefulnessRating      int     `json:"usefulnessRating"`
-	CorrectnessConfidence int     `json:"correctnessConfidence"`
-	PacketQualityRating   int     `json:"packetQualityRating"`
-	AdapterSuitability    int     `json:"adapterSuitability"`
-	RetryRecommended      bool    `json:"retryRecommended"`
-	InfluenceRouting      bool    `json:"influenceRouting"`
-	Notes                 string  `json:"notes"`
-	Scorer                string  `json:"scorer"`
+	ID                    int64  `json:"id"`
+	CreatedAtMs           int64  `json:"createdAtMs"`
+	JobID                 string `json:"jobId"`
+	DossierID             *int64 `json:"dossierId"`
+	Success               bool   `json:"success"`
+	QualityRating         int    `json:"qualityRating"`
+	UsefulnessRating      int    `json:"usefulnessRating"`
+	CorrectnessConfidence int    `json:"correctnessConfidence"`
+	PacketQualityRating   int    `json:"packetQualityRating"`
+	AdapterSuitability    int    `json:"adapterSuitability"`
+	RetryRecommended      bool   `json:"retryRecommended"`
+	InfluenceRouting      bool   `json:"influenceRouting"`
+	Notes                 string `json:"notes"`
+	Scorer                string `json:"scorer"`
 }
 
 type SaveRequest struct {
@@ -41,13 +41,13 @@ type SaveRequest struct {
 }
 
 type AdapterMetric struct {
-	Adapter              string  `json:"adapter"`
-	Runs                 int     `json:"runs"`
-	SuccessRate          float64 `json:"successRate"`
-	AvgQuality           float64 `json:"avgQuality"`
-	AvgUsefulness        float64 `json:"avgUsefulness"`
+	Adapter               string  `json:"adapter"`
+	Runs                  int     `json:"runs"`
+	SuccessRate           float64 `json:"successRate"`
+	AvgQuality            float64 `json:"avgQuality"`
+	AvgUsefulness         float64 `json:"avgUsefulness"`
 	AvgAdapterSuitability float64 `json:"avgAdapterSuitability"`
-	RetryRate            float64 `json:"retryRate"`
+	RetryRate             float64 `json:"retryRate"`
 }
 
 type Service struct {

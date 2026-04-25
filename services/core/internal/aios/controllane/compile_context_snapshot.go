@@ -97,9 +97,14 @@ type compiledContextSnapshotDelta struct {
 }
 
 type compileContextSnapshotOptions struct {
-	PersistSnapshot    bool
-	RenderSnapshotCard bool
-	SnapshotKind       string
+	PersistSnapshot                   bool
+	RenderSnapshotCard                bool
+	SnapshotKind                      string
+	RestoreMode                       bool
+	RestoreCandidateLimit             int
+	RestoreMinScore                   float64
+	RequireFreshCompileBelowThreshold bool
+	ExpandRestoreGraph                bool
 }
 
 type compiledSnapshotBuildInput struct {
@@ -535,6 +540,24 @@ func mergeCompileContextOptions(payload map[string]any) compileContextSnapshotOp
 		}
 		if snapshotKind := readString(src, "snapshotKind"); snapshotKind != "" {
 			opts.SnapshotKind = snapshotKind
+		}
+		if snapshotKind := readString(src, "restoreSnapshotKind"); snapshotKind != "" {
+			opts.SnapshotKind = snapshotKind
+		}
+		if v, present, valid := readOptionalBool(src, "restoreMode"); present && valid {
+			opts.RestoreMode = v
+		}
+		if v := readInt(src, "restoreCandidateLimit", 0); v > 0 {
+			opts.RestoreCandidateLimit = v
+		}
+		if v := readFloat(src, "restoreMinScore", 0); v > 0 {
+			opts.RestoreMinScore = clamp01(v)
+		}
+		if v, present, valid := readOptionalBool(src, "requireFreshCompileBelowThreshold"); present && valid {
+			opts.RequireFreshCompileBelowThreshold = v
+		}
+		if v, present, valid := readOptionalBool(src, "expandRestoreGraph"); present && valid {
+			opts.ExpandRestoreGraph = v
 		}
 	}
 	apply(payload)

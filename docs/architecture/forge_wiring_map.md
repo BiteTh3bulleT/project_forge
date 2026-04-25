@@ -1,7 +1,7 @@
 # FORGE Wiring Map
 
-Date: 2026-04-21.
-Scope: one-page map of how v1 runtime is governed by v2 AI-OS interfaces.
+Date: 2026-04-24.
+Scope: one-page map of authoritative FORGE runtime wiring after cutover.
 Companion to `docs/status/authoritative_paths.md` and
 `docs/architecture/v1_v2_unification_plan.md`.
 
@@ -20,7 +20,7 @@ Companion to `docs/status/authoritative_paths.md` and
 client -> /api/gateway/invoke
       -> gateway.Service.Execute / ExecuteTool
          -> tool_capability_registry (status + risk)
-         -> tool_policy (disabled / approval_only / active / stubbed / future_iris)
+         -> tool_policy (active / approval_only / explicit disabled or override states)
          -> permissions.Service (workspace, capability scope)
          -> approvals.Service  (request/decision, if gated)
          -> adapter invoke     (bounded worker)
@@ -46,9 +46,9 @@ caller (API handler, rule agent, autonomy runner, librarian cell)
          -> audit.Service sink
 ```
 
-Side door: legacy v1 `/api/memory/*` observation APIs still exist but do
-not produce semantic syscall journal entries. Treated as legacy boundary
-until migration; not used by rule agents or autonomy.
+Retired side door: `/api/memory/*` observation mutation endpoints still
+exist only to return `410 Gone` and write audit evidence. Read-only memory
+inspection remains available; mutation must use syscall-native paths.
 
 ## Autonomy path (self-initiated actions)
 

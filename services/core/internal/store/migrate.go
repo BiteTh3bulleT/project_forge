@@ -1285,6 +1285,78 @@ CREATE TABLE IF NOT EXISTS canvas_notes (
 
 CREATE INDEX IF NOT EXISTS idx_canvas_notes_board ON canvas_notes(board_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_canvas_boards_updated ON canvas_boards(updated_at DESC);
+
+-- P0 safety: persisted tool capability status overrides. Registry loads these
+-- on startup so operator UpdateStatus calls survive restart.
+CREATE TABLE IF NOT EXISTS tool_capability_overrides (
+  capability_id TEXT PRIMARY KEY,
+  status TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  actor TEXT NOT NULL DEFAULT 'operator',
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS secrets_vault (
+  name TEXT PRIMARY KEY,
+  ciphertext TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  owner TEXT NOT NULL DEFAULT 'gateway'
+);
+
+CREATE TABLE IF NOT EXISTS identity_tokens (
+  token_id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  revoked_at INTEGER NOT NULL DEFAULT 0,
+  owner TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS feature_flags (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  actor TEXT NOT NULL DEFAULT 'operator'
+);
+
+CREATE TABLE IF NOT EXISTS alert_rules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  expression TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'active',
+  silenced_until INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS scheduled_tasks (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+-- P0 safety: audit immutability. The triggers below block any UPDATE or DELETE
+-- on audit_records so a compromised process with DB access cannot rewrite
+-- history. Test fixtures that need to wipe audit state should drop the table
+-- and re-run migrate.
+CREATE TRIGGER IF NOT EXISTS audit_records_block_update
+BEFORE UPDATE ON audit_records
+BEGIN
+  SELECT RAISE(ABORT, 'audit_records is append-only');
+END;
+CREATE TRIGGER IF NOT EXISTS audit_records_block_delete
+BEFORE DELETE ON audit_records
+BEGIN
+  SELECT RAISE(ABORT, 'audit_records is append-only');
+END;
+
+CREATE INDEX IF NOT EXISTS idx_tool_capability_overrides_updated ON tool_capability_overrides(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_identity_tokens_status ON identity_tokens(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_alert_rules_status ON alert_rules(status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_status ON scheduled_tasks(status, updated_at DESC);
 `
 
 func migrate(db *sql.DB) error {
@@ -1293,6 +1365,59 @@ func migrate(db *sql.DB) error {
 	}
 	if err := ensureContextPacketSnapshotColumns(db); err != nil {
 		return fmt.Errorf("migrate context_packet_snapshots: %w", err)
+	}
+	if err := ensureApprovalRequestExpiryColumns(db); err != nil {
+		return fmt.Errorf("migrate approval_requests expiry: %w", err)
+	}
+	return nil
+}
+
+// ensureApprovalRequestExpiryColumns adds expires_at and auto-expired metadata
+// to approval_requests for existing DBs so P0 safety fixes apply without a wipe.
+func ensureApprovalRequestExpiryColumns(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(approval_requests)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	existing := make(map[string]struct{})
+	for rows.Next() {
+		var cid int
+		var name string
+		var ctype string
+		var notnull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return err
+		}
+		existing[name] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	additions := []struct{ name, ddl string }{
+		{name: "expires_at", ddl: "INTEGER NOT NULL DEFAULT 0"},
+		{name: "expired_at", ddl: "INTEGER NOT NULL DEFAULT 0"},
+	}
+	for _, col := range additions {
+		if _, ok := existing[col.name]; ok {
+			continue
+		}
+		if _, err := db.Exec(fmt.Sprintf(
+			"ALTER TABLE approval_requests ADD COLUMN %s %s",
+			col.name, col.ddl,
+		)); err != nil {
+			return err
+		}
+	}
+	// Backfill expires_at for legacy pending rows so the reaper has something to
+	// act on; default TTL is 24 hours from row creation.
+	if _, err := db.Exec(`
+UPDATE approval_requests
+SET expires_at = created_at + (24 * 3600 * 1000)
+WHERE expires_at = 0`); err != nil {
+		return err
 	}
 	return nil
 }

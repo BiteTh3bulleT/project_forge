@@ -51,7 +51,7 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 		"artifacts", "artifact_refs",
 		"memory_notes", "semantic_links", "state_items", "state_versions", "open_loops",
 		"contradiction_records", "supersession_records", "derived_models",
-		"context_packet_snapshots", "provenance_records",
+		"context_packet_snapshots", "semantic_idempotency_keys", "provenance_records",
 		"project_context_records", "evaluation_records", "gateway_invocations", "audit_records",
 		"autonomy_settings",
 		"permission_profiles", "approval_presets", "execution_strategies",
@@ -63,25 +63,26 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 	}
 
 	expectedExportCounts := map[string]int{
-		"dossiers":                1,
-		"dossier_profiles":        1,
-		"task_packets":            1,
-		"project_context_records": 1,
-		"jobs":                    1,
-		"job_status_history":      1,
-		"job_events":              1,
-		"approval_requests":       1,
-		"approval_decisions":      1,
-		"events":                  1,
-		"artifacts":               1,
-		"provenance_records":      1,
-		"journal_events":          1,
-		"memory_notes":            1,
-		"artifact_refs":           1,
-		"evaluation_records":      1,
-		"gateway_invocations":     1,
-		"audit_records":           1,
-		"autonomy_settings":       1,
+		"dossiers":                  1,
+		"dossier_profiles":          1,
+		"task_packets":              1,
+		"project_context_records":   1,
+		"jobs":                      1,
+		"job_status_history":        1,
+		"job_events":                1,
+		"approval_requests":         1,
+		"approval_decisions":        1,
+		"events":                    1,
+		"artifacts":                 1,
+		"provenance_records":        1,
+		"journal_events":            1,
+		"memory_notes":              1,
+		"artifact_refs":             1,
+		"evaluation_records":        1,
+		"gateway_invocations":       1,
+		"audit_records":             1,
+		"semantic_idempotency_keys": 1,
+		"autonomy_settings":         1,
 	}
 	for section, want := range expectedExportCounts {
 		if got := doc.EntityCounts[section]; got != want {
@@ -109,6 +110,7 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 			"memory_notes", "artifact_refs",
 			"events", "autonomy_settings",
 			"gateway_invocations", "audit_records",
+			"semantic_idempotency_keys",
 			"evaluation_records", "project_context_records",
 		},
 	})
@@ -144,25 +146,26 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 	}
 
 	expectedRestoreCounts := map[string]int{
-		"dossiers":                1,
-		"dossier_profiles":        1,
-		"task_packets":            1,
-		"project_context_records": 1,
-		"jobs":                    1,
-		"job_status_history":      1,
-		"job_events":              1,
-		"approval_requests":       1,
-		"approval_decisions":      1,
-		"events":                  1,
-		"artifacts":               1,
-		"provenance_records":      1,
-		"journal_events":          1,
-		"memory_notes":            1,
-		"artifact_refs":           1,
-		"evaluation_records":      1,
-		"gateway_invocations":     1,
-		"audit_records":           1,
-		"autonomy_settings":       1,
+		"dossiers":                  1,
+		"dossier_profiles":          1,
+		"task_packets":              1,
+		"project_context_records":   1,
+		"jobs":                      1,
+		"job_status_history":        1,
+		"job_events":                1,
+		"approval_requests":         1,
+		"approval_decisions":        1,
+		"events":                    1,
+		"artifacts":                 1,
+		"provenance_records":        1,
+		"journal_events":            1,
+		"memory_notes":              1,
+		"artifact_refs":             1,
+		"evaluation_records":        1,
+		"gateway_invocations":       1,
+		"audit_records":             1,
+		"semantic_idempotency_keys": 1,
+		"autonomy_settings":         1,
 	}
 	for section, want := range expectedRestoreCounts {
 		if got := restore.Imported[section]; got != want {
@@ -184,6 +187,13 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 	}
 	if decision != "approved" {
 		t.Fatalf("restored approval decision mismatch: got %q", decision)
+	}
+	var expiresAt, expiredAt int64
+	if err := target.DB.QueryRowContext(ctx, `SELECT expires_at, expired_at FROM approval_requests WHERE id = ?`, 301).Scan(&expiresAt, &expiredAt); err != nil {
+		t.Fatalf("query restored approval expiry: %v", err)
+	}
+	if expiresAt != 1200+3600000 || expiredAt != 0 {
+		t.Fatalf("restored approval expiry mismatch: expires=%d expired=%d", expiresAt, expiredAt)
 	}
 
 	var artifactPath string
@@ -293,10 +303,29 @@ FROM audit_records WHERE id = ?`, 604).Scan(&auditCategory, &auditAction, &audit
 		t.Fatalf("autonomy setting mismatch: got %q", autonomyValue)
 	}
 
+	var idempotencyAction string
+	if err := target.DB.QueryRowContext(ctx, `SELECT action FROM semantic_idempotency_keys WHERE idempotency_key = ?`, "idem-1").Scan(&idempotencyAction); err != nil {
+		t.Fatalf("query restored semantic idempotency key: %v", err)
+	}
+	if idempotencyAction != "CREATE_NOTE" {
+		t.Fatalf("semantic idempotency action mismatch: got %q", idempotencyAction)
+	}
+
 	var ignored string
 	err = target.DB.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, "ui.theme").Scan(&ignored)
 	if !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("expected ui.theme to remain absent after restore, got err=%v value=%q", err, ignored)
+	}
+
+	secondRestore, err := dstSvc.RestoreBundle(ctx, RestoreBundleRequest{
+		FilePath: bundle.FilePath,
+		Sections: []string{"audit_records", "semantic_idempotency_keys"},
+	})
+	if err != nil {
+		t.Fatalf("second restore bundle: %v", err)
+	}
+	if len(secondRestore.Errors) != 0 || secondRestore.RolledBack {
+		t.Fatalf("second restore should be idempotent for immutable sections: result=%+v", secondRestore)
 	}
 }
 
@@ -808,10 +837,10 @@ INSERT INTO evaluation_records(
 	mustExec(t, ctx, db, `
 INSERT INTO approval_requests(
   id, job_id, created_at, status, requested_action, risk_class, requested_adapter,
-  write_intent, scope_snapshot_json, task_packet_id, request_summary
-) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+  write_intent, scope_snapshot_json, task_packet_id, request_summary, expires_at, expired_at
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		301, "job-1", 1200, "approved", "write files", "high", "adapter.x",
-		1, `{"paths":["/tmp/result.txt"]}`, 11, "need approval")
+		1, `{"paths":["/tmp/result.txt"]}`, 11, "need approval", 1200+3600000, 0)
 	mustExec(t, ctx, db, `INSERT INTO approval_decisions(id, request_id, created_at, actor, decision, note) VALUES(?,?,?,?,?,?)`,
 		302, 301, 1201, "operator", "approved", "looks good")
 
@@ -841,6 +870,11 @@ INSERT INTO audit_records(
 ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		604, 2300, "corr-123", "gateway", "tool.completed", "operator", "tool", "tool.backup",
 		"job-1", 603, 301, "medium", "allowed", "tool completed", `{"result":"ok"}`)
+
+	mustExec(t, ctx, db, `
+INSERT INTO semantic_idempotency_keys(idempotency_key, action, result_json, created_at, correlation_id)
+VALUES(?,?,?,?,?)`,
+		"idem-1", "CREATE_NOTE", `{"success":true}`, 2400, "corr-123")
 
 	mustExec(t, ctx, db, `
 INSERT INTO provenance_records(

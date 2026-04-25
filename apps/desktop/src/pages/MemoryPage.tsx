@@ -33,7 +33,7 @@ export function MemoryPage() {
   const [repairDetail, setRepairDetail] = useState<Awaited<ReturnType<typeof api.memory.getRepairRun>>["detail"] | null>(null);
   const [repairBusy, setRepairBusy] = useState(false);
   const [vsaRuns, setVSARuns] = useState<VSAReindexRun[]>([]);
-  const [memoryView, setMemoryView] = useState<"all" | "inspect" | "search" | "maintenance">("all");
+  const [memoryView, setMemoryView] = useState<"all" | "inspect" | "search" | "maintenance">("inspect");
   const [selectedVSARunId, setSelectedVSARunId] = useState<number | null>(null);
   const [vsaRunDetail, setVSARunDetail] = useState<Awaited<ReturnType<typeof api.memory.getVSAReindexRun>>["detail"] | null>(null);
   const [vsaBusy, setVSABusy] = useState(false);
@@ -214,16 +214,16 @@ export function MemoryPage() {
   return (
     <div className="space-y-6">
       <Panel
-        title="Memory Retrieval"
-        subtitle="Hybrid evidence access. Search chunks, inspect observations, and mark usefulness/noise so retrieval quality improves over time."
+        title="Memory"
+        subtitle="Cognitive memory view: recent episodes, important observations, and active maintenance paths. Details stay collapsed until selected."
         actions={
           <div className="flex gap-2">
             <label className="text-[11px] text-forge-mist">
               View
               <select className="forge-input ml-2 px-2 py-1 text-[11px]" value={memoryView} onChange={(e) => setMemoryView(e.target.value as "all" | "inspect" | "search" | "maintenance")}>
-                <option value="all">All</option>
-                <option value="inspect">Inspect observations</option>
+                <option value="inspect">Recent episodes</option>
                 <option value="search">Search chunks</option>
+                <option value="all">All surfaces</option>
                 <option value="maintenance">Maintenance</option>
               </select>
             </label>

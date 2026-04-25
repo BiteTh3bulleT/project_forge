@@ -13,15 +13,28 @@ import (
 
 	"forge/projectforge/services/core/internal/audit"
 	"forge/projectforge/services/core/internal/config"
+	"forge/projectforge/services/core/internal/gpu"
 	"forge/projectforge/services/core/internal/modelruntime"
 )
 
 type modelRuntimeBridge struct {
-	runtime         *modelruntime.Service
-	maxPromptTokens int
+	runtime                              *modelruntime.Service
+	maxPromptTokens                      int
+	safeModeForceCPUOnly                 bool
+	gpuEnabledConfigured                 bool
+	modelruntimeDegradedOnUnavailableGPU bool
+	dreamModeGPUOnlyInDeepIdle           bool
 }
 
-func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service) modelRuntimeService {
+func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service, telemetry ...any) modelRuntimeService {
+	var gpuTelemetry *gpu.Service
+	if len(telemetry) > 0 {
+		gpuTelemetry, _ = telemetry[0].(*gpu.Service)
+	}
+	var intelTelemetry *gpu.IntelService
+	if len(telemetry) > 1 {
+		intelTelemetry, _ = telemetry[1].(*gpu.IntelService)
+	}
 	runtimeEnabled := cfg.EnableModelRuntime
 	if !runtimeEnabled && cfg.EnableOpenAICompatAPI {
 		log.Printf("model runtime auto-enabled because FORGE_ENABLE_OPENAI_COMPAT_API is true")
@@ -103,12 +116,12 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service) modelRu
 				BinaryPath:      cfg.ModelLlamaCppBinary,
 			}))
 		case modelruntime.BackendFake:
-			backends = append(backends, modelruntime.NewFakeBackend(modelruntime.FakeBackendOptions{
-				Name:            "fake",
-				Kind:            modelruntime.BackendFake,
-				MaxOutputTokens: cfg.ModelMaxOutputTokens,
-				Healthy:         true,
-			}))
+			// Production runtime refuses to spin up the fake backend. The fake
+			// variant exists only to drive unit tests; surfacing it from the
+			// HTTP path would let a caller import a model that never calls
+			// out to a real engine, which produces misleading UI state. Test
+			// suites construct FakeBackend directly.
+			continue
 		case modelruntime.BackendOpenAICompat:
 			backends = append(backends, modelruntime.NewOpenAICompatBackend(modelruntime.OpenAICompatOptions{
 				Name:            "openai-compatible",
@@ -136,22 +149,41 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service) modelRu
 		return nil
 	}
 
+	gpuEnabled := cfg.GPUEnabled && !cfg.SafeModeForceCPUOnly
+	gpuBackgroundJobsEnabled := cfg.GPUBackgroundJobsEnabled && gpuEnabled
+	gpuRequiredForInteractiveInference := cfg.GPURequiredForInteractiveInference
+
 	runtimeSvc, err := modelruntime.NewService(modelruntime.ServiceOptions{
-		Backends:              backends,
-		Models:                models,
-		Registry:              registry,
-		DefaultModelID:        cfg.ModelDefaultID,
-		DefaultTimeout:        time.Duration(cfg.ModelRequestTimeoutMs) * time.Millisecond,
-		MaxPromptTokens:       cfg.ModelMaxPromptTokens,
-		MaxOutputTokens:       cfg.ModelMaxOutputTokens,
-		MaxOutputBytes:        cfg.ModelMaxResponseBytes,
-		MaxLoadedModels:       cfg.ModelMaxLoadedModels,
-		LoadTimeout:           time.Duration(cfg.ModelLoadTimeoutMs) * time.Millisecond,
-		UnloadTimeout:         time.Duration(cfg.ModelUnloadTimeoutMs) * time.Millisecond,
-		AutoLoad:              cfg.ModelPolicyAllowAutoLoad && !cfg.ModelPolicyRequireExplicitLoad,
-		Audit:                 &modelRuntimeAuditAdapter{auditSvc: auditSvc},
-		MaxQueueDepth:         cfg.ModelSchedulerQueueCapacity,
-		MaxConcurrentRequests: cfg.ModelSchedulerMaxConcurrentRequests,
+		Backends:                           backends,
+		Models:                             models,
+		Registry:                           registry,
+		DefaultModelID:                     cfg.ModelDefaultID,
+		DefaultTimeout:                     time.Duration(cfg.ModelRequestTimeoutMs) * time.Millisecond,
+		MaxPromptTokens:                    cfg.ModelMaxPromptTokens,
+		MaxOutputTokens:                    cfg.ModelMaxOutputTokens,
+		MaxOutputBytes:                     cfg.ModelMaxResponseBytes,
+		MaxLoadedModels:                    cfg.ModelMaxLoadedModels,
+		LoadTimeout:                        time.Duration(cfg.ModelLoadTimeoutMs) * time.Millisecond,
+		UnloadTimeout:                      time.Duration(cfg.ModelUnloadTimeoutMs) * time.Millisecond,
+		AutoLoad:                           cfg.ModelPolicyAllowAutoLoad && !cfg.ModelPolicyRequireExplicitLoad,
+		Audit:                              &modelRuntimeAuditAdapter{auditSvc: auditSvc},
+		MaxQueueDepth:                      cfg.ModelSchedulerQueueCapacity,
+		MaxConcurrentRequests:              cfg.ModelSchedulerMaxConcurrentRequests,
+		ChatMaxAttempts:                    cfg.ModelChatMaxAttempts,
+		ChatRetryBackoff:                   time.Duration(cfg.ModelChatRetryBackoffMs) * time.Millisecond,
+		ChatProviderCooldown:               time.Duration(cfg.ModelChatProviderCooldownMs) * time.Millisecond,
+		ChatModelCooldown:                  time.Duration(cfg.ModelChatModelCooldownMs) * time.Millisecond,
+		ChatCheckpointLimit:                cfg.ModelChatCheckpointLimit,
+		GPUEnabled:                         gpuEnabled,
+		GPURequiredForInteractiveInference: gpuRequiredForInteractiveInference,
+		GPUVRAMHeadroomFraction:            cfg.GPUVRAMHeadroomFraction,
+		GPUBkgJobsEnabled:                  gpuBackgroundJobsEnabled,
+		GPUBkgIdleThreshold:                time.Duration(cfg.GPUBackgroundIdleThresholdSeconds) * time.Second,
+		GPUMaxBackgroundJobs:               cfg.GPUMaxBackgroundJobs,
+		DegradeOnUnavailableGPU:            cfg.ModelRuntimeDegradedOnUnavailableGPU,
+		SchedulingInteractivePriorityOverBackground: cfg.SchedulingInteractivePriorityOverBackground,
+		DreamModeAllowGPUClassify:                   cfg.DreamModeAllowGPUSubjobs,
+		GPUTelemetry:                                modelRuntimeTelemetryAdapter(gpuTelemetry, intelTelemetry),
 		RequestValidator: func(_ context.Context, req modelruntime.GenerateRequest) error {
 			if cfg.ModelPolicyRequireWorkspaceScope && strings.TrimSpace(req.WorkspaceID) == "" {
 				return modelruntime.ErrWorkspaceRequired
@@ -160,10 +192,10 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service) modelRu
 				return fmt.Errorf("%w: cross-workspace scope %q blocked for workspace %q", modelruntime.ErrPolicyDenied, req.Scope, req.WorkspaceID)
 			}
 			if strings.EqualFold(strings.TrimSpace(req.Source), "autonomy") {
-				return fmt.Errorf("%w: self-initiated autonomy inference is not enabled in m2", modelruntime.ErrPolicyDenied)
+				return fmt.Errorf("%w: self-initiated autonomy inference is not enabled in the current model runtime policy", modelruntime.ErrPolicyDenied)
 			}
 			if selfInitiated, _ := req.Metadata["selfInitiated"].(bool); selfInitiated {
-				return fmt.Errorf("%w: self-initiated inference is not enabled in m2", modelruntime.ErrPolicyDenied)
+				return fmt.Errorf("%w: self-initiated inference is not enabled in the current model runtime policy", modelruntime.ErrPolicyDenied)
 			}
 			return nil
 		},
@@ -180,8 +212,67 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service) modelRu
 	}
 
 	return &modelRuntimeBridge{
-		runtime:         runtimeSvc,
-		maxPromptTokens: cfg.ModelMaxPromptTokens,
+		runtime:                              runtimeSvc,
+		maxPromptTokens:                      cfg.ModelMaxPromptTokens,
+		safeModeForceCPUOnly:                 cfg.SafeModeForceCPUOnly,
+		gpuEnabledConfigured:                 cfg.GPUEnabled,
+		modelruntimeDegradedOnUnavailableGPU: cfg.ModelRuntimeDegradedOnUnavailableGPU,
+		dreamModeGPUOnlyInDeepIdle:           cfg.DreamModeGPUOnlyInDeepIdle,
+	}
+}
+
+func modelRuntimeTelemetryAdapter(dcgm *gpu.Service, intel *gpu.IntelService) modelruntime.GPUTelemetryFunc {
+	if dcgm == nil && intel == nil {
+		return nil
+	}
+	return func(ctx context.Context) (modelruntime.GPUTelemetrySnapshot, error) {
+		snap := gpu.Telemetry{Enabled: false, Healthy: true, State: "disabled", BackgroundAdmissionOK: true}
+		if dcgm != nil {
+			snap = dcgm.Snapshot(ctx)
+		}
+		if intel != nil {
+			intelSnap := intel.Snapshot(ctx)
+			if !snap.Enabled || (snap.State == "disabled" && intelSnap.Enabled) {
+				snap = intelSnap
+			} else if intelSnap.Enabled {
+				snap.Warnings = append(snap.Warnings, "intel_level_zero:"+intelSnap.State)
+				snap.Devices = append(snap.Devices, intelSnap.Devices...)
+				if !intelSnap.Healthy && snap.Healthy {
+					snap.Healthy = false
+					snap.State = "degraded"
+					snap.Detail = intelSnap.Detail
+				}
+				if !intelSnap.BackgroundAdmissionOK {
+					snap.BackgroundAdmissionOK = false
+				}
+			}
+		}
+		devices := make([]map[string]any, 0, len(snap.Devices))
+		for _, device := range snap.Devices {
+			devices = append(devices, map[string]any{
+				"index":          device.Index,
+				"uuid":           device.UUID,
+				"gpuUtilization": device.GPUUtilization,
+				"memoryUsedMiB":  device.MemoryUsedMiB,
+				"memoryFreeMiB":  device.MemoryFreeMiB,
+				"memoryTotalMiB": device.MemoryTotalMiB,
+				"memoryPressure": device.MemoryPressure,
+				"powerWatts":     device.PowerWatts,
+				"temperatureC":   device.TemperatureC,
+			})
+		}
+		return modelruntime.GPUTelemetrySnapshot{
+			Enabled:                 snap.Enabled,
+			Available:               snap.Available,
+			Healthy:                 snap.Healthy,
+			State:                   snap.State,
+			Detail:                  snap.Detail,
+			MemoryPressure:          snap.MemoryPressure,
+			MemoryPressureThreshold: snap.MemoryPressureThreshold,
+			BackgroundAdmissionOK:   snap.BackgroundAdmissionOK,
+			Devices:                 devices,
+			Warnings:                append([]string(nil), snap.Warnings...),
+		}, nil
 	}
 }
 
@@ -492,7 +583,7 @@ func (b *modelRuntimeBridge) Chat(ctx context.Context, req ModelRuntimeChatReque
 	}
 
 	result, err := b.runtime.ExecuteChatRole(ctx, modelruntime.ChatExecutionRequest{
-		Role: modelruntime.ChatExecutionRoleAssistant,
+		Role: resolveModelRuntimeChatRole(req.Role),
 		GenerateRequest: modelruntime.GenerateRequest{
 			ModelID:       strings.TrimSpace(req.ModelID),
 			Backend:       modelruntime.ParseModelBackendKind(req.Backend),
@@ -500,6 +591,7 @@ func (b *modelRuntimeBridge) Chat(ctx context.Context, req ModelRuntimeChatReque
 			Scope:         strings.TrimSpace(req.Meta.WorkspaceID),
 			Actor:         firstNonEmptyTrimmed(req.Actor, "api"),
 			Source:        firstNonEmptyTrimmed(req.Source, "forge_api"),
+			WorkloadClass: modelruntime.ParseGPUWorkloadClass(req.WorkloadClass),
 			Messages:      messages,
 			Prompt:        strings.TrimSpace(req.Prompt),
 			Parameters:    cloneAnyMap(req.Parameters),
@@ -512,8 +604,26 @@ func (b *modelRuntimeBridge) Chat(ctx context.Context, req ModelRuntimeChatReque
 			Metadata:      cloneAnyMap(req.Metadata),
 		},
 	})
+
 	if err != nil {
 		return ModelRuntimeChatResult{}, mapModelRuntimeBridgeError(err)
+	}
+
+	checkpoint := result.Checkpoint
+	if checkpoint.ExecutionID == "" {
+		checkpoint = buildModelRuntimeChatCheckpoint(req, result)
+	}
+	attemptCount := result.AttemptCount
+	if attemptCount < 1 {
+		attemptCount = checkpoint.AttemptCount
+	}
+	executionID := strings.TrimSpace(result.ExecutionID)
+	if executionID == "" {
+		executionID = strings.TrimSpace(checkpoint.ExecutionID)
+	}
+	role := strings.TrimSpace(string(result.Role))
+	if role == "" {
+		role = strings.TrimSpace(string(resolveModelRuntimeChatRole(req.Role)))
 	}
 
 	return ModelRuntimeChatResult{
@@ -524,13 +634,55 @@ func (b *modelRuntimeBridge) Chat(ctx context.Context, req ModelRuntimeChatReque
 			CompletionTokens: result.CompletionTokens,
 			TotalTokens:      result.PromptTokens + result.CompletionTokens,
 		},
-		DurationMs: result.DurationMs,
-		Backend:    string(result.Backend),
-		ModelID:    result.ModelID,
-		AuditID:    result.AuditID,
-		Artifacts:  toArtifactIDs(result.Artifacts),
-		Warnings:   append([]string(nil), result.Warnings...),
+		DurationMs:   result.DurationMs,
+		Backend:      string(result.Backend),
+		ModelID:      result.ModelID,
+		AuditID:      result.AuditID,
+		ExecutionID:  executionID,
+		AttemptCount: attemptCount,
+		Role:         role,
+		Checkpoint:   &checkpoint,
+		Artifacts:    toArtifactIDs(result.Artifacts),
+		Warnings:     append([]string(nil), result.Warnings...),
 	}, nil
+}
+
+func resolveModelRuntimeChatRole(raw string) modelruntime.ChatExecutionRole {
+	return modelruntime.ChatExecutionRole(strings.TrimSpace(raw))
+}
+
+func buildModelRuntimeChatCheckpoint(req ModelRuntimeChatRequest, result modelruntime.ChatExecutionResult) modelruntime.ChatExecutionCheckpoint {
+	timestamp := time.Now().UTC()
+	attemptCount := result.AttemptCount
+	if attemptCount < 1 {
+		attemptCount = 1
+	}
+	executionID := strings.TrimSpace(result.ExecutionID)
+	if executionID == "" {
+		executionID = fmt.Sprintf("chat-%d", time.Now().UnixNano())
+	}
+
+	return modelruntime.ChatExecutionCheckpoint{
+		ExecutionID:   executionID,
+		CorrelationID: strings.TrimSpace(req.Meta.CorrelationID),
+		TraceID:       strings.TrimSpace(req.Meta.TraceID),
+		WorkspaceID:   strings.TrimSpace(req.Meta.WorkspaceID),
+		Role:          resolveModelRuntimeChatRole(req.Role),
+		ModelID:       strings.TrimSpace(result.ModelID),
+		Backend:       modelruntime.ParseModelBackendKind(strings.TrimSpace(string(result.Backend))),
+		State:         modelruntime.ChatExecutionStateCompleted,
+		AttemptCount:  attemptCount,
+		MaxAttempts:   attemptCount,
+		LastError:     "",
+		StartedAt:     timestamp,
+		UpdatedAt:     timestamp,
+		FinishedAt:    timestamp,
+		Transitions: []modelruntime.ChatExecutionTransition{{
+			State:   modelruntime.ChatExecutionStateCompleted,
+			At:      timestamp,
+			ModelID: strings.TrimSpace(result.ModelID),
+		}},
+	}
 }
 
 func (b *modelRuntimeBridge) Compatibility(ctx context.Context, modelID string, _ ModelRuntimeRequestMeta) (ModelRuntimeCompatibility, error) {
@@ -566,6 +718,12 @@ func (b *modelRuntimeBridge) Health(ctx context.Context, _ ModelRuntimeRequestMe
 		"loaded":    map[string]string{},
 		"backends":  map[string]map[string]any{},
 		"scheduler": map[string]any{},
+		"policy": map[string]any{
+			"safeModeForceCPUOnly":                 b.safeModeForceCPUOnly,
+			"gpuEnabledConfigured":                 b.gpuEnabledConfigured,
+			"modelruntimeDegradedOnUnavailableGPU": b.modelruntimeDegradedOnUnavailableGPU,
+			"dreamModeGPUOnlyInDeepIdle":           b.dreamModeGPUOnlyInDeepIdle,
+		},
 	}
 	loadedDetails := details["loaded"].(map[string]string)
 	for kind, modelID := range health.Loaded {
@@ -581,18 +739,30 @@ func (b *modelRuntimeBridge) Health(ctx context.Context, _ ModelRuntimeRequestMe
 			"meta":    cloneAnyMap(backend.Meta),
 		}
 	}
+	if health.GPUTelemetry != nil {
+		details["gpuTelemetry"] = health.GPUTelemetry
+	}
 	schedulerDetails := details["scheduler"].(map[string]any)
 	schedulerDetails["maxQueueDepth"] = health.Scheduler.MaxQueueDepth
 	schedulerDetails["maxConcurrentRequests"] = health.Scheduler.MaxConcurrentRequests
 	schedulerDetails["queued"] = len(health.Scheduler.Queued)
 	schedulerDetails["running"] = len(health.Scheduler.Running)
 	schedulerDetails["completed"] = len(health.Scheduler.Completed)
+	schedulerDetails["interactiveQueued"] = health.Scheduler.InteractiveQueued
+	schedulerDetails["backgroundQueued"] = health.Scheduler.BackgroundQueued
+	schedulerDetails["interactiveRunning"] = health.Scheduler.InteractiveRunning
+	schedulerDetails["backgroundRunning"] = health.Scheduler.BackgroundRunning
+	schedulerDetails["cooldownJobs"] = health.Scheduler.CooldownJobs
 
 	return ModelRuntimeHealth{
-		OK:      health.Healthy,
-		Status:  healthStatus(health.Healthy),
-		Backend: primaryBackend(health),
-		Details: details,
+		OK:              health.Healthy,
+		Status:          string(health.State),
+		Backend:         primaryBackend(health),
+		RuntimeEnabled:  health.RuntimeEnabled,
+		GPUAware:        health.GPUAware,
+		DegradedReasons: append([]string(nil), health.DegradedReasons...),
+		PolicyWarnings:  append([]string(nil), health.PolicyWarnings...),
+		Details:         details,
 	}, nil
 }
 
@@ -620,7 +790,7 @@ func (b *modelRuntimeBridge) QueueStatus(ctx context.Context, _ ModelRuntimeRequ
 		Active:      active,
 		Pending:     pending,
 		Scheduler:   "fifo_single_active_per_backend",
-		PolicyState: "policy_guarded",
+		PolicyState: queuePolicyState(snapshot),
 	}, nil
 }
 
@@ -774,8 +944,14 @@ func mapModelRuntimeBridgeError(err error) error {
 		return &modelRuntimeError{status: 501, code: "MODEL_BACKEND_UNSUPPORTED", message: err.Error()}
 	case errors.Is(err, modelruntime.ErrRequestQueueFull):
 		return &modelRuntimeError{status: 429, code: "MODEL_SCHEDULER_BUSY", message: err.Error()}
+	case errors.Is(err, modelruntime.ErrBackgroundWorkloadDeferred):
+		return &modelRuntimeError{status: 429, code: "MODEL_BACKGROUND_WORKLOAD_DEFERRED", message: err.Error()}
 	case errors.Is(err, modelruntime.ErrPolicyDenied):
 		return &modelRuntimeError{status: 403, code: "MODEL_POLICY_DENIED", message: err.Error()}
+	case errors.Is(err, modelruntime.ErrGPUNotAllowedForInteractive):
+		return &modelRuntimeError{status: 503, code: "MODEL_GPU_INTERACTIVE_REQUIRED", message: err.Error()}
+	case errors.Is(err, modelruntime.ErrBackgroundJobsDisabled):
+		return &modelRuntimeError{status: 403, code: "MODEL_GPU_BACKGROUND_DISABLED", message: err.Error()}
 	case errors.Is(err, modelruntime.ErrModelCapabilityUnsupported):
 		return &modelRuntimeError{status: 400, code: "MODEL_CAPABILITY_UNSUPPORTED", message: err.Error()}
 	case errors.Is(err, modelruntime.ErrActorRequired):
@@ -897,13 +1073,6 @@ func toManagementMeta(req ModelRuntimeControlRequest) modelruntime.ManagementReq
 	}
 }
 
-func healthStatus(healthy bool) string {
-	if healthy {
-		return "ready"
-	}
-	return "degraded"
-}
-
 func primaryBackend(health modelruntime.RuntimeHealth) string {
 	for kind, backend := range health.Backends {
 		if backend.Healthy {
@@ -914,4 +1083,17 @@ func primaryBackend(health modelruntime.RuntimeHealth) string {
 		return string(kind)
 	}
 	return ""
+}
+
+func queuePolicyState(snapshot modelruntime.SchedulerSnapshot) string {
+	if snapshot.CooldownJobs > 0 {
+		return "background_deferred"
+	}
+	if snapshot.InteractiveQueued > 0 || snapshot.InteractiveRunning > 0 {
+		if snapshot.BackgroundQueued > 0 {
+			return "interactive_priority_active"
+		}
+		return "interactive_active"
+	}
+	return "policy_guarded"
 }

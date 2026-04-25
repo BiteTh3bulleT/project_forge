@@ -527,6 +527,136 @@ func TestService_MaxLoadedModelsLimit(t *testing.T) {
 	}
 }
 
+func TestService_GPUBackgroundWorkloadDisabledByPolicy(t *testing.T) {
+	backend := NewFakeBackend(FakeBackendOptions{Healthy: true, Kind: BackendFake})
+	svc, err := NewService(ServiceOptions{
+		Backends:          []ModelBackend{backend},
+		Models:            []ModelManifest{completionManifest("policy-model", BackendFake)},
+		AutoLoad:          true,
+		GPUEnabled:        true,
+		GPUBkgJobsEnabled: false,
+	})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+
+	req := baseGenerateRequest("policy-model")
+	req.WorkloadClass = GPUWorkloadBackgroundEmbedding
+	_, err = svc.Generate(context.Background(), req)
+	if !errors.Is(err, ErrBackgroundJobsDisabled) {
+		t.Fatalf("expected ErrBackgroundJobsDisabled, got %v", err)
+	}
+}
+
+func TestService_GPUInteractiveCanBeBlockedWhenGPURequired(t *testing.T) {
+	backend := NewFakeBackend(FakeBackendOptions{Healthy: true, Kind: BackendFake})
+	svc, err := NewService(ServiceOptions{
+		Backends:                           []ModelBackend{backend},
+		Models:                             []ModelManifest{completionManifest("gpu-required", BackendFake)},
+		AutoLoad:                           true,
+		GPUEnabled:                         false,
+		GPURequiredForInteractiveInference: true,
+	})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+
+	req := baseGenerateRequest("gpu-required")
+	req.Messages = []GenerateMessage{{Role: "user", Content: "hello"}}
+	req.Prompt = ""
+	_, err = svc.Generate(context.Background(), req)
+	if !errors.Is(err, ErrGPUNotAllowedForInteractive) {
+		t.Fatalf("expected ErrGPUNotAllowedForInteractive, got %v", err)
+	}
+}
+
+func TestService_HealthUnavailableWhenGPURequiredBackendsAreUnavailable(t *testing.T) {
+	backend := NewFakeBackend(FakeBackendOptions{Healthy: false, Kind: BackendFake})
+	svc, err := NewService(ServiceOptions{
+		Backends:                []ModelBackend{backend},
+		Models:                  []ModelManifest{completionManifest("health-model", BackendFake)},
+		GPUEnabled:              true,
+		DegradeOnUnavailableGPU: true,
+	})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+
+	health, _ := svc.Health(context.Background())
+	if health.State != RuntimeHealthUnavailable {
+		t.Fatalf("expected runtime health state unavailable, got %s", health.State)
+	}
+	if health.Healthy {
+		t.Fatalf("expected unhealthy runtime when gpu is enabled and unavailable")
+	}
+	if len(health.DegradedReasons) == 0 {
+		t.Fatalf("expected degraded reasons to be populated")
+	}
+}
+
+func TestService_HealthPreservesDegradedPayloadWhenBackendHealthErrors(t *testing.T) {
+	backend := NewFakeBackend(FakeBackendOptions{
+		Healthy:      false,
+		Kind:         BackendFake,
+		HealthDetail: "backend probe failed",
+		HealthErr:    errors.New("probe failed"),
+	})
+	svc, err := NewService(ServiceOptions{
+		Backends: []ModelBackend{backend},
+		Models:   []ModelManifest{completionManifest("health-error-model", BackendFake)},
+	})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+
+	health, err := svc.Health(context.Background())
+	if err != nil {
+		t.Fatalf("health should return degraded payload without surfacing probe error: %v", err)
+	}
+	if health.Healthy || health.State != RuntimeHealthDegraded {
+		t.Fatalf("expected degraded unhealthy payload, got %+v", health)
+	}
+	if len(health.DegradedReasons) == 0 {
+		t.Fatalf("expected degraded reason for backend probe error")
+	}
+}
+
+func TestService_GPUTelemetryPressureBlocksBackgroundJobs(t *testing.T) {
+	backend := NewFakeBackend(FakeBackendOptions{Healthy: true, Kind: BackendFake})
+	svc, err := NewService(ServiceOptions{
+		Backends:          []ModelBackend{backend},
+		Models:            []ModelManifest{completionManifest("pressure-model", BackendFake)},
+		AutoLoad:          true,
+		GPUEnabled:        true,
+		GPUBkgJobsEnabled: true,
+		GPUTelemetry: func(context.Context) (GPUTelemetrySnapshot, error) {
+			return GPUTelemetrySnapshot{
+				Enabled:                 true,
+				Available:               true,
+				Healthy:                 true,
+				State:                   "pressure",
+				MemoryPressure:          0.95,
+				MemoryPressureThreshold: 0.90,
+				BackgroundAdmissionOK:   false,
+			}, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+
+	req := baseGenerateRequest("pressure-model")
+	req.WorkloadClass = GPUWorkloadBackgroundEmbedding
+	_, err = svc.Generate(context.Background(), req)
+	if !errors.Is(err, ErrBackgroundWorkloadDeferred) {
+		t.Fatalf("expected ErrBackgroundWorkloadDeferred under GPU pressure, got %v", err)
+	}
+	health, _ := svc.Health(context.Background())
+	if health.GPUTelemetry == nil || health.GPUTelemetry.BackgroundAdmissionOK {
+		t.Fatalf("expected telemetry in health to block background admission: %+v", health.GPUTelemetry)
+	}
+}
+
 func waitForSchedulerState(t *testing.T, svc *Service, check func(SchedulerSnapshot) bool, msg string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)

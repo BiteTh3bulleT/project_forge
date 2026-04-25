@@ -1,6 +1,6 @@
 # Stubs / Placeholders / Fake / Example Inventory (Runtime-Adjacent)
 
-Updated: 2026-04-21 (Worker B scope: this file only)
+Updated: 2026-04-24 (tool capability backing follow-up)
 
 Method:
 - Marker sweep across `services/core/internal`, `apps/desktop`, `packages`, `docs`, `nix` for: `TODO`, `FIXME`, `stub`, `placeholder`, `fake`, `noop/no-op`, `dummy`, `mock`, `not implemented`, `unsupported`, `candidate-note`, `candidate-*`, `fakeHash`, `example`, `sample`, `in-memory only`, `disabled capability`, `approval-only capability`, `scaffold`, `future work`, `deferred`.
@@ -22,8 +22,9 @@ Method:
 | `services/core/internal/aios/controllane/store.go` | `BuildContext` | Context packet marks inclusion reason `mode: deterministic_stub`. | runtime scaffold | medium | defer |
 | `services/core/internal/aios/compute/librarian/inference.go` | `NoopSemanticInference` | Semantic inference adapter defaults to no-op (`nil` candidates/suggestions/model). | runtime scaffold | medium | document |
 | `services/core/internal/aios/compute/librarian/cells.go` | `StaticIntakeCell` | Deterministic stub cell with IDs like `stub-intake-create-note` and actor `librarian.intake.stub`; intended for scaffold smoke behavior. | fake/example code in live path | medium | document |
-| `services/core/internal/gateway/tool_capability_registry.go` | `defaultCapabilityDescriptor` | Full taxonomy preserved; default status is `stubbed` and default adapter id is synthetic `stub.<capability>`. | stubbed capability | medium | leave |
-| `services/core/internal/gateway/tool_policy.go` | `ToolPolicyEvaluator.Evaluate` | Enforces `deferred`/`stubbed` => `unsupported`, `disabled/deprecated` => `disabled`; blocks unknown status and missing adapters. | stubbed capability | low | leave |
+| `services/core/internal/gateway/tool_capability_registry.go` | `defaultCapabilityDescriptor` | Full taxonomy preserved; every default capability now receives a concrete `gatewayToolId`, non-`stub.*` adapter ID, and final status of `active` or `approval_only` according to inferred risk. Production startup loads persisted status overrides from SQLite. | resolved hardening | low | keep |
+| `services/core/internal/gateway/capability_backing_tool.go` | `capabilityBackingTool` | Generic gateway-side concrete tool backings cover the full taxonomy and return explicit runtime misconfiguration/permission errors for missing platform services, credentials, binaries, or privileges. | resolved hardening | low | keep |
+| `services/core/internal/gateway/tool_policy.go` | `ToolPolicyEvaluator.Evaluate` | Still enforces explicit override states: `deferred`/`stubbed` => `unsupported`, `disabled/deprecated` => `disabled`; blocks unknown status and missing adapters. | override guard | low | leave |
 | `services/core/internal/api/phase5.go` | `handleGatewayCapabilityStatusUpdate` | Status transitions to `deferred/disabled/stubbed/deprecated` require explicit reason text. | runtime scaffold | low | leave |
 | `services/core/internal/api/server.go` | legacy adapter invoke route wiring | Legacy direct adapter invoke side door has been removed from routing; gateway-only execution path remains. | resolved hardening | low | keep |
 | `services/core/internal/gateway/service.go` | denied-path audit mapping | Terminal policy outcomes (`needs_approval`, `unsupported`, `disabled`) emit explicit audit actions (`tool.needs_approval`, `tool.unsupported`, `tool.disabled`). | runtime scaffold | low | leave |

@@ -130,7 +130,7 @@ Scope: pass-1 truth audit + pass-2 minimal hardening
 | Phase 5.5 | partial | Rule-agent runtime exists; proposal/cleanup risks are still guarded-by-policy. |
 | Phase 5.75 | partial | Autonomy policy/runner are durable and policy-gated; persistence parity is incomplete beyond autonomy settings. |
 | Phase 5.9 | partial | Tool taxonomy/registry/policy are real; high-risk capabilities are gated/approval-only or stubbed. |
-| Phase 5.95 | partial | v1/v2 wiring improved; legacy adapter side door removed and gateway remains sole tool-execution ingress. |
+| Phase 5.95 | partial | runtime authority wiring improved; legacy adapter side door removed and gateway remains sole tool-execution ingress. |
 | Phase 5.99 | partial | Final convergence run underway to close drift and confirm all required hardening/tests. |
 | Phase N1 | partial | Light Nix scaffolding exists; forge-core package still has clean-build parity gaps. |
 
@@ -154,6 +154,7 @@ Scope: pass-1 truth audit + pass-2 minimal hardening
 1. Backup/export restore parity is still incomplete outside autonomy settings path.
 2. Legacy non-syscall mutation routes remain as documented boundaries and must not gain implicit production use.
 3. Rule-agent coverage is partial relative to the expected full expected set.
-4. Root JS test/lint/typecheck scripts and CI workflows remain absent.
-5. `nix --extra-experimental-features 'nix-command flakes' build .#forge-core` fails in clean flake contexts in this environment due `nix-daemon` unavailability (and legacy VSA source assumptions still unresolved).
-6. `/api/adapters/{id}/invoke` route has been removed; gateway remains the sole tool execution path.
+4. Dedicated JS/TS unit/lint scripts remain absent; root `test`/`lint` delegate to Go core and root `typecheck` covers desktop TypeScript.
+5. CI workflow scaffolding exists in `.github/workflows/ci.yml`, but remote GitHub runner execution was not inspected in this local pass.
+6. `nix --extra-experimental-features 'nix-command flakes' flake check` fails in this environment due `nix-daemon` socket unavailability.
+7. `/api/adapters/{id}/invoke` route has been removed; gateway remains the sole tool execution path.

@@ -12,10 +12,12 @@ import (
 type ChatExecutionRole string
 
 const (
-	ChatExecutionRoleAssistant ChatExecutionRole = "assistant"
-	ChatExecutionRolePlanner   ChatExecutionRole = "planner"
-	ChatExecutionRoleExecutor  ChatExecutionRole = "executor"
-	ChatExecutionRoleVerifier  ChatExecutionRole = "verifier"
+	ChatExecutionRoleAssistant     ChatExecutionRole = "assistant"
+	ChatExecutionRolePlanner       ChatExecutionRole = "planner"
+	ChatExecutionRoleExecutor      ChatExecutionRole = "executor"
+	ChatExecutionRoleVerifier      ChatExecutionRole = "verifier"
+	ChatExecutionRoleSummarizer    ChatExecutionRole = "summarizer"
+	ChatExecutionRoleRepairAnalyst ChatExecutionRole = "repair_analyst"
 )
 
 type ChatExecutionState string
@@ -92,13 +94,20 @@ type chatExecutionCandidate struct {
 }
 
 func normalizeChatExecutionRole(role ChatExecutionRole) ChatExecutionRole {
-	switch ChatExecutionRole(strings.ToLower(strings.TrimSpace(string(role)))) {
+	normalized := strings.ToLower(strings.TrimSpace(string(role)))
+	normalized = strings.ReplaceAll(normalized, " ", "_")
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	switch ChatExecutionRole(normalized) {
 	case ChatExecutionRolePlanner:
 		return ChatExecutionRolePlanner
 	case ChatExecutionRoleExecutor:
 		return ChatExecutionRoleExecutor
 	case ChatExecutionRoleVerifier:
 		return ChatExecutionRoleVerifier
+	case ChatExecutionRoleSummarizer:
+		return ChatExecutionRoleSummarizer
+	case ChatExecutionRoleRepairAnalyst:
+		return ChatExecutionRoleRepairAnalyst
 	default:
 		return ChatExecutionRoleAssistant
 	}
@@ -273,7 +282,9 @@ func (s *Service) ExecuteChatRole(ctx context.Context, req ChatExecutionRequest)
 			}, runErr
 		}
 
-		cooldownUntil = s.setChatProviderCooldown(candidate.manifest.Backend)
+		modelCooldownUntil := s.setChatModelCooldown(candidate.manifest.ID, checkpoint.AttemptCount)
+		backendCooldownUntil := s.setChatProviderCooldown(candidate.manifest.Backend)
+		cooldownUntil = maxTime(modelCooldownUntil, backendCooldownUntil)
 		attempt.CooldownUntil = cooldownUntil
 		checkpoint.Attempts[len(checkpoint.Attempts)-1] = attempt
 		checkpoint.CooldownUntil = cooldownUntil
@@ -453,7 +464,9 @@ func (s *Service) nextChatCandidate(candidates []chatExecutionCandidate, attempt
 		if _, attempted := attemptedModels[candidate.manifest.ID]; attempted {
 			continue
 		}
-		cooldownUntil := s.chatProviderCooldownUntil(candidate.manifest.Backend)
+		modelCooldownUntil := s.chatModelCooldownUntil(candidate.manifest.ID)
+		backendCooldownUntil := s.chatProviderCooldownUntil(candidate.manifest.Backend)
+		cooldownUntil := maxTime(modelCooldownUntil, backendCooldownUntil)
 		if cooldownUntil.After(now) {
 			if cooldownUntil.After(latestCooldown) {
 				latestCooldown = cooldownUntil
@@ -471,6 +484,16 @@ func (s *Service) chatProviderCooldownUntil(backend ModelBackendKind) time.Time 
 	return s.chatProviderCooldowns[backend]
 }
 
+func (s *Service) chatModelCooldownUntil(modelID string) time.Time {
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" {
+		return time.Time{}
+	}
+	s.chatMu.Lock()
+	defer s.chatMu.Unlock()
+	return s.chatModelCooldowns[modelID]
+}
+
 func (s *Service) setChatProviderCooldown(backend ModelBackendKind) time.Time {
 	if s.chatProviderCooldown <= 0 {
 		return time.Time{}
@@ -479,6 +502,26 @@ func (s *Service) setChatProviderCooldown(backend ModelBackendKind) time.Time {
 	s.chatMu.Lock()
 	defer s.chatMu.Unlock()
 	s.chatProviderCooldowns[backend] = until
+	return until
+}
+
+func (s *Service) setChatModelCooldown(modelID string, attempt int) time.Time {
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" || s.chatModelCooldown <= 0 {
+		return time.Time{}
+	}
+	if attempt < 1 {
+		attempt = 1
+	}
+	multiplier := 1 << uint(min(attempt-1, 6))
+	until := s.clock().UTC().Add(s.chatModelCooldown * time.Duration(multiplier))
+	s.chatMu.Lock()
+	defer s.chatMu.Unlock()
+	existing := s.chatModelCooldowns[modelID]
+	if existing.After(until) {
+		return existing
+	}
+	s.chatModelCooldowns[modelID] = until
 	return until
 }
 
@@ -561,6 +604,20 @@ func appendChatTransition(checkpoint *ChatExecutionCheckpoint, detail string) {
 	})
 }
 
+func maxTime(first, second time.Time) time.Time {
+	if first.After(second) {
+		return first
+	}
+	return second
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func chatRoleWeight(manifest ModelManifest, role ChatExecutionRole) int {
 	role = normalizeChatExecutionRole(role)
 	if explicit := explicitChatRoleWeight(manifest.Metadata, role); explicit > 0 {
@@ -577,12 +634,29 @@ func chatRoleWeight(manifest ModelManifest, role ChatExecutionRole) int {
 		if manifestHasCapability(manifest, CapabilityToolCalling) {
 			return 30
 		}
+	case ChatExecutionRoleSummarizer:
+		if manifestHasCapability(manifest, CapabilityStructuredOutput) {
+			return 35
+		}
+		if manifestHasCapability(manifest, CapabilityChat) {
+			return 25
+		}
 	case ChatExecutionRoleExecutor:
 		if manifestHasCapability(manifest, CapabilityCode) {
 			return 40
 		}
 		if manifestHasCapability(manifest, CapabilityToolCalling) {
 			return 30
+		}
+	case ChatExecutionRoleRepairAnalyst:
+		if manifestHasCapability(manifest, CapabilityCode) && manifestHasCapability(manifest, CapabilityToolCalling) {
+			return 45
+		}
+		if manifestHasCapability(manifest, CapabilityCode) {
+			return 40
+		}
+		if manifestHasCapability(manifest, CapabilityStructuredOutput) {
+			return 35
 		}
 	case ChatExecutionRoleVerifier:
 		if manifestHasCapability(manifest, CapabilityStructuredOutput) {

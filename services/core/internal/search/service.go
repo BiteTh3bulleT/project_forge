@@ -142,10 +142,10 @@ func placeholders(n int) string {
 }
 
 func (s *Service) ChunkByID(ctx context.Context, id int64) (*Hit, error) {
-row := s.db.QueryRowContext(ctx, `
+	row := s.db.QueryRowContext(ctx, `
 SELECT c.id, c.file_id, f.source_id, c.chunk_index, c.content, f.abs_path, f.rel_path, f.mtime_ns
 FROM chunks c JOIN files f ON f.id = c.file_id WHERE c.id = ?`, id)
-var h Hit
+	var h Hit
 	if err := row.Scan(&h.ChunkID, &h.FileID, &h.SourceID, &h.ChunkIdx, &h.Content, &h.AbsPath, &h.RelPath, &h.MtimeNs); err != nil {
 		return nil, err
 	}

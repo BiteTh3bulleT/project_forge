@@ -10,15 +10,15 @@ import (
 )
 
 type CellReadRepositories struct {
-	Journal       controllane.JournalRepository
-	Notes         controllane.MemoryNoteRepository
-	Links         controllane.SemanticLinkRepository
-	State         controllane.StateRepository
-	Loops         controllane.OpenLoopRepository
-	Artifacts     controllane.ArtifactRefRepository
-	Models        controllane.DerivedModelRepository
+	Journal        controllane.JournalRepository
+	Notes          controllane.MemoryNoteRepository
+	Links          controllane.SemanticLinkRepository
+	State          controllane.StateRepository
+	Loops          controllane.OpenLoopRepository
+	Artifacts      controllane.ArtifactRefRepository
+	Models         controllane.DerivedModelRepository
 	Contradictions controllane.ContradictionRepository
-	Supersessions controllane.SupersessionRepository
+	Supersessions  controllane.SupersessionRepository
 	ContextPackets controllane.ContextPacketRepository
 }
 
@@ -44,16 +44,16 @@ type CellRunContext struct {
 }
 
 type CellRunResult struct {
-	CellName       string
-	CellVersion    string
+	CellName        string
+	CellVersion     string
 	ProposedActions []domain.SyscallRequest
-	AnalysisNotes  []string
-	Warnings       []string
-	Errors         []domain.IngestError
-	Confidence     float64
-	Duration       time.Duration
-	SkippedReason  string
-	Hints          map[string]any
+	AnalysisNotes   []string
+	Warnings        []string
+	Errors          []domain.IngestError
+	Confidence      float64
+	Duration        time.Duration
+	SkippedReason   string
+	Hints           map[string]any
 }
 
 func (r CellRunResult) Diagnostic() domain.CellDiagnostic {

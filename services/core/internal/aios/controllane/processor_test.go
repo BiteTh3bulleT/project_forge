@@ -2,6 +2,7 @@ package controllane
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"forge/projectforge/services/core/internal/aios/domain"
@@ -537,8 +538,18 @@ func TestCompileContextSnapshotPersistenceOptIn(t *testing.T) {
 	if scores, ok := packet.RestoreSnapshot.Metadata["restore_scores_json"].(map[string]any); !ok || len(scores) == 0 {
 		t.Fatalf("expected non-empty restore_scores_json metadata, got %#v", packet.RestoreSnapshot.Metadata["restore_scores_json"])
 	}
+	if _, ok := packet.RestoreSnapshot.Metadata["restore_trace_json"].(map[string]any); !ok {
+		t.Fatalf("expected restore_trace_json metadata, got %#v", packet.RestoreSnapshot.Metadata["restore_trace_json"])
+	}
 	if hints, ok := packet.RestoreSnapshot.Metadata["resume_hints_json"].(map[string]any); !ok || len(hints) == 0 {
 		t.Fatalf("expected non-empty resume_hints_json metadata, got %#v", packet.RestoreSnapshot.Metadata["resume_hints_json"])
+	}
+	reason, ok := packet.RestoreSnapshot.Metadata["restore_reason_json"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected restore_reason_json metadata")
+	}
+	if v := strings.TrimSpace(readString(reason, "decision_reason")); v == "" {
+		t.Fatalf("expected restore decision reason in restore reason json")
 	}
 	if decision := readString(persistedRes.StateSummary, "restoreDecision"); decision == "" {
 		t.Fatalf("expected restoreDecision in state summary")
@@ -607,6 +618,9 @@ func TestCompileContextSnapshotResumeHintsCanForceFreshCompile(t *testing.T) {
 	if source := readString(packet.RestoreSnapshot.Metadata, "restore_source_snapshot_id"); source != "" {
 		t.Fatalf("forced fresh compile should not persist restore source snapshot id, got %q", source)
 	}
+	if reason, ok := packet.RestoreSnapshot.Metadata["restore_reason_json"].(map[string]any); !ok || strings.TrimSpace(readString(reason, "decision_reason")) == "" {
+		t.Fatalf("expected restore_reason_json with decision_reason, got %#v", packet.RestoreSnapshot.Metadata["restore_reason_json"])
+	}
 	if sourceSummary := readString(secondRes.StateSummary, "restoreSourceSnapshotId"); sourceSummary != "" {
 		t.Fatalf("forced fresh compile should not set restoreSourceSnapshotId summary, got %q", sourceSummary)
 	}
@@ -634,7 +648,7 @@ func TestCompileContextSnapshotBelowThresholdFallsBackToFreshCompile(t *testing.
 
 	second := validBaseRequest(domain.ActionCompileContext)
 	second.ID = "compile-context-threshold-second"
-	second.RequestedAt = first.RequestedAt + 1000
+	second.RequestedAt = first.RequestedAt + (10 * 24 * 60 * 60 * 1000)
 	second.Payload = map[string]any{
 		"query":           "summarize blockers",
 		"budget":          map[string]any{"maxTokens": 50, "maxEvents": 10, "maxNotes": 10},
@@ -662,6 +676,9 @@ func TestCompileContextSnapshotBelowThresholdFallsBackToFreshCompile(t *testing.
 	}
 	if parent := readString(packet.RestoreSnapshot.Metadata, "parent_snapshot_id"); parent != "" {
 		t.Fatalf("below-threshold fallback should not persist parent snapshot id, got %q", parent)
+	}
+	if reason, ok := packet.RestoreSnapshot.Metadata["restore_reason_json"].(map[string]any); !ok || reason["decision_reason"] != "top candidate score below threshold" {
+		t.Fatalf("expected restore reason decision_reason, got %#v", packet.RestoreSnapshot.Metadata["restore_reason_json"])
 	}
 }
 

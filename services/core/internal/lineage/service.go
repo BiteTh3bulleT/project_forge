@@ -10,12 +10,12 @@ import (
 )
 
 type Relation struct {
-	ID             int64           `json:"id"`
-	ParentJobID    string          `json:"parentJobId"`
-	ChildJobID     string          `json:"childJobId"`
-	RelationType   string          `json:"relationType"`
-	CreatedAtMs    int64           `json:"createdAtMs"`
-	ChangeSummary  json.RawMessage `json:"changeSummary"`
+	ID            int64           `json:"id"`
+	ParentJobID   string          `json:"parentJobId"`
+	ChildJobID    string          `json:"childJobId"`
+	RelationType  string          `json:"relationType"`
+	CreatedAtMs   int64           `json:"createdAtMs"`
+	ChangeSummary json.RawMessage `json:"changeSummary"`
 }
 
 type JobSummary struct {
@@ -29,10 +29,10 @@ type JobSummary struct {
 }
 
 type JobLineage struct {
-	JobID     string      `json:"jobId"`
-	Parents   []Relation  `json:"parents"`
-	Children  []Relation  `json:"children"`
-	Related   []JobSummary `json:"relatedJobs"`
+	JobID    string       `json:"jobId"`
+	Parents  []Relation   `json:"parents"`
+	Children []Relation   `json:"children"`
+	Related  []JobSummary `json:"relatedJobs"`
 }
 
 type Service struct {

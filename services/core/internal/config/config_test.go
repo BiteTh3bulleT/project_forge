@@ -23,6 +23,25 @@ func TestLoadRespectsWorkspaceOverride(t *testing.T) {
 
 func TestLoadModelRuntimeDefaultsSafe(t *testing.T) {
 	t.Setenv("FORGE_ENABLE_MODEL_RUNTIME", "")
+	t.Setenv("FORGE_GPU_ENABLED", "")
+	t.Setenv("FORGE_NVIDIA_DCGM_ENABLED", "")
+	t.Setenv("FORGE_NVIDIA_DCGM_ENDPOINT", "")
+	t.Setenv("FORGE_NVIDIA_DCGM_TIMEOUT_MS", "")
+	t.Setenv("FORGE_INTEL_LEVEL_ZERO_ENABLED", "")
+	t.Setenv("FORGE_INTEL_LEVEL_ZERO_ZE_INFO_PATH", "")
+	t.Setenv("FORGE_INTEL_GPU_TOP_PATH", "")
+	t.Setenv("FORGE_INTEL_GPU_TELEMETRY_TIMEOUT_MS", "")
+	t.Setenv("FORGE_GPU_BACKGROUND_MEMORY_PRESSURE_BLOCK_THRESHOLD", "")
+	t.Setenv("FORGE_GPU_REQUIRED_FOR_INTERACTIVE_INFERENCE", "")
+	t.Setenv("FORGE_GPU_VRAM_HEADROOM_FRACTION", "")
+	t.Setenv("FORGE_GPU_BACKGROUND_JOBS_ENABLED", "")
+	t.Setenv("FORGE_GPU_BACKGROUND_IDLE_THRESHOLD_SECONDS", "")
+	t.Setenv("FORGE_GPU_MAX_BACKGROUND_JOBS", "")
+	t.Setenv("FORGE_DREAM_MODE_ALLOW_GPU_SUBJOBS", "")
+	t.Setenv("FORGE_DREAM_MODE_GPU_ONLY_IN_DEEP_IDLE", "")
+	t.Setenv("FORGE_SAFE_MODE_FORCE_CPU_ONLY", "")
+	t.Setenv("FORGE_MODELRUNTIME_DEGRADED_ON_UNAVAILABLE_GPU", "")
+	t.Setenv("FORGE_SCHEDULING_INTERACTIVE_PRIORITY_OVER_BACKGROUND", "")
 	t.Setenv("FORGE_MODEL_HOME", "")
 	t.Setenv("FORGE_MODEL_DEFAULT_BACKEND", "")
 	t.Setenv("FORGE_MODEL_DEFAULT_ID", "")
@@ -44,7 +63,18 @@ func TestLoadModelRuntimeDefaultsSafe(t *testing.T) {
 	t.Setenv("FORGE_MODEL_POLICY_ALLOW_AUTO_LOAD", "")
 	t.Setenv("FORGE_MODEL_POLICY_ALLOW_CROSS_WORKSPACE", "")
 	t.Setenv("FORGE_MODEL_POLICY_REQUIRE_WORKSPACE_SCOPE", "")
+	t.Setenv("FORGE_MODEL_CHAT_MAX_ATTEMPTS", "")
+	t.Setenv("FORGE_MODEL_CHAT_RETRY_BACKOFF_MS", "")
+	t.Setenv("FORGE_MODEL_CHAT_PROVIDER_COOLDOWN_MS", "")
+	t.Setenv("FORGE_MODEL_CHAT_MODEL_COOLDOWN_MS", "")
+	t.Setenv("FORGE_MODEL_CHAT_CHECKPOINT_LIMIT", "")
 	t.Setenv("FORGE_ENABLE_OPENAI_COMPAT_API", "")
+	t.Setenv("FORGE_EMBEDDING_TEI_ENDPOINT", "")
+	t.Setenv("FORGE_EMBEDDING_TEI_API_KEY", "")
+	t.Setenv("FORGE_EMBEDDING_TEI_TIMEOUT_MS", "")
+	t.Setenv("FORGE_EMBEDDING_PROVIDER", "")
+	t.Setenv("FORGE_EMBEDDING_MODEL", "")
+	t.Setenv("FORGE_EMBEDDING_DIMS", "")
 
 	cfg := Load()
 	expectedModelHome, err := filepath.Abs(filepath.Join(cfg.DataDir, "models"))
@@ -54,6 +84,54 @@ func TestLoadModelRuntimeDefaultsSafe(t *testing.T) {
 
 	if cfg.EnableModelRuntime {
 		t.Fatalf("expected model runtime disabled by default")
+	}
+	if cfg.GPUEnabled {
+		t.Fatalf("expected gpu disabled by default")
+	}
+	if cfg.NVIDIADCGMEnabled || cfg.NVIDIADCGMEndpoint != "" {
+		t.Fatalf("expected NVIDIA DCGM disabled/unconfigured by default")
+	}
+	if cfg.NVIDIADCGMTimeoutMs != 1500 {
+		t.Fatalf("expected default DCGM timeout 1500ms, got %d", cfg.NVIDIADCGMTimeoutMs)
+	}
+	if cfg.IntelLevelZeroEnabled || cfg.IntelLevelZeroZEInfoPath != "" || cfg.IntelGPUTopPath != "" {
+		t.Fatalf("expected Intel Level Zero disabled/unconfigured by default")
+	}
+	if cfg.IntelGPUTelemetryTimeoutMs != 1500 {
+		t.Fatalf("expected default Intel telemetry timeout 1500ms, got %d", cfg.IntelGPUTelemetryTimeoutMs)
+	}
+	if cfg.GPUBackgroundMemoryPressureBlockThreshold != 0.90 {
+		t.Fatalf("expected GPU background pressure threshold 0.90, got %f", cfg.GPUBackgroundMemoryPressureBlockThreshold)
+	}
+	if cfg.GPURequiredForInteractiveInference {
+		t.Fatalf("expected gpu to be optional for interactive inference by default")
+	}
+	if cfg.GPUVRAMHeadroomFraction != 0.20 {
+		t.Fatalf("expected default GPU VRAM headroom fraction 0.20, got %f", cfg.GPUVRAMHeadroomFraction)
+	}
+	if cfg.GPUBackgroundJobsEnabled {
+		t.Fatalf("expected background GPU jobs disabled by default")
+	}
+	if cfg.GPUBackgroundIdleThresholdSeconds != 300 {
+		t.Fatalf("expected default GPU background idle threshold 300s, got %d", cfg.GPUBackgroundIdleThresholdSeconds)
+	}
+	if cfg.GPUMaxBackgroundJobs != 1 {
+		t.Fatalf("expected default max background GPU jobs 1, got %d", cfg.GPUMaxBackgroundJobs)
+	}
+	if cfg.DreamModeAllowGPUSubjobs {
+		t.Fatalf("expected dream mode GPU subjobs disabled by default")
+	}
+	if !cfg.DreamModeGPUOnlyInDeepIdle {
+		t.Fatalf("expected dream mode GPU to be deep-idle-only by default")
+	}
+	if cfg.SafeModeForceCPUOnly {
+		t.Fatalf("expected safe mode cpu-only override disabled by default")
+	}
+	if !cfg.ModelRuntimeDegradedOnUnavailableGPU {
+		t.Fatalf("expected modelruntime degraded-on-unavailable-gpu enabled by default")
+	}
+	if !cfg.SchedulingInteractivePriorityOverBackground {
+		t.Fatalf("expected interactive-priority-over-background enabled by default")
 	}
 	if cfg.ModelHome != expectedModelHome {
 		t.Fatalf("expected default model home %q, got %q", expectedModelHome, cfg.ModelHome)
@@ -118,13 +196,56 @@ func TestLoadModelRuntimeDefaultsSafe(t *testing.T) {
 	if !cfg.ModelPolicyRequireWorkspaceScope {
 		t.Fatalf("expected workspace scope requirement enabled by default")
 	}
+	if cfg.ModelChatMaxAttempts != 3 {
+		t.Fatalf("expected default max attempts 3, got %d", cfg.ModelChatMaxAttempts)
+	}
+	if cfg.ModelChatRetryBackoffMs != 250 {
+		t.Fatalf("expected default retry backoff 250, got %d", cfg.ModelChatRetryBackoffMs)
+	}
+	if cfg.ModelChatProviderCooldownMs != 5000 {
+		t.Fatalf("expected default provider cooldown 5000, got %d", cfg.ModelChatProviderCooldownMs)
+	}
+	if cfg.ModelChatModelCooldownMs != 5000 {
+		t.Fatalf("expected default model cooldown 5000, got %d", cfg.ModelChatModelCooldownMs)
+	}
+	if cfg.ModelChatCheckpointLimit != 128 {
+		t.Fatalf("expected default checkpoint limit 128, got %d", cfg.ModelChatCheckpointLimit)
+	}
 	if cfg.EnableOpenAICompatAPI {
 		t.Fatalf("expected OpenAI-compat API disabled by default")
+	}
+	if cfg.EmbeddingTEIEndpoint != "" || cfg.EmbeddingTEIAPIKey != "" {
+		t.Fatalf("expected TEI unconfigured by default")
+	}
+	if cfg.EmbeddingProvider != "" || cfg.EmbeddingModel != "" || cfg.EmbeddingDims != 128 {
+		t.Fatalf("expected embedding provider/model unset and dims 128 by default, got provider=%q model=%q dims=%d", cfg.EmbeddingProvider, cfg.EmbeddingModel, cfg.EmbeddingDims)
+	}
+	if cfg.EmbeddingTEITimeoutMs != 30000 {
+		t.Fatalf("expected TEI timeout 30000, got %d", cfg.EmbeddingTEITimeoutMs)
 	}
 }
 
 func TestLoadModelRuntimeOverrides(t *testing.T) {
 	t.Setenv("FORGE_ENABLE_MODEL_RUNTIME", "true")
+	t.Setenv("FORGE_GPU_ENABLED", "true")
+	t.Setenv("FORGE_NVIDIA_DCGM_ENABLED", "true")
+	t.Setenv("FORGE_NVIDIA_DCGM_ENDPOINT", "http://127.0.0.1:9400/metrics")
+	t.Setenv("FORGE_NVIDIA_DCGM_TIMEOUT_MS", "2500")
+	t.Setenv("FORGE_INTEL_LEVEL_ZERO_ENABLED", "true")
+	t.Setenv("FORGE_INTEL_LEVEL_ZERO_ZE_INFO_PATH", "/usr/bin/ze_info")
+	t.Setenv("FORGE_INTEL_GPU_TOP_PATH", "/usr/bin/intel_gpu_top")
+	t.Setenv("FORGE_INTEL_GPU_TELEMETRY_TIMEOUT_MS", "2200")
+	t.Setenv("FORGE_GPU_BACKGROUND_MEMORY_PRESSURE_BLOCK_THRESHOLD", "0.82")
+	t.Setenv("FORGE_GPU_REQUIRED_FOR_INTERACTIVE_INFERENCE", "true")
+	t.Setenv("FORGE_GPU_VRAM_HEADROOM_FRACTION", "0.35")
+	t.Setenv("FORGE_GPU_BACKGROUND_JOBS_ENABLED", "true")
+	t.Setenv("FORGE_GPU_BACKGROUND_IDLE_THRESHOLD_SECONDS", "900")
+	t.Setenv("FORGE_GPU_MAX_BACKGROUND_JOBS", "2")
+	t.Setenv("FORGE_DREAM_MODE_ALLOW_GPU_SUBJOBS", "true")
+	t.Setenv("FORGE_DREAM_MODE_GPU_ONLY_IN_DEEP_IDLE", "false")
+	t.Setenv("FORGE_SAFE_MODE_FORCE_CPU_ONLY", "true")
+	t.Setenv("FORGE_MODELRUNTIME_DEGRADED_ON_UNAVAILABLE_GPU", "false")
+	t.Setenv("FORGE_SCHEDULING_INTERACTIVE_PRIORITY_OVER_BACKGROUND", "false")
 	t.Setenv("FORGE_MODEL_HOME", "./test-models")
 	t.Setenv("FORGE_MODEL_DEFAULT_BACKEND", "llama_cpp")
 	t.Setenv("FORGE_MODEL_DEFAULT_ID", "qwen2.5-coder")
@@ -146,7 +267,18 @@ func TestLoadModelRuntimeOverrides(t *testing.T) {
 	t.Setenv("FORGE_MODEL_POLICY_ALLOW_AUTO_LOAD", "true")
 	t.Setenv("FORGE_MODEL_POLICY_ALLOW_CROSS_WORKSPACE", "true")
 	t.Setenv("FORGE_MODEL_POLICY_REQUIRE_WORKSPACE_SCOPE", "false")
+	t.Setenv("FORGE_MODEL_CHAT_MAX_ATTEMPTS", "5")
+	t.Setenv("FORGE_MODEL_CHAT_RETRY_BACKOFF_MS", "250")
+	t.Setenv("FORGE_MODEL_CHAT_PROVIDER_COOLDOWN_MS", "12000")
+	t.Setenv("FORGE_MODEL_CHAT_MODEL_COOLDOWN_MS", "6000")
+	t.Setenv("FORGE_MODEL_CHAT_CHECKPOINT_LIMIT", "256")
 	t.Setenv("FORGE_ENABLE_OPENAI_COMPAT_API", "true")
+	t.Setenv("FORGE_EMBEDDING_TEI_ENDPOINT", "http://127.0.0.1:8081")
+	t.Setenv("FORGE_EMBEDDING_TEI_API_KEY", "secret")
+	t.Setenv("FORGE_EMBEDDING_TEI_TIMEOUT_MS", "45000")
+	t.Setenv("FORGE_EMBEDDING_PROVIDER", "tei")
+	t.Setenv("FORGE_EMBEDDING_MODEL", "bge-large")
+	t.Setenv("FORGE_EMBEDDING_DIMS", "1024")
 
 	cfg := Load()
 	expectedModelHome, err := filepath.Abs("./test-models")
@@ -160,6 +292,54 @@ func TestLoadModelRuntimeOverrides(t *testing.T) {
 
 	if !cfg.EnableModelRuntime {
 		t.Fatalf("expected model runtime enabled")
+	}
+	if !cfg.GPUEnabled {
+		t.Fatalf("expected gpu enabled")
+	}
+	if !cfg.NVIDIADCGMEnabled || cfg.NVIDIADCGMEndpoint != "http://127.0.0.1:9400/metrics" {
+		t.Fatalf("expected NVIDIA DCGM override, got enabled=%v endpoint=%q", cfg.NVIDIADCGMEnabled, cfg.NVIDIADCGMEndpoint)
+	}
+	if cfg.NVIDIADCGMTimeoutMs != 2500 {
+		t.Fatalf("expected DCGM timeout 2500, got %d", cfg.NVIDIADCGMTimeoutMs)
+	}
+	if !cfg.IntelLevelZeroEnabled || cfg.IntelLevelZeroZEInfoPath != "/usr/bin/ze_info" || cfg.IntelGPUTopPath != "/usr/bin/intel_gpu_top" {
+		t.Fatalf("expected Intel Level Zero overrides, got enabled=%v ze=%q top=%q", cfg.IntelLevelZeroEnabled, cfg.IntelLevelZeroZEInfoPath, cfg.IntelGPUTopPath)
+	}
+	if cfg.IntelGPUTelemetryTimeoutMs != 2200 {
+		t.Fatalf("expected Intel telemetry timeout 2200, got %d", cfg.IntelGPUTelemetryTimeoutMs)
+	}
+	if cfg.GPUBackgroundMemoryPressureBlockThreshold != 0.82 {
+		t.Fatalf("expected GPU pressure threshold 0.82, got %f", cfg.GPUBackgroundMemoryPressureBlockThreshold)
+	}
+	if !cfg.GPURequiredForInteractiveInference {
+		t.Fatalf("expected gpu required for interactive inference override")
+	}
+	if cfg.GPUVRAMHeadroomFraction != 0.35 {
+		t.Fatalf("expected GPU VRAM headroom fraction 0.35, got %f", cfg.GPUVRAMHeadroomFraction)
+	}
+	if !cfg.GPUBackgroundJobsEnabled {
+		t.Fatalf("expected background GPU jobs enabled")
+	}
+	if cfg.GPUBackgroundIdleThresholdSeconds != 900 {
+		t.Fatalf("expected GPU background idle threshold 900s, got %d", cfg.GPUBackgroundIdleThresholdSeconds)
+	}
+	if cfg.GPUMaxBackgroundJobs != 2 {
+		t.Fatalf("expected max background GPU jobs 2, got %d", cfg.GPUMaxBackgroundJobs)
+	}
+	if !cfg.DreamModeAllowGPUSubjobs {
+		t.Fatalf("expected dream mode GPU subjobs enabled")
+	}
+	if cfg.DreamModeGPUOnlyInDeepIdle {
+		t.Fatalf("expected dream mode deep-idle-only override disabled")
+	}
+	if !cfg.SafeModeForceCPUOnly {
+		t.Fatalf("expected safe mode force cpu-only enabled")
+	}
+	if cfg.ModelRuntimeDegradedOnUnavailableGPU {
+		t.Fatalf("expected modelruntime degraded-on-unavailable-gpu disabled")
+	}
+	if cfg.SchedulingInteractivePriorityOverBackground {
+		t.Fatalf("expected interactive-priority-over-background override disabled")
 	}
 	if cfg.ModelHome != expectedModelHome {
 		t.Fatalf("expected model home %q, got %q", expectedModelHome, cfg.ModelHome)
@@ -224,13 +404,45 @@ func TestLoadModelRuntimeOverrides(t *testing.T) {
 	if cfg.ModelPolicyRequireWorkspaceScope {
 		t.Fatalf("expected workspace scope policy disabled")
 	}
+	if cfg.ModelChatMaxAttempts != 5 {
+		t.Fatalf("expected max attempts 5, got %d", cfg.ModelChatMaxAttempts)
+	}
+	if cfg.ModelChatRetryBackoffMs != 250 {
+		t.Fatalf("expected retry backoff 250ms, got %d", cfg.ModelChatRetryBackoffMs)
+	}
+	if cfg.ModelChatProviderCooldownMs != 12000 {
+		t.Fatalf("expected provider cooldown 12000ms, got %d", cfg.ModelChatProviderCooldownMs)
+	}
+	if cfg.ModelChatModelCooldownMs != 6000 {
+		t.Fatalf("expected model cooldown 6000ms, got %d", cfg.ModelChatModelCooldownMs)
+	}
+	if cfg.ModelChatCheckpointLimit != 256 {
+		t.Fatalf("expected checkpoint limit 256, got %d", cfg.ModelChatCheckpointLimit)
+	}
 	if !cfg.EnableOpenAICompatAPI {
 		t.Fatalf("expected OpenAI-compat API enabled")
+	}
+	if cfg.EmbeddingTEIEndpoint != "http://127.0.0.1:8081" || cfg.EmbeddingTEIAPIKey != "secret" || cfg.EmbeddingTEITimeoutMs != 45000 {
+		t.Fatalf("expected TEI overrides, got endpoint=%q key=%q timeout=%d", cfg.EmbeddingTEIEndpoint, cfg.EmbeddingTEIAPIKey, cfg.EmbeddingTEITimeoutMs)
+	}
+	if cfg.EmbeddingProvider != "tei" || cfg.EmbeddingModel != "bge-large" || cfg.EmbeddingDims != 1024 {
+		t.Fatalf("expected embedding overrides, got provider=%q model=%q dims=%d", cfg.EmbeddingProvider, cfg.EmbeddingModel, cfg.EmbeddingDims)
 	}
 }
 
 func TestLoadModelRuntimeInvalidValuesFallbackToDefaults(t *testing.T) {
 	t.Setenv("FORGE_ENABLE_MODEL_RUNTIME", "not-a-bool")
+	t.Setenv("FORGE_GPU_ENABLED", "gpu?")
+	t.Setenv("FORGE_GPU_REQUIRED_FOR_INTERACTIVE_INFERENCE", "required?")
+	t.Setenv("FORGE_GPU_VRAM_HEADROOM_FRACTION", "1.7")
+	t.Setenv("FORGE_GPU_BACKGROUND_JOBS_ENABLED", "background?")
+	t.Setenv("FORGE_GPU_BACKGROUND_IDLE_THRESHOLD_SECONDS", "-5")
+	t.Setenv("FORGE_GPU_MAX_BACKGROUND_JOBS", "-2")
+	t.Setenv("FORGE_DREAM_MODE_ALLOW_GPU_SUBJOBS", "dream?")
+	t.Setenv("FORGE_DREAM_MODE_GPU_ONLY_IN_DEEP_IDLE", "deep?")
+	t.Setenv("FORGE_SAFE_MODE_FORCE_CPU_ONLY", "safe?")
+	t.Setenv("FORGE_MODELRUNTIME_DEGRADED_ON_UNAVAILABLE_GPU", "degrade?")
+	t.Setenv("FORGE_SCHEDULING_INTERACTIVE_PRIORITY_OVER_BACKGROUND", "prio?")
 	t.Setenv("FORGE_ALLOW_LLAMA_CPP_SPAWN", "nope")
 	t.Setenv("FORGE_ENABLE_OPENAI_COMPAT_API", "bad")
 	t.Setenv("FORGE_MODEL_MAX_PROMPT_TOKENS", "abc")
@@ -248,11 +460,49 @@ func TestLoadModelRuntimeInvalidValuesFallbackToDefaults(t *testing.T) {
 	t.Setenv("FORGE_MODEL_POLICY_ALLOW_AUTO_LOAD", "sure")
 	t.Setenv("FORGE_MODEL_POLICY_ALLOW_CROSS_WORKSPACE", "nah")
 	t.Setenv("FORGE_MODEL_POLICY_REQUIRE_WORKSPACE_SCOPE", "idk")
+	t.Setenv("FORGE_MODEL_CHAT_MAX_ATTEMPTS", "zero")
+	t.Setenv("FORGE_MODEL_CHAT_RETRY_BACKOFF_MS", "-1")
+	t.Setenv("FORGE_MODEL_CHAT_PROVIDER_COOLDOWN_MS", "bad")
+	t.Setenv("FORGE_MODEL_CHAT_MODEL_COOLDOWN_MS", "none")
+	t.Setenv("FORGE_MODEL_CHAT_CHECKPOINT_LIMIT", "x")
 
 	cfg := Load()
 
 	if cfg.EnableModelRuntime {
 		t.Fatalf("expected invalid bool to fall back to false")
+	}
+	if cfg.GPUEnabled {
+		t.Fatalf("expected invalid GPU enabled bool to fall back to false")
+	}
+	if cfg.GPURequiredForInteractiveInference {
+		t.Fatalf("expected invalid GPU required bool to fall back to false")
+	}
+	if cfg.GPUVRAMHeadroomFraction != 0.20 {
+		t.Fatalf("expected invalid GPU VRAM headroom to fall back to 0.20, got %f", cfg.GPUVRAMHeadroomFraction)
+	}
+	if cfg.GPUBackgroundJobsEnabled {
+		t.Fatalf("expected invalid background jobs bool to fall back to false")
+	}
+	if cfg.GPUBackgroundIdleThresholdSeconds != 300 {
+		t.Fatalf("expected invalid background idle threshold to fall back to 300, got %d", cfg.GPUBackgroundIdleThresholdSeconds)
+	}
+	if cfg.GPUMaxBackgroundJobs != 1 {
+		t.Fatalf("expected invalid max background jobs to fall back to 1, got %d", cfg.GPUMaxBackgroundJobs)
+	}
+	if cfg.DreamModeAllowGPUSubjobs {
+		t.Fatalf("expected invalid dream mode gpu-subjobs bool to fall back to false")
+	}
+	if !cfg.DreamModeGPUOnlyInDeepIdle {
+		t.Fatalf("expected invalid dream mode deep idle bool to fall back to true")
+	}
+	if cfg.SafeModeForceCPUOnly {
+		t.Fatalf("expected invalid safe mode bool to fall back to false")
+	}
+	if !cfg.ModelRuntimeDegradedOnUnavailableGPU {
+		t.Fatalf("expected invalid degraded-on-unavailable-gpu bool to fall back to true")
+	}
+	if !cfg.SchedulingInteractivePriorityOverBackground {
+		t.Fatalf("expected invalid interactive-priority bool to fall back to true")
 	}
 	if cfg.AllowLlamaCppSpawn {
 		t.Fatalf("expected invalid bool to fall back to false for spawn")
@@ -304,6 +554,21 @@ func TestLoadModelRuntimeInvalidValuesFallbackToDefaults(t *testing.T) {
 	}
 	if !cfg.ModelPolicyRequireWorkspaceScope {
 		t.Fatalf("expected invalid workspace scope policy to fall back to true")
+	}
+	if cfg.ModelChatMaxAttempts != 3 {
+		t.Fatalf("expected invalid max attempts to fall back to 3, got %d", cfg.ModelChatMaxAttempts)
+	}
+	if cfg.ModelChatRetryBackoffMs != 250 {
+		t.Fatalf("expected invalid retry backoff to fall back to 250, got %d", cfg.ModelChatRetryBackoffMs)
+	}
+	if cfg.ModelChatProviderCooldownMs != 5000 {
+		t.Fatalf("expected invalid provider cooldown to fall back to 5000, got %d", cfg.ModelChatProviderCooldownMs)
+	}
+	if cfg.ModelChatModelCooldownMs != 5000 {
+		t.Fatalf("expected invalid model cooldown to fall back to 5000, got %d", cfg.ModelChatModelCooldownMs)
+	}
+	if cfg.ModelChatCheckpointLimit != 128 {
+		t.Fatalf("expected invalid checkpoint limit to fall back to 128, got %d", cfg.ModelChatCheckpointLimit)
 	}
 }
 

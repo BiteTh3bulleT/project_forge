@@ -43,21 +43,21 @@ type RecommendRequest struct {
 }
 
 type Recommendation struct {
-	ID                     int64           `json:"id"`
-	CreatedAtMs            int64           `json:"createdAtMs"`
-	DossierID              *int64          `json:"dossierId"`
-	TaskType               string          `json:"taskType"`
-	StrategyID             *string         `json:"strategyId"`
-	TargetAdapter          string          `json:"targetAdapter"`
-	RetrievalMode          string          `json:"retrievalMode"`
-	PacketShape            json.RawMessage `json:"packetShape"`
-	ApprovalPresetID       *string         `json:"approvalPresetId"`
-	ApprovalRequired       bool            `json:"approvalRequired"`
-	Confidence             float64         `json:"confidence"`
-	Reasons                json.RawMessage `json:"reasons"`
-	Evidence               json.RawMessage `json:"evidence"`
-	Inferred               bool            `json:"inferred"`
-	OperatorOverrideAllowed bool           `json:"operatorOverrideAllowed"`
+	ID                      int64           `json:"id"`
+	CreatedAtMs             int64           `json:"createdAtMs"`
+	DossierID               *int64          `json:"dossierId"`
+	TaskType                string          `json:"taskType"`
+	StrategyID              *string         `json:"strategyId"`
+	TargetAdapter           string          `json:"targetAdapter"`
+	RetrievalMode           string          `json:"retrievalMode"`
+	PacketShape             json.RawMessage `json:"packetShape"`
+	ApprovalPresetID        *string         `json:"approvalPresetId"`
+	ApprovalRequired        bool            `json:"approvalRequired"`
+	Confidence              float64         `json:"confidence"`
+	Reasons                 json.RawMessage `json:"reasons"`
+	Evidence                json.RawMessage `json:"evidence"`
+	Inferred                bool            `json:"inferred"`
+	OperatorOverrideAllowed bool            `json:"operatorOverrideAllowed"`
 }
 
 type Service struct {

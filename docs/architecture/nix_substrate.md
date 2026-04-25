@@ -138,12 +138,11 @@ None in Phase N1. Autonomy charters
 on Nix. Any autonomy-controlled Nix execution environment is Phase N5
 work.
 
-## 12. Relationship to v1/v2 unification
+## 12. Relationship to runtime authority cutover
 
-Nix in Phase N1 explicitly does **not** pick a side between v1/v2
-runtime paths. It wraps the existing build commands. This is
-intentional: deep Nix integration (capsules, modules, release
-snapshots) is deferred until FORGE has one authoritative runtime path.
+Nix in Phase N1 wraps the existing authoritative build commands. Deep
+Nix integration (capsules, modules, release snapshots) remains deferred
+until the runtime cutover evidence is stable on a Nix-enabled host.
 
 ## 13. Command reference
 

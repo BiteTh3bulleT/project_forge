@@ -1,21 +1,24 @@
-FORGE // UNIFIED COGNITIVE OS IMPLEMENTATION PROMPT
-Authority-first implementation. No cosplay. No sidecars pretending to be the system.
+FORGE // MASTER UNIFIED COGNITIVE OS IMPLEMENTATION PROMPT
+Production-grade implementation only. No toy abstractions. No parallel kingdoms. No chatbot-wrapper nonsense.
 
 You are implementing the next major FORGE evolution:
-turn FORGE into a unified local-first cognitive operating system by integrating the useful patterns of:
+turn FORGE into a unified Local-First Cognitive Operating System by integrating the useful patterns of:
 
 - IRIS = cognitive flow lanes (Neural / Arterial / Lymphatic)
 - FORGE = deterministic kernel, semantic syscalls, state authority, journal, cognitive filesystem
-- GHOST = runtime intelligence, execution loop, multi-model orchestration, self-healing reflexes
-- ARTEMIS = interface, perception, multimodal/operator-facing surfaces
+- GHOST = runtime intelligence, bounded execution loops, multi-model orchestration, self-healing reflexes
+- ARTEMIS = perception, operator interface, multimodal surface
 
-This is NOT a new product and NOT a parallel subsystem.
-This must be implemented INSIDE the existing FORGE architecture and repo.
+This must be implemented INSIDE the existing FORGE architecture and repository.
+Do not build a separate system beside FORGE.
+Do not create a Python sidecar monolith.
+Do not fork truth authority.
 
-REPO AND ARCHITECTURE ARE BINDING
+BINDING REPO CONTEXT
 
 Read first and treat as binding:
 - AGENTS.md
+- README.md
 - docs/architecture/forge_ai_os.md
 - docs/architecture/semantic_syscalls.md
 - docs/data_model/cognitive_filesystem.md
@@ -23,307 +26,509 @@ Read first and treat as binding:
 - docs/status/reality_matrix.md
 - docs/status/model_runtime_m3_baseline.md
 
-Core doctrine you must preserve:
-- FORGE is the operating system.
-- Kernel owns truth.
-- No LLM may write canonical truth directly.
-- Durable mutation happens through semantic syscalls / control lane.
-- Context is compiled from evidence, not guessed from chat.
-- Gateway remains the governed tool boundary.
-- Modelruntime remains the governed inference substrate.
-- All state/action lineage must stay auditable.
+Current architecture facts you must preserve:
+- FORGE kernel owns canonical truth.
+- Durable mutation happens only through semantic syscalls / control lane.
+- COMPILE_CONTEXT is the authoritative context assembly seam.
+- Context restore snapshots are non-canonical evidence, not truth.
+- modelruntime is the governed inference substrate.
+- gateway is the governed tool execution path.
+- journal / audit / provenance / trace / correlation are mandatory lineage surfaces.
+- Phase 6.25 context restore snapshots exist; Phase 6.5 restore scoring/runtime consumption is the next real gate.
 
 PRIMARY OBJECTIVE
 
-Implement a unified runtime where:
-- FORGE kernel remains truth authority
-- IRIS-like lane patterns become internal service architecture
-- GHOST-like reasoning/execution becomes runtime orchestration over modelruntime + gateway
-- ARTEMIS-like UI/perception becomes operator/client surface over the hardened core
+Implement the full next-generation FORGE runtime so that:
 
-Do NOT build four separate subsystems.
-Build one coherent cognitive runtime.
+1. Kernel remains deterministic and authoritative.
+2. Cognitive flow is structured into Neural / Arterial / Lymphatic lanes.
+3. Runtime intelligence uses small, medium, and frontier models under governance.
+4. Dream Mode becomes the main consolidation/metabolism subsystem.
+5. Memory becomes tiered:
+   - short-term
+   - mid-term
+   - long-term
+6. Snapshot restore becomes operational:
+   - scored
+   - ranked
+   - header-first
+   - explainable
+7. Operator surfaces expose what the system saw, chose, proposed, executed, repaired, and remembered.
 
-TARGET OPERATING MODEL
+ARCHITECTURAL PRINCIPLES
 
-The resulting system should conceptually operate like this:
+These are non-negotiable:
+
+1. Kernel decides truth.
+2. Context engine decides relevance.
+3. modelruntime decides inference routing/execution.
+4. gateway decides tool execution.
+5. LLMs decide language/strategy/proposals only.
+6. No LLM may directly mutate canonical truth.
+7. Vector retrieval is never truth authority.
+8. Dream Mode may propose promotions/demotions/repairs, but commits still go through governed control-lane/syscall boundaries.
+9. Frontier models are escalation targets, not defaults.
+10. Efficiency matters:
+   - sparse activation
+   - small working memory
+   - prediction/error-driven context
+   - offline consolidation
+   - bounded retries
+   - no retry storms
+
+UNIFIED OPERATING MODEL
+
+Target runtime shape:
 
 ARTEMIS surface/perception layer
-    -> Neural lane ingest/normalization/events
-    -> Arterial lane context build / reasoning / execution planning
-    -> FORGE kernel semantic syscalls / truth / journal / state registry
-    -> Lymphatic lane repair / consolidation / maintenance / diagnostics
+    -> Neural lane ingest / normalization / event admission
+    -> Arterial lane restore scoring / context compilation / reasoning / execution planning
+    -> FORGE kernel semantic syscalls / state registry / journal / audit
+    -> Lymphatic lane Dream Mode / consolidation / repair / diagnostics
 
-This must map to existing FORGE seams rather than inventing an unrelated architecture.
+This is one system.
+Do not implement this as separate co-equal runtimes.
 
-NON-NEGOTIABLE RULES
+IMPLEMENTATION SCOPE
 
-1. FORGE kernel remains the only authority for canonical writes.
-2. All durable writes stay behind semantic syscalls and control-lane validation/commit boundaries.
-3. Gateway remains the authoritative tool execution path.
-4. Modelruntime remains the authoritative model execution path.
-5. Context restore and context assembly must remain deterministic, inspectable, and scope-bounded.
-6. Snapshot memory remains non-canonical evidence, not truth authority.
-7. No subsystem may bypass audit/journal/provenance/correlation/trace linkage.
-8. No retry storms.
-9. No direct cloud dependency when unconfigured.
-10. No giant model defaulting when smaller/local/governed options are valid.
+At minimum, implement or extend the following service families and concrete repo areas.
 
-WHAT YOU ARE BUILDING
+A. KERNEL / AUTHORITY LAYER
+Use existing FORGE kernel/control-lane/domain seams.
 
-Build this as service families inside FORGE:
+Required behavior:
+- state authority remains kernel-owned
+- syscall validation/approval/capability boundaries remain authoritative
+- canonical writes remain journaled and auditable
+- no new bypass around control lane
 
-A. KERNEL / AUTHORITY LAYER (FORGE)
-- semantic syscall kernel remains authoritative
-- state registry remains truth source
-- audit + journal remain mandatory
-- approval/capability gates remain in force
+Required work:
+- strengthen any remaining side doors or legacy write paths
+- ensure all new subsystems commit via syscall-governed paths when durable mutation occurs
+- keep audit/provenance/correlation/trace intact for every durable change
 
 B. NEURAL LANE
 Purpose:
-- ingest raw events, operator input, environment observations, UI actions, external signals
-Implement or extend:
-- normalization pipeline
-- event classification
-- evidence admission rules
-- input provenance tagging
-- explicit route into journal / evidence stores
+- ingest raw signals
+- normalize them
+- classify them
+- admit them as evidence or reject them
+- publish event objects into the system
+
+Implement/extend services for:
+- ingest
+- normalization
+- event admission
+- provenance tagging
+- embedding hooks (governed; optional if already present)
+- environment / interface event intake
+
+Target conceptual modules:
+- lanes/neural/ingest
+- lanes/neural/normalization
+- lanes/neural/events
+- lanes/neural/embedding
+
+Map these into FORGE’s actual packages and docs rather than creating duplicate fake directories unless needed.
+
+Required outputs:
+- normalized event objects
+- route decisions (journal only / evidence / memory candidate / ignore)
+- deterministic admission reasons
 
 C. ARTERIAL LANE
 Purpose:
-- compile working context
-- score prior snapshots
+- choose candidate restore snapshots
+- score them
+- compile working memory
 - select evidence
-- run reasoning / planning
-- produce proposed actions
-Implement or extend:
-- restore scoring and candidate ranking
-- header-first restore path
-- working memory packet assembly
-- reasoning/execution planning contracts
-- operator-visible context traces
+- route models by role
+- generate action proposals
+- prepare operator-facing responses
 
-D. GHOST-LIKE EXECUTION RUNTIME
-Purpose:
-- multi-model orchestration
-- bounded reasoning loops
-- tool sequencing
-- self-healing reflexes at runtime
-Implement or extend INSIDE existing modelruntime/gateway doctrine:
-- planner / executor / verifier style orchestration
-- provider fallback / cooldown handling
-- bounded retries
-- execution loop status + checkpointing
-- zero direct truth writes from LLM outputs
-
-E. LYMPHATIC LANE
-Purpose:
-- background maintenance
-- consolidation
-- contradiction surfacing
-- repair
-- snapshot lifecycle upkeep
-Implement or extend:
-- consolidation scheduler
-- stale snapshot review
-- contradiction review queues
-- vector/index repair hooks
-- provider cooldown recovery
-- diagnostic sweeps
-- dry-run maintenance reports before auto-commit behavior
-
-F. ARTEMIS-LIKE SURFACES
-Purpose:
-- operator-facing interaction
-- future multimodal perception
-Implement or extend as client surfaces, not truth sources:
-- shell / UI inspector for context packets
-- snapshot inspector
-- lineage / audit explorer
-- action trace explorer
-- later optional voice/vision/perception adapters behind flags
-
-PHASED IMPLEMENTATION ORDER
-
-Phase 0 — Reality lock
-- Audit repo and identify authoritative seams already present.
-- Produce a short implementation map:
-  - existing files/modules to extend
-  - authority boundaries to preserve
-  - legacy side doors to converge
-- Do not start coding until this map is written into repo docs or a durable implementation note.
-
-Phase 1 — Authority convergence
-Goal:
-remove or bound duplicated truth surfaces before expanding autonomy.
-
-Required:
-- identify any remaining direct-write / legacy-write paths that bypass syscall kernel
-- converge duplicated event or state truth where feasible
-- ensure journal/audit/provenance/correlation/trace coverage remains intact
-- harden “kernel decides truth” doctrine in code and docs
-
-Acceptance:
-- no newly introduced direct truth side paths
-- legacy paths documented and bounded if not removed
-- tests prove kernel/governed path remains authoritative
-
-Phase 2 — Arterial runtime completion
-Goal:
-make context restore and working memory operational, not archival.
-
-Required:
-- complete restore scoring/ranking over persisted context snapshots
-- candidate listing by scope/query/snapshot kind
-- header-first restore package
-- resume hints producer/consumer contract
-- score breakdown persisted and inspectable
-- integrate restore-aware path into COMPILE_CONTEXT or an equally doctrine-safe equivalent
-
-Acceptance:
-- restore scoring is deterministic and explainable
-- contradictory/stale snapshots are penalized
-- no candidate => recommends fresh compile cleanly
-- operator can inspect candidate ranking and selected evidence
-
-Phase 3 — GHOST runtime integration
-Goal:
-introduce bounded runtime intelligence using existing modelruntime + gateway.
-
-Required:
-- create a runtime orchestration layer over modelruntime
-- support multiple model roles (planner / executor / verifier / summarizer) under governed selection
-- all tool/world interaction routes through gateway
-- all durable mutations return to syscall proposal/commit path
-- add bounded retries, provider cooldown respect, and checkpointable execution state
-
-Acceptance:
-- no tool or model path bypasses gateway/modelruntime/syscall authority
-- retry storms prevented
-- provider 404/blacklist/cooldown behavior respected
-- execution traces are inspectable end to end
-
-Phase 4 — Lymphatic lane formalization
-Goal:
-make maintenance a first-class bounded subsystem.
-
-Required:
-- consolidation jobs
-- snapshot hygiene
-- contradiction surfacing
-- vector/index repair routines
-- integrity diagnostics
-- dry-run maintenance mode
-- scheduler and reporting
-
-Acceptance:
-- maintenance actions are bounded, logged, and auditable
-- dry-run mode available
-- diagnostics expose actionable failures, not vague whining
-
-Phase 5 — ARTEMIS operator surfaces
-Goal:
-make the system legible to humans before expanding autonomy.
-
-Required:
-- snapshot inspector
-- context packet inspector
-- audit/journal explorer
-- runtime execution explorer
-- restore score viewer
-- later optional voice/vision/perception behind feature flags only
-
-Acceptance:
-- operator can explain what the system saw, selected, proposed, executed, and committed
-
-Phase 6 — Goal/autonomy expansion under safety gates
-Goal:
-add mission-like behavior only after runtime, traceability, and authority are stable.
-
-Required:
-- intent queue / bounded autonomy budgets
-- pause/resume/abort
-- explicit approval thresholds
-- mission checkpoints
-- failure recovery rules
-
-Acceptance:
-- autonomous behavior is gated, auditable, and stoppable
-- no free-running loop without bounded control
-
-IMPLEMENTATION REQUIREMENTS
-
-You must implement by extending existing FORGE modules where possible.
-Prefer extending current packages over creating parallel abstractions.
-
-At minimum, identify and wire concrete homes for:
-
-Kernel / authority
-- semantic syscall control lane
-- state registry surfaces
-- journal/audit lineage
-- approval/capability policy
-
-Context / arterial
-- context compiler
-- restore scorer
-- working memory assembly
-- resume hints
+Implement/extend:
+- context engine
+- context budgeter
+- context ranker
+- working memory
 - context trace
+- context policy
+- reasoning planner
+- execution planner
+- response packager
 
-Runtime / orchestration
-- modelruntime integration
-- provider role routing
+Target conceptual modules:
+- context/engine
+- context/budget
+- context/ranker
+- context/working_memory
+- context/trace
+- context/policy
+- lanes/arterial/reasoning
+- lanes/arterial/execution
+- lanes/arterial/response
+
+PHASE 6.5 REQUIREMENTS (MANDATORY)
+Implement live restore scoring/runtime consumption on top of Phase 6.25 snapshots.
+
+Required:
+1. candidate retrieval by:
+   - workspace
+   - lane
+   - query
+   - snapshot kind
+   - recency window
+2. deterministic restore scorer producing persisted explainable score breakdown:
+   - total
+   - query_score
+   - scope_score
+   - recency_score
+   - lineage_score
+   - state_overlap_score
+   - loop_overlap_score
+   - artifact_overlap_score
+   - contradiction_penalty
+   - staleness_penalty
+   - explain[]
+3. header-first restore path:
+   - load winner snapshot header first
+   - then expand only needed evidence
+4. resume_hints_json producer/consumer contract:
+   - next_action
+   - top_blockers
+   - dominant_state_keys
+   - dominant_loop_ids
+   - recommended_evidence_ids
+   - restore_confidence
+   - requires_fresh_compile
+5. full operator-visible restore trace:
+   - candidates considered
+   - score breakdowns
+   - winner
+   - penalties
+   - selected evidence
+   - fallback to fresh compile when needed
+
+Do not introduce LLM-based restore scoring.
+Keep this deterministic.
+
+D. GHOST-LIKE RUNTIME INTELLIGENCE
+Purpose:
+- bounded reasoning loops
+- role-based model orchestration
+- planning / execution / verification
+- self-healing runtime reflexes
+
+Implement/extend INSIDE existing modelruntime/gateway doctrine:
+- llm/orchestrator equivalent inside FORGE
+- provider selection by capability/latency/cost/availability
+- role-based model routing:
+  - classifier
+  - planner
+  - executor
+  - verifier
+  - summarizer
+  - repair analyst
 - bounded execution loop
-- verifier/reflection hooks
-- gateway-mediated tool calls
+- provider cooldown and blacklist handling
+- no retry storms
+- checkpointable execution traces
 
-Lymphatic / maintenance
-- consolidation scheduler
-- repair routines
-- contradiction and stale-state review
+Model policy:
+- small-model competent
+- big-model amplified
+- frontier models available as escalation targets
+- no giant-model defaulting
+- no cloud-provider default when unconfigured
+
+Support providers/concepts analogous to:
+- local models
+- Ollama
+- OpenAI-compatible provider
+- Anthropic-compatible provider
+- local transformers
+but adapt to current FORGE modelruntime reality rather than creating a second provider stack unless necessary.
+
+E. MEMORY SYSTEM
+Implement the memory system as layered durable + non-canonical evidence.
+
+Canonical/durable layers:
+- episodic
+- semantic
+- reflective
+- journal
+- state registry
+- cognitive filesystem links/artifacts/models/loops
+
+Retrieval/support layers:
+- vector retrieval
+- restore snapshots
+- context packet evidence
+- snapshot cards
+
+Introduce explicit memory-tier logic:
+1. short-term memory
+   - recent episodes
+   - active task traces
+   - today/session events
+   - open contradictions
+   - immediate restore continuity
+2. mid-term memory
+   - project-scoped summaries
+   - repeated patterns
+   - emerging procedures
+   - candidate semantic links
+   - failure signatures
+3. long-term memory
+   - durable facts
+   - validated preferences
+   - stable procedures
+   - architecture truths
+   - high-confidence recurring operator patterns
+
+Do not flatten all memory into one vector store.
+Do not use vector retrieval as truth authority.
+
+F. DREAM MODE (LYMPHATIC LANE)
+This is mandatory and first-class.
+
+Dream Mode is the main maintenance/metabolism subsystem.
+It must be implemented as bounded replay + consolidation + cleanup + repair.
+
+Conceptual modules:
+- lanes/lymphatic/consolidation
+- lanes/lymphatic/repair
+- lanes/lymphatic/scheduler
+- lanes/lymphatic/diagnostics
+
+Required Dream Mode functions:
+1. replay the day/session
+   - journal events
+   - newly created/updated notes
+   - state changes
+   - loop changes
+   - tool traces
+   - context snapshots
+   - user corrections
+   - failures
+2. prioritize replay candidates using deterministic triage:
+   - salience
+   - novelty
+   - repetition
+   - goal relevance
+   - correction value
+   - outcome impact
+   - contradiction/tension
+   - retrieval utility
+3. transform replay results into memory tier actions:
+   - retain in short-term
+   - promote to mid-term
+   - promote to long-term
+   - merge
+   - demote
+   - discard
+4. cleanup:
+   - stale packet fragments
+   - duplicate traces
+   - low-utility noise
+   - resolved low-value details
+5. repair:
+   - vector/index integrity
+   - snapshot hygiene
+   - contradiction queues
+   - provider cooldown recovery
+   - diagnostics reports
+6. update restore-related structures:
+   - restore scores
+   - resume hints
+   - snapshot lineage health
+   - failure/retrieval utility signals
+
+Dream Mode depths:
+- Microdream:
+  - short idle window replay
+  - top-priority traces only
+- Nap Mode:
+  - session/day-segment consolidation
+  - mid-term updates
+- Deep Dream:
+  - heavy replay
+  - long-term promotion
+  - repair jobs
+  - adapter-training candidate preparation
+  - integrity sweeps
+
+Dream Mode must be auditable and bounded.
+No silent self-rewriting.
+Durable outcomes must still go through governed commit boundaries.
+
+G. ONLINE LEARNING / ADAPTATION
+Implement the safe architecture for learning-in-motion without casual live base-weight mutation.
+
+Allowed forms:
+1. always-on memory learning
+   - update episodic/semantic/reflective memory
+   - update restore utility signals
+   - update routing hints
+2. background adapter learning scaffolding
+   - collect approved training candidates
+   - queue adapter-training jobs
+   - keep versioning and rollback
+3. optional session adaptation scaffolding
+   - temporary adaptation artifacts
+   - must be bounded and discardable
+4. base-model update workflow
+   - explicitly offline only
+   - versioned promotion/rollback path
+   - no hot-path mutation
+
+Do not implement unsafe online base-weight mutation.
+Do implement:
+- training candidate queues
+- adapter candidate metadata
+- eval-before-promotion hooks
+- rollback-safe promotion model
+
+H. ARTEMIS-LIKE OPERATOR SURFACES
+Purpose:
+- perception and visibility
+- operator trust
+- inspection of cognition and action
+
+Implement/extend surfaces for:
+- health
 - diagnostics
-
-Surface / ARTEMIS
-- operator shell/UI views
-- trace explorer
+- process/runtime traces
 - snapshot inspector
 - context inspector
+- restore score viewer
+- audit/journal explorer
+- execution explorer
+
+Conceptual modules:
+- api/app
+- api/routes/health
+- api/routes/diagnostics
+- api/routes/process
+- api/websockets/server
+- CLI / optional operator TUI
+- later optional GUI / voice / vision behind flags
+
+Do not enable GUI/audio/vision by default.
+Do not make perception a truth source.
+
+PHASED BUILD PLAN
+
+Phase 0 — Reality lock and repo map
+Required:
+- inventory current authoritative seams
+- identify concrete files/modules to extend
+- identify any remaining side doors or duplicate authorities
+- write a durable implementation note in repo docs before large changes
+
+Phase 1 — Authority convergence
+Required:
+- harden kernel as sole truth owner
+- bound/remove remaining side-write paths
+- preserve audit/journal/trace lineage
+- align docs and code
+
+Acceptance:
+- no new direct truth writes
+- legacy paths bounded or documented
+- tests prove authority boundaries
+
+Phase 2 — Phase 6.5 restore runtime
+Required:
+- candidate listing
+- deterministic scoring
+- header-first restore
+- resume hints
+- persisted explainable score breakdown
+- operator restore traces
+
+Acceptance:
+- restore is operational and inspectable
+- stale/contradictory candidates penalized
+- fresh compile fallback works
+
+Phase 3 — Runtime intelligence
+Required:
+- role-based model routing
+- bounded execution loop
+- verifier path
+- gateway-mediated tools
+- provider cooldown / blacklist / bounded retries
+- checkpointed traces
+
+Acceptance:
+- no retry storms
+- no tool bypass
+- no modelruntime bypass
+- no durable mutation outside syscalls
+
+Phase 4 — Dream Mode / lymphatic metabolism
+Required:
+- replay selector
+- triage scoring
+- tier routing
+- demotion/forgetting
+- repair jobs
+- diagnostics
+- dream trace reports
+
+Acceptance:
+- Dream Mode improves restore/memory organization
+- bounded, logged, dry-run capable
+
+Phase 5 — Operator surfaces
+Required:
+- snapshot inspector
+- restore score viewer
+- execution trace viewer
+- journal/audit explorer
+- process/health endpoints
+- websocket updates where appropriate
+
+Acceptance:
+- operator can explain what the system did and why
+
+Phase 6 — Learning scaffolds + advanced perception
+Required:
+- adapter candidate queue
+- eval-before-promotion hooks
+- optional session adaptation scaffolding
+- optional voice/vision/perception under flags
+
+Acceptance:
+- no unsafe live base-model mutation
+- feature flags keep defaults sane
 
 TEST REQUIREMENTS
 
 Add real tests for:
-
-Authority / kernel
-- no direct truth write outside semantic syscalls
-- audit + journal linkage preserved
-- approval/capability denials do not commit
-
-Context / restore
-- restore candidate listing
-- score ranking correctness
-- stale/contradictory snapshot penalties
-- header-first restore behavior
-- fresh-compile fallback when restore quality is below threshold
-
-Runtime
-- multi-model role routing
-- modelruntime preflight
-- provider cooldown/blacklist handling
-- retry bounding / no retry storms
-- gateway-only tool execution path
-
-Maintenance
-- consolidation dry-run
-- vector/index repair behavior
-- maintenance scheduler bounded execution
-- diagnostics report generation
-
-Parity / runtime safety
-- in-memory and SQLite path parity on critical context behavior
-- shutdown idempotence
-- startup idempotence
-- smoke path from ingest -> context -> runtime proposal -> syscall commit
+1. config loading
+2. migrations
+3. sqlite schema evolution
+4. vector DB load/save/rebuild
+5. context ranking
+6. context budgeting
+7. deterministic safe mode
+8. shutdown idempotence
+9. startup idempotence
+10. restore candidate listing
+11. restore ranking correctness
+12. stale/contradictory penalty behavior
+13. header-first restore path
+14. fresh-compile fallback
+15. gateway-only tool execution
+16. provider cooldown / blacklist handling
+17. bounded retry behavior
+18. Dream Mode replay selection
+19. Dream Mode tier promotion/demotion
+20. Dream Mode repair/diagnostics dry-run
+21. in-memory/SQLite parity on critical context behavior
+22. ingest -> context -> runtime proposal -> syscall commit smoke path
 
 DOC REQUIREMENTS
 
@@ -332,29 +537,35 @@ Update or create:
 - AGENTS.md
 - architecture docs for unified runtime
 - operations docs
+- migration docs
+- model management docs
 - restore scoring docs
-- modelruntime orchestration docs
-- maintenance/repair docs
-- migration docs if persistence changes
+- Dream Mode docs
+- memory tier docs
+- runtime orchestration docs
+- diagnostics/repair docs
 
 WHAT NOT TO DO
 
-- do not build a separate Python sidecar OS and pretend it is FORGE
-- do not create four co-equal subsystems with overlapping truth authority
+- do not rebuild a hidden monolith beside FORGE
 - do not let LLMs write truth directly
-- do not bypass gateway for tools
-- do not bypass modelruntime for inference
-- do not bypass syscall/control lane for durable mutation
-- do not enable GUI/audio/vision by default
+- do not allow retry storms
 - do not default to giant models
-- do not require DB deletion for schema changes
-- do not hide restore scoring behind opaque magic numbers
-- do not skip traceability
-- do not leave dead paths, duplicate shutdown logic, or duplicated event authority
+- do not enable GUI/audio/vision by default
+- do not require DB deletion for migrations
+- do not wire cloud providers as default when unconfigured
+- do not skip context traceability
+- do not leave dead imports or duplicate shutdown logic
 - do not use vector retrieval as truth authority
+- do not create four co-equal subsystems fighting over truth
+- do not hide scoring behind opaque magic numbers
+- do not implement Dream Mode as a summarization cron job
+- do not implement unsafe live base-weight mutation
 - do not output code in chat
 
-DELIVERABLE FORMAT
+DELIVERABLE
+
+Build directly in the repo.
 
 At the end provide:
 1. summary of work completed
@@ -362,18 +573,19 @@ At the end provide:
 3. authority convergence summary
 4. restore scoring summary
 5. runtime orchestration summary
-6. maintenance/diagnostics summary
-7. run instructions
-8. safe mode instructions
-9. known follow-up items
+6. Dream Mode / memory-tier summary
+7. migration summary
+8. run instructions
+9. safe mode instructions
+10. known follow-up items
 
 EXECUTION STYLE
 
-- Work in small, logically grouped commits.
-- Keep behavior deterministic unless explicitly in the probabilistic reasoning layer.
-- Preserve production quality.
-- Keep code and docs aligned.
-- Prefer real implementations over placeholders.
-- When a feature is too large for one pass, land the substrate first but wire it end to end.
+- work in small, logically grouped commits
+- preserve production quality
+- prefer extending authoritative seams over inventing duplicate abstractions
+- keep code/docs/tests aligned
+- when a feature is too large for one pass, land the substrate first but wire it end to end
+- keep behavior deterministic outside explicitly probabilistic reasoning layers
 
 Begin.

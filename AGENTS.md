@@ -12,6 +12,7 @@ Last convergence sweep update: 2026-04-22 (branch-local status alignment).
 - **2026-04-22**: Legacy adapter invoke ingress is removed from API routing; tool execution authority is gateway-only.
 - **2026-04-22**: Model Runtime M3 management is implemented (`/forge/models*` plus gated `/v1/*` with import/register flows, lifecycle governance, scheduler/limits/policy hooks, and managed backend selection); M4 items remain (streaming, delete-file approval flow, stronger backend/process control).
 - **2026-04-23**: `COMPILE_CONTEXT` restore selection now includes deterministic candidate listing/ranking (scope/query/kind), thresholded fresh-compile fallback, and persisted `restore_scores_json` + `resume_hints_json` metadata (still non-canonical evidence).
+- **2026-04-24**: CPU/RAM kernel + GPU accelerator operating split is explicitly documented and wired through runtime policy/config health surfaces; safe-mode CPU-only runbook is available (`docs/architecture/cpu_ram_kernel_gpu_accelerator_split.md`, `docs/runbooks/no_gpu_boot_and_recovery.md`).
 - Append-only per-job event streams as execution truth
 - Approval gates with separated request and decision records
 - Context normalization into durable guidance files (`AGENTS.md`, `CLAUDE.md`, briefing, cursor rule)
@@ -83,12 +84,12 @@ Last convergence sweep update: 2026-04-22 (branch-local status alignment).
 - Nix is optional in Phase N1 — existing `npm`/`go` workflows remain authoritative.
 - Do not vendor `nixpkgs`. Do not break non-Nix workflows.
 - Do not expose broken Nix packages as default outputs.
-- Deep Nix integration (tool capsules, NixOS modules) waits for v1/v2 authoritative path clarity.
+- Deep Nix integration (tool capsules, NixOS modules) waits for stable runtime cutover evidence.
 - Substrate details: `docs/architecture/nix_substrate.md`.
 
 ## FORGE Baseline Completion Rules
 - Do not create duplicate runtime paths.
-- Existing v1 systems should be wrapped/adapted into AI-OS interfaces where possible.
+- Existing compatibility systems should be read-only or wrapped/adapted into AI-OS interfaces.
 - Do not mark scaffolds as complete.
 - Dangerous capabilities must be disabled, stubbed, or approval-gated by default.
 - Autonomy maintain/mission modes require durable charters/intents/budgets.

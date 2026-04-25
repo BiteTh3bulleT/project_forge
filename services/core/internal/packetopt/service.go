@@ -22,9 +22,9 @@ type Guidance struct {
 }
 
 type AnalyzeRequest struct {
-	PacketID  int64  `json:"packetId"`
+	PacketID  int64   `json:"packetId"`
 	JobID     *string `json:"jobId"`
-	DossierID *int64 `json:"dossierId"`
+	DossierID *int64  `json:"dossierId"`
 }
 
 type Service struct {

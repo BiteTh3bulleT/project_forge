@@ -2,6 +2,7 @@ package modelruntime
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -123,6 +124,7 @@ type GenerateRequest struct {
 	Scope         string            `json:"scope,omitempty"`
 	Actor         string            `json:"actor,omitempty"`
 	Source        string            `json:"source,omitempty"`
+	WorkloadClass GPUWorkloadClass  `json:"workloadClass,omitempty"`
 	Messages      []GenerateMessage `json:"messages,omitempty"`
 	Prompt        string            `json:"prompt,omitempty"`
 	Parameters    map[string]any    `json:"parameters,omitempty"`
@@ -172,6 +174,51 @@ type TokenEvent struct {
 var (
 	ErrModelNotFound = errors.New("model not found")
 )
+
+type GPUWorkloadClass string
+
+const (
+	GPUWorkloadInteractiveInference GPUWorkloadClass = "INTERACTIVE_INFERENCE"
+	GPUWorkloadInteractiveEmbedding GPUWorkloadClass = "INTERACTIVE_EMBEDDING"
+	GPUWorkloadBackgroundEmbedding  GPUWorkloadClass = "BACKGROUND_EMBEDDING"
+	GPUWorkloadBackgroundRerank     GPUWorkloadClass = "BACKGROUND_RERANK"
+	GPUWorkloadDreamDistillation    GPUWorkloadClass = "DREAM_DISTILLATION"
+	GPUWorkloadAdapterEval          GPUWorkloadClass = "ADAPTER_EVAL"
+	GPUWorkloadAdapterTraining      GPUWorkloadClass = "ADAPTER_TRAINING"
+	GPUWorkloadUnknown              GPUWorkloadClass = ""
+)
+
+func ParseGPUWorkloadClass(raw string) GPUWorkloadClass {
+	normalized := strings.ToUpper(strings.TrimSpace(raw))
+	switch normalized {
+	case string(GPUWorkloadInteractiveInference), string(GPUWorkloadInteractiveEmbedding), string(GPUWorkloadBackgroundEmbedding), string(GPUWorkloadBackgroundRerank), string(GPUWorkloadDreamDistillation), string(GPUWorkloadAdapterEval), string(GPUWorkloadAdapterTraining):
+		return GPUWorkloadClass(normalized)
+	case "INTERACTIVE", "INFERENCE":
+		return GPUWorkloadInteractiveInference
+	case "BACKGROUND":
+		return GPUWorkloadBackgroundEmbedding
+	default:
+		return GPUWorkloadUnknown
+	}
+}
+
+func (c GPUWorkloadClass) IsInteractive() bool {
+	switch c {
+	case GPUWorkloadInteractiveInference, GPUWorkloadInteractiveEmbedding, GPUWorkloadUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+func (c GPUWorkloadClass) IsBackground() bool {
+	switch c {
+	case GPUWorkloadBackgroundEmbedding, GPUWorkloadBackgroundRerank, GPUWorkloadDreamDistillation, GPUWorkloadAdapterEval, GPUWorkloadAdapterTraining:
+		return true
+	default:
+		return false
+	}
+}
 
 var validFormats = map[ModelFormat]struct{}{
 	ModelFormatGGUF:        {},

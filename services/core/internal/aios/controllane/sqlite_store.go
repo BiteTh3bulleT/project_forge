@@ -416,7 +416,7 @@ SELECT id, query, workspace_id, lane_id, selected_paths_json, budget_json, inclu
 FROM context_packet_snapshots
 WHERE workspace_id = ? AND (? = '' OR lane_id = ?) AND (? = '' OR query = ?)
   AND (? = '' OR snapshot_kind = ? OR (snapshot_kind = '' AND json_extract(metadata_json, '$.snapshot_kind') = ?))
-ORDER BY created_at DESC
+ORDER BY created_at DESC, id DESC
 LIMIT ?`, scope.WorkspaceID, scope.LaneID, scope.LaneID, query, query, snapshotKind, snapshotKind, snapshotKind, limit)
 	if err != nil {
 		return nil
@@ -1596,6 +1596,12 @@ func contextSnapshotMetadata(pkt domain.ContextPacket, metadata map[string]any) 
 		}
 		if v := pkt.RestoreSnapshot.Metadata["restore_reason_json"]; v != nil {
 			out["restore_reason_json"] = v
+		}
+		if v := pkt.RestoreSnapshot.Metadata["restore_trace_json"]; v != nil {
+			out["restore_trace_json"] = v
+		}
+		if v := pkt.RestoreSnapshot.Metadata["restore_trace"]; v != nil {
+			out["restore_trace"] = v
 		}
 		if v := readString(pkt.RestoreSnapshot.Metadata, "rendered_card_artifact_id"); v != "" {
 			out["rendered_card_artifact_id"] = v

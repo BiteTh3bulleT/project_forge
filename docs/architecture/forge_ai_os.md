@@ -22,6 +22,18 @@ Rule of operation:
 | Approval and capability gates | approvals + permissions + gateway/tool policy | `services/core/internal/approvals`, `services/core/internal/permissions`, `services/core/internal/gateway/tool_policy.go` |
 | Audit and trace linkage | audit service plus correlation/trace propagation | `services/core/internal/audit`, syscall/gateway/model-runtime bridge code |
 
+## CPU/RAM kernel and GPU accelerator boundary
+
+FORGE now treats CPU/RAM authority and GPU acceleration as separate operating lanes:
+
+- kernel truth/control authority: CPU/RAM only (`forge-core`)
+- inference acceleration: modelruntime boundary (`forge-modelruntime`)
+- tool execution governance: CPU-side gateway path only (`forge-gateway`)
+
+Boundary note:
+
+- [cpu_ram_kernel_gpu_accelerator_split.md](cpu_ram_kernel_gpu_accelerator_split.md)
+
 ## Landed Phase 3-5 architecture
 
 ### Phase 3: cognitive persistence is real
@@ -66,10 +78,10 @@ Three important Phase 5 families are now real:
 
 What remains incomplete:
 
-- v1 memory writes still bypass the syscall kernel in `services/core/internal/memory/*`
-- dual event truth streams (`events` and `journal_events`) still coexist
+- legacy observation reads still coexist with cognitive filesystem reads for compatibility, but mutation endpoints are retired
+- `events` remains an operational event projection while `journal_events` is canonical semantic truth
 - operator trace/explain surfaces are weaker than backend trace data
-- many tool capabilities are intentionally `stubbed`, `deferred`, or `approval_only`
+- dangerous, external, privileged, or destructive tool capabilities are intentionally `approval_only`
 
 ## Runtime surfaces mapped to the AI-OS model
 
@@ -134,7 +146,7 @@ Primary code:
 
 ## Known non-converged boundaries
 
-- v1 memory mutation and v2 semantic mutation still coexist.
+- legacy memory mutation endpoints are retired; semantic mutation uses the syscall kernel.
 - `events` and `journal_events` are both active runtime streams.
 - The tri-lane model is architectural doctrine, not yet a hard package/runtime isolation boundary.
 - Operator-facing trace exploration still lags the backend lineage that already exists in audit, gateway, syscall, and model-runtime records.

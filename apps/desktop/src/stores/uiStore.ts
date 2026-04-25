@@ -1,13 +1,14 @@
 import { create } from "zustand";
 
-type UiMode = "guided" | "pro";
+type UiMode = "cognitive" | "metrics";
 type ContrastPreference = "normal" | "high";
 type EffectsPreference = "off" | "subtle";
 
 function loadMode(): UiMode {
-  if (typeof window === "undefined") return "guided";
+  if (typeof window === "undefined") return "cognitive";
   const raw = window.localStorage.getItem("forge.ui.mode");
-  return raw === "pro" ? "pro" : "guided";
+  if (raw === "metrics" || raw === "pro") return "metrics";
+  return "cognitive";
 }
 
 function loadContrast(): ContrastPreference {
@@ -71,7 +72,7 @@ export const useUiStore = create<UiState>((set) => ({
     }),
   toggleUiMode: () =>
     set((s) => {
-      const next: UiMode = s.uiMode === "guided" ? "pro" : "guided";
+      const next: UiMode = s.uiMode === "cognitive" ? "metrics" : "cognitive";
       if (typeof window !== "undefined") {
         window.localStorage.setItem("forge.ui.mode", next);
       }

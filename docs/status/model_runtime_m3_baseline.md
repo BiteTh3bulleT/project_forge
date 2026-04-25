@@ -3,6 +3,12 @@
 Date: 2026-04-22
 Scope: verify what Model Runtime M1 and M2 actually shipped before extending M3.
 
+Status note (2026-04-25): this file is retained as pre-M3 baseline evidence.
+Current M3 routes and management behavior are implemented in code and summarized
+in `docs/status/model_runtime_status.md` and `docs/architecture/model_runtime.md`.
+The "before M3 extension" limitations below are historical baseline notes, not
+the current runtime state.
+
 ## Baseline Verification
 
 ### M1 actually shipped

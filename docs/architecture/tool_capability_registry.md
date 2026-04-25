@@ -25,16 +25,20 @@ Registry operations:
 - list by risk
 - enable/disable via status update
 
-## Phase 5.9 Mapping
+## Phase 5.997 Mapping
 
 The full taxonomy is registered.
 
-Current execution coverage is intentionally partial:
+Current execution coverage is gateway-backed:
 
-- existing gateway tools are mapped to `active`/`approval_only` capabilities
-- non-implemented primitives are present as `stubbed`/`approval_only` and roadmap-gated ones can be marked `deferred` to keep capability discoverability without enabling execution
+- every default capability has `gatewayToolId` metadata
+- every default adapter id is a concrete `gateway.*` binding, not `stub.*`
+- final default statuses are `active` or `approval_only`
+- missing platform services, credentials, binaries, devices, or privileges return explicit runtime errors from the real gateway tool path
 
-This gives a stable policy and UI surface now, without enabling unsafe operations.
+`stubbed` and `deferred` remain valid status vocabulary for explicit
+operator override and compatibility tests, but they are not the default
+production registry posture.
 
 ## Descriptor Contract
 

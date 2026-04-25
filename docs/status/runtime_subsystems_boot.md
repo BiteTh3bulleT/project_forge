@@ -24,7 +24,7 @@ default posture.
 | I/O lane | yes | adapter-backed | yes |
 | Compute lane | yes | librarian cells propose-only | yes |
 | Truth engine | yes | read-only current/history APIs | yes |
-| Autonomy runner | yes (goroutine) | mode=`maintain`, 4 charters, 2 budgets | see note |
+| Autonomy runner | yes (goroutine) | mode=`observe`, 4 charters, 2 budgets | yes |
 | Watch manager | yes | ingest file-watchers | yes |
 | Backup service | yes | — | yes |
 | Telegram gateway | **disabled** (no token) | — | yes |
@@ -38,8 +38,8 @@ default posture.
 - Wires an autonomy authorizer
   (`newGatewayAutonomyAuthorizer(autonomyLoop)`) so autonomy requests
   are policy-evaluated before commit.
-- Dangerous tools (shell/file write/process) remain `approval_only` or
-  `stubbed` per
+- Dangerous tools (shell/process/external/privileged) remain
+  `approval_only` per
   [dangerous_capabilities.md](dangerous_capabilities.md). Boot does not
   flip any risk flag live.
 
@@ -70,27 +70,28 @@ default posture.
 
 ### Memory
 
-- **[BLOCKED on VSA files being committed, for fresh clones.]**
-  On the current working tree (VSA files present) memory service
+- **[Operational with strict VSA source preflight.]**
+  On the current branch state (VSA files tracked) memory service
   exposes VSA methods (`GetObservationVSA`, `ReindexObservationVSA`,
   etc.). Endpoint `/api/memory/observations/{id}/vsa` returns 400
   validation error on missing observation (verified) rather than
-  panic. A fresh clone without the VSA files **will not compile**.
-- Legacy v1 memory observation mutation routes are now explicit
-  legacy boundaries and default-blocked unless
-  `FORGE_ALLOW_LEGACY_MEMORY_MUTATIONS=true`.
+  panic. A fresh clone missing tracked VSA files fails fast through
+  the strict preflight before core/run/test paths.
+- Memory observation mutation routes are retired. POST/PATCH/usefulness
+  mutation endpoints return `410 Gone` and audit the denied attempt;
+  read-only observation inspection remains available.
 
 ### Autonomy
 
 - Init: [api/server.go:194](services/core/internal/api/server.go#L194) (goroutine)
-- Mode default: `maintain` (see [autonomy_maintenance_loop.go:106](services/core/internal/api/autonomy_maintenance_loop.go#L106)).
+- Mode default: `observe` (see [autonomy_maintenance_loop.go](services/core/internal/api/autonomy_maintenance_loop.go)).
   Can be set via `autonomy_mode` setting (`off` / `observe` / `propose`
   / `maintain` / `mission`).
 - Default charters (4) and budgets (2) are created at boot. Default
   budgets disallow external calls without approval
   ([defaults.go:5-58](services/core/internal/aios/autonomy/defaults.go#L5)).
-- Verified live: `dream.active=false`, `activeIntents=0` on fresh boot
-  — no background work actually in flight.
+- Fresh boot is observation-only unless the operator explicitly sets
+  `autonomy_mode` to `propose`, `maintain`, or `mission`.
 
 ### Telegram / Discord
 
@@ -104,9 +105,9 @@ default posture.
 
 | Subsystem | State | Reason | Next fix |
 |---|---|---|---|
-| Memory (VSA) | **blocked on fresh clone** | Untracked `vsa_engine.go`, `vsa_indexer.go`, `vsa_signals.go` | Commit or revert — operator decision; preflight script now provides actionable failure before core/run/test paths, and strict tracked-state gating on `npm run core`/`npm run smoke` |
+| Memory (VSA) | operational in current worktree | Required VSA files are present and `scripts/check-vsa-files.sh --require-tracked` passes in this workspace | Keep strict preflight in core/run/test paths so missing tracked files fail fast |
 | Permissions | **silently degraded on error** | `EnsureDefaults`/`EnsureMkdir*` discard errors | Log errors; surface in `/api/meta` — not done this pass |
-| Autonomy default | **active, not off** | Mode defaults to `maintain` with auto-created charters | Change default to `off` OR document clearly — documented here; not changing default without operator sign-off |
+| Autonomy default | resolved | Mode defaults to `observe` with auto-created charters/budgets for inspection | Keep maintain/mission explicit operator choices |
 
 No bypass of gateway/permissions/audit was identified in the sampled
 boot paths reviewed this pass. No dangerous capability was observed

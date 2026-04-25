@@ -45,12 +45,12 @@ type DossierDetail struct {
 }
 
 type JobSnapshot struct {
-	JobID          string  `json:"jobId"`
-	Title          string  `json:"title"`
-	Status         string  `json:"status"`
-	TargetAdapter  string  `json:"targetAdapter"`
-	CreatedAtMs    int64   `json:"createdAtMs"`
-	ResultSummary  *string `json:"resultSummary"`
+	JobID           string  `json:"jobId"`
+	Title           string  `json:"title"`
+	Status          string  `json:"status"`
+	TargetAdapter   string  `json:"targetAdapter"`
+	CreatedAtMs     int64   `json:"createdAtMs"`
+	ResultSummary   *string `json:"resultSummary"`
 	LastFailureCode *string `json:"lastFailureCode"`
 }
 
@@ -399,8 +399,8 @@ func (s *Service) GenerateBrief(ctx context.Context, dossierID int64, notes stri
 		}
 	}
 	contextJSON, _ := json.Marshal(map[string]any{
-		"dossierId": dossierID,
-		"jobCount":  len(detail.RecentJobs),
+		"dossierId":   dossierID,
+		"jobCount":    len(detail.RecentJobs),
 		"sourceCount": len(detail.Sources),
 	})
 	now := time.Now().UnixMilli()

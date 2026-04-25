@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"math"
 	"net/http"
 	"sort"
@@ -18,19 +19,42 @@ import (
 const (
 	ProviderLocalHash = "local_hash"
 	ProviderOllama    = "ollama"
+	ProviderTEI       = "tei"
 )
 
 type Provider interface {
 	ID() string
 	Model() string
 	Embed(ctx context.Context, text string) ([]float64, error)
+	EmbedTexts(ctx context.Context, texts []string) ([][]float64, error)
+	Health(ctx context.Context) ProviderHealth
 }
 
 type Config struct {
-	Provider  string `json:"provider"`
-	Model     string `json:"model"`
-	Dims      int    `json:"dims"`
-	OllamaURL string `json:"ollamaUrl"`
+	Provider     string `json:"provider"`
+	Model        string `json:"model"`
+	Dims         int    `json:"dims"`
+	OllamaURL    string `json:"ollamaUrl"`
+	TEIEndpoint  string `json:"teiEndpoint,omitempty"`
+	TEITimeoutMs int    `json:"teiTimeoutMs,omitempty"`
+}
+
+type ProviderHealth struct {
+	Provider           string         `json:"provider"`
+	Model              string         `json:"model,omitempty"`
+	Healthy            bool           `json:"healthy"`
+	State              string         `json:"state"`
+	Detail             string         `json:"detail,omitempty"`
+	LocalCloud         string         `json:"localCloud"`
+	GPURequired        bool           `json:"gpuRequired"`
+	SupportsEmbeddings bool           `json:"supportsEmbeddings"`
+	SupportsGeneration bool           `json:"supportsGeneration"`
+	SupportsLoRA       bool           `json:"supportsLora"`
+	SupportsGuardrails bool           `json:"supportsGuardrails"`
+	SupportsStreaming  bool           `json:"supportsStreaming"`
+	CostClass          string         `json:"costClass"`
+	LatencyClass       string         `json:"latencyClass"`
+	Metadata           map[string]any `json:"metadata,omitempty"`
 }
 
 type Service struct {
@@ -71,17 +95,17 @@ type SemanticHit struct {
 }
 
 type SemanticSearchRequest struct {
-	Query      string
-	Limit      int
-	SourceIDs  []int64
-	Provider   string
-	Model      string
-	DossierID  *int64
+	Query     string
+	Limit     int
+	SourceIDs []int64
+	Provider  string
+	Model     string
+	DossierID *int64
 }
 
 func (s *Service) CurrentConfig(ctx context.Context) Config {
 	provider := strings.TrimSpace(s.setting(ctx, "embedding_provider", ProviderLocalHash))
-	if provider != ProviderLocalHash && provider != ProviderOllama {
+	if provider != ProviderLocalHash && provider != ProviderOllama && provider != ProviderTEI {
 		provider = ProviderLocalHash
 	}
 	dims, _ := strconv.Atoi(strings.TrimSpace(s.setting(ctx, "embedding_dims", "128")))
@@ -92,6 +116,8 @@ func (s *Service) CurrentConfig(ctx context.Context) Config {
 	if model == "" {
 		if provider == ProviderLocalHash {
 			model = fmt.Sprintf("local-hash-%d", dims)
+		} else if provider == ProviderTEI {
+			model = strings.TrimSpace(s.setting(ctx, "embedding_tei_model", "tei"))
 		} else {
 			model = strings.TrimSpace(s.setting(ctx, "ollama_model", ""))
 		}
@@ -100,10 +126,12 @@ func (s *Service) CurrentConfig(ctx context.Context) Config {
 		model = "default"
 	}
 	return Config{
-		Provider:  provider,
-		Model:     model,
-		Dims:      dims,
-		OllamaURL: strings.TrimSpace(s.setting(ctx, "ollama_base_url", "http://127.0.0.1:11434")),
+		Provider:     provider,
+		Model:        model,
+		Dims:         dims,
+		OllamaURL:    strings.TrimSpace(s.setting(ctx, "ollama_base_url", "http://127.0.0.1:11434")),
+		TEIEndpoint:  strings.TrimSpace(s.setting(ctx, "embedding_tei_endpoint", "")),
+		TEITimeoutMs: settingInt(s.setting(ctx, "embedding_tei_timeout_ms", "30000"), 30000),
 	}
 }
 
@@ -118,7 +146,23 @@ func (s *Service) Provider(ctx context.Context, overrideProvider, overrideModel 
 	if cfg.Provider == ProviderOllama {
 		return &ollamaProvider{client: s.client, baseURL: cfg.OllamaURL, model: cfg.Model}
 	}
+	if cfg.Provider == ProviderTEI {
+		client := s.client
+		if cfg.TEITimeoutMs > 0 {
+			client = &http.Client{Timeout: time.Duration(cfg.TEITimeoutMs) * time.Millisecond}
+		}
+		return &teiProvider{client: client, endpoint: cfg.TEIEndpoint, apiKey: strings.TrimSpace(s.setting(ctx, "embedding_tei_api_key", "")), model: cfg.Model}
+	}
 	return &localHashProvider{dims: cfg.Dims, model: cfg.Model}
+}
+
+func (s *Service) ProviderHealth(ctx context.Context, provider, model string) ProviderHealth {
+	return s.Provider(ctx, provider, model).Health(ctx)
+}
+
+func (s *Service) EmbedTexts(ctx context.Context, texts []string, provider, model string, background bool) ([][]float64, error) {
+	_ = background
+	return s.Provider(ctx, provider, model).EmbedTexts(ctx, texts)
 }
 
 func (s *Service) ReembedAll(ctx context.Context, provider, model string) (ReembedResult, error) {
@@ -371,6 +415,10 @@ type localHashProvider struct {
 
 func (p *localHashProvider) ID() string    { return ProviderLocalHash }
 func (p *localHashProvider) Model() string { return p.model }
+func (p *localHashProvider) Health(ctx context.Context) ProviderHealth {
+	_ = ctx
+	return ProviderHealth{Provider: p.ID(), Model: p.Model(), Healthy: true, State: "available", Detail: "local deterministic hash embeddings", LocalCloud: "local", SupportsEmbeddings: true, CostClass: "free", LatencyClass: "low"}
+}
 
 func (p *localHashProvider) Embed(ctx context.Context, text string) ([]float64, error) {
 	_ = ctx
@@ -403,6 +451,18 @@ func (p *localHashProvider) Embed(ctx context.Context, text string) ([]float64, 
 	return vec, nil
 }
 
+func (p *localHashProvider) EmbedTexts(ctx context.Context, texts []string) ([][]float64, error) {
+	out := make([][]float64, 0, len(texts))
+	for _, text := range texts {
+		vec, err := p.Embed(ctx, text)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, vec)
+	}
+	return out, nil
+}
+
 type ollamaProvider struct {
 	client  *http.Client
 	baseURL string
@@ -411,6 +471,24 @@ type ollamaProvider struct {
 
 func (p *ollamaProvider) ID() string    { return ProviderOllama }
 func (p *ollamaProvider) Model() string { return p.model }
+func (p *ollamaProvider) Health(ctx context.Context) ProviderHealth {
+	if strings.TrimSpace(p.baseURL) == "" {
+		return ProviderHealth{Provider: p.ID(), Model: p.Model(), Healthy: false, State: "degraded", Detail: "ollama base URL is empty", LocalCloud: "local", SupportsEmbeddings: true, CostClass: "free", LatencyClass: "medium"}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(p.baseURL, "/")+"/api/tags", nil)
+	if err != nil {
+		return ProviderHealth{Provider: p.ID(), Model: p.Model(), Healthy: false, State: "degraded", Detail: err.Error(), LocalCloud: "local", SupportsEmbeddings: true, CostClass: "free", LatencyClass: "medium"}
+	}
+	res, err := p.client.Do(req)
+	if err != nil {
+		return ProviderHealth{Provider: p.ID(), Model: p.Model(), Healthy: false, State: "degraded", Detail: err.Error(), LocalCloud: "local", SupportsEmbeddings: true, CostClass: "free", LatencyClass: "medium"}
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		return ProviderHealth{Provider: p.ID(), Model: p.Model(), Healthy: false, State: "degraded", Detail: res.Status, LocalCloud: "local", SupportsEmbeddings: true, CostClass: "free", LatencyClass: "medium"}
+	}
+	return ProviderHealth{Provider: p.ID(), Model: p.Model(), Healthy: true, State: "available", Detail: "ollama reachable", LocalCloud: "local", SupportsEmbeddings: true, CostClass: "free", LatencyClass: "medium"}
+}
 
 func (p *ollamaProvider) Embed(ctx context.Context, text string) ([]float64, error) {
 	if strings.TrimSpace(p.baseURL) == "" {
@@ -447,6 +525,136 @@ func (p *ollamaProvider) Embed(ctx context.Context, text string) ([]float64, err
 		return nil, fmt.Errorf("empty embedding from ollama")
 	}
 	return out.Embedding, nil
+}
+
+func (p *ollamaProvider) EmbedTexts(ctx context.Context, texts []string) ([][]float64, error) {
+	out := make([][]float64, 0, len(texts))
+	for _, text := range texts {
+		vec, err := p.Embed(ctx, text)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, vec)
+	}
+	return out, nil
+}
+
+type teiProvider struct {
+	client   *http.Client
+	endpoint string
+	apiKey   string
+	model    string
+}
+
+func (p *teiProvider) ID() string    { return ProviderTEI }
+func (p *teiProvider) Model() string { return p.model }
+
+func (p *teiProvider) Health(ctx context.Context) ProviderHealth {
+	base := ProviderHealth{Provider: p.ID(), Model: p.Model(), LocalCloud: "local_or_cloud", GPURequired: false, SupportsEmbeddings: true, CostClass: "configured_provider", LatencyClass: "medium"}
+	if strings.TrimSpace(p.endpoint) == "" {
+		base.Healthy = false
+		base.State = "degraded"
+		base.Detail = "TEI endpoint is not configured"
+		return base
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(p.endpoint, "/")+"/health", nil)
+	if err != nil {
+		base.Healthy = false
+		base.State = "degraded"
+		base.Detail = err.Error()
+		return base
+	}
+	if p.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	}
+	res, err := p.client.Do(req)
+	if err != nil {
+		base.Healthy = false
+		base.State = "degraded"
+		base.Detail = err.Error()
+		return base
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		base.Healthy = false
+		base.State = "degraded"
+		base.Detail = res.Status
+		return base
+	}
+	base.Healthy = true
+	base.State = "available"
+	base.Detail = "TEI endpoint reachable"
+	return base
+}
+
+func (p *teiProvider) Embed(ctx context.Context, text string) ([]float64, error) {
+	vectors, err := p.EmbedTexts(ctx, []string{text})
+	if err != nil {
+		return nil, err
+	}
+	if len(vectors) == 0 {
+		return nil, fmt.Errorf("empty embedding from TEI")
+	}
+	return vectors[0], nil
+}
+
+func (p *teiProvider) EmbedTexts(ctx context.Context, texts []string) ([][]float64, error) {
+	if strings.TrimSpace(p.endpoint) == "" {
+		return nil, fmt.Errorf("TEI endpoint is empty")
+	}
+	payload := map[string]any{"inputs": texts}
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(p.endpoint, "/")+"/embed", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if p.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+p.apiKey)
+	}
+	res, err := p.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		return nil, fmt.Errorf("TEI embeddings returned %s", res.Status)
+	}
+	raw, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	var batched [][]float64
+	if err := json.Unmarshal(raw, &batched); err == nil && len(batched) > 0 {
+		return batched, nil
+	}
+	var wrapped struct {
+		Embeddings [][]float64 `json:"embeddings"`
+		Data       []struct {
+			Embedding []float64 `json:"embedding"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &wrapped); err == nil {
+		if len(wrapped.Embeddings) > 0 {
+			return wrapped.Embeddings, nil
+		}
+		if len(wrapped.Data) > 0 {
+			out := make([][]float64, 0, len(wrapped.Data))
+			for _, row := range wrapped.Data {
+				out = append(out, row.Embedding)
+			}
+			return out, nil
+		}
+	}
+	return nil, fmt.Errorf("invalid TEI embedding response")
+}
+
+func settingInt(raw string, fallback int) int {
+	v, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || v <= 0 {
+		return fallback
+	}
+	return v
 }
 
 func tokenize(in string) []string {

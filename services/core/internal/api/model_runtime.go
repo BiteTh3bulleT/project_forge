@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+
+	"forge/projectforge/services/core/internal/modelruntime"
 )
 
 // modelRuntimeService is the API-facing abstraction for model runtime operations.
@@ -62,19 +64,21 @@ type ModelRuntimeChatMessage struct {
 }
 
 type ModelRuntimeChatRequest struct {
-	ModelID    string                    `json:"modelId"`
-	Backend    string                    `json:"backend,omitempty"`
-	Messages   []ModelRuntimeChatMessage `json:"messages,omitempty"`
-	Prompt     string                    `json:"prompt,omitempty"`
-	Parameters map[string]any            `json:"parameters,omitempty"`
-	MaxTokens  int                       `json:"maxTokens,omitempty"`
-	TimeoutMs  int                       `json:"timeoutMs,omitempty"`
-	Stream     bool                      `json:"stream,omitempty"`
-	Actor      string                    `json:"actor,omitempty"`
-	Source     string                    `json:"source,omitempty"`
-	Meta       ModelRuntimeRequestMeta   `json:"meta"`
-	Provenance map[string]any            `json:"provenance,omitempty"`
-	Metadata   map[string]any            `json:"metadata,omitempty"`
+	ModelID       string                    `json:"modelId"`
+	Backend       string                    `json:"backend,omitempty"`
+	Role          string                    `json:"role,omitempty"`
+	WorkloadClass string                    `json:"workloadClass,omitempty"`
+	Messages      []ModelRuntimeChatMessage `json:"messages,omitempty"`
+	Prompt        string                    `json:"prompt,omitempty"`
+	Parameters    map[string]any            `json:"parameters,omitempty"`
+	MaxTokens     int                       `json:"maxTokens,omitempty"`
+	TimeoutMs     int                       `json:"timeoutMs,omitempty"`
+	Stream        bool                      `json:"stream,omitempty"`
+	Actor         string                    `json:"actor,omitempty"`
+	Source        string                    `json:"source,omitempty"`
+	Meta          ModelRuntimeRequestMeta   `json:"meta"`
+	Provenance    map[string]any            `json:"provenance,omitempty"`
+	Metadata      map[string]any            `json:"metadata,omitempty"`
 }
 
 type ModelRuntimeUsage struct {
@@ -84,22 +88,30 @@ type ModelRuntimeUsage struct {
 }
 
 type ModelRuntimeChatResult struct {
-	Content      string            `json:"content"`
-	FinishReason string            `json:"finishReason,omitempty"`
-	Usage        ModelRuntimeUsage `json:"usage,omitempty"`
-	DurationMs   int64             `json:"durationMs,omitempty"`
-	Backend      string            `json:"backend,omitempty"`
-	ModelID      string            `json:"modelId,omitempty"`
-	AuditID      string            `json:"auditId,omitempty"`
-	Artifacts    []string          `json:"artifacts,omitempty"`
-	Warnings     []string          `json:"warnings,omitempty"`
+	Content      string                                `json:"content"`
+	FinishReason string                                `json:"finishReason,omitempty"`
+	Usage        ModelRuntimeUsage                     `json:"usage,omitempty"`
+	DurationMs   int64                                 `json:"durationMs,omitempty"`
+	ExecutionID  string                                `json:"executionId,omitempty"`
+	AttemptCount int                                   `json:"attemptCount,omitempty"`
+	Role         string                                `json:"role,omitempty"`
+	Checkpoint   *modelruntime.ChatExecutionCheckpoint `json:"checkpoint,omitempty"`
+	Backend      string                                `json:"backend,omitempty"`
+	ModelID      string                                `json:"modelId,omitempty"`
+	AuditID      string                                `json:"auditId,omitempty"`
+	Artifacts    []string                              `json:"artifacts,omitempty"`
+	Warnings     []string                              `json:"warnings,omitempty"`
 }
 
 type ModelRuntimeHealth struct {
-	OK      bool           `json:"ok"`
-	Status  string         `json:"status,omitempty"`
-	Backend string         `json:"backend,omitempty"`
-	Details map[string]any `json:"details,omitempty"`
+	OK              bool           `json:"ok"`
+	Status          string         `json:"status,omitempty"`
+	Backend         string         `json:"backend,omitempty"`
+	RuntimeEnabled  bool           `json:"runtimeEnabled,omitempty"`
+	GPUAware        bool           `json:"gpuAware,omitempty"`
+	DegradedReasons []string       `json:"degradedReasons,omitempty"`
+	PolicyWarnings  []string       `json:"policyWarnings,omitempty"`
+	Details         map[string]any `json:"details,omitempty"`
 }
 
 type ModelRuntimeQueueStatus struct {
@@ -560,6 +572,8 @@ func (s *Server) handleForgeModelChat(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		ModelID       string                    `json:"modelId"`
 		Backend       string                    `json:"backend"`
+		Role          string                    `json:"role"`
+		WorkloadClass string                    `json:"workloadClass"`
 		Messages      []ModelRuntimeChatMessage `json:"messages"`
 		Prompt        string                    `json:"prompt"`
 		Parameters    map[string]any            `json:"parameters"`
@@ -591,7 +605,7 @@ func (s *Server) handleForgeModelChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Stream {
-		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusNotImplemented, code: "STREAM_UNSUPPORTED", message: "streaming is not supported in M2 API"}, initialMeta)
+		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusNotImplemented, code: "STREAM_UNSUPPORTED", message: "streaming is not supported in the current model runtime API"}, initialMeta)
 		return
 	}
 	if err := validateChatMessages(body.Messages); err != nil {
@@ -606,19 +620,21 @@ func (s *Server) handleForgeModelChat(w http.ResponseWriter, r *http.Request) {
 	meta := requestAuditMetaForBackup(r, body.CorrelationID, body.TraceID, body.WorkspaceID, "model.runtime.chat")
 	metaReq := modelRuntimeMetaFromRequestAudit(meta)
 	result, err := runtimeSvc.Chat(r.Context(), ModelRuntimeChatRequest{
-		ModelID:    pathModelID,
-		Backend:    strings.TrimSpace(body.Backend),
-		Messages:   body.Messages,
-		Prompt:     strings.TrimSpace(body.Prompt),
-		Parameters: body.Parameters,
-		MaxTokens:  body.MaxTokens,
-		TimeoutMs:  body.TimeoutMs,
-		Stream:     body.Stream,
-		Actor:      strings.TrimSpace(body.Actor),
-		Source:     strings.TrimSpace(body.Source),
-		Meta:       metaReq,
-		Provenance: body.Provenance,
-		Metadata:   body.Metadata,
+		ModelID:       pathModelID,
+		Backend:       strings.TrimSpace(body.Backend),
+		Role:          strings.TrimSpace(body.Role),
+		WorkloadClass: strings.TrimSpace(body.WorkloadClass),
+		Messages:      body.Messages,
+		Prompt:        strings.TrimSpace(body.Prompt),
+		Parameters:    body.Parameters,
+		MaxTokens:     body.MaxTokens,
+		TimeoutMs:     body.TimeoutMs,
+		Stream:        body.Stream,
+		Actor:         strings.TrimSpace(body.Actor),
+		Source:        strings.TrimSpace(body.Source),
+		Meta:          metaReq,
+		Provenance:    body.Provenance,
+		Metadata:      body.Metadata,
 	})
 	if err != nil {
 		s.writeModelRuntimeError(w, err, metaReq)
@@ -753,6 +769,8 @@ func (s *Server) handleV1ChatCompletions(w http.ResponseWriter, r *http.Request)
 	}
 	var body struct {
 		Model         string                    `json:"model"`
+		Role          string                    `json:"role"`
+		WorkloadClass string                    `json:"workloadClass"`
 		Messages      []ModelRuntimeChatMessage `json:"messages"`
 		MaxTokens     int                       `json:"max_tokens"`
 		TimeoutMs     int                       `json:"timeout_ms"`
@@ -785,7 +803,7 @@ func (s *Server) handleV1ChatCompletions(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if body.Stream {
-		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusNotImplemented, code: "STREAM_UNSUPPORTED", message: "streaming is not supported in M2 API"}, initialMeta)
+		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusNotImplemented, code: "STREAM_UNSUPPORTED", message: "streaming is not supported in the current model runtime API"}, initialMeta)
 		return
 	}
 	if err := validateChatMessages(body.Messages); err != nil {
@@ -796,15 +814,17 @@ func (s *Server) handleV1ChatCompletions(w http.ResponseWriter, r *http.Request)
 	meta := requestAuditMetaForBackup(r, body.CorrelationID, body.TraceID, body.WorkspaceID, "model.runtime.openai.chat")
 	metaReq := modelRuntimeMetaFromRequestAudit(meta)
 	result, err := runtimeSvc.Chat(r.Context(), ModelRuntimeChatRequest{
-		ModelID:   modelID,
-		Messages:  body.Messages,
-		MaxTokens: body.MaxTokens,
-		TimeoutMs: body.TimeoutMs,
-		Stream:    body.Stream,
-		Actor:     strings.TrimSpace(body.User),
-		Source:    "openai_compat",
-		Meta:      metaReq,
-		Metadata:  body.Metadata,
+		ModelID:       modelID,
+		Role:          strings.TrimSpace(body.Role),
+		WorkloadClass: strings.TrimSpace(body.WorkloadClass),
+		Messages:      body.Messages,
+		MaxTokens:     body.MaxTokens,
+		TimeoutMs:     body.TimeoutMs,
+		Stream:        body.Stream,
+		Actor:         strings.TrimSpace(body.User),
+		Source:        "openai_compat",
+		Meta:          metaReq,
+		Metadata:      body.Metadata,
 	})
 	if err != nil {
 		s.writeModelRuntimeError(w, err, metaReq)

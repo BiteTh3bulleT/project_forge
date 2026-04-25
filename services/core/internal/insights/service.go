@@ -10,16 +10,16 @@ import (
 )
 
 type Record struct {
-	ID            int64           `json:"id"`
-	CreatedAtMs   int64           `json:"createdAtMs"`
-	DossierID     *int64          `json:"dossierId"`
-	AdapterID     string          `json:"adapterId"`
-	TaskType      string          `json:"taskType"`
-	Recommendation string         `json:"recommendation"`
-	Confidence    float64         `json:"confidence"`
-	Reasons       json.RawMessage `json:"reasons"`
-	Evidence      json.RawMessage `json:"evidence"`
-	AdvisoryLevel string          `json:"advisoryLevel"`
+	ID             int64           `json:"id"`
+	CreatedAtMs    int64           `json:"createdAtMs"`
+	DossierID      *int64          `json:"dossierId"`
+	AdapterID      string          `json:"adapterId"`
+	TaskType       string          `json:"taskType"`
+	Recommendation string          `json:"recommendation"`
+	Confidence     float64         `json:"confidence"`
+	Reasons        json.RawMessage `json:"reasons"`
+	Evidence       json.RawMessage `json:"evidence"`
+	AdvisoryLevel  string          `json:"advisoryLevel"`
 }
 
 type GenerateRequest struct {

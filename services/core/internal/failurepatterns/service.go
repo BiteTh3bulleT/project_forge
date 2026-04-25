@@ -10,17 +10,17 @@ import (
 )
 
 type Pattern struct {
-	ID            int64           `json:"id"`
-	CreatedAtMs   int64           `json:"createdAtMs"`
-	DossierID     *int64          `json:"dossierId"`
-	TargetAdapter string          `json:"targetAdapter"`
-	StrategyID    *string         `json:"strategyId"`
-	RetrievalMode string          `json:"retrievalMode"`
-	PacketStyle   string          `json:"packetStyle"`
-	FailureCode   string          `json:"failureCode"`
-	FailureCount  int             `json:"failureCount"`
-	Recommendation string         `json:"recommendation"`
-	Evidence      json.RawMessage `json:"evidence"`
+	ID             int64           `json:"id"`
+	CreatedAtMs    int64           `json:"createdAtMs"`
+	DossierID      *int64          `json:"dossierId"`
+	TargetAdapter  string          `json:"targetAdapter"`
+	StrategyID     *string         `json:"strategyId"`
+	RetrievalMode  string          `json:"retrievalMode"`
+	PacketStyle    string          `json:"packetStyle"`
+	FailureCode    string          `json:"failureCode"`
+	FailureCount   int             `json:"failureCount"`
+	Recommendation string          `json:"recommendation"`
+	Evidence       json.RawMessage `json:"evidence"`
 }
 
 type AnalyzeRequest struct {

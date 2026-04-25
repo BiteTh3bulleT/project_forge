@@ -83,6 +83,6 @@ With authoritative tracked VSA files in this branch state, smoke passes.
 - Kills only its own PID plus anything left listening on port 18492
   via `lsof -ti tcp:18492`.
 - Trap cleanup runs on any exit path.
-- Autonomy runs in the default `maintain` mode during the ~3 s of
-  boot the smoke covers. No external-call budget, no intents in flight
-  — verified via `/api/autonomy/status`.
+- Autonomy runs in the default `observe` mode during the boot window
+  covered by smoke. Maintain/mission behavior requires an explicit
+  operator setting.

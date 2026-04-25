@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/cors"
 
 	"forge/projectforge/services/core/internal/adapters"
+	"forge/projectforge/services/core/internal/aios/dream"
 	"forge/projectforge/services/core/internal/approvals"
 	"forge/projectforge/services/core/internal/artifacts"
 	"forge/projectforge/services/core/internal/audit"
@@ -34,6 +35,7 @@ import (
 	"forge/projectforge/services/core/internal/events"
 	"forge/projectforge/services/core/internal/failurepatterns"
 	"forge/projectforge/services/core/internal/gateway"
+	"forge/projectforge/services/core/internal/gpu"
 	"forge/projectforge/services/core/internal/imports"
 	"forge/projectforge/services/core/internal/ingest"
 	"forge/projectforge/services/core/internal/insights"
@@ -93,8 +95,12 @@ type Server struct {
 	backup          *backup.Service
 	release         *release.Service
 	modelRuntime    modelRuntimeService
+	dream           *dream.Service
+	gpuTelemetry    *gpu.Service
+	intelTelemetry  *gpu.IntelService
 	watch           *watch.Manager
 	watchStop       context.CancelFunc
+	shutdownOnce    sync.Once
 	autonomy        *AutonomyMaintenanceLoop
 	telegramMu      sync.RWMutex
 	telegramGateway *TelegramGateway
@@ -108,11 +114,13 @@ type Server struct {
 }
 
 func NewServer(st *store.Store, cfg config.Config) *Server {
+	bg := context.Background()
 	ev := events.New(st.DB)
 	ext := loadSetting(st.DB, "extensions_csv", ingest.DefaultExtensionsCSV())
 	ing := ingest.New(st.DB, ev, ext)
 	searchSvc := search.New(st.DB)
 	embedSvc := embeddings.New(st.DB)
+	ensureEmbeddingProviderConfig(bg, st.DB, cfg)
 	memorySvc := memory.New(st.DB)
 	retrievalSvc := retrieval.New(st.DB, searchSvc, embedSvc, memorySvc)
 	artSvc := artifacts.New(st.DB, cfg.DataDir)
@@ -138,7 +146,6 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		DB:           st.DB,
 		WorkspaceDir: cfg.WorkspaceDir,
 	})
-	bg := context.Background()
 	permSvc := permissions.New(st.DB)
 	laneSvc := lanes.New(st.DB)
 	auditSvc := audit.New(st.DB)
@@ -152,20 +159,39 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	_ = laneSvc.EnsureDefaults(bg, cfg.WorkspaceDir)
 	backupSvc := backup.New(st.DB, cfg.DataDir)
 	releaseSvc := release.New(st.DB, cfg.DataDir, cfg.WorkspaceDir)
-	modelRuntimeSvc := initModelRuntimeService(cfg, auditSvc)
+	gpuTelemetrySvc := gpu.New(gpu.Options{
+		Enabled:                 cfg.NVIDIADCGMEnabled && !cfg.SafeModeForceCPUOnly,
+		Endpoint:                cfg.NVIDIADCGMEndpoint,
+		Timeout:                 time.Duration(cfg.NVIDIADCGMTimeoutMs) * time.Millisecond,
+		MemoryPressureThreshold: cfg.GPUBackgroundMemoryPressureBlockThreshold,
+	})
+	intelTelemetrySvc := gpu.NewIntel(gpu.IntelOptions{
+		Enabled:     cfg.IntelLevelZeroEnabled && !cfg.SafeModeForceCPUOnly,
+		ZEInfoPath:  cfg.IntelLevelZeroZEInfoPath,
+		IntelGPUTop: cfg.IntelGPUTopPath,
+		Timeout:     time.Duration(cfg.IntelGPUTelemetryTimeoutMs) * time.Millisecond,
+	})
+	modelRuntimeSvc := initModelRuntimeService(cfg, auditSvc, gpuTelemetrySvc, intelTelemetrySvc)
+	dreamSvc := dream.NewService(st.DB)
 	var autonomyLoop *AutonomyMaintenanceLoop
 	if loop := newDefaultAutonomyMaintenanceLoop(st.DB, cfg, ev, memorySvc); loop != nil {
 		autonomyLoop = loop
 	}
+	capabilityRegistry, err := gateway.NewToolCapabilityRegistryWithStore(bg, &gateway.SQLiteOverrideStore{DB: st.DB})
+	if err != nil {
+		log.Printf("tool capability override store unavailable; using in-memory registry: %v", err)
+		capabilityRegistry = gateway.NewToolCapabilityRegistry()
+	}
 	gw := gateway.New(gateway.Options{
-		DB:             st.DB,
-		Permissions:    permSvc,
-		Lanes:          laneSvc,
-		Approvals:      appSvc,
-		Audit:          auditSvc,
-		WorkspaceDir:   cfg.WorkspaceDir,
-		DataDir:        cfg.DataDir,
-		AutonomyPolicy: newGatewayAutonomyAuthorizer(autonomyLoop),
+		DB:                 st.DB,
+		Permissions:        permSvc,
+		Lanes:              laneSvc,
+		Approvals:          appSvc,
+		Audit:              auditSvc,
+		WorkspaceDir:       cfg.WorkspaceDir,
+		DataDir:            cfg.DataDir,
+		CapabilityRegistry: capabilityRegistry,
+		AutonomyPolicy:     newGatewayAutonomyAuthorizer(autonomyLoop),
 	})
 	if err := gw.RegisterTool(newLegacyAdapterGatewayTool(reg)); err != nil {
 		log.Printf("legacy adapter gateway tool registration failed: %v", err)
@@ -192,6 +218,7 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		log.Printf("watch disabled: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
+	startApprovalExpiryReaper(ctx, appSvc)
 	if wm != nil {
 		wm.Run(ctx)
 		_ = wm.SyncSources(context.Background(), listSourcePaths(st.DB))
@@ -200,76 +227,110 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		go autonomyLoop.Run(ctx)
 	}
 	srv := &Server{
-		st:           st,
-		cfg:          cfg,
-		log:          ev,
-		ingest:       ing,
-		search:       searchSvc,
-		adapters:     reg,
-		approvals:    appSvc,
-		packets:      pktSvc,
-		artifacts:    artSvc,
-		chat:         chatSvc,
-		canvas:       canvasSvc,
-		projectCtx:   pcSvc,
-		embeddings:   embedSvc,
-		retrieval:    retrievalSvc,
-		memory:       memorySvc,
-		dossiers:     dossierSvc,
-		evals:        evalSvc,
-		lineage:      lineageSvc,
-		imports:      importSvc,
-		insights:     insightSvc,
-		strategies:   strategySvc,
-		policy:       policySvc,
-		automation:   automationSvc,
-		packetOpt:    packetOptSvc,
-		reviews:      reviewSvc,
-		reconcile:    reconcileSvc,
-		failures:     failureSvc,
-		dashboard:    dashboardSvc,
-		jobs:         jobSvc,
-		gateway:      gw,
-		lanes:        laneSvc,
-		permissions:  permSvc,
-		auditSvc:     auditSvc,
-		backup:       backupSvc,
-		release:      releaseSvc,
-		modelRuntime: modelRuntimeSvc,
-		watch:        wm,
-		watchStop:    cancel,
-		autonomy:     autonomyLoop,
+		st:             st,
+		cfg:            cfg,
+		log:            ev,
+		ingest:         ing,
+		search:         searchSvc,
+		adapters:       reg,
+		approvals:      appSvc,
+		packets:        pktSvc,
+		artifacts:      artSvc,
+		chat:           chatSvc,
+		canvas:         canvasSvc,
+		projectCtx:     pcSvc,
+		embeddings:     embedSvc,
+		retrieval:      retrievalSvc,
+		memory:         memorySvc,
+		dossiers:       dossierSvc,
+		evals:          evalSvc,
+		lineage:        lineageSvc,
+		imports:        importSvc,
+		insights:       insightSvc,
+		strategies:     strategySvc,
+		policy:         policySvc,
+		automation:     automationSvc,
+		packetOpt:      packetOptSvc,
+		reviews:        reviewSvc,
+		reconcile:      reconcileSvc,
+		failures:       failureSvc,
+		dashboard:      dashboardSvc,
+		jobs:           jobSvc,
+		gateway:        gw,
+		lanes:          laneSvc,
+		permissions:    permSvc,
+		auditSvc:       auditSvc,
+		backup:         backupSvc,
+		release:        releaseSvc,
+		modelRuntime:   modelRuntimeSvc,
+		dream:          dreamSvc,
+		gpuTelemetry:   gpuTelemetrySvc,
+		intelTelemetry: intelTelemetrySvc,
+		watch:          wm,
+		watchStop:      cancel,
+		autonomy:       autonomyLoop,
 	}
 	srv.telegramGateway = srv.tryStartTelegramGateway(ctx, cfg)
 	srv.discordGateway = srv.tryStartDiscordGateway(ctx, cfg)
 	return srv
 }
 
+func startApprovalExpiryReaper(ctx context.Context, svc *approvals.Service) {
+	if svc == nil {
+		return
+	}
+	run := func() {
+		n, err := svc.Expire(ctx)
+		if err != nil && ctx.Err() == nil {
+			log.Printf("approval expiry sweep failed: %v", err)
+			return
+		}
+		if n > 0 {
+			log.Printf("approval expiry sweep expired %d request(s)", n)
+		}
+	}
+	run()
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				run()
+			}
+		}
+	}()
+}
+
 func (s *Server) ShutdownWatch() {
-	if s.jobs != nil {
-		s.jobs.Close()
-	}
-	if s.autonomy != nil {
-		s.autonomy.Stop()
-	}
-	s.telegramMu.Lock()
-	if s.telegramGateway != nil {
-		s.telegramGateway.Stop()
-		s.telegramGateway = nil
-	}
-	s.telegramMu.Unlock()
-	s.discordMu.Lock()
-	if s.discordGateway != nil {
-		s.discordGateway.Stop()
-		s.discordGateway = nil
-	}
-	s.discordMu.Unlock()
-	if s.watchStop != nil {
-		s.watchStop()
-	}
-	if s.watch != nil {
-		_ = s.watch.Close()
-	}
+	s.shutdownOnce.Do(func() {
+		if s.jobs != nil {
+			s.jobs.Close()
+		}
+		if s.autonomy != nil {
+			s.autonomy.Stop()
+		}
+		s.telegramMu.Lock()
+		if s.telegramGateway != nil {
+			s.telegramGateway.Stop()
+			s.telegramGateway = nil
+		}
+		s.telegramMu.Unlock()
+		s.discordMu.Lock()
+		if s.discordGateway != nil {
+			s.discordGateway.Stop()
+			s.discordGateway = nil
+		}
+		s.discordMu.Unlock()
+		if s.watchStop != nil {
+			s.watchStop()
+		}
+		if s.watch != nil {
+			_ = s.watch.Close()
+		}
+	})
 }
 
 func (s *Server) Handler() http.Handler {
@@ -298,7 +359,53 @@ func (s *Server) Handler() http.Handler {
 	}))
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "service": "forge-core"})
+		payload := map[string]any{
+			"ok":               true,
+			"service":          "forge-core",
+			"cpuAuthoritative": true,
+		}
+		safeModeReasons := []string{}
+		if s.cfg.SafeModeForceCPUOnly {
+			safeModeReasons = append(safeModeReasons, "safe_mode.force_cpu_only is enabled")
+		}
+		payload["safeMode"] = map[string]any{
+			"active":  s.cfg.SafeModeForceCPUOnly,
+			"reasons": safeModeReasons,
+		}
+		modelRuntimeStatus := map[string]any{
+			"available": s.modelRuntime != nil,
+			"status":    "unavailable",
+		}
+		if s.modelRuntime != nil {
+			meta := modelRuntimeMetaFromRequestAudit(requestAuditMetaForBackup(r, "", "", "", "health"))
+			health, err := s.modelRuntime.Health(r.Context(), meta)
+			if err != nil {
+				modelRuntimeStatus["status"] = "degraded"
+				modelRuntimeStatus["error"] = err.Error()
+			} else {
+				modelRuntimeStatus["status"] = health.Status
+				modelRuntimeStatus["runtimeEnabled"] = health.RuntimeEnabled
+				modelRuntimeStatus["gpuAware"] = health.GPUAware
+				modelRuntimeStatus["degradedReasons"] = append([]string(nil), health.DegradedReasons...)
+				modelRuntimeStatus["policyWarnings"] = append([]string(nil), health.PolicyWarnings...)
+			}
+		}
+		payload["modelRuntime"] = modelRuntimeStatus
+		if s.gpuTelemetry != nil {
+			payload["gpuTelemetry"] = s.gpuTelemetry.Snapshot(r.Context())
+		}
+		if s.intelTelemetry != nil {
+			payload["intelTelemetry"] = s.intelTelemetry.Snapshot(r.Context())
+		}
+		if s.embeddings != nil {
+			cfg := s.embeddings.CurrentConfig(r.Context())
+			payload["embeddings"] = map[string]any{
+				"config":         cfg,
+				"health":         s.embeddings.ProviderHealth(r.Context(), cfg.Provider, cfg.Model),
+				"truthAuthority": false,
+			}
+		}
+		writeJSON(w, http.StatusOK, payload)
 	})
 
 	r.Route("/forge", func(r chi.Router) {
@@ -357,6 +464,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/chunks/{id}", s.handleChunk)
 
 			r.Get("/events", s.handleEvents)
+			r.Get("/providers/capabilities", s.handleProviderCapabilities)
 			r.Get("/autonomy/status", s.handleAutonomyStatus)
 			r.Get("/autonomy/intents", s.handleAutonomyIntents)
 			r.Get("/autonomy/intents/{id}/explain", s.handleAutonomyIntentExplain)
@@ -365,6 +473,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/autonomy/charters", s.handleAutonomyCharters)
 			r.Get("/autonomy/events", s.handleAutonomyEvents)
 			r.Post("/autonomy/maintenance/sweep", s.handleAutonomyMaintenanceSweep)
+			r.Post("/dream/run", s.handleDreamRun)
 
 			r.Get("/adapters", s.handleAdapters)
 
@@ -406,6 +515,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/packets/{id}", s.handleGetPacket)
 			r.Get("/context-inspector/snapshots", s.handleContextSnapshotList)
 			r.Get("/context-inspector/snapshots/{id}", s.handleContextSnapshotGet)
+			r.Get("/process/health", s.handleProcessHealthTrace)
 			r.Get("/project-context", s.handleGetProjectContext)
 			r.Post("/project-context/import", s.handleImportProjectContext)
 			r.Post("/project-context/regenerate", s.handleRegenerateProjectContext)
@@ -540,6 +650,8 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	embeddingProvider := loadSetting(s.st.DB, "embedding_provider", "local_hash")
 	embeddingModel := loadSetting(s.st.DB, "embedding_model", "")
 	embeddingDims := loadSetting(s.st.DB, "embedding_dims", "128")
+	embeddingTEIEndpoint := loadSetting(s.st.DB, "embedding_tei_endpoint", "")
+	embeddingTEITimeoutMs := loadSetting(s.st.DB, "embedding_tei_timeout_ms", "30000")
 	retrievalWeightKeyword := loadSetting(s.st.DB, "retrieval_weight_keyword", "0.45")
 	retrievalWeightSemantic := loadSetting(s.st.DB, "retrieval_weight_semantic", "0.55")
 	retrievalVSAMode := loadSetting(s.st.DB, "retrieval_vsa_mode", "off")
@@ -561,6 +673,14 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	discordWebhookURL := strings.TrimSpace(loadSetting(s.st.DB, discordWebhookURLKey, ""))
 	discordCrossChatContext := parseRemoteBool(loadSetting(s.st.DB, discordGatewayCrossChatContextKey, "false"))
 	remoteDefaultThreadID := strings.TrimSpace(loadSetting(s.st.DB, remoteDefaultThreadIDKey, ""))
+	dreamModeEnabled := parseRemoteBool(loadSetting(s.st.DB, "dream_mode_enabled", "true"))
+	dreamModeDefaultDryRun := parseRemoteBool(loadSetting(s.st.DB, "dream_mode_default_dry_run", "true"))
+	dreamModeMode := strings.TrimSpace(loadSetting(s.st.DB, "dream_mode_mode", "microdream"))
+	dreamModeWindowHours := loadSetting(s.st.DB, "dream_mode_window_hours", "6")
+	dreamModeMaxCandidates := loadSetting(s.st.DB, "dream_mode_max_candidates", "8")
+	dreamModeAllowLongTermPromotion := parseRemoteBool(loadSetting(s.st.DB, "dream_mode_allow_long_term_promotion", "false"))
+	dreamModeRequireOperatorReviewForLongTerm := parseRemoteBool(loadSetting(s.st.DB, "dream_mode_require_operator_review_for_long_term", "true"))
+	dreamModeAllowCommits := parseRemoteBool(loadSetting(s.st.DB, "dream_mode_allow_commits", "false"))
 	writeJSON(w, http.StatusOK, map[string]any{
 		"extensionsCsv":                 ext,
 		"theme":                         theme,
@@ -569,6 +689,8 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		"embeddingProvider":             embeddingProvider,
 		"embeddingModel":                embeddingModel,
 		"embeddingDims":                 embeddingDims,
+		"embeddingTeiEndpoint":          embeddingTEIEndpoint,
+		"embeddingTeiTimeoutMs":         embeddingTEITimeoutMs,
 		"retrievalWeightKeyword":        retrievalWeightKeyword,
 		"retrievalWeightSemantic":       retrievalWeightSemantic,
 		"retrievalVSAMode":              retrievalVSAMode,
@@ -599,6 +721,16 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		"discordDefaultChannelId":       discordDefaultChannelID,
 		"discordWebhookUrl":             discordWebhookURL,
 		"discordCrossChatContext":       discordCrossChatContext,
+		"dreamMode": map[string]any{
+			"enabled":                          dreamModeEnabled,
+			"defaultDryRun":                    dreamModeDefaultDryRun,
+			"mode":                             dreamModeMode,
+			"windowHours":                      dreamModeWindowHours,
+			"maxCandidates":                    dreamModeMaxCandidates,
+			"allowLongTermPromotion":           dreamModeAllowLongTermPromotion,
+			"requireOperatorReviewForLongTerm": dreamModeRequireOperatorReviewForLongTerm,
+			"allowCommits":                     dreamModeAllowCommits,
+		},
 	})
 }
 
@@ -656,6 +788,30 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	case float64:
 		if err := upsertSetting(ctx, s.st.DB, "embedding_dims", strconv.Itoa(int(v))); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if v, ok := body["embeddingTeiEndpoint"].(string); ok {
+		if err := upsertSetting(ctx, s.st.DB, "embedding_tei_endpoint", v); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	if v, ok := body["embeddingTeiApiKey"].(string); ok {
+		if err := upsertSetting(ctx, s.st.DB, "embedding_tei_api_key", v); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	switch v := body["embeddingTeiTimeoutMs"].(type) {
+	case string:
+		if err := upsertSetting(ctx, s.st.DB, "embedding_tei_timeout_ms", v); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	case float64:
+		if err := upsertSetting(ctx, s.st.DB, "embedding_tei_timeout_ms", strconv.Itoa(int(v))); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -846,6 +1002,58 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		if err := upsertSetting(ctx, s.st.DB, "chat_personality_prompt", next); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+	}
+	if rawDreamMode, ok := body["dreamMode"]; ok {
+		dreamMode, ok := rawDreamMode.(map[string]any)
+		if !ok {
+			http.Error(w, "dreamMode must be an object", http.StatusBadRequest)
+			return
+		}
+		for _, item := range []struct {
+			bodyKey    string
+			settingKey string
+		}{
+			{bodyKey: "enabled", settingKey: "dream_mode_enabled"},
+			{bodyKey: "defaultDryRun", settingKey: "dream_mode_default_dry_run"},
+			{bodyKey: "allowLongTermPromotion", settingKey: "dream_mode_allow_long_term_promotion"},
+			{bodyKey: "requireOperatorReviewForLongTerm", settingKey: "dream_mode_require_operator_review_for_long_term"},
+			{bodyKey: "allowCommits", settingKey: "dream_mode_allow_commits"},
+		} {
+			if v, ok := dreamMode[item.bodyKey]; ok {
+				if err := upsertSetting(ctx, s.st.DB, item.settingKey, parseRemoteBoolValue(v)); err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+			}
+		}
+		if v, ok := dreamMode["mode"].(string); ok {
+			mode := strings.TrimSpace(v)
+			switch mode {
+			case "microdream", "nap", "deep_dream":
+			default:
+				mode = "microdream"
+			}
+			if err := upsertSetting(ctx, s.st.DB, "dream_mode_mode", mode); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		for _, item := range []struct {
+			bodyKey    string
+			settingKey string
+		}{
+			{bodyKey: "windowHours", settingKey: "dream_mode_window_hours"},
+			{bodyKey: "maxCandidates", settingKey: "dream_mode_max_candidates"},
+		} {
+			if raw, ok := dreamMode[item.bodyKey]; ok {
+				if value := parseAnyInt64(raw); value > 0 {
+					if err := upsertSetting(ctx, s.st.DB, item.settingKey, strconv.FormatInt(value, 10)); err != nil {
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+				}
+			}
 		}
 	}
 	if discordConfigChanged {
@@ -1106,45 +1314,25 @@ func (s *Server) withLegacyMemoryMutationGate(baseAction string, next http.Handl
 			subjectID = "new"
 		}
 		meta := requestAuditMetaForBackup(r, "", "", "", "legacy.memory.mutation")
-		if !strings.EqualFold(strings.TrimSpace(os.Getenv("FORGE_ALLOW_LEGACY_MEMORY_MUTATIONS")), "true") {
-			if s.auditSvc != nil {
-				_, _ = s.auditSvc.Record(r.Context(), audit.CreateRequest{
-					CorrelationID: meta.CorrelationID,
-					Category:      "memory",
-					Action:        baseAction + ".blocked",
-					Actor:         "api",
-					SubjectType:   "observation",
-					SubjectID:     subjectID,
-					Outcome:       "denied",
-					Summary:       "legacy memory mutation blocked by policy",
-					Payload: requestAuditPayload(map[string]any{
-						"method":               r.Method,
-						"path":                 r.URL.Path,
-						"legacyMemoryMutation": true,
-					}, meta),
-				})
-			}
-			http.Error(w, "legacy memory mutation endpoints are disabled by default; use authoritative syscall path via /api/gateway/invoke", http.StatusForbidden)
-			return
-		}
 		if s.auditSvc != nil {
 			_, _ = s.auditSvc.Record(r.Context(), audit.CreateRequest{
 				CorrelationID: meta.CorrelationID,
 				Category:      "memory",
-				Action:        baseAction + ".used",
+				Action:        baseAction + ".retired",
 				Actor:         "api",
 				SubjectType:   "observation",
 				SubjectID:     subjectID,
-				Outcome:       "ok",
-				Summary:       "legacy memory mutation executed",
+				Outcome:       "denied",
+				Summary:       "legacy memory mutation endpoint retired; use semantic syscall path",
 				Payload: requestAuditPayload(map[string]any{
 					"method":               r.Method,
 					"path":                 r.URL.Path,
 					"legacyMemoryMutation": true,
+					"retired":              true,
 				}, meta),
 			})
 		}
-		next(w, r)
+		http.Error(w, "legacy memory mutation endpoints are retired; use the authoritative semantic syscall path", http.StatusGone)
 	}
 }
 

@@ -328,23 +328,54 @@ Non-canonical:
 - snapshot rows and any rendered SVG card are evidence of load composition, not truth authority.
 - restore metadata may describe how the snapshot was rehydrated, but it does not override canonical notes/state/history.
 
-Phase 6.25 restore fields (contract names):
+Phase 6.25 restore fields:
 
 - `snapshot_kind`: classifies the snapshot intent for restore/review handling
 - `snapshot_fingerprint`: deterministic semantic fingerprint of the snapshot graph
 - `parent_snapshot_id`: lineage edge to the selected predecessor snapshot
+- `restore_scores_json`: deterministic candidate ranking + score breakdown for restore selection
+- `render_artifact_ref_id`: optional reference to the SVG card produced when snapshot cards are requested
+- `resume_hints_json`: deterministic hints package for follow-up compile/restore requests
+
+Additional restore contract fields are persisted inside `metadata_json` rather than as dedicated columns:
+
 - `restore_source_snapshot_id`: links a restore back to the source snapshot row
 - `restore_scope_json`: records the workspace/lane/path scope used during restore
 - `restore_reason_json`: captures why the snapshot was restored or rendered
-- `restore_scores_json`: deterministic candidate ranking + score breakdown for restore selection
-- `rendered_card_artifact_id`: optional reference to the SVG card produced when snapshot cards are requested
-- `resume_hints_json`: deterministic hints package for follow-up compile/restore requests
+- `restore_trace_json`: inspectable selection trace for operator/debug views
+- `restore_package_json`: header-first restore package containing selected header, compact evidence refs, score breakdown, resume hints, candidate summaries, and trace
+- `rendered_card_artifact_id`: metadata alias populated from `render_artifact_ref_id`
 
 Purpose of the restore fields:
 
 - keep restore activity explainable and auditable
 - preserve deterministic scope boundaries during rehydration
 - make compiled context inspectable without promoting it to canonical truth
+
+Restore scoring is deterministic and lexical/scoped. It records query, scope, snapshot kind, recency, lineage, state overlap, loop overlap, artifact overlap, contradiction, staleness, freshness, confidence, and `requires_fresh_compile` fields. `requires_fresh_compile` means the current candidates are absent, below threshold, forced fresh by hints, or hard-stale.
+
+## 12.5) Dream Mode v0 reports
+
+Dream Mode v0 reads journal, snapshot, note, state, loop, contradiction, and artifact tables to produce a dry-run consolidation report.
+
+The report is not canonical truth and is not persisted as canonical memory in v0. It contains:
+
+- run metadata and trace
+- replay candidates
+- deterministic salience scores
+- proposed memory tier routing
+- proposed snapshot hygiene actions
+- proposed restore score updates
+- proposed repair/review actions
+- no-op reasons and warnings
+
+Any later governed commit mode must turn proposals into semantic syscalls and pass control-lane validation.
+
+Provider note:
+
+- TEI and other embedding providers may populate retrieval vector records.
+- Vector records are retrieval indexes/evidence, not canonical truth.
+- Provider health/capability records do not authorize semantic mutation.
 
 ## 13) Audit linkage
 

@@ -77,6 +77,24 @@ func TestAutonomyDreamLoopRunsMaintenanceAndImprovementOnlyWhenIdle(t *testing.T
 	}
 }
 
+func TestAutonomyMaintenanceLoopDefaultsToObserve(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer st.Close()
+
+	loop := NewAutonomyMaintenanceLoop(AutonomyMaintenanceLoopOptions{
+		DB:        st.DB,
+		Events:    events.New(st.DB),
+		Scope:     domain.ForgeScope{WorkspaceID: "ws-default-mode", LaneID: "control.semantic"},
+		NowMillis: func() int64 { return 1_800_000_000_000 },
+	})
+	if got := loop.Mode(); got != domain.AutonomyModeObserve {
+		t.Fatalf("default autonomy mode = %q, want %q", got, domain.AutonomyModeObserve)
+	}
+}
+
 func TestAutonomyDreamLoopBusyJobBlocksEntry(t *testing.T) {
 	st, err := store.Open(t.TempDir())
 	if err != nil {

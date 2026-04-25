@@ -1,5 +1,6 @@
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { FoldSection } from "../components/FoldSection";
 import {
@@ -101,8 +102,26 @@ function writeCachedChatModelSelection(value: string) {
   }
 }
 
+function emptyModelRuntimeUsage(): ModelRuntimeUsageSummary {
+  return {
+    registered: 0,
+    imported: 0,
+    verified: 0,
+    available: 0,
+    disabled: 0,
+    archived: 0,
+    loaded: 0,
+    queueDepth: 0,
+    running: 0,
+    completed: 0,
+    backends: {},
+  };
+}
+
 export function ModelsPage() {
   const setStatus = useUiStore((s) => s.setStatusLine);
+  const uiMode = useUiStore((s) => s.uiMode);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [models, setModels] = useState<ModelRuntimeModel[]>([]);
   const [selectedModelId, setSelectedModelId] = useState("");
   const [selectedModel, setSelectedModel] = useState<ModelRuntimeModel | null>(null);
@@ -112,6 +131,7 @@ export function ModelsPage() {
   const [loaded, setLoaded] = useState<ModelRuntimeLoadedStatus | null>(null);
   const [usage, setUsage] = useState<ModelRuntimeUsageSummary | null>(null);
   const [backends, setBackends] = useState<ModelRuntimeBackendStatus[]>([]);
+  const [runtimeAvailable, setRuntimeAvailable] = useState(true);
   const [importPath, setImportPath] = useState("");
   const [importDisplayName, setImportDisplayName] = useState("");
   const [importFamily, setImportFamily] = useState("");
@@ -149,9 +169,35 @@ export function ModelsPage() {
     [models, chatSelectedModelId],
   );
 
+  const selectedRegistryModel = useMemo(
+    () => models.find((model) => model.id === selectedModelId) ?? null,
+    [models, selectedModelId],
+  );
+
+  const selectedModelDetail = selectedModel?.id === selectedModelId ? selectedModel : null;
+  const selectedModelSummary = selectedModelDetail ?? selectedRegistryModel;
+  const selectedCompatibility = selectedModelDetail ? compatibility : null;
+
   async function refreshOverview(preserveSelection = true, preferredSelection?: string) {
     setLoading(true);
     try {
+      const coreHealth = await api.health();
+      const available = coreHealth.modelRuntime?.available === true;
+      setRuntimeAvailable(available);
+      if (!available) {
+        setModels([]);
+        setSelectedModelId("");
+        setSelectedModel(null);
+        setCompatibility(null);
+        setHealth({ ok: false, status: coreHealth.modelRuntime?.status || "unavailable", backend: "disabled" });
+        setQueue({ depth: 0, scheduler: "disabled" });
+        setLoaded({ count: 0, models: [] });
+        setUsage(emptyModelRuntimeUsage());
+        setBackends([]);
+        setLastUpdatedAt(Date.now());
+        setErr(null);
+        return;
+      }
       const [modelsRes, healthRes, queueRes, loadedRes, usageRes, backendsRes] = await Promise.all([
         api.modelRuntime.list(),
         api.modelRuntime.health(),
@@ -187,7 +233,7 @@ export function ModelsPage() {
 
   async function refreshSelectedModel(modelId: string) {
     const id = modelId.trim();
-    if (!id) {
+    if (!id || !runtimeAvailable) {
       setSelectedModel(null);
       setCompatibility(null);
       return;
@@ -313,9 +359,122 @@ export function ModelsPage() {
     }
   }
 
+  const advancedView = uiMode === "metrics" || searchParams.get("view") === "registry";
+
+  if (!advancedView) {
+    return (
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-5">
+        <Panel
+          title="Model Runtime"
+          subtitle="Cognitive model view: runtime status, active model, and availability. Registry controls open only when requested."
+          actions={
+            <div className="flex flex-wrap gap-2">
+              <GhostButton onClick={() => void refreshOverview(true)} disabled={loading}>
+                {loading ? "Refreshing..." : "Refresh"}
+              </GhostButton>
+              <GhostButton onClick={() => setSearchParams({ view: "registry" })}>Open Registry</GhostButton>
+            </div>
+          }
+        >
+          {err ? <div className="mb-3 rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
+          {!runtimeAvailable ? (
+            <div className="mb-3 rounded-2xl border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">
+              Model runtime is disabled or unavailable. Core UI remains healthy; enable modelruntime before registry and load controls become active.
+            </div>
+          ) : null}
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+            <div className="rounded-2xl bg-black/20 p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-forge-mist/60">Runtime Status</div>
+              <div className="mt-2 text-2xl font-semibold text-forge-ash">{health?.status || (health?.ok ? "ok" : "unknown")}</div>
+              <div className="mt-2 text-sm text-forge-mist">
+                {loaded?.count ?? 0} loaded · {queue?.depth ?? 0} queued · {chatSelectableModels.length} chat-capable
+              </div>
+              {health?.degradedReasons?.length ? (
+                <div className="mt-3 rounded-md border border-forge-ember/30 bg-forge-ember/10 p-2 text-xs text-forge-ash">
+                  {health.degradedReasons.join("; ")}
+                </div>
+              ) : null}
+              {health?.policyWarnings?.length ? (
+                <div className="mt-2 rounded-md border border-white/10 bg-black/25 p-2 text-xs text-forge-mist">
+                  {health.policyWarnings.join("; ")}
+                </div>
+              ) : null}
+              <div className="mt-4 grid gap-2 md:grid-cols-2">
+                <StateBox
+                  title="Active Model"
+                  rows={[
+                    ["Selected", selectedModelSummary?.displayName || selectedModelSummary?.id || "none"],
+                    ["Backend", selectedModelSummary?.backend || health?.backend || "unknown"],
+                    ["Loaded", selectedLoadedRecord?.status || "not loaded"],
+                  ]}
+                />
+                <StateBox
+                  title="Availability"
+                  rows={[
+                    ["Registered", String(models.length)],
+                    ["Available", String(modelCounts.available ?? usage?.available ?? 0)],
+                    ["Disabled/Archived", String((usage?.disabled ?? 0) + (usage?.archived ?? 0))],
+                  ]}
+                />
+              </div>
+            </div>
+            <div className="rounded-2xl bg-black/20 p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-forge-mist/60">Chat Preference</div>
+              <select
+                className="forge-input mt-3"
+                value={chatSelectedModelId}
+                onChange={(event) => {
+                  setChatSelectedModelId(event.target.value);
+                  setStatus(event.target.value ? `Chat model preference set to ${event.target.value}` : "Chat model preference cleared (auto)");
+                }}
+              >
+                <option value="">Auto routing</option>
+                {chatSelectableModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.displayName?.trim() || model.id}
+                  </option>
+                ))}
+              </select>
+              <GhostButton className="mt-3 w-full" onClick={() => setChatSelectedModelId("")} disabled={!chatSelectedModelId}>
+                Clear preference
+              </GhostButton>
+            </div>
+          </div>
+        </Panel>
+
+        <Panel title="Registry" subtitle="Compact model list. Select a model or open advanced registry for lifecycle controls.">
+          {models.length === 0 ? (
+            <div className="text-sm text-forge-mist">No models registered yet.</div>
+          ) : (
+            <div className="space-y-2">
+              {models.slice(0, 12).map((model) => (
+                <button
+                  key={model.id}
+                  type="button"
+                  onClick={() => setSelectedModelId(model.id)}
+                  className={cx(
+                    "flex w-full items-center justify-between gap-3 rounded-2xl bg-black/20 px-4 py-3 text-left transition hover:bg-black/30",
+                    selectedModelId === model.id && "outline outline-1 outline-forge-accent/45",
+                  )}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-mono text-sm text-forge-ash">{model.id}</span>
+                    <span className="mt-1 block truncate text-xs text-forge-mist">{model.displayName || "Unnamed model"} · {model.backend || "backend unset"}</span>
+                  </span>
+                  <span className={cx("shrink-0 rounded-full border px-2 py-1 text-[11px]", badgeClass(model.status))}>{model.status || "unknown"}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </Panel>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <Panel
+        className="overflow-visible"
         title="Models"
         subtitle="Governed FORGE model runtime surface: import, verify, load, disable, archive, inspect health, and track loaded/runtime state."
         actions={
@@ -330,101 +489,187 @@ export function ModelsPage() {
         }
       >
         {err ? <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
-        <div className="mt-4 rounded border border-white/10 bg-black/20 p-3">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-forge-mist">Chat Model Preference</div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <select
-              className="forge-input h-9 min-w-[280px] py-1 text-sm"
-              value={chatSelectedModelId}
-              onChange={(event) => {
-                setChatSelectedModelId(event.target.value);
-                setStatus(event.target.value ? `Chat model preference set to ${event.target.value}` : "Chat model preference cleared (auto)");
-              }}
-            >
-              <option value="">Auto (runtime default / adapter fallback)</option>
-              {chatSelectedModelId && !chatSelectableModels.some((model) => model.id === chatSelectedModelId) ? (
-                <option value={chatSelectedModelId}>Saved: {chatSelectedModelId} (not in current runtime list)</option>
-              ) : null}
-              {chatSelectableModels.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.displayName?.trim() || model.id}
-                </option>
-              ))}
-            </select>
-            <GhostButton
-              onClick={() => {
-                setChatSelectedModelId("");
-                setStatus("Chat model preference cleared (auto).");
-              }}
-              disabled={!chatSelectedModelId}
-            >
-              Clear
-            </GhostButton>
-          </div>
-          <div className="mt-2 text-[11px] text-forge-mist">
-            Applies to chat assistant requests from the desktop shell.
-          </div>
-          {!chatSelectionKnown && chatSelectedModelId ? (
-            <div className="mt-2 text-[11px] text-forge-emberSoft">
-              Saved chat model `{chatSelectedModelId}` is no longer registered; chat will fail over unless you clear or update it.
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.95fr)]">
+          <div className="rounded border border-forge-accent/20 bg-[linear-gradient(135deg,rgba(20,27,37,0.98),rgba(6,10,14,0.92))] p-4 shadow-[0_0_0_1px_rgba(122,162,255,0.04)]">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-forge-mist/75">Runtime Overview</div>
+                <div className="mt-2 max-w-2xl text-sm text-forge-mist">
+                  Central control surface for model registration, operator chat preference, runtime availability, and backend posture.
+                </div>
+              </div>
+              <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[11px] text-forge-mist">
+                Last poll <span className="text-forge-ash">{formatTime(lastUpdatedAt)}</span>
+              </div>
             </div>
-          ) : null}
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          <Metric label="Registered" value={usage?.registered ?? models.length} hint="known manifests" />
-          <Metric label="Loaded" value={usage?.loaded ?? loaded?.count ?? 0} hint="active runtime state" />
-          <Metric label="Queue Depth" value={queue?.depth ?? 0} hint={queue?.scheduler || "scheduler"} />
-          <Metric label="Completed" value={usage?.completed ?? 0} hint="finished requests" />
-          <Metric label="Health" value={health?.status || (health?.ok ? "ok" : "unknown")} hint={health?.backend || "runtime"} />
-          <Metric label="Updated" value={formatTime(lastUpdatedAt)} hint="desktop poll timestamp" />
-        </div>
-        <div className="mt-4 grid gap-2 text-[11px] text-forge-mist md:grid-cols-2 xl:grid-cols-4">
-          <div>Available: <span className="text-forge-ash">{modelCounts.available ?? usage?.available ?? 0}</span></div>
-          <div>Imported: <span className="text-forge-ash">{modelCounts.imported ?? usage?.imported ?? 0}</span></div>
-          <div>Verified: <span className="text-forge-ash">{modelCounts.verified ?? usage?.verified ?? 0}</span></div>
-          <div>Disabled/Archived: <span className="text-forge-ash">{(usage?.disabled ?? 0) + (usage?.archived ?? 0)}</span></div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <Metric label="Registered" value={usage?.registered ?? models.length} hint="known manifests" />
+              <Metric label="Loaded" value={usage?.loaded ?? loaded?.count ?? 0} hint="active runtime state" />
+              <Metric label="Queue Depth" value={queue?.depth ?? 0} hint={queue?.scheduler || "scheduler"} />
+              <Metric label="Completed" value={usage?.completed ?? 0} hint="finished requests" />
+              <Metric label="Health" value={health?.status || (health?.ok ? "ok" : "unknown")} hint={health?.backend || "runtime"} />
+              <Metric label="Available For Chat" value={chatSelectableModels.length} hint="enabled chat-capable models" />
+            </div>
+            {health?.degradedReasons?.length || health?.policyWarnings?.length ? (
+              <div className="mt-4 grid gap-2 text-xs text-forge-mist md:grid-cols-2">
+                {health.degradedReasons?.length ? (
+                  <div className="rounded border border-forge-ember/30 bg-forge-ember/10 px-3 py-2 text-forge-ash">
+                    {health.degradedReasons.join("; ")}
+                  </div>
+                ) : null}
+                {health.policyWarnings?.length ? (
+                  <div className="rounded border border-white/10 bg-black/20 px-3 py-2">{health.policyWarnings.join("; ")}</div>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="mt-4 grid gap-2 text-[11px] text-forge-mist md:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Available: <span className="text-forge-ash">{modelCounts.available ?? usage?.available ?? 0}</span></div>
+              <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Imported: <span className="text-forge-ash">{modelCounts.imported ?? usage?.imported ?? 0}</span></div>
+              <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Verified: <span className="text-forge-ash">{modelCounts.verified ?? usage?.verified ?? 0}</span></div>
+              <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Disabled/Archived: <span className="text-forge-ash">{(usage?.disabled ?? 0) + (usage?.archived ?? 0)}</span></div>
+            </div>
+            <div className="mt-4 rounded border border-white/10 bg-black/20 p-3">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-forge-mist/80">Current Focus</div>
+              {selectedModelSummary ? (
+                <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-mono text-sm text-forge-ash">{selectedModelSummary.id}</div>
+                    <div className="mt-1 text-xs text-forge-mist">
+                      {(selectedModelSummary.displayName || "Unnamed model")} · {selectedModelSummary.family || "family unknown"} · {selectedModelSummary.backend || "backend unset"}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-forge-mist">
+                      <span className="rounded-full border border-white/10 bg-black/25 px-2 py-1">Capabilities: <span className="text-forge-ash">{summarizeList(selectedModelSummary.capabilities)}</span></span>
+                      <span className="rounded-full border border-white/10 bg-black/25 px-2 py-1">Loaded: <span className="text-forge-ash">{selectedLoadedRecord?.status || "not loaded"}</span></span>
+                    </div>
+                  </div>
+                  <span className={cx("rounded-full border px-2 py-1 text-[11px] font-medium", badgeClass(selectedModelSummary.status))}>
+                    {selectedModelSummary.status || "unknown"}
+                  </span>
+                </div>
+              ) : (
+                <div className="mt-3 text-sm text-forge-mist">Select a registered model to pin detailed compatibility and runtime state on the right.</div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded border border-forge-electric/20 bg-[linear-gradient(180deg,rgba(12,18,27,0.96),rgba(6,10,14,0.94))] p-4 shadow-[0_0_0_1px_rgba(75,187,255,0.05)]">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-forge-electric/80">Chat Model Preference</div>
+                <div className="mt-2 text-sm text-forge-mist">
+                  Sets the desktop chat assistant’s requested model before adapter fallback.
+                </div>
+              </div>
+              <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] text-forge-mist">
+                {chatSelectedModelId ? "Manual pin" : "Auto routing"}
+              </span>
+            </div>
+            <div className="relative z-20 mt-4 overflow-visible rounded border border-white/10 bg-black/20 p-3">
+              <label className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-forge-mist">
+                Preferred chat model
+              </label>
+              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                <div className="relative z-20 min-w-0 flex-1 overflow-visible">
+                  <select
+                    className="forge-input relative z-20 h-11 w-full min-w-0 py-2 text-sm"
+                    value={chatSelectedModelId}
+                    onChange={(event) => {
+                      setChatSelectedModelId(event.target.value);
+                      setStatus(event.target.value ? `Chat model preference set to ${event.target.value}` : "Chat model preference cleared (auto)");
+                    }}
+                  >
+                    <option value="">Auto (runtime default / adapter fallback)</option>
+                    {chatSelectedModelId && !chatSelectableModels.some((model) => model.id === chatSelectedModelId) ? (
+                      <option value={chatSelectedModelId}>Saved: {chatSelectedModelId} (not in current runtime list)</option>
+                    ) : null}
+                    {chatSelectableModels.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.displayName?.trim() || model.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <GhostButton
+                  className="min-h-11 shrink-0 px-4"
+                  onClick={() => {
+                    setChatSelectedModelId("");
+                    setStatus("Chat model preference cleared (auto).");
+                  }}
+                  disabled={!chatSelectedModelId}
+                >
+                  Clear
+                </GhostButton>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-forge-mist">
+                <span className="rounded-full border border-white/10 bg-black/25 px-2 py-1">
+                  Active setting: <span className="text-forge-ash">{chatSelectedModelId || "auto"}</span>
+                </span>
+                <span className="rounded-full border border-white/10 bg-black/25 px-2 py-1">
+                  Eligible models: <span className="text-forge-ash">{chatSelectableModels.length}</span>
+                </span>
+              </div>
+            </div>
+            {!chatSelectionKnown && chatSelectedModelId ? (
+              <div className="mt-3 rounded border border-forge-ember/30 bg-forge-ember/10 px-3 py-2 text-[11px] text-forge-emberSoft">
+                Saved chat model `{chatSelectedModelId}` is no longer registered; chat will fail over unless you clear or update it.
+              </div>
+            ) : null}
+          </div>
         </div>
       </Panel>
 
-      <Panel title="Import and Registration" subtitle="Local GGUF and manifest-backed model registration. File deletion remains intentionally out of scope.">
+      <Panel
+        className="overflow-visible"
+        title="Import and Registration"
+        subtitle="Local GGUF and manifest-backed model registration. File deletion remains intentionally out of scope."
+      >
         <FoldSection title="Register Local Model" subtitle="Import a GGUF file or manifest-backed directory into FORGE-managed runtime metadata." defaultOpen>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <label className="text-xs text-forge-mist">
-              Path
-              <input className="forge-input mt-1" value={importPath} onChange={(e) => setImportPath(e.target.value)} placeholder="/models/coder.gguf" />
-            </label>
-            <label className="text-xs text-forge-mist">
-              Display name
-              <input className="forge-input mt-1" value={importDisplayName} onChange={(e) => setImportDisplayName(e.target.value)} placeholder="Qwen Coder" />
-            </label>
-            <label className="text-xs text-forge-mist">
-              Family
-              <input className="forge-input mt-1" value={importFamily} onChange={(e) => setImportFamily(e.target.value)} placeholder="qwen" />
-            </label>
-            <label className="text-xs text-forge-mist">
-              Backend
-              <select className="forge-input mt-1" value={importBackend} onChange={(e) => setImportBackend(e.target.value)}>
-                <option value="">manifest/default</option>
-                <option value="llama_cpp">llama_cpp</option>
-                <option value="openai_compat">openai_compat</option>
-                <option value="vllm">vllm</option>
-                <option value="fake">fake</option>
-              </select>
-            </label>
-            <label className="text-xs text-forge-mist">
-              Capabilities
-              <input className="forge-input mt-1" value={importCapabilities} onChange={(e) => setImportCapabilities(e.target.value)} placeholder="chat,completion" />
-            </label>
-            <label className="flex items-center gap-2 self-end text-xs text-forge-mist">
-              <input type="checkbox" checked={importPreferred} onChange={(e) => setImportPreferred(e.target.checked)} />
-              Mark as preferred
-            </label>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(240px,0.65fr)]">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              <label className="text-xs text-forge-mist">
+                Path
+                <input className="forge-input mt-1" value={importPath} onChange={(e) => setImportPath(e.target.value)} placeholder="/models/coder.gguf" />
+              </label>
+              <label className="text-xs text-forge-mist">
+                Display name
+                <input className="forge-input mt-1" value={importDisplayName} onChange={(e) => setImportDisplayName(e.target.value)} placeholder="Qwen Coder" />
+              </label>
+              <label className="text-xs text-forge-mist">
+                Family
+                <input className="forge-input mt-1" value={importFamily} onChange={(e) => setImportFamily(e.target.value)} placeholder="qwen" />
+              </label>
+              <label className="relative z-10 overflow-visible text-xs text-forge-mist">
+                Backend
+                <select className="forge-input relative z-20 mt-1 h-10 w-full" value={importBackend} onChange={(e) => setImportBackend(e.target.value)}>
+                  <option value="">manifest/default</option>
+                  <option value="llama_cpp">llama_cpp</option>
+                  <option value="openai_compat">openai_compat</option>
+                  <option value="vllm">vllm</option>
+                </select>
+              </label>
+              <label className="text-xs text-forge-mist">
+                Capabilities
+                <input className="forge-input mt-1" value={importCapabilities} onChange={(e) => setImportCapabilities(e.target.value)} placeholder="chat,completion" />
+              </label>
+              <label className="flex items-center gap-2 self-end rounded border border-white/10 bg-black/20 px-3 py-2 text-xs text-forge-mist">
+                <input type="checkbox" checked={importPreferred} onChange={(e) => setImportPreferred(e.target.checked)} />
+                Mark as preferred
+              </label>
+            </div>
+            <div className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-forge-mist/80">Registration Notes</div>
+              <div className="mt-3 space-y-2">
+                <div>Import records runtime metadata only; removal never deletes model files.</div>
+                <div>Use <span className="text-forge-ash">preferred</span> when the imported model should be favored by runtime compatibility checks.</div>
+                <div>Capabilities should stay comma-separated so registry and chat filtering remain aligned.</div>
+              </div>
+            </div>
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
-            <PrimaryButton onClick={() => void handleImport()} disabled={importBusy}>
+            <PrimaryButton className="min-h-11 px-4" onClick={() => void handleImport()} disabled={importBusy}>
               {importBusy ? "Importing..." : "Import Model"}
             </PrimaryButton>
-            <GhostButton onClick={() => void handleScan()} disabled={scanBusy}>
+            <GhostButton className="min-h-11 px-4" onClick={() => void handleScan()} disabled={scanBusy}>
               {scanBusy ? "Scanning..." : "Reconcile Registry"}
             </GhostButton>
           </div>
@@ -437,6 +682,17 @@ export function ModelsPage() {
             <div className="text-sm text-forge-mist">No models registered yet. Import a local model or scan an existing model home.</div>
           ) : (
             <div className="space-y-3">
+              <div className="flex flex-wrap gap-2 text-[11px] text-forge-mist">
+                <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                  Registry size <span className="text-forge-ash">{models.length}</span>
+                </span>
+                <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                  Loaded now <span className="text-forge-ash">{loaded?.count ?? 0}</span>
+                </span>
+                <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                  Selected <span className="text-forge-ash">{selectedModelId || "none"}</span>
+                </span>
+              </div>
               {models.map((model) => {
                 const isSelected = model.id === selectedModelId;
                 const loadedRecord = loaded?.models.find((item) => item.modelId === model.id) ?? null;
@@ -455,22 +711,40 @@ export function ModelsPage() {
                       }
                     }}
                     className={cx(
-                      "w-full rounded border px-3 py-3 text-left transition",
-                      isSelected ? "border-forge-accent/55 bg-forge-slate/30" : "border-white/10 bg-black/20 hover:border-forge-accent/40",
+                      "w-full rounded border px-4 py-4 text-left transition focus:outline-none focus:ring-2 focus:ring-forge-accent/40",
+                      isSelected
+                        ? "border-forge-accent/55 bg-[linear-gradient(135deg,rgba(20,30,44,0.9),rgba(10,15,24,0.92))] shadow-[0_0_0_1px_rgba(122,162,255,0.05)]"
+                        : "border-white/10 bg-black/20 hover:border-forge-accent/40 hover:bg-black/25",
                     )}
                   >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <div className="font-mono text-sm text-forge-ash">{model.id}</div>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="font-mono text-sm text-forge-ash">{model.id}</div>
+                          {chatSelectedModelId === model.id ? (
+                            <span className="rounded-full border border-forge-electric/35 bg-forge-electric/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-forge-electric">
+                              Chat preferred
+                            </span>
+                          ) : null}
+                          {isSelected ? (
+                            <span className="rounded-full border border-forge-accent/35 bg-forge-accent/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-forge-accent">
+                              Selected
+                            </span>
+                          ) : null}
+                        </div>
                         <div className="mt-1 text-xs text-forge-mist">
                           {(model.displayName || "Unnamed model")} · {model.family || "family unknown"} · {model.backend || "backend unset"} · {model.format || "format unknown"}
                         </div>
                       </div>
                       <span className={cx("rounded-full border px-2 py-1 text-[11px] font-medium", badgeClass(model.status))}>{model.status || "unknown"}</span>
                     </div>
-                    <div className="mt-2 text-[11px] text-forge-mist">Capabilities: {summarizeList(model.capabilities)}</div>
-                    <div className="mt-3 flex flex-wrap gap-2">
+                    <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-forge-mist">
+                      <span className="rounded-full border border-white/10 bg-black/25 px-2 py-1">Capabilities: <span className="text-forge-ash">{summarizeList(model.capabilities)}</span></span>
+                      <span className="rounded-full border border-white/10 bg-black/25 px-2 py-1">Loaded: <span className="text-forge-ash">{loadedRecord?.status || "not loaded"}</span></span>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
                       <GhostButton
+                        className="min-h-10 px-3"
                         onClick={(event) => {
                           event.stopPropagation();
                           void runAction(model.id, "verify");
@@ -481,6 +755,7 @@ export function ModelsPage() {
                       </GhostButton>
                       {normalizeStatus(model.status) === "disabled" ? (
                         <GhostButton
+                          className="min-h-10 px-3"
                           onClick={(event) => {
                             event.stopPropagation();
                             void runAction(model.id, "enable");
@@ -491,6 +766,7 @@ export function ModelsPage() {
                         </GhostButton>
                       ) : (
                         <GhostButton
+                          className="min-h-10 px-3"
                           onClick={(event) => {
                             event.stopPropagation();
                             void runAction(model.id, "disable");
@@ -502,6 +778,7 @@ export function ModelsPage() {
                       )}
                       {loadedRecord ? (
                         <PrimaryButton
+                          className="min-h-10 px-3"
                           onClick={(event) => {
                             event.stopPropagation();
                             void runAction(model.id, "unload");
@@ -512,6 +789,7 @@ export function ModelsPage() {
                         </PrimaryButton>
                       ) : (
                         <PrimaryButton
+                          className="min-h-10 px-3"
                           onClick={(event) => {
                             event.stopPropagation();
                             void runAction(model.id, "load");
@@ -522,6 +800,7 @@ export function ModelsPage() {
                         </PrimaryButton>
                       )}
                       <GhostButton
+                        className="min-h-10 px-3"
                         onClick={(event) => {
                           event.stopPropagation();
                           void runAction(model.id, "archive");
@@ -531,6 +810,7 @@ export function ModelsPage() {
                         {busyPrefix === "archive" && isBusy ? "Archiving..." : "Archive"}
                       </GhostButton>
                       <GhostButton
+                        className="min-h-10 px-3"
                         onClick={(event) => {
                           event.stopPropagation();
                           if (!window.confirm(`Remove registration for ${model.id}? Model files will not be deleted.`)) return;
@@ -550,54 +830,116 @@ export function ModelsPage() {
 
         <div className="space-y-6">
           <Panel title="Selected Model" subtitle="Compatibility, loaded state, metadata, and backend readiness for the focused model.">
-            {!selectedModel ? (
+            {!selectedModelSummary ? (
               <div className="text-sm text-forge-mist">Select a registered model to inspect compatibility and detailed metadata.</div>
             ) : (
               <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="font-mono text-sm text-forge-ash">{selectedModel.id}</div>
-                    <div className="mt-1 text-xs text-forge-mist">
-                      {(selectedModel.displayName || "Unnamed model")} · {selectedModel.family || "family unknown"} · {selectedModel.backend || "backend unset"}
+                <div className="rounded border border-forge-accent/20 bg-[linear-gradient(135deg,rgba(20,30,44,0.88),rgba(8,13,20,0.92))] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-mono text-sm text-forge-ash">{selectedModelSummary.id}</div>
+                      <div className="mt-1 text-xs text-forge-mist">
+                        {(selectedModelSummary.displayName || "Unnamed model")} · {selectedModelSummary.family || "family unknown"} · {selectedModelSummary.backend || "backend unset"}
+                      </div>
                     </div>
+                    <span className={cx("rounded-full border px-2 py-1 text-[11px] font-medium", badgeClass(selectedModelSummary.status))}>
+                      {selectedModelSummary.status || "unknown"}
+                    </span>
                   </div>
-                  <span className={cx("rounded-full border px-2 py-1 text-[11px] font-medium", badgeClass(selectedModel.status))}>
-                    {selectedModel.status || "unknown"}
-                  </span>
+                  <div className="mt-4 grid gap-2 text-[11px] text-forge-mist sm:grid-cols-2">
+                    <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Format: <span className="text-forge-ash">{selectedModelSummary.format || "unknown"}</span></div>
+                    <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Capabilities: <span className="text-forge-ash">{summarizeList(selectedModelSummary.capabilities)}</span></div>
+                    <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Loaded state: <span className="text-forge-ash">{selectedLoadedRecord?.status || "not loaded"}</span></div>
+                    <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Loaded at: <span className="text-forge-ash">{selectedLoadedRecord?.loadedAtMs ? formatTime(selectedLoadedRecord.loadedAtMs) : "—"}</span></div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <GhostButton
+                      className="min-h-10 px-3"
+                      onClick={() => void runAction(selectedModelSummary.id, "verify")}
+                      disabled={actionBusy?.endsWith(`:${selectedModelSummary.id}`) ?? false}
+                    >
+                      {actionBusy === `verify:${selectedModelSummary.id}` ? "Verifying..." : "Verify"}
+                    </GhostButton>
+                    {normalizeStatus(selectedModelSummary.status) === "disabled" ? (
+                      <GhostButton
+                        className="min-h-10 px-3"
+                        onClick={() => void runAction(selectedModelSummary.id, "enable")}
+                        disabled={actionBusy?.endsWith(`:${selectedModelSummary.id}`) ?? false}
+                      >
+                        {actionBusy === `enable:${selectedModelSummary.id}` ? "Enabling..." : "Enable"}
+                      </GhostButton>
+                    ) : (
+                      <GhostButton
+                        className="min-h-10 px-3"
+                        onClick={() => void runAction(selectedModelSummary.id, "disable")}
+                        disabled={actionBusy?.endsWith(`:${selectedModelSummary.id}`) ?? false}
+                      >
+                        {actionBusy === `disable:${selectedModelSummary.id}` ? "Disabling..." : "Disable"}
+                      </GhostButton>
+                    )}
+                    {selectedLoadedRecord ? (
+                      <PrimaryButton
+                        className="min-h-10 px-3"
+                        onClick={() => void runAction(selectedModelSummary.id, "unload")}
+                        disabled={actionBusy?.endsWith(`:${selectedModelSummary.id}`) ?? false}
+                      >
+                        {actionBusy === `unload:${selectedModelSummary.id}` ? "Unloading..." : "Unload"}
+                      </PrimaryButton>
+                    ) : (
+                      <PrimaryButton
+                        className="min-h-10 px-3"
+                        onClick={() => void runAction(selectedModelSummary.id, "load")}
+                        disabled={(actionBusy?.endsWith(`:${selectedModelSummary.id}`) ?? false) || normalizeStatus(selectedModelSummary.status) === "archived"}
+                      >
+                        {actionBusy === `load:${selectedModelSummary.id}` ? "Loading..." : "Load"}
+                      </PrimaryButton>
+                    )}
+                    <GhostButton
+                      className="min-h-10 px-3"
+                      onClick={() => void runAction(selectedModelSummary.id, "archive")}
+                      disabled={(actionBusy?.endsWith(`:${selectedModelSummary.id}`) ?? false) || normalizeStatus(selectedModelSummary.status) === "archived"}
+                    >
+                      {actionBusy === `archive:${selectedModelSummary.id}` ? "Archiving..." : "Archive"}
+                    </GhostButton>
+                    <GhostButton
+                      className="min-h-10 px-3"
+                      onClick={() => {
+                        if (!window.confirm(`Remove registration for ${selectedModelSummary.id}? Model files will not be deleted.`)) return;
+                        void runAction(selectedModelSummary.id, "remove");
+                      }}
+                      disabled={actionBusy?.endsWith(`:${selectedModelSummary.id}`) ?? false}
+                    >
+                      {actionBusy === `remove:${selectedModelSummary.id}` ? "Removing..." : "Remove"}
+                    </GhostButton>
+                  </div>
                 </div>
-                <div className="grid gap-2 text-[11px] text-forge-mist sm:grid-cols-2">
-                  <div>Format: <span className="text-forge-ash">{selectedModel.format || "unknown"}</span></div>
-                  <div>Capabilities: <span className="text-forge-ash">{summarizeList(selectedModel.capabilities)}</span></div>
-                  <div>Loaded state: <span className="text-forge-ash">{selectedLoadedRecord?.status || "not loaded"}</span></div>
-                  <div>Loaded at: <span className="text-forge-ash">{selectedLoadedRecord?.loadedAtMs ? formatTime(selectedLoadedRecord.loadedAtMs) : "—"}</span></div>
-                </div>
-                {compatibility ? (
+                {selectedCompatibility ? (
                   <div className="rounded border border-white/10 bg-black/25 p-3 text-xs text-forge-mist">
                     <div className="font-semibold text-forge-ash">Compatibility</div>
-                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                      <div>Backend healthy: <span className="text-forge-ash">{compatibility.backendHealthy ? "yes" : "no"}</span></div>
-                      <div>Configured: <span className="text-forge-ash">{compatibility.backendConfigured ? "yes" : "no"}</span></div>
-                      <div>Supported by backend: <span className="text-forge-ash">{compatibility.supportedByBackend ? "yes" : "no"}</span></div>
-                      <div>Can generate: <span className="text-forge-ash">{compatibility.canGenerate ? "yes" : "no"}</span></div>
-                      <div>Preferred: <span className="text-forge-ash">{compatibility.preferred ? "yes" : "no"}</span></div>
-                      <div>Backend: <span className="text-forge-ash">{compatibility.backend || "unknown"}</span></div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Backend healthy: <span className="text-forge-ash">{selectedCompatibility.backendHealthy ? "yes" : "no"}</span></div>
+                      <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Configured: <span className="text-forge-ash">{selectedCompatibility.backendConfigured ? "yes" : "no"}</span></div>
+                      <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Supported by backend: <span className="text-forge-ash">{selectedCompatibility.supportedByBackend ? "yes" : "no"}</span></div>
+                      <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Can generate: <span className="text-forge-ash">{selectedCompatibility.canGenerate ? "yes" : "no"}</span></div>
+                      <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Preferred: <span className="text-forge-ash">{selectedCompatibility.preferred ? "yes" : "no"}</span></div>
+                      <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Backend: <span className="text-forge-ash">{selectedCompatibility.backend || "unknown"}</span></div>
                     </div>
-                    {compatibility.warnings && compatibility.warnings.length > 0 ? (
+                    {selectedCompatibility.warnings && selectedCompatibility.warnings.length > 0 ? (
                       <div className="mt-3 rounded border border-forge-ember/30 bg-forge-ember/10 px-2 py-2 text-[11px] text-forge-ash">
-                        Warnings: {compatibility.warnings.join(" · ")}
+                        Warnings: {selectedCompatibility.warnings.join(" · ")}
                       </div>
                     ) : null}
-                    {compatibility.details && Object.keys(compatibility.details).length > 0 ? (
+                    {selectedCompatibility.details && Object.keys(selectedCompatibility.details).length > 0 ? (
                       <pre className="mt-3 max-h-[220px] overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
-                        {JSON.stringify(compatibility.details, null, 2)}
+                        {JSON.stringify(selectedCompatibility.details, null, 2)}
                       </pre>
                     ) : null}
                   </div>
                 ) : null}
-                {selectedModel.metadata && Object.keys(selectedModel.metadata).length > 0 ? (
+                {selectedModelSummary.metadata && Object.keys(selectedModelSummary.metadata).length > 0 ? (
                   <FoldSection title="Metadata" subtitle="Manifest and registry metadata for this model.">
                     <pre className="max-h-[260px] overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
-                      {JSON.stringify(selectedModel.metadata, null, 2)}
+                      {JSON.stringify(selectedModelSummary.metadata, null, 2)}
                     </pre>
                   </FoldSection>
                 ) : null}
@@ -622,15 +964,23 @@ export function ModelsPage() {
                 ]} />
               </div>
               <div className="rounded border border-white/10 bg-black/25 p-3">
-                <div className="font-semibold text-forge-ash">Loaded models</div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-semibold text-forge-ash">Loaded models</div>
+                  <div className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[11px] text-forge-mist">
+                    {loaded?.models.length ?? 0} active
+                  </div>
+                </div>
                 {loaded?.models.length ? (
-                  <div className="mt-2 space-y-2">
+                  <div className="mt-3 space-y-2">
                     {loaded.models.map((item) => (
                       <div key={`${item.backend}:${item.modelId}`} className="rounded border border-white/10 bg-black/20 px-3 py-2">
-                        <div className="font-mono text-forge-ash">{item.modelId}</div>
-                        <div className="mt-1 text-[11px] text-forge-mist">
-                          {item.backend || "backend unknown"} · {item.status || "status unknown"} · loaded {item.loadedAtMs ? formatTime(item.loadedAtMs) : "—"}
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="font-mono text-forge-ash">{item.modelId}</div>
+                          <span className={cx("rounded-full border px-2 py-1 text-[11px] font-medium", badgeClass(item.status))}>
+                            {item.status || "status unknown"}
+                          </span>
                         </div>
+                        <div className="mt-1 text-[11px] text-forge-mist">{item.backend || "backend unknown"} · loaded {item.loadedAtMs ? formatTime(item.loadedAtMs) : "—"}</div>
                       </div>
                     ))}
                   </div>
@@ -639,9 +989,14 @@ export function ModelsPage() {
                 )}
               </div>
               <div className="rounded border border-white/10 bg-black/25 p-3">
-                <div className="font-semibold text-forge-ash">Backend health</div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="font-semibold text-forge-ash">Backend health</div>
+                  <div className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[11px] text-forge-mist">
+                    {backends.length} reported
+                  </div>
+                </div>
                 {backends.length ? (
-                  <div className="mt-2 space-y-2">
+                  <div className="mt-3 space-y-2">
                     {backends.map((backend) => (
                       <div key={`${backend.kind}:${backend.name}`} className="rounded border border-white/10 bg-black/20 px-3 py-2">
                         <div className="flex flex-wrap items-center justify-between gap-2">

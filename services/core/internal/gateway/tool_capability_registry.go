@@ -1,20 +1,36 @@
 package gateway
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"forge/projectforge/services/core/internal/aios/domain"
 )
+
+// ToolCapabilityOverrideStore persists operator status overrides (active,
+// approval_only, disabled, deprecated, etc.) so registry mutations survive
+// restart. The registry loads these on construction and writes through on
+// UpdateStatus.
+type ToolCapabilityOverrideStore interface {
+	LoadOverrides(ctx context.Context) (map[string]domain.ToolCapabilityStatus, error)
+	SaveOverride(ctx context.Context, capabilityID string, status domain.ToolCapabilityStatus, actor, reason string) error
+}
 
 type ToolCapabilityRegistry struct {
 	mu           sync.RWMutex
 	byID         map[string]domain.ToolCapability
 	byLegacyTool map[string]string
+	store        ToolCapabilityOverrideStore
 }
 
+// NewToolCapabilityRegistry constructs an in-memory registry (no override
+// persistence). Prefer NewToolCapabilityRegistryWithStore in production so
+// operator UpdateStatus calls survive restart.
 func NewToolCapabilityRegistry() *ToolCapabilityRegistry {
 	r := &ToolCapabilityRegistry{
 		byID:         map[string]domain.ToolCapability{},
@@ -24,6 +40,75 @@ func NewToolCapabilityRegistry() *ToolCapabilityRegistry {
 		_ = r.Register(cap)
 	}
 	return r
+}
+
+// NewToolCapabilityRegistryWithStore builds the registry and immediately
+// applies any persisted overrides from store. If store is nil it degrades to
+// the in-memory constructor.
+func NewToolCapabilityRegistryWithStore(ctx context.Context, store ToolCapabilityOverrideStore) (*ToolCapabilityRegistry, error) {
+	r := NewToolCapabilityRegistry()
+	if store == nil {
+		return r, nil
+	}
+	r.store = store
+	overrides, err := store.LoadOverrides(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load tool capability overrides: %w", err)
+	}
+	for id, status := range overrides {
+		key := strings.TrimSpace(strings.ToLower(id))
+		r.mu.Lock()
+		if row, ok := r.byID[key]; ok {
+			row.Status = status
+			r.byID[key] = row
+		}
+		r.mu.Unlock()
+	}
+	return r, nil
+}
+
+// SQLiteOverrideStore backs ToolCapabilityOverrideStore with the forge SQLite
+// DB. The table is created by the core migrate step.
+type SQLiteOverrideStore struct {
+	DB *sql.DB
+}
+
+func (s *SQLiteOverrideStore) LoadOverrides(ctx context.Context) (map[string]domain.ToolCapabilityStatus, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT capability_id, status FROM tool_capability_overrides`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]domain.ToolCapabilityStatus{}
+	for rows.Next() {
+		var id, status string
+		if err := rows.Scan(&id, &status); err != nil {
+			return nil, err
+		}
+		out[id] = domain.ToolCapabilityStatus(status)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteOverrideStore) SaveOverride(ctx context.Context, capabilityID string, status domain.ToolCapabilityStatus, actor, reason string) error {
+	if strings.TrimSpace(actor) == "" {
+		actor = "operator"
+	}
+	_, err := s.DB.ExecContext(ctx, `
+INSERT INTO tool_capability_overrides(capability_id, status, reason, actor, updated_at)
+VALUES(?,?,?,?,?)
+ON CONFLICT(capability_id) DO UPDATE SET
+  status=excluded.status,
+  reason=excluded.reason,
+  actor=excluded.actor,
+  updated_at=excluded.updated_at`,
+		strings.ToLower(strings.TrimSpace(capabilityID)),
+		string(status),
+		reason,
+		actor,
+		time.Now().UnixMilli(),
+	)
+	return err
 }
 
 func (r *ToolCapabilityRegistry) Register(capability domain.ToolCapability) error {
@@ -121,19 +206,33 @@ func (r *ToolCapabilityRegistry) ListByRisk(risk domain.ToolRisk) []domain.ToolC
 }
 
 func (r *ToolCapabilityRegistry) UpdateStatus(id string, status domain.ToolCapabilityStatus) (domain.ToolCapability, bool, error) {
+	return r.UpdateStatusWithReason(context.Background(), id, status, "operator", "")
+}
+
+// UpdateStatusWithReason updates the in-memory state and, when a store is
+// configured, persists the override so it survives restart. Reason is
+// operator-visible context (e.g. "approved rollout", "incident 123").
+func (r *ToolCapabilityRegistry) UpdateStatusWithReason(ctx context.Context, id string, status domain.ToolCapabilityStatus, actor, reason string) (domain.ToolCapability, bool, error) {
 	status = domain.ToolCapabilityStatus(strings.TrimSpace(strings.ToLower(string(status))))
 	if !domain.IsKnownToolCapabilityStatus(status) {
 		return domain.ToolCapability{}, false, fmt.Errorf("tool capability status %q is unknown", status)
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	key := strings.TrimSpace(strings.ToLower(id))
 	row, ok := r.byID[key]
 	if !ok {
+		r.mu.Unlock()
 		return domain.ToolCapability{}, false, fmt.Errorf("tool capability not found: %s", key)
 	}
 	row.Status = status
 	r.byID[key] = row
+	store := r.store
+	r.mu.Unlock()
+	if store != nil {
+		if err := store.SaveOverride(ctx, key, status, actor, reason); err != nil {
+			return row, true, fmt.Errorf("persist tool capability override: %w", err)
+		}
+	}
 	return row, true, nil
 }
 
@@ -260,10 +359,11 @@ func defaultCapabilityDescriptor(domainID, primitive string) domain.ToolCapabili
 	id := strings.ToLower(strings.TrimSpace(domainID + "." + primitive))
 	effects := inferCapabilityEffects(domainID, primitive)
 	risk := inferCapabilityRisk(domainID, primitive, effects)
-	status := domain.ToolCapabilityStubbed
+	status := domain.ToolCapabilityActive
 	if risk.Rank() >= domain.ToolRiskHigh.Rank() {
 		status = domain.ToolCapabilityApprovalOnly
 	}
+	gatewayToolID := gatewayToolIDForCapability(domainID, primitive)
 	return domain.ToolCapability{
 		ID:                        id,
 		Domain:                    strings.ToLower(strings.TrimSpace(domainID)),
@@ -293,10 +393,28 @@ func defaultCapabilityDescriptor(domainID, primitive string) domain.ToolCapabili
 		AuditLevel:       domain.ToolAuditBasic,
 		ArtifactBehavior: defaultArtifactBehavior(effects),
 		RollbackSupport:  risk.Rank() <= domain.ToolRiskMedium.Rank(),
-		AdapterID:        "stub." + strings.ReplaceAll(id, ".", "_"),
+		AdapterID:        "gateway." + strings.ReplaceAll(gatewayToolID, ".", "_"),
 		Metadata: map[string]any{
 			"taxonomyVersion": "phase_5_9",
+			"gatewayToolId":   gatewayToolID,
 		},
+	}
+}
+
+func gatewayToolIDForCapability(domainID, primitive string) string {
+	domainID = strings.TrimSpace(strings.ToLower(domainID))
+	primitive = strings.TrimSpace(strings.ToLower(primitive))
+	switch domainID {
+	case "filesystem":
+		return "fs." + strings.ReplaceAll(primitive, "_", ".")
+	case "network":
+		return "net." + strings.ReplaceAll(primitive, "_", ".")
+	case "process":
+		return "proc." + strings.ReplaceAll(primitive, "_", ".")
+	case "observability":
+		return "obs." + strings.ReplaceAll(primitive, "_", ".")
+	default:
+		return domainID + "." + strings.ReplaceAll(primitive, "_", ".")
 	}
 }
 

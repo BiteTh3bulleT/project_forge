@@ -399,7 +399,7 @@ func (s *Service) pickSections(kind string) ([]string, error) {
 			"provenance_records", "journal_events", "memory_notes", "semantic_links",
 			"state_items", "state_versions", "open_loops", "artifact_refs",
 			"derived_models", "contradiction_records", "supersession_records",
-			"context_packet_snapshots", "autonomy_settings",
+			"context_packet_snapshots", "semantic_idempotency_keys", "autonomy_settings",
 			"memory_vsa_pointers", "memory_vsa_role_bindings", "memory_vsa_associations",
 			"retrieval_result_vsa_signals", "memory_vsa_reindex_runs", "memory_vsa_reindex_items",
 		}, nil
@@ -455,6 +455,7 @@ func (s *Service) restoreSection(ctx context.Context, execer execContext, table 
 		if !ok {
 			continue
 		}
+		normalizeRestoreRecord(table, rec)
 		args := make([]any, 0, len(insert.fields))
 		for _, f := range insert.fields {
 			args = append(args, rec[f])
@@ -471,6 +472,35 @@ func (s *Service) restoreSection(ctx context.Context, execer execContext, table 
 		n += int(affected)
 	}
 	return n, nil
+}
+
+func normalizeRestoreRecord(table string, rec map[string]any) {
+	if table != "approval_requests" || rec == nil {
+		return
+	}
+	if _, ok := rec["expires_at"]; !ok || rec["expires_at"] == nil {
+		createdAt := restoreInt64(rec["created_at"])
+		rec["expires_at"] = createdAt + int64(24*time.Hour/time.Millisecond)
+	}
+	if _, ok := rec["expired_at"]; !ok || rec["expired_at"] == nil {
+		rec["expired_at"] = int64(0)
+	}
+}
+
+func restoreInt64(v any) int64 {
+	switch t := v.(type) {
+	case int64:
+		return t
+	case int:
+		return int64(t)
+	case float64:
+		return int64(t)
+	case json.Number:
+		n, _ := t.Int64()
+		return n
+	default:
+		return 0
+	}
 }
 
 type insertMap struct {
@@ -510,6 +540,7 @@ var extractQueries = map[string]string{
 	"contradiction_records":        "SELECT * FROM contradiction_records ORDER BY created_at DESC",
 	"supersession_records":         "SELECT * FROM supersession_records ORDER BY created_at DESC",
 	"context_packet_snapshots":     "SELECT * FROM context_packet_snapshots ORDER BY created_at DESC",
+	"semantic_idempotency_keys":    "SELECT * FROM semantic_idempotency_keys ORDER BY created_at DESC, idempotency_key ASC",
 	"autonomy_settings":            "SELECT key, value FROM settings WHERE key LIKE 'autonomy_repo.%' ORDER BY key ASC",
 	"memory_vsa_pointers":          "SELECT * FROM memory_vsa_pointers ORDER BY updated_at DESC",
 	"memory_vsa_role_bindings":     "SELECT * FROM memory_vsa_role_bindings ORDER BY updated_at DESC",
@@ -674,9 +705,9 @@ ON CONFLICT(id) DO UPDATE SET
 	},
 	"approval_requests": {
 		sql: `INSERT INTO approval_requests(
-  id, job_id, created_at, status, requested_action, risk_class, requested_adapter,
-  write_intent, scope_snapshot_json, task_packet_id, request_summary
-) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+	id, job_id, created_at, status, requested_action, risk_class, requested_adapter,
+  write_intent, scope_snapshot_json, task_packet_id, request_summary, expires_at, expired_at
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(id) DO UPDATE SET
   job_id=excluded.job_id,
   created_at=excluded.created_at,
@@ -687,10 +718,13 @@ ON CONFLICT(id) DO UPDATE SET
   write_intent=excluded.write_intent,
   scope_snapshot_json=excluded.scope_snapshot_json,
   task_packet_id=excluded.task_packet_id,
-  request_summary=excluded.request_summary`,
+  request_summary=excluded.request_summary,
+  expires_at=excluded.expires_at,
+  expired_at=excluded.expired_at`,
 		fields: []string{
 			"id", "job_id", "created_at", "status", "requested_action", "risk_class",
 			"requested_adapter", "write_intent", "scope_snapshot_json", "task_packet_id", "request_summary",
+			"expires_at", "expired_at",
 		},
 	},
 	"approval_decisions": {
@@ -942,21 +976,7 @@ ON CONFLICT(id) DO UPDATE SET
   id, created_at, correlation_id, category, action, actor, subject_type, subject_id,
   job_id, gateway_invocation_id, approval_request_id, risk_class, outcome, summary, payload_json
 ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-ON CONFLICT(id) DO UPDATE SET
-  created_at=excluded.created_at,
-  correlation_id=excluded.correlation_id,
-  category=excluded.category,
-  action=excluded.action,
-  actor=excluded.actor,
-  subject_type=excluded.subject_type,
-  subject_id=excluded.subject_id,
-  job_id=excluded.job_id,
-  gateway_invocation_id=excluded.gateway_invocation_id,
-  approval_request_id=excluded.approval_request_id,
-  risk_class=excluded.risk_class,
-  outcome=excluded.outcome,
-  summary=excluded.summary,
-  payload_json=excluded.payload_json`,
+ON CONFLICT(id) DO NOTHING`,
 		fields: []string{
 			"id", "created_at", "correlation_id", "category", "action", "actor", "subject_type", "subject_id",
 			"job_id", "gateway_invocation_id", "approval_request_id", "risk_class", "outcome", "summary", "payload_json",
@@ -1304,6 +1324,13 @@ ON CONFLICT(id) DO UPDATE SET
 			"correlation_id", "trace_id", "syscall_id", "metadata_json", "proposed_by", "committed_by", "audit_id",
 		},
 	},
+	"semantic_idempotency_keys": {
+		sql: `INSERT INTO semantic_idempotency_keys(
+  idempotency_key, action, result_json, created_at, correlation_id
+) VALUES(?,?,?,?,?)
+ON CONFLICT(idempotency_key) DO NOTHING`,
+		fields: []string{"idempotency_key", "action", "result_json", "created_at", "correlation_id"},
+	},
 }
 
 func knownSections(doc BundleDoc) []string {
@@ -1370,38 +1397,39 @@ func orderSectionsForRestore(sections []string) []string {
 }
 
 var restoreSectionPriority = map[string]int{
-	"dossiers":                 8,
-	"task_packets":             10,
-	"project_context_records":  11,
-	"permission_profiles":      15,
-	"approval_presets":         16,
-	"dossier_profiles":         17,
-	"execution_strategies":     18,
-	"automation_rules":         19,
-	"action_lanes":             20,
-	"jobs":                     21,
-	"events":                   25,
-	"approval_requests":        30,
-	"approval_decisions":       31,
-	"job_status_history":       32,
-	"job_events":               33,
-	"artifacts":                34,
-	"evaluation_records":       36,
-	"provenance_records":       40,
-	"gateway_invocations":      41,
-	"audit_records":            42,
-	"journal_events":           50,
-	"state_items":              55,
-	"state_versions":           56,
-	"memory_notes":             60,
-	"semantic_links":           61,
-	"open_loops":               62,
-	"artifact_refs":            63,
-	"derived_models":           64,
-	"contradiction_records":    65,
-	"supersession_records":     66,
-	"context_packet_snapshots": 67,
-	"autonomy_settings":        70,
+	"dossiers":                  8,
+	"task_packets":              10,
+	"project_context_records":   11,
+	"permission_profiles":       15,
+	"approval_presets":          16,
+	"dossier_profiles":          17,
+	"execution_strategies":      18,
+	"automation_rules":          19,
+	"action_lanes":              20,
+	"jobs":                      21,
+	"events":                    25,
+	"approval_requests":         30,
+	"approval_decisions":        31,
+	"job_status_history":        32,
+	"job_events":                33,
+	"artifacts":                 34,
+	"evaluation_records":        36,
+	"provenance_records":        40,
+	"gateway_invocations":       41,
+	"audit_records":             42,
+	"journal_events":            50,
+	"state_items":               55,
+	"state_versions":            56,
+	"memory_notes":              60,
+	"semantic_links":            61,
+	"open_loops":                62,
+	"artifact_refs":             63,
+	"derived_models":            64,
+	"contradiction_records":     65,
+	"supersession_records":      66,
+	"context_packet_snapshots":  67,
+	"semantic_idempotency_keys": 68,
+	"autonomy_settings":         70,
 }
 
 var restoreExportOnlyReasons = map[string]string{

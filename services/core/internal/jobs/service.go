@@ -63,9 +63,10 @@ type Service struct {
 	gateway      *gateway.Gateway
 	workspaceDir string
 
-	queue chan string
-	stop  chan struct{}
-	wg    sync.WaitGroup
+	queue     chan string
+	stop      chan struct{}
+	wg        sync.WaitGroup
+	closeOnce sync.Once
 
 	mu          sync.Mutex
 	cancelFuncs map[string]context.CancelFunc
@@ -121,8 +122,10 @@ func NewService(dep Dependencies) *Service {
 }
 
 func (s *Service) Close() {
-	close(s.stop)
-	s.wg.Wait()
+	s.closeOnce.Do(func() {
+		close(s.stop)
+		s.wg.Wait()
+	})
 }
 
 func (s *Service) ListTemplates() []Template {
@@ -460,11 +463,6 @@ func (s *Service) execute(ctx context.Context, jobID string, job *Job, meta jobM
 		return nonEmpty(result.Message, "Gateway action completed"), nil
 	}
 
-	adapter, err := s.adapters.Get(job.TargetAdapter)
-	if err != nil {
-		return "", executionError{Code: FailAdapterUnavailable, Message: fmt.Sprintf("adapter unavailable: %v", err)}
-	}
-
 	invoke := adapters.InvokeRequest{
 		AdapterID:     job.TargetAdapter,
 		Capability:    tpl.Capability,
@@ -477,7 +475,7 @@ func (s *Service) execute(ctx context.Context, jobID string, job *Job, meta jobM
 		Input:         s.buildAdapterInput(meta, tpl, packet),
 	}
 
-	_, _ = s.appendEvent(ctx, jobID, "adapter.request.sent", "Adapter request sent", map[string]any{
+	_, _ = s.appendEvent(ctx, jobID, "gateway.adapter.request.sent", "Adapter request sent through gateway", map[string]any{
 		"adapter":       invoke.AdapterID,
 		"capability":    invoke.Capability,
 		"correlationId": invoke.CorrelationID,
@@ -485,12 +483,15 @@ func (s *Service) execute(ctx context.Context, jobID string, job *Job, meta jobM
 		"dryRun":        invoke.DryRun,
 	})
 
-	res, err := adapter.Invoke(ctx, invoke)
+	res, err := s.invokeLegacyAdapterThroughGateway(ctx, job, packet, invoke)
 	if err != nil {
+		if errors.Is(err, errExecutionDeferred) {
+			return "", err
+		}
 		return "", executionError{Code: FailAdapterUnavailable, Message: err.Error()}
 	}
 
-	_, _ = s.appendEvent(ctx, jobID, "adapter.response.received", "Adapter response received", map[string]any{
+	_, _ = s.appendEvent(ctx, jobID, "gateway.adapter.response.received", "Gateway adapter response received", map[string]any{
 		"adapter":     invoke.AdapterID,
 		"ok":          res.OK,
 		"failureCode": res.FailureCode,
@@ -524,6 +525,71 @@ func (s *Service) execute(ctx context.Context, jobID string, job *Job, meta jobM
 	})
 
 	return nonEmpty(res.Message, "Adapter execution completed"), nil
+}
+
+func (s *Service) invokeLegacyAdapterThroughGateway(ctx context.Context, job *Job, packet *packets.Packet, invoke adapters.InvokeRequest) (adapters.InvokeResult, error) {
+	if s.gateway == nil {
+		return adapters.InvokeResult{}, fmt.Errorf("gateway dependency unavailable")
+	}
+	if job == nil {
+		return adapters.InvokeResult{}, fmt.Errorf("job is required")
+	}
+	input := map[string]any{}
+	raw, err := json.Marshal(invoke)
+	if err != nil {
+		return adapters.InvokeResult{}, err
+	}
+	if err := json.Unmarshal(raw, &input); err != nil {
+		return adapters.InvokeResult{}, err
+	}
+	packetID := packetID(packet)
+	result, err := s.gateway.Execute(ctx, gateway.Request{
+		ToolID:         "legacy.adapter.invoke",
+		LaneID:         "legacy.adapter.invoke",
+		Domain:         "gateway",
+		Action:         "invoke",
+		RiskClass:      "low",
+		ExecutionLevel: "L0",
+		CorrelationID:  invoke.CorrelationID,
+		Input:          input,
+		JobID:          &job.ID,
+		PacketID:       packetID,
+		Initiator:      "job",
+		DryRun:         invoke.DryRun,
+	})
+	if err != nil {
+		return adapters.InvokeResult{}, err
+	}
+	if result.Status == gateway.StatusNeedsApprov {
+		_ = s.setApprovalStatus(ctx, job.ID, ApprovalPending)
+		if err := s.transitionStatus(ctx, job.ID, StatusAwaitingApproval, "awaiting legacy adapter gateway approval"); err != nil {
+			return adapters.InvokeResult{}, err
+		}
+		return adapters.InvokeResult{}, errExecutionDeferred
+	}
+	if !result.Allowed || result.Status == gateway.StatusDenied {
+		return adapters.InvokeResult{}, errors.New(nonEmpty(result.DeniedReason, "gateway denied legacy adapter invocation"))
+	}
+	if result.Status == gateway.StatusError {
+		return adapters.InvokeResult{}, errors.New(nonEmpty(result.Message, "gateway legacy adapter invocation failed"))
+	}
+	return decodeLegacyAdapterGatewayResult(result.Data)
+}
+
+func decodeLegacyAdapterGatewayResult(data map[string]any) (adapters.InvokeResult, error) {
+	rawResult, ok := data["result"]
+	if !ok {
+		return adapters.InvokeResult{}, fmt.Errorf("gateway legacy adapter result missing")
+	}
+	raw, err := json.Marshal(rawResult)
+	if err != nil {
+		return adapters.InvokeResult{}, err
+	}
+	var out adapters.InvokeResult
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return adapters.InvokeResult{}, err
+	}
+	return out, nil
 }
 
 func enrichGatewayActionInput(toolID string, input map[string]any, userRequest string) map[string]any {

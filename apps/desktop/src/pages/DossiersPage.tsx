@@ -179,7 +179,7 @@ export function DossiersPage() {
       <Panel
         title="Dossiers"
         subtitle={
-          uiMode === "guided"
+          uiMode === "cognitive"
             ? "Project memory profiles. Create a dossier, link sources, and review recent work."
             : "Durable project memory profiles that scope retrieval, packets, jobs, and policy behavior."
         }
@@ -447,10 +447,10 @@ export function DossiersPage() {
       <Panel title="Dossier Policy Profile" subtitle="Dossier-specific strategy, adapter, retrieval, approval, and automation preferences.">
         {!detail ? (
           <div className="text-sm text-forge-mist">Select a dossier first.</div>
-        ) : uiMode === "guided" && !showAdvancedProfile ? (
+        ) : uiMode === "cognitive" && !showAdvancedProfile ? (
           <div className="space-y-3">
             <div className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
-              Advanced policy profile controls are hidden in guided mode to reduce noise.
+              Advanced policy profile controls are hidden in cognitive mode to reduce noise.
             </div>
             <PrimaryButton onClick={() => setShowAdvancedProfile(true)}>Show Advanced Controls</PrimaryButton>
           </div>
@@ -573,7 +573,7 @@ export function DossiersPage() {
 
             <div className="text-[11px] text-forge-mist">Known strategy ids: {strategyHint || "none"}</div>
             <div className="text-[11px] text-forge-mist">Known automation rules: {rulesHint || "none"}</div>
-            {uiMode === "guided" ? <GhostButton onClick={() => setShowAdvancedProfile(false)}>Hide Advanced Controls</GhostButton> : null}
+            {uiMode === "cognitive" ? <GhostButton onClick={() => setShowAdvancedProfile(false)}>Hide Advanced Controls</GhostButton> : null}
           </div>
         )}
       </Panel>

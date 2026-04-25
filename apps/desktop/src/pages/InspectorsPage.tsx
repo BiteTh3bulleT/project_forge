@@ -10,6 +10,9 @@ import {
   type AuditTraceLookupResponse,
   type ContextSnapshotInspectorDetail,
   type ContextSnapshotInspectorSummary,
+  type ProcessHealthTraceResponse,
+  type ProcessHealthCorrelationReport,
+  type ProcessHealthInvocation,
 } from "../lib/api";
 import { formatTime } from "../lib/format";
 
@@ -20,6 +23,180 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function asNumber(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim());
+}
+
+type RestoreScoreCandidate = {
+  snapshotId: string;
+  createdAt: number;
+  snapshotKind: string;
+  queryScore: number;
+  scopeScore: number;
+  kindScore: number;
+  lineageScore: number;
+  stateOverlapScore: number;
+  loopOverlapScore: number;
+  artifactOverlapScore: number;
+  nodeOverlapScore: number;
+  edgeOverlapScore: number;
+  recencyScore: number;
+  fingerprintBonus: number;
+  preferredHintBonus: number;
+  contradictionPenalty: number;
+  stalenessPenalty: number;
+  headerOnlyPenalty: number;
+  total: number;
+  explain: string[];
+  selected?: boolean;
+};
+
+type RestoreScoreSummary = {
+  hasStructured: boolean;
+  decision: string;
+  threshold: number;
+  candidateCount: number;
+  topScore: number;
+  selectedIndex: number;
+  selectedSnapshotId: string;
+  topCandidateId: string;
+  candidates: RestoreScoreCandidate[];
+};
+
+type ResumeHintSummary = {
+  hasStructured: boolean;
+  nextAction: string;
+  topBlockers: string[];
+  dominantStateKeys: string[];
+  dominantLoopIds: string[];
+  recommendedEvidenceIds: string[];
+  restoreConfidence: number;
+  requiresFreshCompile: boolean;
+  preferredSnapshotId: string;
+  candidateCount: number;
+};
+
+function parseRestoreScoreCandidate(value: unknown): RestoreScoreCandidate | null {
+  const raw = asRecord(value);
+  if (!raw) return null;
+  const candidate: RestoreScoreCandidate = {
+    snapshotId: asString(raw.snapshot_id || raw.snapshotId),
+    createdAt: asNumber(raw.created_at ?? raw.createdAt),
+    snapshotKind: asString(raw.snapshot_kind || raw.snapshotKind),
+    queryScore: asNumber(raw.query_score ?? raw.queryScore),
+    scopeScore: asNumber(raw.scope_score ?? raw.scopeScore),
+    kindScore: asNumber(raw.kind_score ?? raw.kindScore),
+    lineageScore: asNumber(raw.lineage_score ?? raw.lineageScore),
+    stateOverlapScore: asNumber(raw.state_overlap_score ?? raw.stateOverlapScore),
+    loopOverlapScore: asNumber(raw.loop_overlap_score ?? raw.loopOverlapScore),
+    artifactOverlapScore: asNumber(raw.artifact_overlap_score ?? raw.artifactOverlapScore),
+    nodeOverlapScore: asNumber(raw.node_overlap_score ?? raw.nodeOverlapScore),
+    edgeOverlapScore: asNumber(raw.edge_overlap_score ?? raw.edgeOverlapScore),
+    recencyScore: asNumber(raw.recency_score ?? raw.recencyScore),
+    fingerprintBonus: asNumber(raw.fingerprint_bonus ?? raw.fingerprintBonus),
+    preferredHintBonus: asNumber(raw.preferred_hint_bonus ?? raw.preferredHintBonus),
+    contradictionPenalty: asNumber(raw.contradiction_penalty ?? raw.contradictionPenalty),
+    stalenessPenalty: asNumber(raw.staleness_penalty ?? raw.stalenessPenalty),
+    headerOnlyPenalty: asNumber(raw.header_only_penalty ?? raw.headerOnlyPenalty),
+    total: asNumber(raw.total ?? raw.totalScore),
+    explain: asStringArray(raw.explain),
+    selected: Boolean(raw.selected),
+  };
+  if (!candidate.snapshotId) return null;
+  return candidate;
+}
+
+function parseRestoreScoreSummary(raw: unknown): RestoreScoreSummary {
+  const record = asRecord(raw);
+  if (!record) {
+    return {
+      hasStructured: false,
+      decision: "",
+      threshold: 0,
+      candidateCount: 0,
+      topScore: 0,
+      selectedIndex: -1,
+      selectedSnapshotId: "",
+      topCandidateId: "",
+      candidates: [],
+    };
+  }
+  const scoreRows = asArray(record.scores).length > 0 ? asArray(record.scores) : asArray(record.score_breakdown ?? record.scoreBreakdown);
+  const candidates = scoreRows.map(parseRestoreScoreCandidate).filter((item): item is RestoreScoreCandidate => item != null);
+  return {
+    hasStructured: candidates.length > 0,
+    decision: asString(record.decision),
+    threshold: asNumber(record.threshold),
+    candidateCount: candidates.length || asNumber(record.candidate_count ?? record.candidateCount),
+    topScore: asNumber(record.top_score ?? record.topScore),
+    selectedIndex: Number(record.selected_index ?? record.selectedIndex ?? -1),
+    selectedSnapshotId: asString(record.selected_snapshot_id ?? record.selectedSnapshotId),
+    topCandidateId: asString(record.top_candidate_id ?? record.topCandidateId),
+    candidates,
+  };
+}
+
+function parseResumeHintSummary(raw: unknown): ResumeHintSummary {
+  const record = asRecord(raw);
+  if (!record) {
+    return {
+      hasStructured: false,
+      nextAction: "",
+      topBlockers: [],
+      dominantStateKeys: [],
+      dominantLoopIds: [],
+      recommendedEvidenceIds: [],
+      restoreConfidence: 0,
+      requiresFreshCompile: false,
+      preferredSnapshotId: "",
+      candidateCount: 0,
+    };
+  }
+  const candidateCount = asNumber(record.candidate_count ?? record.candidateCount);
+  return {
+    hasStructured: candidateCount > 0 || asString(record.next_action || record.nextAction).length > 0,
+    nextAction: asString(record.next_action || record.nextAction || "fresh_compile"),
+    topBlockers: asStringArray(record.top_blockers || record.topBlockers),
+    dominantStateKeys: asStringArray(record.dominant_state_keys || record.dominantStateKeys),
+    dominantLoopIds: asStringArray(record.dominant_loop_ids || record.dominantLoopIds),
+    recommendedEvidenceIds: asStringArray(record.recommended_evidence_ids || record.recommendedEvidenceIds),
+    restoreConfidence: asNumber(record.restore_confidence ?? record.restoreConfidence),
+    requiresFreshCompile: Boolean(record.requires_fresh_compile || record.requiresFreshCompile),
+    preferredSnapshotId: asString(record.preferred_snapshot_id || record.preferredSnapshotId),
+    candidateCount: Math.max(candidateCount, 0),
+  };
+}
+
+function parseProcessRuntimeLine(items: ProcessHealthInvocation[]) {
+  const parseMs = (value: number | undefined) => (value == null || value <= 0 ? "—" : `${value}ms`);
+  return items.map((invocation) => (
+    <tr key={invocation.invocationId} className="border-b border-white/10 last:border-b-0">
+      <td className="px-2 py-1.5 text-[11px]">{invocation.invocationId}</td>
+      <td className="px-2 py-1.5 text-[11px]">{invocation.toolId}</td>
+      <td className="px-2 py-1.5 text-[11px]">{invocation.action}</td>
+      <td className="px-2 py-1.5 text-[11px]">{invocation.domain}</td>
+      <td className="px-2 py-1.5 text-[11px]">{invocation.status}</td>
+      <td className="px-2 py-1.5 text-[11px]">{invocation.policyOutcome}</td>
+      <td className="px-2 py-1.5 text-[11px]">{parseMs(invocation.durationMs)}</td>
+      <td className="px-2 py-1.5 text-[11px]">{invocation.traceId || "—"}</td>
+    </tr>
+  ));
 }
 
 function JsonBlock(props: { value: unknown; empty?: string; maxHeightClass?: string }) {
@@ -66,6 +243,24 @@ function SummaryLink(props: { to: string; label: string }) {
   );
 }
 
+function OperatorStepCard(props: { step: string; title: string; detail: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+      <div className="text-[10px] uppercase tracking-[0.14em] text-forge-electric">{props.step}</div>
+      <div className="mt-1 text-sm font-semibold text-forge-ash">{props.title}</div>
+      <div className="mt-1 text-xs leading-5 text-forge-mist/80">{props.detail}</div>
+    </div>
+  );
+}
+
+function CountPill(props: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist">
+      <span className="text-forge-mist/65">{props.label}</span> {props.value}
+    </div>
+  );
+}
+
 function parseInspectorReportSummary(report: AuditTraceLookupReport | null) {
   const raw = asRecord(report?.report);
   return {
@@ -107,12 +302,26 @@ export function InspectorsPage() {
   const [traceLookup, setTraceLookup] = useState<AuditTraceLookupResponse | null>(null);
   const [selectedTraceCorrelationId, setSelectedTraceCorrelationId] = useState("");
 
+  const [processCorrelationIdInput, setProcessCorrelationIdInput] = useState(() => params.get("processCorrelationId") ?? "");
+  const [processTraceIdInput, setProcessTraceIdInput] = useState(() => params.get("processTraceId") ?? "");
+  const [processBusy, setProcessBusy] = useState(false);
+  const [processErr, setProcessErr] = useState<string | null>(null);
+  const [processLookup, setProcessLookup] = useState<ProcessHealthTraceResponse | null>(null);
+
   const selectedTraceReport = useMemo(() => {
     if (!traceLookup?.reports?.length) return null;
     return traceLookup.reports.find((item) => item.correlationId === selectedTraceCorrelationId) ?? traceLookup.reports[0];
   }, [selectedTraceCorrelationId, traceLookup]);
 
   const parsedTraceSummary = useMemo(() => parseInspectorReportSummary(selectedTraceReport), [selectedTraceReport]);
+  const processParsedRuntime = useMemo(() => {
+    const reports: ProcessHealthCorrelationReport[] = processLookup?.reports ?? [];
+    const totalProcessInvocations = reports.reduce((acc, item) => acc + item.processInvocationCount, 0);
+    const totalGatewayInvocations = reports.reduce((acc, item) => acc + item.totalInvocations, 0);
+    return { totalProcessInvocations, totalGatewayInvocations };
+  }, [processLookup]);
+  const restoreScoreSummary = useMemo(() => parseRestoreScoreSummary(snapshotDetail?.restoreScores), [snapshotDetail?.restoreScores]);
+  const resumeHintSummary = useMemo(() => parseResumeHintSummary(snapshotDetail?.resumeHints), [snapshotDetail?.resumeHints]);
 
   function syncParams(next: Record<string, string>) {
     const merged = new URLSearchParams(params);
@@ -249,6 +458,33 @@ export function InspectorsPage() {
     }
   }
 
+  async function loadProcessHealthInspector(next?: { correlationId?: string; traceId?: string }) {
+    const correlationId = next?.correlationId ?? processCorrelationIdInput;
+    const traceId = next?.traceId ?? processTraceIdInput;
+    if (!correlationId.trim() && !traceId.trim()) {
+      setProcessErr("Provide a correlation id or trace id.");
+      return;
+    }
+    setProcessBusy(true);
+    try {
+      const res = await api.processHealth({
+        correlationId: correlationId.trim() || undefined,
+        traceId: traceId.trim() || undefined,
+      });
+      setProcessLookup(res);
+      setProcessErr(null);
+      syncParams({
+        processCorrelationId: correlationId,
+        processTraceId: traceId,
+      });
+    } catch (error) {
+      setProcessLookup(null);
+      setProcessErr(error instanceof Error ? error.message : String(error));
+    } finally {
+      setProcessBusy(false);
+    }
+  }
+
   useEffect(() => {
     void loadSnapshots(selectedSnapshotId);
   }, []);
@@ -265,6 +501,12 @@ export function InspectorsPage() {
     }
   }, []);
 
+  useEffect(() => {
+    if (processCorrelationIdInput.trim() || processTraceIdInput.trim()) {
+      void loadProcessHealthInspector({ correlationId: processCorrelationIdInput, traceId: processTraceIdInput });
+    }
+  }, []);
+
   const packetRetrievedCount = packet?.retrievedContext?.length ?? 0;
   const packetReferenceCount = packet?.sourceReferences?.length ?? 0;
 
@@ -273,14 +515,48 @@ export function InspectorsPage() {
       <Panel
         title="Operator Inspectors"
         subtitle="Read-only evidence views for context snapshots, packet materialization, and correlation traces."
-        actions={<GhostButton onClick={() => void Promise.all([loadSnapshots(selectedSnapshotId), correlationIdInput || traceIdInput ? loadTraceInspector() : Promise.resolve()])}>Refresh views</GhostButton>}
+        actions={
+          <GhostButton
+            onClick={() =>
+              void Promise.all([
+                loadSnapshots(selectedSnapshotId),
+                correlationIdInput || traceIdInput ? loadTraceInspector() : Promise.resolve(),
+                processCorrelationIdInput || processTraceIdInput ? loadProcessHealthInspector() : Promise.resolve(),
+              ])
+            }
+          >
+            Refresh views
+          </GhostButton>
+        }
       >
         <div className="rounded border border-forge-electric/20 bg-forge-electric/5 p-3 text-sm text-forge-mist">
           These surfaces expose persisted evidence only. They do not execute tools, mutate truth, or bypass approvals.
         </div>
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          <OperatorStepCard
+            step="01"
+            title="Locate the snapshot"
+            detail="Start with context snapshots when you need to see what scope, restore hints, and evidence counts were materialized."
+          />
+          <OperatorStepCard
+            step="02"
+            title="Check the packet"
+            detail="Use packet inspection to confirm the request contract, retrieved evidence, and quality guidance that reached execution."
+          />
+          <OperatorStepCard
+            step="03"
+            title="Trace process/runtime"
+            detail="Follow correlation or trace ids to audit rows, process invocations, and model-runtime health in one flow."
+          />
+        </div>
       </Panel>
 
       <Panel title="Snapshot Inspector" subtitle="Inspect persisted context compilation snapshots, restore scoring, and resume hints.">
+        <div className="mb-4 flex flex-wrap gap-2">
+          <CountPill label="Snapshots" value={snapshots.length} />
+          <CountPill label="Selected" value={selectedSnapshotId || "none"} />
+          <CountPill label="Correlation filter" value={snapshotCorrelationId || "—"} />
+        </div>
         <div className="grid gap-2 md:grid-cols-5">
           <input className="forge-input" placeholder="workspace id" value={snapshotWorkspaceId} onChange={(e) => setSnapshotWorkspaceId(e.target.value)} />
           <input className="forge-input" placeholder="lane id" value={snapshotLaneId} onChange={(e) => setSnapshotLaneId(e.target.value)} />
@@ -346,6 +622,10 @@ export function InspectorsPage() {
                   <span>{snapshot.snapshotKind || "kind: —"}</span>
                   <span>{snapshot.workspaceId || "workspace: —"}</span>
                   <span>{snapshot.laneId || "lane: —"}</span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-forge-mist/80">
+                  {snapshot.correlationId ? <span className="font-mono">corr {snapshot.correlationId}</span> : <span>corr —</span>}
+                  {snapshot.traceId ? <span className="font-mono">trace {snapshot.traceId}</span> : <span>trace —</span>}
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-forge-mist/80">
                   <span>notes {snapshot.counts.notes}</span>
@@ -438,9 +718,79 @@ export function InspectorsPage() {
                 </FoldSection>
 
                 <FoldSection title="Restore Scoring" subtitle="Non-canonical restore scores and resume hints carried with the snapshot." defaultOpen>
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-4">
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <MetricChip label="Decision" value={restoreScoreSummary.decision || "—"} />
+                      <MetricChip label="Threshold" value={restoreScoreSummary.threshold} />
+                      <MetricChip label="Top Score" value={restoreScoreSummary.topScore.toFixed(3)} />
+                      <MetricChip label="Candidates" value={restoreScoreSummary.candidateCount} />
+                      <MetricChip label="Selected" value={restoreScoreSummary.selectedSnapshotId || "—"} />
+                      <MetricChip label="Top Candidate" value={restoreScoreSummary.topCandidateId || "—"} />
+                    </div>
+                    {restoreScoreSummary.hasStructured ? (
+                      <div className="overflow-auto rounded border border-white/10 bg-black/20">
+                        <table className="min-w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-white/10 bg-black/25 text-left text-forge-mist/70">
+                              <th className="px-2 py-2">Snapshot</th>
+                              <th className="px-2 py-2">Score</th>
+                              <th className="px-2 py-2">Query</th>
+                              <th className="px-2 py-2">Scope</th>
+                              <th className="px-2 py-2">Kind</th>
+                              <th className="px-2 py-2">Lineage</th>
+                              <th className="px-2 py-2">State</th>
+                              <th className="px-2 py-2">Loop</th>
+                              <th className="px-2 py-2">Artifact</th>
+                              <th className="px-2 py-2">Penalties</th>
+                              <th className="px-2 py-2">Selected</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {restoreScoreSummary.candidates.map((candidate) => (
+                              <tr key={candidate.snapshotId} className="border-b border-white/10 last:border-b-0">
+                                <td className="px-2 py-1.5">
+                                  <div className="text-[11px] text-forge-ash">{candidate.snapshotId}</div>
+                                  <div className="text-[10px] text-forge-mist/70">{formatTime(candidate.createdAt)}</div>
+                                  <div className="text-[10px] text-forge-mist/70">{candidate.snapshotKind || "restore"}</div>
+                                </td>
+                                <td className="px-2 py-1.5 text-forge-ash">{candidate.total.toFixed(3)}</td>
+                                <td className="px-2 py-1.5 text-forge-mist">{candidate.queryScore.toFixed(3)}</td>
+                                <td className="px-2 py-1.5 text-forge-mist">{candidate.scopeScore.toFixed(3)}</td>
+                                <td className="px-2 py-1.5 text-forge-mist">{candidate.kindScore.toFixed(3)}</td>
+                                <td className="px-2 py-1.5 text-forge-mist">{candidate.lineageScore.toFixed(3)}</td>
+                                <td className="px-2 py-1.5 text-forge-mist">{candidate.stateOverlapScore.toFixed(3)}</td>
+                                <td className="px-2 py-1.5 text-forge-mist">{candidate.loopOverlapScore.toFixed(3)}</td>
+                                <td className="px-2 py-1.5 text-forge-mist">{candidate.artifactOverlapScore.toFixed(3)}</td>
+                                <td className="px-2 py-1.5 text-forge-mist">
+                                  {(candidate.stalenessPenalty + candidate.contradictionPenalty + candidate.headerOnlyPenalty).toFixed(3)}
+                                </td>
+                                <td className="px-2 py-1.5 text-forge-mist">
+                                  {candidate.selected ? "yes" : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-[0.12em] text-forge-mist/70">Resume Hints (parsed)</div>
+                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                          <MetricChip label="Next Action" value={resumeHintSummary.nextAction || "—"} />
+                          <MetricChip label="Preferred Snapshot" value={resumeHintSummary.preferredSnapshotId || "—"} />
+                          <MetricChip label="Restore Confidence" value={resumeHintSummary.restoreConfidence.toFixed(3)} />
+                          <MetricChip label="Requires Fresh Compile" value={resumeHintSummary.requiresFreshCompile ? "yes" : "no"} />
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-2 text-xs text-forge-mist">
+                          <span>Top blockers: {resumeHintSummary.topBlockers.length > 0 ? resumeHintSummary.topBlockers.join(", ") : "none"}</span>
+                          <span>Dominant states: {resumeHintSummary.dominantStateKeys.length > 0 ? resumeHintSummary.dominantStateKeys.join(", ") : "none"}</span>
+                          <span>Dominant loops: {resumeHintSummary.dominantLoopIds.length > 0 ? resumeHintSummary.dominantLoopIds.join(", ") : "none"}</span>
+                        </div>
+                      </div>
+                      <JsonBlock value={snapshotDetail.resumeHints} empty="No resume hints recorded." />
+                    </div>
                     <JsonBlock value={snapshotDetail.restoreScores} empty="No restore scores recorded." />
-                    <JsonBlock value={snapshotDetail.resumeHints} empty="No resume hints recorded." />
                   </div>
                 </FoldSection>
 
@@ -476,6 +826,11 @@ export function InspectorsPage() {
       </Panel>
 
       <Panel title="Context Packet Inspector" subtitle="Read-only task packet view with alignment notes and packet guidance evidence.">
+        <div className="mb-4 flex flex-wrap gap-2">
+          <CountPill label="Packet" value={packet?.id ?? "none"} />
+          <CountPill label="Retrieved context" value={packetRetrievedCount} />
+          <CountPill label="Source refs" value={packetReferenceCount} />
+        </div>
         <div className="flex flex-wrap gap-2">
           <input
             className="forge-input min-w-[240px] flex-1"
@@ -587,6 +942,19 @@ export function InspectorsPage() {
       </Panel>
 
       <Panel title="Execution Trace" subtitle="Trace persisted execution evidence by correlation id or trace id.">
+        <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+          <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">
+            Correlation trace is the fastest path from operator question to execution truth: audit rows, gateway calls, artifact refs, provenance, and journal entries.
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+            <div className="text-[10px] uppercase tracking-[0.14em] text-forge-mist/65">Lookup state</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <CountPill label="Mode" value={traceLookup?.mode ?? "idle"} />
+              <CountPill label="Reports" value={traceLookup?.reports?.length ?? 0} />
+              <CountPill label="Correlation input" value={correlationIdInput || "—"} />
+            </div>
+          </div>
+        </div>
         <div className="grid gap-2 md:grid-cols-2">
           <input
             className="forge-input"
@@ -637,6 +1005,14 @@ export function InspectorsPage() {
 
             {selectedTraceReport ? (
               <>
+                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                  <div className="text-[10px] uppercase tracking-[0.14em] text-forge-mist/65">Selected execution chain</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <CountPill label="Correlation" value={selectedTraceReport.correlationId} />
+                    <CountPill label="Trace id" value={traceLookup.traceId ?? traceIdInput ?? "—"} />
+                    <CountPill label="Mode" value={traceLookup.mode} />
+                  </div>
+                </div>
                 <div className="grid gap-2 md:grid-cols-4">
                   <MetricChip label="Correlation" value={selectedTraceReport.correlationId} />
                   <MetricChip label="Audit Records" value={parsedTraceSummary.auditRecords.length} />
@@ -676,6 +1052,118 @@ export function InspectorsPage() {
               </>
             ) : (
               <div className="text-sm text-forge-mist">No reports were found for the supplied correlation or trace id.</div>
+            )}
+          </div>
+        )}
+      </Panel>
+
+      <Panel
+        title="Process & Health Trace"
+        subtitle="Trace process tool invocations and model-runtime condition for a correlation id or trace id."
+      >
+        <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+          <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">
+            Process trace shows only governed process invocations, while model-runtime entries are non-mutating read-only diagnostics.
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+            <div className="text-[10px] uppercase tracking-[0.14em] text-forge-mist/65">Runtime projection</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <CountPill label="Process invocations" value={processParsedRuntime.totalProcessInvocations} />
+              <CountPill label="Gateway invocations" value={processParsedRuntime.totalGatewayInvocations} />
+              <CountPill label="Runtime available" value={processLookup?.runtime?.available ? "yes" : "no"} />
+              <CountPill label="Runtime state" value={processLookup?.runtime?.state || "unknown"} />
+              <CountPill label="Safe mode" value={processLookup?.runtime?.safeMode ? "on" : "off"} />
+              <CountPill label="GPU aware" value={processLookup?.runtime?.gpuAware ? "yes" : "no"} />
+            </div>
+            {processLookup?.runtime?.safeModeReasons?.length ? (
+              <div className="mt-2 text-xs text-forge-mist">{processLookup.runtime.safeModeReasons.join("; ")}</div>
+            ) : null}
+          </div>
+        </div>
+        <div className="grid gap-2 md:grid-cols-2">
+          <input
+            className="forge-input"
+            placeholder="correlation id"
+            value={processCorrelationIdInput}
+            onChange={(e) => setProcessCorrelationIdInput(e.target.value)}
+          />
+          <input className="forge-input" placeholder="trace id" value={processTraceIdInput} onChange={(e) => setProcessTraceIdInput(e.target.value)} />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <PrimaryButton disabled={processBusy} onClick={() => void loadProcessHealthInspector()}>
+            {processBusy ? "Loading…" : "Load process trace"}
+          </PrimaryButton>
+          <GhostButton
+            onClick={() => {
+              setProcessCorrelationIdInput("");
+              setProcessTraceIdInput("");
+              setProcessLookup(null);
+              setProcessErr(null);
+              syncParams({ processCorrelationId: "", processTraceId: "" });
+            }}
+          >
+            Clear process inputs
+          </GhostButton>
+        </div>
+        {processErr ? <div className="mt-3 rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{processErr}</div> : null}
+        {!processLookup ? (
+          <div className="mt-4 text-sm text-forge-mist">Load a correlation id or trace id to inspect process invocations and runtime health.</div>
+        ) : (
+          <div className="mt-4 space-y-4">
+            <div className="grid gap-2 md:grid-cols-2">
+              <MetricChip label="Correlation" value={processLookup.correlationId || "—"} />
+              <MetricChip label="Trace id" value={processLookup.traceId || "—"} />
+              <MetricChip label="Input mode" value={processLookup.correlationId ? "correlation" : "trace"} />
+              <MetricChip label="Correlation count" value={processLookup.correlationIds?.length ?? 0} />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <JsonBlock value={processLookup.runtime.health || null} empty="Runtime health unavailable." />
+              <JsonBlock value={processLookup.runtime.usage || null} empty="Runtime usage unavailable." />
+              <JsonBlock value={processLookup.runtime.queue || null} empty="Runtime queue unavailable." />
+              <JsonBlock value={processLookup.runtime.loaded || null} empty="Loaded models unavailable." />
+            </div>
+            {processLookup.runtime.error ? (
+              <div className="rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{processLookup.runtime.error}</div>
+            ) : null}
+            {processLookup.reports.length === 0 ? (
+              <div className="text-sm text-forge-mist">No process invocations were captured for this correlation family.</div>
+            ) : (
+              processLookup.reports.map((report) => (
+                <FoldSection
+                  key={report.correlationId}
+                  title={`Process invocations (${report.correlationId})`}
+                  subtitle={`Process: ${report.processInvocationCount} · Gateway total: ${report.totalInvocations}`}
+                  defaultOpen
+                >
+                  <div className="mb-2">
+                    <div className="flex flex-wrap gap-2">
+                      <SummaryLink to={`/audit?correlationId=${encodeURIComponent(report.correlationId)}`} label="Open audit list" />
+                    </div>
+                  </div>
+                  <div className="overflow-auto rounded border border-white/10 bg-black/20">
+                    <table className="min-w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-white/10 bg-black/25 text-left text-forge-mist/70">
+                          <th className="px-2 py-2">Invocation</th>
+                          <th className="px-2 py-2">Tool</th>
+                          <th className="px-2 py-2">Action</th>
+                          <th className="px-2 py-2">Domain</th>
+                          <th className="px-2 py-2">Status</th>
+                          <th className="px-2 py-2">Policy</th>
+                          <th className="px-2 py-2">Duration</th>
+                          <th className="px-2 py-2">Trace</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {parseProcessRuntimeLine(report.processInvocations)}
+                      </tbody>
+                    </table>
+                  </div>
+                  <FoldSection title="Raw process invocations" subtitle="Traceable raw invocation payload for this correlation.">
+                    <JsonBlock value={report.processInvocations} empty="No process invocations recorded for this correlation." />
+                  </FoldSection>
+                </FoldSection>
+              ))
             )}
           </div>
         )}

@@ -6,7 +6,9 @@ Scope: preserve full taxonomy, enforce explicit executable posture
 ## Taxonomy preserved
 
 FORGE keeps the full capability universe across domains (`filesystem`, `process`, `network`, `identity`, `external`, `code`, `ui`, etc.).
-Registered does not mean executable.
+Registered means the capability resolves to a gateway tool path. Dangerous
+or privileged capabilities still require approval, and unavailable platform
+dependencies return explicit runtime errors.
 
 ## Classification buckets
 
@@ -14,9 +16,9 @@ Registered does not mean executable.
 - No broad default disabled blocklist in current static registry snapshot.
 - Runtime disable overrides are possible; registry status for many ids remains advisory and must be persisted through policy review workflow.
 
-### 2) Known stubbed
-- Most taxonomy entries remain `stubbed` (no active adapter path).
-- This is expected for deferred surface breadth.
+### 2) Stubbed/deferred defaults
+- None in the production default registry snapshot.
+- `stubbed` and `deferred` remain supported only as explicit override/status semantics.
 
 ### 3) Known approval-only
 High-risk mappings are explicitly `approval_only` in `activeMappings`, including (selection):
@@ -70,15 +72,16 @@ High-risk mappings are explicitly `approval_only` in `activeMappings`, including
 ### 6) Unknown status
 - Runtime-mutated capability statuses (if changed after registry initialization) are unknown in this report.
 
-### 7) Not directly executable in default runtime (by design)
-- `backup.restore` remains high-risk and requires explicit tooling/adapter wiring before production use.
+### 7) Approval-only / configured dependency paths
+- High-risk capabilities resolve to real gateway tools but are not freely executable.
+- Platform, credential, binary, device, or privilege gaps are reported as explicit runtime errors after policy/approval checks.
 
 ## Policy behavior
 
 - `approval_only` returns `approval_required` decision path with structured tool error.
 - `disabled` and `deprecated` deny execution with structured error.
-- `stubbed` without adapter returns deterministic unsupported operation.
-- `deferred` returns deterministic unsupported operation.
+- Explicit `stubbed` without adapter returns deterministic unsupported operation.
+- Explicit `deferred` returns deterministic unsupported operation.
 - Self-initiated high-risk execution requires autonomy policy/approval flow.
 - `future_iris` does not bypass policy in current tests.
 - Gateway terminal status decisions (`needs_approval`, `unsupported`, `disabled`) produce explicit audit entries (`tool.needs_approval`, `tool.unsupported`, `tool.disabled`).
@@ -87,7 +90,6 @@ High-risk mappings are explicitly `approval_only` in `activeMappings`, including
 
 ## Remaining hardening backlog
 
-1. Add explicit default `disabled` coverage for ultra-sensitive capabilities with no intended short-term execution path.
-2. Persist capability status transition intent (currently in-memory registry + audit trail only).
-3. Expand tests for capability-level workspace path boundaries and policy overrides.
-4. Continue shrinking non-capability legacy mutation boundaries (for example env-gated legacy adapter/memory mutation routes).
+1. Expand tests for capability-level workspace path boundaries and policy overrides.
+2. Keep retired non-capability mutation routes non-executable.
+3. Add more service-specific harness tests for configured dependency failures.

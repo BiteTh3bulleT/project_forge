@@ -163,6 +163,7 @@ func (s *Service) EnsureGatewayToolPolicy(ctx context.Context, workspaceDir stri
 		"net.interfaces", "net.dns_lookup", "net.connectivity", "net.fetch",
 		"time.now",
 		"secret.get",
+		"legacy.adapter.invoke",
 		"export.dossier", "export.packet", "export.audit",
 	}
 	ids := []string{"standard", "workspace-write"}
@@ -206,14 +207,27 @@ func mergeUniqueStrings(base []string, add []string) []string {
 	return out
 }
 
+// sqlExecutor abstracts over *sql.DB and *sql.Tx so upsert logic can be
+// reused inside or outside a transaction.
+type sqlExecutor interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
 func (s *Service) insert(ctx context.Context, p Profile) (*Profile, error) {
+	if err := s.insertTx(ctx, s.db, p); err != nil {
+		return nil, err
+	}
+	return s.Get(ctx, p.ID)
+}
+
+func (s *Service) insertTx(ctx context.Context, exec sqlExecutor, p Profile) error {
 	reads, _ := json.Marshal(nonNilStrings(p.AllowedReadPaths))
 	writes, _ := json.Marshal(nonNilStrings(p.AllowedWritePaths))
 	execs, _ := json.Marshal(nonNilStrings(p.AllowedExecutePaths))
 	forbid, _ := json.Marshal(nonNilStrings(p.ForbiddenPaths))
 	tools, _ := json.Marshal(nonNilStrings(p.AllowedTools))
 	risks, _ := json.Marshal(nonNilStrings(p.ApprovalRequiredRisk))
-	_, err := s.db.ExecContext(ctx, `
+	_, err := exec.ExecContext(ctx, `
 INSERT INTO permission_profiles(
   id, created_at, updated_at, name, description,
   allowed_read_paths_json, allowed_write_paths_json, allowed_execute_paths_json,
@@ -240,14 +254,13 @@ ON CONFLICT(id) DO UPDATE SET
 		string(forbid), string(tools), string(risks),
 		p.MaxBytesPerWrite, boolToInt(p.AllowNetwork), boolToInt(p.Editable), boolToInt(p.Active),
 	)
-	if err != nil {
-		return nil, err
-	}
-	return s.Get(ctx, p.ID)
+	return err
 }
 
 // Save upserts a profile. If a caller marks a profile active, any other
-// active profile is cleared so exactly one is active at a time.
+// active profile is cleared so exactly one is active at a time. The clear +
+// upsert pair runs in a transaction so concurrent activators cannot both
+// succeed and leave two rows marked active.
 func (s *Service) Save(ctx context.Context, p Profile) (*Profile, error) {
 	if strings.TrimSpace(p.ID) == "" {
 		return nil, errors.New("profile id required")
@@ -259,12 +272,24 @@ func (s *Service) Save(ctx context.Context, p Profile) (*Profile, error) {
 		p.CreatedAtMs = time.Now().UnixMilli()
 	}
 	p.UpdatedAtMs = time.Now().UnixMilli()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
 	if p.Active {
-		if _, err := s.db.ExecContext(ctx, `UPDATE permission_profiles SET active = 0 WHERE id <> ?`, p.ID); err != nil {
+		if _, err := tx.ExecContext(ctx, `UPDATE permission_profiles SET active = 0 WHERE id <> ?`, p.ID); err != nil {
 			return nil, err
 		}
 	}
-	return s.insert(ctx, p)
+	if err := s.insertTx(ctx, tx, p); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return s.Get(ctx, p.ID)
 }
 
 func (s *Service) Get(ctx context.Context, id string) (*Profile, error) {
@@ -317,10 +342,18 @@ FROM permission_profiles WHERE active = 1 ORDER BY updated_at DESC LIMIT 1`)
 }
 
 func (s *Service) Activate(ctx context.Context, id string) (*Profile, error) {
-	if _, err := s.db.ExecContext(ctx, `UPDATE permission_profiles SET active = 0`); err != nil {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
 		return nil, err
 	}
-	if _, err := s.db.ExecContext(ctx, `UPDATE permission_profiles SET active = 1, updated_at = ? WHERE id = ?`, time.Now().UnixMilli(), id); err != nil {
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `UPDATE permission_profiles SET active = 0`); err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE permission_profiles SET active = 1, updated_at = ? WHERE id = ?`, time.Now().UnixMilli(), id); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return s.Get(ctx, id)

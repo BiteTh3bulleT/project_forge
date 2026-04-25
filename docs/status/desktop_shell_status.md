@@ -20,7 +20,7 @@ Visible surfaces remain broad and wired to backend APIs:
 - No client-side DB bypass path observed.
 - Legacy backend mutation boundaries still exist, now with stricter guards:
   - legacy adapter invoke route removed (`/api/adapters/{id}/invoke` is not routed)
-  - legacy v1 memory observation mutation endpoints: default-blocked unless `FORGE_ALLOW_LEGACY_MEMORY_MUTATIONS=true`
+  - memory observation mutation endpoints: retired (`410 Gone`) with audit records; read-only inspection remains
 
 ## Trace/explain visibility
 

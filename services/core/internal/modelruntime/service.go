@@ -39,29 +39,55 @@ type AuditRecorder interface {
 
 type GenerateRequestValidator func(ctx context.Context, req GenerateRequest) error
 
+type GPUTelemetrySnapshot struct {
+	Enabled                 bool             `json:"enabled"`
+	Available               bool             `json:"available"`
+	Healthy                 bool             `json:"healthy"`
+	State                   string           `json:"state"`
+	Detail                  string           `json:"detail,omitempty"`
+	MemoryPressure          float64          `json:"memoryPressure,omitempty"`
+	MemoryPressureThreshold float64          `json:"memoryPressureThreshold,omitempty"`
+	BackgroundAdmissionOK   bool             `json:"backgroundAdmissionOk"`
+	Devices                 []map[string]any `json:"devices,omitempty"`
+	Warnings                []string         `json:"warnings,omitempty"`
+}
+
+type GPUTelemetryFunc func(ctx context.Context) (GPUTelemetrySnapshot, error)
+
 type ServiceOptions struct {
-	Backends              []ModelBackend
-	Models                []ModelManifest
-	Registry              *ModelRegistry
-	DefaultModelID        string
-	DefaultTimeout        time.Duration
-	MaxPromptTokens       int
-	MaxOutputTokens       int
-	MaxOutputBytes        int
-	MaxLoadedModels       int
-	LoadTimeout           time.Duration
-	UnloadTimeout         time.Duration
-	AutoLoad              bool
-	Audit                 AuditRecorder
-	Clock                 func() time.Time
-	MaxQueueDepth         int
-	MaxConcurrentRequests int
-	CompletedHistoryLimit int
-	RequestValidator      GenerateRequestValidator
-	ChatMaxAttempts       int
-	ChatRetryBackoff      time.Duration
-	ChatProviderCooldown  time.Duration
-	ChatCheckpointLimit   int
+	Backends                                    []ModelBackend
+	Models                                      []ModelManifest
+	Registry                                    *ModelRegistry
+	DefaultModelID                              string
+	DefaultTimeout                              time.Duration
+	MaxPromptTokens                             int
+	MaxOutputTokens                             int
+	MaxOutputBytes                              int
+	MaxLoadedModels                             int
+	LoadTimeout                                 time.Duration
+	UnloadTimeout                               time.Duration
+	AutoLoad                                    bool
+	Audit                                       AuditRecorder
+	Clock                                       func() time.Time
+	MaxQueueDepth                               int
+	MaxConcurrentRequests                       int
+	CompletedHistoryLimit                       int
+	RequestValidator                            GenerateRequestValidator
+	ChatMaxAttempts                             int
+	ChatModelCooldown                           time.Duration
+	ChatRetryBackoff                            time.Duration
+	ChatProviderCooldown                        time.Duration
+	ChatCheckpointLimit                         int
+	GPUEnabled                                  bool
+	GPURequiredForInteractiveInference          bool
+	GPUVRAMHeadroomFraction                     float64
+	GPUBkgJobsEnabled                           bool
+	GPUBkgIdleThreshold                         time.Duration
+	GPUMaxBackgroundJobs                        int
+	DegradeOnUnavailableGPU                     bool
+	SchedulingInteractivePriorityOverBackground bool
+	DreamModeAllowGPUClassify                   bool
+	GPUTelemetry                                GPUTelemetryFunc
 }
 
 type ModelInfo struct {
@@ -94,6 +120,7 @@ type RequestExecutionRecord struct {
 	Source              string                `json:"source,omitempty"`
 	CorrelationID       string                `json:"correlationId,omitempty"`
 	TraceID             string                `json:"traceId,omitempty"`
+	WorkloadClass       GPUWorkloadClass      `json:"workloadClass,omitempty"`
 	State               RequestExecutionState `json:"state"`
 	Outcome             string                `json:"outcome,omitempty"`
 	Error               string                `json:"error,omitempty"`
@@ -112,16 +139,37 @@ type RequestExecutionRecord struct {
 type SchedulerSnapshot struct {
 	MaxQueueDepth         int                      `json:"maxQueueDepth"`
 	MaxConcurrentRequests int                      `json:"maxConcurrentRequests"`
+	InteractiveQueued     int                      `json:"interactiveQueued"`
+	BackgroundQueued      int                      `json:"backgroundQueued"`
+	InteractiveRunning    int                      `json:"interactiveRunning"`
+	BackgroundRunning     int                      `json:"backgroundRunning"`
+	CooldownJobs          int                      `json:"cooldownJobs"`
 	Queued                []RequestExecutionRecord `json:"queued"`
 	Running               []RequestExecutionRecord `json:"running"`
 	Completed             []RequestExecutionRecord `json:"completed"`
 }
 
+type RuntimeHealthState string
+
+const (
+	RuntimeHealthAvailable   RuntimeHealthState = "available"
+	RuntimeHealthDegraded    RuntimeHealthState = "degraded"
+	RuntimeHealthUnavailable RuntimeHealthState = "unavailable"
+	RuntimeHealthCooldown    RuntimeHealthState = "cooldown"
+	RuntimeHealthOverloaded  RuntimeHealthState = "overloaded"
+)
+
 type RuntimeHealth struct {
-	Healthy   bool                               `json:"healthy"`
-	Backends  map[ModelBackendKind]BackendHealth `json:"backends"`
-	Loaded    map[ModelBackendKind]string        `json:"loaded"`
-	Scheduler SchedulerSnapshot                  `json:"scheduler"`
+	Healthy         bool                               `json:"healthy"`
+	State           RuntimeHealthState                 `json:"state"`
+	DegradedReasons []string                           `json:"degradedReasons,omitempty"`
+	PolicyWarnings  []string                           `json:"policyWarnings,omitempty"`
+	RuntimeEnabled  bool                               `json:"runtimeEnabled"`
+	GPUAware        bool                               `json:"gpuAware"`
+	GPUTelemetry    *GPUTelemetrySnapshot              `json:"gpuTelemetry,omitempty"`
+	Backends        map[ModelBackendKind]BackendHealth `json:"backends"`
+	Loaded          map[ModelBackendKind]string        `json:"loaded"`
+	Scheduler       SchedulerSnapshot                  `json:"scheduler"`
 }
 
 type Service struct {
@@ -158,15 +206,30 @@ type Service struct {
 	maxConcurrentRequests int
 	completedHistoryLimit int
 
-	chatMu                sync.Mutex
-	nextChatExecutionSeq  int64
-	chatMaxAttempts       int
-	chatRetryBackoff      time.Duration
-	chatProviderCooldown  time.Duration
-	chatCheckpointLimit   int
-	chatCheckpoints       map[string]ChatExecutionCheckpoint
-	chatCheckpointOrder   []string
-	chatProviderCooldowns map[ModelBackendKind]time.Time
+	chatMu                                      sync.Mutex
+	nextChatExecutionSeq                        int64
+	chatMaxAttempts                             int
+	chatModelCooldown                           time.Duration
+	chatRetryBackoff                            time.Duration
+	chatProviderCooldown                        time.Duration
+	chatCheckpointLimit                         int
+	chatCheckpoints                             map[string]ChatExecutionCheckpoint
+	chatCheckpointOrder                         []string
+	chatProviderCooldowns                       map[ModelBackendKind]time.Time
+	chatModelCooldowns                          map[string]time.Time
+	gpuEnabled                                  bool
+	gpuRequiredForInteractiveInference          bool
+	gpuVRAMHeadroomFraction                     float64
+	gpuBackgroundJobsEnabled                    bool
+	gpuBackgroundIdleThreshold                  time.Duration
+	gpuMaxBackgroundJobs                        int
+	gpuDegradeOnUnavailable                     bool
+	schedulingInteractivePriorityOverBackground bool
+	backgroundCoolDownUntil                     time.Time
+	lastInteractiveCompleteAt                   time.Time
+	underCooldown                               bool
+	dreamModeAllowGPUClassify                   bool
+	gpuTelemetry                                GPUTelemetryFunc
 }
 
 func NewService(opts ServiceOptions) (*Service, error) {
@@ -226,39 +289,72 @@ func NewService(opts ServiceOptions) (*Service, error) {
 	if chatProviderCooldown < 0 {
 		chatProviderCooldown = 0
 	}
+	chatModelCooldown := opts.ChatModelCooldown
+	if chatModelCooldown < 0 {
+		chatModelCooldown = 0
+	}
+	if chatModelCooldown == 0 {
+		chatModelCooldown = chatProviderCooldown
+	}
+	gpuVRAMHeadroomFraction := opts.GPUVRAMHeadroomFraction
+	if gpuVRAMHeadroomFraction < 0 {
+		gpuVRAMHeadroomFraction = 0
+	} else if gpuVRAMHeadroomFraction > 1 {
+		gpuVRAMHeadroomFraction = 1
+	}
+	gpuMaxBackgroundJobs := opts.GPUMaxBackgroundJobs
+	if gpuMaxBackgroundJobs < 0 {
+		gpuMaxBackgroundJobs = 0
+	}
+	gpuBackgroundIdleThreshold := opts.GPUBkgIdleThreshold
+	if gpuBackgroundIdleThreshold < 0 {
+		gpuBackgroundIdleThreshold = 0
+	}
 
 	svc := &Service{
-		backends:              backendMap,
-		registry:              opts.Registry,
-		models:                modelMap,
-		status:                statusMap,
-		loaded:                map[string]LoadedModel{},
-		loadedBy:              map[ModelBackendKind]string{},
-		defaultModelID:        strings.TrimSpace(opts.DefaultModelID),
-		defaultTimeout:        defaultIfZero(opts.DefaultTimeout, 30*time.Second),
-		maxPromptTokens:       opts.MaxPromptTokens,
-		maxOutputTokens:       opts.MaxOutputTokens,
-		maxOutputBytes:        opts.MaxOutputBytes,
-		maxLoadedModels:       positiveOrDefault(opts.MaxLoadedModels, 1),
-		loadTimeout:           opts.LoadTimeout,
-		unloadTimeout:         opts.UnloadTimeout,
-		autoLoad:              opts.AutoLoad,
-		audit:                 opts.Audit,
-		clock:                 clock,
-		requestValidator:      opts.RequestValidator,
-		queued:                []*RequestExecutionRecord{},
-		running:               map[string]*RequestExecutionRecord{},
-		completed:             []RequestExecutionRecord{},
-		maxQueueDepth:         maxQueueDepth,
-		maxConcurrentRequests: maxConcurrent,
-		completedHistoryLimit: completedLimit,
-		chatMaxAttempts:       chatMaxAttempts,
-		chatRetryBackoff:      chatRetryBackoff,
-		chatProviderCooldown:  chatProviderCooldown,
-		chatCheckpointLimit:   chatCheckpointLimit,
-		chatCheckpoints:       map[string]ChatExecutionCheckpoint{},
-		chatCheckpointOrder:   []string{},
-		chatProviderCooldowns: map[ModelBackendKind]time.Time{},
+		backends:                           backendMap,
+		registry:                           opts.Registry,
+		models:                             modelMap,
+		status:                             statusMap,
+		loaded:                             map[string]LoadedModel{},
+		loadedBy:                           map[ModelBackendKind]string{},
+		defaultModelID:                     strings.TrimSpace(opts.DefaultModelID),
+		defaultTimeout:                     defaultIfZero(opts.DefaultTimeout, 30*time.Second),
+		maxPromptTokens:                    opts.MaxPromptTokens,
+		maxOutputTokens:                    opts.MaxOutputTokens,
+		maxOutputBytes:                     opts.MaxOutputBytes,
+		maxLoadedModels:                    positiveOrDefault(opts.MaxLoadedModels, 1),
+		loadTimeout:                        opts.LoadTimeout,
+		unloadTimeout:                      opts.UnloadTimeout,
+		autoLoad:                           opts.AutoLoad,
+		audit:                              opts.Audit,
+		clock:                              clock,
+		requestValidator:                   opts.RequestValidator,
+		queued:                             []*RequestExecutionRecord{},
+		running:                            map[string]*RequestExecutionRecord{},
+		completed:                          []RequestExecutionRecord{},
+		maxQueueDepth:                      maxQueueDepth,
+		maxConcurrentRequests:              maxConcurrent,
+		completedHistoryLimit:              completedLimit,
+		chatMaxAttempts:                    chatMaxAttempts,
+		chatRetryBackoff:                   chatRetryBackoff,
+		chatProviderCooldown:               chatProviderCooldown,
+		chatModelCooldown:                  chatModelCooldown,
+		chatCheckpointLimit:                chatCheckpointLimit,
+		gpuEnabled:                         opts.GPUEnabled,
+		gpuRequiredForInteractiveInference: opts.GPURequiredForInteractiveInference,
+		gpuVRAMHeadroomFraction:            gpuVRAMHeadroomFraction,
+		gpuBackgroundJobsEnabled:           opts.GPUBkgJobsEnabled,
+		gpuBackgroundIdleThreshold:         gpuBackgroundIdleThreshold,
+		gpuMaxBackgroundJobs:               gpuMaxBackgroundJobs,
+		gpuDegradeOnUnavailable:            opts.DegradeOnUnavailableGPU,
+		schedulingInteractivePriorityOverBackground: opts.SchedulingInteractivePriorityOverBackground,
+		dreamModeAllowGPUClassify:                   opts.DreamModeAllowGPUClassify,
+		gpuTelemetry:                                opts.GPUTelemetry,
+		chatCheckpoints:                             map[string]ChatExecutionCheckpoint{},
+		chatCheckpointOrder:                         []string{},
+		chatProviderCooldowns:                       map[ModelBackendKind]time.Time{},
+		chatModelCooldowns:                          map[string]time.Time{},
 	}
 	svc.schedulerCond = sync.NewCond(&svc.schedulerMu)
 	return svc, nil
@@ -472,6 +568,10 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (result Gen
 	req.Actor = strings.TrimSpace(req.Actor)
 	req.Source = strings.TrimSpace(req.Source)
 	req.WorkspaceID = strings.TrimSpace(req.WorkspaceID)
+	req.WorkloadClass = ParseGPUWorkloadClass(string(req.WorkloadClass))
+	if req.WorkloadClass == GPUWorkloadUnknown {
+		req.WorkloadClass = s.defaultWorkloadClassFromRequest(req)
+	}
 	if req.ModelID == "" {
 		if req.ModelID, err = s.resolveModelID(req); err != nil {
 			s.recordAudit(ctx, ModelRuntimeAuditRecord{
@@ -493,6 +593,23 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (result Gen
 
 	started := s.clock()
 	if err = ValidateGenerateRequest(req); err != nil {
+		s.recordAudit(ctx, ModelRuntimeAuditRecord{
+			Operation:     "generate",
+			ModelID:       req.ModelID,
+			WorkspaceID:   req.WorkspaceID,
+			Actor:         req.Actor,
+			Source:        req.Source,
+			CorrelationID: req.CorrelationID,
+			TraceID:       req.TraceID,
+			TimeoutMs:     req.TimeoutMs,
+			MaxTokens:     req.MaxTokens,
+			Outcome:       "error",
+			Error:         err.Error(),
+			Metadata:      req.Metadata,
+		})
+		return GenerateResult{}, err
+	}
+	if err = s.validateGPUWorkloadPolicy(ctx, req.WorkloadClass); err != nil {
 		s.recordAudit(ctx, ModelRuntimeAuditRecord{
 			Operation:     "generate",
 			ModelID:       req.ModelID,
@@ -847,7 +964,7 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (result Gen
 func (s *Service) SchedulerSnapshot() SchedulerSnapshot {
 	s.schedulerMu.Lock()
 	defer s.schedulerMu.Unlock()
-	return s.schedulerSnapshotLocked()
+	return s.schedulerSnapshotLocked(s.clock().UTC())
 }
 
 func (s *Service) LoadedModels() []LoadedModel {
@@ -868,11 +985,19 @@ func (s *Service) LoadedModels() []LoadedModel {
 }
 
 func (s *Service) Health(ctx context.Context) (RuntimeHealth, error) {
+	s.schedulerMu.Lock()
+	s.updateCooldownStateLocked(s.clock().UTC())
+	s.schedulerMu.Unlock()
 	health := RuntimeHealth{
-		Healthy:   true,
-		Backends:  map[ModelBackendKind]BackendHealth{},
-		Loaded:    map[ModelBackendKind]string{},
-		Scheduler: s.SchedulerSnapshot(),
+		Healthy:         true,
+		RuntimeEnabled:  true,
+		GPUAware:        s.gpuEnabled,
+		DegradedReasons: nil,
+		PolicyWarnings:  nil,
+		Backends:        map[ModelBackendKind]BackendHealth{},
+		Loaded:          map[ModelBackendKind]string{},
+		Scheduler:       s.SchedulerSnapshot(),
+		State:           RuntimeHealthAvailable,
 	}
 
 	s.mu.RLock()
@@ -887,22 +1012,71 @@ func (s *Service) Health(ctx context.Context) (RuntimeHealth, error) {
 	}
 	s.mu.RUnlock()
 
-	var firstErr error
+	if !s.gpuEnabled {
+		health.GPUAware = false
+		health.PolicyWarnings = append(health.PolicyWarnings, "gpu acceleration disabled")
+	}
+	if s.gpuTelemetry != nil {
+		if telemetry, err := s.gpuTelemetry(ctx); err == nil {
+			health.GPUTelemetry = &telemetry
+			if s.gpuEnabled && telemetry.Enabled && !telemetry.Healthy {
+				health.DegradedReasons = append(health.DegradedReasons, "gpu telemetry degraded: "+telemetry.Detail)
+				if health.State == RuntimeHealthAvailable {
+					health.State = RuntimeHealthDegraded
+				}
+			}
+			if s.gpuEnabled && telemetry.Enabled && !telemetry.BackgroundAdmissionOK {
+				health.PolicyWarnings = append(health.PolicyWarnings, "gpu telemetry blocks background workloads under pressure")
+			}
+		} else {
+			health.DegradedReasons = append(health.DegradedReasons, "gpu telemetry unavailable: "+err.Error())
+			if health.State == RuntimeHealthAvailable {
+				health.State = RuntimeHealthDegraded
+			}
+		}
+	}
+	if s.underCooldown {
+		health.State = RuntimeHealthCooldown
+		health.PolicyWarnings = append(health.PolicyWarnings, "background workload cooldown active")
+	}
+
+	if s.gpuEnabled && s.gpuDegradeOnUnavailable && !s.gpuCurrentlyAvailableLocked() {
+		health.State = RuntimeHealthUnavailable
+		health.DegradedReasons = append(health.DegradedReasons, "no healthy GPU-backed runtime backend available")
+		health.Healthy = false
+	}
 	for kind, backend := range backends {
 		h, err := backend.Health(ctx)
 		health.Backends[kind] = h
 		if err != nil {
 			health.Healthy = false
-			if firstErr == nil {
-				firstErr = err
-			}
+			health.DegradedReasons = append(health.DegradedReasons, fmt.Sprintf("%s: %s", kind, err))
 			continue
 		}
 		if !h.Healthy {
 			health.Healthy = false
+			health.DegradedReasons = append(health.DegradedReasons, fmt.Sprintf("%s backend unhealthy", kind))
 		}
 	}
-	return health, firstErr
+	if health.State == RuntimeHealthAvailable && !health.Healthy {
+		health.State = RuntimeHealthDegraded
+	}
+	if s.healthNeedsOverloadedSignalLocked() && health.State == RuntimeHealthAvailable {
+		health.State = RuntimeHealthOverloaded
+	}
+
+	maxQueue := s.maxQueueDepth
+	if maxQueue > 0 {
+		queued, running := len(health.Scheduler.Queued), len(health.Scheduler.Running)
+		if queued >= maxQueue || running > s.maxConcurrentRequests {
+			health.State = RuntimeHealthOverloaded
+		}
+	}
+	if health.State == RuntimeHealthAvailable && len(health.DegradedReasons) > 0 {
+		health.State = RuntimeHealthDegraded
+	}
+
+	return health, nil
 }
 
 func (s *Service) setStatus(modelID string, status ModelStatus) {
@@ -972,6 +1146,7 @@ func manifestHasCapability(manifest ModelManifest, capability ModelCapability) b
 func (s *Service) acquireExecutionSlot(ctx context.Context, req GenerateRequest, backend ModelBackendKind) (*RequestExecutionRecord, error) {
 	s.schedulerMu.Lock()
 	defer s.schedulerMu.Unlock()
+	s.updateCooldownStateLocked(s.clock().UTC())
 
 	now := s.clock().UTC()
 	s.nextRequestSeq++
@@ -986,6 +1161,7 @@ func (s *Service) acquireExecutionSlot(ctx context.Context, req GenerateRequest,
 		Source:        req.Source,
 		CorrelationID: req.CorrelationID,
 		TraceID:       req.TraceID,
+		WorkloadClass: req.WorkloadClass,
 		State:         RequestStateQueued,
 		EnqueuedAt:    now,
 	}
@@ -1000,7 +1176,7 @@ func (s *Service) acquireExecutionSlot(ctx context.Context, req GenerateRequest,
 		return record, ErrRequestQueueFull
 	}
 
-	s.queued = append(s.queued, record)
+	s.enqueueRecordLocked(record)
 	record.QueueDepthAtEnqueue = len(s.queued)
 	s.schedulerCond.Broadcast()
 
@@ -1048,6 +1224,7 @@ func (s *Service) acquireExecutionSlot(ctx context.Context, req GenerateRequest,
 func (s *Service) finishExecutionSlot(record *RequestExecutionRecord, result *GenerateResult, runErr *error) {
 	s.schedulerMu.Lock()
 	defer s.schedulerMu.Unlock()
+	s.updateCooldownStateLocked(s.clock().UTC())
 
 	delete(s.running, record.RequestID)
 	now := s.clock().UTC()
@@ -1069,12 +1246,19 @@ func (s *Service) finishExecutionSlot(record *RequestExecutionRecord, result *Ge
 		record.CompletionTokens = result.CompletionTokens
 		record.OutputBytes = len([]byte(result.Content))
 	}
+	if record.WorkloadClass.IsInteractive() && !record.StartedAt.IsZero() {
+		s.lastInteractiveCompleteAt = now
+		if s.gpuBackgroundIdleThreshold > 0 {
+			s.underCooldown = true
+			s.backgroundCoolDownUntil = now.Add(s.gpuBackgroundIdleThreshold)
+		}
+	}
 
 	s.addCompletedLocked(*record)
 	s.schedulerCond.Broadcast()
 }
 
-func (s *Service) schedulerSnapshotLocked() SchedulerSnapshot {
+func (s *Service) schedulerSnapshotLocked(now time.Time) SchedulerSnapshot {
 	out := SchedulerSnapshot{
 		MaxQueueDepth:         s.maxQueueDepth,
 		MaxConcurrentRequests: s.maxConcurrentRequests,
@@ -1084,6 +1268,15 @@ func (s *Service) schedulerSnapshotLocked() SchedulerSnapshot {
 	}
 	for _, q := range s.queued {
 		out.Queued = append(out.Queued, *q)
+		if q.WorkloadClass.IsInteractive() {
+			out.InteractiveQueued++
+		}
+		if q.WorkloadClass.IsBackground() {
+			out.BackgroundQueued++
+			if s.isBackgroundBlockedLocked(q, now) {
+				out.CooldownJobs++
+			}
+		}
 	}
 	runningIDs := make([]string, 0, len(s.running))
 	for id := range s.running {
@@ -1092,8 +1285,17 @@ func (s *Service) schedulerSnapshotLocked() SchedulerSnapshot {
 	sort.Strings(runningIDs)
 	for _, id := range runningIDs {
 		out.Running = append(out.Running, *s.running[id])
+		if s.running[id].WorkloadClass.IsInteractive() {
+			out.InteractiveRunning++
+		}
+		if s.running[id].WorkloadClass.IsBackground() {
+			out.BackgroundRunning++
+		}
 	}
 	copy(out.Completed, s.completed)
+	if out.CooldownJobs > out.BackgroundQueued {
+		out.CooldownJobs = out.BackgroundQueued
+	}
 	return out
 }
 
@@ -1104,16 +1306,173 @@ func (s *Service) canAdmitLocked(requestID string) bool {
 	if s.queued[0].RequestID != requestID {
 		return false
 	}
+	if err := s.validateWorkloadAdmissionLocked(s.queued[0]); err != nil {
+		s.queued[0].Error = err.Error()
+		return false
+	}
 	if len(s.running) >= s.maxConcurrentRequests {
 		return false
 	}
 	next := s.queued[0]
+	if next.WorkloadClass.IsBackground() {
+		if s.schedulingInteractivePriorityOverBackground && s.hasInteractiveRunningLocked() {
+			return false
+		}
+		if runningBackgroundCount := s.backgroundRunningCountLocked(); runningBackgroundCount >= maxInt(1, s.gpuMaxBackgroundJobs) {
+			return false
+		}
+	}
+
 	for _, running := range s.running {
 		if running.Backend == next.Backend {
 			return false
 		}
 	}
+	if next.WorkloadClass.IsBackground() && s.isBackgroundBlockedLocked(next, s.clock().UTC()) {
+		return false
+	}
 	return true
+}
+
+func (s *Service) validateWorkloadAdmissionLocked(req *RequestExecutionRecord) error {
+	if req.WorkloadClass.IsBackground() && !s.gpuBackgroundJobsEnabled {
+		return ErrBackgroundJobsDisabled
+	}
+	return nil
+}
+
+func (s *Service) updateCooldownStateLocked(now time.Time) {
+	if s.backgroundCoolDownUntil.IsZero() {
+		s.underCooldown = false
+		return
+	}
+	if !s.underCooldown {
+		return
+	}
+	if now.After(s.backgroundCoolDownUntil) {
+		s.underCooldown = false
+	}
+}
+
+func (s *Service) isBackgroundBlockedLocked(record *RequestExecutionRecord, now time.Time) bool {
+	if !record.WorkloadClass.IsBackground() {
+		return false
+	}
+	if !s.gpuBackgroundJobsEnabled {
+		return true
+	}
+	if s.schedulingInteractivePriorityOverBackground && s.hasInteractiveRunningLocked() {
+		return true
+	}
+	if s.schedulingInteractivePriorityOverBackground {
+		for _, q := range s.queued {
+			if q.RequestID == record.RequestID {
+				break
+			}
+			if q.WorkloadClass.IsInteractive() {
+				return true
+			}
+		}
+	}
+	if s.underCooldown && now.Before(s.backgroundCoolDownUntil) {
+		return true
+	}
+	return false
+}
+
+func (s *Service) hasInteractiveRunningLocked() bool {
+	for _, running := range s.running {
+		if running.WorkloadClass.IsInteractive() {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Service) backgroundRunningCountLocked() int {
+	count := 0
+	for _, running := range s.running {
+		if running.WorkloadClass.IsBackground() {
+			count++
+		}
+	}
+	return count
+}
+
+func (s *Service) healthNeedsOverloadedSignalLocked() bool {
+	return len(s.queued) >= maxInt(1, s.maxQueueDepth) || len(s.running) > s.maxConcurrentRequests
+}
+
+func (s *Service) gpuCurrentlyAvailableLocked() bool {
+	for _, backend := range s.backends {
+		h, err := backend.Health(context.Background())
+		if err != nil {
+			continue
+		}
+		if h.Healthy {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Service) validateGPUWorkloadPolicy(ctx context.Context, workload GPUWorkloadClass) error {
+	if !workload.IsInteractive() && !workload.IsBackground() {
+		return nil
+	}
+	if workload.IsBackground() && !s.gpuBackgroundJobsEnabled {
+		return ErrBackgroundJobsDisabled
+	}
+	if workload.IsInteractive() && s.gpuRequiredForInteractiveInference && !s.gpuEnabled {
+		return ErrGPUNotAllowedForInteractive
+	}
+	if workload.IsBackground() && s.gpuTelemetry != nil {
+		telemetry, err := s.gpuTelemetry(ctx)
+		if err == nil && telemetry.Enabled && !telemetry.BackgroundAdmissionOK {
+			return fmt.Errorf("%w: gpu memory pressure %.3f >= %.3f", ErrBackgroundWorkloadDeferred, telemetry.MemoryPressure, telemetry.MemoryPressureThreshold)
+		}
+	}
+	return nil
+}
+
+func (s *Service) defaultWorkloadClassFromRequest(req GenerateRequest) GPUWorkloadClass {
+	if s.dreamModeAllowGPUClassify && strings.EqualFold(req.WorkspaceID, "dream") {
+		return GPUWorkloadDreamDistillation
+	}
+	if len(req.Messages) > 0 {
+		return GPUWorkloadInteractiveInference
+	}
+	if strings.EqualFold(strings.TrimSpace(req.ModelID), "embed") {
+		return GPUWorkloadInteractiveEmbedding
+	}
+	if req.WorkloadClass != GPUWorkloadUnknown {
+		return req.WorkloadClass
+	}
+	return GPUWorkloadInteractiveInference
+}
+
+func (s *Service) enqueueRecordLocked(record *RequestExecutionRecord) {
+	if !s.schedulingInteractivePriorityOverBackground || !record.WorkloadClass.IsInteractive() {
+		s.queued = append(s.queued, record)
+		return
+	}
+	insertAt := len(s.queued)
+	for i, queued := range s.queued {
+		if !queued.WorkloadClass.IsInteractive() {
+			insertAt = i
+			break
+		}
+	}
+	s.queued = append(s.queued, nil)
+	copy(s.queued[insertAt+1:], s.queued[insertAt:])
+	s.queued[insertAt] = record
+}
+
+func maxInt(a, b int) int {
+	if a >= b {
+		return a
+	}
+	return b
 }
 
 func (s *Service) removeQueuedByIDLocked(requestID string) bool {

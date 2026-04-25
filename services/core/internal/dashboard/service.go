@@ -7,11 +7,11 @@ import (
 )
 
 type JobLite struct {
-	ID           string `json:"id"`
-	Title        string `json:"title"`
-	Status       string `json:"status"`
+	ID            string `json:"id"`
+	Title         string `json:"title"`
+	Status        string `json:"status"`
 	TargetAdapter string `json:"targetAdapter"`
-	CreatedAtMs  int64  `json:"createdAtMs"`
+	CreatedAtMs   int64  `json:"createdAtMs"`
 }
 
 type ImportLite struct {
@@ -48,15 +48,15 @@ type RecommendationLite struct {
 }
 
 type Summary struct {
-	ActiveJobs             []JobLite             `json:"activeJobs"`
-	ApprovalsPending       int                   `json:"approvalsPending"`
-	ReviewsPending         int                   `json:"reviewsPending"`
-	RecentFailures         []JobLite             `json:"recentFailures"`
-	RecentImports          []ImportLite          `json:"recentImports"`
-	DossierHealth          []map[string]any      `json:"dossierHealth"`
-	AutomationActivity     []AutomationLite      `json:"automationActivity"`
-	RoutingRecommendations []RecommendationLite  `json:"routingRecommendations"`
-	SystemStatus           map[string]any        `json:"systemStatus"`
+	ActiveJobs             []JobLite            `json:"activeJobs"`
+	ApprovalsPending       int                  `json:"approvalsPending"`
+	ReviewsPending         int                  `json:"reviewsPending"`
+	RecentFailures         []JobLite            `json:"recentFailures"`
+	RecentImports          []ImportLite         `json:"recentImports"`
+	DossierHealth          []map[string]any     `json:"dossierHealth"`
+	AutomationActivity     []AutomationLite     `json:"automationActivity"`
+	RoutingRecommendations []RecommendationLite `json:"routingRecommendations"`
+	SystemStatus           map[string]any       `json:"systemStatus"`
 }
 
 type Service struct {
@@ -170,12 +170,12 @@ LIMIT ?`, limit)
 			health = "review_pending"
 		}
 		out = append(out, map[string]any{
-			"dossierId":      id,
-			"name":           name,
-			"jobCount":       jobs,
-			"failureCount":   fails,
-			"reviewPending":  reviews,
-			"health":         health,
+			"dossierId":     id,
+			"name":          name,
+			"jobCount":      jobs,
+			"failureCount":  fails,
+			"reviewPending": reviews,
+			"health":        health,
 		})
 	}
 	return out, rows.Err()

@@ -20,6 +20,7 @@ type FakeBackendOptions struct {
 	MaxOutputTokens int
 	Healthy         bool
 	HealthDetail    string
+	HealthErr       error
 }
 
 type FakeBackend struct {
@@ -34,6 +35,7 @@ type FakeBackend struct {
 	loadEvents []string
 	healthy    bool
 	detail     string
+	healthErr  error
 }
 
 func NewFakeBackend(opts FakeBackendOptions) *FakeBackend {
@@ -69,6 +71,7 @@ func NewFakeBackend(opts FakeBackendOptions) *FakeBackend {
 		loaded:          map[string]LoadedModel{},
 		healthy:         healthy,
 		detail:          opts.HealthDetail,
+		healthErr:       opts.HealthErr,
 	}
 }
 
@@ -171,7 +174,7 @@ func (b *FakeBackend) Generate(_ context.Context, req GenerateRequest) (Generate
 func (b *FakeBackend) Health(_ context.Context) (BackendHealth, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	return BackendHealth{
+	health := BackendHealth{
 		Name:    b.name,
 		Kind:    b.kind,
 		Healthy: b.healthy,
@@ -179,7 +182,8 @@ func (b *FakeBackend) Health(_ context.Context) (BackendHealth, error) {
 		Meta: map[string]any{
 			"loaded": len(b.loaded),
 		},
-	}, nil
+	}
+	return health, b.healthErr
 }
 
 func (b *FakeBackend) Inspect(_ context.Context, modelID string) (BackendInspectResult, error) {

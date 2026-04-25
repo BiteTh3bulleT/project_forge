@@ -49,38 +49,38 @@ func DefaultCells() []RuntimeCell {
 	}
 }
 
-func (IntakeRuntimeCell) Name() string                { return cellIntake }
-func (IntakeRuntimeCell) Version() string             { return phase4Version }
-func (IntakeRuntimeCell) Lane() string                { return "compute" }
-func (IntakeRuntimeCell) Dependencies() []string      { return nil }
-func (CatalogRuntimeCell) Name() string               { return cellCatalog }
-func (CatalogRuntimeCell) Version() string            { return phase4Version }
-func (CatalogRuntimeCell) Lane() string               { return "compute" }
-func (CatalogRuntimeCell) Dependencies() []string     { return []string{cellIntake} }
-func (LinkerRuntimeCell) Name() string                { return cellLinker }
-func (LinkerRuntimeCell) Version() string             { return phase4Version }
-func (LinkerRuntimeCell) Lane() string                { return "compute" }
-func (LinkerRuntimeCell) Dependencies() []string      { return []string{cellCatalog} }
-func (ContradictionRuntimeCell) Name() string         { return cellContradiction }
-func (ContradictionRuntimeCell) Version() string      { return phase4Version }
-func (ContradictionRuntimeCell) Lane() string         { return "compute" }
+func (IntakeRuntimeCell) Name() string                  { return cellIntake }
+func (IntakeRuntimeCell) Version() string               { return phase4Version }
+func (IntakeRuntimeCell) Lane() string                  { return "compute" }
+func (IntakeRuntimeCell) Dependencies() []string        { return nil }
+func (CatalogRuntimeCell) Name() string                 { return cellCatalog }
+func (CatalogRuntimeCell) Version() string              { return phase4Version }
+func (CatalogRuntimeCell) Lane() string                 { return "compute" }
+func (CatalogRuntimeCell) Dependencies() []string       { return []string{cellIntake} }
+func (LinkerRuntimeCell) Name() string                  { return cellLinker }
+func (LinkerRuntimeCell) Version() string               { return phase4Version }
+func (LinkerRuntimeCell) Lane() string                  { return "compute" }
+func (LinkerRuntimeCell) Dependencies() []string        { return []string{cellCatalog} }
+func (ContradictionRuntimeCell) Name() string           { return cellContradiction }
+func (ContradictionRuntimeCell) Version() string        { return phase4Version }
+func (ContradictionRuntimeCell) Lane() string           { return "compute" }
 func (ContradictionRuntimeCell) Dependencies() []string { return []string{cellCatalog, cellLinker} }
-func (StateRuntimeCell) Name() string                 { return cellState }
-func (StateRuntimeCell) Version() string              { return phase4Version }
-func (StateRuntimeCell) Lane() string                 { return "compute" }
-func (StateRuntimeCell) Dependencies() []string       { return []string{cellCatalog} }
-func (c PatternRuntimeCell) Name() string             { return cellPattern }
-func (PatternRuntimeCell) Version() string            { return phase4Version }
-func (PatternRuntimeCell) Lane() string               { return "compute" }
-func (PatternRuntimeCell) Dependencies() []string     { return []string{cellCatalog, cellLinker} }
-func (RecallRuntimeCell) Name() string                { return cellRecall }
-func (RecallRuntimeCell) Version() string             { return phase4Version }
-func (RecallRuntimeCell) Lane() string                { return "compute" }
-func (RecallRuntimeCell) Dependencies() []string      { return []string{cellState} }
-func (CleanupRuntimeCell) Name() string               { return cellCleanup }
-func (CleanupRuntimeCell) Version() string            { return phase4Version }
-func (CleanupRuntimeCell) Lane() string               { return "compute" }
-func (CleanupRuntimeCell) Dependencies() []string     { return []string{cellRecall} }
+func (StateRuntimeCell) Name() string                   { return cellState }
+func (StateRuntimeCell) Version() string                { return phase4Version }
+func (StateRuntimeCell) Lane() string                   { return "compute" }
+func (StateRuntimeCell) Dependencies() []string         { return []string{cellCatalog} }
+func (c PatternRuntimeCell) Name() string               { return cellPattern }
+func (PatternRuntimeCell) Version() string              { return phase4Version }
+func (PatternRuntimeCell) Lane() string                 { return "compute" }
+func (PatternRuntimeCell) Dependencies() []string       { return []string{cellCatalog, cellLinker} }
+func (RecallRuntimeCell) Name() string                  { return cellRecall }
+func (RecallRuntimeCell) Version() string               { return phase4Version }
+func (RecallRuntimeCell) Lane() string                  { return "compute" }
+func (RecallRuntimeCell) Dependencies() []string        { return []string{cellState} }
+func (CleanupRuntimeCell) Name() string                 { return cellCleanup }
+func (CleanupRuntimeCell) Version() string              { return phase4Version }
+func (CleanupRuntimeCell) Lane() string                 { return "compute" }
+func (CleanupRuntimeCell) Dependencies() []string       { return []string{cellRecall} }
 
 func (IntakeRuntimeCell) CanRun(_ context.Context, _ CellRunContext) (bool, string) { return true, "" }
 func (CatalogRuntimeCell) CanRun(_ context.Context, in CellRunContext) (bool, string) {
@@ -108,7 +108,7 @@ func (PatternRuntimeCell) CanRun(_ context.Context, in CellRunContext) (bool, st
 	}
 	return true, ""
 }
-func (RecallRuntimeCell) CanRun(_ context.Context, _ CellRunContext) (bool, string) { return true, "" }
+func (RecallRuntimeCell) CanRun(_ context.Context, _ CellRunContext) (bool, string)  { return true, "" }
 func (CleanupRuntimeCell) CanRun(_ context.Context, _ CellRunContext) (bool, string) { return true, "" }
 
 func (c IntakeRuntimeCell) Run(ctx context.Context, in CellRunContext) (CellRunResult, error) {
@@ -185,12 +185,12 @@ func (c IntakeRuntimeCell) Run(ctx context.Context, in CellRunContext) (CellRunR
 		if blocker := extractPhrase(lower, []string{"the blocker is ", "blocked by "}); blocker != "" {
 			blockerText := strings.TrimSpace(blocker)
 			out.ProposedActions = append(out.ProposedActions, newCellAction(in, c.Name(), c.Version(), domain.ActionOpenLoop, map[string]any{
-				"id":         objectID("loop", in.Event.ID, "blocker", blockerText),
-				"title":      "Resolve blocker: " + shortTitle(blockerText, "blocker"),
-				"state":      string(domain.LoopOpen),
-				"priority":   "high",
-				"owner":      nonEmptyTrim(in.Actor.ID, "system"),
-				"blocker":    blockerText,
+				"id":          objectID("loop", in.Event.ID, "blocker", blockerText),
+				"title":       "Resolve blocker: " + shortTitle(blockerText, "blocker"),
+				"state":       string(domain.LoopOpen),
+				"priority":    "high",
+				"owner":       nonEmptyTrim(in.Actor.ID, "system"),
+				"blocker":     blockerText,
 				"createdFrom": in.Event.ID,
 			}))
 		}
@@ -445,11 +445,11 @@ func (c StateRuntimeCell) Run(ctx context.Context, in CellRunContext) (CellRunRe
 		case domain.NoteDecision:
 			if strings.Contains(content+" "+title, "architecture") {
 				payload := map[string]any{
-					"id":         objectID("state", in.Event.ID, "architecture_direction", noteID),
-					"key":        "architecture_direction",
-					"value":      map[string]any{"value": strings.TrimSpace(readPayloadString(note.Payload, "title"))},
+					"id":          objectID("state", in.Event.ID, "architecture_direction", noteID),
+					"key":         "architecture_direction",
+					"value":       map[string]any{"value": strings.TrimSpace(readPayloadString(note.Payload, "title"))},
 					"derivedFrom": compactIDs(noteID, in.Event.ID),
-					"status":     string(domain.StateActive),
+					"status":      string(domain.StateActive),
 				}
 				if stateAlreadyCurrent(ctx, in, "architecture_direction", payload["value"]) {
 					continue
@@ -459,11 +459,11 @@ func (c StateRuntimeCell) Run(ctx context.Context, in CellRunContext) (CellRunRe
 		case domain.NotePreference, domain.NotePolicy:
 			if strings.Contains(content, "snapshot") || strings.Contains(content, "structured memory") {
 				payload := map[string]any{
-					"id":         objectID("state", in.Event.ID, "context_policy", noteID),
-					"key":        "context_policy",
-					"value":      map[string]any{"value": "structured_snapshots"},
+					"id":          objectID("state", in.Event.ID, "context_policy", noteID),
+					"key":         "context_policy",
+					"value":       map[string]any{"value": "structured_snapshots"},
 					"derivedFrom": compactIDs(noteID, in.Event.ID),
-					"status":     string(domain.StateActive),
+					"status":      string(domain.StateActive),
 				}
 				if stateAlreadyCurrent(ctx, in, "context_policy", payload["value"]) {
 					continue
@@ -475,11 +475,11 @@ func (c StateRuntimeCell) Run(ctx context.Context, in CellRunContext) (CellRunRe
 
 	if strings.Contains(text, "with just forge") || strings.Contains(text, "just forge") {
 		payload := map[string]any{
-			"id":         objectID("state", in.Event.ID, "current_test_mode", "forge_only"),
-			"key":        "current_test_mode",
-			"value":      map[string]any{"value": "forge_only"},
+			"id":          objectID("state", in.Event.ID, "current_test_mode", "forge_only"),
+			"key":         "current_test_mode",
+			"value":       map[string]any{"value": "forge_only"},
 			"derivedFrom": []string{in.Event.ID},
-			"status":     string(domain.StateActive),
+			"status":      string(domain.StateActive),
 		}
 		if !stateAlreadyCurrent(ctx, in, "current_test_mode", payload["value"]) {
 			out.ProposedActions = append(out.ProposedActions, newCellAction(in, c.Name(), c.Version(), domain.ActionUpdateState, payload))

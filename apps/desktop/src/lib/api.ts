@@ -230,6 +230,55 @@ export type AuditTraceLookupResponse = {
   reports: AuditTraceLookupReport[];
 };
 
+export type ProcessHealthInvocation = {
+  correlationId: string;
+  invocationId: number;
+  toolId: string;
+  action: string;
+  domain: string;
+  laneId?: string;
+  initiator: string;
+  status: string;
+  policyOutcome: string;
+  riskClass: string;
+  writeIntent: boolean;
+  deniedReason?: string;
+  startedAtMs: number;
+  completedAtMs?: number;
+  durationMs?: number;
+  traceId?: string;
+};
+
+export type ProcessHealthCorrelationReport = {
+  correlationId: string;
+  processInvocations: ProcessHealthInvocation[];
+  totalInvocations: number;
+  processInvocationCount: number;
+};
+
+export type ProcessHealthRuntime = {
+  available: boolean;
+  state?: string;
+  safeMode?: boolean;
+  safeModeReasons?: string[];
+  runtimeEnabled?: boolean;
+  gpuAware?: boolean;
+  health?: Record<string, unknown>;
+  queue?: Record<string, unknown>;
+  loaded?: Record<string, unknown>;
+  usage?: Record<string, unknown>;
+  error?: string;
+  warnings?: string[];
+};
+
+export type ProcessHealthTraceResponse = {
+  correlationIds: string[];
+  correlationId?: string;
+  traceId?: string;
+  reports: ProcessHealthCorrelationReport[];
+  runtime: ProcessHealthRuntime;
+};
+
 export type AutonomyScope = {
   workspaceId: string;
   laneId?: string;
@@ -378,6 +427,16 @@ export type SettingsRecord = {
   discordDefaultChannelId: string;
   discordWebhookUrl: string;
   discordCrossChatContext: boolean;
+  dreamMode?: {
+    enabled: boolean;
+    defaultDryRun: boolean;
+    mode: string;
+    windowHours: string;
+    maxCandidates: string;
+    allowLongTermPromotion: boolean;
+    requireOperatorReviewForLongTerm: boolean;
+    allowCommits: boolean;
+  };
 };
 
 export type TelegramStatusResponse = {
@@ -478,6 +537,10 @@ export type ModelRuntimeHealth = {
   ok: boolean;
   status?: string;
   backend?: string;
+  runtimeEnabled?: boolean;
+  gpuAware?: boolean;
+  degradedReasons?: string[];
+  policyWarnings?: string[];
   details?: Record<string, unknown>;
 };
 
@@ -525,8 +588,19 @@ export type ModelRuntimeUsageSummary = {
   backends?: Record<string, Record<string, unknown>>;
 };
 
+export type ForgeHealth = {
+  ok: boolean;
+  service: string;
+  modelRuntime?: {
+    available?: boolean;
+    status?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
 export const api = {
-  health: () => j<{ ok: boolean; service: string }>("/health"),
+  health: () => j<ForgeHealth>("/health"),
   meta: () => j<{ dataDir: string; dbPath: string; workspaceDir: string }>("/api/meta"),
   settings: {
     get: () => j<SettingsRecord>("/api/settings"),
@@ -1341,6 +1415,13 @@ export const api = {
       const q = qs.toString();
       return j<AuditTraceLookupResponse>(`/api/audit/trace${q ? `?${q}` : ""}`);
     },
+  },
+  processHealth: (params: { correlationId?: string; traceId?: string }) => {
+    const qs = new URLSearchParams();
+    if (params.correlationId) qs.set("correlationId", params.correlationId);
+    if (params.traceId) qs.set("traceId", params.traceId);
+    const q = qs.toString();
+    return j<ProcessHealthTraceResponse>(`/api/process/health${q ? `?${q}` : ""}`);
   },
   contextInspector: {
     listSnapshots: (params?: {

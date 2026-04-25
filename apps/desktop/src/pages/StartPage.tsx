@@ -108,7 +108,7 @@ export function StartPage() {
       <Panel
         className="forge-hero"
         title="Start Here"
-        subtitle="FORGE in guided mode: connect context, run bounded jobs, review results, and keep control over risky actions."
+        subtitle="FORGE in cognitive mode: connect context, run bounded jobs, review results, and keep control over risky actions."
         actions={<GhostButton onClick={() => void load()}>Refresh</GhostButton>}
       >
         {err ? <div className="rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}

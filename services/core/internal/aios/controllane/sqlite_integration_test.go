@@ -564,6 +564,9 @@ func TestSQLiteContextCompilePersistsSnapshotEvidence(t *testing.T) {
 	if packet.RestoreSnapshot == nil || packet.CompileOptions == nil {
 		t.Fatalf("expected restore snapshot metadata on packet")
 	}
+	if _, ok := packet.RestoreSnapshot.Metadata["restore_trace_json"].(map[string]any); !ok {
+		t.Fatalf("expected restore_trace_json in restore snapshot metadata")
+	}
 	if got := readString(packet.RestoreSnapshot.Metadata, "rendered_card_artifact_id"); got == "" {
 		t.Fatalf("expected rendered card artifact link")
 	}
@@ -621,6 +624,9 @@ WHERE id = ?`, packet.ID).Scan(
 	}
 	if restoreScoresJSON == "{}" {
 		t.Fatalf("expected restore_scores_json to persist scored selection metadata, got %s", restoreScoresJSON)
+	}
+	if !strings.Contains(metadataRaw, `"restore_trace_json"`) {
+		t.Fatalf("expected metadata_json to persist restore_trace_json, got %s", metadataRaw)
 	}
 	if renderArtifactRefID == "" {
 		t.Fatalf("expected render_artifact_ref_id column to persist rendered card artifact")
@@ -698,6 +704,11 @@ WHERE id = ?`, packet.ID).Scan(&parentSnapshotID); err != nil {
 	if reason, ok := packet.RestoreSnapshot.Metadata["restore_reason_json"].(map[string]any); !ok || reason["fingerprint_matched"] != true {
 		t.Fatalf("expected fingerprint matched restore reason, got %#v", packet.RestoreSnapshot.Metadata["restore_reason_json"])
 	}
+	if trace, ok := packet.RestoreSnapshot.Metadata["restore_trace_json"].(map[string]any); !ok {
+		t.Fatalf("expected restore_trace_json on repeated compile snapshot, got %#v", packet.RestoreSnapshot.Metadata["restore_trace_json"])
+	} else if _, ok := trace["winner"]; !ok {
+		t.Fatalf("expected winner section in restore trace")
+	}
 	scores, ok := packet.RestoreSnapshot.Metadata["restore_scores_json"].(map[string]any)
 	if !ok || scores["decision"] != "selected" {
 		t.Fatalf("expected selected restore_scores_json metadata, got %#v", packet.RestoreSnapshot.Metadata["restore_scores_json"])
@@ -744,12 +755,21 @@ func TestSQLiteListContextSnapshotsFiltersByScopeQueryAndKind(t *testing.T) {
 		t.Fatalf("other-kind compile failed: err=%v res=%+v", err, res)
 	}
 
+	if _, err := txRunner.db.ExecContext(ctx, `
+UPDATE context_packet_snapshots
+SET created_at = ?
+WHERE workspace_id = ? AND query = ? AND snapshot_kind = ?`, int64(1760001999000), "ws-main", "summarize blockers", "restore"); err != nil {
+		t.Fatalf("force timestamp tie: %v", err)
+	}
 	list := read.ListContextSnapshots(domain.ForgeScope{WorkspaceID: "ws-main", LaneID: "control.semantic"}, "summarize blockers", "restore", 10)
 	if len(list) != 2 {
 		t.Fatalf("expected 2 restore snapshots, got %d", len(list))
 	}
 	if list[0].CreatedAt < list[1].CreatedAt {
 		t.Fatalf("expected descending created_at order, got %d then %d", list[0].CreatedAt, list[1].CreatedAt)
+	}
+	if list[0].CreatedAt == list[1].CreatedAt && list[0].ID < list[1].ID {
+		t.Fatalf("expected deterministic id-desc tie ordering, got %q then %q", list[0].ID, list[1].ID)
 	}
 }
 

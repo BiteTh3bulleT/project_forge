@@ -71,85 +71,85 @@ type StateExplanation struct {
 }
 
 type OpenLoopExplanation struct {
-	LoopID         string        `json:"loopId"`
-	Scope          ForgeScope    `json:"scope"`
-	State          OpenLoopState `json:"state"`
-	Priority       string        `json:"priority"`
-	Owner          string        `json:"owner"`
-	Blocker        string        `json:"blocker,omitempty"`
-	NextAction     string        `json:"nextAction,omitempty"`
-	CreatedFrom    string        `json:"createdFrom,omitempty"`
-	RelatedNotes   []string      `json:"relatedNotes,omitempty"`
-	CreatedAt      int64         `json:"createdAt"`
-	UpdatedAt      int64         `json:"updatedAt"`
-	IsStale        bool          `json:"isStale"`
-	StaleCutoffMs  int64         `json:"staleCutoffMs,omitempty"`
-	Warnings       []string      `json:"warnings,omitempty"`
-	CorrelationID  string        `json:"correlationId,omitempty"`
-	TraceID        string        `json:"traceId,omitempty"`
-	SyscallID      string        `json:"syscallId,omitempty"`
-	AuditID        string        `json:"auditId,omitempty"`
+	LoopID        string        `json:"loopId"`
+	Scope         ForgeScope    `json:"scope"`
+	State         OpenLoopState `json:"state"`
+	Priority      string        `json:"priority"`
+	Owner         string        `json:"owner"`
+	Blocker       string        `json:"blocker,omitempty"`
+	NextAction    string        `json:"nextAction,omitempty"`
+	CreatedFrom   string        `json:"createdFrom,omitempty"`
+	RelatedNotes  []string      `json:"relatedNotes,omitempty"`
+	CreatedAt     int64         `json:"createdAt"`
+	UpdatedAt     int64         `json:"updatedAt"`
+	IsStale       bool          `json:"isStale"`
+	StaleCutoffMs int64         `json:"staleCutoffMs,omitempty"`
+	Warnings      []string      `json:"warnings,omitempty"`
+	CorrelationID string        `json:"correlationId,omitempty"`
+	TraceID       string        `json:"traceId,omitempty"`
+	SyscallID     string        `json:"syscallId,omitempty"`
+	AuditID       string        `json:"auditId,omitempty"`
 }
 
 type ContradictionExplanation struct {
-	RecordID       string     `json:"recordId"`
-	Scope          ForgeScope `json:"scope"`
-	LeftObjectID   string     `json:"leftObjectId"`
-	LeftObjectKind string     `json:"leftObjectKind"`
-	RightObjectID  string     `json:"rightObjectId"`
-	RightObjectKind string    `json:"rightObjectKind"`
-	Reason         string     `json:"reason"`
-	Severity       string     `json:"severity"`
-	Confidence     float64    `json:"confidence"`
-	CreatedAt      int64      `json:"createdAt"`
-	CorrelationID  string     `json:"correlationId,omitempty"`
-	TraceID        string     `json:"traceId,omitempty"`
-	SyscallID      string     `json:"syscallId,omitempty"`
-	AuditID        string     `json:"auditId,omitempty"`
+	RecordID        string     `json:"recordId"`
+	Scope           ForgeScope `json:"scope"`
+	LeftObjectID    string     `json:"leftObjectId"`
+	LeftObjectKind  string     `json:"leftObjectKind"`
+	RightObjectID   string     `json:"rightObjectId"`
+	RightObjectKind string     `json:"rightObjectKind"`
+	Reason          string     `json:"reason"`
+	Severity        string     `json:"severity"`
+	Confidence      float64    `json:"confidence"`
+	CreatedAt       int64      `json:"createdAt"`
+	CorrelationID   string     `json:"correlationId,omitempty"`
+	TraceID         string     `json:"traceId,omitempty"`
+	SyscallID       string     `json:"syscallId,omitempty"`
+	AuditID         string     `json:"auditId,omitempty"`
 }
 
 type SupersessionExplanation struct {
-	Scope         ForgeScope `json:"scope"`
-	RootObjectID  string     `json:"rootObjectId"`
-	CurrentObjectID string   `json:"currentObjectId"`
-	Chain         []string   `json:"chain"`
-	Reasons       []string   `json:"reasons,omitempty"`
-	RecordIDs     []string   `json:"recordIds,omitempty"`
+	Scope           ForgeScope `json:"scope"`
+	RootObjectID    string     `json:"rootObjectId"`
+	CurrentObjectID string     `json:"currentObjectId"`
+	Chain           []string   `json:"chain"`
+	Reasons         []string   `json:"reasons,omitempty"`
+	RecordIDs       []string   `json:"recordIds,omitempty"`
 }
 
 type CurrentObjectResolution struct {
-	ObjectID          string   `json:"objectId"`
+	ObjectID          string     `json:"objectId"`
 	Scope             ForgeScope `json:"scope"`
-	Current           bool     `json:"current"`
-	CurrentObjectID   string   `json:"currentObjectId,omitempty"`
-	Archived          bool     `json:"archived"`
-	Superseded        bool     `json:"superseded"`
-	Deprecated        bool     `json:"deprecated"`
-	Contradicted      bool     `json:"contradicted"`
-	IncludeInActive   bool     `json:"includeInActive"`
-	Warnings          []string `json:"warnings,omitempty"`
-	SupersessionChain []string `json:"supersessionChain,omitempty"`
+	Current           bool       `json:"current"`
+	CurrentObjectID   string     `json:"currentObjectId,omitempty"`
+	Archived          bool       `json:"archived"`
+	Superseded        bool       `json:"superseded"`
+	Deprecated        bool       `json:"deprecated"`
+	Contradicted      bool       `json:"contradicted"`
+	IncludeInActive   bool       `json:"includeInActive"`
+	Warnings          []string   `json:"warnings,omitempty"`
+	SupersessionChain []string   `json:"supersessionChain,omitempty"`
 }
 
 type TruthExplanation struct {
-	Query          TruthQuery                `json:"query"`
-	Status         string                    `json:"status"`
-	CurrentState   *StateExplanation         `json:"currentState,omitempty"`
-	CurrentObject  *CurrentObjectResolution  `json:"currentObject,omitempty"`
-	Loops          []OpenLoopExplanation     `json:"loops,omitempty"`
+	Query          TruthQuery                 `json:"query"`
+	Status         string                     `json:"status"`
+	CurrentState   *StateExplanation          `json:"currentState,omitempty"`
+	CurrentObject  *CurrentObjectResolution   `json:"currentObject,omitempty"`
+	Loops          []OpenLoopExplanation      `json:"loops,omitempty"`
 	Contradictions []ContradictionExplanation `json:"contradictions,omitempty"`
-	Supersession   *SupersessionExplanation  `json:"supersession,omitempty"`
-	Timeline       []StateTimelineEntry      `json:"timeline,omitempty"`
-	Warnings       []string                  `json:"warnings,omitempty"`
+	Supersession   *SupersessionExplanation   `json:"supersession,omitempty"`
+	Timeline       []StateTimelineEntry       `json:"timeline,omitempty"`
+	Warnings       []string                   `json:"warnings,omitempty"`
 }
 
 type TruthApplySummary struct {
-	Action           SemanticActionType `json:"action"`
-	RequestID        string             `json:"requestId"`
-	Success          bool               `json:"success"`
-	Scope            ForgeScope         `json:"scope"`
-	CommittedObjectIDs []string         `json:"committedObjectIds"`
-	Warnings         []string           `json:"warnings,omitempty"`
+	Action             SemanticActionType `json:"action"`
+	RequestID          string             `json:"requestId"`
+	Success            bool               `json:"success"`
+	Scope              ForgeScope         `json:"scope"`
+	CommittedObjectIDs []string           `json:"committedObjectIds"`
+	Warnings           []string           `json:"warnings,omitempty"`
 }
 
 type ProjectionRebuildDiff struct {
@@ -162,10 +162,10 @@ type ProjectionRebuildDiff struct {
 }
 
 type ProjectionRebuildReport struct {
-	Scope       ForgeScope             `json:"scope"`
-	DryRun      bool                   `json:"dryRun"`
-	GeneratedAt int64                  `json:"generatedAt"`
+	Scope       ForgeScope              `json:"scope"`
+	DryRun      bool                    `json:"dryRun"`
+	GeneratedAt int64                   `json:"generatedAt"`
 	Differences []ProjectionRebuildDiff `json:"differences"`
-	Warnings    []string               `json:"warnings,omitempty"`
-	Applied     bool                   `json:"applied"`
+	Warnings    []string                `json:"warnings,omitempty"`
+	Applied     bool                    `json:"applied"`
 }

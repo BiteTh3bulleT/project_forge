@@ -120,6 +120,7 @@ Responsibilities:
 - resolve backend/model selection deterministically
 - expose loaded-model, queue, usage, backend, and health snapshots
 - emit audit records with request metadata and usage fields
+- consume optional GPU telemetry for diagnostics and background workload admission
 
 ### Lifecycle
 
@@ -160,6 +161,23 @@ Properties:
 - explicit rejection when queue capacity is exhausted
 
 M3 keeps this intentionally simple. It is not a batching or distributed scheduler.
+
+GPU policy classes are explicit:
+
+- `INTERACTIVE_INFERENCE`
+- `INTERACTIVE_EMBEDDING`
+- `BACKGROUND_EMBEDDING`
+- `BACKGROUND_RERANK`
+- `DREAM_DISTILLATION`
+- `ADAPTER_EVAL`
+- `ADAPTER_TRAINING`
+
+Default policy posture is conservative:
+
+- interactive classes have priority over background classes
+- background classes are bounded by queue and background concurrency caps
+- background classes defer under interactive load/cooldown windows
+- Dream GPU classes are optional and default-off unless enabled by policy
 
 ## Backend Selection and Routing
 
@@ -255,6 +273,20 @@ M3 adds inspection views for:
 
 Status endpoints report actual runtime state. They do not synthesize unsupported metrics.
 
+Runtime health state values:
+
+- `available`
+- `degraded`
+- `unavailable`
+- `cooldown`
+- `overloaded`
+
+Health surfaces expose degraded reasons and policy warnings so operators can distinguish:
+
+- CPU-safe operation with accelerator unavailable
+- background deferrals due to interactive priority/cooldown
+- backend health failures
+
 ## Audit and Evidence
 
 Runtime audit records include, where available:
@@ -289,3 +321,14 @@ Still deferred or intentionally bounded:
 - llama.cpp spawn/process supervision
 - gateway `model.*` capability aliasing
 - autonomy charter/budget-aware inference governance beyond current policy hooks
+
+## Safe mode
+
+Safe mode (`FORGE_SAFE_MODE_FORCE_CPU_ONLY=true`) enforces CPU-only operation while preserving runtime governance APIs.
+
+Effects:
+
+- kernel authority remains CPU/RAM-only and unchanged
+- modelruntime remains callable but reports degraded/unavailable accelerator posture as appropriate
+- GPU-requiring requests fail deterministically with policy/runtime errors
+- background accelerator classes are disabled/deferred by default policy

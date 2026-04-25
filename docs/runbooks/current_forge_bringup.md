@@ -133,13 +133,14 @@ On fresh boot, expect:
 ```json
 {
   "available": true,
-  "mode": "maintain",
+  "mode": "observe",
   "counts": {"activeCharters": 4, "activeIntents": 0, "budgets": 2, "recentDecisions": 0},
   "dream": {"active": false}
 }
 ```
 
-See **§8 Safety** for notes on `mode: maintain`.
+Set `autonomy_mode` explicitly to `maintain` or `mission` only after
+operator review.
 
 ### Adapters
 
@@ -180,12 +181,22 @@ cp apps/desktop/.env.example apps/desktop/.env.development
 # edit if your core runs on a non-default URL
 ```
 
+CPU-only safe mode (no GPU required):
+
+```sh
+export FORGE_SAFE_MODE_FORCE_CPU_ONLY=true
+export FORGE_GPU_ENABLED=false
+```
+
+This keeps `forge-core` authoritative and bootable without GPU/modelruntime acceleration.
+See [no_gpu_boot_and_recovery.md](no_gpu_boot_and_recovery.md) for full degraded-mode runbook.
+
 ## 6. What "success" looks like
 
 1. `go build ./...` in `services/core` exits 0.
 2. `go test ./...` in `services/core` passes all packages.
 3. `npm run smoke` ends with `==> smoke OK`.
-4. `/api/autonomy/status` returns `mode: "maintain"` with 4 charters
+4. `/api/autonomy/status` returns `mode: "observe"` with 4 charters
    and 2 budgets seeded.
 5. `/api/telegram/status` and `/api/discord/status` both report
    disabled with a reason (not 5xx).
@@ -212,14 +223,12 @@ and the Pass-1 status docs under `docs/status/`. Highlights:
 
 ## 8. Safety
 
-- **Autonomy default is `maintain`, not `off`.** Default charters and
-  budgets are seeded at first boot and keep autonomy propose-only with
-  0 external-call budget. If you want zero autonomy, set the
-  `autonomy_mode` setting to `off` via the Settings API or desktop UI
-  before loading a workspace.
-- **Dangerous tools** (shell, file write, process control) remain
-  `approval_only` or `stubbed`. Do not relax these defaults without
-  operator-signed approval.
+- **Autonomy default is `observe`.** Default charters and budgets are
+  seeded at first boot, but maintain/mission behavior requires an
+  explicit `autonomy_mode` setting change by the operator.
+- **Dangerous tools** (shell, process control, external effects,
+  privileged operations) remain `approval_only`. Do not relax these
+  defaults without operator-signed approval.
 - **Remote access** is off by default; token-gated when enabled.
 - **Workspace root** defaults to `/` — intentionally broad for
   convenience, but for real work, scope `FORGE_WORKSPACE_DIR` to a

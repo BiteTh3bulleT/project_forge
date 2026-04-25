@@ -146,6 +146,29 @@ function usableChatStatus(model: ModelRuntimeModel): boolean {
   return status !== "disabled" && status !== "archived" && status !== "unavailable" && status !== "error";
 }
 
+function describeChatModel(modelId: string, models: ModelRuntimeModel[]): string {
+  const id = modelId.trim();
+  if (!id) return "Auto routing uses the runtime default or configured adapter fallback.";
+  const selected = models.find((model) => model.id === id);
+  if (!selected) return `Pinned to saved model ${id}. It is not present in the current runtime list.`;
+  const label = selected.displayName?.trim() || selected.id;
+  const backend = selected.backend?.trim();
+  return backend ? `Pinned to ${label} on backend ${backend}.` : `Pinned to ${label}.`;
+}
+
+function describeAssistantMode(props: {
+  requestAssistant: boolean;
+  assistantDryRun: boolean;
+  streamAssistant: boolean;
+  blockingAssistant: boolean;
+}) {
+  if (!props.requestAssistant) return "Message only";
+  if (props.assistantDryRun) return "Dry-run only";
+  if (props.blockingAssistant) return "Blocking response";
+  if (props.streamAssistant) return "Streaming response";
+  return "Async response";
+}
+
 function readAttachments(meta: Record<string, unknown> | undefined): ChatAttachment[] {
   if (!meta) return [];
   const raw = meta.attachments;
@@ -1299,10 +1322,37 @@ export function ChatPage() {
     }
   }, [messageAttachments, selectedAttachmentId]);
 
+  const selectedChatModel = useMemo(
+    () => chatModels.find((model) => model.id === selectedChatModelId) ?? null,
+    [chatModels, selectedChatModelId],
+  );
+
+  const assistantModeSummary = useMemo(
+    () =>
+      describeAssistantMode({
+        requestAssistant,
+        assistantDryRun,
+        streamAssistant,
+        blockingAssistant,
+      }),
+    [assistantDryRun, blockingAssistant, requestAssistant, streamAssistant],
+  );
+
+  const chatModelSummary = useMemo(() => describeChatModel(selectedChatModelId, chatModels), [selectedChatModelId, chatModels]);
+
   return (
     <div className="grid h-full min-h-0 overflow-hidden rounded-2xl border border-white/10 bg-[#090b0f] md:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_380px]">
       <aside className="flex min-h-0 flex-col overflow-hidden border-b border-white/10 bg-[#0a0d12] md:border-b-0 md:border-r">
         <div className="border-b border-white/10 p-3">
+          <div className="mb-3 flex items-end justify-between gap-3">
+            <div>
+              <div className="text-[10px] uppercase tracking-[0.18em] text-forge-mist/65">Threads</div>
+              <div className="mt-1 text-sm font-semibold text-forge-ash">{threads.length} active conversations</div>
+            </div>
+            <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] text-forge-mist/80">
+              {filteredThreads.length} shown
+            </div>
+          </div>
           <button
             type="button"
             onClick={() => void newThread()}
@@ -1414,12 +1464,24 @@ export function ChatPage() {
                       </button>
                     </div>
                   )}
-                  <p className="text-xs text-forge-mist">
-                    {active.messages.length} message(s) · updated {formatTime(active.updatedAtMs)}
-                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-forge-mist">
+                    <span>{active.messages.length} message(s)</span>
+                    <span className="text-forge-mist/35">•</span>
+                    <span>updated {formatTime(active.updatedAtMs)}</span>
+                    <span className="text-forge-mist/35">•</span>
+                    <span className="font-mono text-[11px] text-forge-mist/80">thread {active.id}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="rounded-full border border-forge-electric/20 bg-forge-electric/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-forge-electric">
+                      {assistantModeSummary}
+                    </span>
+                    <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] text-forge-mist">
+                      {selectedChatModel?.displayName?.trim() || selectedChatModel?.id || "Auto model"}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   {streamingText !== null ? (
                     <button
                       type="button"
@@ -1556,54 +1618,79 @@ export function ChatPage() {
 
             <footer className="forge-chat-footer">
               <div className="mx-auto w-full max-w-4xl">
-                <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-forge-mist">
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      aria-label="Use assistant"
-                      type="checkbox"
-                      checked={requestAssistant}
-                      onChange={(e) => setRequestAssistant(e.target.checked)}
-                    />
-                    Use assistant
-                  </label>
-                  <label className="inline-flex items-center gap-2">
-                    <span className="text-[11px] text-forge-mist/80">Model</span>
-                    <select
-                      aria-label="Chat runtime model"
-                      className="forge-input h-8 min-w-[240px] py-1 text-xs"
-                      value={selectedChatModelId}
-                      onChange={(e) => setSelectedChatModelId(e.target.value)}
-                      disabled={chatModelLoadState === "loading"}
-                    >
-                      <option value="">Auto (runtime default / adapter fallback)</option>
-                      {selectedChatModelId && !chatModels.some((model) => model.id === selectedChatModelId) ? (
-                        <option value={selectedChatModelId}>Saved: {selectedChatModelId} (not in current runtime list)</option>
-                      ) : null}
-                      {chatModels.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.displayName?.trim() || model.id}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvanced((v) => !v)}
-                    className="forge-chat-action-btn border-white/10 bg-transparent py-1 px-2.5 text-[11px]"
-                  >
-                    {showAdvanced ? "Hide advanced" : "Advanced"}
-                  </button>
-                </div>
-                {chatModelMessage ? (
-                  <div className="mb-2 text-[10px] text-forge-mist/75">
-                    {chatModelMessage}{" "}
-                    {(chatModelLoadState === "unavailable" || chatModelLoadState === "error") && (
-                      <Link to="/models" className="text-forge-emberSoft underline underline-offset-2 hover:text-forge-ash">
+                <div className="mb-3 rounded-2xl border border-white/10 bg-[#0d1219] p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[10px] uppercase tracking-[0.16em] text-forge-mist/70">Assistant Routing</div>
+                      <div className="mt-1 text-sm font-semibold text-forge-ash">{assistantModeSummary}</div>
+                      <div className="mt-1 text-[11px] text-forge-mist/75">
+                        {chatModelMessage || chatModelSummary} Models page remains authoritative for runtime inventory, lifecycle, and backend health.
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void refreshChatModels()}
+                        className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-forge-mist transition hover:border-white/20 hover:text-forge-ash"
+                      >
+                        Refresh models
+                      </button>
+                      <Link
+                        to="/models"
+                        className="rounded-lg border border-forge-electric/20 bg-forge-electric/10 px-3 py-1.5 text-[11px] text-forge-electric transition hover:border-forge-electric/35 hover:text-forge-ash"
+                      >
                         Open Models
                       </Link>
-                    )}
+                      <button
+                        type="button"
+                        onClick={() => setShowAdvanced((v) => !v)}
+                        className="forge-chat-action-btn border-white/10 bg-transparent py-1 px-2.5 text-[11px]"
+                      >
+                        {showAdvanced ? "Hide advanced" : "Advanced"}
+                      </button>
+                    </div>
                   </div>
-                ) : null}
+
+                  <div className="mt-3 grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
+                    <label className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs text-forge-mist">
+                      <input
+                        aria-label="Use assistant"
+                        type="checkbox"
+                        checked={requestAssistant}
+                        onChange={(e) => setRequestAssistant(e.target.checked)}
+                      />
+                      Use assistant
+                    </label>
+                    <label className="block min-w-0">
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-forge-mist">Chat model</span>
+                      <select
+                        aria-label="Chat runtime model"
+                        className="forge-input mt-1 h-10 w-full py-1 text-sm"
+                        value={selectedChatModelId}
+                        onChange={(e) => setSelectedChatModelId(e.target.value)}
+                        disabled={chatModelLoadState === "loading"}
+                      >
+                        <option value="">Auto (runtime default / adapter fallback)</option>
+                        {selectedChatModelId && !chatModels.some((model) => model.id === selectedChatModelId) ? (
+                          <option value={selectedChatModelId}>Saved: {selectedChatModelId} (not in current runtime list)</option>
+                        ) : null}
+                        {chatModels.map((model) => (
+                          <option key={model.id} value={model.id}>
+                            {model.displayName?.trim() || model.id}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedChatModelId("")}
+                      disabled={!selectedChatModelId}
+                      className="rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-[11px] text-forge-mist transition hover:border-white/20 hover:text-forge-ash disabled:opacity-40"
+                    >
+                      Use auto
+                    </button>
+                  </div>
+                </div>
 
                 {showAdvanced ? (
                   <div className="mb-3 grid gap-2 md:grid-cols-3">
@@ -1646,74 +1733,90 @@ export function ChatPage() {
                   </div>
                 ) : null}
 
-                <div className="flex items-end gap-2">
-                  <label htmlFor="chat-composer" className="sr-only">
-                    Message
-                  </label>
-                  <textarea
-                    id="chat-composer"
-                    aria-label="Chat message"
-                    ref={textareaRef}
-                    rows={1}
-                    className="forge-chat-composer"
-                    placeholder="Message FORGE"
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={onComposerKeyDown}
-                    disabled={busy}
-                  />
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    multiple
-                    onChange={(e) => void uploadSelectedFiles(e.target.files)}
-                    disabled={busy || uploading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={busy || uploading || !active}
-                    className="h-[80px] min-w-[88px] forge-chat-action-btn"
-                  >
-                    {uploading ? "Uploading…" : "Attach"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void send()}
-                    disabled={busy || (!draft.trim() && pendingAttachments.length === 0)}
-                    className="h-[80px] min-w-[96px] forge-chat-action-btn text-sm"
-                  >
-                    Send
-                  </button>
-                </div>
-                {pendingAttachments.length > 0 ? (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {pendingAttachments.map((item) => (
-                      <span key={item.artifactId} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setInspectorMode("files");
-                            setSelectedAttachmentId(item.artifactId);
-                          }}
-                          className="truncate hover:text-forge-ash"
-                        >
-                          {item.fileName}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPendingAttachments((prev) => prev.filter((entry) => entry.artifactId !== item.artifactId))}
-                          className="text-forge-mist/70 hover:text-forge-ash"
-                          aria-label={`Remove ${item.fileName}`}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
+                <div className="rounded-2xl border border-white/10 bg-[#0b0f15] p-3">
+                  {pendingAttachments.length > 0 ? (
+                    <div className="mb-3">
+                      <div className="mb-2 text-[10px] uppercase tracking-[0.14em] text-forge-mist/65">Pending attachments</div>
+                      <div className="flex flex-wrap gap-2">
+                        {pendingAttachments.map((item) => (
+                          <span
+                            key={item.artifactId}
+                            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setInspectorMode("files");
+                                setSelectedAttachmentId(item.artifactId);
+                              }}
+                              className="truncate hover:text-forge-ash"
+                            >
+                              {item.fileName}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPendingAttachments((prev) => prev.filter((entry) => entry.artifactId !== item.artifactId))}
+                              className="text-forge-mist/70 hover:text-forge-ash"
+                              aria-label={`Remove ${item.fileName}`}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+                    <div className="min-w-0 flex-1">
+                      <label htmlFor="chat-composer" className="sr-only">
+                        Message
+                      </label>
+                      <textarea
+                        id="chat-composer"
+                        aria-label="Chat message"
+                        ref={textareaRef}
+                        rows={1}
+                        className="forge-chat-composer"
+                        placeholder="Message FORGE"
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onKeyDown={onComposerKeyDown}
+                        disabled={busy}
+                      />
+                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      className="hidden"
+                      multiple
+                      onChange={(e) => void uploadSelectedFiles(e.target.files)}
+                      disabled={busy || uploading}
+                    />
+                    <div className="grid grid-cols-2 gap-2 lg:w-[220px] lg:grid-cols-1">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={busy || uploading || !active}
+                        className="h-[56px] forge-chat-action-btn"
+                      >
+                        {uploading ? "Uploading…" : "Attach"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void send()}
+                        disabled={busy || (!draft.trim() && pendingAttachments.length === 0)}
+                        className="h-[56px] forge-chat-action-btn text-sm"
+                      >
+                        Send
+                      </button>
+                    </div>
                   </div>
-                ) : null}
-                <div className="mt-2 text-[11px] text-forge-mist/75">Enter to send · Shift+Enter for newline</div>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-forge-mist/75">
+                    <span>Enter to send · Shift+Enter for newline</span>
+                    <span>{requestAssistant ? `Assistant mode: ${assistantModeSummary}` : "No assistant reply requested"}</span>
+                  </div>
+                </div>
               </div>
             </footer>
           </>
@@ -1846,14 +1949,21 @@ function MessageRow(props: { message: ChatMessage; onInspectAttachment: (artifac
       <div className={["w-full max-w-[46rem]", isUser ? "max-w-[42rem]" : ""].join(" ")}>
         <div
           className={[
-            "rounded-2xl border px-4 py-3",
+            "rounded-2xl border px-4 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.16)]",
             isUser
               ? "border-white/15 bg-white/10 text-forge-ash"
               : "border-white/10 bg-[#0c1016] text-forge-ash",
           ].join(" ")}
         >
           <div className="mb-2 flex items-center justify-between gap-3">
-            <div className="text-[10px] uppercase tracking-wide text-forge-mist/80">{isUser ? "You" : isAssistant ? "FORGE" : role}</div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-[10px] uppercase tracking-wide text-forge-mist/80">{isUser ? "You" : isAssistant ? "FORGE" : role}</div>
+              {toolActivity ? (
+                <span className="rounded-full border border-forge-electric/20 bg-forge-electric/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-forge-electric">
+                  Gateway activity
+                </span>
+              ) : null}
+            </div>
             <div className="text-[10px] text-forge-mist/65">{formatTime(message.createdAtMs)}</div>
           </div>
           <RichMessage content={message.content} />
@@ -1875,30 +1985,32 @@ function MessageRow(props: { message: ChatMessage; onInspectAttachment: (artifac
               </div>
             </div>
           ) : null}
-          {jobId ? (
+          {jobId || correlationId || traceId ? (
             <div className="mt-3 border-t border-white/10 pt-2 text-xs text-forge-mist">
-              <Link to={`/jobs/${encodeURIComponent(jobId)}`} className="underline underline-offset-2 hover:text-forge-ash">
-                Open Job {jobId}
-              </Link>
-            </div>
-          ) : null}
-          {correlationId || traceId ? (
-            <div className="mt-3 border-t border-white/10 pt-2 text-xs text-forge-mist">
-              <div className="flex flex-wrap gap-3">
+              <div className="mb-2 text-[10px] uppercase tracking-[0.14em] text-forge-mist/65">Traceability</div>
+              <div className="flex flex-wrap gap-2">
+                {jobId ? (
+                  <Link
+                    to={`/jobs/${encodeURIComponent(jobId)}`}
+                    className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
+                  >
+                    Job {jobId}
+                  </Link>
+                ) : null}
                 {correlationId ? (
                   <Link
                     to={`/inspectors?correlationId=${encodeURIComponent(correlationId)}`}
-                    className="underline underline-offset-2 hover:text-forge-ash"
+                    className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
                   >
-                    Inspect correlation {correlationId}
+                    Correlation {correlationId}
                   </Link>
                 ) : null}
                 {traceId ? (
                   <Link
                     to={`/inspectors?traceId=${encodeURIComponent(traceId)}`}
-                    className="underline underline-offset-2 hover:text-forge-ash"
+                    className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
                   >
-                    Inspect trace {traceId}
+                    Trace {traceId}
                   </Link>
                 ) : null}
               </div>

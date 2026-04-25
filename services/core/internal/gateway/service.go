@@ -204,6 +204,29 @@ func (g *Gateway) registerBuiltinTools() {
 	register(&secretGetTool{db: g.db})
 	register(&writeFileTool{workspace: g.workspace})
 	register(&validateContextTool{workspace: g.workspace, dataDir: g.dataDir})
+	g.registerCapabilityBackings()
+}
+
+func (g *Gateway) registerCapabilityBackings() {
+	if g.capabilities == nil {
+		return
+	}
+	for _, capability := range g.capabilities.List() {
+		toolID := metadataString(capability.Metadata, "gatewayToolId")
+		if toolID == "" {
+			continue
+		}
+		if _, exists := g.tools[toolID]; exists {
+			continue
+		}
+		g.tools[toolID] = &capabilityBackingTool{
+			capability: capability,
+			toolID:     toolID,
+			workspace:  g.workspace,
+			dataDir:    g.dataDir,
+			db:         g.db,
+		}
+	}
 }
 
 // RegisterTool adds a non-builtin tool to the gateway registry.
@@ -465,7 +488,7 @@ func (g *Gateway) Execute(ctx context.Context, req Request) (*Result, error) {
 	requiresApproval := decision.RequiresApproval || lane.RequiresApproval || metadataBool(req.Metadata, "policyApprovalRequired")
 	policyApprovalReason := metadataString(req.Metadata, "policyApprovalReason")
 	if requiresApproval {
-		granted, grantErr := g.jobApprovalGranted(ctx, req.JobID)
+		granted, grantErr := g.approvalGrantPresent(ctx, req)
 		if grantErr != nil {
 			return g.denied(ctx, req, lane.ID, tool.ID(), risk, fmt.Sprintf("approval check failed: %v", grantErr))
 		}
@@ -605,6 +628,108 @@ WHERE id=?`, now, string(resultBytes), string(artifactsBytes), invID)
 	})
 
 	return &execResult, nil
+}
+
+// ExecuteAndWait executes a request and, when the gateway opens an approval
+// request, blocks until that approval reaches a terminal state. Approved
+// requests are re-run with the approval id attached; denied, cancelled, and
+// expired requests return a terminal denied result tied to the original
+// invocation.
+func (g *Gateway) ExecuteAndWait(ctx context.Context, req Request) (*Result, error) {
+	first, err := g.Execute(ctx, req)
+	if err != nil || first == nil || first.Status != StatusNeedsApprov {
+		return first, err
+	}
+	if g.approvals == nil {
+		first.Status = StatusDenied
+		first.PolicyOutcome = OutcomeDeny
+		first.Allowed = false
+		first.DeniedReason = "approval service unavailable"
+		first.Message = first.DeniedReason
+		return first, nil
+	}
+	approvalID := approvalRequestIDFromResult(first)
+	if approvalID <= 0 {
+		first.Status = StatusDenied
+		first.PolicyOutcome = OutcomeDeny
+		first.Allowed = false
+		first.DeniedReason = "approval request was not created"
+		first.Message = first.DeniedReason
+		return first, nil
+	}
+
+	wait := g.approvals.Wait(ctx, approvalID)
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-wait:
+	}
+	approvalReq, err := g.approvals.GetRequest(ctx, approvalID)
+	if err != nil {
+		first.Status = StatusDenied
+		first.PolicyOutcome = OutcomeDeny
+		first.Allowed = false
+		first.DeniedReason = fmt.Sprintf("approval request lookup failed: %v", err)
+		first.Message = first.DeniedReason
+		return first, nil
+	}
+	decision := ""
+	if approvalReq.Decision != nil {
+		decision = strings.TrimSpace(strings.ToLower(approvalReq.Decision.Decision))
+	}
+	if approvalReq.Status == "expired" {
+		first.Status = StatusDenied
+		first.PolicyOutcome = OutcomeDeny
+		first.Allowed = false
+		first.DeniedReason = fmt.Sprintf("approval request #%d expired", approvalID)
+		first.Message = first.DeniedReason
+		return first, nil
+	}
+	if decision != "approved" {
+		if decision == "" {
+			decision = nonEmpty(approvalReq.Status, "unresolved")
+		}
+		first.Status = StatusDenied
+		first.PolicyOutcome = OutcomeDeny
+		first.Allowed = false
+		first.DeniedReason = fmt.Sprintf("approval request #%d %s", approvalID, decision)
+		first.Message = first.DeniedReason
+		return first, nil
+	}
+
+	rerun := req
+	rerun.ApprovalID = strconv.FormatInt(approvalID, 10)
+	jobID := strings.TrimSpace(approvalReq.JobID)
+	if jobID != "" {
+		rerun.JobID = &jobID
+	}
+	rerun.Metadata = mergeGatewayMetadata(rerun.Metadata, map[string]any{
+		"approvedRequestId": approvalID,
+		"approvalDecision":  decision,
+	})
+	return g.Execute(ctx, rerun)
+}
+
+func approvalRequestIDFromResult(result *Result) int64 {
+	if result == nil || result.Data == nil {
+		return 0
+	}
+	switch v := result.Data["approvalRequestId"].(type) {
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case float64:
+		return int64(v)
+	case json.Number:
+		id, _ := v.Int64()
+		return id
+	case string:
+		id, _ := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		return id
+	default:
+		return 0
+	}
 }
 
 func (g *Gateway) openInvocation(ctx context.Context, req Request, lane *lanes.Lane, tool Tool, risk, level, profileID, status string, approvalRequestID *int64) (int64, error) {
@@ -2874,6 +2999,27 @@ func nonEmpty(v, def string) string {
 		return def
 	}
 	return strings.TrimSpace(v)
+}
+
+func (g *Gateway) approvalGrantPresent(ctx context.Context, req Request) (bool, error) {
+	if strings.TrimSpace(req.ApprovalID) != "" && g.approvals != nil {
+		requestID, err := strconv.ParseInt(strings.TrimSpace(req.ApprovalID), 10, 64)
+		if err != nil {
+			return false, fmt.Errorf("invalid approval id %q", req.ApprovalID)
+		}
+		approvalReq, err := g.approvals.GetRequest(ctx, requestID)
+		if err != nil {
+			return false, err
+		}
+		if req.JobID != nil && strings.TrimSpace(*req.JobID) != "" && strings.TrimSpace(approvalReq.JobID) != strings.TrimSpace(*req.JobID) {
+			return false, fmt.Errorf("approval request %d belongs to job %q, not %q", requestID, approvalReq.JobID, strings.TrimSpace(*req.JobID))
+		}
+		if approvalReq.Decision != nil && strings.EqualFold(strings.TrimSpace(approvalReq.Decision.Decision), "approved") {
+			return true, nil
+		}
+		return false, nil
+	}
+	return g.jobApprovalGranted(ctx, req.JobID)
 }
 
 func (g *Gateway) jobApprovalGranted(ctx context.Context, jobID *string) (bool, error) {

@@ -1,86 +1,101 @@
-# Context Restore Scoring (Arterial Runtime)
+# Context Restore Scoring
 
-Status date: 2026-04-23.
+Status date: 2026-04-24.
 
-## Scope
+`COMPILE_CONTEXT` can rank persisted context snapshots before compiling a new packet. Snapshot rows are non-canonical evidence: canonical truth remains in notes, links, state, loops, artifacts, models, provenance, and journal tables.
 
-This document covers deterministic restore candidate scoring used by `COMPILE_CONTEXT` inside the semantic syscall control lane.  
-It does not introduce a new memory subsystem and does not change truth authority.
-
-## Entrypoint and authority
+## Authority
 
 - Entry action: `COMPILE_CONTEXT`
-- Authority boundary: syscall validator + processor + transactional semantic store
-- Persistence target: `context_packet_snapshots` evidence rows
-- Canonical truth remains notes/links/state/loops/models/artifacts/journal, not snapshot rows
+- Authority boundary: semantic syscall validator, processor, transactional semantic store, audit linkage
+- Persistence target: `context_packet_snapshots`
+- Governed commit scoring persists `restore_scores_json`, `resume_hints_json`, and the header-first restore package metadata on snapshot rows.
+- `dryRun=true` on the semantic syscall remains validation-only and does not write snapshot rows; use `persistSnapshot=false` for the historical non-restore compile path.
 
-## Candidate listing
+## Candidate Model
 
-Restore candidates are listed by:
+Candidate listing is header-first and scope-bound. A candidate exposes:
 
-- `workspace_id` / `lane_id`
-- exact `query`
-- `snapshotKind`
-- deterministic ordering by `created_at DESC` (and stable ID tiebreak)
+- `snapshot_id`, `context_packet_id`, `snapshot_kind`, `query`
+- `workspace_id`, `lane_id`, `selected_paths`, `created_at`
+- `snapshot_fingerprint`, `parent_snapshot_id`
+- header availability, graph availability, delta availability
+- `render_artifact_ref_id`
+- lineage: `correlation_id`, `trace_id`, `syscall_id`, `audit_id`, `proposed_by`, `committed_by`
 
-The listing API is available on semantic read stores as:
+Wrong workspace candidates are excluded. Requested lane matches the same lane, and an empty requested lane may match any lane in the workspace.
 
-- `ListContextSnapshots(scope, query, snapshotKind, limit)`
+## Scoring
 
-## Deterministic scoring model
+All scoring is deterministic lexical/scoped scoring. There is no LLM, modelruntime, GPU, or vector dependency.
 
-Each candidate receives a deterministic score with explicit components.
+Weights:
 
-Base components:
+- query score: `0.20`
+- scope score: `0.20`
+- snapshot kind score: `0.10`
+- recency score: `0.15`
+- lineage score: `0.10`
+- state overlap score: `0.10`
+- loop overlap score: `0.10`
+- artifact overlap score: `0.05`
 
-- query match
-- snapshot kind match
-- node overlap (Jaccard over graph node IDs)
-- edge overlap (Jaccard over graph edge IDs)
-- recency score (half-life decay)
-- fingerprint match bonus
-- preferred snapshot hint bonus (if requested)
+Bonuses:
+
+- fingerprint match bonus: `0.05`
+- preferred snapshot hint bonus: `0.15`
 
 Penalties:
 
-- staleness penalty
-- contradiction density penalty (conflict-marked graph nodes)
-- header-only penalty (when graph body is unavailable)
+- contradiction penalty from conflict-marked graph nodes
+- staleness penalty after one day
+- freshness penalty after fourteen days
+- header-only penalty when the graph body is unavailable
 
-Decision:
+The score object includes `total_score`, `confidence`, `requires_fresh_compile`, and non-empty `explain[]`.
 
-- select candidate when top score >= threshold
-- otherwise fallback to fresh compile
-- explicit fallback also occurs when no candidates or `freshCompileOnly=true`
+## Query Matching
 
-## Resume hints contract
+Query matching lowercases, trims whitespace, removes trivial punctuation, tokenizes, and compares:
 
-Optional request hints:
+- exact normalized query
+- token overlap
+- token subset/prefix matches
 
-- `preferredSnapshotId`
-- `minimumScore` (0..1)
-- `freshCompileOnly`
+Embeddings are not used as truth authority.
 
-Hints may be passed at:
+## Header-First Package
 
-- `payload.resumeHints`
-- `payload.restoreSnapshot.resumeHints`
-- `payload.compileOptions.resumeHints`
+Restore scoring returns a package with:
 
-## Persisted inspectability fields
+- selected snapshot and context packet IDs
+- restore confidence
+- `requires_fresh_compile`
+- selected score and score breakdown
+- selected header
+- resume hints
+- compact selected evidence refs
+- candidate summaries
+- trace
 
-When `persistSnapshot=true`, restore metadata persists:
+Full graph/delta expansion is opt-in through `expandRestoreGraph`.
 
-- `restore_scores_json`:
-  - decision
-  - threshold
-  - candidate count
-  - selected snapshot ID
-  - scored candidate rows
-- `resume_hints_json`:
-  - preferred snapshot recommendation
-  - threshold
-  - fresh compile recommendation
-  - top candidate metadata
+## Fresh Compile
 
-These fields are evidence for operator inspectability and replay/debug, not truth authority.
+`requires_fresh_compile=true` means the current restore candidates are not reliable enough for direct resume. This is set when no candidate exists, the top score is below threshold, restore hints force a fresh compile, or the candidate is hard-stale.
+
+Fresh compile does not discard snapshots. It records why a new compile was chosen.
+
+## Options
+
+`COMPILE_CONTEXT` accepts restore options at payload root, `compileOptions`, or `restoreSnapshot`:
+
+- `restoreMode`
+- `restoreSnapshotKind`
+- `restoreCandidateLimit`
+- `restoreMinScore`
+- `requireFreshCompileBelowThreshold`
+- `expandRestoreGraph`
+- `resumeHints`
+
+`persistSnapshot=false` keeps the historical non-restore behavior. Restore scoring metadata is produced on the governed snapshot persistence path.

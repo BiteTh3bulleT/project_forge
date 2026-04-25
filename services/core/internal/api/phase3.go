@@ -79,8 +79,10 @@ func (s *Server) handleEmbeddingStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg := s.embeddings.CurrentConfig(r.Context())
 	writeJSON(w, http.StatusOK, map[string]any{
-		"config": cfg,
-		"status": status,
+		"config":         cfg,
+		"health":         s.embeddings.ProviderHealth(r.Context(), provider, model),
+		"truthAuthority": false,
+		"status":         status,
 	})
 }
 

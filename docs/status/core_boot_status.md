@@ -21,7 +21,6 @@ None. All have safe defaults:
 | `FORGE_DATA_DIR` | `~/.config/forge` | SQLite DB, backups, exports live here |
 | `FORGE_CORE_PORT` | `18492` | HTTP listen port |
 | `FORGE_WORKSPACE_DIR` | `/` | Workspace root for file/ingest operations |
-| `FORGE_ALLOW_LEGACY_MEMORY_MUTATIONS` | unset/false | Keeps legacy v1 memory observation mutation endpoints blocked unless explicitly enabled |
 
 For an isolated dev boot, override all three:
 

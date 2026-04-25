@@ -5,7 +5,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 
@@ -13,17 +12,7 @@ import (
 	"forge/projectforge/services/core/internal/store"
 )
 
-func TestLegacyMemoryMutationEndpointsAreBlockedByDefaultAndAudited(t *testing.T) {
-	prev, hadPrev := os.LookupEnv("FORGE_ALLOW_LEGACY_MEMORY_MUTATIONS")
-	_ = os.Unsetenv("FORGE_ALLOW_LEGACY_MEMORY_MUTATIONS")
-	t.Cleanup(func() {
-		if !hadPrev {
-			_ = os.Unsetenv("FORGE_ALLOW_LEGACY_MEMORY_MUTATIONS")
-			return
-		}
-		_ = os.Setenv("FORGE_ALLOW_LEGACY_MEMORY_MUTATIONS", prev)
-	})
-
+func TestLegacyMemoryMutationEndpointsAreRetiredAndAudited(t *testing.T) {
 	dataDir := t.TempDir()
 	wsDir := t.TempDir()
 	st, err := store.Open(dataDir)
@@ -50,21 +39,21 @@ func TestLegacyMemoryMutationEndpointsAreBlockedByDefaultAndAudited(t *testing.T
 			name:          "create observation",
 			method:        http.MethodPost,
 			path:          "/api/memory/observations",
-			expectAction:  "legacy.memory.observation.create.blocked",
+			expectAction:  "legacy.memory.observation.create.retired",
 			expectSubject: "new",
 		},
 		{
 			name:          "patch observation",
 			method:        http.MethodPatch,
 			path:          "/api/memory/observations/42",
-			expectAction:  "legacy.memory.observation.patch.blocked",
+			expectAction:  "legacy.memory.observation.patch.retired",
 			expectSubject: "42",
 		},
 		{
 			name:          "mark observation usefulness",
 			method:        http.MethodPost,
 			path:          "/api/memory/observations/42/usefulness",
-			expectAction:  "legacy.memory.observation.usefulness.blocked",
+			expectAction:  "legacy.memory.observation.usefulness.retired",
 			expectSubject: "42",
 		},
 	}
@@ -83,22 +72,22 @@ func TestLegacyMemoryMutationEndpointsAreBlockedByDefaultAndAudited(t *testing.T
 			rr := httptest.NewRecorder()
 			h.ServeHTTP(rr, req)
 
-			if rr.Code != http.StatusForbidden {
-				t.Fatalf("expected forbidden, got %d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+			if rr.Code != http.StatusGone {
+				t.Fatalf("expected gone, got %d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
 			}
-			if got := rr.Body.String(); !strings.Contains(got, "use authoritative syscall path via /api/gateway/invoke") {
-				t.Fatalf("expected syscall guidance message, got %q", got)
+			if got := rr.Body.String(); !strings.Contains(got, "authoritative semantic syscall path") {
+				t.Fatalf("expected semantic syscall guidance message, got %q", got)
 			}
 
-			var blockedCount int
+			var retiredCount int
 			if err := st.DB.QueryRowContext(context.Background(), `
 SELECT COUNT(1) FROM audit_records
 WHERE category = 'memory' AND action = ? AND subject_id = ? AND outcome = 'denied'`, tc.expectAction, tc.expectSubject,
-			).Scan(&blockedCount); err != nil {
-				t.Fatalf("query blocked legacy memory mutation audit: %v", err)
+			).Scan(&retiredCount); err != nil {
+				t.Fatalf("query retired legacy memory mutation audit: %v", err)
 			}
-			if blockedCount == 0 {
-				t.Fatalf("expected blocked legacy memory mutation audit record for action=%s subject=%s", tc.expectAction, tc.expectSubject)
+			if retiredCount == 0 {
+				t.Fatalf("expected retired legacy memory mutation audit record for action=%s subject=%s", tc.expectAction, tc.expectSubject)
 			}
 
 			auditCorrelation, outcome, payload := mustAuditRecordByActionAndCorrelation(t, st, tc.expectAction, correlation)

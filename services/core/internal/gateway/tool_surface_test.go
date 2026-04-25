@@ -50,6 +50,20 @@ func TestToolCapabilityRegistryCoverageAndDuplicateRejection(t *testing.T) {
 	if len(reg.ListByRisk(domain.ToolRiskCritical)) == 0 {
 		t.Fatalf("expected critical-risk capabilities")
 	}
+	for _, row := range rows {
+		if strings.HasPrefix(row.AdapterID, "stub.") {
+			t.Fatalf("capability %s must not use synthetic stub adapter %q", row.ID, row.AdapterID)
+		}
+		if row.Status == domain.ToolCapabilityDeferred || row.Status == domain.ToolCapabilityStubbed {
+			t.Fatalf("capability %s must be active or approval_only by default, got %q", row.ID, row.Status)
+		}
+		if row.Status != domain.ToolCapabilityActive && row.Status != domain.ToolCapabilityApprovalOnly {
+			t.Fatalf("capability %s has unexpected default status %q", row.ID, row.Status)
+		}
+		if metadataString(row.Metadata, "gatewayToolId") == "" {
+			t.Fatalf("capability %s missing gatewayToolId metadata", row.ID)
+		}
+	}
 	err := reg.Register(domain.ToolCapability{
 		ID:          "filesystem.read_file",
 		Domain:      "filesystem",
@@ -62,6 +76,54 @@ func TestToolCapabilityRegistryCoverageAndDuplicateRejection(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatalf("expected duplicate registration to fail")
+	}
+}
+
+func TestGatewayRegistersToolForEveryCapability(t *testing.T) {
+	t.Parallel()
+	gw, _, _ := newToolSurfaceGatewayHarness(t)
+	tools := map[string]struct{}{}
+	for _, tool := range gw.Tools() {
+		tools[tool.ID] = struct{}{}
+	}
+	for _, capability := range gw.capabilities.List() {
+		toolID := metadataString(capability.Metadata, "gatewayToolId")
+		if toolID == "" {
+			t.Fatalf("capability %s missing gatewayToolId", capability.ID)
+		}
+		if _, ok := tools[toolID]; !ok {
+			t.Fatalf("capability %s maps to unregistered tool %s", capability.ID, toolID)
+		}
+	}
+}
+
+func TestToolCapabilityRegistryWithStorePersistsStatusOverrides(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer st.Close()
+
+	reg, err := NewToolCapabilityRegistryWithStore(ctx, &SQLiteOverrideStore{DB: st.DB})
+	if err != nil {
+		t.Fatalf("registry with store: %v", err)
+	}
+	if _, ok, err := reg.UpdateStatusWithReason(ctx, "filesystem.read_file", domain.ToolCapabilityDisabled, "tester", "test override"); err != nil || !ok {
+		t.Fatalf("update status: ok=%v err=%v", ok, err)
+	}
+
+	reloaded, err := NewToolCapabilityRegistryWithStore(ctx, &SQLiteOverrideStore{DB: st.DB})
+	if err != nil {
+		t.Fatalf("reload registry with store: %v", err)
+	}
+	capability, ok := reloaded.Get("filesystem.read_file")
+	if !ok {
+		t.Fatalf("missing filesystem.read_file after reload")
+	}
+	if capability.Status != domain.ToolCapabilityDisabled {
+		t.Fatalf("expected persisted disabled status, got %q", capability.Status)
 	}
 }
 
@@ -139,6 +201,137 @@ func TestToolCapabilityRegistryDangerousDefaultsNotFreelyActive(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGatewayExecuteAndWaitApprovesAndReruns(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	gw, st, workspace := newToolSurfaceGatewayHarness(t)
+	laneID := "execute.wait.write"
+	if _, err := gw.lanes.Save(ctx, lanes.Lane{
+		ID:               laneID,
+		Name:             "Execute Wait Write",
+		Description:      "Approval-gated write lane for ExecuteAndWait",
+		ActionType:       "invoke",
+		AllowedPaths:     []string{workspace},
+		WriteIntent:      true,
+		RequiresApproval: true,
+		RiskClass:        "safe_write",
+		MaxBytes:         1024,
+		Enabled:          true,
+	}); err != nil {
+		t.Fatalf("save lane: %v", err)
+	}
+	approveNextGatewayRequest(t, ctx, gw, st, "approved")
+
+	target := "scratch/execute-and-wait-approved.txt"
+	res, err := gw.ExecuteAndWait(ctx, Request{
+		ToolID:        "fs.write",
+		LaneID:        laneID,
+		Action:        "invoke",
+		CorrelationID: "execute-and-wait-approved",
+		TraceID:       "trace-execute-and-wait-approved",
+		Paths:         []string{target},
+		Input:         map[string]any{"contents": "approved\n"},
+		Initiator:     "tester",
+	})
+	if err != nil {
+		t.Fatalf("execute and wait: %v", err)
+	}
+	if res.Status != StatusOK {
+		t.Fatalf("expected ok after approval, got %s (%s)", res.Status, res.DeniedReason)
+	}
+	body, err := os.ReadFile(filepath.Join(workspace, target))
+	if err != nil {
+		t.Fatalf("read approved write: %v", err)
+	}
+	if string(body) != "approved\n" {
+		t.Fatalf("unexpected approved write contents %q", string(body))
+	}
+}
+
+func TestGatewayExecuteAndWaitDeniedApprovalReturnsDenied(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	gw, st, workspace := newToolSurfaceGatewayHarness(t)
+	laneID := "execute.wait.denied"
+	if _, err := gw.lanes.Save(ctx, lanes.Lane{
+		ID:               laneID,
+		Name:             "Execute Wait Denied",
+		Description:      "Approval-denied write lane for ExecuteAndWait",
+		ActionType:       "invoke",
+		AllowedPaths:     []string{workspace},
+		WriteIntent:      true,
+		RequiresApproval: true,
+		RiskClass:        "safe_write",
+		MaxBytes:         1024,
+		Enabled:          true,
+	}); err != nil {
+		t.Fatalf("save lane: %v", err)
+	}
+	approveNextGatewayRequest(t, ctx, gw, st, "denied")
+
+	target := "scratch/execute-and-wait-denied.txt"
+	res, err := gw.ExecuteAndWait(ctx, Request{
+		ToolID:        "fs.write",
+		LaneID:        laneID,
+		Action:        "invoke",
+		CorrelationID: "execute-and-wait-denied",
+		TraceID:       "trace-execute-and-wait-denied",
+		Paths:         []string{target},
+		Input:         map[string]any{"contents": "denied\n"},
+		Initiator:     "tester",
+	})
+	if err != nil {
+		t.Fatalf("execute and wait: %v", err)
+	}
+	if res.Status != StatusDenied {
+		t.Fatalf("expected denied after approval denial, got %s", res.Status)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, target)); !os.IsNotExist(err) {
+		t.Fatalf("denied write should not create target, stat err=%v", err)
+	}
+}
+
+func approveNextGatewayRequest(t *testing.T, ctx context.Context, gw *Gateway, st *store.Store, decision string) {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() {
+		ticker := time.NewTicker(10 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			var requestID int64
+			err := st.DB.QueryRowContext(ctx, `
+SELECT id
+FROM approval_requests
+WHERE status = 'pending'
+ORDER BY id DESC
+LIMIT 1`).Scan(&requestID)
+			if err == nil {
+				_, err = gw.approvals.Decide(ctx, requestID, "tester", decision, "test decision")
+				done <- err
+				return
+			}
+			select {
+			case <-ctx.Done():
+				done <- ctx.Err()
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+	t.Cleanup(func() {
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Errorf("approval decision failed: %v", err)
+			}
+		case <-time.After(2 * time.Second):
+			t.Errorf("approval decision goroutine did not finish")
+		}
+	})
 }
 
 func TestToolPolicyEvaluatorCoreDecisions(t *testing.T) {

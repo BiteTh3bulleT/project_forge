@@ -407,7 +407,14 @@ func applyCompileContext(store SemanticStore, req domain.SyscallRequest) ([]stri
 		CommittedBy:   "forge_kernel",
 	}, nil)
 	resumeHints := readCompileContextResumeHints(req.Payload)
-	candidates := store.ListContextSnapshots(req.Scope, packet.Query, opts.SnapshotKind, defaultRestoreCandidateLimit)
+	if opts.RestoreMinScore > 0 {
+		resumeHints.MinimumScore = opts.RestoreMinScore
+	}
+	candidateLimit := opts.RestoreCandidateLimit
+	if candidateLimit <= 0 {
+		candidateLimit = defaultRestoreCandidateLimit
+	}
+	candidates := store.ListContextSnapshots(req.Scope, packet.Query, opts.SnapshotKind, candidateLimit)
 	restoreSelection := selectCompileContextRestoreCandidate(req.RequestedAt, restoreInput, candidates, opts.SnapshotKind, resumeHints)
 	prior := restoreSelection.selectedPrior()
 
@@ -434,23 +441,41 @@ func applyCompileContext(store SemanticStore, req domain.SyscallRequest) ([]stri
 	}
 
 	applyCompiledSnapshotToPacket(&packet, snapshot, opts)
+	selected := restoreSelection.selectedCandidate()
+	selectedHeaderOnly := false
+	selectedEvidence := []string{}
+	if selected != nil {
+		selectedHeaderOnly = selected.HeaderOnly
+		selectedEvidence = dominantEvidenceIDs(selected.Snapshot.Graph)
+	}
 	if packet.RestoreSnapshot != nil {
 		if packet.RestoreSnapshot.Metadata == nil {
 			packet.RestoreSnapshot.Metadata = map[string]any{}
 		}
 		packet.RestoreSnapshot.Metadata["restore_scores_json"] = restoreSelection.restoreScoresMetadata()
 		packet.RestoreSnapshot.Metadata["resume_hints_json"] = restoreSelection.resumeHintsMetadata()
+		packet.RestoreSnapshot.Metadata["restore_trace_json"] = restoreSelection.selectionTraceMetadata()
+		packet.RestoreSnapshot.Metadata["restore_package_json"] = restoreSelection.restorePackageMetadata(opts.ExpandRestoreGraph)
 		packet.RestoreSnapshot.Metadata["restore_reason_json"] = map[string]any{
-			"mode":                  "compile_context_restore_selection",
-			"decision":              restoreSelection.Decision,
-			"threshold":             restoreSelection.Threshold,
-			"candidate_count":       len(restoreSelection.Candidates),
-			"selected_snapshot_id":  restoreSelection.selectedSnapshotID(),
-			"fingerprint_matched":   snapshot.Delta.FingerprintMatched,
-			"resume_hint_overrides": map[string]any{"preferredSnapshotId": resumeHints.PreferredSnapshotID, "minimumScore": resumeHints.MinimumScore, "freshCompileOnly": resumeHints.FreshCompileOnly},
+			"mode":                    "compile_context_restore_selection",
+			"decision":                restoreSelection.Decision,
+			"decision_reason":         restoreSelection.decisionReason(),
+			"threshold":               restoreSelection.Threshold,
+			"candidate_count":         len(restoreSelection.Candidates),
+			"candidate_pool_count":    restoreSelection.CandidatePool,
+			"candidates_filtered_out": restoreSelection.FilteredOut,
+			"selected_snapshot_id":    restoreSelection.selectedSnapshotID(),
+			"selected_evidence_ids":   selectedEvidence,
+			"selected_header_only":    selectedHeaderOnly,
+			"fingerprint_matched":     snapshot.Delta.FingerprintMatched,
+			"resume_hint_overrides":   map[string]any{"preferredSnapshotId": resumeHints.PreferredSnapshotID, "minimumScore": resumeHints.MinimumScore, "freshCompileOnly": resumeHints.FreshCompileOnly},
 		}
 		if selectedID := strings.TrimSpace(restoreSelection.selectedSnapshotID()); selectedID != "" {
 			packet.RestoreSnapshot.Metadata["restore_source_snapshot_id"] = selectedID
+		}
+		if selected != nil {
+			packet.RestoreSnapshot.Metadata["selected_evidence_ids"] = selectedEvidence
+			packet.RestoreSnapshot.Metadata["selected_header_only"] = selectedHeaderOnly
 		}
 	}
 	if err := store.CreateContextSnapshot(packet); err != nil {
@@ -466,6 +491,9 @@ func applyCompileContext(store SemanticStore, req domain.SyscallRequest) ([]stri
 		warnings = append(warnings, "restore selection score below threshold; fresh compile used")
 	case "fresh_compile_forced":
 		warnings = append(warnings, "restore selection forced to fresh compile by resume hints")
+	}
+	if restoreSelection.Decision == "selected" && selectedHeaderOnly {
+		warnings = append(warnings, "restore selected header-only candidate; evidence expansion will continue during compile")
 	}
 
 	return committedIDs, map[string]any{

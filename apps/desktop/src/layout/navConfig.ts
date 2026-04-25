@@ -1,18 +1,18 @@
-/** Left-rail navigation — guided mode defaults to practical day-to-day routes. */
+/** Legacy route help retained for command/search surfaces. The shell rail now uses cognitive/metrics modes. */
 
-export type UiMode = "guided" | "pro";
+export type UiMode = "cognitive" | "metrics";
 
 export type NavItem = {
   to: string;
   label: string;
   blurb?: string;
-  mode?: "guided" | "pro" | "both";
+  mode?: "cognitive" | "metrics" | "both";
 };
 
 export type NavGroup = {
   id: string;
   label: string;
-  mode?: "guided" | "pro" | "both";
+  mode?: "cognitive" | "metrics" | "both";
   items: readonly NavItem[];
 };
 
@@ -35,7 +35,7 @@ export const navGroups: readonly NavGroup[] = [
       { to: "/jobs", label: "Jobs", blurb: "Track running and finished work.", mode: "both" },
       { to: "/approvals", label: "Approvals", blurb: "Allow or deny risky actions.", mode: "both" },
       { to: "/reviews", label: "Reviews", blurb: "Review imported/generated output.", mode: "both" },
-      { to: "/workbench", label: "Artifacts", blurb: "Inspect generated files.", mode: "guided" },
+      { to: "/workbench", label: "Artifacts", blurb: "Inspect generated files.", mode: "cognitive" },
     ],
   },
   {
@@ -45,12 +45,12 @@ export const navGroups: readonly NavGroup[] = [
     items: [
       { to: "/memory", label: "Search Memory", blurb: "Find indexed context fast.", mode: "both" },
       { to: "/project-context", label: "Project Context", blurb: "Normalize and regenerate guidance.", mode: "both" },
-      { to: "/inspectors", label: "Inspectors", blurb: "Read-only packet, snapshot, and trace evidence.", mode: "pro" },
+      { to: "/inspectors", label: "Inspectors", blurb: "Read-only packet, snapshot, and trace evidence.", mode: "metrics" },
       { to: "/dossiers", label: "Projects", blurb: "Dossiers and project preferences.", mode: "both" },
-      { to: "/retrieval-runs", label: "Retrieval Runs", blurb: "Inspect keyword/semantic retrieval.", mode: "pro" },
-      { to: "/lineage", label: "Retries & Lineage", blurb: "Compare retries/replays.", mode: "pro" },
-      { to: "/evaluations", label: "Evaluations", blurb: "Score outcomes and quality.", mode: "pro" },
-      { to: "/insights", label: "Insights", blurb: "Routing advisories.", mode: "pro" },
+      { to: "/retrieval-runs", label: "Retrieval Runs", blurb: "Inspect keyword/semantic retrieval.", mode: "metrics" },
+      { to: "/lineage", label: "Retries & Lineage", blurb: "Compare retries/replays.", mode: "cognitive" },
+      { to: "/evaluations", label: "Evaluations", blurb: "Score outcomes and quality.", mode: "metrics" },
+      { to: "/insights", label: "Insights", blurb: "Routing advisories.", mode: "cognitive" },
     ],
   },
   {
@@ -66,17 +66,17 @@ export const navGroups: readonly NavGroup[] = [
   {
     id: "advanced",
     label: "Advanced",
-    mode: "pro",
+    mode: "metrics",
     items: [
-      { to: "/canvas", label: "Canvas", blurb: "Spatial planning board.", mode: "pro" },
-      { to: "/command", label: "Command", blurb: "Template launch surface.", mode: "pro" },
-      { to: "/gateway", label: "Tool Gateway", blurb: "Bounded tool invocation.", mode: "pro" },
-      { to: "/action-lanes", label: "Action Lanes", blurb: "Operational lanes.", mode: "pro" },
-      { to: "/execution-permissions", label: "Execution Permissions", blurb: "Permission profile tuning.", mode: "pro" },
-      { to: "/audit", label: "Audit", blurb: "Audit trail inspection.", mode: "pro" },
-      { to: "/backup", label: "Backup / Export", blurb: "Create and restore bundles.", mode: "pro" },
-      { to: "/release", label: "Release", blurb: "Readiness and release records.", mode: "pro" },
-      { to: "/events", label: "Events", blurb: "Global event stream.", mode: "pro" },
+      { to: "/canvas", label: "Canvas", blurb: "Spatial planning board.", mode: "cognitive" },
+      { to: "/command", label: "Command", blurb: "Template launch surface.", mode: "metrics" },
+      { to: "/gateway", label: "Tool Gateway", blurb: "Bounded tool invocation.", mode: "metrics" },
+      { to: "/action-lanes", label: "Action Lanes", blurb: "Operational lanes.", mode: "metrics" },
+      { to: "/execution-permissions", label: "Execution Permissions", blurb: "Permission profile tuning.", mode: "metrics" },
+      { to: "/audit", label: "Audit", blurb: "Audit trail inspection.", mode: "metrics" },
+      { to: "/backup", label: "Backup / Export", blurb: "Create and restore bundles.", mode: "metrics" },
+      { to: "/release", label: "Release", blurb: "Readiness and release records.", mode: "metrics" },
+      { to: "/events", label: "Events", blurb: "Global event stream.", mode: "metrics" },
     ],
   },
   {

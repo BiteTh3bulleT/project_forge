@@ -537,11 +537,82 @@ func validateResumeHints(raw any, prefix string) []domain.SyscallError {
 			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".minimum_score", "minimum_score must be between 0 and 1"))
 		}
 	}
+	if restoreConfidence, exists := hints["restoreConfidence"]; exists {
+		if !isNumeric(restoreConfidence) {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".restoreConfidence", "restoreConfidence must be a number between 0 and 1"))
+		} else if value := readFloat(hints, "restoreConfidence", -1); value < 0 || value > 1 {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".restoreConfidence", "restoreConfidence must be between 0 and 1"))
+		}
+	}
+	if restoreConfidenceLegacy, exists := hints["restore_confidence"]; exists {
+		if !isNumeric(restoreConfidenceLegacy) {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".restore_confidence", "restore_confidence must be a number between 0 and 1"))
+		} else if value := readFloat(hints, "restore_confidence", -1); value < 0 || value > 1 {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".restore_confidence", "restore_confidence must be between 0 and 1"))
+		}
+	}
+	if nextAction, exists := hints["nextAction"]; exists {
+		if value, ok := nextAction.(string); !ok || strings.TrimSpace(value) == "" {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".nextAction", "nextAction must be a non-empty string"))
+		}
+	}
+	if nextActionLegacy, exists := hints["next_action"]; exists {
+		if value, ok := nextActionLegacy.(string); !ok || strings.TrimSpace(value) == "" {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".next_action", "next_action must be a non-empty string"))
+		}
+	}
+	if topBlockers, exists := hints["topBlockers"]; exists && !isStringSlice(topBlockers) {
+		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".topBlockers", "topBlockers must be an array"))
+	}
+	if topBlockersLegacy, exists := hints["top_blockers"]; exists && !isStringSlice(topBlockersLegacy) {
+		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".top_blockers", "top_blockers must be an array"))
+	}
+	if dominantStates, exists := hints["dominantStateKeys"]; exists && !isStringSlice(dominantStates) {
+		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".dominantStateKeys", "dominantStateKeys must be an array"))
+	}
+	if dominantStatesLegacy, exists := hints["dominant_state_keys"]; exists && !isStringSlice(dominantStatesLegacy) {
+		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".dominant_state_keys", "dominant_state_keys must be an array"))
+	}
+	if dominantLoops, exists := hints["dominantLoopIds"]; exists && !isStringSlice(dominantLoops) {
+		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".dominantLoopIds", "dominantLoopIds must be an array"))
+	}
+	if dominantLoopsLegacy, exists := hints["dominant_loop_ids"]; exists && !isStringSlice(dominantLoopsLegacy) {
+		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".dominant_loop_ids", "dominant_loop_ids must be an array"))
+	}
+	if evidence, exists := hints["recommendedEvidenceIds"]; exists && !isStringSlice(evidence) {
+		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".recommendedEvidenceIds", "recommendedEvidenceIds must be an array"))
+	}
+	if evidenceLegacy, exists := hints["recommended_evidence_ids"]; exists && !isStringSlice(evidenceLegacy) {
+		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".recommended_evidence_ids", "recommended_evidence_ids must be an array"))
+	}
+	if evidenceLegacy, exists := hints["recommendedEvidenceIDs"]; exists && !isStringSlice(evidenceLegacy) {
+		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".recommendedEvidenceIDs", "recommendedEvidenceIDs must be an array"))
+	}
+	if recencyWindowMs, exists := hints["recencyWindowMs"]; exists {
+		if !isNumeric(recencyWindowMs) {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".recencyWindowMs", "recencyWindowMs must be a number"))
+		} else if value := readFloat(hints, "recencyWindowMs", -1); value < 0 {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".recencyWindowMs", "recencyWindowMs must be a non-negative number"))
+		}
+	}
+	if recencyWindowLegacy, exists := hints["recency_window_ms"]; exists {
+		if !isNumeric(recencyWindowLegacy) {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".recency_window_ms", "recency_window_ms must be a number"))
+		} else if value := readFloat(hints, "recency_window_ms", -1); value < 0 {
+			issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".recency_window_ms", "recency_window_ms must be a non-negative number"))
+		}
+	}
 	if _, present, valid := readOptionalBool(hints, "freshCompileOnly"); present && !valid {
 		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".freshCompileOnly", "freshCompileOnly must be a boolean"))
 	}
 	if _, present, valid := readOptionalBool(hints, "fresh_compile_only"); present && !valid {
 		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".fresh_compile_only", "fresh_compile_only must be a boolean"))
+	}
+	if _, present, valid := readOptionalBool(hints, "requiresFreshCompile"); present && !valid {
+		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".requiresFreshCompile", "requiresFreshCompile must be a boolean"))
+	}
+	if _, present, valid := readOptionalBool(hints, "requires_fresh_compile"); present && !valid {
+		issues = append(issues, errField(domain.ErrInvalidPayload, prefix+".requires_fresh_compile", "requires_fresh_compile must be a boolean"))
 	}
 	return issues
 }
@@ -713,6 +784,17 @@ func readStringSlice(m map[string]any, key string) []string {
 		return out
 	default:
 		return nil
+	}
+}
+
+func isStringSlice(v any) bool {
+	switch x := v.(type) {
+	case []string:
+		return len(x) >= 0
+	case []any:
+		return len(x) >= 0
+	default:
+		return false
 	}
 }
 

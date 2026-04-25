@@ -32,10 +32,10 @@ Path-specific IDs (when applicable):
 3. Autonomy
 - intent -> policy/budget/approval decision -> syscall/tool execution -> decision trace + audit
 
-4. Legacy boundaries (explicit)
+4. Retired boundaries (explicit)
 - adapter invoke legacy route is removed; no legacy adapter-route audit action remains
-- v1 memory observation mutation legacy path emits `legacy.memory.observation.*.blocked/used`
-- legacy boundary audit payloads now carry `correlationId` and include `traceId` / `workspaceId` when supplied by request context
+- retired memory observation mutation endpoints emit `legacy.memory.observation.*.retired`
+- retired-boundary audit payloads carry `correlationId` and include `traceId` / `workspaceId` when supplied by request context
 
 5. Backup restore
 - restore result includes `imported`, `skipped`, `unsupported`, `errors`

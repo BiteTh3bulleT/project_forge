@@ -12,12 +12,12 @@ import (
 )
 
 const (
-	sqliteAutonomyPrefix       = "autonomy_repo."
-	sqliteAutonomyCharterPref  = sqliteAutonomyPrefix + "charter."
-	sqliteAutonomyIntentPref   = sqliteAutonomyPrefix + "intent."
-	sqliteAutonomyBudgetPref   = sqliteAutonomyPrefix + "budget."
-	sqliteAutonomyDecisionPref = sqliteAutonomyPrefix + "decision."
-	sqliteAutonomyReservePref  = sqliteAutonomyPrefix + "reservation."
+	sqliteAutonomyPrefix        = "autonomy_repo."
+	sqliteAutonomyCharterPref   = sqliteAutonomyPrefix + "charter."
+	sqliteAutonomyIntentPref    = sqliteAutonomyPrefix + "intent."
+	sqliteAutonomyBudgetPref    = sqliteAutonomyPrefix + "budget."
+	sqliteAutonomyDecisionPref  = sqliteAutonomyPrefix + "decision."
+	sqliteAutonomyReservePref   = sqliteAutonomyPrefix + "reservation."
 	sqliteAutonomyCuriosityPref = sqliteAutonomyPrefix + "curiosity."
 )
 
@@ -50,6 +50,10 @@ var (
 	_ CuriosityRepository   = (*SQLiteCuriosityRepository)(nil)
 )
 
+// NewSQLiteBundle returns a durable bundle backed by the provided SQLite DB,
+// or a permissive in-memory bundle when db is nil. The in-memory path is
+// preserved for tests and diagnostic modes; production callers should use
+// NewSQLiteBundleStrict to fail closed when durable backing is absent.
 func NewSQLiteBundle(db *sql.DB) SQLiteBundle {
 	if db == nil {
 		mem := NewInMemoryBundle()
@@ -71,6 +75,16 @@ func NewSQLiteBundle(db *sql.DB) SQLiteBundle {
 		Reservations: &SQLiteReservationRepository{kv: kv},
 		Curiosity:    &SQLiteCuriosityRepository{kv: kv},
 	}
+}
+
+// NewSQLiteBundleStrict returns an error if db is nil so autonomy self-commit
+// paths can refuse to run with a non-durable fallback. Call this from
+// production wiring after the core store is open.
+func NewSQLiteBundleStrict(db *sql.DB) (SQLiteBundle, error) {
+	if db == nil {
+		return SQLiteBundle{}, fmt.Errorf("autonomy bundle requires a durable SQLite DB; refusing in-memory fallback in strict mode")
+	}
+	return NewSQLiteBundle(db), nil
 }
 
 func (r *sqliteKVRepository) get(ctx context.Context, key string) (string, bool, error) {

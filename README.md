@@ -2,6 +2,19 @@
 
 FORGE is a local-first AI workspace for inspectable, approval-gated engineering work.
 
+## CPU/RAM Kernel + GPU Accelerator Split
+
+FORGE core authority is CPU/RAM-only by design.
+
+- kernel/control/journal/state truth authority remains in `forge-core`
+- GPU-aware inference is isolated to governed modelruntime paths
+- safe mode supports CPU-only degraded operation without breaking core authority
+
+References:
+
+- `docs/architecture/cpu_ram_kernel_gpu_accelerator_split.md`
+- `docs/runbooks/no_gpu_boot_and_recovery.md`
+
 The desktop client now supports a **monitor-aware desktop shell**:
 
 - multiple real Tauri shell windows
@@ -13,6 +26,9 @@ The desktop client now supports a **monitor-aware desktop shell**:
 - observation-based memory architecture with retrieval run inspectability, packet alignment notes, and usefulness/repair controls
 - scheduled + manual memory repair runs with persisted before/after traces
 - governed full tool layer with typed actions, lane/profile policy checks, approvals, and audit traceability
+- deterministic context restore scoring with header-first restore packages
+- Dream Mode v0 dry-run replay/consolidation reports
+- optional NVIDIA DCGM / Intel Level Zero GPU telemetry and Hugging Face TEI embedding provider diagnostics
 
 This is a real desktop feature. FORGE does not simulate monitors or invent off-screen window state.
 
@@ -102,6 +118,16 @@ Default endpoints:
 - Desktop dev server: `http://localhost:5173`
 - Default shell route: `#/chat`
 
+Dry-run maintenance endpoints:
+
+```bash
+curl -sS http://127.0.0.1:18492/api/dream/run \
+  -H 'Content-Type: application/json' \
+  -d '{"workspaceId":"default","laneId":"control.semantic","mode":"microdream"}'
+```
+
+Dream Mode v0 is CPU-only and proposal-only. It does not require GPU/modelruntime and does not commit canonical memory.
+
 ## Daily Flow
 
 1. Start the main FORGE shell window.
@@ -126,6 +152,13 @@ Default endpoints:
 - `docs/CAPABILITY_BROKERS.md`
 - `docs/POLICY_AND_APPROVALS.md`
 - `docs/AUDIT_AND_TRACE.md`
+- `docs/architecture/context_restore_scoring.md`
+- `docs/architecture/dream_mode.md`
+- `docs/operations/restore_scoring.md`
+- `docs/operations/dream_mode.md`
+- `docs/operations/nvidia_dcgm.md`
+- `docs/operations/intel_level_zero.md`
+- `docs/operations/huggingface_tei.md`
 
 Surface/system references:
 

@@ -23,16 +23,16 @@ type Rule struct {
 }
 
 type HistoryEntry struct {
-	ID         int64           `json:"id"`
-	CreatedAtMs int64          `json:"createdAtMs"`
-	RuleID     *int64          `json:"ruleId"`
-	Trigger    string          `json:"trigger"`
-	Matched    bool            `json:"matched"`
-	DryRun     bool            `json:"dryRun"`
-	Status     string          `json:"status"`
-	Message    string          `json:"message"`
-	Preview    json.RawMessage `json:"preview"`
-	Result     json.RawMessage `json:"result"`
+	ID          int64           `json:"id"`
+	CreatedAtMs int64           `json:"createdAtMs"`
+	RuleID      *int64          `json:"ruleId"`
+	Trigger     string          `json:"trigger"`
+	Matched     bool            `json:"matched"`
+	DryRun      bool            `json:"dryRun"`
+	Status      string          `json:"status"`
+	Message     string          `json:"message"`
+	Preview     json.RawMessage `json:"preview"`
+	Result      json.RawMessage `json:"result"`
 }
 
 type SaveRuleRequest struct {
@@ -47,20 +47,20 @@ type SaveRuleRequest struct {
 }
 
 type RunRequest struct {
-	RuleID   int64          `json:"ruleId"`
-	Trigger  string         `json:"trigger"`
-	Context  map[string]any `json:"context"`
-	DryRun   *bool          `json:"dryRun"`
+	RuleID  int64          `json:"ruleId"`
+	Trigger string         `json:"trigger"`
+	Context map[string]any `json:"context"`
+	DryRun  *bool          `json:"dryRun"`
 }
 
 type RunResult struct {
-	Rule       Rule           `json:"rule"`
-	Matched    bool           `json:"matched"`
-	DryRun     bool           `json:"dryRun"`
-	Preview    map[string]any `json:"preview"`
-	Executed   bool           `json:"executed"`
-	Execution  map[string]any `json:"execution"`
-	HistoryID  int64          `json:"historyId"`
+	Rule      Rule           `json:"rule"`
+	Matched   bool           `json:"matched"`
+	DryRun    bool           `json:"dryRun"`
+	Preview   map[string]any `json:"preview"`
+	Executed  bool           `json:"executed"`
+	Execution map[string]any `json:"execution"`
+	HistoryID int64          `json:"historyId"`
 }
 
 type Executor func(ctx context.Context, action map[string]any, scope map[string]any, dryRun bool) (map[string]any, error)

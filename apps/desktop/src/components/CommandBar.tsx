@@ -20,9 +20,9 @@ export function CommandBar(props: { compact?: boolean }) {
 
   const hint = useMemo(
     () =>
-      uiMode === "guided"
-        ? "Quick actions handle most work. You can still type commands like: search auth, ollama summary, go /jobs."
-        : "Commands: go /path, :reindex, job <query>, ollama summary <query>, codex packet <query>, claude packet <query>.",
+      uiMode === "cognitive"
+        ? "Cognitive mode keeps command entry focused on search, jobs, approvals, and current context."
+        : "Metrics mode accepts route jumps plus diagnostics commands: go /path, :reindex, job <query>, ollama summary <query>.",
     [uiMode],
   );
 
@@ -32,7 +32,7 @@ export function CommandBar(props: { compact?: boolean }) {
     try {
       if (id === "start") {
         navigate("/start");
-        setStatus("Opened guided start.");
+        setStatus("Opened start surface.");
         return;
       }
       if (id === "memory") {
@@ -106,7 +106,7 @@ export function CommandBar(props: { compact?: boolean }) {
 
       if (verb === "help" || verb === "start") {
         navigate("/start");
-        setStatus("Opened guided start.");
+        setStatus("Opened start surface.");
         setDraft("");
         return;
       }
@@ -239,7 +239,7 @@ export function CommandBar(props: { compact?: boolean }) {
     }
   }
 
-  const quickButtons = uiMode === "guided"
+  const quickButtons = uiMode === "cognitive"
     ? [
         { id: "start", label: "Start" },
         { id: "memory", label: "Search Memory" },
@@ -260,7 +260,7 @@ export function CommandBar(props: { compact?: boolean }) {
       <div className="flex items-center gap-2">
         <input
           className="forge-input min-h-[2rem] py-1.5 text-[12px]"
-          placeholder={uiMode === "guided" ? "search auth | ollama summary | go /jobs" : "go /jobs · :reindex · codex packet"}
+          placeholder={uiMode === "cognitive" ? "search auth | go /jobs" : "go /dashboard | :reindex"}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -297,7 +297,7 @@ export function CommandBar(props: { compact?: boolean }) {
           <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist/55">Command</span>
           <input
             className="forge-input min-h-[2.25rem] py-1.5 text-[13px]"
-            placeholder={uiMode === "guided" ? "Try: search auth flow | ollama summary | go /jobs" : "go /jobs · :reindex · codex packet auth fix"}
+            placeholder={uiMode === "cognitive" ? "Try: search auth flow | go /jobs" : "go /dashboard | :reindex | codex packet auth fix"}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -312,7 +312,7 @@ export function CommandBar(props: { compact?: boolean }) {
             {busy ? "…" : "Run"}
           </button>
           <span className="forge-kbd hidden sm:inline" title="Submit">
-            ↵
+            Enter
           </span>
         </div>
       </div>

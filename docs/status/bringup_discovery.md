@@ -90,15 +90,10 @@ repointed to a different core without rebuilding.
 
 ### High (behavioral)
 
-- **[HIGH] Autonomy default mode is `maintain`, not `off`.**
-  [autonomy_maintenance_loop.go:106, :707](services/core/internal/api/autonomy_maintenance_loop.go#L106).
-  Fresh boot auto-creates 4 default charters and 2 default budgets (verified
-  via live `/api/autonomy/status`). Default budgets disallow external
-  calls without approval, but the system is performing background work
-  on first start. Observed on a clean boot: `dream.active=false`,
-  `activeIntents=0`, so nothing was actually mid-execution. Still, the
-  safety posture is "maintain with zero intents" rather than "off until
-  operator enables".
+- **[RESOLVED] Autonomy default mode is now `observe`.**
+  Fresh boot still seeds 4 default charters and 2 default budgets for
+  inspection, but maintain/mission behavior requires an explicit
+  `autonomy_mode` operator setting.
 
 ### Medium (visibility)
 
@@ -135,7 +130,7 @@ The phase defines four progressively-wider bring-up targets:
 Core HTTP endpoints respond with non-error shapes:
 - `/health` → 200, healthy JSON.
 - `/api/meta` → data/workspace/DB paths.
-- `/api/autonomy/status` → mode=`maintain`, dream inactive.
+- `/api/autonomy/status` → mode=`observe`, dream inactive.
 - `/api/telegram/status`, `/api/discord/status` → disabled states reported honestly.
 - `/api/adapters` → registered adapters listed with status.
 - `/api/jobs` → empty list.

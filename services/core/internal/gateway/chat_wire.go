@@ -12,11 +12,11 @@ const chatModelPrefix = "forge_"
 // legacyChatToolAliases maps older model-facing names to gateway tool IDs.
 var legacyChatToolAliases = map[string]string{
 	"filesystem_create_directory": "fs.mkdir",
-	"filesystem_list_directory":     "fs.list",
-	"filesystem_read_file":          "fs.read",
-	"filesystem_write_file":         "fs.write",
-	"shell_run_scoped":              "proc.run",
-	"git_status":                    "git.status",
+	"filesystem_list_directory":   "fs.list",
+	"filesystem_read_file":        "fs.read",
+	"filesystem_write_file":       "fs.write",
+	"shell_run_scoped":            "proc.run",
+	"git_status":                  "git.status",
 }
 
 // ChatModelName returns a stable OpenAI-safe function name for a gateway tool ID.

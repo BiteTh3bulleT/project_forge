@@ -284,9 +284,9 @@ func (s *Server) handleRunAutomationRule(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) handleAnalyzePacketGuidance(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		PacketID  int64  `json:"packetId"`
+		PacketID  int64   `json:"packetId"`
 		JobID     *string `json:"jobId"`
-		DossierID *int64 `json:"dossierId"`
+		DossierID *int64  `json:"dossierId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid json", http.StatusBadRequest)

@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"forge/projectforge/services/core/internal/audit"
+	"forge/projectforge/services/core/internal/gateway"
 )
 
 type contextSnapshotInspectorCounts struct {
@@ -46,6 +47,8 @@ type contextSnapshotInspectorSummary struct {
 	HasDelta            bool                           `json:"hasDelta"`
 	HasRestoreScores    bool                           `json:"hasRestoreScores"`
 	HasResumeHints      bool                           `json:"hasResumeHints"`
+	HasRestoreTrace     bool                           `json:"hasRestoreTrace"`
+	RestoreTrace        json.RawMessage                `json:"restoreTrace,omitempty"`
 }
 
 type contextSnapshotInspectorDetail struct {
@@ -57,6 +60,7 @@ type contextSnapshotInspectorDetail struct {
 	Delta               json.RawMessage                 `json:"delta"`
 	RestoreScores       json.RawMessage                 `json:"restoreScores"`
 	ResumeHints         json.RawMessage                 `json:"resumeHints"`
+	RestoreTrace        json.RawMessage                 `json:"restoreTrace"`
 	Metadata            json.RawMessage                 `json:"metadata"`
 	IncludedStateIDs    []string                        `json:"includedStateIds"`
 	IncludedOpenLoops   []string                        `json:"includedOpenLoops"`
@@ -65,6 +69,55 @@ type contextSnapshotInspectorDetail struct {
 	IncludedModelIDs    []string                        `json:"includedModelIds"`
 	IncludedArtifactIDs []string                        `json:"includedArtifactIds"`
 	IncludedEventIDs    []string                        `json:"includedEventIds"`
+}
+
+type processHealthRuntime struct {
+	Available       bool            `json:"available"`
+	State           string          `json:"state,omitempty"`
+	SafeMode        bool            `json:"safeMode"`
+	SafeModeReasons []string        `json:"safeModeReasons,omitempty"`
+	RuntimeEnabled  bool            `json:"runtimeEnabled"`
+	GPUAware        bool            `json:"gpuAware"`
+	Health          json.RawMessage `json:"health,omitempty"`
+	Queue           json.RawMessage `json:"queue,omitempty"`
+	Loaded          json.RawMessage `json:"loaded,omitempty"`
+	Usage           json.RawMessage `json:"usage,omitempty"`
+	Error           string          `json:"error,omitempty"`
+	Warnings        []string        `json:"warnings,omitempty"`
+}
+
+type processHealthInvocation struct {
+	CorrelationID string `json:"correlationId"`
+	InvocationID  int64  `json:"invocationId"`
+	ToolID        string `json:"toolId"`
+	Action        string `json:"action"`
+	Domain        string `json:"domain"`
+	LaneID        string `json:"laneId,omitempty"`
+	Initiator     string `json:"initiator"`
+	Status        string `json:"status"`
+	PolicyOutcome string `json:"policyOutcome"`
+	RiskClass     string `json:"riskClass"`
+	WriteIntent   bool   `json:"writeIntent"`
+	DeniedReason  string `json:"deniedReason,omitempty"`
+	StartedAtMs   int64  `json:"startedAtMs"`
+	CompletedAtMs int64  `json:"completedAtMs,omitempty"`
+	DurationMs    int64  `json:"durationMs,omitempty"`
+	TraceID       string `json:"traceId,omitempty"`
+}
+
+type processHealthCorrelationReport struct {
+	CorrelationID          string                    `json:"correlationId"`
+	ProcessInvocations     []processHealthInvocation `json:"processInvocations"`
+	TotalInvocations       int                       `json:"totalInvocations"`
+	ProcessInvocationCount int                       `json:"processInvocationCount"`
+}
+
+type processHealthTraceResponse struct {
+	CorrelationIDs []string                         `json:"correlationIds"`
+	CorrelationID  string                           `json:"correlationId,omitempty"`
+	TraceID        string                           `json:"traceId,omitempty"`
+	Reports        []processHealthCorrelationReport `json:"reports"`
+	Runtime        processHealthRuntime             `json:"runtime"`
 }
 
 type contextSnapshotInspectorRow struct {
@@ -89,6 +142,7 @@ type contextSnapshotInspectorRow struct {
 	RestoreScoresJSON     string
 	RenderArtifactRefID   string
 	ResumeHintsJSON       string
+	RestoreTraceJSON      string
 	BudgetJSON            string
 	InclusionReasonsJSON  string
 	CreatedAtMs           int64
@@ -105,6 +159,52 @@ type auditTraceLookupResult struct {
 	CorrelationID string                 `json:"correlationId"`
 	Records       []audit.Record         `json:"records"`
 	Report        correlationTraceReport `json:"report"`
+}
+
+func isProcessGatewayInvocation(rec gateway.InvocationRecord) bool {
+	tool := strings.ToLower(strings.TrimSpace(rec.ToolID))
+	domain := strings.ToLower(strings.TrimSpace(rec.Domain))
+	if domain == "proc" || domain == "process" {
+		return true
+	}
+	if strings.HasPrefix(tool, "proc.") || strings.HasPrefix(tool, "process.") {
+		return true
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(rec.Action)), "process") {
+		return true
+	}
+	return false
+}
+
+func normalizeProcessInvocation(rec gateway.InvocationRecord) processHealthInvocation {
+	item := processHealthInvocation{
+		CorrelationID: strings.TrimSpace(rec.CorrelationID),
+		InvocationID:  rec.ID,
+		ToolID:        strings.TrimSpace(rec.ToolID),
+		Action:        strings.TrimSpace(rec.Action),
+		Domain:        strings.TrimSpace(rec.Domain),
+		Initiator:     strings.TrimSpace(rec.Initiator),
+		Status:        strings.TrimSpace(rec.Status),
+		PolicyOutcome: strings.TrimSpace(rec.PolicyOutcome),
+		RiskClass:     strings.TrimSpace(rec.RiskClass),
+		WriteIntent:   rec.WriteIntent,
+		DeniedReason:  strings.TrimSpace(rec.DeniedReason),
+		StartedAtMs:   rec.CreatedAtMs,
+		TraceID:       strings.TrimSpace(rec.TraceID),
+	}
+	if rec.LaneID != nil && strings.TrimSpace(*rec.LaneID) != "" {
+		item.LaneID = strings.TrimSpace(*rec.LaneID)
+	}
+	if rec.CompletedAtMs != nil && *rec.CompletedAtMs > 0 {
+		item.CompletedAtMs = *rec.CompletedAtMs
+		if item.CompletedAtMs >= item.StartedAtMs {
+			item.DurationMs = item.CompletedAtMs - item.StartedAtMs
+		}
+	}
+	if item.DurationMs < 0 {
+		item.DurationMs = 0
+	}
+	return item
 }
 
 func (s *Server) handleContextSnapshotList(w http.ResponseWriter, r *http.Request) {
@@ -196,6 +296,124 @@ WHERE id = ?`, id)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"snapshot": detailContextSnapshotRow(records[0])})
+}
+
+func (s *Server) handleProcessHealthTrace(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	correlationID := strings.TrimSpace(r.URL.Query().Get("correlationId"))
+	traceID := strings.TrimSpace(r.URL.Query().Get("traceId"))
+	if correlationID == "" && traceID == "" {
+		http.Error(w, "correlationId or traceId is required", http.StatusBadRequest)
+		return
+	}
+
+	correlationIDs := []string{}
+	if correlationID != "" {
+		correlationIDs = append(correlationIDs, correlationID)
+	} else {
+		ids, err := s.listCorrelationIDsByTraceID(ctx, traceID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		correlationIDs = ids
+	}
+	if len(correlationIDs) == 0 {
+		http.Error(w, "no correlated correlation ids", http.StatusNotFound)
+		return
+	}
+	if s.gateway == nil {
+		http.Error(w, "gateway unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	reports := make([]processHealthCorrelationReport, 0, len(correlationIDs))
+	for _, cid := range correlationIDs {
+		allInvocations, err := s.gateway.ListInvocationsByCorrelation(ctx, cid, 500)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		items := make([]processHealthInvocation, 0, len(allInvocations))
+		for _, inv := range allInvocations {
+			if isProcessGatewayInvocation(inv) {
+				items = append(items, normalizeProcessInvocation(inv))
+			}
+		}
+		reports = append(reports, processHealthCorrelationReport{
+			CorrelationID:          cid,
+			ProcessInvocations:     items,
+			TotalInvocations:       len(allInvocations),
+			ProcessInvocationCount: len(items),
+		})
+	}
+
+	out := processHealthTraceResponse{
+		CorrelationIDs: correlationIDs,
+		TraceID:        traceID,
+		Runtime: processHealthRuntime{
+			Available:      false,
+			State:          "unavailable",
+			SafeMode:       s.cfg.SafeModeForceCPUOnly,
+			RuntimeEnabled: s.modelRuntime != nil,
+			GPUAware:       s.cfg.GPUEnabled && !s.cfg.SafeModeForceCPUOnly,
+		},
+		Reports: reports,
+	}
+	if s.cfg.SafeModeForceCPUOnly {
+		out.Runtime.SafeModeReasons = append(out.Runtime.SafeModeReasons, "safe_mode.force_cpu_only is enabled")
+	}
+	if correlationID != "" {
+		out.CorrelationID = correlationID
+	}
+
+	if s.modelRuntime != nil {
+		out.Runtime.Available = true
+		rtMeta := modelRuntimeMetaFromRequestAudit(requestAuditMetaForBackup(r, correlationID, traceID, "", "operator.process.health"))
+		health, err := s.modelRuntime.Health(ctx, rtMeta)
+		if err != nil {
+			out.Runtime.Warnings = append(out.Runtime.Warnings, "health: "+err.Error())
+		} else {
+			out.Runtime.State = strings.TrimSpace(health.Status)
+			out.Runtime.RuntimeEnabled = health.RuntimeEnabled
+			out.Runtime.GPUAware = health.GPUAware
+			out.Runtime.SafeMode = s.cfg.SafeModeForceCPUOnly || !health.GPUAware
+			out.Runtime.SafeModeReasons = append(out.Runtime.SafeModeReasons, health.DegradedReasons...)
+			out.Runtime.Warnings = append(out.Runtime.Warnings, health.PolicyWarnings...)
+			healthBytes, _ := json.Marshal(health)
+			out.Runtime.Health = rawJSONOrDefault(string(healthBytes), "null")
+		}
+
+		queue, err := s.modelRuntime.QueueStatus(ctx, rtMeta)
+		if err != nil {
+			out.Runtime.Warnings = append(out.Runtime.Warnings, "queue: "+err.Error())
+		} else {
+			queueBytes, _ := json.Marshal(queue)
+			out.Runtime.Queue = rawJSONOrDefault(string(queueBytes), "null")
+		}
+
+		loaded, err := s.modelRuntime.LoadedStatus(ctx, rtMeta)
+		if err != nil {
+			out.Runtime.Warnings = append(out.Runtime.Warnings, "loaded: "+err.Error())
+		} else {
+			loadedBytes, _ := json.Marshal(loaded)
+			out.Runtime.Loaded = rawJSONOrDefault(string(loadedBytes), "null")
+		}
+
+		usage, err := s.modelRuntime.Usage(ctx, rtMeta)
+		if err != nil {
+			out.Runtime.Warnings = append(out.Runtime.Warnings, "usage: "+err.Error())
+		} else {
+			usageBytes, _ := json.Marshal(usage)
+			out.Runtime.Usage = rawJSONOrDefault(string(usageBytes), "null")
+		}
+	}
+
+	if len(out.Runtime.Warnings) > 0 {
+		out.Runtime.Error = strings.Join(out.Runtime.Warnings, "; ")
+	}
+
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleAuditTraceLookup(w http.ResponseWriter, r *http.Request) {
@@ -348,6 +566,10 @@ func scanContextSnapshotInspectorRows(rows *sql.Rows) ([]contextSnapshotInspecto
 		); err != nil {
 			return nil, err
 		}
+		row.RestoreTraceJSON = extractMetadataFieldJSON(row.MetadataJSON, "restore_trace_json")
+		if !hasStructuredJSON(row.RestoreTraceJSON) {
+			row.RestoreTraceJSON = extractMetadataFieldJSON(row.MetadataJSON, "restore_trace")
+		}
 		out = append(out, row)
 	}
 	return out, rows.Err()
@@ -385,6 +607,8 @@ func summarizeContextSnapshotRow(row contextSnapshotInspectorRow) contextSnapsho
 		HasDelta:         hasStructuredJSON(row.DeltaJSON),
 		HasRestoreScores: hasStructuredJSON(row.RestoreScoresJSON),
 		HasResumeHints:   hasStructuredJSON(row.ResumeHintsJSON),
+		HasRestoreTrace:  hasStructuredJSON(row.RestoreTraceJSON),
+		RestoreTrace:     rawJSONOrDefault(row.RestoreTraceJSON, "{}"),
 	}
 }
 
@@ -398,6 +622,7 @@ func detailContextSnapshotRow(row contextSnapshotInspectorRow) contextSnapshotIn
 		Delta:               rawJSONOrDefault(row.DeltaJSON, "{}"),
 		RestoreScores:       rawJSONOrDefault(row.RestoreScoresJSON, "{}"),
 		ResumeHints:         rawJSONOrDefault(row.ResumeHintsJSON, "{}"),
+		RestoreTrace:        rawJSONOrDefault(row.RestoreTraceJSON, "{}"),
 		Metadata:            rawJSONOrDefault(row.MetadataJSON, "{}"),
 		IncludedStateIDs:    decodeJSONStringSlice(row.IncludedStateJSON),
 		IncludedOpenLoops:   decodeJSONStringSlice(row.IncludedOpenLoopsJSON),
@@ -476,6 +701,26 @@ func hasStructuredJSON(raw string) bool {
 	default:
 		return true
 	}
+}
+
+func extractMetadataFieldJSON(rawJSON, field string) string {
+	trimmed := strings.TrimSpace(rawJSON)
+	if trimmed == "" || trimmed == "null" {
+		return "{}"
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(trimmed), &metadata); err != nil || len(metadata) == 0 {
+		return "{}"
+	}
+	v, ok := metadata[field]
+	if !ok || v == nil {
+		return "{}"
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }
 
 func rawJSONOrDefault(raw, fallback string) json.RawMessage {

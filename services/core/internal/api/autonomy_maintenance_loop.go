@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -167,7 +168,7 @@ func NewAutonomyMaintenanceLoop(opts AutonomyMaintenanceLoopOptions) *AutonomyMa
 	}
 	mode := opts.Mode
 	if mode == "" {
-		mode = domain.AutonomyModeMaintain
+		mode = domain.AutonomyModeObserve
 	}
 	idleAfter := opts.IdleAfter
 	if idleAfter <= 0 {
@@ -1396,7 +1397,11 @@ func newDefaultAutonomyMaintenanceLoop(db *sql.DB, cfg config.Config, ev *events
 		},
 		NowMillis: nowFn,
 	})
-	bundle := autonomy.NewSQLiteBundle(db)
+	bundle, err := autonomy.NewSQLiteBundleStrict(db)
+	if err != nil {
+		log.Printf("autonomy maintenance loop disabled: %v", err)
+		return nil
+	}
 	for _, budget := range autonomy.DefaultBudgets(scope, nowFn(), "forge.autonomy") {
 		_ = bundle.Budgets.Create(context.Background(), budget)
 	}
@@ -1440,7 +1445,7 @@ func newDefaultAutonomyMaintenanceLoop(db *sql.DB, cfg config.Config, ev *events
 		Approval:  autonomy.NewStaticApprovalEscalator(),
 		NowMillis: nowFn,
 	})
-	mode := parseAutonomyMode(loadSetting(db, "autonomy_mode", string(domain.AutonomyModeMaintain)))
+	mode := parseAutonomyMode(loadSetting(db, "autonomy_mode", string(domain.AutonomyModeObserve)))
 	runtime := autonomy.NewRuleAgentRuntime(
 		[]autonomy.RuleAgent{
 			autonomy.OpenLoopStalenessAgent{},
@@ -1490,7 +1495,7 @@ func parseAutonomyMode(raw string) domain.AutonomyMode {
 	case domain.AutonomyModeOff, domain.AutonomyModeObserve, domain.AutonomyModePropose, domain.AutonomyModeMaintain, domain.AutonomyModeMission:
 		return mode
 	default:
-		return domain.AutonomyModeMaintain
+		return domain.AutonomyModeObserve
 	}
 }
 

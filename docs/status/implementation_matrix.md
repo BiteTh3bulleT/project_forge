@@ -10,7 +10,7 @@ Status values: `real`, `partial`, `legacy-boundary`, `blocked`, `scaffold`, `def
 | Legacy adapter side door | route removed | resolved | `server.go`, `server_adapters_test.go` | `/api/adapters/{id}/invoke` no longer wired; removed-route behavior tested as `404` |
 | Model runtime governance (M3) | `/forge/models*` + `modelruntime.Service` (with gated `/v1/*` compatibility) | partial (implemented) | `services/core/internal/modelruntime/*`, `services/core/internal/api/model_runtime.go`, `services/core/internal/api/model_runtime_bridge.go`, `services/core/internal/config/config.go` | M4 items remain: streaming, delete-file approval flow, stronger backend/process supervision, gateway `model.*` aliasing, deeper multi-backend scheduling |
 | Semantic mutation kernel | `controllane.Processor` | real | controllane/truth tests, `processor.go` | broader API-level path coverage |
-| Legacy v1 memory observation mutation | `/api/memory/observations*` mutation endpoints | legacy-boundary | env gate in `server.go`, `server_memory_legacy_test.go` | migrate remaining use cases to syscall-native flows |
+| Retired memory observation mutation | syscall-native memory/state mutation only | resolved | retired gate in `server.go`, `server_memory_legacy_test.go` | keep mutation endpoints returning `410 Gone`; add only syscall-native write facades |
 | Approvals/events/jobs/artifacts restore parity | `backup.Service` restore mappings | mostly complete | `backup/service.go`, `backup/service_test.go` | VSA-derived export-only sections remain |
 | Cognitive filesystem restore parity | restore mappings for core cognitive tables | mostly complete | `backup/service.go` mappings + tests | VSA tables still export-only |
 | Project context/evaluation/audit restore parity | restore mappings in backup service | mostly complete | `backup/service.go`, `backup/service_test.go` | audit/gateway export window remains capped (`LIMIT 5000`) |
@@ -25,6 +25,6 @@ Status values: `real`, `partial`, `legacy-boundary`, `blocked`, `scaffold`, `def
 ## Convergence highlights in this pass
 
 1. Backup restore parity materially improved with restore support for project context/evaluations/audit/gateway sections and atomic rollback behavior.
-2. Legacy memory boundaries now emit richer correlation/trace/workspace audit payloads, and legacy adapter ingress is removed.
+2. Legacy memory mutation boundaries are retired (`410 Gone`) with correlation/trace/workspace audit payloads, and legacy adapter ingress is removed.
 3. Root core build/test/vet/core/smoke flows include strict `--require-tracked` VSA preflight checks, and required VSA source files are tracked in authoritative branch state.
 4. Model runtime M3 is now real: manifest/store/registry/backend/runtime service/APIs/config/audit paths are implemented with import/register flows, persistent lifecycle state, deterministic selection, backend expansion, and runtime inspection endpoints; M4 items remain explicit.

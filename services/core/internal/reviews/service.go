@@ -33,22 +33,22 @@ type Record struct {
 }
 
 type CreateRequest struct {
-	TargetType  string         `json:"targetType"`
-	TargetID    string         `json:"targetId"`
-	DossierID   *int64         `json:"dossierId"`
-	Status      Status         `json:"status"`
-	Summary     string         `json:"summary"`
-	Notes       string         `json:"notes"`
-	Annotations []string       `json:"annotations"`
-	Reviewer    string         `json:"reviewer"`
+	TargetType  string   `json:"targetType"`
+	TargetID    string   `json:"targetId"`
+	DossierID   *int64   `json:"dossierId"`
+	Status      Status   `json:"status"`
+	Summary     string   `json:"summary"`
+	Notes       string   `json:"notes"`
+	Annotations []string `json:"annotations"`
+	Reviewer    string   `json:"reviewer"`
 }
 
 type UpdateRequest struct {
-	Status      *Status        `json:"status"`
-	Summary     *string        `json:"summary"`
-	Notes       *string        `json:"notes"`
-	Annotations *[]string      `json:"annotations"`
-	Reviewer    *string        `json:"reviewer"`
+	Status      *Status   `json:"status"`
+	Summary     *string   `json:"summary"`
+	Notes       *string   `json:"notes"`
+	Annotations *[]string `json:"annotations"`
+	Reviewer    *string   `json:"reviewer"`
 }
 
 type Service struct {

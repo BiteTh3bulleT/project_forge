@@ -43,11 +43,12 @@ Scope: CODEX.md ordered-phase execution start (`Phase 0 -> Phase 1 ...`).
   - `services/core/internal/aios/autonomy/policy_evaluator.go`
 - Maintenance exists, but dry-run/reporting depth and operator diagnostics are still incomplete.
 
-## 2) Legacy / Side-Door Reality To Converge
+## 2) Retired / Bounded Side-Door Reality
 
-These are real and must remain explicitly bounded until converged:
+These are real and must remain explicitly bounded:
 
-- V1 memory path still performs direct writes outside semantic syscall kernel:
+- Memory observation mutation endpoints are retired; read-only observation
+  inspection remains compatibility-only:
   - `services/core/internal/memory/service.go`
   - `services/core/internal/memory/retrieval.go`
   - `services/core/internal/memory/packets.go`
@@ -60,7 +61,8 @@ These are real and must remain explicitly bounded until converged:
   - `services/core/internal/events/logger.go`
   - `services/core/internal/aios/controllane/sqlite_store.go`
 
-These are currently bounded by doctrine/docs and scope controls, but not fully converged to one semantic write substrate.
+These are currently bounded by doctrine/docs and scope controls. Semantic
+memory/state mutation uses the control-lane syscall substrate.
 
 ## 3) Ordered Execution Plan (From This Point)
 
@@ -109,7 +111,8 @@ These are currently bounded by doctrine/docs and scope controls, but not fully c
   - `services/core/internal/aios/controllane/sqlite_store.go` (kernel commit path)
   - `services/core/internal/backup/service.go` (bounded restore path)
   - `services/core/internal/store/migrate.go` (schema/migration path)
-- This does not yet remove all legacy v1 write surfaces; it hard-bounds expansion while convergence work proceeds.
+- Memory observation mutation routes are now retired and audited; the guard
+  still prevents expansion of direct writes into canonical cognitive tables.
 
 ## 6) Phase 2 Progress Landed In This Pass
 
@@ -135,8 +138,9 @@ These are currently bounded by doctrine/docs and scope controls, but not fully c
   - SQLite-backed semantic repositories, transaction runner, and audit linkage exist under `services/core/internal/aios/controllane/*`.
 - Phase 4 ingest runtime is real but bounded:
   - `services/core/internal/aios/compute/librarian/pipeline.go` appends/reuses journal events, orders cell proposals, and routes accepted actions back through the kernel.
-- Phase 5 truth services are real but not yet exclusive:
-  - `services/core/internal/aios/truth/engine.go` exposes current/timeline/evidence/explain paths, while legacy v1 memory writes still coexist.
+- Phase 5 truth services are real and mutation-exclusive for the cutover:
+  - `services/core/internal/aios/truth/engine.go` exposes current/timeline/evidence/explain paths.
+  - legacy observation mutation endpoints now return `410 Gone` and emit retired audit records; read-only observation inspection remains compatibility-only.
 - Phase 5.75 autonomy is policy-bounded, not free-running:
   - durable backing checks block maintain/mission auto-commit without charter+budget persistence.
 - Phase 5.9 tool policy is real:

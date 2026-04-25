@@ -10,9 +10,9 @@ Scope: branch-local validation evidence after convergence hardening pass.
 | Gateway/tool policy and dangerous capability gating | mostly complete | gateway unit/smoke tests; approval/disabled/unsupported/deferred/future_iris tests | broaden workspace/path boundary coverage |
 | Semantic syscall + truth persistence | mostly complete | controllane + truth integration tests | expand projection rebuild/repair behavior tests |
 | Backup export/restore parity | improved, near-complete | `internal/backup` tests now cover project context/evaluations/audit/gateway restore + rollback safety + unsupported reporting + `atomicScope`/warning reporting | VSA-derived export-only sections remain |
-| Legacy side-door hardening | improved | adapter invoke default-off/env-gated policy tests + legacy memory boundary tests + audit propagation checks + route/body mismatch rejection | adapter route still exists as explicit diagnostic boundary |
+| Retired side-door hardening | improved | adapter invoke removed-route tests + retired memory mutation boundary tests + audit propagation checks + route/body mismatch rejection | keep retired routes non-executable and broaden syscall-native API coverage |
 | Rule-agent safety | partial but safe | cleanup placeholder/destructive guard tests; propose-only runtime | broader deterministic agent set still missing |
-| Desktop/frontend validation | partial | desktop build + root/desktop typecheck pass; root build/test/lint/typecheck commands runnable | no dedicated JS/TS lint/test scripts |
+| Desktop/frontend validation | partial | desktop build + root/desktop typecheck pass; root build/test/lint/typecheck commands runnable; Tauri `cargo check` passes | no dedicated JS/TS lint/test scripts |
 | Nix foundation checks | blocked in env | flake/build commands attempted | local nix daemon unavailable |
 
 ## Validation command evidence (executed)
@@ -21,9 +21,9 @@ Scope: branch-local validation evidence after convergence hardening pass.
 - `cd services/core && go vet ./...` -> pass
 - `cd services/core && go test ./internal/backup -count=1` -> pass
 - `cd services/core && go test ./internal/api -run 'Adapter|LegacyMemory|Backup' -count=1` -> pass
-- `npm install` -> pass (after removing recursive root `install` script)
+- `npm install` -> not rerun in latest pass; installed dependencies were already present
 - `npm run build` -> pass
-- `npm run smoke` -> fail (expected in fresh-clone integrity gate): strict VSA tracked-state preflight blocked run because `services/core/internal/memory/vsa_*.go` are present but untracked
+- `npm run smoke` -> pass
 - `npm run typecheck` -> pass
 - `npm test` -> pass (delegates to `go test ./...`)
 - `npm run lint` -> pass (delegates to `go vet ./...`)
@@ -40,4 +40,4 @@ Scope: branch-local validation evidence after convergence hardening pass.
 
 Remaining gap:
 - no dedicated JS/TS lint/test scripts (current root `lint`/`test` delegate to Go tooling).
-- fresh-clone VSA reproducibility remains unresolved at source-control level (now explicitly enforced by smoke/core strict preflight).
+- Nix validation remains environment-blocked by local daemon availability.

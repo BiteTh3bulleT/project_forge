@@ -10,27 +10,27 @@ import (
 )
 
 type Board struct {
-	ID          int64   `json:"id"`
-	Title       string  `json:"title"`
-	DossierID   *int64  `json:"dossierId,omitempty"`
-	CreatedAtMs int64   `json:"createdAtMs"`
-	UpdatedAtMs int64   `json:"updatedAtMs"`
+	ID          int64  `json:"id"`
+	Title       string `json:"title"`
+	DossierID   *int64 `json:"dossierId,omitempty"`
+	CreatedAtMs int64  `json:"createdAtMs"`
+	UpdatedAtMs int64  `json:"updatedAtMs"`
 }
 
 type Note struct {
-	ID          int64           `json:"id"`
-	BoardID     int64           `json:"boardId"`
-	Title       string          `json:"title"`
-	Body        string          `json:"body"`
-	X           float64         `json:"x"`
-	Y           float64         `json:"y"`
-	Width       float64         `json:"width"`
-	Height      float64         `json:"height"`
-	Pinned      bool            `json:"pinned"`
-	Color       string          `json:"color"`
+	ID          int64            `json:"id"`
+	BoardID     int64            `json:"boardId"`
+	Title       string           `json:"title"`
+	Body        string           `json:"body"`
+	X           float64          `json:"x"`
+	Y           float64          `json:"y"`
+	Width       float64          `json:"width"`
+	Height      float64          `json:"height"`
+	Pinned      bool             `json:"pinned"`
+	Color       string           `json:"color"`
 	Links       []map[string]any `json:"links"`
-	CreatedAtMs int64           `json:"createdAtMs"`
-	UpdatedAtMs int64           `json:"updatedAtMs"`
+	CreatedAtMs int64            `json:"createdAtMs"`
+	UpdatedAtMs int64            `json:"updatedAtMs"`
 }
 
 type BoardDetail struct {
@@ -158,15 +158,15 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
 }
 
 type PatchNote struct {
-	Title   *string          `json:"title"`
-	Body    *string          `json:"body"`
-	X       *float64         `json:"x"`
-	Y       *float64         `json:"y"`
-	Width   *float64         `json:"width"`
-	Height  *float64         `json:"height"`
-	Pinned  *bool            `json:"pinned"`
-	Color   *string          `json:"color"`
-	Links   []map[string]any `json:"links"`
+	Title  *string          `json:"title"`
+	Body   *string          `json:"body"`
+	X      *float64         `json:"x"`
+	Y      *float64         `json:"y"`
+	Width  *float64         `json:"width"`
+	Height *float64         `json:"height"`
+	Pinned *bool            `json:"pinned"`
+	Color  *string          `json:"color"`
+	Links  []map[string]any `json:"links"`
 }
 
 func (s *Service) PatchNote(ctx context.Context, boardID, noteID int64, p PatchNote) (*Note, error) {

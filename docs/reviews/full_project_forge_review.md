@@ -39,7 +39,7 @@ FORGE remains materially implemented across control-lane persistence, ingest/cel
 
 ### High
 
-1. v1 memory mutation still bypasses the semantic syscall kernel, so Phase 5 truth services are not yet the sole runtime memory authority.
+1. Memory observation mutation bypass is resolved in the cutover: mutation endpoints now return `410 Gone` and emit retired audit records; read-only observation inspection remains compatibility-only.
 2. Dual runtime event streams (`events` and `journal_events`) still coexist.
 3. End-to-end operator trace/explain visibility remains partial even though backend correlation data is present.
 4. Model Runtime M3 remains non-streaming and does not yet provide delete-file workflow, stronger backend/process supervision, or gateway `model.*` aliasing.
@@ -52,10 +52,10 @@ FORGE remains materially implemented across control-lane persistence, ingest/cel
 
 ## 5) Reality Verdict
 
-FORGE is materially closer to one authoritative runtime, but it is not fully converged. Phase 3 persistence is real, Phase 4 ingest runtime is real, and core Phase 5 services are real; the remaining gaps are legacy write/event paths, incomplete operator traceability, and unfinished Model Runtime M4 work.
+FORGE is materially closer to one authoritative runtime. Phase 3 persistence is real, Phase 4 ingest runtime is real, core Phase 5 services are real, and the old observation mutation write path is retired; remaining gaps are event projection clarity, incomplete operator traceability, and unfinished Model Runtime M4 work.
 
 ## 6) Recommended Next Move
 
-1. Continue converging v1 memory/event side paths into the declared control-lane authority model.
+1. Keep retired memory mutation paths non-executable and continue converging event projection language around `journal_events` as semantic truth.
 2. Extend operator-facing trace and snapshot inspection until the Phase 5 “explain what happened” bar is actually met.
 3. Continue Model Runtime M4 work on top of the landed M3 baseline without documenting M4 behavior as present before it exists.
