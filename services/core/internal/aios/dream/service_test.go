@@ -140,6 +140,75 @@ func TestDreamRunDryRunModesAndNoCanonicalCommits(t *testing.T) {
 	}
 }
 
+func TestDreamReportPersistenceIsNonCanonicalEvidence(t *testing.T) {
+	ctx := context.Background()
+	st, svc, now := newDreamHarness(t)
+	insertDreamFixtures(t, st, now)
+	before := tableCounts(t, st)
+
+	report, err := svc.Run(ctx, RunRequest{
+		Mode:          ModeNap,
+		WorkspaceID:   "ws-dream",
+		LaneID:        "control.semantic",
+		CorrelationID: "corr-dream",
+		TraceID:       "trace-dream",
+	})
+	if err != nil {
+		t.Fatalf("dream run: %v", err)
+	}
+	id, err := svc.PersistReport(ctx, PersistReportRequest{
+		Report:     report,
+		ProposedBy: "test.dream",
+		Metadata:   map[string]any{"test": true},
+	})
+	if err != nil {
+		t.Fatalf("persist report: %v", err)
+	}
+	if id == "" {
+		t.Fatalf("expected persisted report id")
+	}
+	if got := tableCounts(t, st); got != before {
+		t.Fatalf("Dream report persistence mutated canonical tables: before=%v after=%v", before, got)
+	}
+	var count int
+	if err := st.DB.QueryRow(`SELECT COUNT(1) FROM dream_reports`).Scan(&count); err != nil {
+		t.Fatalf("count dream_reports: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("dream_reports count=%d want 1", count)
+	}
+	rec, err := svc.GetReport(ctx, id, "ws-dream", "control.semantic")
+	if err != nil {
+		t.Fatalf("get report: %v", err)
+	}
+	if !rec.NonCanonicalEvidence || rec.CanonicalWriteCommitted {
+		t.Fatalf("report authority flags wrong: %+v", rec)
+	}
+	if rec.WorkspaceID != "ws-dream" || rec.LaneID != "control.semantic" || rec.Mode != ModeNap || !rec.DryRun {
+		t.Fatalf("unexpected report scope/mode: %+v", rec)
+	}
+	if len(rec.Candidates) == 0 || len(rec.SalienceScores) == 0 || len(rec.MemoryTierProposals) == 0 || len(rec.Trace) == 0 {
+		t.Fatalf("persisted report missing candidates/salience/proposals/trace: %+v", rec)
+	}
+	if _, err := svc.GetReport(ctx, id, "ws-other", "control.semantic"); err == nil {
+		t.Fatalf("wrong workspace should not retrieve dream report")
+	}
+	list, err := svc.ListReports(ctx, ListReportsRequest{WorkspaceID: "ws-dream", LaneID: "control.semantic", Mode: ModeNap})
+	if err != nil {
+		t.Fatalf("list reports: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != id {
+		t.Fatalf("unexpected report list: %+v", list)
+	}
+	wrong, err := svc.ListReports(ctx, ListReportsRequest{WorkspaceID: "ws-other", LaneID: "control.semantic", Mode: ModeNap})
+	if err != nil {
+		t.Fatalf("list wrong workspace: %v", err)
+	}
+	if len(wrong) != 0 {
+		t.Fatalf("wrong workspace reports leaked: %+v", wrong)
+	}
+}
+
 func TestDreamNoModelRuntimeVectorOrControlLaneBypass(t *testing.T) {
 	raw, err := os.ReadFile("service.go")
 	if err != nil {

@@ -154,6 +154,23 @@ Expect at least `claude_code`, `codex`, and `ollama` (Ollama shows
 `ready` only if a local Ollama is running at
 `http://127.0.0.1:11434`).
 
+### Operator inspectors
+
+Restore inspector routes are read-only and workspace scoped:
+
+```sh
+curl -s 'http://127.0.0.1:18492/api/context/restore/recent?workspaceId=default&limit=10' | jq .
+```
+
+Persisted Dream reports are also read-only evidence:
+
+```sh
+curl -s 'http://127.0.0.1:18492/api/dream/reports?workspaceId=default&limit=10' | jq .
+```
+
+Both surfaces return empty lists cleanly on a fresh DB. They do not mutate canonical memory/state,
+execute tools, or require modelruntime/GPU.
+
 ### External gateways (optional, off by default)
 
 ```sh

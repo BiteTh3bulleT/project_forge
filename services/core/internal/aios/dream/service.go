@@ -140,6 +140,70 @@ type DreamReport struct {
 	Trace                           map[string]any    `json:"trace"`
 }
 
+type PersistReportRequest struct {
+	Report      DreamReport    `json:"report"`
+	SyscallID   string         `json:"syscallId,omitempty"`
+	AuditID     string         `json:"auditId,omitempty"`
+	ProposedBy  string         `json:"proposedBy,omitempty"`
+	CommittedBy string         `json:"committedBy,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+}
+
+type ReportRecord struct {
+	ID                       string            `json:"id"`
+	CreatedAt                int64             `json:"createdAt"`
+	CompletedAt              int64             `json:"completedAt"`
+	WorkspaceID              string            `json:"workspaceId"`
+	LaneID                   string            `json:"laneId,omitempty"`
+	Mode                     Mode              `json:"mode"`
+	DryRun                   bool              `json:"dryRun"`
+	Status                   string            `json:"status"`
+	TimeWindowStart          int64             `json:"timeWindowStart"`
+	TimeWindowEnd            int64             `json:"timeWindowEnd"`
+	CandidatesConsidered     int               `json:"candidatesConsidered"`
+	ProposalsGenerated       int               `json:"proposalsGenerated"`
+	Summary                  json.RawMessage   `json:"summary"`
+	Candidates               []ReplayCandidate `json:"candidates"`
+	SalienceScores           []SalienceScore   `json:"salienceScores"`
+	MemoryTierProposals      []RoutingProposal `json:"memoryTierProposals"`
+	RepairProposals          []RoutingProposal `json:"repairProposals"`
+	SnapshotHygieneProposals []RoutingProposal `json:"snapshotHygieneProposals"`
+	Warnings                 []string          `json:"warnings"`
+	Trace                    json.RawMessage   `json:"trace"`
+	CorrelationID            string            `json:"correlationId,omitempty"`
+	TraceID                  string            `json:"traceId,omitempty"`
+	SyscallID                string            `json:"syscallId,omitempty"`
+	AuditID                  string            `json:"auditId,omitempty"`
+	ProposedBy               string            `json:"proposedBy"`
+	CommittedBy              string            `json:"committedBy,omitempty"`
+	Metadata                 json.RawMessage   `json:"metadata"`
+	EvidenceClass            string            `json:"evidenceClass"`
+	NonCanonicalEvidence     bool              `json:"nonCanonicalEvidence"`
+	CanonicalWriteCommitted  bool              `json:"canonicalWriteCommitted"`
+}
+
+func (r ReportRecord) ReviewItems() []RoutingProposal {
+	out := []RoutingProposal{}
+	for _, proposal := range r.MemoryTierProposals {
+		if proposal.Decision == NeedsReview || proposal.Decision == RepairRequired {
+			out = append(out, proposal)
+		}
+	}
+	for _, proposal := range r.RepairProposals {
+		if proposal.Decision == NeedsReview || proposal.Decision == RepairRequired {
+			out = append(out, proposal)
+		}
+	}
+	return out
+}
+
+type ListReportsRequest struct {
+	WorkspaceID string
+	LaneID      string
+	Mode        Mode
+	Limit       int
+}
+
 func (s *Service) Run(ctx context.Context, req RunRequest) (DreamReport, error) {
 	if s == nil || s.db == nil {
 		return DreamReport{}, fmt.Errorf("dream service requires sqlite store")
@@ -213,6 +277,137 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (DreamReport, error) 
 		report.Warnings = append(report.Warnings, "dryRun=false ignored in Dream Mode v0; report is dry-run only")
 	}
 	return report, nil
+}
+
+func (s *Service) PersistReport(ctx context.Context, req PersistReportRequest) (string, error) {
+	if s == nil || s.db == nil {
+		return "", fmt.Errorf("dream service requires sqlite store")
+	}
+	report := req.Report
+	if strings.TrimSpace(report.Run.RunID) == "" {
+		return "", fmt.Errorf("dream report id required")
+	}
+	if strings.TrimSpace(report.Run.WorkspaceID) == "" {
+		return "", fmt.Errorf("dream report workspace_id required")
+	}
+	proposedBy := strings.TrimSpace(req.ProposedBy)
+	if proposedBy == "" {
+		proposedBy = "forge.dream"
+	}
+	summaryJSON := mustJSON(map[string]any{
+		"summary":                     report.Run.Summary,
+		"itemsRequiringReview":        report.ItemsRequiringReview,
+		"proposedRestoreScoreUpdates": report.ProposedRestoreScoreUpdates,
+		"proposedEmbeddingRefresh":    report.ProposedEmbeddingRefreshActions,
+		"proposedMemoryActions":       report.ProposedMemoryActions,
+		"noOpReasons":                 report.NoOpReasons,
+		"nonCanonicalEvidence":        true,
+		"canonicalWriteCommitted":     false,
+	})
+	_, err := s.db.ExecContext(ctx, `INSERT INTO dream_reports(
+  id, created_at, completed_at, workspace_id, lane_id, mode, dry_run, status,
+  time_window_start, time_window_end, candidates_considered, proposals_generated,
+  summary_json, candidates_json, salience_scores_json, memory_tier_proposals_json,
+  repair_proposals_json, snapshot_hygiene_proposals_json, warnings_json, trace_json,
+  correlation_id, trace_id, syscall_id, audit_id, proposed_by, committed_by, metadata_json
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+ON CONFLICT(id) DO UPDATE SET
+  completed_at=excluded.completed_at,
+  status=excluded.status,
+  candidates_considered=excluded.candidates_considered,
+  proposals_generated=excluded.proposals_generated,
+  summary_json=excluded.summary_json,
+  candidates_json=excluded.candidates_json,
+  salience_scores_json=excluded.salience_scores_json,
+  memory_tier_proposals_json=excluded.memory_tier_proposals_json,
+  repair_proposals_json=excluded.repair_proposals_json,
+  snapshot_hygiene_proposals_json=excluded.snapshot_hygiene_proposals_json,
+  warnings_json=excluded.warnings_json,
+  trace_json=excluded.trace_json,
+  correlation_id=excluded.correlation_id,
+  trace_id=excluded.trace_id,
+  syscall_id=excluded.syscall_id,
+  audit_id=excluded.audit_id,
+  proposed_by=excluded.proposed_by,
+  committed_by=excluded.committed_by,
+  metadata_json=excluded.metadata_json`,
+		report.Run.RunID,
+		report.Run.StartedAt,
+		report.Run.CompletedAt,
+		report.Run.WorkspaceID,
+		report.Run.LaneID,
+		string(report.Run.Mode),
+		boolInt(report.Run.DryRun),
+		report.Run.Status,
+		report.Run.WindowStart,
+		report.Run.WindowEnd,
+		report.Run.CandidatesConsidered,
+		report.Run.ProposalsGenerated,
+		summaryJSON,
+		mustJSON(report.Candidates),
+		mustJSON(report.SalienceScores),
+		mustJSON(report.ProposedTierRouting),
+		mustJSON(report.ProposedRepairActions),
+		mustJSON(report.ProposedSnapshotHygieneActions),
+		mustJSON(report.Warnings),
+		mustJSON(report.Trace),
+		report.Run.CorrelationID,
+		report.Run.TraceID,
+		nullableString(req.SyscallID),
+		nullableString(req.AuditID),
+		proposedBy,
+		strings.TrimSpace(req.CommittedBy),
+		mustJSON(req.Metadata),
+	)
+	if err != nil {
+		return "", err
+	}
+	return report.Run.RunID, nil
+}
+
+func (s *Service) GetReport(ctx context.Context, id, workspaceID, laneID string) (ReportRecord, error) {
+	if strings.TrimSpace(workspaceID) == "" {
+		return ReportRecord{}, fmt.Errorf("workspaceId required")
+	}
+	query := `SELECT id,created_at,completed_at,workspace_id,lane_id,mode,dry_run,status,
+time_window_start,time_window_end,candidates_considered,proposals_generated,summary_json,
+candidates_json,salience_scores_json,memory_tier_proposals_json,repair_proposals_json,
+snapshot_hygiene_proposals_json,warnings_json,trace_json,correlation_id,trace_id,
+COALESCE(syscall_id,''),COALESCE(audit_id,''),proposed_by,committed_by,metadata_json
+FROM dream_reports WHERE id=? AND workspace_id=? AND (?='' OR lane_id=?)`
+	row := s.db.QueryRowContext(ctx, query, strings.TrimSpace(id), strings.TrimSpace(workspaceID), strings.TrimSpace(laneID), strings.TrimSpace(laneID))
+	return scanReport(row)
+}
+
+func (s *Service) ListReports(ctx context.Context, req ListReportsRequest) ([]ReportRecord, error) {
+	if strings.TrimSpace(req.WorkspaceID) == "" {
+		return nil, fmt.Errorf("workspaceId required")
+	}
+	limit := req.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT id,created_at,completed_at,workspace_id,lane_id,mode,dry_run,status,
+time_window_start,time_window_end,candidates_considered,proposals_generated,summary_json,
+candidates_json,salience_scores_json,memory_tier_proposals_json,repair_proposals_json,
+snapshot_hygiene_proposals_json,warnings_json,trace_json,correlation_id,trace_id,
+COALESCE(syscall_id,''),COALESCE(audit_id,''),proposed_by,committed_by,metadata_json
+FROM dream_reports
+WHERE workspace_id=? AND (?='' OR lane_id=?) AND (?='' OR mode=?)
+ORDER BY created_at DESC LIMIT ?`, strings.TrimSpace(req.WorkspaceID), strings.TrimSpace(req.LaneID), strings.TrimSpace(req.LaneID), strings.TrimSpace(string(req.Mode)), strings.TrimSpace(string(req.Mode)), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ReportRecord{}
+	for rows.Next() {
+		rec, err := scanReport(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	return out, rows.Err()
 }
 
 func normalizeRequest(req RunRequest) RunRequest {
@@ -671,4 +866,71 @@ func clamp01(v float64) float64 {
 		return 1
 	}
 	return math.Round(v*1000) / 1000
+}
+
+type reportScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanReport(row reportScanner) (ReportRecord, error) {
+	var rec ReportRecord
+	var mode string
+	var dryRun int
+	var summaryJSON, candidatesJSON, scoresJSON, tierJSON, repairJSON, snapshotJSON, warningsJSON, traceJSON, metadataJSON string
+	if err := row.Scan(
+		&rec.ID, &rec.CreatedAt, &rec.CompletedAt, &rec.WorkspaceID, &rec.LaneID, &mode, &dryRun, &rec.Status,
+		&rec.TimeWindowStart, &rec.TimeWindowEnd, &rec.CandidatesConsidered, &rec.ProposalsGenerated,
+		&summaryJSON, &candidatesJSON, &scoresJSON, &tierJSON, &repairJSON, &snapshotJSON, &warningsJSON, &traceJSON,
+		&rec.CorrelationID, &rec.TraceID, &rec.SyscallID, &rec.AuditID, &rec.ProposedBy, &rec.CommittedBy, &metadataJSON,
+	); err != nil {
+		return ReportRecord{}, err
+	}
+	rec.Mode = Mode(mode)
+	rec.DryRun = dryRun != 0
+	rec.Summary = json.RawMessage(nonEmptyJSON(summaryJSON, "{}"))
+	rec.Trace = json.RawMessage(nonEmptyJSON(traceJSON, "{}"))
+	rec.Metadata = json.RawMessage(nonEmptyJSON(metadataJSON, "{}"))
+	_ = json.Unmarshal([]byte(nonEmptyJSON(candidatesJSON, "[]")), &rec.Candidates)
+	_ = json.Unmarshal([]byte(nonEmptyJSON(scoresJSON, "[]")), &rec.SalienceScores)
+	_ = json.Unmarshal([]byte(nonEmptyJSON(tierJSON, "[]")), &rec.MemoryTierProposals)
+	_ = json.Unmarshal([]byte(nonEmptyJSON(repairJSON, "[]")), &rec.RepairProposals)
+	_ = json.Unmarshal([]byte(nonEmptyJSON(snapshotJSON, "[]")), &rec.SnapshotHygieneProposals)
+	_ = json.Unmarshal([]byte(nonEmptyJSON(warningsJSON, "[]")), &rec.Warnings)
+	rec.EvidenceClass = "non_canonical_evidence"
+	rec.NonCanonicalEvidence = true
+	rec.CanonicalWriteCommitted = false
+	return rec, nil
+}
+
+func mustJSON(v any) string {
+	if v == nil {
+		return "{}"
+	}
+	raw, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
+	return string(raw)
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func nullableString(v string) any {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return nil
+	}
+	return v
+}
+
+func nonEmptyJSON(raw, fallback string) string {
+	if strings.TrimSpace(raw) == "" {
+		return fallback
+	}
+	return raw
 }

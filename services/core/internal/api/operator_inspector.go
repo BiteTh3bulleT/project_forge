@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -25,30 +26,32 @@ type contextSnapshotInspectorCounts struct {
 }
 
 type contextSnapshotInspectorSummary struct {
-	ID                  string                         `json:"id"`
-	Query               string                         `json:"query"`
-	WorkspaceID         string                         `json:"workspaceId"`
-	LaneID              string                         `json:"laneId"`
-	SelectedPaths       []string                       `json:"selectedPaths"`
-	SnapshotKind        string                         `json:"snapshotKind"`
-	SnapshotFingerprint string                         `json:"snapshotFingerprint"`
-	ParentSnapshotID    string                         `json:"parentSnapshotId"`
-	RenderArtifactRefID string                         `json:"renderArtifactRefId"`
-	CreatedAtMs         int64                          `json:"createdAtMs"`
-	CorrelationID       string                         `json:"correlationId"`
-	TraceID             string                         `json:"traceId"`
-	SyscallID           string                         `json:"syscallId"`
-	AuditID             string                         `json:"auditId"`
-	ProposedBy          string                         `json:"proposedBy"`
-	CommittedBy         string                         `json:"committedBy"`
-	Counts              contextSnapshotInspectorCounts `json:"counts"`
-	HasHeader           bool                           `json:"hasHeader"`
-	HasGraph            bool                           `json:"hasGraph"`
-	HasDelta            bool                           `json:"hasDelta"`
-	HasRestoreScores    bool                           `json:"hasRestoreScores"`
-	HasResumeHints      bool                           `json:"hasResumeHints"`
-	HasRestoreTrace     bool                           `json:"hasRestoreTrace"`
-	RestoreTrace        json.RawMessage                `json:"restoreTrace,omitempty"`
+	ID                   string                         `json:"id"`
+	Query                string                         `json:"query"`
+	WorkspaceID          string                         `json:"workspaceId"`
+	LaneID               string                         `json:"laneId"`
+	SelectedPaths        []string                       `json:"selectedPaths"`
+	SnapshotKind         string                         `json:"snapshotKind"`
+	SnapshotFingerprint  string                         `json:"snapshotFingerprint"`
+	ParentSnapshotID     string                         `json:"parentSnapshotId"`
+	RenderArtifactRefID  string                         `json:"renderArtifactRefId"`
+	CreatedAtMs          int64                          `json:"createdAtMs"`
+	CorrelationID        string                         `json:"correlationId"`
+	TraceID              string                         `json:"traceId"`
+	SyscallID            string                         `json:"syscallId"`
+	AuditID              string                         `json:"auditId"`
+	ProposedBy           string                         `json:"proposedBy"`
+	CommittedBy          string                         `json:"committedBy"`
+	Counts               contextSnapshotInspectorCounts `json:"counts"`
+	HasHeader            bool                           `json:"hasHeader"`
+	HasGraph             bool                           `json:"hasGraph"`
+	HasDelta             bool                           `json:"hasDelta"`
+	HasRestoreScores     bool                           `json:"hasRestoreScores"`
+	HasResumeHints       bool                           `json:"hasResumeHints"`
+	HasRestoreTrace      bool                           `json:"hasRestoreTrace"`
+	RestoreTrace         json.RawMessage                `json:"restoreTrace,omitempty"`
+	EvidenceClass        string                         `json:"evidenceClass"`
+	NonCanonicalEvidence bool                           `json:"nonCanonicalEvidence"`
 }
 
 type contextSnapshotInspectorDetail struct {
@@ -61,6 +64,7 @@ type contextSnapshotInspectorDetail struct {
 	RestoreScores       json.RawMessage                 `json:"restoreScores"`
 	ResumeHints         json.RawMessage                 `json:"resumeHints"`
 	RestoreTrace        json.RawMessage                 `json:"restoreTrace"`
+	RestorePackage      json.RawMessage                 `json:"restorePackage"`
 	Metadata            json.RawMessage                 `json:"metadata"`
 	IncludedStateIDs    []string                        `json:"includedStateIds"`
 	IncludedOpenLoops   []string                        `json:"includedOpenLoops"`
@@ -143,6 +147,7 @@ type contextSnapshotInspectorRow struct {
 	RenderArtifactRefID   string
 	ResumeHintsJSON       string
 	RestoreTraceJSON      string
+	RestorePackageJSON    string
 	BudgetJSON            string
 	InclusionReasonsJSON  string
 	CreatedAtMs           int64
@@ -262,15 +267,30 @@ LIMIT ?`,
 
 func (s *Server) handleContextSnapshotGet(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	db, err := s.traceDB()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-		return
-	}
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	if id == "" {
 		http.Error(w, "snapshot id is required", http.StatusBadRequest)
 		return
+	}
+	record, ok, err := s.getContextSnapshotInspectorRow(ctx, id, strings.TrimSpace(r.URL.Query().Get("workspaceId")), strings.TrimSpace(r.URL.Query().Get("laneId")), false)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		http.Error(w, "snapshot not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"snapshot": detailContextSnapshotRow(record)})
+}
+
+func (s *Server) getContextSnapshotInspectorRow(ctx context.Context, id, workspaceID, laneID string, requireWorkspace bool) (contextSnapshotInspectorRow, bool, error) {
+	db, err := s.traceDB()
+	if err != nil {
+		return contextSnapshotInspectorRow{}, false, err
+	}
+	if requireWorkspace && strings.TrimSpace(workspaceID) == "" {
+		return contextSnapshotInspectorRow{}, false, fmt.Errorf("workspaceId required")
 	}
 	rows, err := db.QueryContext(ctx, `
 SELECT id, query, workspace_id, lane_id, snapshot_kind, snapshot_fingerprint, parent_snapshot_id, selected_paths_json,
@@ -279,23 +299,126 @@ SELECT id, query, workspace_id, lane_id, snapshot_kind, snapshot_fingerprint, pa
        render_artifact_ref_id, resume_hints_json, budget_json, inclusion_reasons_json, created_at, correlation_id,
        trace_id, syscall_id, metadata_json, proposed_by, committed_by, audit_id
 FROM context_packet_snapshots
-WHERE id = ?`, id)
+WHERE id = ?
+  AND (? = '' OR workspace_id = ?)
+  AND (? = '' OR lane_id = ?)`, id, strings.TrimSpace(workspaceID), strings.TrimSpace(workspaceID), strings.TrimSpace(laneID), strings.TrimSpace(laneID))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return contextSnapshotInspectorRow{}, false, err
 	}
 	defer rows.Close()
 
 	records, err := scanContextSnapshotInspectorRows(rows)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return contextSnapshotInspectorRow{}, false, err
 	}
 	if len(records) == 0 {
-		http.Error(w, "snapshot not found", http.StatusNotFound)
+		return contextSnapshotInspectorRow{}, false, nil
+	}
+	return records[0], true, nil
+}
+
+func (s *Server) handleContextRestoreRecent(w http.ResponseWriter, r *http.Request) {
+	if strings.TrimSpace(r.URL.Query().Get("workspaceId")) == "" {
+		http.Error(w, "workspaceId required", http.StatusBadRequest)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"snapshot": detailContextSnapshotRow(records[0])})
+	if strings.TrimSpace(r.URL.Query().Get("snapshotKind")) == "" {
+		next := new(http.Request)
+		*next = *r
+		nextURL := *r.URL
+		query := nextURL.Query()
+		query.Set("snapshotKind", "restore")
+		nextURL.RawQuery = query.Encode()
+		next.URL = &nextURL
+		r = next
+	}
+	s.handleContextSnapshotList(w, r)
+}
+
+func (s *Server) handleContextRestoreGet(w http.ResponseWriter, r *http.Request) {
+	record, ok := s.loadScopedRestoreSnapshot(w, r)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"snapshot":                detailContextSnapshotRow(record),
+		"evidenceClass":           "non_canonical_evidence",
+		"nonCanonicalEvidence":    true,
+		"canonicalWriteCommitted": false,
+	})
+}
+
+func (s *Server) handleContextRestoreCandidates(w http.ResponseWriter, r *http.Request) {
+	record, ok := s.loadScopedRestoreSnapshot(w, r)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"snapshotId":              record.ID,
+		"candidates":              restoreScoreCandidatesJSON(record.RestoreScoresJSON),
+		"score":                   rawJSONOrDefault(record.RestoreScoresJSON, "{}"),
+		"evidenceClass":           "non_canonical_evidence",
+		"nonCanonicalEvidence":    true,
+		"canonicalWriteCommitted": false,
+	})
+}
+
+func (s *Server) handleContextRestoreScore(w http.ResponseWriter, r *http.Request) {
+	record, ok := s.loadScopedRestoreSnapshot(w, r)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"snapshotId":                 record.ID,
+		"score":                      rawJSONOrDefault(record.RestoreScoresJSON, "{}"),
+		"scoreBreakdown":             restoreScoreCandidatesJSON(record.RestoreScoresJSON),
+		"restorePackage":             rawJSONOrDefault(record.RestorePackageJSON, "{}"),
+		"resumeHints":                rawJSONOrDefault(record.ResumeHintsJSON, "{}"),
+		"requiresFreshCompile":       restoreRequiresFreshCompile(record.RestoreScoresJSON, record.ResumeHintsJSON),
+		"requiresFreshCompileReason": restoreFreshCompileReason(record.RestoreScoresJSON, record.ResumeHintsJSON),
+		"renderArtifactRefId":        record.RenderArtifactRefID,
+		"evidenceClass":              "non_canonical_evidence",
+		"nonCanonicalEvidence":       true,
+		"canonicalWriteCommitted":    false,
+	})
+}
+
+func (s *Server) handleContextRestoreResumeHints(w http.ResponseWriter, r *http.Request) {
+	record, ok := s.loadScopedRestoreSnapshot(w, r)
+	if !ok {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"snapshotId":                 record.ID,
+		"resumeHints":                rawJSONOrDefault(record.ResumeHintsJSON, "{}"),
+		"requiresFreshCompile":       restoreRequiresFreshCompile(record.RestoreScoresJSON, record.ResumeHintsJSON),
+		"requiresFreshCompileReason": restoreFreshCompileReason(record.RestoreScoresJSON, record.ResumeHintsJSON),
+		"evidenceClass":              "non_canonical_evidence",
+		"nonCanonicalEvidence":       true,
+		"canonicalWriteCommitted":    false,
+	})
+}
+
+func (s *Server) loadScopedRestoreSnapshot(w http.ResponseWriter, r *http.Request) (contextSnapshotInspectorRow, bool) {
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	if id == "" {
+		http.Error(w, "snapshot id is required", http.StatusBadRequest)
+		return contextSnapshotInspectorRow{}, false
+	}
+	record, found, err := s.getContextSnapshotInspectorRow(r.Context(), id, strings.TrimSpace(r.URL.Query().Get("workspaceId")), strings.TrimSpace(r.URL.Query().Get("laneId")), true)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "workspaceId required") {
+			status = http.StatusBadRequest
+		}
+		http.Error(w, err.Error(), status)
+		return contextSnapshotInspectorRow{}, false
+	}
+	if !found {
+		http.Error(w, "restore snapshot not found", http.StatusNotFound)
+		return contextSnapshotInspectorRow{}, false
+	}
+	return record, true
 }
 
 func (s *Server) handleProcessHealthTrace(w http.ResponseWriter, r *http.Request) {
@@ -570,6 +693,10 @@ func scanContextSnapshotInspectorRows(rows *sql.Rows) ([]contextSnapshotInspecto
 		if !hasStructuredJSON(row.RestoreTraceJSON) {
 			row.RestoreTraceJSON = extractMetadataFieldJSON(row.MetadataJSON, "restore_trace")
 		}
+		row.RestorePackageJSON = extractMetadataFieldJSON(row.MetadataJSON, "restore_package_json")
+		if !hasStructuredJSON(row.RestorePackageJSON) {
+			row.RestorePackageJSON = extractMetadataFieldJSON(row.MetadataJSON, "restore_package")
+		}
 		out = append(out, row)
 	}
 	return out, rows.Err()
@@ -602,13 +729,15 @@ func summarizeContextSnapshotRow(row contextSnapshotInspectorRow) contextSnapsho
 			Artifacts: jsonArrayCount(row.IncludedArtifactsJSON),
 			Events:    jsonArrayCount(row.IncludedEventsJSON),
 		},
-		HasHeader:        hasStructuredJSON(row.HeaderJSON),
-		HasGraph:         hasStructuredJSON(row.GraphJSON),
-		HasDelta:         hasStructuredJSON(row.DeltaJSON),
-		HasRestoreScores: hasStructuredJSON(row.RestoreScoresJSON),
-		HasResumeHints:   hasStructuredJSON(row.ResumeHintsJSON),
-		HasRestoreTrace:  hasStructuredJSON(row.RestoreTraceJSON),
-		RestoreTrace:     rawJSONOrDefault(row.RestoreTraceJSON, "{}"),
+		HasHeader:            hasStructuredJSON(row.HeaderJSON),
+		HasGraph:             hasStructuredJSON(row.GraphJSON),
+		HasDelta:             hasStructuredJSON(row.DeltaJSON),
+		HasRestoreScores:     hasStructuredJSON(row.RestoreScoresJSON),
+		HasResumeHints:       hasStructuredJSON(row.ResumeHintsJSON),
+		HasRestoreTrace:      hasStructuredJSON(row.RestoreTraceJSON),
+		RestoreTrace:         rawJSONOrDefault(row.RestoreTraceJSON, "{}"),
+		EvidenceClass:        "non_canonical_evidence",
+		NonCanonicalEvidence: true,
 	}
 }
 
@@ -623,6 +752,7 @@ func detailContextSnapshotRow(row contextSnapshotInspectorRow) contextSnapshotIn
 		RestoreScores:       rawJSONOrDefault(row.RestoreScoresJSON, "{}"),
 		ResumeHints:         rawJSONOrDefault(row.ResumeHintsJSON, "{}"),
 		RestoreTrace:        rawJSONOrDefault(row.RestoreTraceJSON, "{}"),
+		RestorePackage:      rawJSONOrDefault(row.RestorePackageJSON, "{}"),
 		Metadata:            rawJSONOrDefault(row.MetadataJSON, "{}"),
 		IncludedStateIDs:    decodeJSONStringSlice(row.IncludedStateJSON),
 		IncludedOpenLoops:   decodeJSONStringSlice(row.IncludedOpenLoopsJSON),
@@ -729,4 +859,65 @@ func rawJSONOrDefault(raw, fallback string) json.RawMessage {
 		trimmed = fallback
 	}
 	return json.RawMessage(trimmed)
+}
+
+func restoreScoreCandidatesJSON(raw string) json.RawMessage {
+	record := map[string]any{}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &record); err != nil {
+		return json.RawMessage("[]")
+	}
+	for _, key := range []string{"scores", "score_breakdown", "scoreBreakdown", "candidates"} {
+		if value, ok := record[key]; ok {
+			if encoded, err := json.Marshal(value); err == nil && strings.TrimSpace(string(encoded)) != "null" {
+				return json.RawMessage(encoded)
+			}
+		}
+	}
+	return json.RawMessage("[]")
+}
+
+func restoreRequiresFreshCompile(scoresJSON, hintsJSON string) bool {
+	for _, raw := range []string{hintsJSON, scoresJSON} {
+		record := map[string]any{}
+		if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &record); err != nil {
+			continue
+		}
+		for _, key := range []string{"requires_fresh_compile", "requiresFreshCompile"} {
+			if value, ok := record[key]; ok {
+				switch typed := value.(type) {
+				case bool:
+					return typed
+				case string:
+					parsed, _ := strconv.ParseBool(strings.TrimSpace(typed))
+					return parsed
+				}
+			}
+		}
+	}
+	return false
+}
+
+func restoreFreshCompileReason(scoresJSON, hintsJSON string) string {
+	for _, raw := range []string{hintsJSON, scoresJSON} {
+		record := map[string]any{}
+		if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &record); err != nil {
+			continue
+		}
+		for _, key := range []string{"requires_fresh_compile_reason", "requiresFreshCompileReason", "fresh_compile_reason", "freshCompileReason", "reason"} {
+			if value, ok := record[key]; ok {
+				if text := strings.TrimSpace(fmt.Sprint(value)); text != "" && text != "<nil>" {
+					return text
+				}
+			}
+		}
+		if restoreRequiresFreshCompile(scoresJSON, hintsJSON) {
+			if decision := strings.TrimSpace(fmt.Sprint(record["decision"])); decision != "" && decision != "<nil>" {
+				return "restore decision: " + decision
+			}
+		}
+	}
+	if restoreRequiresFreshCompile(scoresJSON, hintsJSON) {
+		return "restore metadata requires fresh compile"
+	}
+	return ""
 }

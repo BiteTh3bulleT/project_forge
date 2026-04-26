@@ -193,6 +193,10 @@ export type ContextSnapshotInspectorSummary = {
   hasDelta: boolean;
   hasRestoreScores: boolean;
   hasResumeHints: boolean;
+  hasRestoreTrace?: boolean;
+  restoreTrace?: Record<string, unknown>;
+  evidenceClass?: string;
+  nonCanonicalEvidence?: boolean;
 };
 
 export type ContextSnapshotInspectorDetail = {
@@ -204,6 +208,8 @@ export type ContextSnapshotInspectorDetail = {
   delta: Record<string, unknown>;
   restoreScores: Record<string, unknown>;
   resumeHints: Record<string, unknown>;
+  restoreTrace?: Record<string, unknown>;
+  restorePackage?: Record<string, unknown>;
   metadata: Record<string, unknown>;
   includedStateIds: string[];
   includedOpenLoops: string[];
@@ -212,6 +218,143 @@ export type ContextSnapshotInspectorDetail = {
   includedModelIds: string[];
   includedArtifactIds: string[];
   includedEventIds: string[];
+};
+
+export type RestoreCandidateScoreView = Record<string, unknown> & {
+  snapshotId?: string;
+  snapshot_id?: string;
+  total?: number;
+  explain?: string[];
+  selected?: boolean;
+};
+
+export type RestorePackageView = Record<string, unknown>;
+
+export type ResumeHintsView = Record<string, unknown> & {
+  requiresFreshCompile?: boolean;
+  requires_fresh_compile?: boolean;
+  nextAction?: string;
+  next_action?: string;
+};
+
+export type RestoreInspectorScoreResponse = {
+  snapshotId: string;
+  score: Record<string, unknown>;
+  scoreBreakdown: RestoreCandidateScoreView[];
+  restorePackage: RestorePackageView;
+  resumeHints: ResumeHintsView;
+  requiresFreshCompile: boolean;
+  requiresFreshCompileReason: string;
+  renderArtifactRefId?: string;
+  evidenceClass: string;
+  nonCanonicalEvidence: boolean;
+  canonicalWriteCommitted: boolean;
+};
+
+export type RestoreInspectorCandidatesResponse = {
+  snapshotId: string;
+  candidates: RestoreCandidateScoreView[];
+  score: Record<string, unknown>;
+  evidenceClass: string;
+  nonCanonicalEvidence: boolean;
+  canonicalWriteCommitted: boolean;
+};
+
+export type RestoreInspectorResumeHintsResponse = {
+  snapshotId: string;
+  resumeHints: ResumeHintsView;
+  requiresFreshCompile: boolean;
+  requiresFreshCompileReason: string;
+  evidenceClass: string;
+  nonCanonicalEvidence: boolean;
+  canonicalWriteCommitted: boolean;
+};
+
+export type DreamReplayCandidateView = Record<string, unknown> & {
+  id?: string;
+  type?: string;
+  reason?: string;
+};
+
+export type DreamSalienceScoreView = Record<string, unknown> & {
+  id?: string;
+  total?: number;
+  score?: number;
+};
+
+export type DreamMemoryTierProposalView = Record<string, unknown> & {
+  subjectId?: string;
+  subject_id?: string;
+  decision?: string;
+};
+
+export type OperatorReviewItem = Record<string, unknown> & {
+  subjectId?: string;
+  subject_id?: string;
+  decision?: string;
+  reason?: string;
+};
+
+export type DreamReportSummary = {
+  id: string;
+  createdAt: number;
+  completedAt: number;
+  workspaceId: string;
+  laneId: string;
+  mode: string;
+  dryRun: boolean;
+  status: string;
+  candidatesConsidered: number;
+  proposalsGenerated: number;
+  warnings: unknown[];
+  correlationId: string;
+  traceId: string;
+  evidenceClass?: string;
+  nonCanonicalEvidence?: boolean;
+  canonicalWriteCommitted?: boolean;
+};
+
+export type DreamReportDetail = DreamReportSummary & {
+  summary: Record<string, unknown>;
+  candidates: DreamReplayCandidateView[];
+  salienceScores: DreamSalienceScoreView[];
+  memoryTierProposals: DreamMemoryTierProposalView[];
+  repairProposals: OperatorReviewItem[];
+  snapshotHygieneProposals: OperatorReviewItem[];
+  trace: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+};
+
+export type DreamReportCandidatesResponse = {
+  reportId: string;
+  candidates: DreamReplayCandidateView[];
+  salienceScores: DreamSalienceScoreView[];
+  evidenceClass: string;
+  nonCanonicalEvidence: boolean;
+  dryRun: boolean;
+  canonicalWriteCommitted: boolean;
+};
+
+export type DreamReportProposalsResponse = {
+  reportId: string;
+  memoryTierProposals: DreamMemoryTierProposalView[];
+  repairProposals: OperatorReviewItem[];
+  snapshotHygieneProposals: OperatorReviewItem[];
+  reviewItems: OperatorReviewItem[];
+  evidenceClass: string;
+  nonCanonicalEvidence: boolean;
+  dryRun: boolean;
+  canonicalWriteCommitted: boolean;
+};
+
+export type DreamReportWarningsResponse = {
+  reportId: string;
+  warnings: unknown[];
+  reviewItems: OperatorReviewItem[];
+  evidenceClass: string;
+  nonCanonicalEvidence: boolean;
+  dryRun: boolean;
+  canonicalWriteCommitted: boolean;
 };
 
 export type AuditTraceLookupReport = {
@@ -1468,8 +1611,87 @@ export const api = {
       const q = qs.toString();
       return j<{ snapshots: ContextSnapshotInspectorSummary[] }>(`/api/context-inspector/snapshots${q ? `?${q}` : ""}`);
     },
-    getSnapshot: (id: string) =>
-      j<{ snapshot: ContextSnapshotInspectorDetail }>(`/api/context-inspector/snapshots/${encodeURIComponent(id)}`),
+    getSnapshot: (id: string, params?: { workspaceId?: string; laneId?: string }) => {
+      const qs = new URLSearchParams();
+      if (params?.workspaceId) qs.set("workspaceId", params.workspaceId);
+      if (params?.laneId) qs.set("laneId", params.laneId);
+      const q = qs.toString();
+      return j<{ snapshot: ContextSnapshotInspectorDetail }>(
+        `/api/context-inspector/snapshots/${encodeURIComponent(id)}${q ? `?${q}` : ""}`,
+      );
+    },
+    restoreRecent: (params: { workspaceId: string; laneId?: string; limit?: number; snapshotKind?: string }) => {
+      const qs = new URLSearchParams();
+      qs.set("workspaceId", params.workspaceId);
+      if (params.laneId) qs.set("laneId", params.laneId);
+      if (params.limit != null) qs.set("limit", String(params.limit));
+      if (params.snapshotKind) qs.set("snapshotKind", params.snapshotKind);
+      const q = qs.toString();
+      return j<{ snapshots: ContextSnapshotInspectorSummary[] }>(`/api/context/restore/recent?${q}`);
+    },
+    restoreGet: (id: string, params: { workspaceId: string; laneId?: string }) => {
+      const qs = new URLSearchParams();
+      qs.set("workspaceId", params.workspaceId);
+      if (params.laneId) qs.set("laneId", params.laneId);
+      return j<{
+        snapshot: ContextSnapshotInspectorDetail;
+        evidenceClass: string;
+        nonCanonicalEvidence: boolean;
+        canonicalWriteCommitted: boolean;
+      }>(`/api/context/restore/${encodeURIComponent(id)}?${qs.toString()}`);
+    },
+    restoreCandidates: (id: string, params: { workspaceId: string; laneId?: string }) => {
+      const qs = new URLSearchParams();
+      qs.set("workspaceId", params.workspaceId);
+      if (params.laneId) qs.set("laneId", params.laneId);
+      return j<RestoreInspectorCandidatesResponse>(`/api/context/restore/${encodeURIComponent(id)}/candidates?${qs.toString()}`);
+    },
+    restoreScore: (id: string, params: { workspaceId: string; laneId?: string }) => {
+      const qs = new URLSearchParams();
+      qs.set("workspaceId", params.workspaceId);
+      if (params.laneId) qs.set("laneId", params.laneId);
+      return j<RestoreInspectorScoreResponse>(`/api/context/restore/${encodeURIComponent(id)}/score?${qs.toString()}`);
+    },
+    restoreResumeHints: (id: string, params: { workspaceId: string; laneId?: string }) => {
+      const qs = new URLSearchParams();
+      qs.set("workspaceId", params.workspaceId);
+      if (params.laneId) qs.set("laneId", params.laneId);
+      return j<RestoreInspectorResumeHintsResponse>(`/api/context/restore/${encodeURIComponent(id)}/resume-hints?${qs.toString()}`);
+    },
+  },
+  dreamReports: {
+    list: (params: { workspaceId: string; laneId?: string; mode?: string; limit?: number }) => {
+      const qs = new URLSearchParams();
+      qs.set("workspaceId", params.workspaceId);
+      if (params.laneId) qs.set("laneId", params.laneId);
+      if (params.mode) qs.set("mode", params.mode);
+      if (params.limit != null) qs.set("limit", String(params.limit));
+      return j<{ reports: DreamReportSummary[] }>(`/api/dream/reports?${qs.toString()}`);
+    },
+    get: (id: string, params: { workspaceId: string; laneId?: string }) => {
+      const qs = new URLSearchParams();
+      qs.set("workspaceId", params.workspaceId);
+      if (params.laneId) qs.set("laneId", params.laneId);
+      return j<DreamReportDetail>(`/api/dream/reports/${encodeURIComponent(id)}?${qs.toString()}`);
+    },
+    candidates: (id: string, params: { workspaceId: string; laneId?: string }) => {
+      const qs = new URLSearchParams();
+      qs.set("workspaceId", params.workspaceId);
+      if (params.laneId) qs.set("laneId", params.laneId);
+      return j<DreamReportCandidatesResponse>(`/api/dream/reports/${encodeURIComponent(id)}/candidates?${qs.toString()}`);
+    },
+    proposals: (id: string, params: { workspaceId: string; laneId?: string }) => {
+      const qs = new URLSearchParams();
+      qs.set("workspaceId", params.workspaceId);
+      if (params.laneId) qs.set("laneId", params.laneId);
+      return j<DreamReportProposalsResponse>(`/api/dream/reports/${encodeURIComponent(id)}/proposals?${qs.toString()}`);
+    },
+    warnings: (id: string, params: { workspaceId: string; laneId?: string }) => {
+      const qs = new URLSearchParams();
+      qs.set("workspaceId", params.workspaceId);
+      if (params.laneId) qs.set("laneId", params.laneId);
+      return j<DreamReportWarningsResponse>(`/api/dream/reports/${encodeURIComponent(id)}/warnings?${qs.toString()}`);
+    },
   },
   backup: {
     bundles: (limit?: number) => {

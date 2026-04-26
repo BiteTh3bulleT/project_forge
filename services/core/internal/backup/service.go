@@ -437,7 +437,7 @@ func (s *Service) pickSections(kind string) ([]string, error) {
 			"provenance_records", "journal_events", "memory_notes", "semantic_links",
 			"state_items", "state_versions", "open_loops", "artifact_refs",
 			"derived_models", "contradiction_records", "supersession_records",
-			"context_packet_snapshots", "semantic_idempotency_keys", "autonomy_settings",
+			"context_packet_snapshots", "dream_reports", "semantic_idempotency_keys", "autonomy_settings",
 			"chat_threads", "chat_messages", "canvas_boards", "canvas_notes",
 			"tool_capability_overrides", "feature_flags", "alert_rules", "scheduled_tasks",
 			"memory_vsa_pointers", "memory_vsa_role_bindings", "memory_vsa_associations",
@@ -677,6 +677,7 @@ var extractQueries = map[string]string{
 	"contradiction_records":         "SELECT * FROM contradiction_records ORDER BY created_at DESC",
 	"supersession_records":          "SELECT * FROM supersession_records ORDER BY created_at DESC",
 	"context_packet_snapshots":      "SELECT * FROM context_packet_snapshots ORDER BY created_at DESC",
+	"dream_reports":                 "SELECT * FROM dream_reports ORDER BY created_at DESC",
 	"semantic_idempotency_keys":     "SELECT * FROM semantic_idempotency_keys ORDER BY created_at DESC, idempotency_key ASC",
 	"autonomy_settings":             "SELECT key, value FROM settings WHERE key LIKE 'autonomy_repo.%' ORDER BY key ASC",
 	"memory_vsa_pointers":           "SELECT * FROM memory_vsa_pointers ORDER BY updated_at DESC",
@@ -1470,6 +1471,49 @@ ON CONFLICT(id) DO UPDATE SET
 				"correlation_id", "trace_id", "syscall_id", "metadata_json", "proposed_by", "committed_by", "audit_id",
 			},
 		},
+		"dream_reports": {
+			sql: `INSERT INTO dream_reports(
+  id, created_at, completed_at, workspace_id, lane_id, mode, dry_run, status,
+  time_window_start, time_window_end, candidates_considered, proposals_generated,
+  summary_json, candidates_json, salience_scores_json, memory_tier_proposals_json,
+  repair_proposals_json, snapshot_hygiene_proposals_json, warnings_json, trace_json,
+  correlation_id, trace_id, syscall_id, audit_id, proposed_by, committed_by, metadata_json
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+ON CONFLICT(id) DO UPDATE SET
+  created_at=excluded.created_at,
+  completed_at=excluded.completed_at,
+  workspace_id=excluded.workspace_id,
+  lane_id=excluded.lane_id,
+  mode=excluded.mode,
+  dry_run=excluded.dry_run,
+  status=excluded.status,
+  time_window_start=excluded.time_window_start,
+  time_window_end=excluded.time_window_end,
+  candidates_considered=excluded.candidates_considered,
+  proposals_generated=excluded.proposals_generated,
+  summary_json=excluded.summary_json,
+  candidates_json=excluded.candidates_json,
+  salience_scores_json=excluded.salience_scores_json,
+  memory_tier_proposals_json=excluded.memory_tier_proposals_json,
+  repair_proposals_json=excluded.repair_proposals_json,
+  snapshot_hygiene_proposals_json=excluded.snapshot_hygiene_proposals_json,
+  warnings_json=excluded.warnings_json,
+  trace_json=excluded.trace_json,
+  correlation_id=excluded.correlation_id,
+  trace_id=excluded.trace_id,
+  syscall_id=excluded.syscall_id,
+  audit_id=excluded.audit_id,
+  proposed_by=excluded.proposed_by,
+  committed_by=excluded.committed_by,
+  metadata_json=excluded.metadata_json`,
+			fields: []string{
+				"id", "created_at", "completed_at", "workspace_id", "lane_id", "mode", "dry_run", "status",
+				"time_window_start", "time_window_end", "candidates_considered", "proposals_generated",
+				"summary_json", "candidates_json", "salience_scores_json", "memory_tier_proposals_json",
+				"repair_proposals_json", "snapshot_hygiene_proposals_json", "warnings_json", "trace_json",
+				"correlation_id", "trace_id", "syscall_id", "audit_id", "proposed_by", "committed_by", "metadata_json",
+			},
+		},
 		"semantic_idempotency_keys": {
 			sql: `INSERT INTO semantic_idempotency_keys(
   idempotency_key, action, result_json, created_at, correlation_id
@@ -1576,6 +1620,9 @@ func backupSectionManifest(section string) SectionManifest {
 	case "context_packet_snapshots":
 		entry.AuthorityClass = "non_canonical_evidence"
 		entry.Purpose = "context restore snapshot evidence and scoring metadata"
+	case "dream_reports":
+		entry.AuthorityClass = "non_canonical_evidence"
+		entry.Purpose = "Dream Mode dry-run replay, salience, memory-tier, repair, and snapshot hygiene report evidence"
 	case "artifact_refs", "artifacts", "gateway_invocations", "audit_records", "approval_requests", "approval_decisions", "provenance_records":
 		entry.AuthorityClass = "non_canonical_evidence"
 		entry.Purpose = "audit, approval, provenance, gateway, or artifact evidence"
@@ -1715,7 +1762,8 @@ var restoreSectionPriority = map[string]int{
 	"contradiction_records":         65,
 	"supersession_records":          66,
 	"context_packet_snapshots":      67,
-	"semantic_idempotency_keys":     68,
+	"dream_reports":                 68,
+	"semantic_idempotency_keys":     69,
 	"autonomy_settings":             70,
 	"memory_usefulness_events":      71,
 	"packet_alignment_notes":        72,

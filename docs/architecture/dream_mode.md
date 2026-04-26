@@ -63,8 +63,36 @@ Long-term promotion requires high salience, high confidence, low contradiction r
 - `nap`: day-scale window, mid-term promotion and snapshot hygiene proposals
 - `deep_dream`: longer window and larger candidate set, long-term candidates and repair proposals, still CPU-only in v0
 
-## Report
+## Report Persistence
 
 The dry-run report returns run metadata, candidates, salience scores, tier routing proposals, memory action proposals, snapshot hygiene proposals, restore score update proposals, repair proposals, review items, no-op reasons, warnings, and trace.
 
 Reports are non-canonical evidence. They are not memory truth.
+
+Persistence is explicit. `/api/dream/run` accepts `persistReport`; when false or omitted, the report is returned only. When true, FORGE writes one `dream_reports` row containing the dry-run report as non-canonical evidence:
+
+- candidates and salience scores
+- memory-tier proposals
+- repair proposals
+- snapshot hygiene proposals
+- warnings and trace
+- correlation/trace IDs
+- proposed-by metadata
+
+Persisting a Dream report does not promote, demote, merge, delete, repair, or otherwise mutate canonical memory/state. Future commit/apply behavior must be a separate governed semantic syscall/control-lane path.
+
+## Operator Inspector API
+
+Status: IMPLEMENTED.
+
+Persisted reports are inspectable through read-only, workspace-scoped routes:
+
+- `GET /api/dream/reports?workspaceId=<id>&laneId=<lane>&mode=nap&limit=20`
+- `GET /api/dream/reports/<report-id>?workspaceId=<id>&laneId=<lane>`
+- `GET /api/dream/reports/<report-id>/candidates?workspaceId=<id>&laneId=<lane>`
+- `GET /api/dream/reports/<report-id>/proposals?workspaceId=<id>&laneId=<lane>`
+- `GET /api/dream/reports/<report-id>/warnings?workspaceId=<id>&laneId=<lane>`
+
+Each response marks the report as `non_canonical_evidence`, preserves `dryRun`, and reports
+`canonicalWriteCommitted=false`. Wrong-workspace report IDs return not found. Inspector routes do
+not call modelruntime/GPU and do not apply proposals.

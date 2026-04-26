@@ -1603,6 +1603,12 @@ func contextSnapshotMetadata(pkt domain.ContextPacket, metadata map[string]any) 
 		if v := pkt.RestoreSnapshot.Metadata["restore_trace"]; v != nil {
 			out["restore_trace"] = v
 		}
+		if v := pkt.RestoreSnapshot.Metadata["restore_package_json"]; v != nil {
+			out["restore_package_json"] = v
+		}
+		if v := pkt.RestoreSnapshot.Metadata["restore_package"]; v != nil {
+			out["restore_package"] = v
+		}
 		if v := readString(pkt.RestoreSnapshot.Metadata, "rendered_card_artifact_id"); v != "" {
 			out["rendered_card_artifact_id"] = v
 		}

@@ -80,6 +80,22 @@ Restore scoring returns a package with:
 
 Full graph/delta expansion is opt-in through `expandRestoreGraph`.
 
+## Operator Inspector API
+
+Status: IMPLEMENTED.
+
+Restore inspector routes are read-only and require workspace scope for the `/api/context/restore/*` surface:
+
+- `GET /api/context/restore/recent?workspaceId=<id>&laneId=<lane>&limit=20`
+- `GET /api/context/restore/<snapshot-id>?workspaceId=<id>&laneId=<lane>`
+- `GET /api/context/restore/<snapshot-id>/candidates?workspaceId=<id>&laneId=<lane>`
+- `GET /api/context/restore/<snapshot-id>/score?workspaceId=<id>&laneId=<lane>`
+- `GET /api/context/restore/<snapshot-id>/resume-hints?workspaceId=<id>&laneId=<lane>`
+
+Responses label restore rows as `non_canonical_evidence` and set `canonicalWriteCommitted=false`.
+Wrong-workspace IDs return not found instead of leaking snapshot evidence. These routes do not apply
+Dream proposals, execute tools, call modelruntime, or mutate canonical memory/state.
+
 ## Fresh Compile
 
 `requires_fresh_compile=true` means the current restore candidates are not reliable enough for direct resume. This is set when no candidate exists, the top score is below threshold, restore hints force a fresh compile, or the candidate is hard-stale.

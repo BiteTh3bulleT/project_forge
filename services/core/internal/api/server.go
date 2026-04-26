@@ -476,6 +476,11 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/autonomy/events", s.handleAutonomyEvents)
 			r.Post("/autonomy/maintenance/sweep", s.handleAutonomyMaintenanceSweep)
 			r.Post("/dream/run", s.handleDreamRun)
+			r.Get("/dream/reports", s.handleDreamReportsList)
+			r.Get("/dream/reports/{id}", s.handleDreamReportGet)
+			r.Get("/dream/reports/{id}/candidates", s.handleDreamReportCandidates)
+			r.Get("/dream/reports/{id}/proposals", s.handleDreamReportProposals)
+			r.Get("/dream/reports/{id}/warnings", s.handleDreamReportWarnings)
 
 			r.Get("/adapters", s.handleAdapters)
 
@@ -517,6 +522,11 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/packets/{id}", s.handleGetPacket)
 			r.Get("/context-inspector/snapshots", s.handleContextSnapshotList)
 			r.Get("/context-inspector/snapshots/{id}", s.handleContextSnapshotGet)
+			r.Get("/context/restore/recent", s.handleContextRestoreRecent)
+			r.Get("/context/restore/{id}", s.handleContextRestoreGet)
+			r.Get("/context/restore/{id}/candidates", s.handleContextRestoreCandidates)
+			r.Get("/context/restore/{id}/score", s.handleContextRestoreScore)
+			r.Get("/context/restore/{id}/resume-hints", s.handleContextRestoreResumeHints)
 			r.Get("/process/health", s.handleProcessHealthTrace)
 			r.Get("/project-context", s.handleGetProjectContext)
 			r.Post("/project-context/import", s.handleImportProjectContext)

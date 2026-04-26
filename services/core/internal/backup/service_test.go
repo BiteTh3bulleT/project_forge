@@ -51,7 +51,7 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 		"artifacts", "artifact_refs",
 		"memory_notes", "semantic_links", "state_items", "state_versions", "open_loops",
 		"contradiction_records", "supersession_records", "derived_models",
-		"context_packet_snapshots", "semantic_idempotency_keys", "provenance_records",
+		"context_packet_snapshots", "dream_reports", "semantic_idempotency_keys", "provenance_records",
 		"project_context_records", "evaluation_records", "gateway_invocations", "audit_records",
 		"autonomy_settings",
 		"permission_profiles", "approval_presets", "execution_strategies",
@@ -90,6 +90,7 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 		"gateway_invocations":       1,
 		"audit_records":             1,
 		"semantic_idempotency_keys": 1,
+		"dream_reports":             1,
 		"autonomy_settings":         1,
 		"model_manifests":           1,
 		"model_registry_status":     1,
@@ -126,7 +127,7 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 			"memory_notes", "artifact_refs",
 			"events", "autonomy_settings",
 			"gateway_invocations", "audit_records",
-			"semantic_idempotency_keys",
+			"dream_reports", "semantic_idempotency_keys",
 			"evaluation_records", "project_context_records",
 			"model_runtime_loads", "model_registry_status", "model_manifests",
 			"chat_messages", "chat_threads", "canvas_notes", "canvas_boards", "tool_capability_overrides",
@@ -183,6 +184,7 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 		"gateway_invocations":       1,
 		"audit_records":             1,
 		"semantic_idempotency_keys": 1,
+		"dream_reports":             1,
 		"autonomy_settings":         1,
 		"model_manifests":           1,
 		"model_registry_status":     1,
@@ -337,6 +339,15 @@ FROM audit_records WHERE id = ?`, 604).Scan(&auditCategory, &auditAction, &audit
 		t.Fatalf("semantic idempotency action mismatch: got %q", idempotencyAction)
 	}
 
+	var dreamMode, dreamCommittedBy string
+	var dreamDryRun int
+	if err := target.DB.QueryRowContext(ctx, `SELECT mode, dry_run, committed_by FROM dream_reports WHERE id = ?`, "dream-report-1").Scan(&dreamMode, &dreamDryRun, &dreamCommittedBy); err != nil {
+		t.Fatalf("query restored dream report: %v", err)
+	}
+	if dreamMode != "nap" || dreamDryRun != 1 || dreamCommittedBy != "" {
+		t.Fatalf("restored dream report authority mismatch: mode=%q dryRun=%d committedBy=%q", dreamMode, dreamDryRun, dreamCommittedBy)
+	}
+
 	var modelStatus string
 	if err := target.DB.QueryRowContext(ctx, `SELECT status FROM model_registry_status WHERE model_id = ?`, "local-chat").Scan(&modelStatus); err != nil {
 		t.Fatalf("query restored model registry status: %v", err)
@@ -380,6 +391,44 @@ FROM audit_records WHERE id = ?`, 604).Scan(&auditCategory, &auditAction, &audit
 	}
 	if len(secondRestore.Errors) != 0 || secondRestore.RolledBack {
 		t.Fatalf("second restore should be idempotent for immutable sections: result=%+v", secondRestore)
+	}
+}
+
+func TestRestoreDetectsMissingDreamReportsTable(t *testing.T) {
+	ctx := context.Background()
+	sourceDir := t.TempDir()
+	source, err := store.Open(sourceDir)
+	if err != nil {
+		t.Fatalf("open source store: %v", err)
+	}
+	t.Cleanup(func() { _ = source.Close() })
+	seedHighValueBackupFixture(t, ctx, source.DB)
+	srcSvc := New(source.DB, sourceDir)
+	bundle, err := srcSvc.CreateBundle(ctx, CreateBundleRequest{Kind: "full_backup", Label: "dream-schema"})
+	if err != nil {
+		t.Fatalf("create bundle: %v", err)
+	}
+
+	targetDir := t.TempDir()
+	target, err := store.Open(targetDir)
+	if err != nil {
+		t.Fatalf("open target store: %v", err)
+	}
+	t.Cleanup(func() { _ = target.Close() })
+	mustExec(t, ctx, target.DB, `DROP TABLE dream_reports`)
+
+	result, err := New(target.DB, targetDir).RestoreBundle(ctx, RestoreBundleRequest{
+		FilePath: bundle.FilePath,
+		Sections: []string{"dream_reports"},
+	})
+	if err != nil {
+		t.Fatalf("restore bundle: %v", err)
+	}
+	if result.Verification["schema"] != "failed" || len(result.Errors) == 0 {
+		t.Fatalf("expected dream report schema failure, got verification=%+v errors=%+v", result.Verification, result.Errors)
+	}
+	if result.Applied || result.Atomic || result.RolledBack {
+		t.Fatalf("schema validation should fail before transaction, got applied=%t atomic=%t rolledBack=%t", result.Applied, result.Atomic, result.RolledBack)
 	}
 }
 
@@ -999,6 +1048,24 @@ INSERT INTO audit_records(
 INSERT INTO semantic_idempotency_keys(idempotency_key, action, result_json, created_at, correlation_id)
 VALUES(?,?,?,?,?)`,
 		"idem-1", "CREATE_NOTE", `{"success":true}`, 2400, "corr-123")
+
+	mustExec(t, ctx, db, `
+INSERT INTO dream_reports(
+  id, created_at, completed_at, workspace_id, lane_id, mode, dry_run, status,
+  time_window_start, time_window_end, candidates_considered, proposals_generated,
+  summary_json, candidates_json, salience_scores_json, memory_tier_proposals_json,
+  repair_proposals_json, snapshot_hygiene_proposals_json, warnings_json, trace_json,
+  correlation_id, trace_id, syscall_id, audit_id, proposed_by, committed_by, metadata_json
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"dream-report-1", 2450, 2451, "workspace-1", "lane-a", "nap", 1, "completed",
+		2000, 2450, 2, 2,
+		`{"summary":"dry-run report","nonCanonicalEvidence":true,"canonicalWriteCommitted":false}`,
+		`[{"candidate_id":"cand-1","source_type":"memory_note","source_ids":["note-1"],"workspace_id":"workspace-1","lane_id":"lane-a","start_timestamp":2400,"end_timestamp":2400,"content_summary":"candidate","tags":["correction"],"related_goal_ids":[],"related_loop_ids":[],"related_snapshot_ids":[],"raw_importance_signals":{},"trace":{}}]`,
+		`[{"candidate_id":"cand-1","total_salience":0.8,"confidence":0.8}]`,
+		`[{"candidate_id":"cand-1","source_type":"memory_note","decision":"promote_mid_term","confidence":0.8,"reason":"dry run","dry_run":true}]`,
+		`[]`, `[]`, `[]`,
+		`{"cpu_only":true,"canonical_write_committed":false}`,
+		"corr-123", "trace-123", nil, nil, "forge.dream", "", `{"evidence":"non_canonical"}`)
 
 	mustExec(t, ctx, db, `
 INSERT INTO provenance_records(

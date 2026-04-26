@@ -216,6 +216,156 @@ func TestHandleContextSnapshotInspectorListAndGet(t *testing.T) {
 	}
 }
 
+func TestHandleContextRestoreInspectorRoutesAreScopedReadOnly(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
+	packet := domain.ContextPacket{
+		ID:    "restore-inspector-1",
+		Query: "why restore",
+		Scope: domain.ForgeScope{
+			WorkspaceID:   "workspace-restore",
+			LaneID:        "control.semantic",
+			SelectedPaths: []string{"docs"},
+		},
+		CompileOptions: &domain.ContextCompileOptions{SnapshotKind: "restore"},
+		RestoreSnapshot: &domain.ContextRestoreSnapshot{
+			SnapshotID:   "restore-inspector-1",
+			SnapshotKind: "restore",
+			Evidence: map[string]any{
+				"header": map[string]any{"snapshotId": "restore-inspector-1"},
+				"graph":  map[string]any{"nodes": []string{"root"}},
+				"delta":  map[string]any{"added": []string{"note-restore"}},
+			},
+			Metadata: map[string]any{
+				"restore_scores_json": map[string]any{
+					"decision":                      "fresh_compile",
+					"requires_fresh_compile":        true,
+					"requires_fresh_compile_reason": "top candidate below threshold",
+					"threshold":                     0.72,
+					"top_score":                     0.42,
+					"selected_snapshot_id":          "",
+					"top_candidate_id":              "restore-inspector-0",
+					"scores": []map[string]any{{
+						"snapshot_id": "restore-inspector-0",
+						"total":       0.42,
+						"explain":     []string{"below threshold"},
+					}},
+				},
+				"resume_hints_json": map[string]any{
+					"next_action":            "fresh_compile",
+					"requires_fresh_compile": true,
+					"candidate_count":        1,
+				},
+				"restore_package_json": map[string]any{
+					"selected_header": map[string]any{"snapshotId": "restore-inspector-1"},
+				},
+			},
+		},
+		Notes: []domain.MemoryNote{{ID: "note-restore"}},
+		Budget: domain.ContextBudget{
+			MaxTokens: 512,
+		},
+		CreatedAt: time.Now().UnixMilli(),
+	}
+	semanticStore := controllane.NewSQLiteSemanticStore(st.DB)
+	if err := semanticStore.CreateSnapshot(context.Background(), packet, "sys-restore", "corr-restore", "trace-restore", map[string]any{"source": "restore_inspector_test"}); err != nil {
+		t.Fatalf("create snapshot: %v", err)
+	}
+	before := countRows(t, st, "memory_notes")
+
+	recentReq := httptest.NewRequest(http.MethodGet, "/api/context/restore/recent?workspaceId=workspace-restore&laneId=control.semantic", nil)
+	recentRR := httptest.NewRecorder()
+	srv.handleContextRestoreRecent(recentRR, recentReq)
+	if recentRR.Code != http.StatusOK {
+		t.Fatalf("recent status=%d body=%s", recentRR.Code, strings.TrimSpace(recentRR.Body.String()))
+	}
+	var recentResp struct {
+		Snapshots []struct {
+			ID                   string `json:"id"`
+			NonCanonicalEvidence bool   `json:"nonCanonicalEvidence"`
+			EvidenceClass        string `json:"evidenceClass"`
+		} `json:"snapshots"`
+	}
+	if err := json.Unmarshal(recentRR.Body.Bytes(), &recentResp); err != nil {
+		t.Fatalf("decode recent: %v", err)
+	}
+	if len(recentResp.Snapshots) != 1 || recentResp.Snapshots[0].ID != packet.ID || !recentResp.Snapshots[0].NonCanonicalEvidence || recentResp.Snapshots[0].EvidenceClass != "non_canonical_evidence" {
+		t.Fatalf("unexpected recent response: %+v", recentResp)
+	}
+
+	scoreReq := withRouteParam(httptest.NewRequest(http.MethodGet, "/api/context/restore/"+packet.ID+"/score?workspaceId=workspace-restore&laneId=control.semantic", nil), "id", packet.ID)
+	scoreRR := httptest.NewRecorder()
+	srv.handleContextRestoreScore(scoreRR, scoreReq)
+	if scoreRR.Code != http.StatusOK {
+		t.Fatalf("score status=%d body=%s", scoreRR.Code, strings.TrimSpace(scoreRR.Body.String()))
+	}
+	var scoreResp struct {
+		RequiresFreshCompile       bool             `json:"requiresFreshCompile"`
+		RequiresFreshCompileReason string           `json:"requiresFreshCompileReason"`
+		ScoreBreakdown             []map[string]any `json:"scoreBreakdown"`
+		RestorePackage             map[string]any   `json:"restorePackage"`
+		NonCanonicalEvidence       bool             `json:"nonCanonicalEvidence"`
+	}
+	if err := json.Unmarshal(scoreRR.Body.Bytes(), &scoreResp); err != nil {
+		t.Fatalf("decode score: %v body=%s", err, scoreRR.Body.String())
+	}
+	if !scoreResp.RequiresFreshCompile || !strings.Contains(scoreResp.RequiresFreshCompileReason, "threshold") || len(scoreResp.ScoreBreakdown) != 1 || !scoreResp.NonCanonicalEvidence {
+		t.Fatalf("unexpected score response: %+v", scoreResp)
+	}
+	if _, ok := scoreResp.RestorePackage["selected_header"]; !ok {
+		t.Fatalf("expected restore package selected_header: %+v", scoreResp.RestorePackage)
+	}
+
+	candidatesReq := withRouteParam(httptest.NewRequest(http.MethodGet, "/api/context/restore/"+packet.ID+"/candidates?workspaceId=workspace-restore&laneId=control.semantic", nil), "id", packet.ID)
+	candidatesRR := httptest.NewRecorder()
+	srv.handleContextRestoreCandidates(candidatesRR, candidatesReq)
+	if candidatesRR.Code != http.StatusOK {
+		t.Fatalf("candidates status=%d body=%s", candidatesRR.Code, strings.TrimSpace(candidatesRR.Body.String()))
+	}
+	var candidatesResp struct {
+		Candidates           []map[string]any `json:"candidates"`
+		NonCanonicalEvidence bool             `json:"nonCanonicalEvidence"`
+	}
+	if err := json.Unmarshal(candidatesRR.Body.Bytes(), &candidatesResp); err != nil {
+		t.Fatalf("decode candidates: %v body=%s", err, candidatesRR.Body.String())
+	}
+	if len(candidatesResp.Candidates) != 1 || !candidatesResp.NonCanonicalEvidence {
+		t.Fatalf("unexpected candidates response: %+v", candidatesResp)
+	}
+
+	hintsReq := withRouteParam(httptest.NewRequest(http.MethodGet, "/api/context/restore/"+packet.ID+"/resume-hints?workspaceId=workspace-restore&laneId=control.semantic", nil), "id", packet.ID)
+	hintsRR := httptest.NewRecorder()
+	srv.handleContextRestoreResumeHints(hintsRR, hintsReq)
+	if hintsRR.Code != http.StatusOK {
+		t.Fatalf("hints status=%d body=%s", hintsRR.Code, strings.TrimSpace(hintsRR.Body.String()))
+	}
+	var hintsResp struct {
+		ResumeHints          map[string]any `json:"resumeHints"`
+		NonCanonicalEvidence bool           `json:"nonCanonicalEvidence"`
+	}
+	if err := json.Unmarshal(hintsRR.Body.Bytes(), &hintsResp); err != nil {
+		t.Fatalf("decode hints: %v", err)
+	}
+	if hintsResp.ResumeHints["next_action"] != "fresh_compile" || !hintsResp.NonCanonicalEvidence {
+		t.Fatalf("unexpected hints response: %+v", hintsResp)
+	}
+
+	wrongReq := withRouteParam(httptest.NewRequest(http.MethodGet, "/api/context/restore/"+packet.ID+"?workspaceId=workspace-other", nil), "id", packet.ID)
+	wrongRR := httptest.NewRecorder()
+	srv.handleContextRestoreGet(wrongRR, wrongReq)
+	if wrongRR.Code != http.StatusNotFound {
+		t.Fatalf("wrong workspace status=%d body=%s", wrongRR.Code, strings.TrimSpace(wrongRR.Body.String()))
+	}
+	missingReq := withRouteParam(httptest.NewRequest(http.MethodGet, "/api/context/restore/missing?workspaceId=workspace-restore", nil), "id", "missing")
+	missingRR := httptest.NewRecorder()
+	srv.handleContextRestoreGet(missingRR, missingReq)
+	if missingRR.Code != http.StatusNotFound {
+		t.Fatalf("missing snapshot status=%d body=%s", missingRR.Code, strings.TrimSpace(missingRR.Body.String()))
+	}
+	if got := countRows(t, st, "memory_notes"); got != before {
+		t.Fatalf("restore inspector mutated canonical memory_notes: before=%d after=%d", before, got)
+	}
+}
+
 func TestHandleContextSnapshotInspectorListAndGetShowsRestoreTraceWhenAvailable(t *testing.T) {
 	srv, st := newBackupAuditHarness(t)
 

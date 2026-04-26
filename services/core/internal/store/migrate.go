@@ -1203,6 +1203,36 @@ CREATE TABLE IF NOT EXISTS context_packet_snapshots (
   audit_id TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS dream_reports (
+  id TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  completed_at INTEGER NOT NULL,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  mode TEXT NOT NULL,
+  dry_run INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL,
+  time_window_start INTEGER NOT NULL,
+  time_window_end INTEGER NOT NULL,
+  candidates_considered INTEGER NOT NULL DEFAULT 0,
+  proposals_generated INTEGER NOT NULL DEFAULT 0,
+  summary_json TEXT NOT NULL DEFAULT '{}',
+  candidates_json TEXT NOT NULL DEFAULT '[]',
+  salience_scores_json TEXT NOT NULL DEFAULT '[]',
+  memory_tier_proposals_json TEXT NOT NULL DEFAULT '[]',
+  repair_proposals_json TEXT NOT NULL DEFAULT '[]',
+  snapshot_hygiene_proposals_json TEXT NOT NULL DEFAULT '[]',
+  warnings_json TEXT NOT NULL DEFAULT '[]',
+  trace_json TEXT NOT NULL DEFAULT '{}',
+  correlation_id TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
+  syscall_id TEXT,
+  audit_id TEXT,
+  proposed_by TEXT NOT NULL DEFAULT 'forge.dream',
+  committed_by TEXT NOT NULL DEFAULT '',
+  metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
 CREATE TABLE IF NOT EXISTS semantic_idempotency_keys (
   idempotency_key TEXT PRIMARY KEY,
   action TEXT NOT NULL,
@@ -1238,6 +1268,9 @@ CREATE INDEX IF NOT EXISTS idx_supersession_old ON supersession_records(old_obje
 CREATE INDEX IF NOT EXISTS idx_supersession_new ON supersession_records(new_object_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ctx_snapshot_scope ON context_packet_snapshots(workspace_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ctx_snapshot_corr ON context_packet_snapshots(correlation_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_dream_reports_scope ON dream_reports(workspace_id, lane_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_dream_reports_mode ON dream_reports(workspace_id, mode, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_dream_reports_trace ON dream_reports(correlation_id, trace_id);
 
 CREATE TABLE IF NOT EXISTS chat_threads (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

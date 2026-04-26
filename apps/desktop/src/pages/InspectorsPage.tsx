@@ -10,6 +10,8 @@ import {
   type AuditTraceLookupResponse,
   type ContextSnapshotInspectorDetail,
   type ContextSnapshotInspectorSummary,
+  type DreamReportDetail,
+  type DreamReportSummary,
   type ProcessHealthTraceResponse,
   type ProcessHealthCorrelationReport,
   type ProcessHealthInvocation,
@@ -288,6 +290,15 @@ export function InspectorsPage() {
   const [snapshotBusy, setSnapshotBusy] = useState(false);
   const [snapshotErr, setSnapshotErr] = useState<string | null>(null);
 
+  const [dreamWorkspaceId, setDreamWorkspaceId] = useState(() => params.get("dreamWorkspaceId") ?? params.get("workspaceId") ?? "");
+  const [dreamLaneId, setDreamLaneId] = useState(() => params.get("dreamLaneId") ?? params.get("laneId") ?? "");
+  const [dreamMode, setDreamMode] = useState(() => params.get("dreamMode") ?? "");
+  const [selectedDreamReportId, setSelectedDreamReportId] = useState(() => params.get("dreamReportId") ?? "");
+  const [dreamReports, setDreamReports] = useState<DreamReportSummary[]>([]);
+  const [dreamReportDetail, setDreamReportDetail] = useState<DreamReportDetail | null>(null);
+  const [dreamBusy, setDreamBusy] = useState(false);
+  const [dreamErr, setDreamErr] = useState<string | null>(null);
+
   const [packetIdInput, setPacketIdInput] = useState(() => params.get("packetId") ?? "");
   const [packetBusy, setPacketBusy] = useState(false);
   const [packetErr, setPacketErr] = useState<string | null>(null);
@@ -404,6 +415,71 @@ export function InspectorsPage() {
     }
   }
 
+  async function loadDreamReports(preferredReportId?: string) {
+    const workspaceId = dreamWorkspaceId.trim();
+    if (!workspaceId) {
+      setDreamErr("Workspace id is required to inspect Dream reports.");
+      return;
+    }
+    setDreamBusy(true);
+    try {
+      const res = await api.dreamReports.list({
+        workspaceId,
+        laneId: dreamLaneId.trim() || undefined,
+        mode: dreamMode.trim() || undefined,
+        limit: 60,
+      });
+      const next = Array.isArray(res.reports) ? res.reports : [];
+      setDreamReports(next);
+      const nextSelectedId = preferredReportId?.trim() || selectedDreamReportId.trim() || next[0]?.id || "";
+      if (nextSelectedId) {
+        setSelectedDreamReportId(nextSelectedId);
+        await loadDreamReportDetail(nextSelectedId, workspaceId, dreamLaneId);
+      } else {
+        setDreamReportDetail(null);
+      }
+      setDreamErr(null);
+      syncParams({
+        dreamWorkspaceId: workspaceId,
+        dreamLaneId,
+        dreamMode,
+        dreamReportId: nextSelectedId,
+      });
+    } catch (error) {
+      setDreamReports([]);
+      setDreamReportDetail(null);
+      setDreamErr(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDreamBusy(false);
+    }
+  }
+
+  async function loadDreamReportDetail(reportId: string, workspaceOverride?: string, laneOverride?: string) {
+    const id = reportId.trim();
+    const workspaceId = (workspaceOverride ?? dreamWorkspaceId).trim();
+    const laneId = (laneOverride ?? dreamLaneId).trim();
+    if (!id) {
+      setDreamReportDetail(null);
+      return;
+    }
+    if (!workspaceId) {
+      setDreamErr("Workspace id is required to inspect Dream reports.");
+      return;
+    }
+    try {
+      const res = await api.dreamReports.get(id, {
+        workspaceId,
+        laneId: laneId || undefined,
+      });
+      setDreamReportDetail(res);
+      setDreamErr(null);
+      syncParams({ dreamReportId: id, dreamWorkspaceId: workspaceId, dreamLaneId: laneId });
+    } catch (error) {
+      setDreamReportDetail(null);
+      setDreamErr(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async function loadPacketInspector(packetIdText = packetIdInput) {
     const packetId = Number(packetIdText.trim());
     if (!Number.isFinite(packetId) || packetId <= 0) {
@@ -490,6 +566,12 @@ export function InspectorsPage() {
   }, []);
 
   useEffect(() => {
+    if (dreamWorkspaceId.trim()) {
+      void loadDreamReports(selectedDreamReportId);
+    }
+  }, []);
+
+  useEffect(() => {
     if (packetIdInput.trim()) {
       void loadPacketInspector(packetIdInput);
     }
@@ -520,6 +602,7 @@ export function InspectorsPage() {
             onClick={() =>
               void Promise.all([
                 loadSnapshots(selectedSnapshotId),
+                dreamWorkspaceId ? loadDreamReports(selectedDreamReportId) : Promise.resolve(),
                 correlationIdInput || traceIdInput ? loadTraceInspector() : Promise.resolve(),
                 processCorrelationIdInput || processTraceIdInput ? loadProcessHealthInspector() : Promise.resolve(),
               ])
@@ -532,7 +615,7 @@ export function InspectorsPage() {
         <div className="rounded border border-forge-electric/20 bg-forge-electric/5 p-3 text-sm text-forge-mist">
           These surfaces expose persisted evidence only. They do not execute tools, mutate truth, or bypass approvals.
         </div>
-        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        <div className="mt-4 grid gap-3 lg:grid-cols-4">
           <OperatorStepCard
             step="01"
             title="Locate the snapshot"
@@ -545,6 +628,11 @@ export function InspectorsPage() {
           />
           <OperatorStepCard
             step="03"
+            title="Inspect Dream evidence"
+            detail="Review dry-run reports, replay candidates, salience scores, proposed memory-tier moves, and warnings as non-canonical evidence."
+          />
+          <OperatorStepCard
+            step="04"
             title="Trace process/runtime"
             detail="Follow correlation or trace ids to audit rows, process invocations, and model-runtime health in one flow."
           />
@@ -645,6 +733,10 @@ export function InspectorsPage() {
                   <MetricChip label="Kind" value={snapshotDetail.summary.snapshotKind || "—"} />
                   <MetricChip label="Workspace" value={snapshotDetail.summary.workspaceId || "—"} />
                   <MetricChip label="Lane" value={snapshotDetail.summary.laneId || "—"} />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <CountPill label="Evidence" value={snapshotDetail.summary.evidenceClass || "non_canonical_evidence"} />
+                  <CountPill label="Canonical commit" value={snapshotDetail.summary.nonCanonicalEvidence ? "no" : "unknown"} />
                 </div>
                 <div className="rounded border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">
                   <div className="font-medium text-forge-ash">{snapshotDetail.summary.query || snapshotDetail.summary.id}</div>
@@ -817,6 +909,149 @@ export function InspectorsPage() {
                       }}
                       empty="No included ids recorded."
                     />
+                  </div>
+                </FoldSection>
+              </>
+            )}
+          </div>
+        </div>
+      </Panel>
+
+      <Panel title="Dream Reports" subtitle="Inspect persisted Dream Mode dry-run reports as non-canonical evidence.">
+        <div className="mb-4 flex flex-wrap gap-2">
+          <CountPill label="Reports" value={dreamReports.length} />
+          <CountPill label="Selected" value={selectedDreamReportId || "none"} />
+          <CountPill label="Evidence" value="non-canonical" />
+          <CountPill label="Commit mode" value="disabled" />
+        </div>
+        <div className="grid gap-2 md:grid-cols-3">
+          <input
+            className="forge-input"
+            placeholder="workspace id"
+            value={dreamWorkspaceId}
+            onChange={(e) => setDreamWorkspaceId(e.target.value)}
+          />
+          <input className="forge-input" placeholder="lane id" value={dreamLaneId} onChange={(e) => setDreamLaneId(e.target.value)} />
+          <input className="forge-input" placeholder="mode" value={dreamMode} onChange={(e) => setDreamMode(e.target.value)} />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <PrimaryButton disabled={dreamBusy} onClick={() => void loadDreamReports()}>
+            {dreamBusy ? "Loading…" : "Load Dream reports"}
+          </PrimaryButton>
+          <GhostButton
+            onClick={() => {
+              setDreamWorkspaceId("");
+              setDreamLaneId("");
+              setDreamMode("");
+              setSelectedDreamReportId("");
+              setDreamReports([]);
+              setDreamReportDetail(null);
+              setDreamErr(null);
+              syncParams({ dreamWorkspaceId: "", dreamLaneId: "", dreamMode: "", dreamReportId: "" });
+            }}
+          >
+            Clear Dream filters
+          </GhostButton>
+        </div>
+        {dreamErr ? <div className="mt-3 rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{dreamErr}</div> : null}
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+          <div className="space-y-2">
+            {dreamReports.length === 0 ? <div className="text-sm text-forge-mist">No Dream reports matched the current filters.</div> : null}
+            {dreamReports.map((report) => (
+              <button
+                key={report.id}
+                type="button"
+                onClick={() => {
+                  setSelectedDreamReportId(report.id);
+                  void loadDreamReportDetail(report.id);
+                }}
+                className={[
+                  "w-full rounded border px-3 py-3 text-left transition",
+                  selectedDreamReportId === report.id ? "border-white/20 bg-white/10" : "border-white/10 bg-black/20 hover:border-white/20",
+                ].join(" ")}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold text-forge-ash">{report.mode || "dream report"}</div>
+                    <div className="mt-1 font-mono text-[11px] text-forge-mist/80">{report.id}</div>
+                  </div>
+                  <div className="text-[11px] text-forge-mist/75">{formatTime(report.createdAt)}</div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-forge-mist/80">
+                  <span>{report.workspaceId || "workspace: —"}</span>
+                  <span>{report.laneId || "lane: —"}</span>
+                  <span>{report.dryRun ? "dry-run" : "not dry-run"}</span>
+                  <span>{report.status || "status: —"}</span>
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-2 text-[11px] text-forge-mist/80">
+                  <span>candidates {report.candidatesConsidered ?? 0}</span>
+                  <span>proposals {report.proposalsGenerated ?? 0}</span>
+                  <span>warnings {report.warnings?.length ?? 0}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-4">
+            {!dreamReportDetail ? (
+              <div className="rounded border border-dashed border-white/10 px-4 py-6 text-sm text-forge-mist">
+                Load a workspace and select a Dream report to inspect replay, salience, proposals, and warnings.
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-2 md:grid-cols-4">
+                  <MetricChip label="Mode" value={dreamReportDetail.mode || "—"} />
+                  <MetricChip label="Status" value={dreamReportDetail.status || "—"} />
+                  <MetricChip label="Dry Run" value={dreamReportDetail.dryRun ? "yes" : "no"} />
+                  <MetricChip label="Canonical Commit" value={dreamReportDetail.canonicalWriteCommitted ? "yes" : "no"} />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <CountPill label="Evidence" value={dreamReportDetail.evidenceClass || "non_canonical_evidence"} />
+                  <CountPill label="Candidates" value={dreamReportDetail.candidates?.length ?? 0} />
+                  <CountPill label="Salience" value={dreamReportDetail.salienceScores?.length ?? 0} />
+                  <CountPill label="Review" value={[...(dreamReportDetail.repairProposals ?? []), ...(dreamReportDetail.snapshotHygieneProposals ?? [])].length} />
+                </div>
+                <div className="rounded border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">
+                  <div className="font-mono text-[11px] text-forge-ash">{dreamReportDetail.id}</div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                    <span>workspace {dreamReportDetail.workspaceId || "—"}</span>
+                    <span>lane {dreamReportDetail.laneId || "—"}</span>
+                    <span>corr {dreamReportDetail.correlationId || "—"}</span>
+                    <span>trace {dreamReportDetail.traceId || "—"}</span>
+                  </div>
+                </div>
+
+                <FoldSection title="Run Summary" subtitle="Dry-run report totals and summary payload." defaultOpen>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <MetricChip label="Considered" value={dreamReportDetail.candidatesConsidered ?? 0} />
+                    <MetricChip label="Generated" value={dreamReportDetail.proposalsGenerated ?? 0} />
+                    <MetricChip label="Warnings" value={dreamReportDetail.warnings?.length ?? 0} />
+                  </div>
+                  <div className="mt-3">
+                    <JsonBlock value={dreamReportDetail.summary} empty="No Dream summary payload recorded." maxHeightClass="max-h-[220px]" />
+                  </div>
+                </FoldSection>
+
+                <FoldSection title="Replay & Salience" subtitle="Replay candidates and deterministic salience evidence." defaultOpen>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <JsonBlock value={dreamReportDetail.candidates} empty="No replay candidates recorded." maxHeightClass="max-h-[280px]" />
+                    <JsonBlock value={dreamReportDetail.salienceScores} empty="No salience scores recorded." maxHeightClass="max-h-[280px]" />
+                  </div>
+                </FoldSection>
+
+                <FoldSection title="Proposals & Review" subtitle="Proposal records only. The inspector does not apply Dream Mode changes." defaultOpen>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <JsonBlock value={dreamReportDetail.memoryTierProposals} empty="No memory-tier proposals recorded." maxHeightClass="max-h-[280px]" />
+                    <JsonBlock value={dreamReportDetail.repairProposals} empty="No repair proposals recorded." maxHeightClass="max-h-[280px]" />
+                    <JsonBlock value={dreamReportDetail.snapshotHygieneProposals} empty="No snapshot hygiene proposals recorded." maxHeightClass="max-h-[280px]" />
+                    <JsonBlock value={dreamReportDetail.warnings} empty="No warnings recorded." maxHeightClass="max-h-[280px]" />
+                  </div>
+                </FoldSection>
+
+                <FoldSection title="Trace & Metadata" subtitle="Correlation, trace, and non-canonical report metadata.">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <JsonBlock value={dreamReportDetail.trace} empty="No trace payload recorded." />
+                    <JsonBlock value={dreamReportDetail.metadata} empty="No report metadata recorded." />
                   </div>
                 </FoldSection>
               </>

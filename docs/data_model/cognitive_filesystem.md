@@ -358,7 +358,28 @@ Restore scoring is deterministic and lexical/scoped. It records query, scope, sn
 
 Dream Mode v0 reads journal, snapshot, note, state, loop, contradiction, and artifact tables to produce a dry-run consolidation report.
 
-The report is not canonical truth and is not persisted as canonical memory in v0. It contains:
+The report is not canonical truth and is not persisted as canonical memory in v0. When `persistReport=true` is supplied to `/api/dream/run`, the report is stored as non-canonical evidence in `dream_reports`.
+
+`dream_reports` stores:
+
+- `id`, `created_at`, `completed_at`
+- `workspace_id`, `lane_id`, `mode`, `dry_run`, `status`
+- `time_window_start`, `time_window_end`
+- `candidates_considered`, `proposals_generated`
+- `summary_json`
+- `candidates_json`
+- `salience_scores_json`
+- `memory_tier_proposals_json`
+- `repair_proposals_json`
+- `snapshot_hygiene_proposals_json`
+- `warnings_json`
+- `trace_json`
+- `correlation_id`, `trace_id`, nullable `syscall_id`, nullable `audit_id`
+- `proposed_by`, `committed_by`, `metadata_json`
+
+These rows are report/evidence records only. `committed_by` remains empty unless a future governed evidence pipeline explicitly records otherwise; it must not be interpreted as canonical memory commit.
+
+The report contains:
 
 - run metadata and trace
 - replay candidates
@@ -370,6 +391,15 @@ The report is not canonical truth and is not persisted as canonical memory in v0
 - no-op reasons and warnings
 
 Any later governed commit mode must turn proposals into semantic syscalls and pass control-lane validation.
+
+`dream_reports` is included in `full_backup` export/restore and is classified as `non_canonical_evidence`.
+
+Read-only inspector routes expose these rows for operator review:
+
+- restore snapshots through `/api/context/restore/*`
+- Dream reports through `/api/dream/reports/*`
+
+The inspector API must preserve workspace/lane scope and must not apply Dream proposals or mutate canonical rows.
 
 Provider note:
 
