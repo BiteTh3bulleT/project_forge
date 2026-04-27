@@ -128,6 +128,17 @@ func TestForcedChatModelNameCompositeWorkflowNotForced(t *testing.T) {
 	}
 }
 
+func TestCompositeFilesystemWorkflowDetectsTypedFileCreate(t *testing.T) {
+	t.Parallel()
+	in := `Create a directory in Downloads called PeanutButterJellyTime. Inside that folder create an svg file of a flower.`
+	if !IsCompositeFilesystemWorkflow(in) {
+		t.Fatalf("expected composite filesystem workflow")
+	}
+	if got := ForcedChatModelName(in); got != "" {
+		t.Fatalf("ForcedChatModelName should not force single mkdir for composite SVG workflow, got %q", got)
+	}
+}
+
 func TestForcedChatModelNameSimpleMkdirStillForced(t *testing.T) {
 	t.Parallel()
 	in := `create a directory called "MyFirstTele"`

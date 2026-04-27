@@ -21,6 +21,41 @@ Only Arterial restore scoring and Lymphatic Dream routing are wired into real v0
 
 The chat API also uses a narrow Hyperlane-style no-model classifier for latency. It is not a new Rule Cell integration point and does not change runtime authority. It classifies obvious status, diagnostics, mode, degraded-state, and restore-inspector requests so they can return structured CPU-local replies without modelruntime, gateway execution, or heavy context assembly.
 
+## Deterministic Intent Routing
+
+The gateway fallback natural-language parser is now represented as a Hyperlane deterministic intent router in Go. It turns simple operator requests into typed route proposals before modelruntime is used. It is CPU-only and performs no I/O.
+
+The v0 intent model records:
+
+- `id`
+- `type`
+- `confidence`
+- `lane`
+- `route`
+- `requires_gateway`
+- `requires_model`
+- `requires_approval_hint`
+- `risk_class`
+- `arguments`
+- `warnings`
+- `matched_rule`
+- `trace`
+
+Supported v0 intent types include structured no-model queries (`status_query`, `diagnostics_query`, `restore_inspection`, `dream_report_inspection`, `modelruntime_status`), gateway-bound file/process proposals (`mkdir`, `read_file`, `write_file`, `list_directory`, `run_command`, `generate_template`, `gateway_tool_request`), and `unknown`.
+
+Route hints use existing FORGE routes and gateway tool ids:
+
+- `mkdir` -> `fs.mkdir`
+- `write_file` / `generate_template` -> `fs.write`
+- `read_file` -> `fs.read`
+- `list_directory` -> `fs.list`
+- `run_command` -> `proc.run`
+- status/diagnostics/restore/Dream/modelruntime inspection -> structured no-model routes
+
+The router does not execute tools. Gateway policy, capability checks, workspace scope, approvals, and audit still decide whether any gateway-bound proposal can run. Shell command intents are always marked high-risk with an approval hint.
+
+Each parse emits compact trace data with parser version, matched rule, confidence, route, warnings, and rejected reason for unsafe or unknown input.
+
 Phase 8 feeds non-canonical restore outcome facts into the same two paths. Arterial restore scoring may use prior helpful/stale/harmful/corrected outcomes as bounded utility evidence. Lymphatic Dream routing treats outcome events as replay candidates for memory-gap, evidence-review, or promotion proposals. These facts remain advisory and cannot replace scope filtering, kernel validation, or canonical commit authority.
 
 ## Integration Rules

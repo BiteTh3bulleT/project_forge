@@ -1643,6 +1643,9 @@ func (t *writeFileTool) UsesNetwork() bool      { return false }
 func (t *writeFileTool) WriteIntent() bool      { return true }
 func (t *writeFileTool) Description() string    { return "Write content to a file inside approved scope" }
 func (t *writeFileTool) Execute(ctx context.Context, req Request) (Result, error) {
+	if rawFiles, ok := req.Input["files"]; ok {
+		return t.executeBatch(ctx, req, rawFiles)
+	}
 	target, err := firstPath(req.Paths, t.workspace)
 	if err != nil {
 		return Result{}, err
@@ -1665,6 +1668,89 @@ func (t *writeFileTool) Execute(ctx context.Context, req Request) (Result, error
 		Artifacts: []ResultArtifact{{Type: "writtenFile", Path: target, Summary: fmt.Sprintf("%d bytes", len(contents))}},
 		Message:   fmt.Sprintf("wrote %d bytes to %s", len(contents), target),
 	}, nil
+}
+
+func (t *writeFileTool) executeBatch(ctx context.Context, req Request, rawFiles any) (Result, error) {
+	files, err := writeBatchFiles(rawFiles)
+	if err != nil {
+		return Result{}, err
+	}
+	if len(files) == 0 {
+		return Result{}, errors.New("fs.write batch requires input.files")
+	}
+	if len(req.Paths) != len(files) {
+		return Result{}, fmt.Errorf("fs.write batch requires one path per file: got %d paths for %d files", len(req.Paths), len(files))
+	}
+
+	outFiles := make([]map[string]any, 0, len(files))
+	artifacts := make([]ResultArtifact, 0, len(files))
+	totalBytes := 0
+	for i, file := range files {
+		contents := file.Contents
+		if contents == "" {
+			return Result{}, fmt.Errorf("fs.write batch file %d requires contents", i)
+		}
+		target, err := firstPath([]string{req.Paths[i]}, t.workspace)
+		if err != nil {
+			return Result{}, err
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return Result{}, err
+		}
+		if err := os.WriteFile(target, []byte(contents), 0o644); err != nil {
+			return Result{}, err
+		}
+		n := len(contents)
+		totalBytes += n
+		outFiles = append(outFiles, map[string]any{"path": target, "bytes": n})
+		artifacts = append(artifacts, ResultArtifact{Type: "writtenFile", Path: target, Summary: fmt.Sprintf("%d bytes", n)})
+	}
+
+	paths := make([]string, 0, len(outFiles))
+	for _, file := range outFiles {
+		if p, ok := file["path"].(string); ok {
+			paths = append(paths, p)
+		}
+	}
+	return Result{
+		Data: map[string]any{
+			"files": outFiles,
+			"paths": paths,
+			"count": len(outFiles),
+			"bytes": totalBytes,
+		},
+		Artifacts: artifacts,
+		Message:   fmt.Sprintf("wrote %d files (%d bytes)", len(outFiles), totalBytes),
+	}, nil
+}
+
+type writeBatchFile struct {
+	Contents string
+}
+
+func writeBatchFiles(raw any) ([]writeBatchFile, error) {
+	switch typed := raw.(type) {
+	case []map[string]any:
+		out := make([]writeBatchFile, 0, len(typed))
+		for _, item := range typed {
+			contents, _ := item["contents"].(string)
+			out = append(out, writeBatchFile{Contents: contents})
+		}
+		return out, nil
+	case []any:
+		out := make([]writeBatchFile, 0, len(typed))
+		for _, item := range typed {
+			rec, ok := item.(map[string]any)
+			if !ok {
+				return nil, errors.New("fs.write batch input.files must contain objects")
+			}
+			contents, _ := rec["contents"].(string)
+			out = append(out, writeBatchFile{Contents: contents})
+		}
+		return out, nil
+	default:
+		return nil, errors.New("fs.write batch input.files must be an array")
+	}
 }
 
 type validateContextTool struct {
@@ -2920,6 +3006,16 @@ func writeBytesFromInput(input map[string]any) int64 {
 	}
 	if v, ok := input["contents"].(string); ok {
 		return int64(len(v))
+	}
+	if rawFiles, ok := input["files"]; ok {
+		files, err := writeBatchFiles(rawFiles)
+		if err == nil {
+			var total int64
+			for _, file := range files {
+				total += int64(len(file.Contents))
+			}
+			return total
+		}
 	}
 	if v, ok := input["bytes"].(float64); ok {
 		return int64(v)

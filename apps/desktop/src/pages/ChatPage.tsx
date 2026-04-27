@@ -1,5 +1,5 @@
 import type { JobTemplate } from "@forge/shared";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import {
@@ -71,6 +71,40 @@ function sleep(ms: number) {
 function trimLine(value: string, fallback: string) {
   const trimmed = value.trim();
   return trimmed ? trimmed : fallback;
+}
+
+type ChatPaneLayout = {
+  threadWidth: number;
+  inspectorWidth: number;
+  inspectorListHeight: number;
+};
+
+const CHAT_PANE_LAYOUT_KEY = "forge.chatPaneLayout.v1";
+const DEFAULT_CHAT_PANE_LAYOUT: ChatPaneLayout = {
+  threadWidth: 280,
+  inspectorWidth: 380,
+  inspectorListHeight: 260,
+};
+
+function clampNumber(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+function readStoredChatPaneLayout(): ChatPaneLayout {
+  if (typeof window === "undefined") return DEFAULT_CHAT_PANE_LAYOUT;
+  try {
+    const raw = window.localStorage.getItem(CHAT_PANE_LAYOUT_KEY);
+    if (!raw) return DEFAULT_CHAT_PANE_LAYOUT;
+    const parsed = JSON.parse(raw) as Partial<ChatPaneLayout>;
+    return {
+      threadWidth: clampNumber(Number(parsed.threadWidth), 200, 420),
+      inspectorWidth: clampNumber(Number(parsed.inspectorWidth), 300, 680),
+      inspectorListHeight: clampNumber(Number(parsed.inspectorListHeight), 160, 520),
+    };
+  } catch {
+    return DEFAULT_CHAT_PANE_LAYOUT;
+  }
 }
 
 function readJobId(meta: Record<string, unknown> | undefined): string | null {
@@ -1081,6 +1115,7 @@ export function ChatPage() {
   const [chatModelLoadState, setChatModelLoadState] = useState<"idle" | "loading" | "ready" | "unavailable" | "error">("idle");
   const [chatModelMessage, setChatModelMessage] = useState("");
   const [selectedChatModelId, setSelectedChatModelId] = useState<string>(() => readCachedChatModelSelection());
+  const [paneLayout, setPaneLayout] = useState<ChatPaneLayout>(() => readStoredChatPaneLayout());
 
   const [jobForm, setJobForm] = useState<{
     templateId: string;
@@ -1101,6 +1136,88 @@ export function ChatPage() {
   const streamTokenFlushTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const chatPaneStyle = useMemo(
+    () =>
+      ({
+        "--forge-chat-thread-width": `${paneLayout.threadWidth}px`,
+        "--forge-chat-inspector-width": `${paneLayout.inspectorWidth}px`,
+      }) as CSSProperties,
+    [paneLayout.inspectorWidth, paneLayout.threadWidth],
+  );
+
+  const inspectorSplitStyle = useMemo(
+    () =>
+      ({
+        gridTemplateRows: `${paneLayout.inspectorListHeight}px 7px minmax(0, 1fr)`,
+      }) as CSSProperties,
+    [paneLayout.inspectorListHeight],
+  );
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CHAT_PANE_LAYOUT_KEY, JSON.stringify(paneLayout));
+    } catch {
+      // Layout persistence is cosmetic; ignore storage failures.
+    }
+  }, [paneLayout]);
+
+  const startHorizontalPaneResize = useCallback((pane: "thread" | "inspector", event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const start = paneLayout;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const dx = moveEvent.clientX - startX;
+      setPaneLayout((current) => ({
+        ...current,
+        threadWidth: pane === "thread" ? clampNumber(start.threadWidth + dx, 200, 420) : current.threadWidth,
+        inspectorWidth: pane === "inspector" ? clampNumber(start.inspectorWidth - dx, 300, 680) : current.inspectorWidth,
+      }));
+    };
+    const onUp = () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+  }, [paneLayout]);
+
+  const startInspectorSplitResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = paneLayout.inspectorListHeight;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const dy = moveEvent.clientY - startY;
+      setPaneLayout((current) => ({
+        ...current,
+        inspectorListHeight: clampNumber(startHeight + dy, 160, 520),
+      }));
+    };
+    const onUp = () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+  }, [paneLayout.inspectorListHeight]);
+
   useEffect(() => {
     return () => {
       streamEsRef.current?.close();
@@ -1114,7 +1231,7 @@ export function ChatPage() {
   useEffect(() => {
     if (!textareaRef.current) return;
     textareaRef.current.style.height = "0px";
-    const next = Math.max(168, Math.min(420, textareaRef.current.scrollHeight));
+    const next = Math.max(54, Math.min(180, textareaRef.current.scrollHeight));
     textareaRef.current.style.height = `${next}px`;
   }, [draft]);
 
@@ -1717,7 +1834,7 @@ export function ChatPage() {
   const chatModelSummary = useMemo(() => describeChatModel(selectedChatModelId, chatModels), [selectedChatModelId, chatModels]);
 
   return (
-    <div className="forge-chat-layout grid h-full min-h-0 overflow-hidden bg-forge-black">
+    <div className={["forge-chat-layout grid h-full min-h-0 overflow-hidden bg-forge-black", !active ? "forge-chat-layout--empty" : ""].join(" ")} style={chatPaneStyle}>
       <aside className="forge-chat-thread-rail flex min-h-0 flex-col overflow-hidden border-b border-forge-platinum/10 bg-forge-carbon md:border-b-0 md:border-r">
         <div className="border-b border-forge-platinum/10 p-2.5">
           <div className="mb-2 flex items-end justify-between gap-3">
@@ -1776,12 +1893,20 @@ export function ChatPage() {
         </div>
       </aside>
 
+      <div
+        role="separator"
+        aria-label="Resize chat thread rail"
+        aria-orientation="vertical"
+        className="forge-chat-resizer forge-chat-resizer--left"
+        onPointerDown={(event) => startHorizontalPaneResize("thread", event)}
+      />
+
       <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
         {!active ? (
-          <div className="flex flex-1 items-center justify-center p-8">
-            <div className="max-w-md rounded-xl border border-dashed border-forge-platinum/10 bg-black/25 px-6 py-8 text-center">
+          <div className="forge-chat-empty-state flex flex-1 items-start justify-center p-6">
+            <div className="w-full max-w-2xl rounded-xl border border-dashed border-forge-platinum/10 bg-black/25 px-6 py-6">
               <h2 className="text-lg font-semibold text-forge-ash">Start a new chat</h2>
-              <p className="mt-2 text-sm text-forge-mist">Pick a chat on the left or create a new one.</p>
+              <p className="mt-2 text-sm text-forge-mist">Create a thread to open the composer, terminal, browser, files, and thinking inspector.</p>
               <button
                 type="button"
                 onClick={() => void newThread()}
@@ -2135,7 +2260,7 @@ export function ChatPage() {
                     </div>
                   ) : null}
 
-                  <div className="mb-3 flex flex-wrap gap-2">
+                  <div className="mb-2 flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => {
@@ -2171,16 +2296,16 @@ export function ChatPage() {
                     </button>
                   </div>
 
-	                  <div className="flex flex-col gap-3">
-	                    <div className="min-w-0 flex-1">
-	                      <label htmlFor="chat-composer" className="sr-only">
-	                        Message
+                  <div className="forge-chat-compose-row">
+                    <div className="min-w-0 flex-1">
+                      <label htmlFor="chat-composer" className="sr-only">
+                        Message
                       </label>
                       <textarea
                         id="chat-composer"
                         aria-label="Chat message"
                         ref={textareaRef}
-	                        rows={6}
+                        rows={2}
                         className="forge-chat-composer"
                         placeholder="Message FORGE"
                         value={draft}
@@ -2197,26 +2322,26 @@ export function ChatPage() {
                       onChange={(e) => void uploadSelectedFiles(e.target.files)}
                       disabled={busy || uploading}
                     />
-	                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-	                      <button
-	                        type="button"
-	                        onClick={() => fileInputRef.current?.click()}
-	                        disabled={busy || uploading || !active}
-	                        className="h-12 forge-chat-action-btn sm:w-36"
-	                      >
-	                        {uploading ? "Uploading…" : "Attach"}
-	                      </button>
+                    <div className="forge-chat-compose-actions">
                       <button
-	                        type="button"
-	                        onClick={() => void send()}
-	                        disabled={busy || (!draft.trim() && pendingAttachments.length === 0)}
-	                        className="h-12 forge-chat-action-btn text-sm sm:w-36"
-	                      >
-	                        Send
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={busy || uploading || !active}
+                        className="forge-chat-action-btn"
+                      >
+                        {uploading ? "Uploading…" : "Attach"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void send()}
+                        disabled={busy || (!draft.trim() && pendingAttachments.length === 0)}
+                        className="forge-chat-action-btn text-sm"
+                      >
+                        Send
                       </button>
                     </div>
                   </div>
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-forge-mist/75">
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-forge-mist/75">
                     <span>Enter to send · Shift+Enter for newline</span>
                     <span>{requestAssistant ? `Assistant mode: ${assistantModeSummary}` : "No assistant reply requested"}</span>
                   </div>
@@ -2227,7 +2352,17 @@ export function ChatPage() {
         )}
       </section>
 
-      <aside className="forge-chat-inspector min-h-0 min-w-0 flex-col overflow-hidden border-l border-forge-platinum/10 bg-forge-carbon">
+      {active ? (
+        <div
+          role="separator"
+          aria-label="Resize chat inspector"
+          aria-orientation="vertical"
+          className="forge-chat-resizer forge-chat-resizer--right"
+          onPointerDown={(event) => startHorizontalPaneResize("inspector", event)}
+        />
+      ) : null}
+
+      {active ? <aside className="forge-chat-inspector min-h-0 min-w-0 flex-col overflow-hidden border-l border-forge-platinum/10 bg-forge-carbon">
         <div className="flex items-center justify-between border-b border-forge-platinum/10 px-4 py-3">
           <div className="text-sm font-semibold text-forge-ash">Inspector</div>
           <div className="flex items-center gap-2 text-xs">
@@ -2331,7 +2466,7 @@ export function ChatPage() {
             )}
           </div>
         ) : inspectorMode === "code" ? (
-          <div className="grid min-h-0 flex-1 grid-rows-[220px_minmax(0,1fr)]">
+          <div className="forge-chat-inspector-split grid min-h-0 flex-1" style={inspectorSplitStyle}>
             <div className="forge-chat-scroll overflow-y-auto border-b border-forge-platinum/10 p-2">
               {assistantCodeSnippets.length === 0 ? (
                 <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">No assistant code blocks in this thread yet.</div>
@@ -2353,6 +2488,13 @@ export function ChatPage() {
                 ))
               )}
             </div>
+            <div
+              role="separator"
+              aria-label="Resize code inspector list"
+              aria-orientation="horizontal"
+              className="forge-chat-row-resizer"
+              onPointerDown={startInspectorSplitResize}
+            />
             <div className="forge-chat-scroll overflow-y-auto p-3">
               {assistantCodeSnippets.find((item) => item.key === selectedSnippetKey) ? (
                 <CodeBlock
@@ -2365,7 +2507,7 @@ export function ChatPage() {
             </div>
           </div>
         ) : inspectorMode === "files" ? (
-          <div className="grid min-h-0 flex-1 grid-rows-[220px_minmax(0,1fr)]">
+          <div className="forge-chat-inspector-split grid min-h-0 flex-1" style={inspectorSplitStyle}>
             <div className="forge-chat-scroll overflow-y-auto border-b border-forge-platinum/10 p-2">
               {messageAttachments.length === 0 ? (
                 <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">No files attached in this thread.</div>
@@ -2387,6 +2529,13 @@ export function ChatPage() {
                 ))
               )}
             </div>
+            <div
+              role="separator"
+              aria-label="Resize file inspector list"
+              aria-orientation="horizontal"
+              className="forge-chat-row-resizer"
+              onPointerDown={startInspectorSplitResize}
+            />
             <div className="forge-chat-scroll overflow-y-auto p-3">
               {messageAttachments.find((item) => item.attachment.artifactId === selectedAttachmentId) ? (
                 <AttachmentInspectorCard
@@ -2398,7 +2547,7 @@ export function ChatPage() {
             </div>
           </div>
         ) : null}
-      </aside>
+      </aside> : null}
     </div>
   );
 }

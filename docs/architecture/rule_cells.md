@@ -140,6 +140,8 @@ Rule engine errors are explicit warnings, not silent failures.
 
 Phase 8 restore outcome feedback is separate non-canonical evidence. Rule Cells may see outcome-derived facts in restore/Dream inputs, but those facts remain bounded advisory signals and cannot loosen authority or directly mutate memory.
 
+Hyperlane deterministic intent routing is adjacent to Rule Cells, not a dynamic rule runtime. It uses fixed Go classifiers to emit typed route proposals for simple operator requests before modelruntime is invoked. Like Rule Cells, it cannot execute tools, commit truth, or make gateway/kernel authority more permissive.
+
 ## Adding A Rule Safely
 
 Add rules only to static packs in code for v0. A safe rule:

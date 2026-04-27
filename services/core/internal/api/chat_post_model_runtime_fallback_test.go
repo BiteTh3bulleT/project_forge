@@ -6,9 +6,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+
+	"forge/projectforge/services/core/internal/config"
+	"forge/projectforge/services/core/internal/store"
 )
 
 type chatPostAssistantMessage struct {
@@ -538,6 +543,12 @@ func TestChatPostSyncRoutesStatusWithoutModel(t *testing.T) {
 	if intFromTrace(trace["model_calls_avoided"]) != 1 {
 		t.Fatalf("expected model_calls_avoided=1, got %#v", trace["model_calls_avoided"])
 	}
+	if trace["hyperlane_intent_type"] != "status_query" || trace["hyperlane_route"] != "structured.status" {
+		t.Fatalf("expected hyperlane status trace, got %#v", trace)
+	}
+	if trace["modelruntime_avoided"] != true || trace["context_compile_avoided"] != true || trace["gateway_avoided"] != true {
+		t.Fatalf("expected avoided flags in trace, got %#v", trace)
+	}
 }
 
 func TestChatPostSyncRoutesDiagnosticsWithoutModel(t *testing.T) {
@@ -595,6 +606,359 @@ func TestChatPostSyncRoutesRestoreInspectorWithoutModel(t *testing.T) {
 	}
 	if fakeRuntime.chatCalls != 0 {
 		t.Fatalf("expected no model runtime calls, got %d", fakeRuntime.chatCalls)
+	}
+}
+
+func TestChatPostSyncRoutesModelRuntimeStatusWithoutModel(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.loaded["mistral-7b-instruct"] = true
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "modelruntime status deterministic", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	raw := []byte(`{"content":"modelruntime status","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil || !strings.Contains(payload.AssistantMessage.Content, "Modelruntime fast path") {
+		t.Fatalf("expected modelruntime fast path response, got %#v", payload.AssistantMessage)
+	}
+	if fakeRuntime.chatCalls != 0 {
+		t.Fatalf("expected no model runtime chat calls, got %d", fakeRuntime.chatCalls)
+	}
+	if fakeRuntime.healthCalls == 0 || fakeRuntime.queueCalls == 0 || fakeRuntime.loadedCalls == 0 || fakeRuntime.listCalls == 0 {
+		t.Fatalf("expected read-only modelruntime status probes, got health=%d queue=%d loaded=%d list=%d", fakeRuntime.healthCalls, fakeRuntime.queueCalls, fakeRuntime.loadedCalls, fakeRuntime.listCalls)
+	}
+	trace := metadataMap(payload.AssistantMessage.Metadata, "chatLatencyTrace")
+	if trace["hyperlane_intent_type"] != "modelruntime_status" || trace["hyperlane_route"] != "structured.modelruntime_status" {
+		t.Fatalf("expected modelruntime hyperlane trace, got %#v", trace)
+	}
+}
+
+func TestChatPostSyncRoutesDreamReportInspectionWithoutModel(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "dream report deterministic", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	raw := []byte(`{"content":"show latest Dream report","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil || !strings.Contains(payload.AssistantMessage.Content, "Dream Mode") {
+		t.Fatalf("expected Dream Mode fast path response, got %#v", payload.AssistantMessage)
+	}
+	if fakeRuntime.chatCalls != 0 {
+		t.Fatalf("expected no model runtime calls, got %d", fakeRuntime.chatCalls)
+	}
+	trace := metadataMap(payload.AssistantMessage.Metadata, "chatLatencyTrace")
+	if trace["hyperlane_intent_type"] != "dream_report_inspection" || trace["hyperlane_route"] != "structured.dream_reports" {
+		t.Fatalf("expected dream hyperlane trace, got %#v", trace)
+	}
+}
+
+func TestChatPostSyncNoModelStatusDoesNotRequireGateway(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	srv.modelRuntime = fakeRuntime
+	srv.gateway = nil
+
+	thread, err := srv.chat.CreateThread(context.Background(), "status no gateway", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	raw := []byte(`{"content":"forge status","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil || !strings.Contains(payload.AssistantMessage.Content, "Fast path: no model call") {
+		t.Fatalf("expected no-model status response without gateway, got %#v", payload.AssistantMessage)
+	}
+	if fakeRuntime.chatCalls != 0 {
+		t.Fatalf("expected no model runtime calls, got %d", fakeRuntime.chatCalls)
+	}
+	trace := metadataMap(payload.AssistantMessage.Metadata, "chatLatencyTrace")
+	if trace["gateway_avoided"] != true {
+		t.Fatalf("expected gateway_avoided trace, got %#v", trace)
+	}
+}
+
+func TestChatPostSyncRestoreInspectorDoesNotLeakOtherThreadMetadata(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	srv.modelRuntime = fakeRuntime
+
+	other, err := srv.chat.CreateThread(context.Background(), "other restore thread", nil)
+	if err != nil {
+		t.Fatalf("create other thread: %v", err)
+	}
+	if _, err := srv.chat.AppendMessage(context.Background(), other.ID, "assistant", "other restore", map[string]any{"restoreSummary": "secret-other-workspace-restore"}); err != nil {
+		t.Fatalf("append other restore: %v", err)
+	}
+	thread, err := srv.chat.CreateThread(context.Background(), "current restore thread", nil)
+	if err != nil {
+		t.Fatalf("create current thread: %v", err)
+	}
+	raw := []byte(`{"content":"show recent restore decisions","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message")
+	}
+	if strings.Contains(payload.AssistantMessage.Content, "secret-other-workspace-restore") {
+		t.Fatalf("restore inspector leaked other thread metadata: %q", payload.AssistantMessage.Content)
+	}
+	if !strings.Contains(payload.AssistantMessage.Content, "No restore package") {
+		t.Fatalf("expected empty restore state response, got %q", payload.AssistantMessage.Content)
+	}
+	if fakeRuntime.chatCalls != 0 {
+		t.Fatalf("expected no model runtime calls, got %d", fakeRuntime.chatCalls)
+	}
+}
+
+func TestChatPostSyncRoutesDownloadSorterThroughGateway(t *testing.T) {
+	dataDir := t.TempDir()
+	homeDir := filepath.Join(t.TempDir(), "home")
+	if err := os.MkdirAll(filepath.Join(homeDir, "Downloads"), 0o755); err != nil {
+		t.Fatalf("mkdir fake home: %v", err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	srv := NewServer(st, config.Config{
+		DataDir:      dataDir,
+		WorkspaceDir: homeDir,
+	})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.chatContent = "I cannot access the filesystem."
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "download sorter deterministic", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	raw := []byte(`{"content":"Create a folder in the Downloads directory labled Python_Scripts/. Inside the folder create a python script that will make anything I download get sorted into a folder in the downloads folder.","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message")
+	}
+	if !strings.Contains(payload.AssistantMessage.Content, "FORGE (deterministic download sorter): gateway needs_approval") {
+		t.Fatalf("expected governed gateway approval result, got %q", payload.AssistantMessage.Content)
+	}
+	if fakeRuntime.chatCalls != 0 {
+		t.Fatalf("expected no model runtime calls, got %d", fakeRuntime.chatCalls)
+	}
+	scriptPath := filepath.Join(homeDir, "Downloads", "Python_Scripts", "sort_downloads.py")
+	if _, err := os.Stat(scriptPath); !os.IsNotExist(err) {
+		t.Fatalf("expected no unapproved write at %s, err=%v", scriptPath, err)
+	}
+	activity := metadataMap(payload.AssistantMessage.Metadata, "toolGatewayActivity")
+	if activity["executionState"] != "needs_approval" || activity["toolSelected"] != "fs.write" {
+		t.Fatalf("expected ok fs.write activity, got %#v", activity)
+	}
+}
+
+func TestChatPostSyncMultiSVGUsesDeterministicGatewayShortcut(t *testing.T) {
+	dataDir := t.TempDir()
+	homeDir := filepath.Join(t.TempDir(), "home")
+	if err := os.MkdirAll(filepath.Join(homeDir, "Downloads"), 0o755); err != nil {
+		t.Fatalf("mkdir fake home: %v", err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	srv := NewServer(st, config.Config{
+		DataDir:      dataDir,
+		WorkspaceDir: homeDir,
+	})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.chatContent = "I would create the files manually."
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "multi svg deterministic", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	raw := []byte(`{"content":"Create a directory in Downloads called RandomSVGs. Inside that folder create an svg file of a turtle and then one of stitch.","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message")
+	}
+	if !strings.Contains(payload.AssistantMessage.Content, "FORGE (deterministic svg): gateway needs_approval") {
+		t.Fatalf("expected governed deterministic svg approval result, got %q", payload.AssistantMessage.Content)
+	}
+	if fakeRuntime.chatCalls != 0 {
+		t.Fatalf("expected no model runtime calls, got %d", fakeRuntime.chatCalls)
+	}
+	activity := metadataMap(payload.AssistantMessage.Metadata, "toolGatewayActivity")
+	if activity["executionState"] != "needs_approval" || activity["toolSelected"] != "fs.write" {
+		t.Fatalf("expected needs_approval fs.write activity, got %#v", activity)
+	}
+	args := metadataMap(activity, "toolArgs")
+	paths, ok := args["paths"].([]any)
+	if !ok || len(paths) != 2 {
+		t.Fatalf("expected two governed write paths, got %#v", args["paths"])
+	}
+	for _, rawPath := range paths {
+		path := asString(rawPath)
+		if !strings.HasPrefix(path, "~/Downloads/RandomSVGs/") {
+			t.Fatalf("expected home Downloads path alias, got %q", path)
+		}
+		if strings.HasPrefix(path, "/Downloads") || strings.Contains(path, "../") {
+			t.Fatalf("unsafe write path %q", path)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(homeDir, "Downloads", "RandomSVGs", "turtle.svg")); !os.IsNotExist(err) {
+		t.Fatalf("expected no unapproved turtle write, err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(homeDir, "Downloads", "RandomSVGs", "stitch.svg")); !os.IsNotExist(err) {
+		t.Fatalf("expected no unapproved stitch write, err=%v", err)
+	}
+}
+
+func TestChatPostSyncSameDirectoryWebpageUsesPriorGatewayDirectory(t *testing.T) {
+	dataDir := t.TempDir()
+	homeDir := filepath.Join(t.TempDir(), "home")
+	priorDir := filepath.Join(homeDir, "Downloads", "PeanutButterJellyTime")
+	if err := os.MkdirAll(priorDir, 0o755); err != nil {
+		t.Fatalf("mkdir fake prior dir: %v", err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	srv := NewServer(st, config.Config{
+		DataDir:      dataDir,
+		WorkspaceDir: homeDir,
+	})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.chatContent = "I would write the prior SVG again."
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "same directory webpage", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	priorPath := filepath.Join(priorDir, "flower.svg")
+	if _, err := srv.chat.AppendMessage(context.Background(), thread.ID, "assistant", "Gateway job succeeded.", map[string]any{
+		"correlationId": "corr-prior-write",
+		"toolGatewayActivity": map[string]any{
+			"executionState": "ok",
+			"toolSelected":   "fs.write",
+			"executionResult": map[string]any{
+				"path":  priorPath,
+				"bytes": 821,
+			},
+		},
+	}); err != nil {
+		t.Fatalf("append prior assistant: %v", err)
+	}
+
+	raw := []byte(`{"content":"In the same directory, create a test webpage. I would like it to look like it belongs to a video game journal site.","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message")
+	}
+	if !strings.Contains(payload.AssistantMessage.Content, "FORGE (deterministic webpage): gateway needs_approval") {
+		t.Fatalf("expected governed deterministic webpage approval result, got %q", payload.AssistantMessage.Content)
+	}
+	if fakeRuntime.chatCalls != 0 {
+		t.Fatalf("expected no model runtime calls, got %d", fakeRuntime.chatCalls)
+	}
+	activity := metadataMap(payload.AssistantMessage.Metadata, "toolGatewayActivity")
+	args := metadataMap(activity, "toolArgs")
+	gotPath := strings.TrimSpace(asString(args["path"]))
+	if !strings.HasSuffix(gotPath, "/Downloads/PeanutButterJellyTime/test-webpage.html") {
+		t.Fatalf("expected test webpage path in prior directory, got %q", gotPath)
+	}
+	if strings.HasSuffix(gotPath, "flower.svg") {
+		t.Fatalf("webpage request reused stale SVG path: %q", gotPath)
+	}
+	if _, err := os.Stat(filepath.Join(priorDir, "test-webpage.html")); !os.IsNotExist(err) {
+		t.Fatalf("expected no unapproved webpage write, err=%v", err)
 	}
 }
 

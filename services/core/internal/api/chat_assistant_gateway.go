@@ -162,9 +162,22 @@ func (s *Server) completeAssistantWithGatewayTools(
 
 	corr := "chat-tools-" + strconv.FormatInt(userMessageID, 10)
 
-	ollamaTools := s.gateway.ChatOllamaToolDefs()
-	manifests := s.gateway.ChatToolManifests()
-	toolNames := s.gateway.ChatToolModelNames()
+	var ollamaTools []map[string]any
+	var manifests []map[string]any
+	var toolNames []string
+	toolCatalogLoaded := false
+	loadToolCatalog := func() {
+		if toolCatalogLoaded {
+			return
+		}
+		toolCatalogLoaded = true
+		if s.gateway == nil {
+			return
+		}
+		ollamaTools = s.gateway.ChatOllamaToolDefs()
+		manifests = s.gateway.ChatToolManifests()
+		toolNames = s.gateway.ChatToolModelNames()
+	}
 
 	stages := []map[string]any{}
 	var trackedActivity map[string]any
@@ -224,6 +237,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 		return am
 	}
 
+	loadToolCatalog()
 	pushStage("tools_attached", map[string]any{"tools": toolNames, "count": len(toolNames)})
 
 	if dryRun {
@@ -267,6 +281,31 @@ func (s *Server) completeAssistantWithGatewayTools(
 		_ = s.log.Emit(ctx, "chat.message.assistant", map[string]any{"threadId": threadID, "messageId": am.ID, "ok": true, "tools": true, "deterministicShortcut": true})
 		return am
 	}
+	if writes, ok := gateway.ParseSVGAssetWriteIntents(lastUserContent); ok {
+		pushStage("deterministic_svg_shortcut", map[string]any{"reason": "explicit SVG asset creation intent", "count": len(writes)})
+		gwActivity := map[string]any{
+			"userRequestSummary": trimSummary(lastUserContent, 500),
+			"toolManifest":       manifests,
+			"stages":             stages,
+			"toolCallEmitted":    false,
+		}
+		trackedActivity = gwActivity
+		var final strings.Builder
+		s.runDeterministicSVGWrites(ctx, corr, writes, pushStage, gwActivity, &final)
+		if final.Len() == 0 {
+			final.WriteString("(no deterministic output)")
+		}
+		am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", final.String(), map[string]any{
+			"replyToUserMessageId": userMessageID,
+			"correlationId":        corr,
+			"ollamaSkipped":        true,
+			"toolManifest":         manifests,
+			"toolPipeline":         map[string]any{"stages": stages},
+			"toolGatewayActivity":  gwActivity,
+		})
+		_ = s.log.Emit(ctx, "chat.message.assistant", map[string]any{"threadId": threadID, "messageId": am.ID, "ok": true, "tools": true, "deterministicShortcut": true})
+		return am
+	}
 	if _, _, ok := gateway.ParsePythonBannerScriptIntent(lastUserContent); ok {
 		pushStage("deterministic_python_banner_shortcut", map[string]any{"reason": "explicit script creation intent"})
 		gwActivity := map[string]any{
@@ -278,6 +317,56 @@ func (s *Server) completeAssistantWithGatewayTools(
 		trackedActivity = gwActivity
 		var final strings.Builder
 		s.runChatFSDeterministicFallback(ctx, corr, lastUserContent, "", pushStage, gwActivity, &final)
+		if final.Len() == 0 {
+			final.WriteString("(no deterministic output)")
+		}
+		am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", final.String(), map[string]any{
+			"replyToUserMessageId": userMessageID,
+			"correlationId":        corr,
+			"ollamaSkipped":        true,
+			"toolManifest":         manifests,
+			"toolPipeline":         map[string]any{"stages": stages},
+			"toolGatewayActivity":  gwActivity,
+		})
+		_ = s.log.Emit(ctx, "chat.message.assistant", map[string]any{"threadId": threadID, "messageId": am.ID, "ok": true, "tools": true, "deterministicShortcut": true})
+		return am
+	}
+	if _, _, ok := gateway.ParseDownloadSorterScriptIntent(lastUserContent); ok {
+		pushStage("deterministic_download_sorter_shortcut", map[string]any{"reason": "explicit Downloads sorter script intent"})
+		gwActivity := map[string]any{
+			"userRequestSummary": trimSummary(lastUserContent, 500),
+			"toolManifest":       manifests,
+			"stages":             stages,
+			"toolCallEmitted":    false,
+		}
+		trackedActivity = gwActivity
+		var final strings.Builder
+		s.runChatFSDeterministicFallback(ctx, corr, lastUserContent, "", pushStage, gwActivity, &final)
+		if final.Len() == 0 {
+			final.WriteString("(no deterministic output)")
+		}
+		am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", final.String(), map[string]any{
+			"replyToUserMessageId": userMessageID,
+			"correlationId":        corr,
+			"ollamaSkipped":        true,
+			"toolManifest":         manifests,
+			"toolPipeline":         map[string]any{"stages": stages},
+			"toolGatewayActivity":  gwActivity,
+		})
+		_ = s.log.Emit(ctx, "chat.message.assistant", map[string]any{"threadId": threadID, "messageId": am.ID, "ok": true, "tools": true, "deterministicShortcut": true})
+		return am
+	}
+	if writePath, html, ok := gateway.ParseVideoGameJournalWebpageIntent(lastUserContent, s.latestGatewayFilesystemDir(ctx, th)); ok {
+		pushStage("deterministic_webpage_shortcut", map[string]any{"reason": "same-directory webpage intent", "path": writePath})
+		gwActivity := map[string]any{
+			"userRequestSummary": trimSummary(lastUserContent, 500),
+			"toolManifest":       manifests,
+			"stages":             stages,
+			"toolCallEmitted":    false,
+		}
+		trackedActivity = gwActivity
+		var final strings.Builder
+		s.runDeterministicWrite(ctx, corr, "webpage", writePath, html, pushStage, gwActivity, &final)
 		if final.Len() == 0 {
 			final.WriteString("(no deterministic output)")
 		}
@@ -668,20 +757,20 @@ func normalizeChatInvokeArgs(args map[string]any) (paths []string, input map[str
 		}
 	}
 	if p := strings.TrimSpace(stringArg(args, "path")); p != "" {
-		paths = append(paths, p)
+		paths = append(paths, normalizeChatPathAlias(p))
 	}
 	if raw, ok := args["paths"]; ok {
 		switch typed := raw.(type) {
 		case []any:
 			for _, x := range typed {
 				if s, ok := x.(string); ok && strings.TrimSpace(s) != "" {
-					paths = append(paths, strings.TrimSpace(s))
+					paths = append(paths, normalizeChatPathAlias(s))
 				}
 			}
 		case []string:
 			for _, s := range typed {
 				if strings.TrimSpace(s) != "" {
-					paths = append(paths, strings.TrimSpace(s))
+					paths = append(paths, normalizeChatPathAlias(s))
 				}
 			}
 		}
@@ -696,6 +785,24 @@ func normalizeChatInvokeArgs(args map[string]any) (paths []string, input map[str
 		}
 	}
 	return paths, input
+}
+
+func normalizeChatPathAlias(raw string) string {
+	p := filepath.ToSlash(strings.TrimSpace(raw))
+	p = strings.Trim(p, `"'`)
+	if p == "" || strings.HasPrefix(p, "~") {
+		return p
+	}
+	trimmed := strings.TrimLeft(p, "/")
+	parts := strings.Split(trimmed, "/")
+	if len(parts) == 0 || !strings.EqualFold(parts[0], "downloads") {
+		return p
+	}
+	out := []string{"~", "Downloads"}
+	if len(parts) > 1 {
+		out = append(out, parts[1:]...)
+	}
+	return filepath.ToSlash(filepath.Join(out...))
 }
 
 func (s *Server) dispatchToolCall(ctx context.Context, corr string, threadID int64, functionName, argsStr, lastUserContent string, pushStage func(string, map[string]any)) toolDispatchResult {
@@ -728,6 +835,45 @@ func (s *Server) dispatchToolCall(ctx context.Context, corr string, threadID int
 
 	paths, input := normalizeChatInvokeArgs(args)
 	input = enrichDesktopOpenInputFromUser(toolID, input, lastUserContent)
+
+	if toolID == "fs.write" && gateway.IsVideoGameJournalWebpageIntent(lastUserContent) && len(paths) > 0 && !isHTMLWritePath(paths[0]) {
+		pushStage("stale_write_path_rejected", map[string]any{
+			"path":   paths[0],
+			"reason": "webpage request cannot write to non-HTML path",
+		})
+		return toolDispatchResult{
+			args:          args,
+			state:         "denied",
+			text:          "Refused: this request asks for a webpage, but the model selected a non-HTML path. No file was written.",
+			failureReason: "webpage request selected non-HTML path",
+			executionResult: map[string]any{
+				"rejectedPath": paths[0],
+				"reason":       "webpage request selected non-HTML path",
+			},
+		}
+	}
+
+	if toolID == "fs.mkdir" && gateway.IsCompositeFilesystemWorkflow(lastUserContent) {
+		path := ""
+		if len(paths) > 0 {
+			path = paths[0]
+		}
+		pushStage("composite_mkdir_suppressed", map[string]any{
+			"path":   path,
+			"reason": "parent directory creation deferred to approved fs.write",
+		})
+		return toolDispatchResult{
+			args:  args,
+			state: "ok",
+			text:  "Skipped standalone mkdir: this request also creates or writes a file. Parent directory creation is deferred to fs.write so approval covers the whole filesystem operation.",
+			executionResult: map[string]any{
+				"suppressed": true,
+				"toolId":     toolID,
+				"path":       path,
+				"reason":     "composite filesystem workflow; mkdir deferred to fs.write",
+			},
+		}
+	}
 
 	if toolID == "fs.read" && len(paths) > 0 {
 		if content, meta, ok, err := s.resolveThreadAttachmentRead(ctx, threadID, paths[0]); err != nil {
@@ -950,13 +1096,7 @@ func (s *Server) completeAssistantWithoutTools(
 			text = assistantContentFallback
 		}
 		recordStage("deterministic_no_model_reply", map[string]any{"reason": perf.Reason, "intent": perf.Intent})
-		trace := chatLatencyTrace(requestStart, perf, map[string]any{
-			"model_calls_avoided":   1,
-			"fresh_compile_avoided": 1,
-			"restore_ms":            int64(0),
-			"modelruntime_ms":       int64(0),
-			"gateway_execution_ms":  int64(0),
-		})
+		trace := chatHyperlaneNoModelTrace(requestStart, perf)
 		am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", text, map[string]any{
 			"replyToUserMessageId": userMessageID,
 			"correlationId":        corr,
@@ -964,13 +1104,17 @@ func (s *Server) completeAssistantWithoutTools(
 			"chatLatencyTrace":     trace,
 			"toolPipeline":         map[string]any{"stages": stages},
 			"toolGatewayActivity": map[string]any{
-				"userRequestSummary": trimSummary(lastUserContent, 500),
-				"stages":             stages,
-				"toolCallEmitted":    false,
-				"executionState":     "skipped",
-				"latencyTrace":       trace,
-				"contextBudgetClass": perf.ContextBudgetClass,
-				"outputMode":         perf.OutputMode,
+				"userRequestSummary":  trimSummary(lastUserContent, 500),
+				"stages":              stages,
+				"toolCallEmitted":     false,
+				"executionState":      "skipped",
+				"latencyTrace":        trace,
+				"contextBudgetClass":  perf.ContextBudgetClass,
+				"outputMode":          perf.OutputMode,
+				"hyperlaneIntentType": trace["hyperlane_intent_type"],
+				"hyperlaneRoute":      trace["hyperlane_route"],
+				"gatewayAvoided":      true,
+				"modelruntimeAvoided": true,
 			},
 		})
 		return am
@@ -1702,6 +1846,15 @@ func formatToolResult(gatewayToolID string, res *gateway.Result) string {
 		}
 		return fmt.Sprintf("File %v (%v bytes):\n```\n%s\n```", path, size, text)
 	case "fs.write":
+		if files, ok := res.Data["files"]; ok {
+			count := res.Data["count"]
+			bytes := res.Data["bytes"]
+			encoded, _ := json.MarshalIndent(files, "", "  ")
+			if len(encoded) > 0 {
+				return fmt.Sprintf("Wrote %v files (%v bytes):\n```json\n%s\n```", count, bytes, string(encoded))
+			}
+			return fmt.Sprintf("Wrote %v files (%v bytes)", count, bytes)
+		}
 		return fmt.Sprintf("Wrote %v bytes to %v", res.Data["bytes"], res.Data["path"])
 	case "proc.run":
 		stdout, _ := res.Data["stdout"].(string)

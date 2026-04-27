@@ -128,6 +128,13 @@ function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
+const SHELL_RAIL_COLLAPSED_KEY = "forge.shellRailCollapsed.v1";
+
+function readStoredShellRailCollapsed() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(SHELL_RAIL_COLLAPSED_KEY) === "true";
+}
+
 export function AppShell(props: AppShellProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -149,6 +156,7 @@ export function AppShell(props: AppShellProps) {
   const [windows, setWindows] = useState<FloatingWindow[]>([]);
   const [dragging, setDragging] = useState<{ id: number; dx: number; dy: number } | null>(null);
   const [windowSeq, setWindowSeq] = useState(1);
+  const [railCollapsed, setRailCollapsed] = useState(() => readStoredShellRailCollapsed());
   const isMainWindow = props.isMainWindow;
 
   useEffect(() => {
@@ -174,6 +182,14 @@ export function AppShell(props: AppShellProps) {
   }, [isMainWindow]);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(SHELL_RAIL_COLLAPSED_KEY, String(railCollapsed));
+    } catch {
+      // Cosmetic shell preference; ignore storage failures.
+    }
+  }, [railCollapsed]);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
@@ -181,6 +197,10 @@ export function AppShell(props: AppShellProps) {
       if (event.ctrlKey && event.key.toLowerCase() === "m") {
         event.preventDefault();
         switchMode(uiMode === "cognitive" ? "metrics" : "cognitive");
+      }
+      if (event.ctrlKey && event.key.toLowerCase() === "b") {
+        event.preventDefault();
+        setRailCollapsed((value) => !value);
       }
       if (event.key === "Escape") {
         setWindows((items) => items.filter((item) => item.pinned));
@@ -304,9 +324,19 @@ export function AppShell(props: AppShellProps) {
       ) : null}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="forge-category-rail">
-          <div className="px-3 py-3">
-            <CommandBar compact />
+        <aside className={cx("forge-category-rail", railCollapsed && "forge-category-rail--collapsed")}>
+          <div className="forge-category-rail__top">
+            <button
+              type="button"
+              onClick={() => setRailCollapsed((value) => !value)}
+              className="forge-rail-toggle"
+              aria-label={railCollapsed ? "Open left toolbar" : "Collapse left toolbar"}
+              title={railCollapsed ? "Open toolbar (Ctrl+B)" : "Collapse toolbar (Ctrl+B)"}
+            >
+              <span aria-hidden>{railCollapsed ? ">" : "<"}</span>
+              <span className={railCollapsed ? "sr-only" : ""}>{railCollapsed ? "Open" : "Collapse"}</span>
+            </button>
+            {!railCollapsed ? <CommandBar compact /> : null}
           </div>
           <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-3">
             {navGroups.map((group) => {
@@ -319,9 +349,10 @@ export function AppShell(props: AppShellProps) {
                     onClick={() => toggleGroup(group.label)}
                     className={cx("forge-nav-group__trigger", groupActive && "forge-nav-group__trigger--active")}
                     aria-expanded={expanded}
+                    title={railCollapsed ? group.label : undefined}
                   >
-                    <span>{group.label}</span>
-                    <span>{expanded ? "-" : "+"}</span>
+                    <span>{railCollapsed ? group.label.slice(0, 2).toUpperCase() : group.label}</span>
+                    {!railCollapsed ? <span>{expanded ? "-" : "+"}</span> : null}
                   </button>
                   {expanded ? (
                     <div className="mt-1 space-y-1">
@@ -337,9 +368,10 @@ export function AppShell(props: AppShellProps) {
                             }}
                             className={cx("forge-nav-item", active && "forge-nav-item--active")}
                             aria-current={active ? "page" : undefined}
+                            title={railCollapsed ? item.label : undefined}
                           >
                             <span className="forge-nav-item__short">{item.short}</span>
-                            <span className="min-w-0 truncate">{item.label}</span>
+                            <span className={cx("forge-nav-item__label min-w-0 truncate", railCollapsed && "sr-only")}>{item.label}</span>
                           </button>
                         );
                       })}
@@ -350,9 +382,9 @@ export function AppShell(props: AppShellProps) {
             })}
           </nav>
           <div className="border-t border-forge-platinum/10 p-2">
-            <button type="button" onClick={() => openWindow("surfaces", "Surface Directory")} className="forge-nav-item w-full">
+            <button type="button" onClick={() => openWindow("surfaces", "Surface Directory")} className="forge-nav-item w-full" title={railCollapsed ? "More" : undefined}>
               <span className="forge-nav-item__short">··</span>
-              <span>More</span>
+              <span className={cx("forge-nav-item__label", railCollapsed && "sr-only")}>More</span>
             </button>
           </div>
         </aside>

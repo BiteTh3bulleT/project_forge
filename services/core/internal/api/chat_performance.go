@@ -6,7 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"forge/projectforge/services/core/internal/aios/hyperlane"
 	"forge/projectforge/services/core/internal/chat"
+	"forge/projectforge/services/core/internal/gateway"
 )
 
 const (
@@ -30,12 +32,13 @@ type chatPerformanceDecision struct {
 	Confidence         float64
 	Reason             string
 	HyperlaneMs        int64
+	HyperlaneIntent    hyperlane.Intent
 }
 
-func classifyChatPerformance(content string) chatPerformanceDecision {
+func classifyChatPerformance(content string) (decision chatPerformanceDecision) {
 	start := time.Now()
 	normalized := normalizeAssistantIntent(content)
-	decision := chatPerformanceDecision{
+	decision = chatPerformanceDecision{
 		Intent:             "general_chat",
 		ContextBudgetClass: chatBudgetSmall,
 		OutputMode:         chatOutputNormal,
@@ -63,6 +66,18 @@ func classifyChatPerformance(content string) chatPerformanceDecision {
 		decision.NoModel = true
 		decision.Confidence = 1
 		decision.Reason = "identity or missing live-context request"
+		return decision
+	}
+
+	intent := gateway.ParseHyperlaneIntent(content)
+	decision.HyperlaneIntent = intent
+	if isSupportedNoModelHyperlaneIntent(intent) {
+		decision.Intent = string(intent.Type)
+		decision.ContextBudgetClass = chatBudgetTiny
+		decision.OutputMode = chatOutputBrief
+		decision.NoModel = true
+		decision.Confidence = intent.Confidence
+		decision.Reason = "hyperlane deterministic no-model route: " + intent.MatchedRule
 		return decision
 	}
 
@@ -115,6 +130,22 @@ func classifyChatPerformance(content string) chatPerformanceDecision {
 		decision.Reason = "larger operator turn"
 	}
 	return decision
+}
+
+func isSupportedNoModelHyperlaneIntent(intent hyperlane.Intent) bool {
+	if intent.RequiresModel || intent.RequiresGateway {
+		return false
+	}
+	switch intent.Type {
+	case hyperlane.IntentStatusQuery,
+		hyperlane.IntentDiagnosticsQuery,
+		hyperlane.IntentRestoreInspection,
+		hyperlane.IntentDreamReportInspection,
+		hyperlane.IntentModelruntimeStatus:
+		return true
+	default:
+		return false
+	}
 }
 
 func deterministicNoModelIntent(normalized string) bool {
@@ -180,6 +211,19 @@ func isDeepReasoningIntent(normalized string) bool {
 }
 
 func (s *Server) renderNoModelChatReply(ctx context.Context, decision chatPerformanceDecision, th *chat.ThreadDetail, content string) string {
+	switch decision.HyperlaneIntent.Type {
+	case hyperlane.IntentStatusQuery:
+		return s.renderFastStatusReply()
+	case hyperlane.IntentDiagnosticsQuery:
+		return s.renderFastDiagnosticsReply()
+	case hyperlane.IntentRestoreInspection:
+		return renderFastRestoreReply(th)
+	case hyperlane.IntentDreamReportInspection:
+		return s.renderFastDreamReportReply(ctx)
+	case hyperlane.IntentModelruntimeStatus:
+		return s.renderFastModelRuntimeStatusReply(ctx)
+	}
+
 	switch decision.Intent {
 	case "empty":
 		return "No request text received."
@@ -233,6 +277,64 @@ func (s *Server) renderFastDiagnosticsReply() string {
 	return strings.Join(parts, "; ") + "."
 }
 
+func (s *Server) renderFastModelRuntimeStatusReply(ctx context.Context) string {
+	if s.modelRuntime == nil {
+		return "Modelruntime: unavailable. Core remains online on the CPU-side no-model route."
+	}
+	meta := ModelRuntimeRequestMeta{WorkspaceID: strings.TrimSpace(s.cfg.WorkspaceDir)}
+	parts := []string{"Modelruntime fast path:"}
+	if health, err := s.modelRuntime.Health(ctx, meta); err == nil {
+		status := strings.TrimSpace(health.Status)
+		if status == "" {
+			if health.OK {
+				status = "ok"
+			} else {
+				status = "degraded"
+			}
+		}
+		parts = append(parts, "status "+status)
+		if backend := strings.TrimSpace(health.Backend); backend != "" {
+			parts = append(parts, "backend "+backend)
+		}
+		if len(health.DegradedReasons) > 0 {
+			parts = append(parts, "degraded: "+strings.Join(health.DegradedReasons, ", "))
+		}
+	} else {
+		parts = append(parts, "health unavailable: "+err.Error())
+	}
+	if queue, err := s.modelRuntime.QueueStatus(ctx, meta); err == nil {
+		parts = append(parts, fmt.Sprintf("queue depth %d", queue.Depth))
+		if state := strings.TrimSpace(queue.PolicyState); state != "" {
+			parts = append(parts, "policy "+state)
+		}
+	} else {
+		parts = append(parts, "queue unavailable: "+err.Error())
+	}
+	if loaded, err := s.modelRuntime.LoadedStatus(ctx, meta); err == nil {
+		parts = append(parts, fmt.Sprintf("loaded %d", loaded.Count))
+	}
+	if models, err := s.modelRuntime.ListModels(ctx, ModelRuntimeListRequest{Meta: meta}); err == nil {
+		available := 0
+		for _, model := range models {
+			status := strings.ToLower(strings.TrimSpace(model.Status))
+			if status == "available" || status == "loaded" {
+				available++
+			}
+		}
+		parts = append(parts, fmt.Sprintf("registered %d", len(models)), fmt.Sprintf("available %d", available))
+	}
+	parts = append(parts, "no model call executed")
+	return strings.Join(parts, "; ") + "."
+}
+
+func (s *Server) renderFastDreamReportReply(ctx context.Context) string {
+	_ = ctx
+	if s.dream == nil {
+		return "Dream Mode: unavailable. No persisted Dream reports are attached to this chat."
+	}
+	return "Dream Mode: service registered. No persisted Dream report is attached to this chat; run /api/dream/run for a fresh dry-run report."
+}
+
 func renderFastRestoreReply(th *chat.ThreadDetail) string {
 	if th == nil {
 		return "No restore package is attached to this chat context."
@@ -282,6 +384,39 @@ func chatLatencyTrace(start time.Time, decision chatPerformanceDecision, extras 
 		trace[k] = v
 	}
 	return trace
+}
+
+func chatHyperlaneNoModelTrace(start time.Time, decision chatPerformanceDecision) map[string]any {
+	extras := map[string]any{
+		"latency_ms":               time.Since(start).Milliseconds(),
+		"modelruntime_avoided":     true,
+		"model_calls_avoided":      1,
+		"context_compile_avoided":  true,
+		"fresh_compile_avoided":    1,
+		"gateway_avoided":          true,
+		"restore_ms":               int64(0),
+		"context_compile_ms":       int64(0),
+		"modelruntime_ms":          int64(0),
+		"gateway_preflight_ms":     int64(0),
+		"gateway_execution_ms":     int64(0),
+		"hyperlane_parser_version": hyperlane.ParserVersion,
+	}
+	intent := decision.HyperlaneIntent
+	if intent.Type != "" {
+		extras["hyperlane_intent_type"] = string(intent.Type)
+		extras["hyperlane_route"] = intent.Route
+		extras["hyperlane_confidence"] = intent.Confidence
+		extras["hyperlane_matched_rule"] = intent.MatchedRule
+		extras["hyperlane_trace"] = map[string]any{
+			"parser_version":  intent.Trace.ParserVersion,
+			"matched_rule":    intent.Trace.MatchedRule,
+			"confidence":      intent.Trace.Confidence,
+			"route":           intent.Trace.Route,
+			"warnings":        intent.Trace.Warnings,
+			"rejected_reason": intent.Trace.RejectedReason,
+		}
+	}
+	return chatLatencyTrace(start, decision, extras)
 }
 
 func chatLatencyTraceWithPrompt(start time.Time, decision chatPerformanceDecision, prompt modelRuntimePromptBudget, extras map[string]any) map[string]any {

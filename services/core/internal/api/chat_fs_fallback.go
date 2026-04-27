@@ -24,6 +24,9 @@ func (s *Server) runChatFSDeterministicFallback(
 	if combined {
 		return s.runDeterministicMkdirThenWrite(ctx, corr, lastUserContent, pushStage, gwActivity, final)
 	}
+	if writes, ok := gateway.ParseSVGAssetWriteIntents(lastUserContent); ok {
+		return s.runDeterministicSVGWrites(ctx, corr, writes, pushStage, gwActivity, final)
+	}
 	if writePath, script, ok := gateway.ParsePythonBannerScriptIntent(lastUserContent); ok {
 		pushStage("deterministic_python_banner_dispatch", map[string]any{"path": writePath})
 		res, err := s.gwChatExec(ctx, corr, "fs.write", []string{writePath}, map[string]any{"contents": script})
@@ -56,6 +59,45 @@ func (s *Server) runChatFSDeterministicFallback(
 			final.WriteString("\n\n")
 		}
 		final.WriteString("FORGE (deterministic python): " + formatToolResult("fs.write", res))
+		gwActivity["executionState"] = "ok"
+		gwActivity["toolSelected"] = "fs.write"
+		gwActivity["toolArgs"] = map[string]any{"path": writePath}
+		gwActivity["executionResult"] = res.Data
+		gwActivity["syntheticToolExecution"] = true
+		return true
+	}
+	if writePath, script, ok := gateway.ParseDownloadSorterScriptIntent(lastUserContent); ok {
+		pushStage("deterministic_download_sorter_dispatch", map[string]any{"path": writePath})
+		res, err := s.gwChatExec(ctx, corr, "fs.write", []string{writePath}, map[string]any{"contents": script})
+		if err != nil {
+			if final.Len() > 0 {
+				final.WriteString("\n\n")
+			}
+			final.WriteString("FORGE (deterministic download sorter): " + err.Error())
+			gwActivity["executionState"] = "error"
+			gwActivity["failureReason"] = err.Error()
+			gwActivity["toolSelected"] = "fs.write"
+			gwActivity["toolArgs"] = map[string]any{"path": writePath}
+			gwActivity["syntheticToolExecution"] = true
+			return true
+		}
+		if res.Status != gateway.StatusOK {
+			if final.Len() > 0 {
+				final.WriteString("\n\n")
+			}
+			final.WriteString(fmt.Sprintf("FORGE (deterministic download sorter): gateway %s — %s", res.Status, strings.TrimSpace(coalesceReason(res))))
+			gwActivity["executionState"] = res.Status
+			gwActivity["failureReason"] = coalesceReason(res)
+			gwActivity["toolSelected"] = "fs.write"
+			gwActivity["toolArgs"] = map[string]any{"path": writePath}
+			gwActivity["executionResult"] = res.Data
+			gwActivity["syntheticToolExecution"] = true
+			return true
+		}
+		if final.Len() > 0 {
+			final.WriteString("\n\n")
+		}
+		final.WriteString("FORGE (deterministic download sorter): " + formatToolResult("fs.write", res))
 		gwActivity["executionState"] = "ok"
 		gwActivity["toolSelected"] = "fs.write"
 		gwActivity["toolArgs"] = map[string]any{"path": writePath}
@@ -353,6 +395,82 @@ func (s *Server) runChatFSDeterministicFallback(
 	return false
 }
 
+func (s *Server) runDeterministicSVGWrites(
+	ctx context.Context,
+	corr string,
+	writes []gateway.DeterministicWrite,
+	pushStage func(string, map[string]any),
+	gwActivity map[string]any,
+	final *strings.Builder,
+) bool {
+	if len(writes) == 0 {
+		return false
+	}
+	paths := make([]string, 0, len(writes))
+	files := make([]map[string]any, 0, len(writes))
+	for _, write := range writes {
+		writePath := strings.TrimSpace(write.Path)
+		if writePath == "" || !pathAllowed(s.cfg.WorkspaceDir, writePath) {
+			pushStage("deterministic_svg_precheck_failed", map[string]any{"path": writePath})
+			if final.Len() > 0 {
+				final.WriteString("\n\n")
+			}
+			final.WriteString("FORGE (deterministic svg): refused path outside workspace.")
+			gwActivity["executionState"] = "denied"
+			gwActivity["failureReason"] = "path rejected (outside workspace or traversal)"
+			gwActivity["toolSelected"] = "fs.write"
+			gwActivity["toolArgs"] = map[string]any{"paths": paths}
+			gwActivity["syntheticToolExecution"] = true
+			return true
+		}
+		paths = append(paths, writePath)
+		files = append(files, map[string]any{
+			"contents": write.Contents,
+		})
+	}
+
+	pushStage("deterministic_svg_dispatch", map[string]any{"paths": paths, "count": len(paths)})
+	res, err := s.gwChatExec(ctx, corr, "fs.write", paths, map[string]any{"files": files})
+	if err != nil {
+		pushStage("deterministic_svg_error", map[string]any{"error": err.Error()})
+		if final.Len() > 0 {
+			final.WriteString("\n\n")
+		}
+		final.WriteString("FORGE (deterministic svg): " + err.Error())
+		gwActivity["executionState"] = "error"
+		gwActivity["failureReason"] = err.Error()
+		gwActivity["toolSelected"] = "fs.write"
+		gwActivity["toolArgs"] = map[string]any{"paths": paths}
+		gwActivity["syntheticToolExecution"] = true
+		return true
+	}
+	if res.Status != gateway.StatusOK {
+		if final.Len() > 0 {
+			final.WriteString("\n\n")
+		}
+		final.WriteString(fmt.Sprintf("FORGE (deterministic svg): gateway %s — %s", res.Status, strings.TrimSpace(coalesceReason(res))))
+		gwActivity["executionState"] = res.Status
+		gwActivity["failureReason"] = coalesceReason(res)
+		gwActivity["toolSelected"] = "fs.write"
+		gwActivity["toolArgs"] = map[string]any{"paths": paths}
+		gwActivity["executionResult"] = res.Data
+		gwActivity["syntheticToolExecution"] = true
+		return true
+	}
+
+	pushStage("deterministic_svg_ok", map[string]any{"paths": res.Data["paths"], "count": res.Data["count"]})
+	if final.Len() > 0 {
+		final.WriteString("\n\n")
+	}
+	final.WriteString("FORGE (deterministic svg): " + formatToolResult("fs.write", res))
+	gwActivity["executionState"] = "ok"
+	gwActivity["toolSelected"] = "fs.write"
+	gwActivity["toolArgs"] = map[string]any{"paths": paths}
+	gwActivity["executionResult"] = res.Data
+	gwActivity["syntheticToolExecution"] = true
+	return true
+}
+
 func (s *Server) gwChatExec(ctx context.Context, corr, toolID string, paths []string, input map[string]any) (*gateway.Result, error) {
 	lane, ok := gateway.DefaultChatLane(toolID)
 	if !ok {
@@ -372,6 +490,76 @@ func (s *Server) gwChatExec(ctx context.Context, corr, toolID string, paths []st
 		Initiator:     "chat_deterministic",
 		DryRun:        false,
 	})
+}
+
+func (s *Server) runDeterministicWrite(
+	ctx context.Context,
+	corr string,
+	label string,
+	writePath string,
+	contents string,
+	pushStage func(string, map[string]any),
+	gwActivity map[string]any,
+	final *strings.Builder,
+) bool {
+	stageLabel := strings.TrimSpace(label)
+	if stageLabel == "" {
+		stageLabel = "write"
+	}
+	if !pathAllowed(s.cfg.WorkspaceDir, writePath) {
+		pushStage("deterministic_"+stageLabel+"_precheck_failed", map[string]any{"path": writePath})
+		if final.Len() > 0 {
+			final.WriteString("\n\n")
+		}
+		final.WriteString("FORGE (deterministic " + stageLabel + "): refused path outside workspace.")
+		gwActivity["executionState"] = "denied"
+		gwActivity["failureReason"] = "path rejected (outside workspace or traversal)"
+		gwActivity["toolSelected"] = "fs.write"
+		gwActivity["toolArgs"] = map[string]any{"path": writePath}
+		gwActivity["syntheticToolExecution"] = true
+		return true
+	}
+
+	pushStage("deterministic_"+stageLabel+"_dispatch", map[string]any{"path": writePath})
+	res, err := s.gwChatExec(ctx, corr, "fs.write", []string{writePath}, map[string]any{"contents": contents})
+	if err != nil {
+		pushStage("deterministic_"+stageLabel+"_error", map[string]any{"error": err.Error()})
+		if final.Len() > 0 {
+			final.WriteString("\n\n")
+		}
+		final.WriteString("FORGE (deterministic " + stageLabel + "): " + err.Error())
+		gwActivity["executionState"] = "error"
+		gwActivity["failureReason"] = err.Error()
+		gwActivity["toolSelected"] = "fs.write"
+		gwActivity["toolArgs"] = map[string]any{"path": writePath}
+		gwActivity["syntheticToolExecution"] = true
+		return true
+	}
+	if res.Status != gateway.StatusOK {
+		if final.Len() > 0 {
+			final.WriteString("\n\n")
+		}
+		final.WriteString(fmt.Sprintf("FORGE (deterministic %s): gateway %s — %s", stageLabel, res.Status, strings.TrimSpace(coalesceReason(res))))
+		gwActivity["executionState"] = res.Status
+		gwActivity["failureReason"] = coalesceReason(res)
+		gwActivity["toolSelected"] = "fs.write"
+		gwActivity["toolArgs"] = map[string]any{"path": writePath}
+		gwActivity["executionResult"] = res.Data
+		gwActivity["syntheticToolExecution"] = true
+		return true
+	}
+
+	pushStage("deterministic_"+stageLabel+"_ok", map[string]any{"path": res.Data["path"]})
+	if final.Len() > 0 {
+		final.WriteString("\n\n")
+	}
+	final.WriteString("FORGE (deterministic " + stageLabel + "): " + formatToolResult("fs.write", res))
+	gwActivity["executionState"] = "ok"
+	gwActivity["toolSelected"] = "fs.write"
+	gwActivity["toolArgs"] = map[string]any{"path": writePath}
+	gwActivity["executionResult"] = res.Data
+	gwActivity["syntheticToolExecution"] = true
+	return true
 }
 
 func (s *Server) deterministicMkdirExec(ctx context.Context, corr, dirRel string, pushStage func(string, map[string]any)) (*gateway.Result, error) {

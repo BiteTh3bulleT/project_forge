@@ -3,6 +3,8 @@ package gateway
 import (
 	"regexp"
 	"strings"
+
+	"forge/projectforge/services/core/internal/aios/hyperlane"
 )
 
 var (
@@ -78,34 +80,27 @@ func ForcedChatModelName(user string) string {
 	if wantsCompositeFilesystemWorkflow(user) {
 		return ""
 	}
-	if wantsFilesystemMkdir(user) {
-		return ChatModelName("fs.mkdir")
-	}
-	if wantsListDirectory(user) {
-		return ChatModelName("fs.list")
-	}
-	if wantsReadFile(user) {
-		return ChatModelName("fs.read")
-	}
-	if wantsWriteFile(user) {
-		return ChatModelName("fs.write")
-	}
-	if wantsShellRun(user) {
-		return ChatModelName("proc.run")
-	}
-	if wantsWebSearch(user) {
-		return ChatModelName("web.search")
-	}
-	if wantsURLFetch(user) {
-		return ChatModelName("net.fetch")
-	}
-	if wantsBrowserOpen(user) {
-		return ChatModelName("desktop.open")
-	}
-	if wantsGitStatus(user) {
-		return ChatModelName("git.status")
+	intent := ParseHyperlaneIntent(user)
+	switch intent.Route {
+	case hyperlane.RouteGatewayFSMkdir,
+		hyperlane.RouteGatewayFSList,
+		hyperlane.RouteGatewayFSRead,
+		hyperlane.RouteGatewayFSWrite,
+		hyperlane.RouteGatewayProcRun,
+		hyperlane.RouteGatewayWebSearch,
+		hyperlane.RouteGatewayNetFetch,
+		hyperlane.RouteGatewayDesktopOpen,
+		hyperlane.RouteGatewayGitStatus:
+		return ChatModelName(intent.Route)
 	}
 	return ""
+}
+
+// IsCompositeFilesystemWorkflow reports whether a user turn combines folder creation
+// with a follow-on file write/create step. Chat dispatch uses this to avoid
+// executing partial filesystem side effects before the write action is approved.
+func IsCompositeFilesystemWorkflow(user string) bool {
+	return wantsCompositeFilesystemWorkflow(user)
 }
 
 func wantsCompositeFilesystemWorkflow(user string) bool {
@@ -196,6 +191,20 @@ func wantsWriteFile(user string) bool {
 		return true
 	}
 	if strings.Contains(s, "create a file") || strings.Contains(s, "create file") {
+		return true
+	}
+	if IsVideoGameJournalWebpageIntent(user) {
+		return true
+	}
+	if (strings.Contains(s, "create") || strings.Contains(s, "write") || strings.Contains(s, "make") || strings.Contains(s, "save")) &&
+		(strings.Contains(s, "webpage") || strings.Contains(s, "web page") || strings.Contains(s, "html page")) {
+		return true
+	}
+	if (strings.Contains(s, "create") || strings.Contains(s, "write") || strings.Contains(s, "save")) &&
+		(strings.Contains(s, " file") || strings.Contains(s, " script")) &&
+		(strings.Contains(s, "svg") || strings.Contains(s, "json") || strings.Contains(s, "markdown") || strings.Contains(s, "text") ||
+			strings.Contains(s, "html") || strings.Contains(s, "css") || strings.Contains(s, "javascript") || strings.Contains(s, "typescript") ||
+			strings.Contains(s, "go file") || strings.Contains(s, ".go") || strings.Contains(s, "python")) {
 		return true
 	}
 	if strings.Contains(s, "create a script") || strings.Contains(s, "create script") {
@@ -348,6 +357,12 @@ func ShouldAttachChatTools(user string) bool {
 		return true
 	}
 	if _, _, ok := ParsePythonBannerScriptIntent(user); ok {
+		return true
+	}
+	if _, _, ok := ParseDownloadSorterScriptIntent(user); ok {
+		return true
+	}
+	if IsVideoGameJournalWebpageIntent(user) {
 		return true
 	}
 	if _, ok := ParseShellCommand(user); ok {
