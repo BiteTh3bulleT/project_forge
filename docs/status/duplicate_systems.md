@@ -9,9 +9,9 @@ Scope: identify overlaps; do not expand duplicates
 |---|---|---|---|---|---|
 | Tool execution | Gateway (`/api/gateway/invoke` -> `gateway.Execute`) | none | converged | low | Keep gateway as sole ingress; direct adapter invoke route removed. |
 | Semantic memory/state mutation | syscall kernel (`aios/controllane`) | read-only observation inspection APIs (`/api/memory/*` GET) | converged for mutation | low | Mutation endpoints are retired (`410 Gone`); reads remain compatibility inspection only. |
-| Compute lane structure | `aios/computelane` interfaces | `aios/compute/librarian` runtime cells | duplicated (intent vs runtime split) | architecture confusion | Keep both only with explicit boundary: `computelane` = interface seam, `compute/librarian` = current runtime. |
+| Compute lane structure | `aios/computelane` interfaces (forward-declared seam, zero production importers) | `aios/compute/librarian` runtime cells | not duplicated; intent vs runtime split | none | `computelane` is a contract seam for the future IRIS service; package docstring forbids runtime logic and production imports. `compute/librarian` is the only live runtime. |
 | Backup semantics | `full_backup` export of many AI-OS tables | restore import supports only policy-shaped tables | partial duplicate semantics (export-only vs import subset) | false sense of recoverability | Keep as explicit export/restore asymmetry; do not claim full restore parity. |
-| Autonomy state | Durable SQLite-backed autonomy repos via `sqlite_repositories` | Durable across store reopen (`autonomy_settings`-backed bundles) | capability split | none |
+| Autonomy state | Single canonical store: `aios/autonomy.SQLiteBundle` over the `settings` table with the `autonomy_repo.*` key prefix (production wires this via `NewSQLiteBundleStrict`, fail-closed when DB is nil) | `autonomy_settings` is the backup-export view name for the same rows (`SELECT key, value FROM settings WHERE key LIKE 'autonomy_repo.%'`), not a parallel store | not duplicated | none | `InMemoryBundle` is retained only for unit tests / `db == nil` diagnostic mode. |
 
 ## Non-duplicates (single authoritative implementation observed)
 
@@ -23,7 +23,7 @@ Scope: identify overlaps; do not expand duplicates
 ## Cutover priorities
 
 1. Keep direct adapter execution side door removed from router wiring.
-2. Quarantine autonomy maintain/mission until autonomy repos are durable.
+2. Autonomy repos are durable via `NewSQLiteBundleStrict`; default mode remains `observe` and maintain/mission stay explicit operator opt-ins (see `cutover_blockers.md` row "Autonomy default mode is `observe`").
 3. Keep memory observation mutation endpoints retired; add only syscall-native write facades for future memory/state mutation.
-4. Keep `computelane` vs `compute/librarian` roles explicit in docs to avoid parallel-architecture drift.
+4. `computelane` is now a forward-declared seam (package docstring; zero production importers); `compute/librarian` is the only runtime. Adding a production import of `computelane` requires promoting the consumer through kernel/gateway commit gates first.
 5. Keep tool capability status transitions on one authoritative path (`PATCH /api/gateway/capabilities/{id}/status`) with required reasons for deferred/disabled/stubbed/deprecated transitions.

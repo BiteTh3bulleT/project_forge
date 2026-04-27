@@ -1,3 +1,12 @@
+// Package computelane is a forward-declared interface seam for the future
+// IRIS service and any out-of-tree compute consumers. It owns no runtime:
+// the live runtime is aios/compute/librarian. computelane has no production
+// importers by design — its only job is to lock the propose-only contract
+// (cells, inference, context compile, retrieval, IRIS bridge) into the type
+// system so that when a consumer is wired, the contract is already pinned.
+// Do not add runtime logic here; do not add production imports of this
+// package without first promoting the consumer through the kernel/gateway
+// commit gates.
 package computelane
 
 import (
