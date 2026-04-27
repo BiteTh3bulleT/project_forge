@@ -105,6 +105,7 @@ type compileContextSnapshotOptions struct {
 	RestoreMinScore                   float64
 	RequireFreshCompileBelowThreshold bool
 	ExpandRestoreGraph                bool
+	RestoreCacheDisabled              bool
 }
 
 type compiledSnapshotBuildInput struct {
@@ -558,6 +559,9 @@ func mergeCompileContextOptions(payload map[string]any) compileContextSnapshotOp
 		}
 		if v, present, valid := readOptionalBool(src, "expandRestoreGraph"); present && valid {
 			opts.ExpandRestoreGraph = v
+		}
+		if v, present, valid := readOptionalBool(src, "restoreCacheDisabled"); present && valid {
+			opts.RestoreCacheDisabled = v
 		}
 	}
 	apply(payload)

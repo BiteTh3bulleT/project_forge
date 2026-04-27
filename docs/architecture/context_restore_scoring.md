@@ -4,6 +4,8 @@ Status date: 2026-04-24.
 
 `COMPILE_CONTEXT` can rank persisted context snapshots before compiling a new packet. Snapshot rows are non-canonical evidence: canonical truth remains in notes, links, state, loops, artifacts, models, provenance, and journal tables.
 
+Memory taxonomy reference: [memory_taxonomy.md](memory_taxonomy.md).
+
 ## Authority
 
 - Entry action: `COMPILE_CONTEXT`
@@ -24,6 +26,21 @@ Candidate listing is header-first and scope-bound. A candidate exposes:
 - lineage: `correlation_id`, `trace_id`, `syscall_id`, `audit_id`, `proposed_by`, `committed_by`
 
 Wrong workspace candidates are excluded. Requested lane matches the same lane, and an empty requested lane may match any lane in the workspace.
+
+## Memory Taxonomy Role
+
+Restore scoring is the arterial recall/score function for working, structural, semantic, prospective, episodic, and utility memory.
+
+It consumes:
+
+- working memory from active context packets and snapshot headers
+- structural memory from snapshot fingerprints, links, artifacts, selected paths, and lineage
+- semantic memory from notes/state/links included in prior snapshots
+- prospective memory from open loop overlap
+- episodic memory from journal/event evidence and snapshot creation history
+- utility memory from `restore_outcome_events`
+
+It does not make any of those sources canonical. Restore scoring chooses evidence for context assembly and may require fresh compile. Canonical mutation still requires semantic syscalls.
 
 ## Scoring
 
@@ -54,6 +71,55 @@ Penalties:
 
 The score object includes `total_score`, `confidence`, `requires_fresh_compile`, and non-empty `explain[]`.
 
+## Rule Cell Adjustments
+
+Phase 7 v0 adds optional Arterial Rule Cell adjustments after deterministic base scoring and before the threshold/fresh-compile decision.
+
+Rule Cells may:
+
+- boost exact or overlapping query matches
+- penalize stale or contradiction-marked snapshots
+- emit `FreshCompileRequired` for low base scores
+- emit warnings/reject outputs for wrong-workspace candidates
+
+Rule Cells are not the workspace boundary. Wrong workspace candidates are excluded by the store/query/scoring flow before Rule Cells run.
+
+Score safety:
+
+- individual restore `ScoreAdjustment` is capped at `0.06`
+- total rule-based restore adjustment is capped at `0.12`
+- final restore score is clamped to `0.0..1.0`
+
+If the rule engine fails, `COMPILE_CONTEXT` appends an explicit warning and continues deterministic base scoring. Rule traces are persisted only inside existing non-canonical restore metadata and include rule pack id/version.
+
+## Outcome Feedback
+
+Phase 8 adds `restore_outcome_events` as non-canonical evidence for the restore loop. A persistent `COMPILE_CONTEXT` run emits one outcome event after snapshot selection with:
+
+- selected context packet and source snapshot IDs
+- selected evidence, state keys, loop IDs, and artifact IDs
+- assigned restore score and `requires_fresh_compile`
+- restore decision, correlation, trace, syscall, and audit linkage
+- initial outcome `unknown`, `no_candidate`, or `fresh_compile_required`
+
+Read-only compile paths and semantic dry-runs do not write outcome rows. They may return a draft outcome in the response summary so operators can inspect what would have been recorded.
+
+Operator feedback can update the non-canonical event outcome, confidence, feedback text, and correction summary through the restore outcome API. This update does not mutate canonical notes, state, loops, links, or memory truth.
+
+Future scoring consumes prior outcome evidence as a bounded utility signal:
+
+- prior helpful evidence/snapshot: small boost
+- stale, harmful, contradictory, failed, or operator-corrected outcomes: penalty/review signal
+- repeated `fresh_compile_required` or `no_candidate` for the same query: lower confidence and memory-gap signal
+
+Safety caps:
+
+- individual outcome utility adjustment is capped at `0.04`
+- total outcome utility adjustment is capped at `0.08`
+- final restore score remains clamped to `0.0..1.0`
+
+Outcome lookup failures append an explicit warning and `COMPILE_CONTEXT` continues deterministic base scoring.
+
 ## Query Matching
 
 Query matching lowercases, trims whitespace, removes trivial punctuation, tokenizes, and compares:
@@ -79,6 +145,14 @@ Restore scoring returns a package with:
 - trace
 
 Full graph/delta expansion is opt-in through `expandRestoreGraph`.
+
+## Restore Scoring Cache
+
+Phase 8.1 adds a bounded in-memory scoring cache for deterministic restore selection. The cache stores the ranked selection summary, not canonical truth.
+
+The key includes workspace id, lane id, normalized query, snapshot kind, restore hints, candidate set fingerprint, and restore outcome fingerprint. New snapshots, outcome feedback changes, wrong workspace/lane, hint changes, TTL expiry, or an explicit `restoreCacheDisabled=true` compile option produce a miss.
+
+The cache is used after scoped candidate listing, so wrong-workspace exclusion remains enforced by store/query logic. Trace metadata includes `cache.hit` and a compact key fingerprint.
 
 ## Fresh Compile
 

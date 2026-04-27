@@ -1324,6 +1324,108 @@ LIMIT 1`, scope.WorkspaceID, scope.LaneID, scope.LaneID, query, snapshotKind, sn
 	return out[0], true, nil
 }
 
+func (s *SQLiteSemanticStore) CreateRestoreOutcome(ctx context.Context, event RestoreOutcomeEvent) error {
+	event = normalizeRestoreOutcomeEvent(event)
+	if event.ID == "" {
+		return fmt.Errorf("restore outcome id required")
+	}
+	_, err := s.exec.ExecContext(ctx, `
+INSERT INTO restore_outcome_events(
+  id, created_at, updated_at, workspace_id, lane_id, query, context_packet_id, snapshot_id, snapshot_kind,
+  restore_score, requires_fresh_compile, selected_evidence_json, selected_state_keys_json, selected_loop_ids_json,
+  selected_artifact_ids_json, outcome, outcome_confidence, operator_feedback, failure_reason, correction_summary,
+  downstream_action_type, downstream_object_id, correlation_id, trace_id, syscall_id, audit_id, proposed_by,
+  committed_by, metadata_json
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		event.ID, event.CreatedAt, event.UpdatedAt, event.WorkspaceID, event.LaneID, event.Query, event.ContextPacketID, event.SnapshotID, event.SnapshotKind,
+		event.RestoreScore, boolToInt(event.RequiresFreshCompile), encodeStringSlice(event.SelectedEvidence), encodeStringSlice(event.SelectedStateKeys), encodeStringSlice(event.SelectedLoopIDs),
+		encodeStringSlice(event.SelectedArtifactIDs), string(event.Outcome), event.OutcomeConfidence, event.OperatorFeedback, event.FailureReason, event.CorrectionSummary,
+		event.DownstreamActionType, event.DownstreamObjectID, event.CorrelationID, event.TraceID, event.SyscallID, event.AuditID, event.ProposedBy,
+		event.CommittedBy, encodeJSON(nonNilMap(event.Metadata)),
+	)
+	return err
+}
+
+func (s *SQLiteSemanticStore) GetRestoreOutcome(ctx context.Context, id string) (RestoreOutcomeEvent, bool, error) {
+	rows, err := s.exec.QueryContext(ctx, restoreOutcomeSelectSQL(`id = ?`), strings.TrimSpace(id))
+	if err != nil {
+		return RestoreOutcomeEvent{}, false, err
+	}
+	defer rows.Close()
+	out, err := scanRestoreOutcomeRows(rows)
+	if err != nil {
+		return RestoreOutcomeEvent{}, false, err
+	}
+	if len(out) == 0 {
+		return RestoreOutcomeEvent{}, false, nil
+	}
+	return out[0], true, nil
+}
+
+func (s *SQLiteSemanticStore) ListRestoreOutcomes(ctx context.Context, filter RestoreOutcomeFilter) ([]RestoreOutcomeEvent, error) {
+	filter = normalizeRestoreOutcomeFilter(filter)
+	where := []string{"1=1"}
+	args := []any{}
+	if filter.WorkspaceID != "" {
+		where = append(where, "workspace_id = ?")
+		args = append(args, filter.WorkspaceID)
+	}
+	if filter.LaneID != "" {
+		where = append(where, "(lane_id = '' OR lane_id = ?)")
+		args = append(args, filter.LaneID)
+	}
+	if filter.Query != "" {
+		where = append(where, "query = ?")
+		args = append(args, filter.Query)
+	}
+	if filter.SnapshotID != "" {
+		where = append(where, "snapshot_id = ?")
+		args = append(args, filter.SnapshotID)
+	}
+	if filter.Outcome != "" {
+		where = append(where, "outcome = ?")
+		args = append(args, string(filter.Outcome))
+	}
+	if filter.Since > 0 {
+		where = append(where, "created_at >= ?")
+		args = append(args, filter.Since)
+	}
+	query := restoreOutcomeSelectSQL(strings.Join(where, " AND ")) + ` ORDER BY created_at DESC, id DESC LIMIT ?`
+	args = append(args, filter.Limit)
+	rows, err := s.exec.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanRestoreOutcomeRows(rows)
+}
+
+func (s *SQLiteSemanticStore) UpdateRestoreOutcomeFeedback(ctx context.Context, id string, scope domain.ForgeScope, feedback RestoreOutcomeFeedback) (RestoreOutcomeEvent, error) {
+	event, ok, err := s.GetRestoreOutcome(ctx, id)
+	if err != nil {
+		return RestoreOutcomeEvent{}, err
+	}
+	if !ok {
+		return RestoreOutcomeEvent{}, restoreOutcomeNotFound(id)
+	}
+	if !restoreOutcomeMatchesScope(event, scope) {
+		return RestoreOutcomeEvent{}, fmt.Errorf("restore outcome %q outside requested scope", strings.TrimSpace(id))
+	}
+	event = applyRestoreOutcomeFeedback(event, feedback)
+	_, err = s.exec.ExecContext(ctx, `
+UPDATE restore_outcome_events
+SET updated_at = ?, outcome = ?, outcome_confidence = ?, operator_feedback = ?, correction_summary = ?,
+    correlation_id = ?, trace_id = ?, committed_by = ?, metadata_json = ?
+WHERE id = ?`,
+		event.UpdatedAt, string(event.Outcome), event.OutcomeConfidence, event.OperatorFeedback, event.CorrectionSummary,
+		event.CorrelationID, event.TraceID, event.CommittedBy, encodeJSON(nonNilMap(event.Metadata)), event.ID,
+	)
+	if err != nil {
+		return RestoreOutcomeEvent{}, err
+	}
+	return event, nil
+}
+
 // Extra read helpers used by tests and context compilation.
 func (s *SQLiteSemanticStore) ListLinksByScope(ctx context.Context, scope ScopeFilter, limit int) ([]domain.SemanticLink, error) {
 	return s.listLinks(ctx, "1=1", nil, scope, limit)
@@ -1384,6 +1486,7 @@ func linkAuditOnExecutor(ctx context.Context, exec sqlExecutor, correlationID, s
 		"contradiction_records",
 		"supersession_records",
 		"context_packet_snapshots",
+		"restore_outcome_events",
 	}
 	for _, tbl := range tables {
 		query := fmt.Sprintf(`UPDATE %s SET audit_id = ? WHERE audit_id = '' AND syscall_id = ? AND correlation_id = ?`, tbl)
@@ -1448,6 +1551,13 @@ func decodeStringSlice(raw string) []string {
 		return []string{}
 	}
 	return out
+}
+
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
 
 func nonNilMap(v map[string]any) map[string]any {
@@ -1835,6 +1945,15 @@ func applyContextSnapshotMetadata(pkt *domain.ContextPacket, raw string) {
 	}
 }
 
+func restoreOutcomeSelectSQL(where string) string {
+	return `SELECT id, created_at, updated_at, workspace_id, lane_id, query, context_packet_id, snapshot_id, snapshot_kind,
+       restore_score, requires_fresh_compile, selected_evidence_json, selected_state_keys_json, selected_loop_ids_json,
+       selected_artifact_ids_json, outcome, outcome_confidence, operator_feedback, failure_reason, correction_summary,
+       downstream_action_type, downstream_object_id, correlation_id, trace_id, syscall_id, audit_id, proposed_by,
+       committed_by, metadata_json
+FROM restore_outcome_events WHERE ` + where
+}
+
 func scanContextPacketRows(rows *sql.Rows) ([]domain.ContextPacket, error) {
 	out := []domain.ContextPacket{}
 	for rows.Next() {
@@ -1871,6 +1990,39 @@ func scanContextPacketRows(rows *sql.Rows) ([]domain.ContextPacket, error) {
 		out = append(out, pkt)
 	}
 	return out, rows.Err()
+}
+
+func scanRestoreOutcomeRows(rows *sql.Rows) ([]RestoreOutcomeEvent, error) {
+	out := []RestoreOutcomeEvent{}
+	for rows.Next() {
+		var event RestoreOutcomeEvent
+		var requiresFresh int
+		var selectedEvidence, selectedStateKeys, selectedLoopIDs, selectedArtifactIDs, metadataRaw string
+		var outcome string
+		if err := rows.Scan(
+			&event.ID, &event.CreatedAt, &event.UpdatedAt, &event.WorkspaceID, &event.LaneID, &event.Query, &event.ContextPacketID, &event.SnapshotID, &event.SnapshotKind,
+			&event.RestoreScore, &requiresFresh, &selectedEvidence, &selectedStateKeys, &selectedLoopIDs, &selectedArtifactIDs, &outcome, &event.OutcomeConfidence,
+			&event.OperatorFeedback, &event.FailureReason, &event.CorrectionSummary, &event.DownstreamActionType, &event.DownstreamObjectID,
+			&event.CorrelationID, &event.TraceID, &event.SyscallID, &event.AuditID, &event.ProposedBy, &event.CommittedBy, &metadataRaw,
+		); err != nil {
+			return nil, err
+		}
+		event.RequiresFreshCompile = requiresFresh != 0
+		event.SelectedEvidence = decodeStringSlice(selectedEvidence)
+		event.SelectedStateKeys = decodeStringSlice(selectedStateKeys)
+		event.SelectedLoopIDs = decodeStringSlice(selectedLoopIDs)
+		event.SelectedArtifactIDs = decodeStringSlice(selectedArtifactIDs)
+		event.Outcome = RestoreOutcome(outcome)
+		event.Metadata = map[string]any{}
+		if strings.TrimSpace(metadataRaw) != "" {
+			_ = json.Unmarshal([]byte(metadataRaw), &event.Metadata)
+		}
+		out = append(out, normalizeRestoreOutcomeEvent(event))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func scanJournalRows(rows *sql.Rows) ([]domain.JournalEvent, error) {

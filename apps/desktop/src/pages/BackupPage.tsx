@@ -109,7 +109,7 @@ export function BackupPage() {
           </PrimaryButton>
         </div>
         {restoreResult ? (
-          <pre className="mt-4 max-h-64 overflow-auto rounded border border-white/10 bg-black/30 p-3 font-mono text-[11px] text-forge-mist">
+          <pre className="mt-4 max-h-64 overflow-auto rounded border border-forge-platinum/10 bg-black/30 p-3 font-mono text-[11px] text-forge-mist">
             {JSON.stringify(restoreResult, null, 2)}
           </pre>
         ) : null}
@@ -118,7 +118,7 @@ export function BackupPage() {
       <Panel title="Bundles on disk" subtitle="Rows from backup_bundles; delete removes the catalog row (file delete is best-effort server-side).">
         <div className="space-y-2">
           {bundles.map((b) => (
-            <div key={b.id} className="flex flex-wrap items-start justify-between gap-2 rounded border border-white/10 bg-forge-slate/20 p-3 text-xs text-forge-mist">
+            <div key={b.id} className="flex flex-wrap items-start justify-between gap-2 rounded border border-forge-platinum/10 bg-forge-slate/20 p-3 text-xs text-forge-mist">
               <div>
                 <div className="font-mono text-forge-ash">
                   {b.kind} · {b.label || "—"}

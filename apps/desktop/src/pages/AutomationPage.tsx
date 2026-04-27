@@ -180,7 +180,7 @@ export function AutomationPage() {
                   onClick={() => selectRule(r)}
                   className={[
                     "w-full rounded border px-3 py-2 text-left",
-                    selectedRuleId === r.id ? "border-forge-ember/40 bg-black/30" : "border-white/10 bg-black/20 hover:border-forge-ember/35",
+                    selectedRuleId === r.id ? "border-forge-ember/40 bg-black/30" : "border-forge-platinum/10 bg-black/20 hover:border-forge-ember/35",
                   ].join(" ")}
                 >
                   <div className="text-sm font-semibold text-forge-ash">{r.name}</div>
@@ -200,7 +200,7 @@ export function AutomationPage() {
           ) : (
             <div className="space-y-2">
               {history.map((h) => (
-                <div key={h.id} className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+                <div key={h.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
                   <div className="font-semibold text-forge-ash">
                     history #{h.id} · rule {h.ruleId ?? "n/a"} · {h.status}
                   </div>
@@ -220,7 +220,7 @@ export function AutomationPage() {
         {!runResult ? (
           <div className="text-sm text-forge-mist">Run a rule to inspect payload output.</div>
         ) : (
-          <pre className="max-h-[320px] overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
+          <pre className="max-h-[320px] overflow-auto rounded border border-forge-platinum/10 bg-black/30 p-3 text-[11px] text-forge-mist">
             {JSON.stringify(runResult, null, 2)}
           </pre>
         )}

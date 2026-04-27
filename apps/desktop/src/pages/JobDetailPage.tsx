@@ -129,7 +129,7 @@ export function JobDetailPage() {
         }
       >
         <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+          <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
             <div>Action: {j.requestedAction}</div>
             <div>Boundary: {j.executionBoundary}</div>
             <div>Approval: {j.approvalStatus}</div>
@@ -137,7 +137,7 @@ export function JobDetailPage() {
             <div>Created: {formatTime(j.createdAtMs)}</div>
             <div>Updated: {formatTime(j.updatedAtMs)}</div>
           </div>
-          <div className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+          <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
             <div>Packet: {j.taskPacketId ?? "none"}</div>
             <div>Initiator: {j.initiatingSource}</div>
             <div>Cancel requested: {String(j.cancelRequested)}</div>
@@ -145,7 +145,7 @@ export function JobDetailPage() {
             <div>Last error: {j.lastError ?? "none"}</div>
           </div>
         </div>
-        {j.resultSummary ? <div className="mt-3 rounded border border-white/10 bg-black/20 p-3 text-sm text-forge-ash">{j.resultSummary}</div> : null}
+        {j.resultSummary ? <div className="mt-3 rounded border border-forge-platinum/10 bg-black/20 p-3 text-sm text-forge-ash">{j.resultSummary}</div> : null}
       </Panel>
 
       {approvalPending && detail.approvalRequest ? (
@@ -156,7 +156,7 @@ export function JobDetailPage() {
             <div>Risk class: {detail.approvalRequest.riskClass}</div>
             <div>Write intent: {String(detail.approvalRequest.writeIntent)}</div>
           </div>
-          <pre className="mt-3 max-h-44 overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
+          <pre className="mt-3 max-h-44 overflow-auto rounded border border-forge-platinum/10 bg-black/30 p-3 text-[11px] text-forge-mist">
             {JSON.stringify(detail.approvalRequest.scopeSnapshot, null, 2)}
           </pre>
           <div className="mt-3 flex gap-2">
@@ -185,10 +185,10 @@ export function JobDetailPage() {
       <Panel title="Packet Preview" subtitle="Versioned contract that this job executed against.">
         {detail.packet ? (
           <div className="space-y-3">
-            <pre className="max-h-[520px] overflow-auto rounded border border-white/10 bg-black/30 p-4 text-[11px] text-forge-mist">
+            <pre className="max-h-[520px] overflow-auto rounded border border-forge-platinum/10 bg-black/30 p-4 text-[11px] text-forge-mist">
               {JSON.stringify(detail.packet, null, 2)}
             </pre>
-            <div className="rounded border border-white/10 bg-black/20 p-3">
+            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
               <div className="text-xs font-semibold tracking-wide text-forge-mist">Packet Alignment Notes</div>
               {alignmentNotes.length === 0 ? (
                 <div className="mt-2 text-xs text-forge-mist">No alignment notes stored for this packet.</div>
@@ -214,7 +214,7 @@ export function JobDetailPage() {
         ) : (
           <div className="space-y-2">
             {artifacts.map((a) => (
-              <div key={a.id} className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+              <div key={a.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
                 <div className="font-semibold text-forge-ash">
                   {a.type} · {a.title}
                 </div>
@@ -237,7 +237,7 @@ export function JobDetailPage() {
         ) : (
           <div className="space-y-2">
             {jobReviews.map((r) => (
-              <div key={r.id} className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+              <div key={r.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
                 <div className="font-semibold text-forge-ash">
                   #{r.id} · {r.status}
                 </div>
@@ -256,13 +256,13 @@ export function JobDetailPage() {
         ) : (
           <div className="space-y-2">
             {events.map((ev) => (
-              <div key={ev.id} className="rounded border border-white/10 bg-black/20 p-3">
+              <div key={ev.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-sm font-semibold text-forge-ash">{ev.type}</div>
                   <div className="text-[11px] text-forge-mist">#{ev.id} · {formatTime(ev.createdAtMs)}</div>
                 </div>
                 <div className="mt-2 text-xs text-forge-mist">{ev.message}</div>
-                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
+                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded border border-forge-platinum/10 bg-black/30 p-2 text-[11px] text-forge-mist">
                   {JSON.stringify(ev.payload, null, 2)}
                 </pre>
               </div>

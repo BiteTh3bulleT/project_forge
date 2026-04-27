@@ -15,6 +15,32 @@ Kernel rule remains:
 - supersession/contradiction preserve evidence rather than delete
 - correlation/audit/provenance traceability on persisted objects
 
+## Memory taxonomy alignment
+
+The cognitive filesystem participates in the FORGE memory taxonomy documented in [memory_taxonomy.md](../architecture/memory_taxonomy.md).
+
+The taxonomy is descriptive. It does not create authority:
+
+- Short-term memory covers active context, retrieval runs, and current working packets.
+- Mid-term memory covers reviewable snapshots, Dream proposals, restore outcomes, usefulness events, and repair traces.
+- Long-term memory covers governed notes, state, links, loops, journal history, contradictions, supersessions, and provenance.
+
+The nine memory types map onto existing storage without a new canonical table:
+
+| Memory type | Primary current objects |
+|---|---|
+| Working | `context_packet_snapshots`, `retrieval_runs`, `retrieval_results`, active context packets |
+| Episodic | `journal_events`, `events`, `job_events`, `memory_observations`, `context_evidence` |
+| Salience | `contradiction_records`, blocked `open_loops`, Dream salience fields, Rule Cell traces |
+| Prospective | `open_loops`, task packets, planned `state_items`, autonomy bookkeeping where present |
+| Reflective | Dream reports, `memory_repair_runs`, `memory_repair_items`, truth rebuild reports |
+| Utility | `restore_outcome_events`, `memory_usefulness_events`, retrieval usefulness fields, `retrieval_result_vsa_signals` |
+| Semantic | `memory_notes`, `state_items`, `state_versions`, `semantic_links`, `journal_events` |
+| Procedural | procedural `memory_notes`, `derived_models`, packet guidance, docs references |
+| Structural | `semantic_links`, `artifact_refs`, `context_packet_snapshots`, `embedding_records`, `memory_vsa_*` |
+
+Vector, embedding, and VSA records are structural retrieval indexes. They may affect recall/ranking within caps, but they are not truth authority.
+
 ## Persistent objects
 
 ## 1) `journal_events`
@@ -354,9 +380,59 @@ Purpose of the restore fields:
 
 Restore scoring is deterministic and lexical/scoped. It records query, scope, snapshot kind, recency, lineage, state overlap, loop overlap, artifact overlap, contradiction, staleness, freshness, confidence, and `requires_fresh_compile` fields. `requires_fresh_compile` means the current candidates are absent, below threshold, forced fresh by hints, or hard-stale.
 
-## 12.5) Dream Mode v0 reports
+## 12.5) `restore_outcome_events`
 
-Dream Mode v0 reads journal, snapshot, note, state, loop, contradiction, and artifact tables to produce a dry-run consolidation report.
+Purpose:
+
+- non-canonical evidence describing whether selected restore context helped or hurt downstream work
+- feedback signal for future restore scoring and Dream Mode replay/salience
+
+Core fields:
+
+- `id`, `created_at`, `updated_at`
+- `workspace_id`, `lane_id`, `query`
+- `context_packet_id`, `snapshot_id`, `snapshot_kind`
+- `restore_score`, `requires_fresh_compile`
+- selected refs JSON:
+  - `selected_evidence_json`
+  - `selected_state_keys_json`
+  - `selected_loop_ids_json`
+  - `selected_artifact_ids_json`
+- `outcome`, `outcome_confidence`
+- `operator_feedback`, `failure_reason`, `correction_summary`
+- `downstream_action_type`, `downstream_object_id`
+- `correlation_id`, `trace_id`, `syscall_id`, `audit_id`
+- `proposed_by`, `committed_by`, `metadata_json`
+
+Allowed outcomes:
+
+- `unknown`
+- `helpful`
+- `not_helpful`
+- `harmful`
+- `stale`
+- `contradictory`
+- `fresh_compile_required`
+- `operator_corrected`
+- `no_candidate`
+- `failed_execution`
+
+Mutability:
+
+- initial rows are durable evidence emitted by governed restore persistence paths.
+- operator feedback may update outcome text/confidence/correction fields as a non-canonical evidence correction.
+- updates preserve a feedback history in metadata where supported.
+
+Non-canonical guarantee:
+
+- outcome rows do not promote, demote, archive, or edit memory notes/state/loops.
+- scoring may consume outcomes only as bounded utility evidence.
+- Dream Mode may replay outcomes only as dry-run proposals.
+- canonical truth changes still require semantic syscalls and control-lane validation.
+
+## 12.6) Dream Mode v0 reports
+
+Dream Mode v0 reads journal, snapshot, restore outcome, note, state, loop, contradiction, and artifact tables to produce a dry-run consolidation report.
 
 The report is not canonical truth and is not persisted as canonical memory in v0. It contains:
 
@@ -366,6 +442,10 @@ The report is not canonical truth and is not persisted as canonical memory in v0
 - proposed memory tier routing
 - proposed snapshot hygiene actions
 - proposed restore score updates
+- restore outcome candidates
+- memory gap proposals
+- stale/harmful evidence review proposals
+- helpful evidence promotion proposals
 - proposed repair/review actions
 - no-op reasons and warnings
 
@@ -525,6 +605,7 @@ Cognitive tables included in `full_backup` extraction:
 - `contradiction_records`
 - `supersession_records`
 - `context_packet_snapshots`
+- `restore_outcome_events`
 
 Restore ordering concern (future restore expansion):
 
@@ -532,6 +613,7 @@ Restore ordering concern (future restore expansion):
 2. core entities (`memory_notes`, `state_items`, `open_loops`, `artifact_refs`, `derived_models`, `journal_events`)
 3. relation/history tables (`semantic_links`, `state_versions`, `contradiction_records`, `supersession_records`)
 4. `context_packet_snapshots`
+5. `restore_outcome_events`
 
 Audit/correlation survivability:
 

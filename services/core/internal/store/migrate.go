@@ -1203,6 +1203,38 @@ CREATE TABLE IF NOT EXISTS context_packet_snapshots (
   audit_id TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS restore_outcome_events (
+  id TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL DEFAULT 0,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  query TEXT NOT NULL DEFAULT '',
+  context_packet_id TEXT NOT NULL DEFAULT '',
+  snapshot_id TEXT NOT NULL DEFAULT '',
+  snapshot_kind TEXT NOT NULL DEFAULT '',
+  restore_score REAL NOT NULL DEFAULT 0,
+  requires_fresh_compile INTEGER NOT NULL DEFAULT 0,
+  selected_evidence_json TEXT NOT NULL DEFAULT '[]',
+  selected_state_keys_json TEXT NOT NULL DEFAULT '[]',
+  selected_loop_ids_json TEXT NOT NULL DEFAULT '[]',
+  selected_artifact_ids_json TEXT NOT NULL DEFAULT '[]',
+  outcome TEXT NOT NULL DEFAULT 'unknown',
+  outcome_confidence REAL NOT NULL DEFAULT 0,
+  operator_feedback TEXT NOT NULL DEFAULT '',
+  failure_reason TEXT NOT NULL DEFAULT '',
+  correction_summary TEXT NOT NULL DEFAULT '',
+  downstream_action_type TEXT NOT NULL DEFAULT '',
+  downstream_object_id TEXT NOT NULL DEFAULT '',
+  correlation_id TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
+  syscall_id TEXT NOT NULL DEFAULT '',
+  audit_id TEXT NOT NULL DEFAULT '',
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_kernel',
+  metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
 CREATE TABLE IF NOT EXISTS semantic_idempotency_keys (
   idempotency_key TEXT PRIMARY KEY,
   action TEXT NOT NULL,
@@ -1238,6 +1270,10 @@ CREATE INDEX IF NOT EXISTS idx_supersession_old ON supersession_records(old_obje
 CREATE INDEX IF NOT EXISTS idx_supersession_new ON supersession_records(new_object_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ctx_snapshot_scope ON context_packet_snapshots(workspace_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_ctx_snapshot_corr ON context_packet_snapshots(correlation_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_restore_outcomes_scope ON restore_outcome_events(workspace_id, lane_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_restore_outcomes_snapshot ON restore_outcome_events(workspace_id, snapshot_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_restore_outcomes_outcome ON restore_outcome_events(workspace_id, outcome, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_restore_outcomes_corr ON restore_outcome_events(correlation_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS chat_threads (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

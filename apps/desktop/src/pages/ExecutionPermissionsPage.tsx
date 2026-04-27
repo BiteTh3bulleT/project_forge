@@ -181,7 +181,7 @@ export function ExecutionPermissionsPage() {
       >
         {err ? <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
         {summary ? (
-          <pre className="mt-3 max-h-32 overflow-auto rounded border border-white/10 bg-black/25 p-3 font-mono text-[11px] text-forge-mist">
+          <pre className="mt-3 max-h-32 overflow-auto rounded border border-forge-platinum/10 bg-black/25 p-3 font-mono text-[11px] text-forge-mist">
             {JSON.stringify(summary, null, 2)}
           </pre>
         ) : null}
@@ -284,7 +284,7 @@ export function ExecutionPermissionsPage() {
       <Panel title="Profiles" subtitle="Activate, edit, or delete editable profiles.">
         <div className="space-y-3">
           {profiles.map((p) => (
-            <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-forge-slate/20 p-3">
+            <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-forge-platinum/10 bg-forge-slate/20 p-3">
               <div className="min-w-0">
                 <div className="font-mono text-sm text-forge-ash">{p.id}</div>
                 <div className="text-xs text-forge-mist">{p.name}</div>

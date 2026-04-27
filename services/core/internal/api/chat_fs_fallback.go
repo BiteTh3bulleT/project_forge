@@ -189,6 +189,119 @@ func (s *Server) runChatFSDeterministicFallback(
 			return true
 		}
 	}
+	if forcedModel == gateway.ChatModelName("web.search") {
+		query, ok := gateway.ParseWebSearchQuery(lastUserContent)
+		if ok {
+			pushStage("deterministic_web_search_dispatch", map[string]any{"query": query})
+			res, err := s.gwChatExec(ctx, corr, "web.search", nil, map[string]any{"query": query, "limit": 5})
+			if err != nil {
+				if final.Len() > 0 {
+					final.WriteString("\n\n")
+				}
+				final.WriteString("FORGE (deterministic web search): " + err.Error())
+				gwActivity["executionState"] = "error"
+				gwActivity["failureReason"] = err.Error()
+				gwActivity["toolSelected"] = "web.search"
+				gwActivity["toolArgs"] = map[string]any{"query": query}
+				gwActivity["syntheticToolExecution"] = true
+				return true
+			}
+			if res.Status != gateway.StatusOK {
+				if final.Len() > 0 {
+					final.WriteString("\n\n")
+				}
+				final.WriteString(fmt.Sprintf("FORGE (deterministic web search): gateway %s — %s", res.Status, strings.TrimSpace(coalesceReason(res))))
+				gwActivity["executionState"] = res.Status
+				gwActivity["failureReason"] = coalesceReason(res)
+				gwActivity["toolSelected"] = "web.search"
+				gwActivity["toolArgs"] = map[string]any{"query": query}
+				gwActivity["executionResult"] = res.Data
+				gwActivity["syntheticToolExecution"] = true
+				return true
+			}
+			if final.Len() > 0 {
+				final.WriteString("\n\n")
+			}
+			final.WriteString("FORGE (deterministic web search): " + formatToolResult("web.search", res))
+			gwActivity["toolSelected"] = "web.search"
+			gwActivity["toolArgs"] = map[string]any{"query": query}
+			gwActivity["executionState"] = "ok"
+			gwActivity["executionResult"] = res.Data
+			gwActivity["syntheticToolExecution"] = true
+			return true
+		}
+	}
+	if forcedModel == gateway.ChatModelName("net.fetch") {
+		rawURL, ok := gateway.ParseURLFromText(lastUserContent)
+		if ok {
+			pushStage("deterministic_url_fetch_dispatch", map[string]any{"url": rawURL})
+			res, err := s.gwChatExec(ctx, corr, "net.fetch", nil, map[string]any{"url": rawURL})
+			if err != nil {
+				if final.Len() > 0 {
+					final.WriteString("\n\n")
+				}
+				final.WriteString("FORGE (deterministic fetch): " + err.Error())
+				gwActivity["executionState"] = "error"
+				gwActivity["failureReason"] = err.Error()
+				gwActivity["toolSelected"] = "net.fetch"
+				gwActivity["toolArgs"] = map[string]any{"url": rawURL}
+				gwActivity["syntheticToolExecution"] = true
+				return true
+			}
+			if res.Status != gateway.StatusOK {
+				if final.Len() > 0 {
+					final.WriteString("\n\n")
+				}
+				final.WriteString(fmt.Sprintf("FORGE (deterministic fetch): gateway %s — %s", res.Status, strings.TrimSpace(coalesceReason(res))))
+				gwActivity["executionState"] = res.Status
+				gwActivity["failureReason"] = coalesceReason(res)
+				gwActivity["toolSelected"] = "net.fetch"
+				gwActivity["toolArgs"] = map[string]any{"url": rawURL}
+				gwActivity["executionResult"] = res.Data
+				gwActivity["syntheticToolExecution"] = true
+				return true
+			}
+			if final.Len() > 0 {
+				final.WriteString("\n\n")
+			}
+			final.WriteString("FORGE (deterministic fetch): " + formatToolResult("net.fetch", res))
+			gwActivity["toolSelected"] = "net.fetch"
+			gwActivity["toolArgs"] = map[string]any{"url": rawURL}
+			gwActivity["executionState"] = "ok"
+			gwActivity["executionResult"] = res.Data
+			gwActivity["syntheticToolExecution"] = true
+			return true
+		}
+	}
+	if forcedModel == gateway.ChatModelName("desktop.open") {
+		rawURL, ok := gateway.ParseURLFromText(lastUserContent)
+		if ok {
+			pushStage("deterministic_browser_open_dispatch", map[string]any{"url": rawURL})
+			res, err := s.gwChatExec(ctx, corr, "desktop.open", nil, map[string]any{"url": rawURL})
+			if err != nil {
+				if final.Len() > 0 {
+					final.WriteString("\n\n")
+				}
+				final.WriteString("FORGE (deterministic browser): " + err.Error())
+				gwActivity["executionState"] = "error"
+				gwActivity["failureReason"] = err.Error()
+				gwActivity["toolSelected"] = "desktop.open"
+				gwActivity["toolArgs"] = map[string]any{"url": rawURL}
+				gwActivity["syntheticToolExecution"] = true
+				return true
+			}
+			if final.Len() > 0 {
+				final.WriteString("\n\n")
+			}
+			final.WriteString("FORGE (deterministic browser): " + formatToolResult("desktop.open", res))
+			gwActivity["toolSelected"] = "desktop.open"
+			gwActivity["toolArgs"] = map[string]any{"url": rawURL}
+			gwActivity["executionState"] = res.Status
+			gwActivity["executionResult"] = res.Data
+			gwActivity["syntheticToolExecution"] = true
+			return true
+		}
+	}
 	if forcedModel == gateway.ChatModelName("git.status") {
 		pushStage("deterministic_git_status_dispatch", map[string]any{"path": "."})
 		res, err := s.gwChatExec(ctx, corr, "git.status", []string{"."}, nil)

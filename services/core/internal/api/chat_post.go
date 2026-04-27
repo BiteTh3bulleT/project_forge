@@ -25,8 +25,18 @@ const (
 	chatAttachmentExcerptRunes        = 800
 )
 
+const chatAssistantVisibilityGuard = `
+
+Visibility boundary:
+- Do not reveal hidden reasoning, scratchpad analysis, chain-of-thought, "Thinking Process" sections, draft options, or internal planning.
+- Return only the final user-facing answer.
+- If you need to think, do it privately and keep the response concise.
+- Your visible name is FORGE. Never identify as Phi, ChatGPT, Claude, an Ollama model, or the underlying model family.
+- Do not continue the transcript, invent USER/YOU turns, or append synthetic prompts.`
+
 func defaultChatOperatorSystemPrompt() string {
 	return `You are FORGE, a practical software/workflow assistant.
+Your visible name is FORGE. If asked who you are or what your name is, answer as FORGE.
 
 Tone:
 - concise, direct, technically grounded
@@ -49,15 +59,17 @@ Operational constraints:
 - Chat may provide analysis, plans, and code examples.
 - Do not claim files/commands executed unless verified by tool results in this thread.
 - For machine actions, route through governed jobs/tool gateway and report only real outcomes.
+- For live/current information, use governed tools when available; if required details like location are missing, ask for that detail directly.
+- Do not continue the user transcript or write fake USER/YOU turns.
 - Be concise and operational.`
 }
 
 func (s *Server) chatOperatorSystemPrompt() string {
 	override := strings.TrimSpace(loadSetting(s.st.DB, "chat_personality_prompt", ""))
 	if override != "" {
-		return override
+		return override + chatAssistantVisibilityGuard
 	}
-	return defaultChatOperatorSystemPrompt()
+	return defaultChatOperatorSystemPrompt() + chatAssistantVisibilityGuard
 }
 
 func (s *Server) buildChatPrompt(ctx context.Context, th *chat.ThreadDetail) string {
@@ -423,7 +435,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 		async = false
 	}
 
-	if body.Stream && chatOllamaStreamCapable(ctx, ollamaAdapter) {
+	if body.Stream && !body.SyncAssistant {
 		out["assistantPending"] = true
 		out["stream"] = true
 		writeJSON(w, http.StatusOK, out)
@@ -955,6 +967,16 @@ func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Reques
 	}
 	if !chatOllamaStreamCapable(ctx, ollamaAdapter) {
 		s.initSSE(w)
+		emitStage := func(stage string, data map[string]any) {
+			row := map[string]any{"stage": stage, "atMs": time.Now().UnixMilli()}
+			for k, v := range data {
+				row[k] = v
+			}
+			s.writeNamedSSEEvent(w, "agent_stage", row)
+		}
+		emitStage("request_received", map[string]any{"userChars": len(umContent)})
+		emitStage("stream_downgrade", map[string]any{"reason": "ollama streaming unavailable; using synchronous assistant completion"})
+		emitStage("sync_completion_start", map[string]any{"threadId": threadID, "userMessageId": userMessageID})
 		am := s.completeAssistantSync(ctx, threadID, userMessageID, th, umContent, ollamaAdapter, false, requestedModelID)
 		if am == nil {
 			b, _ := json.Marshal(map[string]any{"message": "assistant reply could not be saved"})
@@ -962,6 +984,7 @@ func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Reques
 			w.(http.Flusher).Flush()
 			return
 		}
+		emitStage("sync_completion_done", map[string]any{"messageId": am.ID})
 		s.writeSSEEvent(w, map[string]any{"assistantMessage": am})
 		return
 	}

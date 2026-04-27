@@ -399,7 +399,7 @@ func (s *Service) pickSections(kind string) ([]string, error) {
 			"provenance_records", "journal_events", "memory_notes", "semantic_links",
 			"state_items", "state_versions", "open_loops", "artifact_refs",
 			"derived_models", "contradiction_records", "supersession_records",
-			"context_packet_snapshots", "semantic_idempotency_keys", "autonomy_settings",
+			"context_packet_snapshots", "restore_outcome_events", "semantic_idempotency_keys", "autonomy_settings",
 			"memory_vsa_pointers", "memory_vsa_role_bindings", "memory_vsa_associations",
 			"retrieval_result_vsa_signals", "memory_vsa_reindex_runs", "memory_vsa_reindex_items",
 		}, nil
@@ -540,6 +540,7 @@ var extractQueries = map[string]string{
 	"contradiction_records":        "SELECT * FROM contradiction_records ORDER BY created_at DESC",
 	"supersession_records":         "SELECT * FROM supersession_records ORDER BY created_at DESC",
 	"context_packet_snapshots":     "SELECT * FROM context_packet_snapshots ORDER BY created_at DESC",
+	"restore_outcome_events":       "SELECT * FROM restore_outcome_events ORDER BY created_at DESC",
 	"semantic_idempotency_keys":    "SELECT * FROM semantic_idempotency_keys ORDER BY created_at DESC, idempotency_key ASC",
 	"autonomy_settings":            "SELECT key, value FROM settings WHERE key LIKE 'autonomy_repo.%' ORDER BY key ASC",
 	"memory_vsa_pointers":          "SELECT * FROM memory_vsa_pointers ORDER BY updated_at DESC",
@@ -1324,6 +1325,51 @@ ON CONFLICT(id) DO UPDATE SET
 			"correlation_id", "trace_id", "syscall_id", "metadata_json", "proposed_by", "committed_by", "audit_id",
 		},
 	},
+	"restore_outcome_events": {
+		sql: `INSERT INTO restore_outcome_events(
+  id, created_at, updated_at, workspace_id, lane_id, query, context_packet_id, snapshot_id, snapshot_kind,
+  restore_score, requires_fresh_compile, selected_evidence_json, selected_state_keys_json, selected_loop_ids_json,
+  selected_artifact_ids_json, outcome, outcome_confidence, operator_feedback, failure_reason, correction_summary,
+  downstream_action_type, downstream_object_id, correlation_id, trace_id, syscall_id, audit_id, proposed_by,
+  committed_by, metadata_json
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+ON CONFLICT(id) DO UPDATE SET
+  created_at=excluded.created_at,
+  updated_at=excluded.updated_at,
+  workspace_id=excluded.workspace_id,
+  lane_id=excluded.lane_id,
+  query=excluded.query,
+  context_packet_id=excluded.context_packet_id,
+  snapshot_id=excluded.snapshot_id,
+  snapshot_kind=excluded.snapshot_kind,
+  restore_score=excluded.restore_score,
+  requires_fresh_compile=excluded.requires_fresh_compile,
+  selected_evidence_json=excluded.selected_evidence_json,
+  selected_state_keys_json=excluded.selected_state_keys_json,
+  selected_loop_ids_json=excluded.selected_loop_ids_json,
+  selected_artifact_ids_json=excluded.selected_artifact_ids_json,
+  outcome=excluded.outcome,
+  outcome_confidence=excluded.outcome_confidence,
+  operator_feedback=excluded.operator_feedback,
+  failure_reason=excluded.failure_reason,
+  correction_summary=excluded.correction_summary,
+  downstream_action_type=excluded.downstream_action_type,
+  downstream_object_id=excluded.downstream_object_id,
+  correlation_id=excluded.correlation_id,
+  trace_id=excluded.trace_id,
+  syscall_id=excluded.syscall_id,
+  audit_id=excluded.audit_id,
+  proposed_by=excluded.proposed_by,
+  committed_by=excluded.committed_by,
+  metadata_json=excluded.metadata_json`,
+		fields: []string{
+			"id", "created_at", "updated_at", "workspace_id", "lane_id", "query", "context_packet_id", "snapshot_id", "snapshot_kind",
+			"restore_score", "requires_fresh_compile", "selected_evidence_json", "selected_state_keys_json", "selected_loop_ids_json",
+			"selected_artifact_ids_json", "outcome", "outcome_confidence", "operator_feedback", "failure_reason", "correction_summary",
+			"downstream_action_type", "downstream_object_id", "correlation_id", "trace_id", "syscall_id", "audit_id", "proposed_by",
+			"committed_by", "metadata_json",
+		},
+	},
 	"semantic_idempotency_keys": {
 		sql: `INSERT INTO semantic_idempotency_keys(
   idempotency_key, action, result_json, created_at, correlation_id
@@ -1428,7 +1474,8 @@ var restoreSectionPriority = map[string]int{
 	"contradiction_records":     65,
 	"supersession_records":      66,
 	"context_packet_snapshots":  67,
-	"semantic_idempotency_keys": 68,
+	"restore_outcome_events":    68,
+	"semantic_idempotency_keys": 69,
 	"autonomy_settings":         70,
 }
 

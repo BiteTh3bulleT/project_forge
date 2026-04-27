@@ -37,7 +37,11 @@ start_if_needed() {
   echo "Starting $name..."
   (
     cd "$ROOT_DIR"
-    nohup bash -lc "$cmd" >>"$log_file" 2>&1 &
+    if command -v setsid >/dev/null 2>&1; then
+      nohup setsid bash -lc "$cmd" </dev/null >>"$log_file" 2>&1 &
+    else
+      nohup bash -lc "$cmd" </dev/null >>"$log_file" 2>&1 &
+    fi
     echo $! >"$pid_file"
   )
 
@@ -71,7 +75,7 @@ wait_for_desktop() {
   :
 }
 
-start_if_needed "core" "$CORE_PID_FILE" "$CORE_LOG" "npm run core"
+start_if_needed "core" "$CORE_PID_FILE" "$CORE_LOG" "bash ./scripts/forge-core.sh"
 wait_for_core
 start_if_needed "desktop" "$DESKTOP_PID_FILE" "$DESKTOP_LOG" "npm run desktop"
 

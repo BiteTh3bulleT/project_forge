@@ -15,6 +15,34 @@ import (
 	"forge/projectforge/services/core/internal/gateway"
 )
 
+const (
+	modelRuntimePlainChatMessages       = 4
+	modelRuntimePlainChatMessageMax     = 800
+	modelRuntimePlainChatUserMax        = 6000
+	modelRuntimePlainChatSystemMax      = 3200
+	modelRuntimePlainChatAttachmentMax  = 1200
+	modelRuntimePlainChatMaxOutputToken = 384
+	modelRuntimePlainChatTimeoutMs      = 30000
+	modelRuntimePlainChatMaxAttempts    = 1
+	assistantStreamFlushChars           = 160
+	assistantStreamFlushIntervalMs      = 24
+)
+
+const assistantContentFallback = "I couldn't produce a clean assistant response. Try again, or check the selected model/runtime."
+
+type modelRuntimePromptBudget struct {
+	ThreadMessages     int
+	IncludedMessages   int
+	TruncatedMessages  int
+	TranscriptChars    int
+	AttachmentChars    int
+	UserChars          int
+	SystemChars        int
+	TotalChars         int
+	Compacted          bool
+	AttachmentsTrimmed bool
+}
+
 func (s *Server) buildChatLLMMessages(ctx context.Context, th *chat.ThreadDetail) (system string, user string) {
 	transcript := s.chat.BuildTranscript(th.Messages, chatTranscriptTurns)
 	sys := s.chatOperatorSystemPrompt()
@@ -28,6 +56,91 @@ func (s *Server) buildChatLLMMessages(ctx context.Context, th *chat.ThreadDetail
 	return sys, user
 }
 
+func (s *Server) buildModelRuntimePlainChatMessages(ctx context.Context, th *chat.ThreadDetail) ([]ModelRuntimeChatMessage, modelRuntimePromptBudget) {
+	budget := modelRuntimePromptBudget{ThreadMessages: len(th.Messages)}
+	system := trimSummary(s.chatOperatorSystemPrompt(), modelRuntimePlainChatSystemMax)
+
+	start := 0
+	if len(th.Messages) > modelRuntimePlainChatMessages {
+		start = len(th.Messages) - modelRuntimePlainChatMessages
+		budget.Compacted = true
+	}
+
+	if title := strings.TrimSpace(th.Title); title != "" {
+		system = strings.TrimSpace(system) + "\n\nThread title: " + trimSummary(title, 160)
+	}
+	if budget.Compacted {
+		system = strings.TrimSpace(system) + "\n\nRecent chat context was compacted for local model runtime latency. Answer only the latest operator turn."
+	}
+	system = trimSummary(system, modelRuntimePlainChatSystemMax)
+	budget.SystemChars = len(system)
+
+	messages := []ModelRuntimeChatMessage{{Role: "system", Content: system}}
+	for _, msg := range th.Messages[start:] {
+		role := strings.ToLower(strings.TrimSpace(msg.Role))
+		if role != "assistant" {
+			role = "user"
+		}
+		content := strings.TrimSpace(msg.Content)
+		if len(content) > modelRuntimePlainChatMessageMax {
+			content = trimSummary(content, modelRuntimePlainChatMessageMax)
+			budget.TruncatedMessages++
+			budget.Compacted = true
+		}
+		if content == "" {
+			continue
+		}
+		messages = append(messages, ModelRuntimeChatMessage{Role: role, Content: content})
+		budget.TranscriptChars += len(content)
+		budget.IncludedMessages++
+	}
+
+	if att := strings.TrimSpace(s.buildThreadAttachmentContext(ctx, th)); att != "" {
+		trimmed := trimSummary(att, modelRuntimePlainChatAttachmentMax)
+		if len(trimmed) < len(att) {
+			budget.AttachmentsTrimmed = true
+			budget.Compacted = true
+		}
+		budget.AttachmentChars = len(trimmed)
+		attachmentMessage := "Relevant attachment excerpts:\n" + trimmed
+		if len(messages) > 1 && messages[len(messages)-1].Role == "user" {
+			messages[len(messages)-1].Content = trimSummary(messages[len(messages)-1].Content+"\n\n"+attachmentMessage, modelRuntimePlainChatUserMax)
+		} else {
+			messages = append(messages, ModelRuntimeChatMessage{Role: "user", Content: attachmentMessage})
+		}
+	}
+
+	totalUserChars := 0
+	for i := range messages {
+		if messages[i].Role == "user" {
+			if len(messages[i].Content) > modelRuntimePlainChatUserMax {
+				messages[i].Content = trimSummary(messages[i].Content, modelRuntimePlainChatUserMax)
+				budget.Compacted = true
+			}
+			totalUserChars += len(messages[i].Content)
+		}
+	}
+	budget.UserChars = totalUserChars
+	budget.TotalChars = budget.SystemChars + budget.UserChars
+
+	return messages, budget
+}
+
+func modelRuntimePromptBudgetMap(b modelRuntimePromptBudget) map[string]any {
+	return map[string]any{
+		"threadMessages":     b.ThreadMessages,
+		"includedMessages":   b.IncludedMessages,
+		"truncatedMessages":  b.TruncatedMessages,
+		"transcriptChars":    b.TranscriptChars,
+		"attachmentChars":    b.AttachmentChars,
+		"userChars":          b.UserChars,
+		"systemChars":        b.SystemChars,
+		"totalChars":         b.TotalChars,
+		"compacted":          b.Compacted,
+		"attachmentsTrimmed": b.AttachmentsTrimmed,
+	}
+}
+
 func (s *Server) completeAssistantWithGatewayTools(
 	ctx context.Context,
 	threadID, userMessageID int64,
@@ -38,6 +151,8 @@ func (s *Server) completeAssistantWithGatewayTools(
 	emit func(event string, payload map[string]any),
 	requestedModelID string,
 ) *chat.Message {
+	requestStart := time.Now()
+	perf := classifyChatPerformance(lastUserContent)
 	if decision, ok := parseChatApprovalDirective(lastUserContent); ok {
 		return s.handleChatApprovalDirective(ctx, threadID, userMessageID, decision)
 	}
@@ -72,10 +187,24 @@ func (s *Server) completeAssistantWithGatewayTools(
 	}
 
 	pushStage("request_received", map[string]any{"userChars": len(lastUserContent)})
+	pushStage("hyperlane_classified", map[string]any{
+		"intent":             perf.Intent,
+		"contextBudgetClass": perf.ContextBudgetClass,
+		"outputMode":         perf.OutputMode,
+		"noModel":            perf.NoModel,
+		"confidence":         perf.Confidence,
+		"reason":             perf.Reason,
+		"hyperlaneMs":        perf.HyperlaneMs,
+	})
+
+	if perf.NoModel {
+		pushStage("tools_skipped", map[string]any{"reason": "hyperlane_no_model_route", "intent": perf.Intent})
+		return s.completeAssistantWithoutTools(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, corr, stages, pushStage, emit, requestedModelID)
+	}
 
 	if !gateway.ShouldAttachChatTools(lastUserContent) {
 		pushStage("tools_skipped", map[string]any{"reason": "non_operational_turn"})
-		return s.completeAssistantWithoutTools(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, corr, stages, pushStage, requestedModelID)
+		return s.completeAssistantWithoutTools(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, corr, stages, pushStage, emit, requestedModelID)
 	}
 
 	if s.gateway == nil {
@@ -168,7 +297,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 	if !ok {
 		pushStage("adapter_mismatch", map[string]any{"detail": "ollama concrete type required for /api/chat tools"})
 		pushStage("runtime_fallback", map[string]any{"reason": "ollama adapter not registered"})
-		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama adapter not registered", requestedModelID)
+		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama adapter not registered", requestedModelID, requestStart, perf)
 		if am != nil {
 			return am
 		}
@@ -190,7 +319,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 	model := ol.ModelForChat(ctx)
 	if strings.TrimSpace(model) == "" {
 		pushStage("runtime_fallback", map[string]any{"reason": "ollama model is not configured"})
-		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama model is not configured", requestedModelID)
+		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama model is not configured", requestedModelID, requestStart, perf)
 		if am != nil {
 			return am
 		}
@@ -254,7 +383,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 		if err != nil {
 			pushStage("ollama_chat_error", map[string]any{"turn": turn, "error": err.Error()})
 			pushStage("runtime_fallback", map[string]any{"reason": "ollama /api/chat failed", "turn": turn})
-			am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama /api/chat failed: "+err.Error(), requestedModelID)
+			am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama /api/chat failed: "+err.Error(), requestedModelID, requestStart, perf)
 			if am != nil {
 				return am
 			}
@@ -780,8 +909,11 @@ func (s *Server) completeAssistantWithoutTools(
 	corr string,
 	stages []map[string]any,
 	pushStage func(string, map[string]any),
+	emit func(event string, payload map[string]any),
 	requestedModelID string,
 ) *chat.Message {
+	requestStart := time.Now()
+	perf := classifyChatPerformance(lastUserContent)
 	recordStage := func(stage string, data map[string]any) {
 		row := map[string]any{"stage": stage, "atMs": time.Now().UnixMilli()}
 		for k, v := range data {
@@ -790,15 +922,70 @@ func (s *Server) completeAssistantWithoutTools(
 		stages = append(stages, row)
 		pushStage(stage, data)
 	}
+	recordStage("hyperlane_classified", map[string]any{
+		"intent":             perf.Intent,
+		"contextBudgetClass": perf.ContextBudgetClass,
+		"outputMode":         perf.OutputMode,
+		"noModel":            perf.NoModel,
+		"confidence":         perf.Confidence,
+		"reason":             perf.Reason,
+		"hyperlaneMs":        perf.HyperlaneMs,
+	})
 
-	manifests := []map[string]any{}
-	if s.gateway != nil {
-		manifests = s.gateway.ChatToolManifests()
+	var manifests []map[string]any
+	manifestLoaded := false
+	getManifests := func() []map[string]any {
+		if !manifestLoaded {
+			if s.gateway != nil {
+				manifests = s.gateway.ChatToolManifests()
+			}
+			manifestLoaded = true
+		}
+		return manifests
 	}
 
+	if perf.NoModel {
+		text := s.renderNoModelChatReply(ctx, perf, th, lastUserContent)
+		if strings.TrimSpace(text) == "" {
+			text = assistantContentFallback
+		}
+		recordStage("deterministic_no_model_reply", map[string]any{"reason": perf.Reason, "intent": perf.Intent})
+		trace := chatLatencyTrace(requestStart, perf, map[string]any{
+			"model_calls_avoided":   1,
+			"fresh_compile_avoided": 1,
+			"restore_ms":            int64(0),
+			"modelruntime_ms":       int64(0),
+			"gateway_execution_ms":  int64(0),
+		})
+		am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", text, map[string]any{
+			"replyToUserMessageId": userMessageID,
+			"correlationId":        corr,
+			"modelSkipped":         true,
+			"chatLatencyTrace":     trace,
+			"toolPipeline":         map[string]any{"stages": stages},
+			"toolGatewayActivity": map[string]any{
+				"userRequestSummary": trimSummary(lastUserContent, 500),
+				"stages":             stages,
+				"toolCallEmitted":    false,
+				"executionState":     "skipped",
+				"latencyTrace":       trace,
+				"contextBudgetClass": perf.ContextBudgetClass,
+				"outputMode":         perf.OutputMode,
+			},
+		})
+		return am
+	}
+
+	if emit != nil {
+		if am := s.completeAssistantWithNativeOllamaStream(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, corr, getManifests, stages, pushStage, emit, requestStart, perf); am != nil {
+			return am
+		}
+	}
+
+	manifests = getManifests()
 	if s.modelRuntime != nil {
 		recordStage("runtime_primary", map[string]any{"reason": "plain chat prefers model runtime"})
-		if am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "model-runtime-first plain chat path", requestedModelID); am != nil {
+		if am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "model-runtime-first plain chat path", requestedModelID, requestStart, perf); am != nil {
 			return am
 		} else if strings.TrimSpace(reason) != "" {
 			recordStage("runtime_fallback", map[string]any{"reason": "model runtime plain-chat path failed: " + reason})
@@ -807,13 +994,14 @@ func (s *Server) completeAssistantWithoutTools(
 
 	ol, ok := ollamaAdapter.(adapters.Ollama)
 	if !ok {
-		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama adapter not registered", requestedModelID)
+		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama adapter not registered", requestedModelID, requestStart, perf)
 		if am != nil {
 			return am
 		}
+		trace := chatLatencyTrace(requestStart, perf, map[string]any{"modelruntime_ms": int64(0), "gateway_execution_ms": int64(0)})
 		am, _ = s.chat.AppendMessage(ctx, threadID, "assistant", "Chat completion requires the Ollama adapter in this runtime, and model runtime fallback failed: "+reason, map[string]any{
 			"failure": true, "replyToUserMessageId": userMessageID, "correlationId": corr,
-			"toolManifest": manifests, "toolPipeline": map[string]any{"stages": stages},
+			"toolManifest": manifests, "toolPipeline": map[string]any{"stages": stages}, "chatLatencyTrace": trace,
 			"toolGatewayActivity": map[string]any{
 				"userRequestSummary": trimSummary(lastUserContent, 500),
 				"toolManifest":       manifests,
@@ -821,6 +1009,7 @@ func (s *Server) completeAssistantWithoutTools(
 				"toolCallEmitted":    false,
 				"executionState":     "error",
 				"failureReason":      "ollama adapter not registered; model runtime fallback failed: " + reason,
+				"latencyTrace":       trace,
 			},
 		})
 		return am
@@ -829,13 +1018,14 @@ func (s *Server) completeAssistantWithoutTools(
 	baseURL := ol.BaseURLForChat(ctx)
 	model := ol.ModelForChat(ctx)
 	if strings.TrimSpace(model) == "" {
-		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama model is not configured", requestedModelID)
+		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama model is not configured", requestedModelID, requestStart, perf)
 		if am != nil {
 			return am
 		}
+		trace := chatLatencyTrace(requestStart, perf, map[string]any{"modelruntime_ms": int64(0), "gateway_execution_ms": int64(0)})
 		am, _ = s.chat.AppendMessage(ctx, threadID, "assistant", "ollama model is not configured in Settings, and model runtime fallback failed: "+reason, map[string]any{
 			"replyToUserMessageId": userMessageID, "correlationId": corr,
-			"toolManifest": manifests, "toolPipeline": map[string]any{"stages": stages},
+			"toolManifest": manifests, "toolPipeline": map[string]any{"stages": stages}, "chatLatencyTrace": trace,
 			"toolGatewayActivity": map[string]any{
 				"userRequestSummary": trimSummary(lastUserContent, 500),
 				"toolManifest":       manifests,
@@ -843,6 +1033,7 @@ func (s *Server) completeAssistantWithoutTools(
 				"toolCallEmitted":    false,
 				"executionState":     "error",
 				"failureReason":      "ollama model is not configured; model runtime fallback failed: " + reason,
+				"latencyTrace":       trace,
 			},
 		})
 		return am
@@ -855,7 +1046,7 @@ func (s *Server) completeAssistantWithoutTools(
 	}
 	raw, err := ol.OllamaChat(ctx, baseURL, model, msgs, nil, nil, 120*time.Second)
 	if err != nil {
-		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama /api/chat failed: "+err.Error(), requestedModelID)
+		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama /api/chat failed: "+err.Error(), requestedModelID, requestStart, perf)
 		if am != nil {
 			return am
 		}
@@ -863,9 +1054,10 @@ func (s *Server) completeAssistantWithoutTools(
 		if strings.TrimSpace(reason) != "" {
 			text += " (model runtime fallback failed: " + reason + ")"
 		}
+		trace := chatLatencyTrace(requestStart, perf, map[string]any{"modelruntime_ms": int64(0), "gateway_execution_ms": int64(0)})
 		am, _ = s.chat.AppendMessage(ctx, threadID, "assistant", text, map[string]any{
 			"failure": true, "replyToUserMessageId": userMessageID, "correlationId": corr,
-			"toolManifest": manifests, "toolPipeline": map[string]any{"stages": stages},
+			"toolManifest": manifests, "toolPipeline": map[string]any{"stages": stages}, "chatLatencyTrace": trace,
 			"toolGatewayActivity": map[string]any{
 				"userRequestSummary": trimSummary(lastUserContent, 500),
 				"toolManifest":       manifests,
@@ -873,6 +1065,7 @@ func (s *Server) completeAssistantWithoutTools(
 				"toolCallEmitted":    false,
 				"executionState":     "error",
 				"failureReason":      err.Error(),
+				"latencyTrace":       trace,
 			},
 		})
 		return am
@@ -882,15 +1075,21 @@ func (s *Server) completeAssistantWithoutTools(
 	if msg, _ := raw["message"].(map[string]any); msg != nil {
 		content = strings.TrimSpace(asString(msg["content"]))
 	}
+	content, contentWarnings := sanitizeAssistantVisibleContent(content)
 	if content == "" {
-		content = "Acknowledged. Ready for your next instruction."
+		content = assistantContentFallback
 	}
-
-	am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", content, map[string]any{
+	trace := chatLatencyTrace(requestStart, perf, map[string]any{
+		"modelruntime_ms":      int64(0),
+		"gateway_execution_ms": int64(0),
+		"model_calls_avoided":  0,
+	})
+	metadata := map[string]any{
 		"replyToUserMessageId": userMessageID,
 		"correlationId":        corr,
 		"ollamaOk":             true,
 		"toolsBypassed":        true,
+		"chatLatencyTrace":     trace,
 		"toolManifest":         manifests,
 		"toolPipeline":         map[string]any{"stages": stages},
 		"toolGatewayActivity": map[string]any{
@@ -899,8 +1098,152 @@ func (s *Server) completeAssistantWithoutTools(
 			"stages":             stages,
 			"toolCallEmitted":    false,
 			"executionState":     "skipped",
+			"latencyTrace":       trace,
 		},
+	}
+	if len(contentWarnings) > 0 {
+		metadata["assistantContentWarnings"] = contentWarnings
+	}
+
+	am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", content, metadata)
+	return am
+}
+
+func (s *Server) completeAssistantWithNativeOllamaStream(
+	ctx context.Context,
+	threadID, userMessageID int64,
+	th *chat.ThreadDetail,
+	lastUserContent string,
+	ollamaAdapter adapters.Adapter,
+	corr string,
+	getManifests func() []map[string]any,
+	stages []map[string]any,
+	pushStage func(string, map[string]any),
+	emit func(event string, payload map[string]any),
+	requestStart time.Time,
+	perf chatPerformanceDecision,
+) *chat.Message {
+	ol, ok := ollamaAdapter.(adapters.Ollama)
+	if !ok {
+		pushStage("ollama_native_stream_unavailable", map[string]any{"reason": "ollama adapter not registered"})
+		return nil
+	}
+	baseURL := ol.BaseURLForChat(ctx)
+	model := ol.ModelForChat(ctx)
+	if strings.TrimSpace(model) == "" {
+		pushStage("ollama_native_stream_unavailable", map[string]any{"reason": "ollama model is not configured"})
+		return nil
+	}
+
+	runtimeMessages, promptBudget := s.buildModelRuntimePlainChatMessages(ctx, th)
+	messages := make([]map[string]any, 0, len(runtimeMessages))
+	for _, msg := range runtimeMessages {
+		messages = append(messages, map[string]any{
+			"role":    msg.Role,
+			"content": msg.Content,
+		})
+	}
+
+	pushStage("ollama_native_stream_start", map[string]any{
+		"model":        model,
+		"promptBudget": modelRuntimePromptBudgetMap(promptBudget),
 	})
+
+	var rawStream strings.Builder
+	lastFlush := time.Time{}
+	emittedFirst := false
+	emittedChars := 0
+	streamCut := false
+	flushVisible := func(force bool) {
+		visible, cut := stripSyntheticTranscriptContinuation(rawStream.String())
+		if cut {
+			streamCut = true
+		}
+		emitLimit := len(visible)
+		if !force && !streamCut {
+			const markerLookbehind = 16
+			if emitLimit > markerLookbehind {
+				emitLimit -= markerLookbehind
+			} else if emittedFirst {
+				emitLimit = emittedChars
+			}
+		}
+		if emitLimit <= emittedChars {
+			return
+		}
+		now := time.Now()
+		if !force && emittedFirst && emitLimit-emittedChars < assistantStreamFlushChars && now.Sub(lastFlush) < time.Duration(assistantStreamFlushIntervalMs)*time.Millisecond {
+			return
+		}
+		chunk := visible[emittedChars:emitLimit]
+		emit("token", map[string]any{"text": chunk})
+		emittedChars = emitLimit
+		emittedFirst = true
+		lastFlush = now
+	}
+	content, streamMeta, err := ol.StreamChat(ctx, baseURL, model, messages, 120*time.Second, func(token string) error {
+		if streamCut {
+			return nil
+		}
+		rawStream.WriteString(token)
+		flushVisible(false)
+		return nil
+	})
+	flushVisible(true)
+	if err != nil {
+		pushStage("ollama_native_stream_error", map[string]any{"error": err.Error()})
+		return nil
+	}
+	if streamCut {
+		pushStage("ollama_native_stream_truncated", map[string]any{"reason": "synthetic transcript continuation"})
+	}
+	content, contentWarnings := sanitizeAssistantVisibleContent(content)
+	if content == "" {
+		content = assistantContentFallback
+	}
+	trace := chatLatencyTraceWithPrompt(requestStart, perf, promptBudget, map[string]any{
+		"modelruntime_ms":      int64(0),
+		"gateway_execution_ms": int64(0),
+		"model_calls_avoided":  1,
+	})
+	metadata := map[string]any{
+		"replyToUserMessageId": userMessageID,
+		"correlationId":        corr,
+		"ollamaOk":             true,
+		"ollamaStream":         true,
+		"chatLatencyTrace":     trace,
+		"streamBatching": map[string]any{
+			"flushChars":      assistantStreamFlushChars,
+			"flushIntervalMs": assistantStreamFlushIntervalMs,
+		},
+		"toolsBypassed":       true,
+		"modelRuntimeSkipped": true,
+		"toolManifest":        getManifests(),
+		"toolPipeline":        map[string]any{"stages": stages},
+		"toolGatewayActivity": map[string]any{
+			"userRequestSummary": trimSummary(lastUserContent, 500),
+			"toolManifest":       getManifests(),
+			"stages":             stages,
+			"toolCallEmitted":    false,
+			"executionState":     "skipped",
+			"fallback":           "ollama_native_stream",
+			"model":              model,
+			"promptBudget":       modelRuntimePromptBudgetMap(promptBudget),
+			"latencyTrace":       trace,
+			"contextBudgetClass": perf.ContextBudgetClass,
+			"outputMode":         perf.OutputMode,
+		},
+		"ollamaMetadata": streamMeta,
+	}
+	if len(contentWarnings) > 0 {
+		metadata["assistantContentWarnings"] = contentWarnings
+	}
+	am, err := s.chat.AppendMessage(ctx, threadID, "assistant", content, metadata)
+	if err != nil {
+		pushStage("ollama_native_stream_save_failed", map[string]any{"error": err.Error()})
+		return nil
+	}
+	pushStage("ollama_native_stream_done", map[string]any{"messageId": am.ID})
 	return am
 }
 
@@ -913,6 +1256,8 @@ func (s *Server) completeAssistantWithModelRuntime(
 	stages []map[string]any,
 	fallbackReason string,
 	requestedModelID string,
+	requestStart time.Time,
+	perf chatPerformanceDecision,
 ) (*chat.Message, string) {
 	if s.modelRuntime == nil {
 		return nil, "model runtime is unavailable"
@@ -929,21 +1274,36 @@ func (s *Server) completeAssistantWithModelRuntime(
 		return nil, resolveReason
 	}
 
-	sys, userBody := s.buildChatLLMMessages(ctx, th)
+	messages, promptBudget := s.buildModelRuntimePlainChatMessages(ctx, th)
+	preflightTrace, preflightReason := s.modelRuntimeChatPreflight(ctx, meta)
+	if strings.TrimSpace(preflightReason) != "" {
+		return nil, preflightReason
+	}
+	stages = append(stages, map[string]any{
+		"stage":  "model_runtime_prompt_budget",
+		"atMs":   time.Now().UnixMilli(),
+		"budget": modelRuntimePromptBudgetMap(promptBudget),
+	})
+	modelStart := time.Now()
 	result, err := s.modelRuntime.Chat(ctx, ModelRuntimeChatRequest{
-		ModelID: modelID,
-		Messages: []ModelRuntimeChatMessage{
-			{Role: "system", Content: sys},
-			{Role: "user", Content: userBody},
-		},
-		Actor:  "chat",
-		Source: "chat_assistant",
-		Meta:   meta,
+		ModelID:       modelID,
+		WorkloadClass: "INTERACTIVE_INFERENCE",
+		Messages:      messages,
+		MaxTokens:     chatOutputModeMaxTokens(perf.OutputMode),
+		TimeoutMs:     modelRuntimePlainChatTimeoutMs,
+		MaxAttempts:   modelRuntimePlainChatMaxAttempts,
+		Actor:         "chat",
+		Source:        "chat_assistant",
+		Meta:          meta,
 		Metadata: map[string]any{
-			"entrypoint": "api.chat",
-			"fallback":   "model_runtime",
+			"entrypoint":   "api.chat",
+			"fallback":     "model_runtime",
+			"promptBudget": modelRuntimePromptBudgetMap(promptBudget),
+			"outputMode":   perf.OutputMode,
+			"budgetClass":  perf.ContextBudgetClass,
 		},
 	})
+	modelRuntimeMs := time.Since(modelStart).Milliseconds()
 	if err != nil {
 		_, code, message := mapModelRuntimeError(err)
 		if strings.TrimSpace(code) != "" {
@@ -952,10 +1312,20 @@ func (s *Server) completeAssistantWithModelRuntime(
 		return nil, message
 	}
 
-	content := strings.TrimSpace(result.Content)
+	content, contentWarnings := sanitizeAssistantVisibleContent(result.Content)
 	if content == "" {
-		content = "Acknowledged. Ready for your next instruction."
+		content = assistantContentFallback
 	}
+	traceExtras := map[string]any{
+		"modelruntime_ms":      modelRuntimeMs,
+		"gateway_execution_ms": int64(0),
+		"model_calls_avoided":  0,
+		"output_max_tokens":    chatOutputModeMaxTokens(perf.OutputMode),
+	}
+	for k, v := range preflightTrace {
+		traceExtras[k] = v
+	}
+	trace := chatLatencyTraceWithPrompt(requestStart, perf, promptBudget, traceExtras)
 
 	activity := map[string]any{
 		"userRequestSummary": trimSummary(lastUserContent, 500),
@@ -967,6 +1337,10 @@ func (s *Server) completeAssistantWithModelRuntime(
 		"fallback":           "model_runtime",
 		"modelId":            nonEmpty(strings.TrimSpace(result.ModelID), modelID),
 		"backend":            strings.TrimSpace(result.Backend),
+		"promptBudget":       modelRuntimePromptBudgetMap(promptBudget),
+		"latencyTrace":       trace,
+		"contextBudgetClass": perf.ContextBudgetClass,
+		"outputMode":         perf.OutputMode,
 	}
 	if requested := strings.TrimSpace(requestedModelID); requested != "" {
 		activity["requestedModelId"] = requested
@@ -981,6 +1355,8 @@ func (s *Server) completeAssistantWithModelRuntime(
 		"modelRuntimeOk":       true,
 		"modelRuntimeModelId":  nonEmpty(strings.TrimSpace(result.ModelID), modelID),
 		"modelRuntimeBackend":  strings.TrimSpace(result.Backend),
+		"modelRuntimePrompt":   modelRuntimePromptBudgetMap(promptBudget),
+		"chatLatencyTrace":     trace,
 		"toolManifest":         manifests,
 		"toolPipeline":         map[string]any{"stages": stages},
 		"toolGatewayActivity":  activity,
@@ -994,12 +1370,202 @@ func (s *Server) completeAssistantWithModelRuntime(
 	if len(result.Warnings) > 0 {
 		metadata["modelRuntimeWarnings"] = append([]string(nil), result.Warnings...)
 	}
+	if len(contentWarnings) > 0 {
+		metadata["assistantContentWarnings"] = contentWarnings
+	}
 
 	am, err := s.chat.AppendMessage(ctx, threadID, "assistant", content, metadata)
 	if err != nil {
 		return nil, "assistant reply could not be saved"
 	}
 	return am, ""
+}
+
+func deterministicNoToolChatReply(content string) (string, bool) {
+	normalized := normalizeAssistantIntent(content)
+	switch normalized {
+	case "what is your name", "whats your name", "who are you", "what are you":
+		return "I am FORGE.", true
+	}
+	if isWeatherWithoutLocationQuery(normalized) {
+		return "What city or ZIP code should I check for the weather?", true
+	}
+	return "", false
+}
+
+func normalizeAssistantIntent(content string) string {
+	s := strings.ToLower(strings.TrimSpace(content))
+	s = strings.Trim(s, " \t\r\n?!.,")
+	s = strings.ReplaceAll(s, "’", "'")
+	s = strings.ReplaceAll(s, "what's", "whats")
+	for strings.Contains(s, "  ") {
+		s = strings.ReplaceAll(s, "  ", " ")
+	}
+	return s
+}
+
+func isWeatherWithoutLocationQuery(normalized string) bool {
+	if normalized == "" || !strings.Contains(normalized, "weather") {
+		return false
+	}
+	if strings.Contains(normalized, " in ") || strings.Contains(normalized, " for ") || strings.Contains(normalized, " at ") {
+		return false
+	}
+	if strings.Contains(normalized, "weather today") || strings.Contains(normalized, "weather looking like today") || strings.Contains(normalized, "forecast today") {
+		return true
+	}
+	return normalized == "weather" || normalized == "what is the weather" || normalized == "whats the weather"
+}
+
+func sanitizeAssistantVisibleContent(content string) (string, []string) {
+	out := strings.TrimSpace(content)
+	warnings := []string(nil)
+	var stripped bool
+
+	out, stripped = stripDelimitedAssistantBlock(out, "<think>", "</think>")
+	if stripped {
+		warnings = append(warnings, "stripped_hidden_thinking_block")
+	}
+	out, stripped = stripDelimitedAssistantBlock(out, "<thinking>", "</thinking>")
+	if stripped {
+		warnings = append(warnings, "stripped_hidden_thinking_block")
+	}
+	out, stripped = stripLeadingReasoningScaffold(out)
+	if stripped {
+		warnings = append(warnings, "stripped_reasoning_scaffold")
+	}
+	if idx := assistantLineMarkerIndex(out, []string{"TRACEABILITY"}); idx >= 0 {
+		out = strings.TrimSpace(out[:idx])
+		warnings = append(warnings, "stripped_traceability_scaffold")
+	}
+	if strippedOut, cut := stripSyntheticTranscriptContinuation(out); cut {
+		out = strings.TrimSpace(strippedOut)
+		warnings = append(warnings, "stripped_synthetic_transcript_turn")
+	}
+	out, stripped = normalizeAssistantVisibleIdentity(out)
+	if stripped {
+		warnings = append(warnings, "normalized_model_identity")
+	}
+
+	return strings.TrimSpace(out), warnings
+}
+
+func stripSyntheticTranscriptContinuation(content string) (string, bool) {
+	markers := []string{
+		"USER",
+		"YOU",
+		"ASSISTANT",
+		"FORGE",
+		"OPERATOR",
+	}
+	if idx := assistantLineMarkerIndex(content, markers); idx >= 0 {
+		return strings.TrimSpace(content[:idx]), true
+	}
+	return content, false
+}
+
+func normalizeAssistantVisibleIdentity(content string) (string, bool) {
+	out := strings.TrimSpace(content)
+	lower := strings.ToLower(out)
+	prefixes := []string{
+		"i am phi",
+		"i'm phi",
+		"my name is phi",
+		"this is phi",
+	}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(lower, prefix) {
+			if idx := strings.Index(out, "."); idx >= 0 {
+				rest := strings.TrimSpace(out[idx+1:])
+				if rest == "" {
+					return "I am FORGE.", true
+				}
+				return "I am FORGE. " + rest, true
+			}
+			return "I am FORGE.", true
+		}
+	}
+	return out, false
+}
+
+func stripDelimitedAssistantBlock(content, openMarker, closeMarker string) (string, bool) {
+	out := strings.TrimSpace(content)
+	stripped := false
+	for {
+		lower := strings.ToLower(out)
+		start := strings.Index(lower, strings.ToLower(openMarker))
+		if start < 0 {
+			return strings.TrimSpace(out), stripped
+		}
+		endRel := strings.Index(lower[start+len(openMarker):], strings.ToLower(closeMarker))
+		if endRel < 0 {
+			if start == 0 {
+				return "", true
+			}
+			return strings.TrimSpace(out[:start]), true
+		}
+		end := start + len(openMarker) + endRel + len(closeMarker)
+		out = strings.TrimSpace(out[:start] + "\n" + out[end:])
+		stripped = true
+	}
+}
+
+func stripLeadingReasoningScaffold(content string) (string, bool) {
+	out := strings.TrimSpace(content)
+	if out == "" {
+		return "", false
+	}
+	lower := strings.ToLower(out)
+	reasoningMarkers := []string{
+		"thinking process:",
+		"reasoning process:",
+		"internal reasoning:",
+		"chain of thought:",
+		"analysis:",
+		"reasoning:",
+	}
+	leaksReasoning := false
+	for _, marker := range reasoningMarkers {
+		if strings.HasPrefix(lower, marker) {
+			leaksReasoning = true
+			break
+		}
+	}
+	if !leaksReasoning {
+		return out, false
+	}
+	if idx, markerLen := assistantFinalMarkerIndex(out); idx >= 0 {
+		return strings.TrimSpace(out[idx+markerLen:]), true
+	}
+	return "", true
+}
+
+func assistantFinalMarkerIndex(content string) (int, int) {
+	lower := strings.ToLower(content)
+	for _, marker := range []string{"final answer:", "final:", "answer:", "response:"} {
+		if strings.HasPrefix(lower, marker) {
+			return 0, len(marker)
+		}
+		pattern := "\n" + marker
+		if idx := strings.Index(lower, pattern); idx >= 0 {
+			return idx + 1, len(marker)
+		}
+	}
+	return -1, 0
+}
+
+func assistantLineMarkerIndex(content string, markers []string) int {
+	offset := 0
+	for _, line := range strings.SplitAfter(content, "\n") {
+		trimmed := strings.TrimSpace(strings.TrimSuffix(line, "\n"))
+		for _, marker := range markers {
+			if strings.EqualFold(trimmed, marker) || strings.HasPrefix(strings.ToLower(trimmed), strings.ToLower(marker)+":") {
+				return offset
+			}
+		}
+		offset += len(line)
+	}
+	return -1
 }
 
 func (s *Server) resolveChatModelRuntimeModel(ctx context.Context, meta ModelRuntimeRequestMeta, requestedModelID string) (string, string) {
@@ -1159,6 +1725,48 @@ func formatToolResult(gatewayToolID string, res *gateway.Result) string {
 			b.WriteString(fmt.Sprintf("\n\nStderr:\n```\n%s\n```", errOut))
 		}
 		return b.String()
+	case "net.fetch":
+		body, _ := res.Data["body"].(string)
+		urlValue := res.Data["url"]
+		statusCode := res.Data["statusCode"]
+		if len(body) > 4000 {
+			body = body[:4000] + "\n... (truncated)"
+		}
+		return fmt.Sprintf("Fetched %v (status %v):\n```html\n%s\n```", urlValue, statusCode, body)
+	case "web.search":
+		query := res.Data["query"]
+		results, _ := res.Data["results"].([]map[string]any)
+		if results == nil {
+			if raw, ok := res.Data["results"].([]any); ok {
+				results = make([]map[string]any, 0, len(raw))
+				for _, item := range raw {
+					if rec, ok := item.(map[string]any); ok {
+						results = append(results, rec)
+					}
+				}
+			}
+		}
+		var b strings.Builder
+		b.WriteString(fmt.Sprintf("Web search for %q returned %d result(s).", query, len(results)))
+		for i, result := range results {
+			title, _ := result["title"].(string)
+			urlValue, _ := result["url"].(string)
+			snippet, _ := result["snippet"].(string)
+			b.WriteString(fmt.Sprintf("\n\n%d. %s\n%s", i+1, strings.TrimSpace(title), strings.TrimSpace(urlValue)))
+			if strings.TrimSpace(snippet) != "" {
+				b.WriteString("\n")
+				b.WriteString(strings.TrimSpace(snippet))
+			}
+		}
+		return b.String()
+	case "desktop.open":
+		if target, ok := res.Data["target"].(string); ok && strings.TrimSpace(target) != "" {
+			return fmt.Sprintf("Opened desktop target: %s", target)
+		}
+		if urlValue, ok := res.Data["url"].(string); ok && strings.TrimSpace(urlValue) != "" {
+			return fmt.Sprintf("Opened browser URL: %s", urlValue)
+		}
+		return "Desktop open request completed."
 	case "git.status":
 		output, _ := res.Data["output"].(string)
 		available, _ := res.Data["available"].(bool)

@@ -320,7 +320,7 @@ export function ToolGatewayPage() {
             subtitle="UI gate preview: if/and checks before execute. Kernel policy remains authoritative."
             defaultOpen
           >
-            <div className="space-y-1 rounded border border-white/10 bg-black/25 p-3 text-xs">
+            <div className="space-y-1 rounded border border-forge-platinum/10 bg-black/25 p-3 text-xs">
               {preflightGates.map((gate, idx) => (
                 <GateLine key={gate.label} prefix={idx === 0 ? "IF" : "AND"} label={gate.label} pass={gate.pass} />
               ))}
@@ -382,7 +382,7 @@ export function ToolGatewayPage() {
       <Panel title="Registered Tools" subtitle="Bounded typed capabilities exposed by the gateway.">
         <div className="space-y-2">
           {tools.map((t) => (
-            <div key={t.id} className="rounded border border-white/10 bg-forge-slate/20 px-3 py-2 text-xs text-forge-mist">
+            <div key={t.id} className="rounded border border-forge-platinum/10 bg-forge-slate/20 px-3 py-2 text-xs text-forge-mist">
               <div className="font-mono text-forge-ash">{t.id}</div>
               <div className="mt-1">{t.domain}.{t.action} · {t.riskClass} · {t.executionLevel} · {t.writeIntent ? "write" : "read"}</div>
               <div className="mt-1 text-[11px]">
@@ -399,7 +399,7 @@ export function ToolGatewayPage() {
         <div className="space-y-2">
           {capabilities.length === 0 ? <div className="text-sm text-forge-mist">No capability metadata available.</div> : null}
           {capabilities.map((cap) => (
-            <div key={cap.id} className="rounded border border-white/10 bg-black/25 px-3 py-2 text-xs text-forge-mist">
+            <div key={cap.id} className="rounded border border-forge-platinum/10 bg-black/25 px-3 py-2 text-xs text-forge-mist">
               <div className="font-mono text-forge-ash">{cap.id}</div>
               <div className="mt-1">
                 {cap.domain}.{cap.name} · {cap.status} · risk {cap.risk} · lane {cap.lane}
@@ -475,7 +475,7 @@ export function ToolGatewayPage() {
               key={row.id}
               type="button"
               onClick={() => setLast(row as unknown as Record<string, unknown>)}
-              className="w-full rounded border border-white/10 bg-black/25 px-3 py-2 text-left text-xs text-forge-mist hover:border-forge-accent/50"
+              className="w-full rounded border border-forge-platinum/10 bg-black/25 px-3 py-2 text-left text-xs text-forge-mist hover:border-forge-accent/50"
             >
               <div className="font-mono text-[11px] text-forge-ash">#{row.id} · {row.toolId} · {row.status} · {row.policyOutcome}</div>
               <div className="mt-1">{formatTime(row.createdAtMs)} · lane {row.laneId ?? "—"} · risk {row.riskClass} · {row.executionLevel}</div>
@@ -513,24 +513,24 @@ function GatewayResultSummary(props: { result: Record<string, unknown> }) {
   const outputSummary = summarizeOutput(props.result.output);
 
   return (
-    <div className="mt-4 rounded-md border border-white/10 bg-black/25 p-3 text-[11px] text-forge-mist">
+    <div className="mt-4 rounded-md border border-forge-platinum/10 bg-black/25 p-3 text-[11px] text-forge-mist">
       <div className="grid gap-1 md:grid-cols-2">
         {rows
           .filter(([, value]) => value !== "—")
           .map(([label, value]) => (
-            <div key={label} className="flex items-start justify-between gap-3 border-b border-white/5 pb-1">
+            <div key={label} className="flex items-start justify-between gap-3 border-b border-forge-platinum/5 pb-1">
               <span className="text-forge-mist/75">{label}</span>
               <span className="text-right text-forge-ash">{value}</span>
             </div>
           ))}
       </div>
       {outputSummary ? (
-        <div className="mt-2 rounded border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-forge-ash">
+        <div className="mt-2 rounded border border-forge-platinum/10 bg-black/30 px-2 py-1 text-[11px] text-forge-ash">
           Output: {outputSummary}
         </div>
       ) : null}
       {warnings.length > 0 ? (
-        <div className="mt-2 rounded border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-forge-ash">
+        <div className="mt-2 rounded border border-forge-platinum/10 bg-black/30 px-2 py-1 text-[11px] text-forge-ash">
           Warnings: {warnings.join(" | ")}
         </div>
       ) : null}
@@ -597,7 +597,7 @@ function capabilityStatusReason(status?: ToolCapabilityStatus, adapterId?: strin
 
 function GateLine(props: { prefix: "IF" | "AND"; label: string; pass: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-1 last:border-b-0 last:pb-0">
+    <div className="flex items-center justify-between gap-3 border-b border-forge-platinum/5 pb-1 last:border-b-0 last:pb-0">
       <div className="font-mono text-[11px] text-forge-mist">
         <span className="mr-2 text-forge-mist/60">{props.prefix}</span>
         {props.label}

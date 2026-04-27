@@ -186,7 +186,7 @@ function parseResumeHintSummary(raw: unknown): ResumeHintSummary {
 function parseProcessRuntimeLine(items: ProcessHealthInvocation[]) {
   const parseMs = (value: number | undefined) => (value == null || value <= 0 ? "—" : `${value}ms`);
   return items.map((invocation) => (
-    <tr key={invocation.invocationId} className="border-b border-white/10 last:border-b-0">
+    <tr key={invocation.invocationId} className="border-b border-forge-platinum/10 last:border-b-0">
       <td className="px-2 py-1.5 text-[11px]">{invocation.invocationId}</td>
       <td className="px-2 py-1.5 text-[11px]">{invocation.toolId}</td>
       <td className="px-2 py-1.5 text-[11px]">{invocation.action}</td>
@@ -214,7 +214,7 @@ function JsonBlock(props: { value: unknown; empty?: string; maxHeightClass?: str
   return (
     <pre
       className={[
-        "overflow-auto rounded border border-white/10 bg-black/25 p-3 font-mono text-[11px] text-forge-mist",
+        "overflow-auto rounded border border-forge-platinum/10 bg-black/25 p-3 font-mono text-[11px] text-forge-mist",
         props.maxHeightClass ?? "max-h-[360px]",
       ].join(" ")}
     >
@@ -225,7 +225,7 @@ function JsonBlock(props: { value: unknown; empty?: string; maxHeightClass?: str
 
 function MetricChip(props: { label: string; value: string | number }) {
   return (
-    <div className="rounded border border-white/10 bg-black/20 px-3 py-2">
+    <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">
       <div className="text-[10px] uppercase tracking-[0.12em] text-forge-mist/70">{props.label}</div>
       <div className="mt-1 text-sm text-forge-ash">{props.value}</div>
     </div>
@@ -236,7 +236,7 @@ function SummaryLink(props: { to: string; label: string }) {
   return (
     <Link
       to={props.to}
-      className="rounded border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
+      className="rounded border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
     >
       {props.label}
     </Link>
@@ -245,7 +245,7 @@ function SummaryLink(props: { to: string; label: string }) {
 
 function OperatorStepCard(props: { step: string; title: string; detail: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+    <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3">
       <div className="text-[10px] uppercase tracking-[0.14em] text-forge-electric">{props.step}</div>
       <div className="mt-1 text-sm font-semibold text-forge-ash">{props.title}</div>
       <div className="mt-1 text-xs leading-5 text-forge-mist/80">{props.detail}</div>
@@ -255,7 +255,7 @@ function OperatorStepCard(props: { step: string; title: string; detail: string }
 
 function CountPill(props: { label: string; value: string | number }) {
   return (
-    <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist">
+    <div className="rounded-full border border-forge-platinum/10 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist">
       <span className="text-forge-mist/65">{props.label}</span> {props.value}
     </div>
   );
@@ -608,7 +608,7 @@ export function InspectorsPage() {
                 }}
                 className={[
                   "w-full rounded border px-3 py-3 text-left transition",
-                  selectedSnapshotId === snapshot.id ? "border-white/20 bg-white/10" : "border-white/10 bg-black/20 hover:border-white/20",
+                  selectedSnapshotId === snapshot.id ? "border-forge-platinum/20 bg-forge-platinum/10" : "border-forge-platinum/10 bg-black/20 hover:border-forge-platinum/20",
                 ].join(" ")}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -638,7 +638,7 @@ export function InspectorsPage() {
 
           <div className="space-y-4">
             {!snapshotDetail ? (
-              <div className="rounded border border-dashed border-white/10 px-4 py-6 text-sm text-forge-mist">Select a snapshot to inspect its persisted evidence.</div>
+              <div className="rounded border border-dashed border-forge-platinum/10 px-4 py-6 text-sm text-forge-mist">Select a snapshot to inspect its persisted evidence.</div>
             ) : (
               <>
                 <div className="grid gap-2 md:grid-cols-3">
@@ -646,7 +646,7 @@ export function InspectorsPage() {
                   <MetricChip label="Workspace" value={snapshotDetail.summary.workspaceId || "—"} />
                   <MetricChip label="Lane" value={snapshotDetail.summary.laneId || "—"} />
                 </div>
-                <div className="rounded border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">
+                <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-sm text-forge-mist">
                   <div className="font-medium text-forge-ash">{snapshotDetail.summary.query || snapshotDetail.summary.id}</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {snapshotDetail.summary.correlationId ? (
@@ -658,7 +658,7 @@ export function InspectorsPage() {
                     {snapshotDetail.summary.parentSnapshotId ? (
                       <button
                         type="button"
-                        className="rounded border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
+                        className="rounded border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
                         onClick={() => {
                           setSelectedSnapshotId(snapshotDetail.summary.parentSnapshotId);
                           void loadSnapshotDetail(snapshotDetail.summary.parentSnapshotId);
@@ -689,7 +689,7 @@ export function InspectorsPage() {
                           <span className="text-xs text-forge-mist/75">No explicit path scope recorded.</span>
                         ) : (
                           snapshotDetail.summary.selectedPaths.map((path) => (
-                            <span key={path} className="rounded border border-white/10 bg-black/25 px-2 py-1 font-mono text-[11px] text-forge-ash">
+                            <span key={path} className="rounded border border-forge-platinum/10 bg-black/25 px-2 py-1 font-mono text-[11px] text-forge-ash">
                               {path}
                             </span>
                           ))
@@ -728,10 +728,10 @@ export function InspectorsPage() {
                       <MetricChip label="Top Candidate" value={restoreScoreSummary.topCandidateId || "—"} />
                     </div>
                     {restoreScoreSummary.hasStructured ? (
-                      <div className="overflow-auto rounded border border-white/10 bg-black/20">
+                      <div className="overflow-auto rounded border border-forge-platinum/10 bg-black/20">
                         <table className="min-w-full text-xs">
                           <thead>
-                            <tr className="border-b border-white/10 bg-black/25 text-left text-forge-mist/70">
+                            <tr className="border-b border-forge-platinum/10 bg-black/25 text-left text-forge-mist/70">
                               <th className="px-2 py-2">Snapshot</th>
                               <th className="px-2 py-2">Score</th>
                               <th className="px-2 py-2">Query</th>
@@ -747,7 +747,7 @@ export function InspectorsPage() {
                           </thead>
                           <tbody>
                             {restoreScoreSummary.candidates.map((candidate) => (
-                              <tr key={candidate.snapshotId} className="border-b border-white/10 last:border-b-0">
+                              <tr key={candidate.snapshotId} className="border-b border-forge-platinum/10 last:border-b-0">
                                 <td className="px-2 py-1.5">
                                   <div className="text-[11px] text-forge-ash">{candidate.snapshotId}</div>
                                   <div className="text-[10px] text-forge-mist/70">{formatTime(candidate.createdAt)}</div>
@@ -853,7 +853,7 @@ export function InspectorsPage() {
               <MetricChip label="Retrieved" value={packetRetrievedCount} />
               <MetricChip label="References" value={packetReferenceCount} />
             </div>
-            <div className="rounded border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">
+            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-sm text-forge-mist">
               <div className="text-base font-semibold text-forge-ash">{packet.title}</div>
               <div className="mt-2">{packet.objective}</div>
               <div className="mt-2 text-xs text-forge-mist/80">Generated {formatTime(packet.generatedAtMs)} · adapter {packet.adapterTarget}</div>
@@ -881,7 +881,7 @@ export function InspectorsPage() {
                   <span className="text-xs text-forge-mist/75">No selected paths recorded.</span>
                 ) : (
                   packet.selectedPaths.map((path) => (
-                    <span key={path} className="rounded border border-white/10 bg-black/25 px-2 py-1 font-mono text-[11px] text-forge-ash">
+                    <span key={path} className="rounded border border-forge-platinum/10 bg-black/25 px-2 py-1 font-mono text-[11px] text-forge-ash">
                       {path}
                     </span>
                   ))
@@ -903,7 +903,7 @@ export function InspectorsPage() {
               ) : (
                 <div className="space-y-2">
                   {packetAlignment.map((note) => (
-                    <div key={note.id} className="rounded border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">
+                    <div key={note.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-sm text-forge-mist">
                       <div className="text-forge-ash">{note.note}</div>
                       <div className="mt-2 text-[11px] text-forge-mist/75">Recorded {formatTime(note.createdAtMs)}</div>
                     </div>
@@ -918,7 +918,7 @@ export function InspectorsPage() {
               ) : (
                 <div className="space-y-3">
                   {packetGuidance.map((item) => (
-                    <div key={item.id} className="rounded border border-white/10 bg-black/20 p-3">
+                    <div key={item.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="text-sm font-semibold text-forge-ash">Guidance score {item.guidanceScore}</div>
                         <div className="text-[11px] text-forge-mist/75">{formatTime(item.createdAtMs)}</div>
@@ -943,10 +943,10 @@ export function InspectorsPage() {
 
       <Panel title="Execution Trace" subtitle="Trace persisted execution evidence by correlation id or trace id.">
         <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-          <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">
+          <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3 text-sm text-forge-mist">
             Correlation trace is the fastest path from operator question to execution truth: audit rows, gateway calls, artifact refs, provenance, and journal entries.
           </div>
-          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+          <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3">
             <div className="text-[10px] uppercase tracking-[0.14em] text-forge-mist/65">Lookup state</div>
             <div className="mt-2 flex flex-wrap gap-2">
               <CountPill label="Mode" value={traceLookup?.mode ?? "idle"} />
@@ -994,7 +994,7 @@ export function InspectorsPage() {
                     onClick={() => setSelectedTraceCorrelationId(correlationId)}
                     className={[
                       "rounded border px-2.5 py-1 text-[11px]",
-                      selectedTraceCorrelationId === correlationId ? "border-white/20 bg-white/10 text-forge-ash" : "border-white/10 bg-black/20 text-forge-mist",
+                      selectedTraceCorrelationId === correlationId ? "border-forge-platinum/20 bg-forge-platinum/10 text-forge-ash" : "border-forge-platinum/10 bg-black/20 text-forge-mist",
                     ].join(" ")}
                   >
                     {correlationId}
@@ -1005,7 +1005,7 @@ export function InspectorsPage() {
 
             {selectedTraceReport ? (
               <>
-                <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3">
                   <div className="text-[10px] uppercase tracking-[0.14em] text-forge-mist/65">Selected execution chain</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <CountPill label="Correlation" value={selectedTraceReport.correlationId} />
@@ -1062,10 +1062,10 @@ export function InspectorsPage() {
         subtitle="Trace process tool invocations and model-runtime condition for a correlation id or trace id."
       >
         <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-          <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">
+          <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3 text-sm text-forge-mist">
             Process trace shows only governed process invocations, while model-runtime entries are non-mutating read-only diagnostics.
           </div>
-          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+          <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3">
             <div className="text-[10px] uppercase tracking-[0.14em] text-forge-mist/65">Runtime projection</div>
             <div className="mt-2 flex flex-wrap gap-2">
               <CountPill label="Process invocations" value={processParsedRuntime.totalProcessInvocations} />
@@ -1140,10 +1140,10 @@ export function InspectorsPage() {
                       <SummaryLink to={`/audit?correlationId=${encodeURIComponent(report.correlationId)}`} label="Open audit list" />
                     </div>
                   </div>
-                  <div className="overflow-auto rounded border border-white/10 bg-black/20">
+                  <div className="overflow-auto rounded border border-forge-platinum/10 bg-black/20">
                     <table className="min-w-full text-xs">
                       <thead>
-                        <tr className="border-b border-white/10 bg-black/25 text-left text-forge-mist/70">
+                        <tr className="border-b border-forge-platinum/10 bg-black/25 text-left text-forge-mist/70">
                           <th className="px-2 py-2">Invocation</th>
                           <th className="px-2 py-2">Tool</th>
                           <th className="px-2 py-2">Action</th>

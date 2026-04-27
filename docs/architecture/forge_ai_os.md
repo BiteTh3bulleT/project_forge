@@ -21,6 +21,21 @@ Rule of operation:
 | Model execution and model management | model runtime service | `services/core/internal/modelruntime/service.go`, `management.go`, `store_management.go`, `services/core/internal/api/model_runtime*.go` |
 | Approval and capability gates | approvals + permissions + gateway/tool policy | `services/core/internal/approvals`, `services/core/internal/permissions`, `services/core/internal/gateway/tool_policy.go` |
 | Audit and trace linkage | audit service plus correlation/trace propagation | `services/core/internal/audit`, syscall/gateway/model-runtime bridge code |
+| Deterministic reflex routing | Rule Cells / Hyperlane | `services/core/internal/aios/rulecells`, `docs/architecture/rule_cells.md`, `docs/architecture/hyperlane.md` |
+
+## Memory taxonomy baseline
+
+FORGE memory is classified across three temporal horizons, six processing functions, and nine memory types. The taxonomy is an operating map, not a new authority system:
+
+- horizons: short-term, mid-term, long-term
+- functions: capture, recall, route, score, consolidate, forget
+- types: working, episodic, salience, prospective, reflective, utility, semantic, procedural, structural
+
+Memory type never implies truth authority. Canonical memory still requires semantic syscall validation and control-lane commit. Restore snapshots, Dream reports, retrieval/vector/VSA records, and restore outcome events remain non-canonical evidence unless a governed syscall promotes a specific claim.
+
+Reference:
+
+- [memory_taxonomy.md](memory_taxonomy.md)
 
 ## CPU/RAM kernel and GPU accelerator boundary
 
@@ -34,6 +49,8 @@ Boundary note:
 
 - [cpu_ram_kernel_gpu_accelerator_split.md](cpu_ram_kernel_gpu_accelerator_split.md)
 
+Rule Cells and Hyperlane run inside the CPU/RAM side of the system. They are deterministic reflex routers only: no modelruntime, no GPU, no network, no tool execution, no durable truth mutation.
+
 ## Landed Phase 3-5 architecture
 
 ### Phase 3: cognitive persistence is real
@@ -44,6 +61,7 @@ The control lane is no longer in-memory-only. Durable semantic persistence exist
 - commit boundaries run through `SQLiteTransactionRunner`
 - `journal_events` remains append-only at the DB level
 - context snapshot evidence persists in `context_packet_snapshots`
+- restore outcome feedback persists in `restore_outcome_events` as non-canonical evidence
 - `COMPILE_CONTEXT` can persist non-canonical snapshot evidence and restore-selection metadata
 
 This is real Phase 3 persistence, but not full mutation convergence across the whole repo.
@@ -120,6 +138,26 @@ Primary code:
 - `services/core/internal/aios/autonomy/*`
 - `services/core/internal/modelruntime/*`
 
+### Rule Cell / Hyperlane Substrate
+
+Phase 7 v0 adds deterministic Rule Cells as a CPU-local advisory substrate.
+
+What is true:
+
+- static rule packs are registered in `services/core/internal/aios/rulecells`
+- rules are lane/phase filtered and priority ordered
+- traces include matched rules, outputs, warnings, and pack id/version
+- restore scoring and Dream Mode consume Rule Cell outputs as non-canonical evidence
+- score adjustments are capped and final scores are clamped
+- engine failures emit warnings and fall back to deterministic base behavior
+
+What remains constrained:
+
+- Rule Cells are not agents and spawn no processes
+- Rule Cells do not commit truth
+- Rule Cells do not execute gateway tools or modelruntime inference
+- Rule Cells cannot loosen kernel, gateway, approval, capability, scope, or degraded-runtime denials
+
 ### I/O Lane
 
 Implemented responsibilities:
@@ -143,6 +181,9 @@ Primary code:
 - `future_iris` is a proposer source class, not a bypass for tool or syscall policy.
 - Model runtime is the owned inference substrate when enabled, but it is still non-streaming and does not yet expose dedicated gateway `model.*` aliases.
 - Context restore snapshots are evidence, not truth authority.
+- Restore outcome feedback is evidence about utility, not memory truth authority.
+- Rule Cell traces and Dream reports are evidence, not truth authority.
+- Vector, embedding, and VSA records are structural retrieval indexes, not truth authority.
 
 ## Known non-converged boundaries
 

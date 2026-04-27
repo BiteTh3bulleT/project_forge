@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -200,6 +201,7 @@ func (g *Gateway) registerBuiltinTools() {
 	register(&networkConnectivityTool{})
 	register(&networkDNSLookupTool{})
 	register(&networkFetchTool{})
+	register(&webSearchTool{})
 	register(&timeNowTool{})
 	register(&secretGetTool{db: g.db})
 	register(&writeFileTool{workspace: g.workspace})
@@ -2629,6 +2631,124 @@ func (t *networkFetchTool) Execute(ctx context.Context, req Request) (Result, er
 	}, nil
 }
 
+type webSearchTool struct{}
+
+func (t *webSearchTool) ID() string             { return "web.search" }
+func (t *webSearchTool) Domain() string         { return "network" }
+func (t *webSearchTool) Action() string         { return "search_web" }
+func (t *webSearchTool) RiskClass() string      { return "read_only" }
+func (t *webSearchTool) ExecutionLevel() string { return "L2" }
+func (t *webSearchTool) Executes() bool         { return false }
+func (t *webSearchTool) UsesNetwork() bool      { return true }
+func (t *webSearchTool) WriteIntent() bool      { return false }
+func (t *webSearchTool) Description() string {
+	return "Search the public web and return compact result titles, URLs, and snippets"
+}
+func (t *webSearchTool) Execute(ctx context.Context, req Request) (Result, error) {
+	query, _ := req.Input["query"].(string)
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return Result{}, errors.New("web.search requires input.query")
+	}
+	limit := 5
+	if v, ok := req.Input["limit"].(float64); ok && v > 0 {
+		limit = int(v)
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > 10 {
+		limit = 10
+	}
+	searchURL := "https://duckduckgo.com/html/?q=" + url.QueryEscape(query)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
+	if err != nil {
+		return Result{}, err
+	}
+	httpReq.Header.Set("User-Agent", "FORGE/1.0 web.search")
+	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(httpReq)
+	if err != nil {
+		return Result{}, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
+	results := parseDuckDuckGoHTMLResults(string(body), limit)
+	return Result{
+		Data: map[string]any{
+			"query":      query,
+			"searchUrl":  searchURL,
+			"statusCode": resp.StatusCode,
+			"ok":         resp.StatusCode >= 200 && resp.StatusCode < 300,
+			"results":    results,
+			"count":      len(results),
+		},
+		Message: "web search completed",
+	}, nil
+}
+
+func parseDuckDuckGoHTMLResults(rawHTML string, limit int) []map[string]any {
+	out := make([]map[string]any, 0, limit)
+	blocks := strings.Split(rawHTML, "result__body")
+	for _, block := range blocks {
+		if len(out) >= limit {
+			break
+		}
+		title := htmlText(firstRegexGroup(block, `(?s)class="result__a"[^>]*>(.*?)</a>`))
+		href := htmlEntityDecode(firstRegexGroup(block, `(?s)class="result__a"[^>]*href="([^"]+)"`))
+		snippet := htmlText(firstRegexGroup(block, `(?s)class="result__snippet"[^>]*>(.*?)</a>`))
+		if snippet == "" {
+			snippet = htmlText(firstRegexGroup(block, `(?s)class="result__snippet"[^>]*>(.*?)</div>`))
+		}
+		href = normalizeDuckDuckGoResultURL(href)
+		if title == "" || href == "" {
+			continue
+		}
+		out = append(out, map[string]any{"title": title, "url": href, "snippet": snippet})
+	}
+	return out
+}
+
+func firstRegexGroup(s, pattern string) string {
+	re := regexp.MustCompile(pattern)
+	m := re.FindStringSubmatch(s)
+	if len(m) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(m[1])
+}
+
+func htmlText(s string) string {
+	if s == "" {
+		return ""
+	}
+	tagRE := regexp.MustCompile(`(?s)<[^>]+>`)
+	text := tagRE.ReplaceAllString(s, " ")
+	text = htmlEntityDecode(text)
+	return strings.Join(strings.Fields(text), " ")
+}
+
+func htmlEntityDecode(s string) string {
+	replacer := strings.NewReplacer("&amp;", "&", "&lt;", "<", "&gt;", ">", "&quot;", `"`, "&#39;", "'", "&#x27;", "'")
+	return replacer.Replace(s)
+}
+
+func normalizeDuckDuckGoResultURL(raw string) string {
+	raw = strings.TrimSpace(htmlEntityDecode(raw))
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err == nil && parsed.Host != "" && strings.Contains(parsed.Host, "duckduckgo.com") {
+		if uddg := parsed.Query().Get("uddg"); uddg != "" {
+			if decoded, err := url.QueryUnescape(uddg); err == nil {
+				return decoded
+			}
+			return uddg
+		}
+	}
+	return raw
+}
+
 type secretGetTool struct{ db *sql.DB }
 
 type timeNowTool struct{}
@@ -2715,6 +2835,8 @@ func pathContains(scope, target string) bool {
 	if scope == "" || target == "" {
 		return false
 	}
+	scope = expandUserPath(scope)
+	target = expandUserPath(target)
 	absScope, err := filepath.Abs(scope)
 	if err != nil {
 		absScope = scope
@@ -2746,6 +2868,7 @@ func resolvePaths(workspace string, paths []string) []string {
 		if p == "" {
 			continue
 		}
+		p = expandUserPath(p)
 		if !filepath.IsAbs(p) {
 			p = filepath.Join(workspace, p)
 		}
@@ -2762,7 +2885,7 @@ func firstPath(paths []string, workspace string) (string, error) {
 	if len(paths) == 0 {
 		return "", errors.New("this tool requires at least one path")
 	}
-	p := strings.TrimSpace(paths[0])
+	p := expandUserPath(strings.TrimSpace(paths[0]))
 	if !filepath.IsAbs(p) {
 		p = filepath.Join(workspace, p)
 	}
@@ -2771,6 +2894,24 @@ func firstPath(paths []string, workspace string) (string, error) {
 		return "", err
 	}
 	return filepath.Clean(abs), nil
+}
+
+func expandUserPath(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return p
+	}
+	if p != "~" && !strings.HasPrefix(p, "~/") {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return p
+	}
+	if p == "~" {
+		return home
+	}
+	return filepath.Join(home, strings.TrimPrefix(p, "~/"))
 }
 
 func writeBytesFromInput(input map[string]any) int64 {

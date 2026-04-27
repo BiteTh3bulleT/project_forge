@@ -47,14 +47,14 @@ export function ReleasePage() {
 
       {firstRun ? (
         <Panel title="First-run summary" subtitle="Operator onboarding state from the core.">
-          <pre className="max-h-48 overflow-auto rounded border border-white/10 bg-black/25 p-3 font-mono text-[11px] text-forge-mist">{JSON.stringify(firstRun, null, 2)}</pre>
+          <pre className="max-h-48 overflow-auto rounded border border-forge-platinum/10 bg-black/25 p-3 font-mono text-[11px] text-forge-mist">{JSON.stringify(firstRun, null, 2)}</pre>
         </Panel>
       ) : null}
 
       <Panel title="Readiness checklist" subtitle="Each item is independently inspectable.">
         <div className="space-y-2">
           {items.map((it) => (
-            <div key={it.id} className="rounded border border-white/10 bg-forge-iron/30 p-3 text-xs text-forge-mist">
+            <div key={it.id} className="rounded border border-forge-platinum/10 bg-forge-iron/30 p-3 text-xs text-forge-mist">
               <div className="flex flex-wrap justify-between gap-2">
                 <span className="font-semibold text-forge-ash">{it.title}</span>
                 <span className={it.status === "ok" ? "text-forge-ash" : it.status === "fail" ? "text-forge-emberSoft" : ""}>{it.status}</span>
@@ -95,7 +95,7 @@ export function ReleasePage() {
       <Panel title="Recorded artifacts" subtitle="release_artifacts table — audit-friendly packaging history.">
         <div className="space-y-2">
           {artifacts.map((row, idx) => (
-            <pre key={idx} className="max-h-36 overflow-auto rounded border border-white/10 bg-black/25 p-2 font-mono text-[10px] text-forge-mist">
+            <pre key={idx} className="max-h-36 overflow-auto rounded border border-forge-platinum/10 bg-black/25 p-2 font-mono text-[10px] text-forge-mist">
               {JSON.stringify(row, null, 2)}
             </pre>
           ))}

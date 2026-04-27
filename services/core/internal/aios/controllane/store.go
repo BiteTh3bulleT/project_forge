@@ -110,6 +110,7 @@ type memoryState struct {
 	artifacts        map[string]domain.ArtifactRef
 	models           map[string]domain.AdaptivePolicyModel
 	contextSnapshots map[string]domain.ContextPacket
+	restoreOutcomes  map[string]RestoreOutcomeEvent
 	contradictions   map[string]ContradictionRecord
 	supersessions    map[string]SupersessionRecord
 	idempotency      map[string]IdempotencyRecord
@@ -125,6 +126,7 @@ func newMemoryState() memoryState {
 		artifacts:        map[string]domain.ArtifactRef{},
 		models:           map[string]domain.AdaptivePolicyModel{},
 		contextSnapshots: map[string]domain.ContextPacket{},
+		restoreOutcomes:  map[string]RestoreOutcomeEvent{},
 		contradictions:   map[string]ContradictionRecord{},
 		supersessions:    map[string]SupersessionRecord{},
 		idempotency:      map[string]IdempotencyRecord{},
@@ -158,6 +160,9 @@ func cloneState(in memoryState) memoryState {
 	}
 	for k, v := range in.contextSnapshots {
 		out.contextSnapshots[k] = v
+	}
+	for k, v := range in.restoreOutcomes {
+		out.restoreOutcomes[k] = v
 	}
 	for k, v := range in.contradictions {
 		out.contradictions[k] = v
@@ -423,6 +428,48 @@ func (s *InMemorySemanticStore) CreateContextSnapshot(pkt domain.ContextPacket) 
 	return nil
 }
 
+func (s *InMemorySemanticStore) CreateRestoreOutcome(ctx context.Context, event RestoreOutcomeEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	event = normalizeRestoreOutcomeEvent(event)
+	if event.ID == "" {
+		return fmt.Errorf("restore outcome id required")
+	}
+	if _, ok := s.state.restoreOutcomes[event.ID]; ok {
+		return fmt.Errorf("restore outcome %q already exists", event.ID)
+	}
+	s.state.restoreOutcomes[event.ID] = event
+	return nil
+}
+
+func (s *InMemorySemanticStore) GetRestoreOutcome(ctx context.Context, id string) (RestoreOutcomeEvent, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	event, ok := s.state.restoreOutcomes[strings.TrimSpace(id)]
+	return event, ok, nil
+}
+
+func (s *InMemorySemanticStore) ListRestoreOutcomes(ctx context.Context, filter RestoreOutcomeFilter) ([]RestoreOutcomeEvent, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return filterRestoreOutcomes(s.state.restoreOutcomes, filter), nil
+}
+
+func (s *InMemorySemanticStore) UpdateRestoreOutcomeFeedback(ctx context.Context, id string, scope domain.ForgeScope, feedback RestoreOutcomeFeedback) (RestoreOutcomeEvent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	event, ok := s.state.restoreOutcomes[strings.TrimSpace(id)]
+	if !ok {
+		return RestoreOutcomeEvent{}, restoreOutcomeNotFound(id)
+	}
+	if !restoreOutcomeMatchesScope(event, scope) {
+		return RestoreOutcomeEvent{}, fmt.Errorf("restore outcome %q outside requested scope", strings.TrimSpace(id))
+	}
+	event = applyRestoreOutcomeFeedback(event, feedback)
+	s.state.restoreOutcomes[event.ID] = event
+	return event, nil
+}
+
 func (s *InMemorySemanticStore) BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -665,8 +712,78 @@ func (s *TransactionalSemanticStore) ListContextSnapshots(scope domain.ForgeScop
 	return filterContextSnapshots(s.state.contextSnapshots, scope, query, snapshotKind, limit)
 }
 
+func (s *TransactionalSemanticStore) CreateRestoreOutcome(ctx context.Context, event RestoreOutcomeEvent) error {
+	event = normalizeRestoreOutcomeEvent(event)
+	if event.ID == "" {
+		return fmt.Errorf("restore outcome id required")
+	}
+	if _, ok := s.state.restoreOutcomes[event.ID]; ok {
+		return fmt.Errorf("restore outcome %q already exists", event.ID)
+	}
+	s.state.restoreOutcomes[event.ID] = event
+	return nil
+}
+
+func (s *TransactionalSemanticStore) GetRestoreOutcome(ctx context.Context, id string) (RestoreOutcomeEvent, bool, error) {
+	event, ok := s.state.restoreOutcomes[strings.TrimSpace(id)]
+	return event, ok, nil
+}
+
+func (s *TransactionalSemanticStore) ListRestoreOutcomes(ctx context.Context, filter RestoreOutcomeFilter) ([]RestoreOutcomeEvent, error) {
+	return filterRestoreOutcomes(s.state.restoreOutcomes, filter), nil
+}
+
+func (s *TransactionalSemanticStore) UpdateRestoreOutcomeFeedback(ctx context.Context, id string, scope domain.ForgeScope, feedback RestoreOutcomeFeedback) (RestoreOutcomeEvent, error) {
+	event, ok := s.state.restoreOutcomes[strings.TrimSpace(id)]
+	if !ok {
+		return RestoreOutcomeEvent{}, restoreOutcomeNotFound(id)
+	}
+	if !restoreOutcomeMatchesScope(event, scope) {
+		return RestoreOutcomeEvent{}, fmt.Errorf("restore outcome %q outside requested scope", strings.TrimSpace(id))
+	}
+	event = applyRestoreOutcomeFeedback(event, feedback)
+	s.state.restoreOutcomes[event.ID] = event
+	return event, nil
+}
+
 func (s *TransactionalSemanticStore) SetIdempotency(key string, rec IdempotencyRecord) {
 	s.state.idempotency[key] = rec
+}
+
+func filterRestoreOutcomes(all map[string]RestoreOutcomeEvent, filter RestoreOutcomeFilter) []RestoreOutcomeEvent {
+	filter = normalizeRestoreOutcomeFilter(filter)
+	matches := make([]RestoreOutcomeEvent, 0, filter.Limit)
+	for _, event := range all {
+		if filter.WorkspaceID != "" && strings.TrimSpace(event.WorkspaceID) != filter.WorkspaceID {
+			continue
+		}
+		if filter.LaneID != "" && strings.TrimSpace(event.LaneID) != "" && strings.TrimSpace(event.LaneID) != filter.LaneID {
+			continue
+		}
+		if filter.Query != "" && strings.TrimSpace(event.Query) != filter.Query {
+			continue
+		}
+		if filter.SnapshotID != "" && strings.TrimSpace(event.SnapshotID) != filter.SnapshotID {
+			continue
+		}
+		if filter.Outcome != "" && event.Outcome != filter.Outcome {
+			continue
+		}
+		if filter.Since > 0 && event.CreatedAt < filter.Since {
+			continue
+		}
+		matches = append(matches, event)
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		if matches[i].CreatedAt == matches[j].CreatedAt {
+			return matches[i].ID > matches[j].ID
+		}
+		return matches[i].CreatedAt > matches[j].CreatedAt
+	})
+	if len(matches) > filter.Limit {
+		matches = matches[:filter.Limit]
+	}
+	return matches
 }
 
 func filterContextSnapshots(all map[string]domain.ContextPacket, scope domain.ForgeScope, query, snapshotKind string, limit int) []domain.ContextPacket {

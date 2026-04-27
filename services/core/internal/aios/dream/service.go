@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"forge/projectforge/services/core/internal/aios/rulecells"
 )
 
 type Mode string
@@ -21,8 +23,13 @@ const (
 )
 
 type Service struct {
-	db    *sql.DB
-	clock func() time.Time
+	db         *sql.DB
+	clock      func() time.Time
+	ruleEngine RuleEngine
+}
+
+type RuleEngine interface {
+	Run(ctx context.Context, in rulecells.RunInput, opts rulecells.RunOptions) (rulecells.RunResult, error)
 }
 
 func NewService(db *sql.DB) *Service {
@@ -33,6 +40,10 @@ func (s *Service) SetClock(clock func() time.Time) {
 	if clock != nil {
 		s.clock = clock
 	}
+}
+
+func (s *Service) SetRuleEngine(engine RuleEngine) {
+	s.ruleEngine = engine
 }
 
 func (s *Service) Close() error { return nil }
@@ -87,18 +98,21 @@ type ReplayCandidate struct {
 }
 
 type SalienceScore struct {
-	CandidateID           string   `json:"candidate_id"`
-	NoveltyScore          float64  `json:"novelty_score"`
-	RepetitionScore       float64  `json:"repetition_score"`
-	GoalRelevanceScore    float64  `json:"goal_relevance_score"`
-	CorrectionValueScore  float64  `json:"correction_value_score"`
-	OutcomeImpactScore    float64  `json:"outcome_impact_score"`
-	ContradictionScore    float64  `json:"contradiction_score"`
-	RetrievalUtilityScore float64  `json:"retrieval_utility_score"`
-	RecencyScore          float64  `json:"recency_score"`
-	TotalSalience         float64  `json:"total_salience"`
-	Confidence            float64  `json:"confidence"`
-	Explain               []string `json:"explain"`
+	CandidateID            string         `json:"candidate_id"`
+	NoveltyScore           float64        `json:"novelty_score"`
+	RepetitionScore        float64        `json:"repetition_score"`
+	GoalRelevanceScore     float64        `json:"goal_relevance_score"`
+	CorrectionValueScore   float64        `json:"correction_value_score"`
+	OutcomeImpactScore     float64        `json:"outcome_impact_score"`
+	ContradictionScore     float64        `json:"contradiction_score"`
+	RetrievalUtilityScore  float64        `json:"retrieval_utility_score"`
+	RecencyScore           float64        `json:"recency_score"`
+	PreRuleTotalSalience   float64        `json:"pre_rule_total_salience,omitempty"`
+	RuleSalienceAdjustment float64        `json:"rule_salience_adjustment,omitempty"`
+	RuleTrace              map[string]any `json:"rule_trace,omitempty"`
+	TotalSalience          float64        `json:"total_salience"`
+	Confidence             float64        `json:"confidence"`
+	Explain                []string       `json:"explain"`
 }
 
 type TierDecision string
@@ -125,19 +139,23 @@ type RoutingProposal struct {
 }
 
 type DreamReport struct {
-	Run                             DreamRun          `json:"run"`
-	Candidates                      []ReplayCandidate `json:"candidates"`
-	SalienceScores                  []SalienceScore   `json:"salience_scores"`
-	ProposedTierRouting             []RoutingProposal `json:"proposed_tier_routing"`
-	ProposedMemoryActions           []RoutingProposal `json:"proposed_memory_actions"`
-	ProposedSnapshotHygieneActions  []RoutingProposal `json:"proposed_snapshot_hygiene_actions"`
-	ProposedRestoreScoreUpdates     []RoutingProposal `json:"proposed_restore_score_updates"`
-	ProposedEmbeddingRefreshActions []RoutingProposal `json:"proposed_embedding_refresh_actions"`
-	ProposedRepairActions           []RoutingProposal `json:"proposed_repair_actions"`
-	ItemsRequiringReview            []RoutingProposal `json:"items_requiring_review"`
-	NoOpReasons                     []string          `json:"no_op_reasons"`
-	Warnings                        []string          `json:"warnings"`
-	Trace                           map[string]any    `json:"trace"`
+	Run                               DreamRun          `json:"run"`
+	Candidates                        []ReplayCandidate `json:"candidates"`
+	SalienceScores                    []SalienceScore   `json:"salience_scores"`
+	ProposedTierRouting               []RoutingProposal `json:"proposed_tier_routing"`
+	ProposedMemoryActions             []RoutingProposal `json:"proposed_memory_actions"`
+	ProposedSnapshotHygieneActions    []RoutingProposal `json:"proposed_snapshot_hygiene_actions"`
+	ProposedRestoreScoreUpdates       []RoutingProposal `json:"proposed_restore_score_updates"`
+	ProposedEmbeddingRefreshActions   []RoutingProposal `json:"proposed_embedding_refresh_actions"`
+	ProposedRepairActions             []RoutingProposal `json:"proposed_repair_actions"`
+	RestoreOutcomeCandidates          []ReplayCandidate `json:"restore_outcome_candidates,omitempty"`
+	MemoryGapProposals                []RoutingProposal `json:"memory_gap_proposals,omitempty"`
+	StaleEvidenceReviewProposals      []RoutingProposal `json:"stale_evidence_review_proposals,omitempty"`
+	HelpfulEvidencePromotionProposals []RoutingProposal `json:"helpful_evidence_promotion_proposals,omitempty"`
+	ItemsRequiringReview              []RoutingProposal `json:"items_requiring_review"`
+	NoOpReasons                       []string          `json:"no_op_reasons"`
+	Warnings                          []string          `json:"warnings"`
+	Trace                             map[string]any    `json:"trace"`
 }
 
 func (s *Service) Run(ctx context.Context, req RunRequest) (DreamReport, error) {
@@ -157,7 +175,11 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (DreamReport, error) 
 		return DreamReport{}, err
 	}
 	scores := ScoreCandidates(candidates, now)
+	ruleTrace, blockedLongTerm, ruleWarnings := s.applyRuleCells(ctx, candidates, scores, now)
 	routing := RouteCandidates(candidates, scores, req, dryRun)
+	if len(blockedLongTerm) > 0 {
+		applyLongTermBlocks(routing, blockedLongTerm)
+	}
 	report := DreamReport{
 		Run: DreamRun{
 			RunID:                stableID("dream", req.WorkspaceID, req.LaneID, string(req.Mode), fmt.Sprint(started)),
@@ -188,7 +210,21 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (DreamReport, error) 
 			"max_candidates":            req.MaxCandidates,
 		},
 	}
+	if len(ruleTrace) > 0 {
+		report.Trace["rule_cells"] = ruleTrace
+	}
+	if len(ruleWarnings) > 0 {
+		report.Warnings = append(report.Warnings, ruleWarnings...)
+	}
+	candidateByID := map[string]ReplayCandidate{}
+	for _, candidate := range candidates {
+		candidateByID[candidate.CandidateID] = candidate
+		if candidate.SourceType == "restore_outcome" {
+			report.RestoreOutcomeCandidates = append(report.RestoreOutcomeCandidates, candidate)
+		}
+	}
 	for _, proposal := range routing {
+		candidate := candidateByID[proposal.CandidateID]
 		switch proposal.Decision {
 		case NeedsReview:
 			report.ItemsRequiringReview = append(report.ItemsRequiringReview, proposal)
@@ -197,9 +233,19 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (DreamReport, error) 
 		case Noop, Discard:
 			report.NoOpReasons = append(report.NoOpReasons, proposal.CandidateID+": "+proposal.Reason)
 		}
-		if proposal.SourceType == "context_snapshot" {
+		if proposal.SourceType == "context_snapshot" || proposal.SourceType == "restore_outcome" {
 			report.ProposedSnapshotHygieneActions = append(report.ProposedSnapshotHygieneActions, proposal)
 			report.ProposedRestoreScoreUpdates = append(report.ProposedRestoreScoreUpdates, proposal)
+		}
+		if proposal.SourceType == "restore_outcome" {
+			switch {
+			case hasAnyTag(candidate, "fresh_compile_required", "no_candidate", "memory_gap"):
+				report.MemoryGapProposals = append(report.MemoryGapProposals, proposal)
+			case hasAnyTag(candidate, "harmful", "stale", "contradictory", "not_helpful", "operator_corrected"):
+				report.StaleEvidenceReviewProposals = append(report.StaleEvidenceReviewProposals, proposal)
+			case hasAnyTag(candidate, "helpful"):
+				report.HelpfulEvidencePromotionProposals = append(report.HelpfulEvidencePromotionProposals, proposal)
+			}
 		}
 		if proposal.SourceType == "memory_note" || proposal.SourceType == "context_snapshot" {
 			report.ProposedEmbeddingRefreshActions = append(report.ProposedEmbeddingRefreshActions, proposal)
@@ -261,6 +307,7 @@ func (s *Service) SelectReplayCandidates(ctx context.Context, req RunRequest, si
 	loaders := []func(context.Context, RunRequest, int64, int64) ([]ReplayCandidate, error){
 		s.loadJournalEvents,
 		s.loadContextSnapshots,
+		s.loadRestoreOutcomeEvents,
 		s.loadMemoryNotes,
 		s.loadStateItems,
 		s.loadOpenLoops,
@@ -323,6 +370,57 @@ func (s *Service) loadContextSnapshots(ctx context.Context, req RunRequest, sinc
 		c.RelatedSnapshotIDs = []string{id}
 		if strings.Contains(scores+hints, "fresh_compile") || strings.Contains(scores+hints, "below_threshold") {
 			c.RawImportanceSignals["failed_restore"] = 1
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) loadRestoreOutcomeEvents(ctx context.Context, req RunRequest, since, until int64) ([]ReplayCandidate, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,query,workspace_id,lane_id,context_packet_id,snapshot_id,restore_score,requires_fresh_compile,outcome,outcome_confidence,operator_feedback,correction_summary,correlation_id,trace_id,created_at FROM restore_outcome_events WHERE workspace_id=? AND (?='' OR lane_id='' OR lane_id=?) AND created_at BETWEEN ? AND ? ORDER BY created_at DESC LIMIT ?`, req.WorkspaceID, req.LaneID, req.LaneID, since, until, req.MaxCandidates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ReplayCandidate{}
+	for rows.Next() {
+		var id, query, ws, lane, packetID, snapshotID, outcome, feedback, correction, corr, trace string
+		var restoreScore, confidence float64
+		var requiresFresh int
+		var ts int64
+		if err := rows.Scan(&id, &query, &ws, &lane, &packetID, &snapshotID, &restoreScore, &requiresFresh, &outcome, &confidence, &feedback, &correction, &corr, &trace, &ts); err != nil {
+			return nil, err
+		}
+		tags := tagsFromText(strings.Join([]string{"restore_outcome", outcome, feedback, correction}, " "))
+		tags = append(tags, "restore_outcome", outcome)
+		if requiresFresh != 0 || outcome == "fresh_compile_required" || outcome == "no_candidate" {
+			tags = append(tags, "memory_gap")
+		}
+		if outcome == "operator_corrected" {
+			tags = append(tags, "correction", "corrected", "user_correction")
+		}
+		if outcome == "harmful" || outcome == "stale" || outcome == "contradictory" || outcome == "not_helpful" || outcome == "failed_execution" {
+			tags = append(tags, "failed", "review")
+		}
+		c := replayCandidate("restore_outcome", id, ws, lane, ts, outcome+" restore outcome for "+query, normalizeTags(tags), corr, trace)
+		c.SourceIDs = normalizeStrings([]string{id, packetID, snapshotID})
+		if snapshotID != "" {
+			c.RelatedSnapshotIDs = []string{snapshotID}
+		}
+		c.RawImportanceSignals["confidence"] = confidence
+		c.RawImportanceSignals["restore_score"] = restoreScore
+		c.RawImportanceSignals["restore_outcome"] = 1
+		if outcome == "operator_corrected" {
+			c.RawImportanceSignals["correction"] = 1
+		}
+		if hasAnyTag(c, "harmful", "stale", "contradictory", "not_helpful", "failed_execution") {
+			c.RawImportanceSignals["outcome_impact"] = 1
+		}
+		if hasAnyTag(c, "memory_gap") {
+			c.RawImportanceSignals["memory_gap"] = 1
+		}
+		if outcome == "helpful" {
+			c.RawImportanceSignals["helpful"] = 1
 		}
 		out = append(out, c)
 	}
@@ -440,10 +538,10 @@ func ScoreCandidates(candidates []ReplayCandidate, now int64) []SalienceScore {
 			NoveltyScore:          clamp01(1 - rep),
 			RepetitionScore:       rep,
 			GoalRelevanceScore:    boolScore(hasAnyTag(c, "open", "active", "blocker", "critical", "high")),
-			CorrectionValueScore:  boolScore(hasAnyTag(c, "correction", "corrected", "preference", "user_correction")),
-			OutcomeImpactScore:    boolScore(hasAnyTag(c, "failed", "failure", "blocked", "error", "timeout") || c.RawImportanceSignals["failed_restore"] > 0),
+			CorrectionValueScore:  boolScore(hasAnyTag(c, "correction", "corrected", "preference", "user_correction", "operator_corrected") || c.RawImportanceSignals["correction"] > 0),
+			OutcomeImpactScore:    boolScore(hasAnyTag(c, "failed", "failure", "blocked", "error", "timeout", "harmful", "stale", "not_helpful", "failed_execution") || c.RawImportanceSignals["failed_restore"] > 0 || c.RawImportanceSignals["outcome_impact"] > 0),
 			ContradictionScore:    boolScore(c.SourceType == "contradiction" || hasAnyTag(c, "contradiction", "conflict", "unresolved")),
-			RetrievalUtilityScore: boolScore(c.SourceType == "context_snapshot" || len(c.RelatedSnapshotIDs) > 0),
+			RetrievalUtilityScore: boolScore(c.SourceType == "context_snapshot" || c.SourceType == "restore_outcome" || len(c.RelatedSnapshotIDs) > 0),
 			RecencyScore:          recency(now, c.EndTimestamp),
 		}
 		score.TotalSalience = clamp01(
@@ -456,6 +554,20 @@ func ScoreCandidates(candidates []ReplayCandidate, now int64) []SalienceScore {
 				0.05*score.RetrievalUtilityScore +
 				0.10*score.RecencyScore,
 		)
+		switch {
+		case hasAnyTag(c, "operator_corrected"):
+			score.TotalSalience = math.Max(score.TotalSalience, 0.88)
+		case hasAnyTag(c, "harmful", "stale", "contradictory"):
+			score.TotalSalience = math.Max(score.TotalSalience, 0.78)
+		case hasAnyTag(c, "fresh_compile_required", "no_candidate", "memory_gap"):
+			score.TotalSalience = math.Max(score.TotalSalience, 0.70)
+		case hasAnyTag(c, "helpful") && score.RepetitionScore > 0:
+			score.TotalSalience = math.Max(score.TotalSalience, 0.72)
+		case hasAnyTag(c, "helpful"):
+			score.TotalSalience = math.Max(score.TotalSalience, 0.55)
+		}
+		score.TotalSalience = clamp01(score.TotalSalience)
+		score.PreRuleTotalSalience = score.TotalSalience
 		score.Confidence = clamp01((score.TotalSalience + c.RawImportanceSignals["confidence"] + 0.5) / 2)
 		score.Explain = salienceExplain(score)
 		out = append(out, score)
@@ -478,7 +590,20 @@ func RouteCandidates(candidates []ReplayCandidate, scores []SalienceScore, req R
 	for _, score := range scores {
 		decision := RetainShortTerm
 		reason := "recent replay candidate retained in short-term tier"
+		candidate := byID[score.CandidateID]
 		switch {
+		case candidate.SourceType == "restore_outcome" && hasAnyTag(candidate, "operator_corrected", "contradictory"):
+			decision = NeedsReview
+			reason = "restore outcome feedback requires governed review before memory promotion"
+		case candidate.SourceType == "restore_outcome" && hasAnyTag(candidate, "harmful", "stale", "not_helpful", "failed_execution"):
+			decision = NeedsReview
+			reason = "restore outcome marks selected evidence as stale or harmful"
+		case candidate.SourceType == "restore_outcome" && hasAnyTag(candidate, "fresh_compile_required", "no_candidate", "memory_gap"):
+			decision = NeedsReview
+			reason = "repeated restore miss is a memory gap proposal"
+		case candidate.SourceType == "restore_outcome" && hasAnyTag(candidate, "helpful") && score.TotalSalience >= 0.55:
+			decision = PromoteMidTerm
+			reason = "helpful restore evidence is a promotion candidate"
 		case score.ContradictionScore > 0 && score.Confidence < 0.85:
 			decision = NeedsReview
 			reason = "unresolved contradiction requires operator review before promotion"
@@ -506,14 +631,168 @@ func RouteCandidates(candidates []ReplayCandidate, scores []SalienceScore, req R
 			decision = Noop
 			reason = "insufficient salience for memory tier action"
 		}
-		sourceType := byID[score.CandidateID].SourceType
-		if c := byID[score.CandidateID]; c.SourceType == "memory_note" && decision == RetainShortTerm && score.TotalSalience < 0.35 {
+		sourceType := candidate.SourceType
+		if c := candidate; c.SourceType == "memory_note" && decision == RetainShortTerm && score.TotalSalience < 0.35 {
 			decision = Demote
 			reason = "low-salience derived memory note can be demoted without touching journal truth"
 		}
 		out = append(out, RoutingProposal{CandidateID: score.CandidateID, SourceType: sourceType, Decision: decision, Confidence: score.Confidence, Reason: reason, DryRun: dryRun})
 	}
 	return out
+}
+
+const (
+	maxDreamRuleSalienceAdjustment       = 0.15
+	maxDreamIndividualSalienceAdjustment = 0.08
+)
+
+func (s *Service) applyRuleCells(ctx context.Context, candidates []ReplayCandidate, scores []SalienceScore, now int64) ([]map[string]any, map[string]bool, []string) {
+	if s == nil || s.ruleEngine == nil {
+		return nil, nil, nil
+	}
+	byID := map[string]ReplayCandidate{}
+	for _, candidate := range candidates {
+		byID[candidate.CandidateID] = candidate
+	}
+	traces := []map[string]any{}
+	warnings := []string{}
+	blockedLongTerm := map[string]bool{}
+	for idx := range scores {
+		candidate := byID[scores[idx].CandidateID]
+		failureCount := 0
+		if hasAnyTag(candidate, "failed", "failure", "error", "timeout", "blocked") || candidate.RawImportanceSignals["failed_restore"] > 0 {
+			failureCount = 1
+		}
+		if scores[idx].RepetitionScore > 0 {
+			failureCount++
+		}
+		facts := map[string]any{
+			"tags":                append([]string(nil), candidate.Tags...),
+			"candidate_id":        candidate.CandidateID,
+			"source_type":         candidate.SourceType,
+			"contradiction_score": scores[idx].ContradictionScore,
+			"failure_count":       failureCount,
+			"total_salience":      scores[idx].TotalSalience,
+			"created_at":          candidate.EndTimestamp,
+			"age_ms":              now - candidate.EndTimestamp,
+		}
+		result, err := s.ruleEngine.Run(ctx, rulecells.RunInput{
+			Lane:      rulecells.LaneLymphatic,
+			Phase:     rulecells.PhaseSalienceScoring,
+			InputID:   candidate.CandidateID,
+			InputType: "dream_candidate",
+			Facts:     facts,
+		}, rulecells.RunOptions{DryRun: true, MaxLatencyMs: 5})
+		if err != nil {
+			warnings = append(warnings, "dream rule engine failed during salience scoring: "+err.Error())
+		} else {
+			adjustment := boundedDreamAdjustment(result.Outputs)
+			scores[idx].RuleSalienceAdjustment = adjustment
+			scores[idx].TotalSalience = clamp01(scores[idx].TotalSalience + adjustment)
+			scores[idx].Confidence = clamp01((scores[idx].TotalSalience + candidate.RawImportanceSignals["confidence"] + 0.5) / 2)
+			if len(result.Trace.MatchedRules) > 0 || len(result.Trace.Warnings) > 0 {
+				scores[idx].RuleTrace = dreamRuleTraceMap(result.Trace)
+			}
+			if adjustment != 0 {
+				scores[idx].Explain = append(scores[idx].Explain, fmt.Sprintf("rule cell salience adjustment %.3f", adjustment))
+			}
+			warnings = append(warnings, result.Warnings...)
+			if len(result.Trace.MatchedRules) > 0 || len(result.Trace.Warnings) > 0 {
+				traces = append(traces, dreamRuleTraceMap(result.Trace))
+			}
+		}
+
+		tierResult, err := s.ruleEngine.Run(ctx, rulecells.RunInput{
+			Lane:      rulecells.LaneLymphatic,
+			Phase:     rulecells.PhaseMemoryTierRouting,
+			InputID:   candidate.CandidateID,
+			InputType: "dream_candidate",
+			Facts:     facts,
+		}, rulecells.RunOptions{DryRun: true, MaxLatencyMs: 5})
+		if err != nil {
+			warnings = append(warnings, "dream rule engine failed during tier routing: "+err.Error())
+			continue
+		}
+		for _, output := range tierResult.Outputs {
+			if output.Type == rulecells.OutputPolicyDecision && strings.EqualFold(output.Decision, "block_long_term_promotion") {
+				blockedLongTerm[candidate.CandidateID] = true
+			}
+		}
+		warnings = append(warnings, tierResult.Warnings...)
+		if len(tierResult.Trace.MatchedRules) > 0 {
+			traces = append(traces, dreamRuleTraceMap(tierResult.Trace))
+		}
+	}
+	sort.Slice(scores, func(i, j int) bool {
+		if scores[i].TotalSalience == scores[j].TotalSalience {
+			return scores[i].CandidateID < scores[j].CandidateID
+		}
+		return scores[i].TotalSalience > scores[j].TotalSalience
+	})
+	return traces, blockedLongTerm, warnings
+}
+
+func boundedDreamAdjustment(outputs []rulecells.RuleOutput) float64 {
+	total := 0.0
+	for _, output := range outputs {
+		if output.Type != rulecells.OutputScoreAdjustment {
+			continue
+		}
+		delta := output.ScoreDelta
+		if delta > maxDreamIndividualSalienceAdjustment {
+			delta = maxDreamIndividualSalienceAdjustment
+		}
+		if delta < -maxDreamIndividualSalienceAdjustment {
+			delta = -maxDreamIndividualSalienceAdjustment
+		}
+		total += delta
+	}
+	if total > maxDreamRuleSalienceAdjustment {
+		return maxDreamRuleSalienceAdjustment
+	}
+	if total < -maxDreamRuleSalienceAdjustment {
+		return -maxDreamRuleSalienceAdjustment
+	}
+	return math.Round(total*1000) / 1000
+}
+
+func applyLongTermBlocks(routes []RoutingProposal, blocked map[string]bool) {
+	for idx := range routes {
+		if !blocked[routes[idx].CandidateID] || routes[idx].Decision != PromoteLongTerm {
+			continue
+		}
+		routes[idx].Decision = NeedsReview
+		routes[idx].Reason = "rule cell blocked long-term promotion; operator review required"
+	}
+}
+
+func dreamRuleTraceMap(trace rulecells.RuleTrace) map[string]any {
+	packs := make([]map[string]any, 0, len(trace.RulePacks))
+	for _, pack := range trace.RulePacks {
+		packs = append(packs, map[string]any{"pack_id": pack.ID, "version": pack.Version})
+	}
+	matched := make([]map[string]any, 0, len(trace.MatchedRules))
+	for _, rule := range trace.MatchedRules {
+		matched = append(matched, map[string]any{
+			"rule_id":      rule.RuleID,
+			"rule_version": rule.RuleVersion,
+			"pack_id":      rule.PackID,
+			"pack_version": rule.PackVersion,
+			"output_types": rule.OutputTypes,
+			"explain":      rule.Explain,
+		})
+	}
+	return map[string]any{
+		"trace_id":        trace.TraceID,
+		"lane":            trace.Lane,
+		"phase":           trace.Phase,
+		"input_id":        trace.InputID,
+		"latency_ms":      trace.LatencyMs,
+		"rules_evaluated": trace.RulesEvaluated,
+		"rule_packs":      packs,
+		"matched_rules":   matched,
+		"warnings":        trace.Warnings,
+	}
 }
 
 func replayCandidate(sourceType, id, ws, lane string, ts int64, summary string, tags []string, corr, trace string) ReplayCandidate {
@@ -568,6 +847,40 @@ func tagsFromText(raw string) []string {
 	out := make([]string, 0, len(seen))
 	for tag := range seen {
 		out = append(out, tag)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func normalizeTags(tags []string) []string {
+	seen := map[string]struct{}{}
+	for _, tag := range tags {
+		trimmed := strings.TrimSpace(strings.ToLower(tag))
+		if trimmed == "" {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+	}
+	out := make([]string, 0, len(seen))
+	for tag := range seen {
+		out = append(out, tag)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func normalizeStrings(values []string) []string {
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+	}
+	out := make([]string, 0, len(seen))
+	for value := range seen {
+		out = append(out, value)
 	}
 	sort.Strings(out)
 	return out

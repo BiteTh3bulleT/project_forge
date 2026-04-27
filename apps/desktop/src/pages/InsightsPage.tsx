@@ -76,11 +76,11 @@ export function InsightsPage() {
         ) : (
           <div className="space-y-2">
             {insights.map((row) => (
-              <div key={row.id} className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+              <div key={row.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
                 <div className="font-semibold text-forge-ash">{row.adapterId} - {row.taskType}</div>
                 <div className="mt-1">{row.recommendation}</div>
                 <div className="mt-1">confidence {(row.confidence * 100).toFixed(1)}% | dossier {row.dossierId ?? "global"} | {formatTime(row.createdAtMs)}</div>
-                <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-ash">{JSON.stringify({ reasons: row.reasons, evidence: row.evidence }, null, 2)}</pre>
+                <pre className="mt-2 max-h-44 overflow-auto whitespace-pre-wrap rounded border border-forge-platinum/10 bg-black/30 p-2 text-[11px] text-forge-ash">{JSON.stringify({ reasons: row.reasons, evidence: row.evidence }, null, 2)}</pre>
               </div>
             ))}
           </div>
@@ -158,7 +158,7 @@ export function InsightsPage() {
               <div className="text-sm text-forge-mist">No imports yet.</div>
             ) : (
               importsList.map((x) => (
-                <div key={x.id} className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+                <div key={x.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
                   <div className="font-semibold text-forge-ash">#{x.id} - {x.adapterId}</div>
                   <div className="mt-1">{x.summary}</div>
                   <div className="mt-1">run {x.externalRunId || "n/a"} | job {x.originJobId ?? "none"} | packet {x.originPacketId ?? "none"}</div>
@@ -186,7 +186,7 @@ export function InsightsPage() {
           ) : (
             <div className="space-y-2">
               {embedStatus.map((srow) => (
-                <div key={srow.sourceId} className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+                <div key={srow.sourceId} className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
                   <div className="font-semibold text-forge-ash">source {srow.sourceId}</div>
                   <div className="mt-1">{srow.path}</div>
                   <div className="mt-1">ready {srow.readyChunks}/{srow.totalChunks} | failed {srow.failedChunks}</div>

@@ -67,6 +67,10 @@ func TestShouldAttachChatTools(t *testing.T) {
 		{name: "python banner enabled", in: `Create scratch/Python directory. Inside the directory create a simple scrolling banner python script that says "FORGE LIVES!" in vegas lights font.`, want: true},
 		{name: "mkdir write enabled", in: `create a file labeled "test.txt" inside scratch/not_another_test/ and inside said file the words "This is a test file"`, want: true},
 		{name: "shell run enabled", in: "run go test ./...", want: true},
+		{name: "web search enabled", in: "search the web for forge ai os", want: true},
+		{name: "weather with location enabled", in: "what is the weather in Chicago today?", want: true},
+		{name: "weather without location disabled", in: "what is the weather looking like today?", want: false},
+		{name: "browser open enabled", in: "open browser https://example.com", want: true},
 		{name: "chat question disabled", in: "How do you operate?", want: false},
 	}
 	for _, tc := range cases {
@@ -78,6 +82,41 @@ func TestShouldAttachChatTools(t *testing.T) {
 				t.Fatalf("ShouldAttachChatTools(%q)=%v want %v", tc.in, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestForcedChatModelNameWebAndBrowser(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "web search", in: "search the web for FORGE docs", want: ChatModelName("web.search")},
+		{name: "weather with location", in: "what is the weather in Chicago today?", want: ChatModelName("web.search")},
+		{name: "fetch url", in: "fetch https://example.com", want: ChatModelName("net.fetch")},
+		{name: "open browser", in: "open browser https://example.com", want: ChatModelName("desktop.open")},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ForcedChatModelName(tc.in); got != tc.want {
+				t.Fatalf("ForcedChatModelName(%q)=%q want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestParseWebSearchQueryAndURL(t *testing.T) {
+	t.Parallel()
+	query, ok := ParseWebSearchQuery("search the web for model runtime adapters")
+	if !ok || query != "model runtime adapters" {
+		t.Fatalf("ParseWebSearchQuery got %q ok=%v", query, ok)
+	}
+	rawURL, ok := ParseURLFromText("open browser https://example.com/test.")
+	if !ok || rawURL != "https://example.com/test" {
+		t.Fatalf("ParseURLFromText got %q ok=%v", rawURL, ok)
 	}
 }
 

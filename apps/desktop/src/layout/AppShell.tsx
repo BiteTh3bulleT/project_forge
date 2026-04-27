@@ -264,6 +264,7 @@ export function AppShell(props: AppShellProps) {
   const runtimeState = core === "offline" ? "offline" : shellErr ? "degraded" : "online";
   const pinnedWindows = windows.filter((item) => item.pinned);
   const floatingWindows = windows.filter((item) => !item.pinned);
+  const isChatRoute = pathname === "/chat";
 
   return (
     <div className="forge-shell-frame flex h-full min-h-0 flex-col text-forge-ash">
@@ -348,7 +349,7 @@ export function AppShell(props: AppShellProps) {
               );
             })}
           </nav>
-          <div className="border-t border-white/10 p-2">
+          <div className="border-t border-forge-platinum/10 p-2">
             <button type="button" onClick={() => openWindow("surfaces", "Surface Directory")} className="forge-nav-item w-full">
               <span className="forge-nav-item__short">··</span>
               <span>More</span>
@@ -368,31 +369,33 @@ export function AppShell(props: AppShellProps) {
             </div>
           ) : null}
 
-          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(74,99,255,0.08),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0))]">
-            <main className="forge-desktop-surface">
-              <div className="forge-window-frame forge-window-frame--focus">
-                <div className="forge-focus-head">
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist/55">
-                      {uiMode === "metrics" ? "System Metrics" : "Cognitive State"}
+          <div className="forge-main-field flex min-h-0 min-w-0 flex-1 overflow-hidden">
+            <main className={cx("forge-desktop-surface", isChatRoute && "forge-desktop-surface--flush")}>
+              <div className={cx("forge-window-frame forge-window-frame--focus", isChatRoute && "forge-window-frame--chat")}>
+                {!isChatRoute ? (
+                  <div className="forge-focus-head">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist/55">
+                        {uiMode === "metrics" ? "System Metrics" : "Cognitive State"}
+                      </div>
+                      <div className="mt-1 truncate text-sm font-semibold text-forge-ash">{currentTool.label}</div>
                     </div>
-                    <div className="mt-1 truncate text-sm font-semibold text-forge-ash">{currentTool.label}</div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    {level !== "none" ? (
-                      <button type="button" onClick={() => openWindow("diagnostics", "Attention")} className="forge-chip forge-chip--warn px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
-                        Attention {attentionCount}
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {level !== "none" ? (
+                        <button type="button" onClick={() => openWindow("diagnostics", "Attention")} className="forge-chip forge-chip--warn px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
+                          Attention {attentionCount}
+                        </button>
+                      ) : null}
+                      <button type="button" onClick={() => openWindow("inspector", "Inspector")} className="forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
+                        Inspector
                       </button>
-                    ) : null}
-                    <button type="button" onClick={() => openWindow("inspector", "Inspector")} className="forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
-                      Inspector
-                    </button>
-                    <button type="button" onClick={() => openWindow("snapshot", "Restore Snapshot")} className="forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
-                      Snapshot
-                    </button>
+                      <button type="button" onClick={() => openWindow("snapshot", "Restore Snapshot")} className="forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
+                        Snapshot
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className={pathname === "/chat" ? "min-h-0 flex flex-1 overflow-hidden p-3 sm:p-4" : "min-h-0 flex-1 overflow-auto px-4 py-4 sm:px-5 lg:px-6"}>
+                ) : null}
+                <div className={isChatRoute ? "min-h-0 flex flex-1 overflow-hidden p-0" : "min-h-0 flex-1 overflow-auto px-4 py-4 sm:px-5 lg:px-6"}>
                   {props.children}
                 </div>
               </div>

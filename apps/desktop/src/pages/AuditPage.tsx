@@ -44,7 +44,7 @@ function JsonBlock(props: { value: unknown; empty?: string; maxHeightClass?: str
   return (
     <pre
       className={cx(
-        "overflow-auto rounded border border-white/10 bg-black/25 p-3 font-mono text-[11px] text-forge-mist",
+        "overflow-auto rounded border border-forge-platinum/10 bg-black/25 p-3 font-mono text-[11px] text-forge-mist",
         props.maxHeightClass ?? "max-h-[220px]",
       )}
     >
@@ -55,7 +55,7 @@ function JsonBlock(props: { value: unknown; empty?: string; maxHeightClass?: str
 
 function CountPill(props: { label: string; value: string | number }) {
   return (
-    <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist">
+    <div className="rounded-full border border-forge-platinum/10 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist">
       <span className="text-forge-mist/65">{props.label}</span> {props.value}
     </div>
   );
@@ -144,7 +144,7 @@ export function AuditPage() {
           <div className="flex flex-wrap gap-2">
             <Link
               to={correlation ? `/inspectors?correlationId=${encodeURIComponent(correlation)}` : "/inspectors"}
-              className="rounded border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
+              className="rounded border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
             >
               Open inspectors
             </Link>
@@ -171,10 +171,10 @@ export function AuditPage() {
           </div>
         ) : null}
         <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-          <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">
+          <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3 text-sm text-forge-mist">
             Use the list to find a governed action, then pivot into a single correlation trace to reconstruct the exact sequence of persisted audit events.
           </div>
-          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+          <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3">
             <div className="text-[10px] uppercase tracking-[0.14em] text-forge-mist/65">Current view</div>
             <div className="mt-2 flex flex-wrap gap-2">
               <CountPill label="Rows" value={records.length} />
@@ -215,7 +215,7 @@ export function AuditPage() {
         <div className="mt-4 space-y-2">
           {trace.length === 0 ? <div className="text-sm text-forge-mist">No trace loaded.</div> : null}
           {trace.map((rec) => (
-            <div key={rec.id} className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+            <div key={rec.id} className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="font-mono text-forge-ash">
                   {rec.createdAtMs ? formatTime(rec.createdAtMs) : ""} · {rec.category}.{rec.action}
@@ -243,7 +243,7 @@ export function AuditPage() {
         <div className="space-y-2">
           {records.length === 0 ? <div className="text-sm text-forge-mist">No records (or core offline).</div> : null}
           {records.map((rec) => (
-            <div key={rec.id} className="rounded-xl border border-white/10 bg-forge-iron/30 p-3 text-xs text-forge-mist">
+            <div key={rec.id} className="rounded-xl border border-forge-platinum/10 bg-forge-iron/30 p-3 text-xs text-forge-mist">
               <div className="flex flex-wrap justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-mono text-forge-ash">{rec.category}.{rec.action}</span>
@@ -267,13 +267,13 @@ export function AuditPage() {
                         setTraceId(rec.correlationId);
                         void loadTrace(rec.correlationId);
                       }}
-                      className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-forge-mist transition hover:text-forge-ash"
+                      className="rounded-full border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-forge-mist transition hover:text-forge-ash"
                     >
                       Load correlation trace
                     </button>
                     <Link
                       to={`/inspectors?correlationId=${encodeURIComponent(rec.correlationId)}`}
-                      className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-forge-mist transition hover:text-forge-ash"
+                      className="rounded-full border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-forge-mist transition hover:text-forge-ash"
                     >
                       Inspect evidence
                     </Link>

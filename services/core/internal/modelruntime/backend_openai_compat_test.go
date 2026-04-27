@@ -63,3 +63,87 @@ func TestOpenAICompatBackendLoadGenerateHealth(t *testing.T) {
 		t.Fatalf("unexpected health: %+v", health)
 	}
 }
+
+func TestOpenAICompatBackendGenerateExtractsContentParts(t *testing.T) {
+	result := generateWithOpenAICompatResponse(t, map[string]any{
+		"choices": []map[string]any{{
+			"message": map[string]any{
+				"content": []map[string]any{
+					{"type": "reasoning", "text": "internal notes"},
+					{"type": "text", "text": "part one"},
+					{"type": "text", "text": "part two"},
+				},
+			},
+			"finish_reason": "stop",
+		}},
+	})
+	if result.Content != "part one\npart two" {
+		t.Fatalf("unexpected content: %q", result.Content)
+	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("unexpected warnings: %v", result.Warnings)
+	}
+}
+
+func TestOpenAICompatBackendGenerateExtractsChoiceTextFallback(t *testing.T) {
+	result := generateWithOpenAICompatResponse(t, map[string]any{
+		"choices": []map[string]any{{
+			"text":          "completion style ok",
+			"finish_reason": "stop",
+		}},
+	})
+	if result.Content != "completion style ok" {
+		t.Fatalf("unexpected content: %q", result.Content)
+	}
+}
+
+func TestOpenAICompatBackendGenerateExtractsReasoningFallbackWithWarning(t *testing.T) {
+	result := generateWithOpenAICompatResponse(t, map[string]any{
+		"choices": []map[string]any{{
+			"message":       map[string]any{"content": "", "reasoning_content": "reasoning-only provider output"},
+			"finish_reason": "stop",
+		}},
+	})
+	if result.Content != "reasoning-only provider output" {
+		t.Fatalf("unexpected content: %q", result.Content)
+	}
+	if len(result.Warnings) != 1 || result.Warnings[0] != "openai-compatible response used reasoning-content fallback" {
+		t.Fatalf("unexpected warnings: %v", result.Warnings)
+	}
+}
+
+func generateWithOpenAICompatResponse(t *testing.T, response map[string]any) GenerateResult {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			_ = json.NewEncoder(w).Encode(response)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	backend := NewOpenAICompatBackend(OpenAICompatOptions{
+		Endpoint:       server.URL,
+		Kind:           BackendOpenAICompat,
+		RequestTimeout: 2000000000,
+	})
+	_, err := backend.Load(context.Background(), ModelManifest{
+		ID:           "remote-model",
+		Backend:      BackendOpenAICompat,
+		Format:       ModelFormatUnknown,
+		Capabilities: []ModelCapability{CapabilityChat},
+	})
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	result, err := backend.Generate(context.Background(), GenerateRequest{
+		ModelID:  "remote-model",
+		Messages: []GenerateMessage{{Role: "user", Content: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	return result
+}

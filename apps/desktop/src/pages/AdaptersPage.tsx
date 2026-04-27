@@ -39,7 +39,7 @@ export function AdaptersPage() {
           <Panel key={a.id} title={a.displayName} subtitle={`Status: ${a.status}`}>
             <div className="text-sm text-forge-mist">{a.detail}</div>
             <div className="mt-2 text-xs text-forge-mist">Capabilities: {a.capabilities.join(", ") || "none"}</div>
-            <div className="mt-3 rounded-md border border-white/10 bg-black/25 p-3 font-mono text-[11px] text-forge-mist">
+            <div className="mt-3 rounded-md border border-forge-platinum/10 bg-black/25 p-3 font-mono text-[11px] text-forge-mist">
               <div className="text-forge-ash">config</div>
               <pre className="mt-2 whitespace-pre-wrap break-words">{JSON.stringify(a.config, null, 2)}</pre>
             </div>

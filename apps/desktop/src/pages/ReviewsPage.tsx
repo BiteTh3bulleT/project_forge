@@ -117,7 +117,7 @@ export function ReviewsPage() {
           ) : (
             <div className="space-y-2">
               {reviews.map((r) => (
-                <div key={r.id} className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+                <div key={r.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
                   <div className="font-semibold text-forge-ash">
                     #{r.id} · {r.targetType}:{r.targetId} · {r.status}
                   </div>
@@ -287,9 +287,9 @@ export function ReviewsPage() {
         </div>
 
         {selectedImportId ? (
-          <div className="mt-3 rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+          <div className="mt-3 rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
             <div className="font-semibold text-forge-ash">Selected import context</div>
-            <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
+            <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded border border-forge-platinum/10 bg-black/30 p-2 text-[11px] text-forge-mist">
               {JSON.stringify(importMap.get(Number(selectedImportId)) ?? {}, null, 2)}
             </pre>
             {selectedReconciliation ? (
@@ -307,7 +307,7 @@ export function ReviewsPage() {
         ) : (
           <div className="space-y-2">
             {reconciliations.map((r) => (
-              <div key={r.id} className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+              <div key={r.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
                 <div className="font-semibold text-forge-ash">
                   reconciliation #{r.id} · import {r.importId} · {r.reviewStatus}
                 </div>

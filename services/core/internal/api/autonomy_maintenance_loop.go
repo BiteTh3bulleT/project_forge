@@ -17,6 +17,7 @@ import (
 	"forge/projectforge/services/core/internal/aios/autonomy"
 	"forge/projectforge/services/core/internal/aios/controllane"
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/aios/rulecells"
 	"forge/projectforge/services/core/internal/aios/truth"
 	"forge/projectforge/services/core/internal/audit"
 	"forge/projectforge/services/core/internal/config"
@@ -1383,6 +1384,7 @@ func newDefaultAutonomyMaintenanceLoop(db *sql.DB, cfg config.Config, ev *events
 		ApprovalGate: controllane.NewStaticApprovalGate(),
 		TxRunner:     txRunner,
 		AuditSink:    controllane.NewCoreAuditSink(audit.New(db)),
+		RuleEngine:   rulecells.MustStaticEngine(),
 		NowMillis:    nowFn,
 	})
 	truthEngine := truth.NewEngine(truth.EngineOptions{

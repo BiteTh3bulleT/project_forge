@@ -158,7 +158,7 @@ export function PolicyPage() {
               <button
                 key={p.id}
                 type="button"
-                className="w-full rounded border border-white/10 bg-black/20 p-3 text-left text-xs text-forge-mist hover:border-forge-ember/35"
+                className="w-full rounded border border-forge-platinum/10 bg-black/20 p-3 text-left text-xs text-forge-mist hover:border-forge-ember/35"
                 onClick={() => loadPresetIntoEditor(p)}
               >
                 <div className="font-semibold text-forge-ash">
@@ -166,7 +166,7 @@ export function PolicyPage() {
                 </div>
                 <div className="mt-1">{p.description}</div>
                 <div className="mt-1">editable {String(p.editable)} · updated {formatTime(p.updatedAtMs)}</div>
-                <pre className="mt-2 max-h-40 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
+                <pre className="mt-2 max-h-40 overflow-auto rounded border border-forge-platinum/10 bg-black/30 p-2 text-[11px] text-forge-mist">
                   {JSON.stringify(p.profile, null, 2)}
                 </pre>
               </button>
@@ -237,7 +237,7 @@ export function PolicyPage() {
         ) : (
           <div className="space-y-2">
             {recommendations.map((r) => (
-              <div key={r.id} className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+              <div key={r.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
                 <div className="font-semibold text-forge-ash">
                   #{r.id} · {r.taskType} → {r.targetAdapter}
                 </div>
@@ -248,7 +248,7 @@ export function PolicyPage() {
                   confidence {(r.confidence * 100).toFixed(1)}% · inferred {String(r.inferred)} · override {String(r.operatorOverrideAllowed)}
                 </div>
                 <div className="mt-1">reasons: {r.reasons.join(" | ")}</div>
-                <pre className="mt-2 max-h-44 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
+                <pre className="mt-2 max-h-44 overflow-auto rounded border border-forge-platinum/10 bg-black/30 p-2 text-[11px] text-forge-mist">
                   {JSON.stringify({ evidence: r.evidence, packetShape: r.packetShape }, null, 2)}
                 </pre>
               </div>
@@ -305,13 +305,13 @@ export function PolicyPage() {
             <div className="text-sm text-forge-mist">No packet guidance records yet.</div>
           ) : (
             guidance.map((g) => (
-              <div key={g.id} className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+              <div key={g.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
                 <div className="font-semibold text-forge-ash">
                   guidance #{g.id} · packet {g.packetId ?? "n/a"} · score {g.guidanceScore.toFixed(2)}
                 </div>
                 <div className="mt-1">issues: {g.issues.join(" | ") || "none"}</div>
                 <div className="mt-1">recommendations: {g.recommendations.join(" | ") || "none"}</div>
-                <pre className="mt-2 max-h-36 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
+                <pre className="mt-2 max-h-36 overflow-auto rounded border border-forge-platinum/10 bg-black/30 p-2 text-[11px] text-forge-mist">
                   {JSON.stringify(g.evidence, null, 2)}
                 </pre>
               </div>

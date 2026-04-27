@@ -409,7 +409,7 @@ export function SettingsPage() {
             />
             <span className="text-xs font-semibold tracking-wide text-forge-mist">Cross-chat context for remote ingress (share one thread per platform)</span>
           </label>
-          <div className="md:col-span-2 grid gap-2 rounded border border-white/10 bg-black/20 p-3 text-xs md:grid-cols-5">
+          <div className="md:col-span-2 grid gap-2 rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs md:grid-cols-5">
             <RemoteStateChip label="Endpoints" ok={remoteOverview.endpointsEnabled} okText="on" offText="off" />
             <RemoteStateChip label="Token" ok={remoteOverview.tokenConfigured} okText="set" offText="missing" />
             <RemoteStateChip label="Shared Context" ok={remoteOverview.sharedThreading} okText="on" offText="off" />
@@ -435,7 +435,7 @@ export function SettingsPage() {
               placeholder="Fallback thread for all remote conversations"
             />
           </div>
-          <div className="rounded border border-white/10 bg-black/20 p-3">
+          <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
             <div className="flex items-center justify-between">
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-forge-mist">Telegram</div>
               <StatusDot ok={telegramReady} label={telegramReady ? "Ready" : "Needs setup"} />
@@ -481,7 +481,7 @@ export function SettingsPage() {
               )}
             </div>
           </div>
-          <div className="rounded border border-white/10 bg-black/20 p-3">
+          <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
             <div className="flex items-center justify-between">
               <div className="text-xs font-semibold uppercase tracking-[0.14em] text-forge-mist">Discord</div>
               <StatusDot ok={discordReady} label={discordReady ? "Ready" : "Needs setup"} />
@@ -577,7 +577,7 @@ export function SettingsPage() {
             {remoteStatusBusy ? "Refreshing channel status..." : "Refresh Telegram + Discord status"}
           </GhostButton>
         </div>
-        <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 md:grid-cols-2">
+        <div className="mt-4 grid gap-3 border-t border-forge-platinum/10 pt-4 md:grid-cols-2">
           <div className="md:col-span-2">
             <label className="text-xs font-semibold tracking-wide text-forge-mist">Remote probe message</label>
             <input
@@ -651,7 +651,7 @@ export function SettingsPage() {
             </div>
           </div>
 
-          <div className="md:col-span-2 rounded border border-white/10 bg-black/20 p-3">
+          <div className="md:col-span-2 rounded border border-forge-platinum/10 bg-black/20 p-3">
             <div className="text-xs font-semibold uppercase tracking-[0.14em] text-forge-mist">VSA Reranking</div>
             <div className="mt-3 grid gap-3 md:grid-cols-3">
               <div>
@@ -817,7 +817,7 @@ export function SettingsPage() {
       {(settingsView === "all" || settingsView === "diagnostics") ? (
       <FoldSection title="Diagnostics" subtitle="Machine/runtime visibility and host metrics." defaultOpen>
       <Panel title="PC Diagnostics" subtitle="Local process-level and rendering context visibility used for monitor/resource audits.">
-        <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+        <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3">
           {pcDiagnostics ? (
             <div className="space-y-2 text-sm text-forge-mist">
               <MetricRow label="Platform" value={pcDiagnostics.platform} />
@@ -831,7 +831,7 @@ export function SettingsPage() {
               <MetricRow label="User Agent" value={pcDiagnostics.userAgent} />
               <MetricRow label="Runtime Origin" value={pcDiagnostics.runtime} />
               {pcDiagnostics.desktop ? (
-                <div className="mt-3 border-t border-white/10 pt-3">
+                <div className="mt-3 border-t border-forge-platinum/10 pt-3">
                   <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-forge-mist">Host / process diagnostics</div>
                   <MetricRow
                     label="Host"
@@ -903,7 +903,7 @@ export function SettingsPage() {
 
 function RemoteStateChip(props: { label: string; ok: boolean; okText: string; offText: string }) {
   return (
-    <div className="rounded border border-white/10 bg-black/25 px-3 py-2 text-[11px] text-forge-mist">
+    <div className="rounded border border-forge-platinum/10 bg-black/25 px-3 py-2 text-[11px] text-forge-mist">
       <div className="uppercase tracking-[0.14em] text-forge-mist/70">{props.label}</div>
       <div className={props.ok ? "mt-1 font-semibold text-forge-ash" : "mt-1 font-semibold text-forge-emberSoft"}>
         {props.ok ? props.okText : props.offText}
@@ -923,7 +923,7 @@ function StatusDot(props: { ok: boolean; label: string }) {
 
 function StatusRow(props: { label: string; value: string; tone?: "normal" | "warn" }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-white/5 pb-1">
+    <div className="flex items-start justify-between gap-4 border-b border-forge-platinum/5 pb-1">
       <span className="text-forge-mist/75">{props.label}</span>
       <span className={props.tone === "warn" ? "text-right text-forge-emberSoft" : "text-right text-forge-ash"}>{props.value}</span>
     </div>
@@ -932,7 +932,7 @@ function StatusRow(props: { label: string; value: string; tone?: "normal" | "war
 
 function MetricRow(props: { label: string; value: string }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-[11px] text-forge-mist">
+    <div className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-forge-platinum/10 bg-black/25 px-3 py-2 text-[11px] text-forge-mist">
       <span className="text-forge-mist/65">{props.label}</span>
       <span className="text-right text-forge-ash">{props.value}</span>
     </div>

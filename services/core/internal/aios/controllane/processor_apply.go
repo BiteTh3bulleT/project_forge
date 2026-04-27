@@ -34,7 +34,7 @@ func (p *Processor) normalize(req domain.SyscallRequest) domain.SyscallRequest {
 	return req
 }
 
-func (p *Processor) apply(_ context.Context, store SemanticStore, req domain.SyscallRequest, def ActionDefinition) ([]string, map[string]any, []string, []domain.SyscallError) {
+func (p *Processor) apply(ctx context.Context, store SemanticStore, req domain.SyscallRequest, def ActionDefinition) ([]string, map[string]any, []string, []domain.SyscallError) {
 	switch def.Action {
 	case domain.ActionCreateNote:
 		return applyCreateNote(store, req)
@@ -55,7 +55,7 @@ func (p *Processor) apply(_ context.Context, store SemanticStore, req domain.Sys
 	case domain.ActionArchiveNote:
 		return applyArchiveNote(store, req)
 	case domain.ActionCompileContext:
-		return applyCompileContext(store, req)
+		return applyCompileContext(ctx, store, req, p.ruleEngine)
 	default:
 		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrUnsupportedAction, Field: "action", Message: "unsupported action"}}
 	}
@@ -372,7 +372,7 @@ func applyArchiveNote(store SemanticStore, req domain.SyscallRequest) ([]string,
 	return []string{noteID}, map[string]any{"noteId": noteID, "noteStatus": note.Status}, nil, nil
 }
 
-func applyCompileContext(store SemanticStore, req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {
+func applyCompileContext(ctx context.Context, store SemanticStore, req domain.SyscallRequest, engine RuleEngine) ([]string, map[string]any, []string, []domain.SyscallError) {
 	query := readString(req.Payload, "query")
 	if strings.TrimSpace(query) == "" {
 		if v, ok := req.Metadata["query"]; ok {
@@ -388,11 +388,31 @@ func applyCompileContext(store SemanticStore, req domain.SyscallRequest) ([]stri
 	packet := store.BuildContext(query, req.Scope, budget, req.RequestedAt)
 	opts := mergeCompileContextOptions(req.Payload)
 	if !opts.PersistSnapshot {
+		outcomeDraft := restoreOutcomeSummary(RestoreOutcomeEvent{
+			ID:                   NewRestoreOutcomeID(req.ID, packet.ID, "draft"),
+			CreatedAt:            req.RequestedAt,
+			UpdatedAt:            req.RequestedAt,
+			WorkspaceID:          req.Scope.WorkspaceID,
+			LaneID:               req.Scope.LaneID,
+			Query:                packet.Query,
+			ContextPacketID:      packet.ID,
+			SnapshotKind:         opts.SnapshotKind,
+			Outcome:              RestoreOutcomeUnknown,
+			DownstreamActionType: "compile_context",
+			DownstreamObjectID:   packet.ID,
+			CorrelationID:        req.CorrelationID,
+			TraceID:              req.TraceID,
+			SyscallID:            req.ID,
+			ProposedBy:           string(req.Source),
+			CommittedBy:          "forge_kernel",
+			Metadata:             map[string]any{"persisted": false, "non_canonical_evidence": true},
+		})
 		return []string{}, map[string]any{
 			"contextPacketId": packet.ID,
 			"notes":           len(packet.Notes),
 			"openLoops":       len(packet.OpenLoops),
 			"models":          len(packet.Models),
+			"restoreOutcome":  outcomeDraft,
 		}, []string{"compile_context is deterministic Phase 2 stub"}, nil
 	}
 
@@ -414,8 +434,9 @@ func applyCompileContext(store SemanticStore, req domain.SyscallRequest) ([]stri
 	if candidateLimit <= 0 {
 		candidateLimit = defaultRestoreCandidateLimit
 	}
+	outcomeSignals, outcomeSignalWarnings := listRestoreOutcomeSignals(ctx, store, req.Scope, packet.Query, candidateLimit*4)
 	candidates := store.ListContextSnapshots(req.Scope, packet.Query, opts.SnapshotKind, candidateLimit)
-	restoreSelection := selectCompileContextRestoreCandidate(req.RequestedAt, restoreInput, candidates, opts.SnapshotKind, resumeHints)
+	restoreSelection := selectCompileContextRestoreCandidateCached(ctx, engine, req.RequestedAt, restoreInput, candidates, opts.SnapshotKind, resumeHints, outcomeSignals, opts.RestoreCacheDisabled)
 	prior := restoreSelection.selectedPrior()
 
 	snapshot := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
@@ -463,6 +484,7 @@ func applyCompileContext(store SemanticStore, req domain.SyscallRequest) ([]stri
 			"threshold":               restoreSelection.Threshold,
 			"candidate_count":         len(restoreSelection.Candidates),
 			"candidate_pool_count":    restoreSelection.CandidatePool,
+			"cache_hit":               restoreSelection.CacheHit,
 			"candidates_filtered_out": restoreSelection.FilteredOut,
 			"selected_snapshot_id":    restoreSelection.selectedSnapshotID(),
 			"selected_evidence_ids":   selectedEvidence,
@@ -484,6 +506,7 @@ func applyCompileContext(store SemanticStore, req domain.SyscallRequest) ([]stri
 	committedIDs = append([]string{packet.ID}, committedIDs...)
 
 	warnings := []string{"compile_context snapshot evidence is non-canonical"}
+	warnings = append(warnings, outcomeSignalWarnings...)
 	switch restoreSelection.Decision {
 	case "fresh_compile_no_candidates":
 		warnings = append(warnings, "restore selection found no candidates; fresh compile used")
@@ -494,6 +517,16 @@ func applyCompileContext(store SemanticStore, req domain.SyscallRequest) ([]stri
 	}
 	if restoreSelection.Decision == "selected" && selectedHeaderOnly {
 		warnings = append(warnings, "restore selected header-only candidate; evidence expansion will continue during compile")
+	}
+	outcomeEvent := buildRestoreOutcomeEvent(req, packet, snapshot, restoreSelection, selectedEvidence, selectedHeaderOnly)
+	if outcomeStore, ok := store.(RestoreOutcomeStore); ok {
+		if err := outcomeStore.CreateRestoreOutcome(ctx, outcomeEvent); err != nil {
+			warnings = append(warnings, "restore outcome evidence persist failed: "+err.Error())
+		} else {
+			committedIDs = append(committedIDs, outcomeEvent.ID)
+		}
+	} else {
+		warnings = append(warnings, "restore outcome evidence store unavailable; returning non-persisted draft")
 	}
 
 	return committedIDs, map[string]any{
@@ -511,11 +544,125 @@ func applyCompileContext(store SemanticStore, req domain.SyscallRequest) ([]stri
 		"restoreTopScore":         restoreSelection.TopScore,
 		"restoreCandidateCount":   len(restoreSelection.Candidates),
 		"restoreSourceSnapshotId": restoreSelection.selectedSnapshotID(),
+		"restoreCacheHit":         restoreSelection.CacheHit,
+		"restoreOutcome":          restoreOutcomeSummary(outcomeEvent),
 	}, warnings, nil
 }
 
 func defaultBudget() domain.ContextBudget {
 	return domain.ContextBudget{MaxTokens: 4000, MaxEvents: 50, MaxNotes: 50}
+}
+
+func listRestoreOutcomeSignals(ctx context.Context, store SemanticStore, scope domain.ForgeScope, query string, limit int) ([]RestoreOutcomeEvent, []string) {
+	outcomeStore, ok := store.(RestoreOutcomeStore)
+	if !ok {
+		return nil, nil
+	}
+	events, err := outcomeStore.ListRestoreOutcomes(ctx, RestoreOutcomeFilter{
+		WorkspaceID: scope.WorkspaceID,
+		LaneID:      scope.LaneID,
+		Query:       query,
+		Limit:       limit,
+	})
+	if err != nil {
+		return nil, []string{"restore outcome feedback lookup failed: " + err.Error()}
+	}
+	return events, nil
+}
+
+func buildRestoreOutcomeEvent(req domain.SyscallRequest, packet domain.ContextPacket, snapshot compiledContextSnapshot, selection compileContextRestoreSelection, selectedEvidence []string, selectedHeaderOnly bool) RestoreOutcomeEvent {
+	outcome := RestoreOutcomeUnknown
+	requiresFreshCompile := selection.Decision != "selected"
+	switch selection.Decision {
+	case "fresh_compile_no_candidates":
+		outcome = RestoreOutcomeNoCandidate
+	case "fresh_compile_below_threshold", "fresh_compile_forced":
+		outcome = RestoreOutcomeFreshCompileRequired
+	}
+	selected := selection.selectedCandidate()
+	restoreScore := selection.TopScore
+	outcomeConfidence := 0.0
+	selectedStateKeys := []string{}
+	selectedLoopIDs := []string{}
+	selectedArtifactIDs := []string{}
+	if selected != nil {
+		restoreScore = selected.Score.TotalScore
+		outcomeConfidence = selected.Score.Confidence
+		selectedStateKeys = stripGraphIDPrefix(dominantIDsByPrefix(selected.Snapshot.Graph, "state:"), "state:")
+		selectedLoopIDs = stripGraphIDPrefix(dominantIDsByPrefix(selected.Snapshot.Graph, "loop:"), "loop:")
+		selectedArtifactIDs = stripGraphIDPrefix(dominantIDsByPrefix(selected.Snapshot.Graph, "artifact:"), "artifact:")
+	}
+	if len(selectedArtifactIDs) == 0 {
+		selectedArtifactIDs = stripGraphIDPrefix(dominantIDsByPrefix(snapshot.Graph, "artifact:"), "artifact:")
+	}
+	event := RestoreOutcomeEvent{
+		ID:                   NewRestoreOutcomeID(req.ID, packet.ID, selection.selectedSnapshotID(), selection.Decision),
+		CreatedAt:            req.RequestedAt,
+		UpdatedAt:            req.RequestedAt,
+		WorkspaceID:          req.Scope.WorkspaceID,
+		LaneID:               req.Scope.LaneID,
+		Query:                packet.Query,
+		ContextPacketID:      packet.ID,
+		SnapshotID:           selection.selectedSnapshotID(),
+		SnapshotKind:         snapshot.Header.SnapshotKind,
+		RestoreScore:         clamp01(restoreScore),
+		RequiresFreshCompile: requiresFreshCompile,
+		SelectedEvidence:     selectedEvidence,
+		SelectedStateKeys:    selectedStateKeys,
+		SelectedLoopIDs:      selectedLoopIDs,
+		SelectedArtifactIDs:  selectedArtifactIDs,
+		Outcome:              outcome,
+		OutcomeConfidence:    clamp01(outcomeConfidence),
+		DownstreamActionType: "compile_context",
+		DownstreamObjectID:   packet.ID,
+		CorrelationID:        req.CorrelationID,
+		TraceID:              req.TraceID,
+		SyscallID:            req.ID,
+		ProposedBy:           string(req.Source),
+		CommittedBy:          "forge_kernel",
+		Metadata: map[string]any{
+			"restore_decision":        selection.Decision,
+			"restore_decision_reason": selection.decisionReason(),
+			"selected_header_only":    selectedHeaderOnly,
+			"non_canonical_evidence":  true,
+		},
+	}
+	if selection.RuleTrace != nil {
+		event.Metadata["rule_trace"] = ruleTraceMap(*selection.RuleTrace)
+	}
+	return normalizeRestoreOutcomeEvent(event)
+}
+
+func stripGraphIDPrefix(ids []string, prefix string) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, strings.TrimPrefix(strings.TrimSpace(id), prefix))
+	}
+	return normalizeStringSet(out)
+}
+
+func restoreOutcomeSummary(event RestoreOutcomeEvent) map[string]any {
+	event = normalizeRestoreOutcomeEvent(event)
+	return map[string]any{
+		"id":                   event.ID,
+		"workspaceId":          event.WorkspaceID,
+		"laneId":               event.LaneID,
+		"contextPacketId":      event.ContextPacketID,
+		"snapshotId":           event.SnapshotID,
+		"snapshotKind":         event.SnapshotKind,
+		"restoreScore":         event.RestoreScore,
+		"requiresFreshCompile": event.RequiresFreshCompile,
+		"selectedEvidence":     event.SelectedEvidence,
+		"selectedStateKeys":    event.SelectedStateKeys,
+		"selectedLoopIds":      event.SelectedLoopIDs,
+		"selectedArtifactIds":  event.SelectedArtifactIDs,
+		"outcome":              string(event.Outcome),
+		"outcomeConfidence":    event.OutcomeConfidence,
+		"correlationId":        event.CorrelationID,
+		"traceId":              event.TraceID,
+		"nonCanonicalEvidence": true,
+		"metadata":             event.Metadata,
+	}
 }
 
 func detectStoreObject(store SemanticStore, id string) (string, domain.ForgeScope, bool) {

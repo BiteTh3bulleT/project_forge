@@ -93,10 +93,10 @@ export function JobsPage() {
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2 text-xs text-forge-mist">
-          <span className="rounded border border-white/10 px-2 py-1">running {counts.running ?? 0}</span>
-          <span className="rounded border border-white/10 px-2 py-1">awaiting {counts.awaiting_approval ?? 0}</span>
-          <span className="rounded border border-white/10 px-2 py-1">queued {counts.queued ?? 0}</span>
-          <span className="rounded border border-white/10 px-2 py-1">failed {counts.failed ?? 0}</span>
+          <span className="rounded border border-forge-platinum/10 px-2 py-1">running {counts.running ?? 0}</span>
+          <span className="rounded border border-forge-platinum/10 px-2 py-1">awaiting {counts.awaiting_approval ?? 0}</span>
+          <span className="rounded border border-forge-platinum/10 px-2 py-1">queued {counts.queued ?? 0}</span>
+          <span className="rounded border border-forge-platinum/10 px-2 py-1">failed {counts.failed ?? 0}</span>
         </div>
 
         {err ? <div className="mt-4 rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
@@ -111,7 +111,7 @@ export function JobsPage() {
               <button
                 key={j.id}
                 type="button"
-                className="w-full rounded-md border border-white/10 bg-black/20 p-3 text-left hover:border-forge-ember/35"
+                className="w-full rounded-md border border-forge-platinum/10 bg-black/20 p-3 text-left hover:border-forge-ember/35"
                 onClick={() => navigate(`/jobs/${j.id}`)}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">

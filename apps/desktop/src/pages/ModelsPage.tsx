@@ -35,7 +35,7 @@ function badgeClass(status?: string) {
     case "available":
     case "ok":
     case "healthy":
-      return "border-emerald-500/30 bg-emerald-500/10 text-emerald-200";
+      return "border-forge-ultramarine/35 bg-forge-ultramarine/10 text-forge-platinum";
     case "loading":
     case "unloading":
     case "imported":
@@ -47,7 +47,7 @@ function badgeClass(status?: string) {
     case "unavailable":
       return "border-forge-ember/40 bg-forge-ember/10 text-forge-emberSoft";
     default:
-      return "border-white/10 bg-black/25 text-forge-mist";
+      return "border-forge-platinum/10 bg-black/25 text-forge-mist";
   }
 }
 
@@ -189,8 +189,8 @@ export function ModelsPage() {
         setSelectedModelId("");
         setSelectedModel(null);
         setCompatibility(null);
-        setHealth({ ok: false, status: coreHealth.modelRuntime?.status || "unavailable", backend: "disabled" });
-        setQueue({ depth: 0, scheduler: "disabled" });
+        setHealth({ ok: false, status: coreHealth.modelRuntime?.status || "not enabled", backend: "not configured" });
+        setQueue({ depth: 0, scheduler: "not enabled" });
         setLoaded({ count: 0, models: [] });
         setUsage(emptyModelRuntimeUsage());
         setBackends([]);
@@ -378,8 +378,9 @@ export function ModelsPage() {
         >
           {err ? <div className="mb-3 rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
           {!runtimeAvailable ? (
-            <div className="mb-3 rounded-2xl border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">
-              Model runtime is disabled or unavailable. Core UI remains healthy; enable modelruntime before registry and load controls become active.
+            <div className="mb-3 rounded-2xl border border-forge-platinum/10 bg-black/20 p-3 text-sm text-forge-mist">
+              Modelruntime is not enabled for this core process. Core UI remains healthy, and chat may still use the configured Ollama adapter. Registry and load controls require
+              `FORGE_ENABLE_MODEL_RUNTIME=true` plus a backend endpoint such as `FORGE_LLAMA_CPP_ENDPOINT` or `FORGE_MODEL_OPENAI_COMPAT_ENDPOINT`.
             </div>
           ) : null}
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
@@ -395,7 +396,7 @@ export function ModelsPage() {
                 </div>
               ) : null}
               {health?.policyWarnings?.length ? (
-                <div className="mt-2 rounded-md border border-white/10 bg-black/25 p-2 text-xs text-forge-mist">
+                <div className="mt-2 rounded-md border border-forge-platinum/10 bg-black/25 p-2 text-xs text-forge-mist">
                   {health.policyWarnings.join("; ")}
                 </div>
               ) : null}
@@ -490,7 +491,7 @@ export function ModelsPage() {
       >
         {err ? <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
         <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.95fr)]">
-          <div className="rounded border border-forge-accent/20 bg-[linear-gradient(135deg,rgba(20,27,37,0.98),rgba(6,10,14,0.92))] p-4 shadow-[0_0_0_1px_rgba(122,162,255,0.04)]">
+          <div className="rounded border border-forge-accent/20 bg-[linear-gradient(135deg,rgba(23,25,28,0.98),rgba(0,0,0,0.92))] p-4 shadow-[0_0_0_1px_rgba(16,18,20,0.04)]">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-forge-mist/75">Runtime Overview</div>
@@ -498,7 +499,7 @@ export function ModelsPage() {
                   Central control surface for model registration, operator chat preference, runtime availability, and backend posture.
                 </div>
               </div>
-              <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[11px] text-forge-mist">
+              <div className="rounded-full border border-forge-platinum/10 bg-black/25 px-3 py-1 text-[11px] text-forge-mist">
                 Last poll <span className="text-forge-ash">{formatTime(lastUpdatedAt)}</span>
               </div>
             </div>
@@ -518,17 +519,17 @@ export function ModelsPage() {
                   </div>
                 ) : null}
                 {health.policyWarnings?.length ? (
-                  <div className="rounded border border-white/10 bg-black/20 px-3 py-2">{health.policyWarnings.join("; ")}</div>
+                  <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">{health.policyWarnings.join("; ")}</div>
                 ) : null}
               </div>
             ) : null}
             <div className="mt-4 grid gap-2 text-[11px] text-forge-mist md:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Available: <span className="text-forge-ash">{modelCounts.available ?? usage?.available ?? 0}</span></div>
-              <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Imported: <span className="text-forge-ash">{modelCounts.imported ?? usage?.imported ?? 0}</span></div>
-              <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Verified: <span className="text-forge-ash">{modelCounts.verified ?? usage?.verified ?? 0}</span></div>
-              <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Disabled/Archived: <span className="text-forge-ash">{(usage?.disabled ?? 0) + (usage?.archived ?? 0)}</span></div>
+              <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">Available: <span className="text-forge-ash">{modelCounts.available ?? usage?.available ?? 0}</span></div>
+              <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">Imported: <span className="text-forge-ash">{modelCounts.imported ?? usage?.imported ?? 0}</span></div>
+              <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">Verified: <span className="text-forge-ash">{modelCounts.verified ?? usage?.verified ?? 0}</span></div>
+              <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">Disabled/Archived: <span className="text-forge-ash">{(usage?.disabled ?? 0) + (usage?.archived ?? 0)}</span></div>
             </div>
-            <div className="mt-4 rounded border border-white/10 bg-black/20 p-3">
+            <div className="mt-4 rounded border border-forge-platinum/10 bg-black/20 p-3">
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-forge-mist/80">Current Focus</div>
               {selectedModelSummary ? (
                 <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
@@ -538,8 +539,8 @@ export function ModelsPage() {
                       {(selectedModelSummary.displayName || "Unnamed model")} · {selectedModelSummary.family || "family unknown"} · {selectedModelSummary.backend || "backend unset"}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-forge-mist">
-                      <span className="rounded-full border border-white/10 bg-black/25 px-2 py-1">Capabilities: <span className="text-forge-ash">{summarizeList(selectedModelSummary.capabilities)}</span></span>
-                      <span className="rounded-full border border-white/10 bg-black/25 px-2 py-1">Loaded: <span className="text-forge-ash">{selectedLoadedRecord?.status || "not loaded"}</span></span>
+                      <span className="rounded-full border border-forge-platinum/10 bg-black/25 px-2 py-1">Capabilities: <span className="text-forge-ash">{summarizeList(selectedModelSummary.capabilities)}</span></span>
+                      <span className="rounded-full border border-forge-platinum/10 bg-black/25 px-2 py-1">Loaded: <span className="text-forge-ash">{selectedLoadedRecord?.status || "not loaded"}</span></span>
                     </div>
                   </div>
                   <span className={cx("rounded-full border px-2 py-1 text-[11px] font-medium", badgeClass(selectedModelSummary.status))}>
@@ -552,7 +553,7 @@ export function ModelsPage() {
             </div>
           </div>
 
-          <div className="rounded border border-forge-electric/20 bg-[linear-gradient(180deg,rgba(12,18,27,0.96),rgba(6,10,14,0.94))] p-4 shadow-[0_0_0_1px_rgba(75,187,255,0.05)]">
+          <div className="rounded border border-forge-electric/20 bg-[linear-gradient(180deg,rgba(16,18,20,0.96),rgba(0,0,0,0.94))] p-4 shadow-[0_0_0_1px_rgba(16,18,20,0.05)]">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-forge-electric/80">Chat Model Preference</div>
@@ -560,11 +561,11 @@ export function ModelsPage() {
                   Sets the desktop chat assistant’s requested model before adapter fallback.
                 </div>
               </div>
-              <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] text-forge-mist">
+              <span className="rounded-full border border-forge-platinum/10 bg-black/30 px-3 py-1 text-[11px] text-forge-mist">
                 {chatSelectedModelId ? "Manual pin" : "Auto routing"}
               </span>
             </div>
-            <div className="relative z-20 mt-4 overflow-visible rounded border border-white/10 bg-black/20 p-3">
+            <div className="relative z-20 mt-4 overflow-visible rounded border border-forge-platinum/10 bg-black/20 p-3">
               <label className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-forge-mist">
                 Preferred chat model
               </label>
@@ -601,10 +602,10 @@ export function ModelsPage() {
                 </GhostButton>
               </div>
               <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-forge-mist">
-                <span className="rounded-full border border-white/10 bg-black/25 px-2 py-1">
+                <span className="rounded-full border border-forge-platinum/10 bg-black/25 px-2 py-1">
                   Active setting: <span className="text-forge-ash">{chatSelectedModelId || "auto"}</span>
                 </span>
-                <span className="rounded-full border border-white/10 bg-black/25 px-2 py-1">
+                <span className="rounded-full border border-forge-platinum/10 bg-black/25 px-2 py-1">
                   Eligible models: <span className="text-forge-ash">{chatSelectableModels.length}</span>
                 </span>
               </div>
@@ -651,12 +652,12 @@ export function ModelsPage() {
                 Capabilities
                 <input className="forge-input mt-1" value={importCapabilities} onChange={(e) => setImportCapabilities(e.target.value)} placeholder="chat,completion" />
               </label>
-              <label className="flex items-center gap-2 self-end rounded border border-white/10 bg-black/20 px-3 py-2 text-xs text-forge-mist">
+              <label className="flex items-center gap-2 self-end rounded border border-forge-platinum/10 bg-black/20 px-3 py-2 text-xs text-forge-mist">
                 <input type="checkbox" checked={importPreferred} onChange={(e) => setImportPreferred(e.target.checked)} />
                 Mark as preferred
               </label>
             </div>
-            <div className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-forge-mist/80">Registration Notes</div>
               <div className="mt-3 space-y-2">
                 <div>Import records runtime metadata only; removal never deletes model files.</div>
@@ -683,13 +684,13 @@ export function ModelsPage() {
           ) : (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2 text-[11px] text-forge-mist">
-                <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                <span className="rounded-full border border-forge-platinum/10 bg-black/20 px-3 py-1">
                   Registry size <span className="text-forge-ash">{models.length}</span>
                 </span>
-                <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                <span className="rounded-full border border-forge-platinum/10 bg-black/20 px-3 py-1">
                   Loaded now <span className="text-forge-ash">{loaded?.count ?? 0}</span>
                 </span>
-                <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1">
+                <span className="rounded-full border border-forge-platinum/10 bg-black/20 px-3 py-1">
                   Selected <span className="text-forge-ash">{selectedModelId || "none"}</span>
                 </span>
               </div>
@@ -713,8 +714,8 @@ export function ModelsPage() {
                     className={cx(
                       "w-full rounded border px-4 py-4 text-left transition focus:outline-none focus:ring-2 focus:ring-forge-accent/40",
                       isSelected
-                        ? "border-forge-accent/55 bg-[linear-gradient(135deg,rgba(20,30,44,0.9),rgba(10,15,24,0.92))] shadow-[0_0_0_1px_rgba(122,162,255,0.05)]"
-                        : "border-white/10 bg-black/20 hover:border-forge-accent/40 hover:bg-black/25",
+                        ? "border-forge-accent/55 bg-[linear-gradient(135deg,rgba(23,25,28,0.9),rgba(16,18,20,0.92))] shadow-[0_0_0_1px_rgba(16,18,20,0.05)]"
+                        : "border-forge-platinum/10 bg-black/20 hover:border-forge-accent/40 hover:bg-black/25",
                     )}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -739,8 +740,8 @@ export function ModelsPage() {
                       <span className={cx("rounded-full border px-2 py-1 text-[11px] font-medium", badgeClass(model.status))}>{model.status || "unknown"}</span>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-forge-mist">
-                      <span className="rounded-full border border-white/10 bg-black/25 px-2 py-1">Capabilities: <span className="text-forge-ash">{summarizeList(model.capabilities)}</span></span>
-                      <span className="rounded-full border border-white/10 bg-black/25 px-2 py-1">Loaded: <span className="text-forge-ash">{loadedRecord?.status || "not loaded"}</span></span>
+                      <span className="rounded-full border border-forge-platinum/10 bg-black/25 px-2 py-1">Capabilities: <span className="text-forge-ash">{summarizeList(model.capabilities)}</span></span>
+                      <span className="rounded-full border border-forge-platinum/10 bg-black/25 px-2 py-1">Loaded: <span className="text-forge-ash">{loadedRecord?.status || "not loaded"}</span></span>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <GhostButton
@@ -834,7 +835,7 @@ export function ModelsPage() {
               <div className="text-sm text-forge-mist">Select a registered model to inspect compatibility and detailed metadata.</div>
             ) : (
               <div className="space-y-4">
-                <div className="rounded border border-forge-accent/20 bg-[linear-gradient(135deg,rgba(20,30,44,0.88),rgba(8,13,20,0.92))] p-4">
+                <div className="rounded border border-forge-accent/20 bg-[linear-gradient(135deg,rgba(23,25,28,0.88),rgba(16,18,20,0.92))] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="font-mono text-sm text-forge-ash">{selectedModelSummary.id}</div>
@@ -847,10 +848,10 @@ export function ModelsPage() {
                     </span>
                   </div>
                   <div className="mt-4 grid gap-2 text-[11px] text-forge-mist sm:grid-cols-2">
-                    <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Format: <span className="text-forge-ash">{selectedModelSummary.format || "unknown"}</span></div>
-                    <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Capabilities: <span className="text-forge-ash">{summarizeList(selectedModelSummary.capabilities)}</span></div>
-                    <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Loaded state: <span className="text-forge-ash">{selectedLoadedRecord?.status || "not loaded"}</span></div>
-                    <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Loaded at: <span className="text-forge-ash">{selectedLoadedRecord?.loadedAtMs ? formatTime(selectedLoadedRecord.loadedAtMs) : "—"}</span></div>
+                    <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">Format: <span className="text-forge-ash">{selectedModelSummary.format || "unknown"}</span></div>
+                    <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">Capabilities: <span className="text-forge-ash">{summarizeList(selectedModelSummary.capabilities)}</span></div>
+                    <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">Loaded state: <span className="text-forge-ash">{selectedLoadedRecord?.status || "not loaded"}</span></div>
+                    <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">Loaded at: <span className="text-forge-ash">{selectedLoadedRecord?.loadedAtMs ? formatTime(selectedLoadedRecord.loadedAtMs) : "—"}</span></div>
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <GhostButton
@@ -914,15 +915,15 @@ export function ModelsPage() {
                   </div>
                 </div>
                 {selectedCompatibility ? (
-                  <div className="rounded border border-white/10 bg-black/25 p-3 text-xs text-forge-mist">
+                  <div className="rounded border border-forge-platinum/10 bg-black/25 p-3 text-xs text-forge-mist">
                     <div className="font-semibold text-forge-ash">Compatibility</div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Backend healthy: <span className="text-forge-ash">{selectedCompatibility.backendHealthy ? "yes" : "no"}</span></div>
-                      <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Configured: <span className="text-forge-ash">{selectedCompatibility.backendConfigured ? "yes" : "no"}</span></div>
-                      <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Supported by backend: <span className="text-forge-ash">{selectedCompatibility.supportedByBackend ? "yes" : "no"}</span></div>
-                      <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Can generate: <span className="text-forge-ash">{selectedCompatibility.canGenerate ? "yes" : "no"}</span></div>
-                      <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Preferred: <span className="text-forge-ash">{selectedCompatibility.preferred ? "yes" : "no"}</span></div>
-                      <div className="rounded border border-white/10 bg-black/20 px-3 py-2">Backend: <span className="text-forge-ash">{selectedCompatibility.backend || "unknown"}</span></div>
+                      <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">Backend healthy: <span className="text-forge-ash">{selectedCompatibility.backendHealthy ? "yes" : "no"}</span></div>
+                      <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">Configured: <span className="text-forge-ash">{selectedCompatibility.backendConfigured ? "yes" : "no"}</span></div>
+                      <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">Supported by backend: <span className="text-forge-ash">{selectedCompatibility.supportedByBackend ? "yes" : "no"}</span></div>
+                      <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">Can generate: <span className="text-forge-ash">{selectedCompatibility.canGenerate ? "yes" : "no"}</span></div>
+                      <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">Preferred: <span className="text-forge-ash">{selectedCompatibility.preferred ? "yes" : "no"}</span></div>
+                      <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">Backend: <span className="text-forge-ash">{selectedCompatibility.backend || "unknown"}</span></div>
                     </div>
                     {selectedCompatibility.warnings && selectedCompatibility.warnings.length > 0 ? (
                       <div className="mt-3 rounded border border-forge-ember/30 bg-forge-ember/10 px-2 py-2 text-[11px] text-forge-ash">
@@ -930,7 +931,7 @@ export function ModelsPage() {
                       </div>
                     ) : null}
                     {selectedCompatibility.details && Object.keys(selectedCompatibility.details).length > 0 ? (
-                      <pre className="mt-3 max-h-[220px] overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
+                      <pre className="mt-3 max-h-[220px] overflow-auto rounded border border-forge-platinum/10 bg-black/30 p-3 text-[11px] text-forge-mist">
                         {JSON.stringify(selectedCompatibility.details, null, 2)}
                       </pre>
                     ) : null}
@@ -938,7 +939,7 @@ export function ModelsPage() {
                 ) : null}
                 {selectedModelSummary.metadata && Object.keys(selectedModelSummary.metadata).length > 0 ? (
                   <FoldSection title="Metadata" subtitle="Manifest and registry metadata for this model.">
-                    <pre className="max-h-[260px] overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
+                    <pre className="max-h-[260px] overflow-auto rounded border border-forge-platinum/10 bg-black/30 p-3 text-[11px] text-forge-mist">
                       {JSON.stringify(selectedModelSummary.metadata, null, 2)}
                     </pre>
                   </FoldSection>
@@ -963,17 +964,17 @@ export function ModelsPage() {
                   ["Completed", String(usage?.completed ?? 0)],
                 ]} />
               </div>
-              <div className="rounded border border-white/10 bg-black/25 p-3">
+              <div className="rounded border border-forge-platinum/10 bg-black/25 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="font-semibold text-forge-ash">Loaded models</div>
-                  <div className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[11px] text-forge-mist">
+                  <div className="rounded-full border border-forge-platinum/10 bg-black/20 px-2 py-1 text-[11px] text-forge-mist">
                     {loaded?.models.length ?? 0} active
                   </div>
                 </div>
                 {loaded?.models.length ? (
                   <div className="mt-3 space-y-2">
                     {loaded.models.map((item) => (
-                      <div key={`${item.backend}:${item.modelId}`} className="rounded border border-white/10 bg-black/20 px-3 py-2">
+                      <div key={`${item.backend}:${item.modelId}`} className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="font-mono text-forge-ash">{item.modelId}</div>
                           <span className={cx("rounded-full border px-2 py-1 text-[11px] font-medium", badgeClass(item.status))}>
@@ -988,17 +989,17 @@ export function ModelsPage() {
                   <div className="mt-2 text-[11px] text-forge-mist">No loaded models.</div>
                 )}
               </div>
-              <div className="rounded border border-white/10 bg-black/25 p-3">
+              <div className="rounded border border-forge-platinum/10 bg-black/25 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="font-semibold text-forge-ash">Backend health</div>
-                  <div className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[11px] text-forge-mist">
+                  <div className="rounded-full border border-forge-platinum/10 bg-black/20 px-2 py-1 text-[11px] text-forge-mist">
                     {backends.length} reported
                   </div>
                 </div>
                 {backends.length ? (
                   <div className="mt-3 space-y-2">
                     {backends.map((backend) => (
-                      <div key={`${backend.kind}:${backend.name}`} className="rounded border border-white/10 bg-black/20 px-3 py-2">
+                      <div key={`${backend.kind}:${backend.name}`} className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="font-mono text-forge-ash">{backend.name}</div>
                           <span className={cx("rounded-full border px-2 py-1 text-[11px] font-medium", badgeClass(backend.healthy ? "healthy" : "error"))}>
@@ -1034,7 +1035,7 @@ export function ModelsPage() {
 
 function Metric(props: { label: string; value: string | number; hint: string }) {
   return (
-    <div className="rounded border border-white/10 bg-black/20 px-3 py-3">
+    <div className="rounded border border-forge-platinum/10 bg-black/20 px-3 py-3">
       <div className="text-[11px] uppercase tracking-wide text-forge-mist">{props.label}</div>
       <div className="mt-1 text-lg font-semibold text-forge-ash">{props.value}</div>
       <div className="mt-1 text-[11px] text-forge-mist">{props.hint}</div>
@@ -1044,7 +1045,7 @@ function Metric(props: { label: string; value: string | number; hint: string }) 
 
 function StateBox(props: { title: string; rows: Array<[string, string]> }) {
   return (
-    <div className="rounded border border-white/10 bg-black/25 p-3">
+    <div className="rounded border border-forge-platinum/10 bg-black/25 p-3">
       <div className="font-semibold text-forge-ash">{props.title}</div>
       <div className="mt-2 grid gap-2">
         {props.rows.map(([label, value]) => (

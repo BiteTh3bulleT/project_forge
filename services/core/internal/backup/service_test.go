@@ -51,7 +51,7 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 		"artifacts", "artifact_refs",
 		"memory_notes", "semantic_links", "state_items", "state_versions", "open_loops",
 		"contradiction_records", "supersession_records", "derived_models",
-		"context_packet_snapshots", "semantic_idempotency_keys", "provenance_records",
+		"context_packet_snapshots", "restore_outcome_events", "semantic_idempotency_keys", "provenance_records",
 		"project_context_records", "evaluation_records", "gateway_invocations", "audit_records",
 		"autonomy_settings",
 		"permission_profiles", "approval_presets", "execution_strategies",
@@ -346,6 +346,7 @@ func TestRestoreBundleContextPacketSnapshotColumns(t *testing.T) {
 		Label:       "snapshot-columns",
 		EntityCounts: map[string]int{
 			"context_packet_snapshots": 2,
+			"restore_outcome_events":   1,
 		},
 		Entities: map[string][]any{
 			"context_packet_snapshots": {
@@ -407,6 +408,39 @@ func TestRestoreBundleContextPacketSnapshotColumns(t *testing.T) {
 					"audit_id":                 "audit-new",
 				},
 			},
+			"restore_outcome_events": {
+				map[string]any{
+					"id":                         "restore-outcome-backup",
+					"created_at":                 3000,
+					"updated_at":                 3001,
+					"workspace_id":               "workspace-1",
+					"lane_id":                    "lane-a",
+					"query":                      "restore the new-style snapshot",
+					"context_packet_id":          "snap-new",
+					"snapshot_id":                "snap-old",
+					"snapshot_kind":              "restore",
+					"restore_score":              0.72,
+					"requires_fresh_compile":     0,
+					"selected_evidence_json":     `["note-1"]`,
+					"selected_state_keys_json":   `["runtime.safe_mode"]`,
+					"selected_loop_ids_json":     `["loop-1"]`,
+					"selected_artifact_ids_json": `["artifact-1"]`,
+					"outcome":                    "helpful",
+					"outcome_confidence":         0.9,
+					"operator_feedback":          "worked",
+					"failure_reason":             "",
+					"correction_summary":         "",
+					"downstream_action_type":     "compile_context",
+					"downstream_object_id":       "snap-new",
+					"correlation_id":             "corr-new",
+					"trace_id":                   "trace-new",
+					"syscall_id":                 "sys-new",
+					"audit_id":                   "audit-new",
+					"proposed_by":                "worker-2",
+					"committed_by":               "forge_kernel",
+					"metadata_json":              `{"non_canonical_evidence":true}`,
+				},
+			},
 		},
 	}
 	raw, err := json.Marshal(doc)
@@ -421,7 +455,7 @@ func TestRestoreBundleContextPacketSnapshotColumns(t *testing.T) {
 	svc := New(st.DB, dataDir)
 	result, err := svc.RestoreBundle(ctx, RestoreBundleRequest{
 		FilePath: filePath,
-		Sections: []string{"context_packet_snapshots"},
+		Sections: []string{"context_packet_snapshots", "restore_outcome_events"},
 	})
 	if err != nil {
 		t.Fatalf("restore bundle: %v", err)
@@ -431,6 +465,16 @@ func TestRestoreBundleContextPacketSnapshotColumns(t *testing.T) {
 	}
 	if got := result.Imported["context_packet_snapshots"]; got != 2 {
 		t.Fatalf("restore count mismatch: got %d want 2", got)
+	}
+	if got := result.Imported["restore_outcome_events"]; got != 1 {
+		t.Fatalf("restore outcome count mismatch: got %d want 1", got)
+	}
+	var outcome string
+	if err := st.DB.QueryRow(`SELECT outcome FROM restore_outcome_events WHERE id = ?`, "restore-outcome-backup").Scan(&outcome); err != nil {
+		t.Fatalf("read restored outcome: %v", err)
+	}
+	if outcome != "helpful" {
+		t.Fatalf("expected restored helpful outcome, got %q", outcome)
 	}
 
 	var oldKind, oldFingerprint, oldParent, oldHeader, oldGraph, oldDelta, oldScores, oldRender, oldHints string

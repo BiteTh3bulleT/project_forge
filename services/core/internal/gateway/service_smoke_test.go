@@ -319,6 +319,9 @@ func smokeRequestForTool(t *testing.T, workspace, toolID, laneID string) Request
 	case "net.fetch":
 		req.Paths = nil
 		req.Input = map[string]any{"url": "https://example.com"}
+	case "web.search":
+		req.Paths = nil
+		req.Input = map[string]any{"query": "forge", "limit": 1}
 	case "secret.get":
 		req.Paths = nil
 		req.Input = map[string]any{"name": "test_api"}

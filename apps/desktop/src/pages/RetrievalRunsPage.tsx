@@ -184,7 +184,7 @@ export function RetrievalRunsPage() {
                   type="button"
                   className={[
                     "w-full rounded border px-3 py-2 text-left",
-                    selectedRun?.id === run.id ? "border-forge-ember/40 bg-black/30" : "border-white/10 bg-black/20 hover:border-forge-ember/35",
+                    selectedRun?.id === run.id ? "border-forge-ember/40 bg-black/30" : "border-forge-platinum/10 bg-black/20 hover:border-forge-ember/35",
                   ].join(" ")}
                   onClick={async () => {
                     const full = await api.retrieval.getRun(run.id);
@@ -208,7 +208,7 @@ export function RetrievalRunsPage() {
             <div className="text-sm text-forge-mist">Select a run.</div>
           ) : (
             <div className="space-y-2">
-              <div className="rounded border border-white/10 bg-black/20 p-2 text-xs text-forge-mist">
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-2 text-xs text-forge-mist">
                 run #{selectedRun.id} | mode {selectedRun.mode} | packet {selectedRun.packetId ?? "none"} | job {selectedRun.jobId ?? "none"}
               </div>
               {selectedRun.results.length === 0 ? (
@@ -219,14 +219,14 @@ export function RetrievalRunsPage() {
                   const matchedObservationId = vsaSignal?.observationId ?? row.observationId ?? null;
                   const matchedObservation = matchedObservationId != null ? observationInfoById[matchedObservationId] : undefined;
                   return (
-                    <div key={row.id} className="rounded border border-white/10 bg-black/20 p-3">
+                    <div key={row.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="text-xs font-semibold text-forge-ash">rank {row.rankIndex + 1} - {row.relPath || row.absPath}</div>
                         <div className="text-[11px] text-forge-mist">selected {String(row.selectedForPacket)}</div>
                       </div>
                       <div className="mt-1 text-[11px] text-forge-mist">k {row.keywordScore.toFixed(3)} | s {row.semanticScore.toFixed(3)} | h {row.hybridScore.toFixed(3)}</div>
                       {vsaSignal ? (
-                        <div className="mt-1 rounded border border-white/10 bg-black/30 px-2 py-1 text-[11px] text-forge-mist">
+                        <div className="mt-1 rounded border border-forge-platinum/10 bg-black/30 px-2 py-1 text-[11px] text-forge-mist">
                           VSA {vsaSignal.mode || "off"} | assoc {vsaSignal.associativeScore.toFixed(3)} | role {vsaSignal.roleMatchScore.toFixed(3)} | rel{" "}
                           {vsaSignal.relationalScore.toFixed(3)} | feedback {vsaSignal.feedbackScore.toFixed(3)} | add {vsaSignal.additiveScore.toFixed(3)} | applied{" "}
                           {vsaSignal.appliedScore.toFixed(3)}
@@ -244,10 +244,10 @@ export function RetrievalRunsPage() {
                       ) : null}
                       <div className="mt-2 text-xs text-forge-mist whitespace-pre-wrap">{row.snippet}</div>
                       {selectionByResult[row.id] ? (
-                        <pre className="mt-2 overflow-x-auto rounded border border-white/10 bg-black/35 p-2 text-[11px] text-forge-mist">{JSON.stringify(selectionByResult[row.id], null, 2)}</pre>
+                        <pre className="mt-2 overflow-x-auto rounded border border-forge-platinum/10 bg-black/35 p-2 text-[11px] text-forge-mist">{JSON.stringify(selectionByResult[row.id], null, 2)}</pre>
                       ) : null}
                       {vsaSignal?.explain ? (
-                        <pre className="mt-2 overflow-x-auto rounded border border-white/10 bg-black/35 p-2 text-[11px] text-forge-mist">{JSON.stringify(vsaSignal.explain, null, 2)}</pre>
+                        <pre className="mt-2 overflow-x-auto rounded border border-forge-platinum/10 bg-black/35 p-2 text-[11px] text-forge-mist">{JSON.stringify(vsaSignal.explain, null, 2)}</pre>
                       ) : null}
                       <div className="mt-2 flex flex-wrap gap-2">
                         {[

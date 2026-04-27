@@ -238,7 +238,7 @@ export function ActionLanesPage() {
 
       <div className="space-y-3">
         {lanes.map((ln) => (
-          <div key={ln.id} className="rounded-lg border border-white/10 bg-forge-iron/40 p-4">
+          <div key={ln.id} className="rounded-lg border border-forge-platinum/10 bg-forge-iron/40 p-4">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <div className="font-mono text-sm text-forge-ash">{ln.id}</div>
@@ -254,19 +254,19 @@ export function ActionLanesPage() {
             </div>
             <p className="mt-2 text-xs text-forge-mist">{ln.description}</p>
             <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-forge-mist">
-              <span className="rounded border border-white/10 px-2 py-0.5">type {ln.actionType}</span>
-              <span className="rounded border border-white/10 px-2 py-0.5">risk {ln.riskClass}</span>
-              <span className="rounded border border-white/10 px-2 py-0.5">{ln.writeIntent ? "write-intent" : "read-only"}</span>
-              <span className="rounded border border-white/10 px-2 py-0.5">{ln.requiresApproval ? "approval gate" : "no lane approval"}</span>
-              <span className="rounded border border-white/10 px-2 py-0.5">{ln.builtin ? "builtin" : "custom"}</span>
-              <span className="rounded border border-white/10 px-2 py-0.5">maxBytes {ln.maxBytes}</span>
+              <span className="rounded border border-forge-platinum/10 px-2 py-0.5">type {ln.actionType}</span>
+              <span className="rounded border border-forge-platinum/10 px-2 py-0.5">risk {ln.riskClass}</span>
+              <span className="rounded border border-forge-platinum/10 px-2 py-0.5">{ln.writeIntent ? "write-intent" : "read-only"}</span>
+              <span className="rounded border border-forge-platinum/10 px-2 py-0.5">{ln.requiresApproval ? "approval gate" : "no lane approval"}</span>
+              <span className="rounded border border-forge-platinum/10 px-2 py-0.5">{ln.builtin ? "builtin" : "custom"}</span>
+              <span className="rounded border border-forge-platinum/10 px-2 py-0.5">maxBytes {ln.maxBytes}</span>
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
-              <div className="rounded border border-white/10 bg-black/20 p-2">
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-2">
                 <div className="text-[10px] font-semibold text-forge-ash">allowedPaths</div>
                 <pre className="mt-1 max-h-28 overflow-auto whitespace-pre-wrap font-mono text-[10px] text-forge-mist">{JSON.stringify(ln.allowedPaths, null, 2)}</pre>
               </div>
-              <div className="rounded border border-white/10 bg-black/20 p-2">
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-2">
                 <div className="text-[10px] font-semibold text-forge-ash">forbiddenPaths / expectedArtifacts</div>
                 <pre className="mt-1 max-h-28 overflow-auto font-mono text-[10px] text-forge-mist">
                   {JSON.stringify({ forbiddenPaths: ln.forbiddenPaths, expectedArtifacts: ln.expectedArtifacts }, null, 2)}

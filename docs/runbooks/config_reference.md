@@ -38,6 +38,15 @@ boot or runtime. Observed 2026-04-21._
 | `FORGE_MODEL_CHAT_MAX_ATTEMPTS`, `FORGE_MODEL_CHAT_RETRY_BACKOFF_MS`, `FORGE_MODEL_CHAT_PROVIDER_COOLDOWN_MS`, `FORGE_MODEL_CHAT_MODEL_COOLDOWN_MS`, `FORGE_MODEL_CHAT_CHECKPOINT_LIMIT` | chat orchestration | `3` / `250` / `5000` / `5000` / `128` | Retry pacing, cooldown, and checkpoint bounds. |
 | `FORGE_ENABLE_OPENAI_COMPAT_API` | `/v1/*` routes | `false` | Enables gated OpenAI-compatible model API surface. |
 
+Local dev startup note: `scripts/forge-core.sh` auto-detects a running
+Ollama OpenAI-compatible endpoint at `OLLAMA_BASE_URL` or
+`http://127.0.0.1:11434` when no explicit modelruntime backend env vars are
+set. In that case it enables modelruntime, configures
+`FORGE_MODEL_OPENAI_COMPAT_ENDPOINT`, allows governed autoload for the local
+dev session, and selects a non-embedding default model when available. Set
+`FORGE_DISABLE_OLLAMA_AUTODETECT=true` or any explicit runtime backend env var
+to bypass autodetect.
+
 ### Model runtime GPU/safe-mode policy
 
 | Var | Consumer | Default | Purpose |

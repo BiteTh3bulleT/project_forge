@@ -200,6 +200,26 @@ type MessageCodeSnippet = {
   code: string;
 };
 
+type ChatToolEntry = {
+  key: string;
+  messageId: number;
+  createdAtMs: number;
+  tool: string;
+  state: string;
+  args: Record<string, unknown>;
+  result: Record<string, unknown>;
+};
+
+type ChatThinkingEvent = {
+  key?: string;
+  messageId?: number;
+  at: number;
+  kind: string;
+  text: string;
+  detail?: string;
+  data?: Record<string, unknown>;
+};
+
 type MessagePart =
   | { type: "text"; text: string }
   | { type: "code"; text: string; lang: string };
@@ -228,7 +248,7 @@ function renderInline(text: string): ReactNode[] {
     if (!chunk) return;
     if (chunk.startsWith("`") && chunk.endsWith("`") && chunk.length >= 2) {
       nodes.push(
-        <code key={`inline-${i}`} className="rounded border border-white/15 bg-black/35 px-1.5 py-0.5 font-mono text-[12px] text-forge-ash">
+        <code key={`inline-${i}`} className="rounded border border-forge-platinum/15 bg-black/35 px-1.5 py-0.5 font-mono text-[12px] text-forge-ash">
           {chunk.slice(1, -1)}
         </code>,
       );
@@ -274,6 +294,134 @@ function readToolGatewayActivity(meta: Record<string, unknown> | undefined): Cha
 
   if (!shouldSurface) return null;
   return activity;
+}
+
+function normalizeToolName(raw: unknown): string {
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
+function readToolEntries(message: ChatMessage): ChatToolEntry[] {
+  const activity = readToolGatewayActivity(message.metadata);
+  if (!activity) return [];
+  const tool = normalizeToolName(activity.toolSelected);
+  if (!tool) return [];
+  const args = asRecord(activity.toolArgs) ?? {};
+  const result = asRecord(activity.executionResult) ?? {};
+  return [
+    {
+      key: `${message.id}-${tool}`,
+      messageId: message.id,
+      createdAtMs: message.createdAtMs,
+      tool,
+      state: normalizeToolName(activity.executionState) || "recorded",
+      args,
+      result,
+    },
+  ];
+}
+
+function readThinkingEvents(message: ChatMessage): ChatThinkingEvent[] {
+  const meta = message.metadata ?? {};
+  const activity = readToolGatewayActivity(meta);
+  const pipeline = asRecord(meta.toolPipeline);
+  const activityStages = activity?.stages;
+  const pipelineStages = pipeline?.stages;
+  const rawStages: unknown[] = Array.isArray(activityStages) ? activityStages : Array.isArray(pipelineStages) ? pipelineStages : [];
+  const out: ChatThinkingEvent[] = [];
+  for (let i = 0; i < rawStages.length; i++) {
+    const row = asRecord(rawStages[i]);
+    if (!row) continue;
+    const stage = typeof row.stage === "string" && row.stage.trim() ? row.stage.trim() : "stage";
+    const at = numberField(row, "atMs") ?? message.createdAtMs;
+    out.push({
+      key: `${message.id}-think-${i}-${stage}`,
+      messageId: message.id,
+      at,
+      kind: "stage",
+      text: formatThinkingStage(stage),
+      detail: compactThinkingDetail(row),
+      data: row,
+    });
+  }
+  return out;
+}
+
+function isTerminalTool(tool: string) {
+  return tool === "proc.run";
+}
+
+function isBrowserTool(tool: string) {
+  return tool === "web.search" || tool === "net.fetch" || tool === "desktop.open";
+}
+
+function stringField(record: Record<string, unknown>, key: string): string {
+  const raw = record[key];
+  return typeof raw === "string" ? raw : "";
+}
+
+function numberField(record: Record<string, unknown>, key: string): number | null {
+  const raw = record[key];
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string" && raw.trim() && Number.isFinite(Number(raw))) return Number(raw);
+  return null;
+}
+
+function readSearchResults(record: Record<string, unknown>): Array<Record<string, unknown>> {
+  const raw = record.results;
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => asRecord(item)).filter((item): item is Record<string, unknown> => item != null);
+}
+
+function clipText(value: string, max = 6000): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max)}\n... (truncated)`;
+}
+
+function formatThinkingStage(stage: string): string {
+  const labels: Record<string, string> = {
+    request_received: "Request received",
+    tools_skipped: "No tool route needed",
+    tools_attached: "Gateway tools attached",
+    dry_run: "Dry run selected",
+    deterministic_combined_shortcut: "Deterministic file workflow selected",
+    deterministic_python_banner_shortcut: "Deterministic script workflow selected",
+    forced_tool_choice: "Forced tool route selected",
+    runtime_primary: "Model runtime selected",
+    runtime_fallback: "Runtime fallback selected",
+    adapter_mismatch: "Adapter mismatch detected",
+    ollama_chat_error: "Ollama chat failed",
+    model_raw_response: "Model response received",
+    tool_call_check: "Tool call check",
+    tool_args: "Tool arguments received",
+    backend_dispatch: "Gateway dispatch",
+    execution_result: "Gateway result",
+    gateway_error: "Gateway error",
+    path_precheck_failed: "Path boundary rejected",
+    attachment_read_resolved: "Attachment resolved",
+    attachment_read_error: "Attachment read failed",
+    model_prose_discarded: "Unverified model prose discarded",
+    sync_completion_start: "Synchronous completion started",
+    sync_completion_done: "Synchronous completion saved",
+    stream_downgrade: "Streaming downgraded",
+    cached_reply: "Cached reply returned",
+  };
+  return labels[stage] ?? stage.replaceAll("_", " ");
+}
+
+function compactThinkingDetail(row: Record<string, unknown>): string {
+  const parts: string[] = [];
+  const keys = ["tool", "toolId", "gatewayTool", "laneId", "reason", "status", "state", "count", "turn", "index", "paths", "error", "modelId", "backend"];
+  for (const key of keys) {
+    const raw = row[key];
+    if (raw == null || raw === "") continue;
+    if (Array.isArray(raw)) {
+      if (raw.length === 0) continue;
+      parts.push(`${key}: ${raw.map((item) => String(item)).join(", ")}`);
+      continue;
+    }
+    parts.push(`${key}: ${String(raw)}`);
+  }
+  return parts.slice(0, 5).join(" · ");
 }
 
 function readApprovalRequestIdFromGatewayResult(executionResult: unknown): number | null {
@@ -403,6 +551,20 @@ function ToolGatewayActivityPanel(props: { activity: ChatToolGatewayActivity }) 
   const gatewayJobTerminal = gatewayJobStatus === "succeeded" || gatewayJobStatus === "failed" || gatewayJobStatus === "cancelled";
   const stages = Array.isArray(a.stages) ? (a.stages as Record<string, unknown>[]) : [];
   const args = a.toolArgs && typeof a.toolArgs === "object" && !Array.isArray(a.toolArgs) ? (a.toolArgs as Record<string, unknown>) : null;
+  const inlineToolEntry = useMemo<ChatToolEntry | null>(() => {
+    const tool = normalizeToolName(a.toolSelected);
+    const result = asRecord(a.executionResult);
+    if (!tool || !result) return null;
+    return {
+      key: `inline-${tool}`,
+      messageId: 0,
+      createdAtMs: Date.now(),
+      tool,
+      state: normalizeToolName(a.executionState) || "recorded",
+      args: args ?? {},
+      result,
+    };
+  }, [a.executionResult, a.executionState, a.toolSelected, args]);
 
   const isAlreadyResolvedError = useCallback((message: string) => {
     const value = message.toLowerCase();
@@ -627,7 +789,11 @@ function ToolGatewayActivityPanel(props: { activity: ChatToolGatewayActivity }) 
             Approval is required, but no approval request id was recorded. Check that the approvals service and database are available.
           </div>
         ) : null}
-        {a.executionResult !== undefined ? <InlineStructuredSummary value={a.executionResult} /> : null}
+        {inlineToolEntry && isTerminalTool(inlineToolEntry.tool) ? <TerminalTranscript entry={inlineToolEntry} compact /> : null}
+        {inlineToolEntry && isBrowserTool(inlineToolEntry.tool) ? <BrowserResultPanel entry={inlineToolEntry} compact /> : null}
+        {a.executionResult !== undefined && (!inlineToolEntry || (!isTerminalTool(inlineToolEntry.tool) && !isBrowserTool(inlineToolEntry.tool))) ? (
+          <InlineStructuredSummary value={a.executionResult} />
+        ) : null}
       </div>
       {stages.length > 0 ? (
         <details className="mt-2">
@@ -668,13 +834,13 @@ function InlineStructuredSummary(props: { value: unknown }) {
   const rows = summarizeResultRows(props.value);
   if (rows.length === 0) {
     return (
-      <div className="mt-1 rounded border border-white/10 bg-black/30 px-2 py-1 text-[10px] text-forge-mist">
+      <div className="mt-1 rounded border border-forge-platinum/10 bg-black/30 px-2 py-1 text-[10px] text-forge-mist">
         Execution result recorded.
       </div>
     );
   }
   return (
-    <div className="mt-1 rounded border border-white/10 bg-black/30 p-2 text-[10px] text-forge-mist">
+    <div className="mt-1 rounded border border-forge-platinum/10 bg-black/30 p-2 text-[10px] text-forge-mist">
       <div className="font-semibold uppercase tracking-[0.14em] text-forge-mist/70">Execution Result</div>
       <div className="mt-1 grid gap-1">
         {rows.map(([label, value]) => (
@@ -684,6 +850,116 @@ function InlineStructuredSummary(props: { value: unknown }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function TerminalTranscript(props: { entry: ChatToolEntry; compact?: boolean }) {
+  const command = stringField(props.entry.result, "command") || stringField(props.entry.args, "command");
+  const cwd = stringField(props.entry.result, "cwd");
+  const stdout = clipText(stringField(props.entry.result, "stdout"));
+  const stderr = clipText(stringField(props.entry.result, "stderr"), 3000);
+  const exitCode = numberField(props.entry.result, "exitCode");
+  const timedOut = props.entry.result.timedOut === true;
+  return (
+    <div className="overflow-hidden rounded-xl border border-forge-platinum/15 bg-black/60 font-mono text-[11px] text-forge-ash">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-forge-platinum/10 bg-forge-onyx/80 px-3 py-2">
+        <span className="text-forge-mist">$ {command || "command recorded"}</span>
+        <span className={exitCode === 0 ? "text-forge-platinum" : "text-forge-emberSoft"}>
+          exit {exitCode ?? "?"}{timedOut ? " timed out" : ""}
+        </span>
+      </div>
+      {cwd ? <div className="border-b border-forge-platinum/10 px-3 py-1.5 text-[10px] text-forge-mist/70">cwd {cwd}</div> : null}
+      <div className={["forge-chat-scroll overflow-auto p-3", props.compact ? "max-h-72" : "max-h-full"].join(" ")}>
+        {stdout ? (
+          <pre className="whitespace-pre-wrap break-words text-forge-ash">{stdout}</pre>
+        ) : (
+          <div className="text-forge-mist/65">No stdout.</div>
+        )}
+        {stderr ? (
+          <pre className="mt-3 whitespace-pre-wrap break-words border-t border-forge-ember/20 pt-3 text-forge-emberSoft">{stderr}</pre>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function BrowserResultPanel(props: { entry: ChatToolEntry; compact?: boolean }) {
+  const tool = props.entry.tool;
+  const query = stringField(props.entry.result, "query") || stringField(props.entry.args, "query");
+  const url = stringField(props.entry.result, "url") || stringField(props.entry.args, "url") || stringField(props.entry.result, "searchUrl");
+  const statusCode = numberField(props.entry.result, "statusCode");
+  const body = clipText(stringField(props.entry.result, "body"), props.compact ? 3000 : 9000);
+  const results = readSearchResults(props.entry.result);
+  return (
+    <div className="overflow-hidden rounded-xl border border-forge-platinum/15 bg-black/50 text-xs text-forge-mist">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-forge-platinum/10 bg-forge-onyx/80 px-3 py-2">
+        <span className="font-semibold text-forge-ash">{tool === "web.search" ? "Web search" : tool === "net.fetch" ? "Fetched page" : "Browser open"}</span>
+        <span className="font-mono text-[10px] text-forge-mist/70">{props.entry.state}{statusCode != null ? ` · ${statusCode}` : ""}</span>
+      </div>
+      <div className={["forge-chat-scroll overflow-auto p-3", props.compact ? "max-h-72" : "max-h-full"].join(" ")}>
+        {query ? <div className="mb-3 font-mono text-[11px] text-forge-ash">query: {query}</div> : null}
+        {url ? (
+          <a href={url} target="_blank" rel="noreferrer" className="mb-3 block break-all font-mono text-[11px] text-forge-platinum underline underline-offset-2">
+            {url}
+          </a>
+        ) : null}
+        {results.length > 0 ? (
+          <div className="space-y-3">
+            {results.map((item, index) => {
+              const title = stringField(item, "title") || `Result ${index + 1}`;
+              const resultUrl = stringField(item, "url");
+              const snippet = stringField(item, "snippet");
+              return (
+                <div key={`${props.entry.key}-result-${index}`} className="rounded-lg border border-forge-platinum/10 bg-forge-carbon/80 p-3">
+                  <div className="font-semibold text-forge-ash">{title}</div>
+                  {resultUrl ? (
+                    <a href={resultUrl} target="_blank" rel="noreferrer" className="mt-1 block break-all font-mono text-[10px] text-forge-platinum underline underline-offset-2">
+                      {resultUrl}
+                    </a>
+                  ) : null}
+                  {snippet ? <div className="mt-2 text-forge-mist">{snippet}</div> : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : body ? (
+          <pre className="whitespace-pre-wrap break-words font-mono text-[11px] text-forge-ash">{body}</pre>
+        ) : (
+          <div className="text-forge-mist/70">No browser/search payload recorded.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ThinkingTimeline(props: { events: ChatThinkingEvent[]; live?: boolean; emptyText?: string; compact?: boolean }) {
+  if (props.events.length === 0) {
+    return (
+      <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">
+        {props.emptyText ?? "No FORGE thinking trace is available yet."}
+      </div>
+    );
+  }
+  const events = props.compact ? props.events.slice(0, 12) : props.events;
+  return (
+    <div className="space-y-2">
+      {props.live ? (
+        <div className="mb-2 flex items-center justify-between rounded-lg border border-forge-platinum/10 bg-black/25 px-3 py-2">
+          <span className="text-[10px] uppercase tracking-[0.16em] text-forge-mist/70">Live FORGE Thinking</span>
+          <span className="font-mono text-[10px] text-forge-platinum">streaming</span>
+        </div>
+      ) : null}
+      {events.map((evt, index) => (
+        <div key={evt.key ?? `${evt.kind}-${evt.at}-${index}`} className="rounded-lg border border-forge-platinum/10 bg-black/25 px-3 py-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0 truncate text-xs font-semibold text-forge-ash">{evt.text}</div>
+            <div className="shrink-0 font-mono text-[10px] text-forge-mist/65">{formatTime(evt.at)}</div>
+          </div>
+          {evt.detail ? <div className="mt-1 break-words font-mono text-[10px] leading-5 text-forge-mist/80">{evt.detail}</div> : null}
+          {evt.messageId ? <div className="mt-1 text-[10px] uppercase tracking-[0.12em] text-forge-mist/45">message {evt.messageId}</div> : null}
+        </div>
+      ))}
     </div>
   );
 }
@@ -756,13 +1032,13 @@ function CodeBlock(props: { code: string; lang: string }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-white/12 bg-[#0a0d12]">
-      <div className="flex items-center justify-between border-b border-white/10 px-3 py-1.5 text-[11px] text-forge-mist">
+    <div className="overflow-hidden rounded-xl border border-forge-platinum/12 bg-forge-carbon">
+      <div className="flex items-center justify-between border-b border-forge-platinum/10 px-3 py-1.5 text-[11px] text-forge-mist">
         <span className="uppercase tracking-[0.12em]">{props.lang || "code"}</span>
         <button
           type="button"
           onClick={() => void copy()}
-          className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-forge-mist transition hover:bg-white/10"
+          className="rounded border border-forge-platinum/10 bg-forge-platinum/5 px-2 py-1 text-[10px] text-forge-mist transition hover:bg-forge-platinum/10"
         >
           {copied ? "Copied" : "Copy"}
         </button>
@@ -790,7 +1066,7 @@ export function ChatPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showForgeActions, setShowForgeActions] = useState(false);
   const [streamingText, setStreamingText] = useState<string | null>(null);
-  const [streamingEvents, setStreamingEvents] = useState<Array<{ at: number; kind: string; text: string }>>([]);
+  const [streamingEvents, setStreamingEvents] = useState<ChatThinkingEvent[]>([]);
   const [templates, setTemplates] = useState<JobTemplate[]>([]);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
@@ -798,7 +1074,7 @@ export function ChatPage() {
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
-  const [inspectorMode, setInspectorMode] = useState<"code" | "files">("code");
+  const [inspectorMode, setInspectorMode] = useState<"thinking" | "code" | "files" | "terminal" | "browser">("thinking");
   const [selectedSnippetKey, setSelectedSnippetKey] = useState<string>("");
   const [selectedAttachmentId, setSelectedAttachmentId] = useState<number>(0);
   const [chatModels, setChatModels] = useState<ModelRuntimeModel[]>([]);
@@ -821,19 +1097,24 @@ export function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const streamEsRef = useRef<EventSource | null>(null);
+  const streamTokenBufferRef = useRef("");
+  const streamTokenFlushTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     return () => {
       streamEsRef.current?.close();
       streamEsRef.current = null;
+      if (streamTokenFlushTimerRef.current) window.clearTimeout(streamTokenFlushTimerRef.current);
+      streamTokenFlushTimerRef.current = null;
+      streamTokenBufferRef.current = "";
     };
   }, []);
 
   useEffect(() => {
     if (!textareaRef.current) return;
     textareaRef.current.style.height = "0px";
-    const next = Math.max(80, Math.min(300, textareaRef.current.scrollHeight));
+    const next = Math.max(168, Math.min(420, textareaRef.current.scrollHeight));
     textareaRef.current.style.height = `${next}px`;
   }, [draft]);
 
@@ -1006,6 +1287,9 @@ export function ChatPage() {
   function stopStreaming() {
     streamEsRef.current?.close();
     streamEsRef.current = null;
+    if (streamTokenFlushTimerRef.current) window.clearTimeout(streamTokenFlushTimerRef.current);
+    streamTokenFlushTimerRef.current = null;
+    streamTokenBufferRef.current = "";
     setStreamingText(null);
     setStreamingEvents([]);
     setStatus("Assistant stream stopped.");
@@ -1019,6 +1303,9 @@ export function ChatPage() {
 
     setBusy(true);
     setErr(null);
+    if (streamTokenFlushTimerRef.current) window.clearTimeout(streamTokenFlushTimerRef.current);
+    streamTokenFlushTimerRef.current = null;
+    streamTokenBufferRef.current = "";
     setStreamingText(null);
     setStreamingEvents([]);
     streamEsRef.current?.close();
@@ -1089,15 +1376,52 @@ export function ChatPage() {
     return new Promise((resolve, reject) => {
       const url = api.chat.threads.assistantStreamUrl(threadId, userMessageId);
       setStreamingText("");
+      setInspectorMode("thinking");
       const es = new EventSource(url);
       streamEsRef.current = es;
       setStreamingEvents([]);
+      streamTokenBufferRef.current = "";
+      if (streamTokenFlushTimerRef.current) window.clearTimeout(streamTokenFlushTimerRef.current);
+      streamTokenFlushTimerRef.current = null;
+      let firstTokenShown = false;
+
+      const flushTokenBuffer = () => {
+        if (streamTokenFlushTimerRef.current) {
+          window.clearTimeout(streamTokenFlushTimerRef.current);
+          streamTokenFlushTimerRef.current = null;
+        }
+        if (!streamTokenBufferRef.current) return;
+        const chunk = streamTokenBufferRef.current;
+        streamTokenBufferRef.current = "";
+        setStreamingText((prev) => (prev == null ? chunk : prev + chunk));
+      };
+
+      const queueToken = (token: string) => {
+        if (!token) return;
+        streamTokenBufferRef.current += token;
+        if (!firstTokenShown) {
+          firstTokenShown = true;
+          flushTokenBuffer();
+          return;
+        }
+        if (streamTokenBufferRef.current.length >= 240) {
+          flushTokenBuffer();
+          return;
+        }
+        if (!streamTokenFlushTimerRef.current) {
+          streamTokenFlushTimerRef.current = window.setTimeout(flushTokenBuffer, 32);
+        }
+      };
+
+      const pushThinkingEvent = (event: ChatThinkingEvent) => {
+        setStreamingEvents((prev) => [...prev.slice(-79), event]);
+      };
 
       es.addEventListener("token", (ev) => {
         try {
           const raw = JSON.parse((ev as MessageEvent).data as string) as { text?: string };
           const token = typeof raw.text === "string" ? raw.text : "";
-          setStreamingText((prev) => (prev == null ? token : prev + token));
+          queueToken(token);
         } catch {
           /* ignore malformed token payload */
         }
@@ -1108,6 +1432,7 @@ export function ChatPage() {
           const raw = JSON.parse((ev as MessageEvent).data as string) as { assistantMessage?: ChatMessage };
           es.close();
           streamEsRef.current = null;
+          flushTokenBuffer();
           setStreamingText(null);
           setStreamingEvents([]);
           const am = raw.assistantMessage;
@@ -1119,6 +1444,7 @@ export function ChatPage() {
         } catch (e) {
           es.close();
           streamEsRef.current = null;
+          flushTokenBuffer();
           setStreamingText(null);
           reject(e);
         }
@@ -1127,6 +1453,9 @@ export function ChatPage() {
       es.onerror = () => {
         es.close();
         streamEsRef.current = null;
+        if (streamTokenFlushTimerRef.current) window.clearTimeout(streamTokenFlushTimerRef.current);
+        streamTokenFlushTimerRef.current = null;
+        streamTokenBufferRef.current = "";
         setStreamingText(null);
         setStreamingEvents([]);
         reject(new Error("Assistant stream disconnected."));
@@ -1137,7 +1466,13 @@ export function ChatPage() {
           const raw = JSON.parse((ev as MessageEvent).data as string) as Record<string, unknown>;
           const stage = typeof raw.stage === "string" ? raw.stage : "stage";
           const at = typeof raw.atMs === "number" ? raw.atMs : Date.now();
-          setStreamingEvents((prev) => [...prev.slice(-39), { at, kind: "stage", text: stage }]);
+          pushThinkingEvent({
+            at,
+            kind: "stage",
+            text: formatThinkingStage(stage),
+            detail: compactThinkingDetail(raw),
+            data: raw,
+          });
         } catch {
           /* ignore malformed stage payload */
         }
@@ -1148,7 +1483,13 @@ export function ChatPage() {
           const raw = JSON.parse((ev as MessageEvent).data as string) as Record<string, unknown>;
           const modelName = typeof raw.modelName === "string" ? raw.modelName : "tool";
           const at = Date.now();
-          setStreamingEvents((prev) => [...prev.slice(-39), { at, kind: "call", text: `call ${modelName}` }]);
+          pushThinkingEvent({
+            at,
+            kind: "call",
+            text: `Tool call: ${modelName}`,
+            detail: compactThinkingDetail(raw),
+            data: raw,
+          });
         } catch {
           /* ignore malformed tool_call payload */
         }
@@ -1160,7 +1501,13 @@ export function ChatPage() {
           const modelName = typeof raw.modelName === "string" ? raw.modelName : "tool";
           const state = typeof raw.state === "string" ? raw.state : "unknown";
           const at = Date.now();
-          setStreamingEvents((prev) => [...prev.slice(-39), { at, kind: "result", text: `${modelName} -> ${state}` }]);
+          pushThinkingEvent({
+            at,
+            kind: "result",
+            text: `Tool result: ${modelName}`,
+            detail: `state: ${state}${compactThinkingDetail(raw) ? ` · ${compactThinkingDetail(raw)}` : ""}`,
+            data: raw,
+          });
         } catch {
           /* ignore malformed tool_result payload */
         }
@@ -1304,6 +1651,35 @@ export function ChatPage() {
     return out.sort((a, b) => b.createdAtMs - a.createdAtMs);
   }, [active?.messages]);
 
+  const terminalEntries = useMemo<ChatToolEntry[]>(() => {
+    const out: ChatToolEntry[] = [];
+    for (const message of active?.messages ?? []) {
+      for (const entry of readToolEntries(message)) {
+        if (isTerminalTool(entry.tool)) out.push(entry);
+      }
+    }
+    return out.sort((a, b) => b.createdAtMs - a.createdAtMs);
+  }, [active?.messages]);
+
+  const browserEntries = useMemo<ChatToolEntry[]>(() => {
+    const out: ChatToolEntry[] = [];
+    for (const message of active?.messages ?? []) {
+      for (const entry of readToolEntries(message)) {
+        if (isBrowserTool(entry.tool)) out.push(entry);
+      }
+    }
+    return out.sort((a, b) => b.createdAtMs - a.createdAtMs);
+  }, [active?.messages]);
+
+  const thinkingEntries = useMemo<ChatThinkingEvent[]>(() => {
+    const out: ChatThinkingEvent[] = [];
+    for (const message of active?.messages ?? []) {
+      if (message.role !== "assistant") continue;
+      out.push(...readThinkingEvents(message));
+    }
+    return out.sort((a, b) => b.at - a.at);
+  }, [active?.messages]);
+
   useEffect(() => {
     if (!selectedSnippetKey && assistantCodeSnippets.length > 0) {
       setSelectedSnippetKey(assistantCodeSnippets[0].key);
@@ -1341,15 +1717,15 @@ export function ChatPage() {
   const chatModelSummary = useMemo(() => describeChatModel(selectedChatModelId, chatModels), [selectedChatModelId, chatModels]);
 
   return (
-    <div className="grid h-full min-h-0 overflow-hidden rounded-2xl border border-white/10 bg-[#090b0f] md:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[280px_minmax(0,1fr)_380px]">
-      <aside className="flex min-h-0 flex-col overflow-hidden border-b border-white/10 bg-[#0a0d12] md:border-b-0 md:border-r">
-        <div className="border-b border-white/10 p-3">
-          <div className="mb-3 flex items-end justify-between gap-3">
+    <div className="forge-chat-layout grid h-full min-h-0 overflow-hidden bg-forge-black">
+      <aside className="forge-chat-thread-rail flex min-h-0 flex-col overflow-hidden border-b border-forge-platinum/10 bg-forge-carbon md:border-b-0 md:border-r">
+        <div className="border-b border-forge-platinum/10 p-2.5">
+          <div className="mb-2 flex items-end justify-between gap-3">
             <div>
               <div className="text-[10px] uppercase tracking-[0.18em] text-forge-mist/65">Threads</div>
               <div className="mt-1 text-sm font-semibold text-forge-ash">{threads.length} active conversations</div>
             </div>
-            <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] text-forge-mist/80">
+            <div className="rounded-full border border-forge-platinum/10 bg-forge-platinum/5 px-2.5 py-1 text-[10px] text-forge-mist/80">
               {filteredThreads.length} shown
             </div>
           </div>
@@ -1357,7 +1733,7 @@ export function ChatPage() {
             type="button"
             onClick={() => void newThread()}
             disabled={busy}
-            className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-forge-ash transition hover:bg-white/10 disabled:opacity-40"
+            className="w-full rounded-xl border border-forge-platinum/15 bg-forge-platinum/5 px-3 py-1.5 text-sm font-semibold text-forge-ash transition hover:bg-forge-platinum/10 disabled:opacity-40"
           >
             + New chat
           </button>
@@ -1371,9 +1747,9 @@ export function ChatPage() {
           {err ? <div className="mt-2 rounded border border-forge-ember/30 bg-forge-ember/10 p-2 text-xs text-forge-ash">{err}</div> : null}
         </div>
 
-        <div className="forge-chat-scroll min-h-0 flex-1 overflow-y-auto p-2">
+        <div className="forge-chat-scroll min-h-0 flex-1 overflow-y-auto p-1.5">
           {filteredThreads.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-white/10 px-3 py-4 text-xs text-forge-mist">No chats yet.</div>
+            <div className="rounded-lg border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">No chats yet.</div>
           ) : (
             <div className="space-y-1">
               {filteredThreads.map((thread) => {
@@ -1386,8 +1762,8 @@ export function ChatPage() {
                     className={[
                       "w-full rounded-lg border px-3 py-2 text-left transition",
                       isActive
-                        ? "border-white/25 bg-white/10 text-forge-ash"
-                        : "border-transparent bg-transparent text-forge-mist hover:border-white/10 hover:bg-white/5",
+                        ? "border-forge-platinum/25 bg-forge-platinum/10 text-forge-ash"
+                        : "border-transparent bg-transparent text-forge-mist hover:border-forge-platinum/10 hover:bg-forge-platinum/5",
                     ].join(" ")}
                   >
                     <div className="truncate text-sm font-semibold">{trimLine(thread.title, `Thread #${thread.id}`)}</div>
@@ -1403,14 +1779,14 @@ export function ChatPage() {
       <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
         {!active ? (
           <div className="flex flex-1 items-center justify-center p-8">
-            <div className="max-w-md rounded-xl border border-dashed border-white/10 bg-black/25 px-6 py-8 text-center">
+            <div className="max-w-md rounded-xl border border-dashed border-forge-platinum/10 bg-black/25 px-6 py-8 text-center">
               <h2 className="text-lg font-semibold text-forge-ash">Start a new chat</h2>
               <p className="mt-2 text-sm text-forge-mist">Pick a chat on the left or create a new one.</p>
               <button
                 type="button"
                 onClick={() => void newThread()}
                 disabled={busy}
-                className="mt-5 rounded-lg border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-forge-ash transition hover:bg-white/10 disabled:opacity-45"
+                className="mt-5 rounded-lg border border-forge-platinum/15 bg-forge-platinum/5 px-4 py-2 text-sm font-semibold text-forge-ash transition hover:bg-forge-platinum/10 disabled:opacity-45"
               >
                 New chat
               </button>
@@ -1419,7 +1795,7 @@ export function ChatPage() {
         ) : (
           <>
             <header className="forge-chat-header">
-              <div className="mx-auto flex w-full max-w-4xl items-center justify-between gap-3">
+              <div className="forge-chat-content-width mx-auto flex w-full items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   {isEditingTitle ? (
                     <div className="flex items-center gap-2">
@@ -1458,7 +1834,7 @@ export function ChatPage() {
                       <button
                         type="button"
                         onClick={() => setIsEditingTitle(true)}
-                        className="rounded border border-transparent px-2 py-1 text-[11px] text-forge-mist transition hover:border-white/10 hover:text-forge-ash"
+                        className="rounded border border-transparent px-2 py-1 text-[11px] text-forge-mist transition hover:border-forge-platinum/10 hover:text-forge-ash"
                       >
                         Rename
                       </button>
@@ -1475,7 +1851,7 @@ export function ChatPage() {
                     <span className="rounded-full border border-forge-electric/20 bg-forge-electric/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] text-forge-electric">
                       {assistantModeSummary}
                     </span>
-                    <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] text-forge-mist">
+                    <span className="rounded-full border border-forge-platinum/10 bg-forge-platinum/5 px-2.5 py-1 text-[10px] text-forge-mist">
                       {selectedChatModel?.displayName?.trim() || selectedChatModel?.id || "Auto model"}
                     </span>
                   </div>
@@ -1502,7 +1878,7 @@ export function ChatPage() {
                     type="button"
                     onClick={() => void deleteActiveThread()}
                     disabled={busy}
-                    className="forge-chat-action-btn bg-transparent border-white/10 px-2.5"
+                    className="forge-chat-action-btn bg-transparent border-forge-platinum/10 px-2.5"
                   >
                     Delete
                   </button>
@@ -1512,7 +1888,7 @@ export function ChatPage() {
 
             {showForgeActions ? (
               <div className="forge-chat-toolbar">
-                <div className="mx-auto grid w-full max-w-4xl gap-2 md:grid-cols-2">
+                <div className="forge-chat-content-width mx-auto grid w-full gap-2 md:grid-cols-2">
                   <label className="block">
                     <span className="text-[11px] font-medium uppercase tracking-wide text-forge-mist">Template</span>
                     <select
@@ -1561,7 +1937,7 @@ export function ChatPage() {
                     />
                   </label>
                 </div>
-                <div className="mx-auto mt-3 flex w-full max-w-4xl gap-2">
+                <div className="forge-chat-content-width mx-auto mt-3 flex w-full gap-2">
                   <button
                     type="button"
                     onClick={() => void queueJob()}
@@ -1574,10 +1950,10 @@ export function ChatPage() {
               </div>
             ) : null}
 
-            <div className="forge-chat-scroll min-h-0 flex-1 overflow-y-auto px-4 py-6">
-              <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+            <div className="forge-chat-messages forge-chat-scroll min-h-0 flex-1 overflow-y-auto px-5 py-6">
+              <div className="forge-chat-message-stack forge-chat-content-width mx-auto flex w-full flex-col gap-5">
                 {active.messages.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-white/10 bg-black/25 px-5 py-6 text-center">
+                  <div className="rounded-xl border border-dashed border-forge-platinum/10 bg-black/25 px-5 py-6 text-center">
                     <div className="text-sm font-semibold text-forge-ash">No messages yet</div>
                     <div className="mt-1 text-xs text-forge-mist">Send the first message to begin.</div>
                   </div>
@@ -1595,19 +1971,12 @@ export function ChatPage() {
                 )}
 
                 {streamingText !== null ? (
-                  <div className="rounded-xl border border-white/12 bg-[#0c1118] p-4">
+                  <div className="rounded-xl border border-forge-platinum/12 bg-forge-charcoal p-4">
                     <div className="mb-2 text-[10px] uppercase tracking-wide text-forge-mist/70">Assistant is typing…</div>
                     <div className="text-[15px] leading-7 text-forge-ash whitespace-pre-wrap break-words">{streamingText || "…"}</div>
                     {streamingEvents.length > 0 ? (
-                      <div className="mt-3 rounded-lg border border-white/10 bg-black/25 p-2">
-                        <div className="mb-1 text-[10px] uppercase tracking-wide text-forge-mist/70">Agent timeline</div>
-                        <div className="forge-chat-scroll max-h-36 overflow-y-auto space-y-1">
-                          {streamingEvents.map((evt, i) => (
-                            <div key={`se-${i}-${evt.at}`} className="font-mono text-[10px] text-forge-mist/90">
-                              {formatTime(evt.at)} · {evt.text}
-                            </div>
-                          ))}
-                        </div>
+                      <div className="mt-3 rounded-lg border border-forge-platinum/10 bg-black/25 p-2">
+                        <ThinkingTimeline events={streamingEvents.slice().reverse()} live compact />
                       </div>
                     ) : null}
                   </div>
@@ -1617,21 +1986,27 @@ export function ChatPage() {
             </div>
 
             <footer className="forge-chat-footer">
-              <div className="mx-auto w-full max-w-4xl">
-                <div className="mb-3 rounded-2xl border border-white/10 bg-[#0d1219] p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="forge-chat-content-width mx-auto w-full">
+                <div className="forge-chat-routing-strip mb-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <div className="text-[10px] uppercase tracking-[0.16em] text-forge-mist/70">Assistant Routing</div>
-                      <div className="mt-1 text-sm font-semibold text-forge-ash">{assistantModeSummary}</div>
-                      <div className="mt-1 text-[11px] text-forge-mist/75">
-                        {chatModelMessage || chatModelSummary} Models page remains authoritative for runtime inventory, lifecycle, and backend health.
-                      </div>
+                      <div className="text-[10px] uppercase tracking-[0.16em] text-forge-mist/60">Assistant Routing</div>
+                      <div className="mt-0.5 truncate text-xs text-forge-mist/80">{assistantModeSummary} · {chatModelMessage || chatModelSummary}</div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex items-center gap-2 rounded-lg border border-forge-platinum/10 bg-black/20 px-2.5 py-1.5 text-xs text-forge-mist">
+                        <input
+                          aria-label="Use assistant"
+                          type="checkbox"
+                          checked={requestAssistant}
+                          onChange={(e) => setRequestAssistant(e.target.checked)}
+                        />
+                        Use assistant
+                      </label>
                       <button
                         type="button"
                         onClick={() => void refreshChatModels()}
-                        className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-forge-mist transition hover:border-white/20 hover:text-forge-ash"
+                        className="rounded-lg border border-forge-platinum/10 bg-forge-platinum/5 px-3 py-1.5 text-[11px] text-forge-mist transition hover:border-forge-platinum/20 hover:text-forge-ash"
                       >
                         Refresh models
                       </button>
@@ -1644,23 +2019,15 @@ export function ChatPage() {
                       <button
                         type="button"
                         onClick={() => setShowAdvanced((v) => !v)}
-                        className="forge-chat-action-btn border-white/10 bg-transparent py-1 px-2.5 text-[11px]"
+                        className="forge-chat-action-btn border-forge-platinum/10 bg-transparent py-1 px-2.5 text-[11px]"
                       >
                         {showAdvanced ? "Hide advanced" : "Advanced"}
                       </button>
                     </div>
                   </div>
 
-                  <div className="mt-3 grid gap-3 lg:grid-cols-[auto_minmax(0,1fr)_auto]">
-                    <label className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs text-forge-mist">
-                      <input
-                        aria-label="Use assistant"
-                        type="checkbox"
-                        checked={requestAssistant}
-                        onChange={(e) => setRequestAssistant(e.target.checked)}
-                      />
-                      Use assistant
-                    </label>
+                  {showAdvanced ? (
+                  <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
                     <label className="block min-w-0">
                       <span className="text-[11px] font-medium uppercase tracking-wide text-forge-mist">Chat model</span>
                       <select
@@ -1685,16 +2052,17 @@ export function ChatPage() {
                       type="button"
                       onClick={() => setSelectedChatModelId("")}
                       disabled={!selectedChatModelId}
-                      className="rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-[11px] text-forge-mist transition hover:border-white/20 hover:text-forge-ash disabled:opacity-40"
+                      className="rounded-lg border border-forge-platinum/10 bg-black/25 px-3 py-2 text-[11px] text-forge-mist transition hover:border-forge-platinum/20 hover:text-forge-ash disabled:opacity-40"
                     >
                       Use auto
                     </button>
                   </div>
+                  ) : null}
                 </div>
 
                 {showAdvanced ? (
                   <div className="mb-3 grid gap-2 md:grid-cols-3">
-                    <label className="inline-flex items-center gap-2 rounded border border-white/10 bg-black/25 px-2.5 py-2 text-xs text-forge-mist">
+                    <label className="inline-flex items-center gap-2 rounded border border-forge-platinum/10 bg-black/25 px-2.5 py-2 text-xs text-forge-mist">
                       <input
                         aria-label="Assistant dry run"
                         type="checkbox"
@@ -1704,7 +2072,7 @@ export function ChatPage() {
                       />
                       Dry-run
                     </label>
-                    <label className="inline-flex items-center gap-2 rounded border border-white/10 bg-black/25 px-2.5 py-2 text-xs text-forge-mist">
+                    <label className="inline-flex items-center gap-2 rounded border border-forge-platinum/10 bg-black/25 px-2.5 py-2 text-xs text-forge-mist">
                       <input
                         aria-label="Stream assistant response"
                         type="checkbox"
@@ -1717,7 +2085,7 @@ export function ChatPage() {
                       />
                       Stream response
                     </label>
-                    <label className="inline-flex items-center gap-2 rounded border border-white/10 bg-black/25 px-2.5 py-2 text-xs text-forge-mist">
+                    <label className="inline-flex items-center gap-2 rounded border border-forge-platinum/10 bg-black/25 px-2.5 py-2 text-xs text-forge-mist">
                       <input
                         aria-label="Block on assistant response"
                         type="checkbox"
@@ -1733,7 +2101,7 @@ export function ChatPage() {
                   </div>
                 ) : null}
 
-                <div className="rounded-2xl border border-white/10 bg-[#0b0f15] p-3">
+                <div className="forge-chat-composer-shell">
                   {pendingAttachments.length > 0 ? (
                     <div className="mb-3">
                       <div className="mb-2 text-[10px] uppercase tracking-[0.14em] text-forge-mist/65">Pending attachments</div>
@@ -1741,7 +2109,7 @@ export function ChatPage() {
                         {pendingAttachments.map((item) => (
                           <span
                             key={item.artifactId}
-                            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist"
+                            className="inline-flex items-center gap-2 rounded-full border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist"
                           >
                             <button
                               type="button"
@@ -1767,16 +2135,52 @@ export function ChatPage() {
                     </div>
                   ) : null}
 
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-                    <div className="min-w-0 flex-1">
-                      <label htmlFor="chat-composer" className="sr-only">
-                        Message
+                  <div className="mb-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInspectorMode("terminal");
+                        setDraft((prev) => prev || "run ");
+                        window.setTimeout(() => textareaRef.current?.focus(), 0);
+                      }}
+                      className="rounded-lg border border-forge-platinum/10 bg-black/25 px-3 py-1.5 text-[11px] font-semibold text-forge-mist transition hover:border-forge-platinum/25 hover:text-forge-ash"
+                    >
+                      Terminal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInspectorMode("browser");
+                        setDraft((prev) => prev || "search the web for ");
+                        window.setTimeout(() => textareaRef.current?.focus(), 0);
+                      }}
+                      className="rounded-lg border border-forge-platinum/10 bg-black/25 px-3 py-1.5 text-[11px] font-semibold text-forge-mist transition hover:border-forge-platinum/25 hover:text-forge-ash"
+                    >
+                      Web search
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInspectorMode("browser");
+                        setDraft((prev) => prev || "open browser https://");
+                        window.setTimeout(() => textareaRef.current?.focus(), 0);
+                      }}
+                      className="rounded-lg border border-forge-platinum/10 bg-black/25 px-3 py-1.5 text-[11px] font-semibold text-forge-mist transition hover:border-forge-platinum/25 hover:text-forge-ash"
+                    >
+                      Browser
+                    </button>
+                  </div>
+
+	                  <div className="flex flex-col gap-3">
+	                    <div className="min-w-0 flex-1">
+	                      <label htmlFor="chat-composer" className="sr-only">
+	                        Message
                       </label>
                       <textarea
                         id="chat-composer"
                         aria-label="Chat message"
                         ref={textareaRef}
-                        rows={1}
+	                        rows={6}
                         className="forge-chat-composer"
                         placeholder="Message FORGE"
                         value={draft}
@@ -1793,22 +2197,22 @@ export function ChatPage() {
                       onChange={(e) => void uploadSelectedFiles(e.target.files)}
                       disabled={busy || uploading}
                     />
-                    <div className="grid grid-cols-2 gap-2 lg:w-[220px] lg:grid-cols-1">
+	                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+	                      <button
+	                        type="button"
+	                        onClick={() => fileInputRef.current?.click()}
+	                        disabled={busy || uploading || !active}
+	                        className="h-12 forge-chat-action-btn sm:w-36"
+	                      >
+	                        {uploading ? "Uploading…" : "Attach"}
+	                      </button>
                       <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={busy || uploading || !active}
-                        className="h-[56px] forge-chat-action-btn"
-                      >
-                        {uploading ? "Uploading…" : "Attach"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void send()}
-                        disabled={busy || (!draft.trim() && pendingAttachments.length === 0)}
-                        className="h-[56px] forge-chat-action-btn text-sm"
-                      >
-                        Send
+	                        type="button"
+	                        onClick={() => void send()}
+	                        disabled={busy || (!draft.trim() && pendingAttachments.length === 0)}
+	                        className="h-12 forge-chat-action-btn text-sm sm:w-36"
+	                      >
+	                        Send
                       </button>
                     </div>
                   </div>
@@ -1823,16 +2227,46 @@ export function ChatPage() {
         )}
       </section>
 
-      <aside className="hidden min-h-0 min-w-0 flex-col overflow-hidden border-l border-white/10 bg-[#0a0d12] xl:flex">
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+      <aside className="forge-chat-inspector min-h-0 min-w-0 flex-col overflow-hidden border-l border-forge-platinum/10 bg-forge-carbon">
+        <div className="flex items-center justify-between border-b border-forge-platinum/10 px-4 py-3">
           <div className="text-sm font-semibold text-forge-ash">Inspector</div>
           <div className="flex items-center gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => setInspectorMode("thinking")}
+              className={[
+                "rounded border px-2 py-1",
+                inspectorMode === "thinking" ? "border-forge-platinum/20 bg-forge-platinum/10 text-forge-ash" : "border-forge-platinum/10 text-forge-mist hover:border-forge-platinum/20",
+              ].join(" ")}
+            >
+              Thinking
+            </button>
+            <button
+              type="button"
+              onClick={() => setInspectorMode("terminal")}
+              className={[
+                "rounded border px-2 py-1",
+                inspectorMode === "terminal" ? "border-forge-platinum/20 bg-forge-platinum/10 text-forge-ash" : "border-forge-platinum/10 text-forge-mist hover:border-forge-platinum/20",
+              ].join(" ")}
+            >
+              Terminal
+            </button>
+            <button
+              type="button"
+              onClick={() => setInspectorMode("browser")}
+              className={[
+                "rounded border px-2 py-1",
+                inspectorMode === "browser" ? "border-forge-platinum/20 bg-forge-platinum/10 text-forge-ash" : "border-forge-platinum/10 text-forge-mist hover:border-forge-platinum/20",
+              ].join(" ")}
+            >
+              Browser
+            </button>
             <button
               type="button"
               onClick={() => setInspectorMode("code")}
               className={[
                 "rounded border px-2 py-1",
-                inspectorMode === "code" ? "border-white/20 bg-white/10 text-forge-ash" : "border-white/10 text-forge-mist hover:border-white/20",
+                inspectorMode === "code" ? "border-forge-platinum/20 bg-forge-platinum/10 text-forge-ash" : "border-forge-platinum/10 text-forge-mist hover:border-forge-platinum/20",
               ].join(" ")}
             >
               Code
@@ -1842,7 +2276,7 @@ export function ChatPage() {
               onClick={() => setInspectorMode("files")}
               className={[
                 "rounded border px-2 py-1",
-                inspectorMode === "files" ? "border-white/20 bg-white/10 text-forge-ash" : "border-white/10 text-forge-mist hover:border-white/20",
+                inspectorMode === "files" ? "border-forge-platinum/20 bg-forge-platinum/10 text-forge-ash" : "border-forge-platinum/10 text-forge-mist hover:border-forge-platinum/20",
               ].join(" ")}
             >
               Files
@@ -1850,11 +2284,57 @@ export function ChatPage() {
           </div>
         </div>
 
-        {inspectorMode === "code" ? (
+        {inspectorMode === "thinking" ? (
+          <div className="forge-chat-scroll min-h-0 flex-1 overflow-y-auto p-3">
+            {streamingText !== null && streamingEvents.length > 0 ? (
+              <div className="mb-4">
+                <ThinkingTimeline events={streamingEvents.slice().reverse()} live />
+              </div>
+            ) : null}
+            <ThinkingTimeline
+              events={thinkingEntries}
+              emptyText={streamingText !== null ? "FORGE has not emitted a visible thinking event yet." : "No FORGE thinking trace in this thread yet."}
+            />
+          </div>
+        ) : inspectorMode === "terminal" ? (
+          <div className="forge-chat-scroll min-h-0 flex-1 overflow-y-auto p-3">
+            {terminalEntries.length === 0 ? (
+              <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">No terminal runs in this thread yet.</div>
+            ) : (
+              <div className="space-y-3">
+                {terminalEntries.map((entry) => (
+                  <div key={entry.key}>
+                    <div className="mb-1 text-[10px] uppercase tracking-[0.12em] text-forge-mist/60">
+                      message {entry.messageId} · {formatTime(entry.createdAtMs)}
+                    </div>
+                    <TerminalTranscript entry={entry} compact />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : inspectorMode === "browser" ? (
+          <div className="forge-chat-scroll min-h-0 flex-1 overflow-y-auto p-3">
+            {browserEntries.length === 0 ? (
+              <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">No browser or web-search results in this thread yet.</div>
+            ) : (
+              <div className="space-y-3">
+                {browserEntries.map((entry) => (
+                  <div key={entry.key}>
+                    <div className="mb-1 text-[10px] uppercase tracking-[0.12em] text-forge-mist/60">
+                      {entry.tool} · message {entry.messageId} · {formatTime(entry.createdAtMs)}
+                    </div>
+                    <BrowserResultPanel entry={entry} compact />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : inspectorMode === "code" ? (
           <div className="grid min-h-0 flex-1 grid-rows-[220px_minmax(0,1fr)]">
-            <div className="forge-chat-scroll overflow-y-auto border-b border-white/10 p-2">
+            <div className="forge-chat-scroll overflow-y-auto border-b border-forge-platinum/10 p-2">
               {assistantCodeSnippets.length === 0 ? (
-                <div className="rounded border border-dashed border-white/10 px-3 py-4 text-xs text-forge-mist">No assistant code blocks in this thread yet.</div>
+                <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">No assistant code blocks in this thread yet.</div>
               ) : (
                 assistantCodeSnippets.map((snippet) => (
                   <button
@@ -1863,7 +2343,7 @@ export function ChatPage() {
                     onClick={() => setSelectedSnippetKey(snippet.key)}
                     className={[
                       "mb-2 w-full rounded-lg border px-3 py-2 text-left",
-                      selectedSnippetKey === snippet.key ? "border-white/20 bg-white/10" : "border-white/10 bg-black/20 hover:border-white/20",
+                      selectedSnippetKey === snippet.key ? "border-forge-platinum/20 bg-forge-platinum/10" : "border-forge-platinum/10 bg-black/20 hover:border-forge-platinum/20",
                     ].join(" ")}
                   >
                     <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-forge-ash">{snippet.lang}</div>
@@ -1880,15 +2360,15 @@ export function ChatPage() {
                   lang={assistantCodeSnippets.find((item) => item.key === selectedSnippetKey)?.lang ?? "code"}
                 />
               ) : (
-                <div className="rounded border border-dashed border-white/10 px-3 py-4 text-xs text-forge-mist">Select a code block.</div>
+                <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">Select a code block.</div>
               )}
             </div>
           </div>
-        ) : (
+        ) : inspectorMode === "files" ? (
           <div className="grid min-h-0 flex-1 grid-rows-[220px_minmax(0,1fr)]">
-            <div className="forge-chat-scroll overflow-y-auto border-b border-white/10 p-2">
+            <div className="forge-chat-scroll overflow-y-auto border-b border-forge-platinum/10 p-2">
               {messageAttachments.length === 0 ? (
-                <div className="rounded border border-dashed border-white/10 px-3 py-4 text-xs text-forge-mist">No files attached in this thread.</div>
+                <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">No files attached in this thread.</div>
               ) : (
                 messageAttachments.map((item) => (
                   <button
@@ -1897,7 +2377,7 @@ export function ChatPage() {
                     onClick={() => setSelectedAttachmentId(item.attachment.artifactId)}
                     className={[
                       "mb-2 w-full rounded-lg border px-3 py-2 text-left",
-                      selectedAttachmentId === item.attachment.artifactId ? "border-white/20 bg-white/10" : "border-white/10 bg-black/20 hover:border-white/20",
+                      selectedAttachmentId === item.attachment.artifactId ? "border-forge-platinum/20 bg-forge-platinum/10" : "border-forge-platinum/10 bg-black/20 hover:border-forge-platinum/20",
                     ].join(" ")}
                   >
                     <div className="truncate text-xs font-semibold text-forge-ash">{item.attachment.title}</div>
@@ -1913,11 +2393,11 @@ export function ChatPage() {
                   attachment={messageAttachments.find((item) => item.attachment.artifactId === selectedAttachmentId)!.attachment}
                 />
               ) : (
-                <div className="rounded border border-dashed border-white/10 px-3 py-4 text-xs text-forge-mist">Select a file.</div>
+                <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">Select a file.</div>
               )}
             </div>
           </div>
-        )}
+        ) : null}
       </aside>
     </div>
   );
@@ -1936,7 +2416,7 @@ function MessageRow(props: { message: ChatMessage; onInspectAttachment: (artifac
 
   if (role === "system") {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-forge-mist">
+      <div className="rounded-xl border border-forge-platinum/10 bg-forge-platinum/5 px-4 py-3 text-xs text-forge-mist">
         <div className="font-semibold uppercase tracking-wide text-forge-mist/80">System</div>
         <div className="mt-2 whitespace-pre-wrap break-words text-forge-ash">{message.content}</div>
         <div className="mt-2 text-[10px] text-forge-mist/60">{formatTime(message.createdAtMs)}</div>
@@ -1949,10 +2429,10 @@ function MessageRow(props: { message: ChatMessage; onInspectAttachment: (artifac
       <div className={["w-full max-w-[46rem]", isUser ? "max-w-[42rem]" : ""].join(" ")}>
         <div
           className={[
-            "rounded-2xl border px-4 py-3 shadow-[0_18px_40px_rgba(0,0,0,0.16)]",
+            "forge-message-card rounded-xl border px-4 py-3",
             isUser
-              ? "border-white/15 bg-white/10 text-forge-ash"
-              : "border-white/10 bg-[#0c1016] text-forge-ash",
+              ? "border-forge-platinum/15 bg-forge-platinum/10 text-forge-ash"
+              : "border-forge-platinum/10 bg-forge-carbon text-forge-ash",
           ].join(" ")}
         >
           <div className="mb-2 flex items-center justify-between gap-3">
@@ -1969,7 +2449,7 @@ function MessageRow(props: { message: ChatMessage; onInspectAttachment: (artifac
           <RichMessage content={message.content} />
           {toolActivity ? <ToolGatewayActivityPanel activity={toolActivity} /> : null}
           {attachments.length > 0 ? (
-            <div className="mt-3 border-t border-white/10 pt-2">
+            <div className="mt-3 border-t border-forge-platinum/10 pt-2">
               <div className="mb-1 text-[10px] uppercase tracking-[0.12em] text-forge-mist/70">Attachments</div>
               <div className="flex flex-wrap gap-2">
                 {attachments.map((attachment) => (
@@ -1977,7 +2457,7 @@ function MessageRow(props: { message: ChatMessage; onInspectAttachment: (artifac
                     key={attachment.artifactId}
                     type="button"
                     onClick={() => props.onInspectAttachment(attachment.artifactId)}
-                    className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
+                    className="rounded-full border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
                   >
                     {attachment.fileName}
                   </button>
@@ -1986,13 +2466,13 @@ function MessageRow(props: { message: ChatMessage; onInspectAttachment: (artifac
             </div>
           ) : null}
           {jobId || correlationId || traceId ? (
-            <div className="mt-3 border-t border-white/10 pt-2 text-xs text-forge-mist">
+            <div className="mt-3 border-t border-forge-platinum/10 pt-2 text-xs text-forge-mist">
               <div className="mb-2 text-[10px] uppercase tracking-[0.14em] text-forge-mist/65">Traceability</div>
               <div className="flex flex-wrap gap-2">
                 {jobId ? (
                   <Link
                     to={`/jobs/${encodeURIComponent(jobId)}`}
-                    className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
+                    className="rounded-full border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
                   >
                     Job {jobId}
                   </Link>
@@ -2000,7 +2480,7 @@ function MessageRow(props: { message: ChatMessage; onInspectAttachment: (artifac
                 {correlationId ? (
                   <Link
                     to={`/inspectors?correlationId=${encodeURIComponent(correlationId)}`}
-                    className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
+                    className="rounded-full border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
                   >
                     Correlation {correlationId}
                   </Link>
@@ -2008,7 +2488,7 @@ function MessageRow(props: { message: ChatMessage; onInspectAttachment: (artifac
                 {traceId ? (
                   <Link
                     to={`/inspectors?traceId=${encodeURIComponent(traceId)}`}
-                    className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
+                    className="rounded-full border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
                   >
                     Trace {traceId}
                   </Link>
@@ -2024,7 +2504,7 @@ function MessageRow(props: { message: ChatMessage; onInspectAttachment: (artifac
 
 function AttachmentInspectorCard(props: { attachment: ChatAttachment }) {
   return (
-    <div className="space-y-3 rounded-xl border border-white/12 bg-[#0c1016] p-3">
+    <div className="space-y-3 rounded-xl border border-forge-platinum/12 bg-forge-carbon p-3">
       <div>
         <div className="text-[10px] uppercase tracking-[0.12em] text-forge-mist/70">Attachment</div>
         <div className="mt-1 text-sm font-semibold text-forge-ash">{props.attachment.title}</div>
@@ -2036,13 +2516,13 @@ function AttachmentInspectorCard(props: { attachment: ChatAttachment }) {
       <div className="flex flex-wrap gap-2">
         <Link
           to={`/workbench?artifactId=${encodeURIComponent(String(props.attachment.artifactId))}`}
-          className="rounded border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist hover:text-forge-ash"
+          className="rounded border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist hover:text-forge-ash"
         >
           Open in Workbench
         </Link>
       </div>
       {props.attachment.textPreview ? (
-        <pre className="forge-chat-scroll max-h-[420px] overflow-auto whitespace-pre-wrap rounded border border-white/10 bg-black/25 p-2 font-mono text-[11px] text-forge-mist">
+        <pre className="forge-chat-scroll max-h-[420px] overflow-auto whitespace-pre-wrap rounded border border-forge-platinum/10 bg-black/25 p-2 font-mono text-[11px] text-forge-mist">
           {props.attachment.textPreview}
         </pre>
       ) : (

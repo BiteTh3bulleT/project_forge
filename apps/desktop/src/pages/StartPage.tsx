@@ -114,13 +114,13 @@ export function StartPage() {
         {err ? <div className="rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {readiness.map((row) => (
-            <div key={row.id} className="rounded border border-white/10 bg-black/20 p-3">
+            <div key={row.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="text-xs font-semibold uppercase tracking-wide text-forge-mist">{row.title}</div>
                 <span
                   className={[
                     "rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                    row.done ? "bg-emerald-500/15 text-emerald-200" : "bg-white/10 text-forge-mist",
+                    row.done ? "bg-forge-ultramarine/15 text-forge-platinum" : "bg-forge-platinum/10 text-forge-mist",
                   ].join(" ")}
                 >
                   {row.done ? "ready" : "needs setup"}
@@ -130,7 +130,7 @@ export function StartPage() {
               <button
                 type="button"
                 onClick={row.onAction}
-                className="mt-3 rounded border border-white/10 bg-black/30 px-2.5 py-1 text-[11px] font-medium text-forge-mist transition hover:border-forge-ember/35 hover:text-forge-ash"
+                className="mt-3 rounded border border-forge-platinum/10 bg-black/30 px-2.5 py-1 text-[11px] font-medium text-forge-mist transition hover:border-forge-ember/35 hover:text-forge-ash"
               >
                 {row.actionLabel}
               </button>
@@ -197,7 +197,7 @@ export function StartPage() {
                   key={job.id}
                   type="button"
                   onClick={() => navigate(`/jobs/${job.id}`)}
-                  className="w-full rounded border border-white/10 bg-black/20 p-3 text-left transition hover:border-forge-ember/35"
+                  className="w-full rounded border border-forge-platinum/10 bg-black/20 p-3 text-left transition hover:border-forge-ember/35"
                 >
                   <div className="text-sm font-semibold text-forge-ash">{job.title}</div>
                   <div className="mt-1 text-xs text-forge-mist">
@@ -248,7 +248,7 @@ function isAdapterReady(status: string | undefined): boolean {
 
 function QueueRow(props: { label: string; value: number; actionLabel: string; onAction: () => void }) {
   return (
-    <div className="rounded border border-white/10 bg-black/20 p-3">
+    <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
       <div className="flex items-center justify-between gap-2">
         <div className="text-xs uppercase tracking-wide text-forge-mist">{props.label}</div>
         <div className="text-lg font-semibold text-forge-ash">{props.value}</div>
@@ -256,7 +256,7 @@ function QueueRow(props: { label: string; value: number; actionLabel: string; on
       <button
         type="button"
         onClick={props.onAction}
-        className="mt-2 rounded border border-white/10 bg-black/30 px-2.5 py-1 text-[11px] font-medium text-forge-mist transition hover:border-forge-ember/35 hover:text-forge-ash"
+        className="mt-2 rounded border border-forge-platinum/10 bg-black/30 px-2.5 py-1 text-[11px] font-medium text-forge-mist transition hover:border-forge-ember/35 hover:text-forge-ash"
       >
         {props.actionLabel}
       </button>

@@ -117,13 +117,13 @@ export function ProjectContextPage() {
           </Panel>
 
           <Panel title="Normalized Summary" subtitle="Structured digest extracted from context source.">
-            <pre className="max-h-[360px] overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
+            <pre className="max-h-[360px] overflow-auto rounded border border-forge-platinum/10 bg-black/30 p-3 text-[11px] text-forge-mist">
               {JSON.stringify(record.normalizedSummary, null, 2)}
             </pre>
           </Panel>
 
           <Panel title="Generated Briefing" subtitle="FORGE-owned durable briefing used in packet generation and handoffs.">
-            <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
+            <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap rounded border border-forge-platinum/10 bg-black/30 p-3 text-[11px] text-forge-mist">
               {record.briefingMarkdown}
             </pre>
           </Panel>

@@ -296,7 +296,7 @@ export function MemoryPage() {
           </div>
         </FoldSection>
         <FoldSection title="Maintenance preflight gates" subtitle="If/and checks before running repair or VSA maintenance.">
-          <div className="space-y-1 rounded border border-white/10 bg-black/25 p-3 text-xs">
+          <div className="space-y-1 rounded border border-forge-platinum/10 bg-black/25 p-3 text-xs">
             {maintenanceGates.map((gate, idx) => (
               <GateLine key={gate.label} prefix={idx === 0 ? "IF" : "AND"} label={gate.label} pass={gate.pass} />
             ))}
@@ -319,7 +319,7 @@ export function MemoryPage() {
                   onClick={() => setSelectedObsId(obs.id)}
                   className={[
                     "w-full rounded border px-3 py-2 text-left",
-                    selectedObsId === obs.id ? "border-forge-ember/40 bg-black/30" : "border-white/10 bg-black/20 hover:border-forge-ember/35",
+                    selectedObsId === obs.id ? "border-forge-ember/40 bg-black/30" : "border-forge-platinum/10 bg-black/20 hover:border-forge-ember/35",
                   ].join(" ")}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -339,13 +339,13 @@ export function MemoryPage() {
             <div className="text-sm text-forge-mist">Select an observation.</div>
           ) : (
             <div className="space-y-3">
-              <div className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
                 <div>ID #{obsDetail.observation.id} · {obsDetail.observation.type} · verification {obsDetail.observation.verificationState}</div>
                 <div className="mt-1">origin {obsDetail.observation.originKind || "none"}:{obsDetail.observation.originId || "none"}</div>
                 <div className="mt-1">score {obsDetail.observation.usefulnessScore.toFixed(2)} · useful {obsDetail.observation.usefulnessCount} · noisy {obsDetail.observation.noiseCount}</div>
               </div>
-              <div className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist whitespace-pre-wrap">{obsDetail.observation.rawContent || "(no raw content)"}</div>
-              <div className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist whitespace-pre-wrap">{obsDetail.observation.rawContent || "(no raw content)"}</div>
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-forge-ash">VSA Detail</div>
                 {!obsVSADetail?.pointer ? (
                   <div className="mt-2 text-[11px]">No VSA pointer indexed for this observation yet.</div>
@@ -360,7 +360,7 @@ export function MemoryPage() {
                       vector preview [{obsVSADetail.pointer.pointer.slice(0, 8).map((v) => v.toFixed(3)).join(", ")}
                       {obsVSADetail.pointer.pointer.length > 8 ? ", ..." : ""}]
                     </div>
-                    <div className="rounded border border-white/10 bg-black/30 p-2">
+                    <div className="rounded border border-forge-platinum/10 bg-black/30 p-2">
                       <div className="text-[11px] font-semibold text-forge-ash">Role bindings ({obsVSADetail.roleBindings.length})</div>
                       {obsVSADetail.roleBindings.length === 0 ? (
                         <div className="mt-1 text-[11px]">No role bindings.</div>
@@ -374,7 +374,7 @@ export function MemoryPage() {
                         </div>
                       )}
                     </div>
-                    <div className="rounded border border-white/10 bg-black/30 p-2">
+                    <div className="rounded border border-forge-platinum/10 bg-black/30 p-2">
                       <div className="text-[11px] font-semibold text-forge-ash">Associations ({obsVSADetail.associations.length})</div>
                       {obsVSADetail.associations.length === 0 ? (
                         <div className="mt-1 text-[11px]">No associations.</div>
@@ -444,7 +444,7 @@ export function MemoryPage() {
                   Toggle stale
                 </button>
               </div>
-              {status ? <div className="rounded border border-white/10 bg-black/20 p-2 text-xs text-forge-mist">{status}</div> : null}
+              {status ? <div className="rounded border border-forge-platinum/10 bg-black/20 p-2 text-xs text-forge-mist">{status}</div> : null}
             </div>
           )}
         </Panel>
@@ -462,7 +462,7 @@ export function MemoryPage() {
                   key={h.chunkId}
                   type="button"
                   onClick={() => navigate(`/memory/chunk/${h.chunkId}`)}
-                  className="w-full rounded border border-white/10 bg-black/20 p-3 text-left hover:border-forge-ember/35"
+                  className="w-full rounded border border-forge-platinum/10 bg-black/20 p-3 text-left hover:border-forge-ember/35"
                 >
                   <div className="text-xs font-semibold text-forge-ash">{h.relPath || h.absPath}</div>
                   <div className="mt-1 text-[11px] text-forge-mist">chunk {h.chunkIndex} · score {h.score.toFixed(3)} · {formatTime(Math.floor(h.mtimeNs / 1_000_000))}</div>
@@ -513,7 +513,7 @@ export function MemoryPage() {
                   onClick={() => setSelectedRepairId(run.id)}
                   className={[
                     "w-full rounded border px-3 py-2 text-left",
-                    selectedRepairId === run.id ? "border-forge-ember/40 bg-black/30" : "border-white/10 bg-black/20 hover:border-forge-ember/35",
+                    selectedRepairId === run.id ? "border-forge-ember/40 bg-black/30" : "border-forge-platinum/10 bg-black/20 hover:border-forge-ember/35",
                   ].join(" ")}
                 >
                   <div className="text-xs font-semibold text-forge-ash">run #{run.id} · {run.mode}</div>
@@ -532,14 +532,14 @@ export function MemoryPage() {
             <div className="text-sm text-forge-mist">Select a repair run.</div>
           ) : (
             <div className="space-y-2">
-              <div className="rounded border border-white/10 bg-black/20 p-2 text-xs text-forge-mist">
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-2 text-xs text-forge-mist">
                 run #{repairDetail.run.id} · mode {repairDetail.run.mode} · repaired {repairDetail.run.repaired} / {repairDetail.run.candidates}
               </div>
               {repairDetail.items.length === 0 ? (
                 <div className="text-sm text-forge-mist">No repair items recorded.</div>
               ) : (
                 repairDetail.items.slice(0, 40).map((item) => (
-                  <div key={item.id} className="rounded border border-white/10 bg-black/20 p-3">
+                  <div key={item.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3">
                     <div className="text-xs font-semibold text-forge-ash">
                       item #{item.id} · obs {item.observationId} · {item.status}
                     </div>
@@ -607,7 +607,7 @@ export function MemoryPage() {
                   onClick={() => setSelectedVSARunId(run.id)}
                   className={[
                     "w-full rounded border px-3 py-2 text-left",
-                    selectedVSARunId === run.id ? "border-forge-ember/40 bg-black/30" : "border-white/10 bg-black/20 hover:border-forge-ember/35",
+                    selectedVSARunId === run.id ? "border-forge-ember/40 bg-black/30" : "border-forge-platinum/10 bg-black/20 hover:border-forge-ember/35",
                   ].join(" ")}
                 >
                   <div className="text-xs font-semibold text-forge-ash">run #{run.id} · {run.mode} · {run.status}</div>
@@ -628,14 +628,14 @@ export function MemoryPage() {
             <div className="text-sm text-forge-mist">Select a VSA reindex run.</div>
           ) : (
             <div className="space-y-2">
-              <div className="rounded border border-white/10 bg-black/20 p-2 text-xs text-forge-mist">
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-2 text-xs text-forge-mist">
                 run #{vsaRunDetail.run.id} · status {vsaRunDetail.run.status} · indexed {vsaRunDetail.run.indexed} / {vsaRunDetail.run.candidates}
               </div>
               {vsaRunDetail.items.length === 0 ? (
                 <div className="text-sm text-forge-mist">No VSA reindex items recorded.</div>
               ) : (
                 vsaRunDetail.items.slice(0, 40).map((item) => (
-                  <div key={item.id} className="rounded border border-white/10 bg-black/20 p-3">
+                  <div key={item.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3">
                     <div className="text-xs font-semibold text-forge-ash">
                       item #{item.id} · obs {item.observationId} · {item.status}
                     </div>
@@ -657,7 +657,7 @@ export function MemoryPage() {
 
 function GateLine(props: { prefix: "IF" | "AND"; label: string; pass: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-1 last:border-b-0 last:pb-0">
+    <div className="flex items-center justify-between gap-3 border-b border-forge-platinum/5 pb-1 last:border-b-0 last:pb-0">
       <div className="font-mono text-[11px] text-forge-mist">
         <span className="mr-2 text-forge-mist/60">{props.prefix}</span>
         {props.label}
