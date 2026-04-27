@@ -2,6 +2,7 @@ import type { ForgeEvent } from "@forge/shared";
 import { GhostButton, Panel } from "@forge/ui";
 import { useEffect, useState } from "react";
 
+import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 
@@ -41,9 +42,9 @@ export function EventsPage() {
                 <div className="text-sm font-semibold text-forge-ash">{ev.type}</div>
                 <div className="text-[11px] text-forge-mist">{formatTime(ev.createdAtMs)}</div>
               </div>
-              <pre className="mt-3 max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-forge-mist">
-                {JSON.stringify(ev.payload, null, 2)}
-              </pre>
+              <div className="mt-3 max-h-48 overflow-auto break-words rounded border border-white/10 bg-black/20 p-2 text-[11px] leading-relaxed text-forge-mist">
+                <HumanDataView value={ev.payload} compact />
+              </div>
             </div>
           ))
         )}

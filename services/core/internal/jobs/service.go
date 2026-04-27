@@ -404,25 +404,33 @@ func (s *Service) execute(ctx context.Context, jobID string, job *Job, meta jobM
 		if correlationID == "" {
 			correlationID = fmt.Sprintf("job-%s-gateway", jobID)
 		}
+		initiator := strings.TrimSpace(readString(meta.RequestPayload, "initiator"))
+		if initiator == "" {
+			initiator = "job"
+		}
 		reqPaths := readStringSlice(meta.RequestPayload, "paths")
 		invokeInput := readMap(meta.RequestPayload, "input")
 		invokeInput = enrichGatewayActionInput(toolID, invokeInput, meta.UserRequest)
 		dryRun := readBool(meta.RequestPayload, "dryRun", false)
 		packetID := packetID(packet)
 		result, err := s.gateway.Execute(ctx, gateway.Request{
-			ToolID:         toolID,
-			LaneID:         laneID,
-			Domain:         domain,
-			Action:         action,
-			RiskClass:      riskClass,
-			ExecutionLevel: level,
-			CorrelationID:  correlationID,
-			Paths:          reqPaths,
-			Input:          invokeInput,
-			JobID:          &jobID,
-			PacketID:       packetID,
-			Initiator:      "job",
-			DryRun:         dryRun,
+			ToolID:              toolID,
+			LaneID:              laneID,
+			Domain:              domain,
+			Action:              action,
+			RiskClass:           riskClass,
+			ExecutionLevel:      level,
+			CorrelationID:       correlationID,
+			Paths:               reqPaths,
+			Input:               invokeInput,
+			JobID:               &jobID,
+			PacketID:            packetID,
+			Initiator:           initiator,
+			Source:              strings.TrimSpace(readString(meta.RequestPayload, "source")),
+			WorkspaceID:         strings.TrimSpace(readString(meta.RequestPayload, "workspaceId")),
+			ProvenanceActor:     strings.TrimSpace(readString(meta.RequestPayload, "provenanceActor")),
+			ProvenanceActorType: strings.TrimSpace(readString(meta.RequestPayload, "provenanceActorType")),
+			DryRun:              dryRun,
 		})
 		if err != nil {
 			return "", executionError{Code: FailExecution, Message: "gateway invoke failed: " + err.Error()}

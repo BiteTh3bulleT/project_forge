@@ -88,11 +88,22 @@ function formatTime(ms?: number | null) {
 function parseInput(raw: string): Record<string, unknown> {
   const trimmed = raw.trim();
   if (!trimmed) return {};
-  const parsed = JSON.parse(trimmed);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Input must be a JSON object.");
+  if (trimmed.startsWith("{")) {
+    const parsed = JSON.parse(trimmed);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Request details must be a named field list.");
+    }
+    return parsed as Record<string, unknown>;
   }
-  return parsed as Record<string, unknown>;
+  const next: Record<string, unknown> = {};
+  for (const line of trimmed.split(/\r?\n/)) {
+    const clean = line.trim();
+    if (!clean) continue;
+    const splitAt = clean.indexOf(":");
+    if (splitAt < 1) throw new Error(`Request detail is missing a colon: ${clean}`);
+    next[clean.slice(0, splitAt).trim()] = parseReadableValue(clean.slice(splitAt + 1).trim());
+  }
+  return next;
 }
 
 export function ToolGatewayPage() {
@@ -110,7 +121,7 @@ export function ToolGatewayPage() {
   const [action, setAction] = useState("invoke");
   const [riskClass, setRiskClass] = useState("");
   const [executionLevel, setExecutionLevel] = useState("");
-  const [inputRaw, setInputRaw] = useState("{}");
+  const [inputRaw, setInputRaw] = useState("");
   const [dryRun, setDryRun] = useState(true);
   const [last, setLast] = useState<Record<string, unknown> | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -156,7 +167,7 @@ export function ToolGatewayPage() {
           return status === "active" || status === "approval_only";
         })(),
       },
-      { label: "and input JSON is valid", pass: parsedInput.ok },
+      { label: "and request details are valid", pass: parsedInput.ok },
     ],
     [parsedInput.ok, selectedCapability?.status, selectedLane, selectedTool],
   );
@@ -242,7 +253,7 @@ export function ToolGatewayPage() {
         </div>
       </Panel>
 
-      <Panel title="Invoke Action" subtitle="Typed request contract: tool + lane + risk + execution level + scoped targets + structured input.">
+      <Panel title="Invoke Action" subtitle="Typed request contract: tool + lane + risk + execution level + scoped targets + request details.">
         <div className="space-y-3">
           <FoldSection title="1) Target and lane" subtitle="Choose exactly what you want to invoke." defaultOpen>
             <div className="grid gap-3 md:grid-cols-2">
@@ -299,14 +310,19 @@ export function ToolGatewayPage() {
             </div>
           </FoldSection>
 
-          <FoldSection title="3) Scope and payload" subtitle="Constrain paths and provide structured input.">
+          <FoldSection title="3) Scope and details" subtitle="Constrain paths and provide named request details.">
             <label className="block text-xs text-forge-mist">
               Paths (comma-separated, relative to workspace or absolute if policy allows)
               <input className="forge-input mt-1 font-mono text-xs" value={paths} onChange={(e) => setPaths(e.target.value)} placeholder="README.md, docs" />
             </label>
             <label className="mt-3 block text-xs text-forge-mist">
-              Input JSON
-              <textarea className="forge-input mt-1 min-h-[120px] font-mono text-xs" value={inputRaw} onChange={(e) => setInputRaw(e.target.value)} />
+              Request details
+              <textarea
+                className="forge-input mt-1 min-h-[120px] font-mono text-xs"
+                value={inputRaw}
+                onChange={(e) => setInputRaw(e.target.value)}
+                placeholder={"application: minecraft\nwindowTitle: Minecraft"}
+              />
             </label>
             {!parsedInput.ok ? <div className="mt-2 text-xs text-forge-emberSoft">Input error: {parsedInput.error}</div> : null}
             <label className="mt-3 flex items-center gap-2 text-xs text-forge-mist">
@@ -397,7 +413,7 @@ export function ToolGatewayPage() {
 
       <Panel title="Capability Registry" subtitle="Kernel capability taxonomy, status, risk, and autonomy eligibility.">
         <div className="space-y-2">
-          {capabilities.length === 0 ? <div className="text-sm text-forge-mist">No capability metadata available.</div> : null}
+          {capabilities.length === 0 ? <div className="text-sm text-forge-mist">No capability details available.</div> : null}
           {capabilities.map((cap) => (
             <div key={cap.id} className="rounded border border-white/10 bg-black/25 px-3 py-2 text-xs text-forge-mist">
               <div className="font-mono text-forge-ash">{cap.id}</div>
@@ -436,20 +452,32 @@ export function ToolGatewayPage() {
                       [cap.id]: e.target.value,
                     }))
                   }
-                  placeholder="Transition reason (required for disabled/stubbed/deferred/deprecated)"
+                  placeholder="Transition reason (required for status changes)"
                 />
                 <GhostButton
                   onClick={async () => {
                     const nextStatus = statusDraftById[cap.id] ?? cap.status;
                     const reason = (statusReasonById[cap.id] ?? "").trim();
-                    if (requiresStatusReason(nextStatus) && reason === "") {
+                    if (nextStatus !== cap.status && (requiresStatusReason(nextStatus) || reason === "")) {
                       setErr(`Status ${nextStatus} for ${cap.id} requires an explicit reason.`);
                       return;
                     }
                     setStatusUpdateBusy(cap.id);
                     try {
-                      const res = await api.gateway.updateCapabilityStatus(cap.id, { status: nextStatus, reason: reason || undefined });
-                      setStatus(`Capability ${res.capability.id} status -> ${res.capability.status}`);
+                      const res = await api.gateway.updateCapabilityStatus(cap.id, {
+                        status: nextStatus,
+                        reason: reason || undefined,
+                        actor: "operator",
+                        actorKind: "desktop",
+                        source: "desktop",
+                      });
+                      if (res.approvalRequired && res.approvalRequestId) {
+                        setStatus(`Capability ${cap.id} status change needs approval request #${res.approvalRequestId}`);
+                      } else if (res.capability) {
+                        setStatus(`Capability ${res.capability.id} status -> ${res.capability.status}`);
+                      } else {
+                        setStatus(`Capability ${cap.id} status update processed`);
+                      }
                       await refresh();
                     } catch (error) {
                       setErr(error instanceof Error ? error.message : String(error));
@@ -467,7 +495,7 @@ export function ToolGatewayPage() {
         </div>
       </Panel>
 
-      <Panel title="Invocation History" subtitle="Policy outcomes, approvals, and execution results from gateway_invocations.">
+      <Panel title="Invocation History" subtitle="Policy outcomes, approvals, and execution results from gateway history.">
         <div className="space-y-2">
           {invs.length === 0 ? <div className="text-sm text-forge-mist">No invocations in this filter.</div> : null}
           {invs.map((row) => (
@@ -567,6 +595,22 @@ function summarizeOutput(value: unknown) {
   if (Array.isArray(value)) return `${value.length} item(s)`;
   if (typeof value === "object") return `${Object.keys(value as Record<string, unknown>).length} field(s)`;
   return "";
+}
+
+function parseReadableValue(value: string): unknown {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "yes" || normalized === "true") return true;
+  if (normalized === "no" || normalized === "false") return false;
+  if (normalized === "none" || normalized === "null") return null;
+  const numberValue = Number(value);
+  if (value !== "" && Number.isFinite(numberValue)) return numberValue;
+  if (value.includes(",")) {
+    return value
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+  return value;
 }
 
 const CAPABILITY_STATUS_OPTIONS: ToolCapabilityStatus[] = ["active", "approval_only", "disabled", "stubbed", "deferred", "deprecated"];

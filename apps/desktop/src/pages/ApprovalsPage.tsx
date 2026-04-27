@@ -3,6 +3,7 @@ import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -72,9 +73,9 @@ export function ApprovalsPage() {
                 <div className="mt-1 text-xs text-forge-mist">Risk: {r.riskClass} · Write intent: {String(r.writeIntent)}</div>
                 <div className="mt-1 text-xs text-forge-mist">Summary: {r.requestSummary}</div>
 
-                <pre className="mt-3 max-h-40 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
-                  {JSON.stringify(r.scopeSnapshot, null, 2)}
-                </pre>
+                <div className="mt-3 max-h-40 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
+                  <HumanDataView value={r.scopeSnapshot} compact />
+                </div>
 
                 {r.status === "pending" ? (
                   <div className="mt-3 flex gap-2">

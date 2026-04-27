@@ -264,8 +264,7 @@ export function CanvasPage() {
             </div>
 
             <p className="text-[11px] leading-relaxed text-forge-mist/80">
-              Cross-links: put references in note body (for example job ids, dossier ids, or paths). Structured{" "}
-              <code className="text-forge-ash">links</code> JSON is supported by the API; the UI does not yet expose a link builder.
+              Cross-links: put references in note body, such as job ids, dossier ids, or paths. A dedicated link builder is still pending.
             </p>
           </div>
         )}

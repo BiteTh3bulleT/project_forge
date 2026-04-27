@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { FoldSection } from "../components/FoldSection";
+import { HumanDataView, summarizeHumanValue } from "../components/HumanDataView";
 import {
   api,
   type ModelRuntimeBackendStatus,
@@ -58,12 +59,8 @@ function summarizeList(values?: string[]) {
 }
 
 function summarizeValue(value: unknown) {
-  if (value == null) return "—";
-  if (typeof value === "string") return value || "—";
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  if (Array.isArray(value)) return value.length === 0 ? "[]" : JSON.stringify(value);
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
+  const summary = summarizeHumanValue(value);
+  return summary === "None" ? "—" : summary;
 }
 
 function supportsChatCapability(model: ModelRuntimeModel) {
@@ -694,7 +691,7 @@ export function ModelsPage() {
         title="Import and Registration"
         subtitle="Local GGUF and manifest-backed model registration. File deletion remains intentionally out of scope."
       >
-        <FoldSection title="Register Local Model" subtitle="Import a GGUF file or manifest-backed directory into FORGE-managed runtime metadata." defaultOpen>
+        <FoldSection title="Register Local Model" subtitle="Import a GGUF file or manifest-backed directory into FORGE-managed runtime records." defaultOpen>
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(240px,0.65fr)]">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <label className="text-xs text-forge-mist">
@@ -730,7 +727,7 @@ export function ModelsPage() {
             <div className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-forge-mist/80">Registration Notes</div>
               <div className="mt-3 space-y-2">
-                <div>Import records runtime metadata only; removal never deletes model files.</div>
+                <div>Import records runtime details only; removal never deletes model files.</div>
                 <div>Use <span className="text-forge-ash">preferred</span> when the imported model should be favored by runtime compatibility checks.</div>
                 <div>Capabilities should stay comma-separated so registry and chat filtering remain aligned.</div>
               </div>
@@ -900,9 +897,9 @@ export function ModelsPage() {
         </Panel>
 
         <div className="space-y-6">
-          <Panel title="Selected Model" subtitle="Compatibility, loaded state, metadata, and backend readiness for the focused model.">
+          <Panel title="Selected Model" subtitle="Compatibility, loaded state, model details, and backend readiness for the focused model.">
             {!selectedModelSummary ? (
-              <div className="text-sm text-forge-mist">Select a registered model to inspect compatibility and detailed metadata.</div>
+              <div className="text-sm text-forge-mist">Select a registered model to inspect compatibility and model details.</div>
             ) : (
               <div className="space-y-4">
                 <div className="rounded border border-forge-accent/20 bg-[linear-gradient(135deg,rgba(20,30,44,0.88),rgba(8,13,20,0.92))] p-4">
@@ -1001,17 +998,17 @@ export function ModelsPage() {
                       </div>
                     ) : null}
                     {selectedCompatibility.details && Object.keys(selectedCompatibility.details).length > 0 ? (
-                      <pre className="mt-3 max-h-[220px] overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
-                        {JSON.stringify(selectedCompatibility.details, null, 2)}
-                      </pre>
+                      <div className="mt-3 max-h-[220px] overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
+                        <HumanDataView value={selectedCompatibility.details} compact />
+                      </div>
                     ) : null}
                   </div>
                 ) : null}
                 {selectedModelSummary.metadata && Object.keys(selectedModelSummary.metadata).length > 0 ? (
-                  <FoldSection title="Metadata" subtitle="Manifest and registry metadata for this model.">
-                    <pre className="max-h-[260px] overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
-                      {JSON.stringify(selectedModelSummary.metadata, null, 2)}
-                    </pre>
+                  <FoldSection title="Model Details" subtitle="Manifest and registry details for this model.">
+                    <div className="max-h-[260px] overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
+                      <HumanDataView value={selectedModelSummary.metadata} />
+                    </div>
                   </FoldSection>
                 ) : null}
               </div>

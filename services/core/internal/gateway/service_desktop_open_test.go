@@ -1,6 +1,9 @@
 package gateway
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
 
 func TestDesktopInputCandidate(t *testing.T) {
 	input := map[string]any{
@@ -27,6 +30,19 @@ func TestDesktopLaunchCandidates(t *testing.T) {
 	}
 	if candidates[0][0] != "plasma-discover" {
 		t.Fatalf("expected first candidate plasma-discover, got %q", candidates[0][0])
+	}
+}
+
+func TestDesktopLaunchCandidatesMinecraftOnWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows-specific launcher candidates")
+	}
+	candidates := desktopLaunchCandidates("minecraft")
+	if len(candidates) == 0 {
+		t.Fatalf("expected launch candidates for minecraft")
+	}
+	if candidates[0][0] != "minecraft:" {
+		t.Fatalf("expected first Minecraft candidate to use URI launcher, got %q", candidates[0][0])
 	}
 }
 

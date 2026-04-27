@@ -3,7 +3,9 @@
 package gateway
 
 import (
+	"context"
 	"os"
+	"strings"
 	"syscall"
 )
 
@@ -21,4 +23,17 @@ func signalProcess(pid int, sigName string) error {
 		sig = syscall.SIGKILL
 	}
 	return syscall.Kill(pid, sig)
+}
+
+func desktopOpenTarget(ctx context.Context, target string) (pid int, output string, err error) {
+	out, err := runCmd(ctx, "", "xdg-open", strings.TrimSpace(target))
+	return 0, out, err
+}
+
+func desktopLaunchApp(command string, args []string) (int, error) {
+	return runDetachedCmd("", append([]string{command}, args...)...)
+}
+
+func desktopPlatformLaunchCandidates(_ string) [][]string {
+	return nil
 }

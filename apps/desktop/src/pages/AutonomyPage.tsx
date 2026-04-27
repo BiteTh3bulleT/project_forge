@@ -2,6 +2,7 @@ import type { ForgeEvent } from "@forge/shared";
 import { GhostButton, Panel } from "@forge/ui";
 import { useEffect, useState } from "react";
 
+import { HumanDataView, summarizeHumanValue } from "../components/HumanDataView";
 import {
   api,
   type AutonomyBudgetRecord,
@@ -18,7 +19,7 @@ function fmtTime(ms?: number) {
 }
 
 function shortText(value: unknown, max = 220) {
-  const raw = typeof value === "string" ? value : JSON.stringify(value);
+  const raw = typeof value === "string" ? value : summarizeHumanValue(value);
   if (!raw) return "";
   return raw.length > max ? `${raw.slice(0, max)}…` : raw;
 }
@@ -142,9 +143,9 @@ export function AutonomyPage() {
 
         <Panel title="Intent Explanation" subtitle="Structured explain output for selected intent.">
           {intentExplain ? (
-            <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-white/10 bg-black/30 p-3 font-mono text-[11px] leading-relaxed text-forge-mist">
-              {JSON.stringify(intentExplain, null, 2)}
-            </pre>
+            <div className="max-h-96 overflow-auto rounded-lg border border-white/10 bg-black/30 p-3 text-[11px] leading-relaxed text-forge-mist">
+              <HumanDataView value={intentExplain} />
+            </div>
           ) : (
             <div className="text-sm text-forge-mist">Select an intent to inspect explain details.</div>
           )}

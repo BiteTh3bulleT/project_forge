@@ -2,6 +2,7 @@ import type { ImportReconciliation, ImportedExecution, ReviewRecord } from "@for
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
 
+import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -289,9 +290,9 @@ export function ReviewsPage() {
         {selectedImportId ? (
           <div className="mt-3 rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
             <div className="font-semibold text-forge-ash">Selected import context</div>
-            <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
-              {JSON.stringify(importMap.get(Number(selectedImportId)) ?? {}, null, 2)}
-            </pre>
+            <div className="mt-2 max-h-48 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
+              <HumanDataView value={importMap.get(Number(selectedImportId)) ?? {}} compact />
+            </div>
             {selectedReconciliation ? (
               <div className="mt-2 text-[11px]">Existing reconciliation #{selectedReconciliation.id} (updated {formatTime(selectedReconciliation.updatedAtMs)})</div>
             ) : (

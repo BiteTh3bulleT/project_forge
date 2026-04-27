@@ -1326,6 +1326,13 @@ CREATE TABLE IF NOT EXISTS tool_capability_overrides (
   status TEXT NOT NULL,
   reason TEXT NOT NULL DEFAULT '',
   actor TEXT NOT NULL DEFAULT 'operator',
+  actor_kind TEXT NOT NULL DEFAULT '',
+  previous_status TEXT NOT NULL DEFAULT '',
+  risk_class TEXT NOT NULL DEFAULT '',
+  transition_risk TEXT NOT NULL DEFAULT '',
+  approval_request_id INTEGER REFERENCES approval_requests(id) ON DELETE SET NULL,
+  correlation_id TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
   updated_at INTEGER NOT NULL
 );
 
@@ -1401,6 +1408,54 @@ func migrate(db *sql.DB) error {
 	}
 	if err := ensureApprovalRequestExpiryColumns(db); err != nil {
 		return fmt.Errorf("migrate approval_requests expiry: %w", err)
+	}
+	if err := ensureToolCapabilityOverrideColumns(db); err != nil {
+		return fmt.Errorf("migrate tool_capability_overrides: %w", err)
+	}
+	return nil
+}
+
+func ensureToolCapabilityOverrideColumns(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(tool_capability_overrides)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	existing := make(map[string]struct{})
+	for rows.Next() {
+		var cid int
+		var name string
+		var ctype string
+		var notNull int
+		var dflt any
+		var pk int
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &pk); err != nil {
+			return err
+		}
+		existing[name] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	add := []struct {
+		name string
+		ddl  string
+	}{
+		{name: "actor_kind", ddl: "TEXT NOT NULL DEFAULT ''"},
+		{name: "previous_status", ddl: "TEXT NOT NULL DEFAULT ''"},
+		{name: "risk_class", ddl: "TEXT NOT NULL DEFAULT ''"},
+		{name: "transition_risk", ddl: "TEXT NOT NULL DEFAULT ''"},
+		{name: "approval_request_id", ddl: "INTEGER REFERENCES approval_requests(id) ON DELETE SET NULL"},
+		{name: "correlation_id", ddl: "TEXT NOT NULL DEFAULT ''"},
+		{name: "trace_id", ddl: "TEXT NOT NULL DEFAULT ''"},
+	}
+	for _, col := range add {
+		if _, ok := existing[col.name]; ok {
+			continue
+		}
+		if _, err := db.Exec(fmt.Sprintf("ALTER TABLE tool_capability_overrides ADD COLUMN %s %s", col.name, col.ddl)); err != nil {
+			return err
+		}
 	}
 	return nil
 }

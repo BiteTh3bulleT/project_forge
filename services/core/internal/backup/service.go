@@ -1552,7 +1552,7 @@ ON CONFLICT(idempotency_key) DO NOTHING`,
 	addRestoreTable("chat_messages", []string{"id"}, []string{"id", "thread_id", "role", "content", "created_at", "metadata_json"})
 	addRestoreTable("canvas_boards", []string{"id"}, []string{"id", "title", "dossier_id", "created_at", "updated_at"})
 	addRestoreTable("canvas_notes", []string{"id"}, []string{"id", "board_id", "title", "body", "x", "y", "width", "height", "pinned", "color", "links_json", "created_at", "updated_at"})
-	addRestoreTable("tool_capability_overrides", []string{"capability_id"}, []string{"capability_id", "status", "reason", "actor", "updated_at"})
+	addRestoreTable("tool_capability_overrides", []string{"capability_id"}, []string{"capability_id", "status", "reason", "actor", "actor_kind", "previous_status", "risk_class", "transition_risk", "approval_request_id", "correlation_id", "trace_id", "updated_at"})
 	addRestoreTable("feature_flags", []string{"key"}, []string{"key", "value", "updated_at", "actor"})
 	addRestoreTable("alert_rules", []string{"id"}, []string{"id", "name", "expression", "status", "silenced_until", "created_at", "updated_at"})
 	addRestoreTable("scheduled_tasks", []string{"id"}, []string{"id", "kind", "payload_json", "status", "created_at", "updated_at"})

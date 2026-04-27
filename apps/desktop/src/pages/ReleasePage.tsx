@@ -1,6 +1,7 @@
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useState } from "react";
 
+import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { useUiStore } from "../stores/uiStore";
 
@@ -47,7 +48,9 @@ export function ReleasePage() {
 
       {firstRun ? (
         <Panel title="First-run summary" subtitle="Operator onboarding state from the core.">
-          <pre className="max-h-48 overflow-auto rounded border border-white/10 bg-black/25 p-3 font-mono text-[11px] text-forge-mist">{JSON.stringify(firstRun, null, 2)}</pre>
+          <div className="max-h-48 overflow-auto rounded border border-white/10 bg-black/25 p-3 text-[11px] text-forge-mist">
+            <HumanDataView value={firstRun} compact />
+          </div>
         </Panel>
       ) : null}
 
@@ -95,9 +98,9 @@ export function ReleasePage() {
       <Panel title="Recorded artifacts" subtitle="release_artifacts table — audit-friendly packaging history.">
         <div className="space-y-2">
           {artifacts.map((row, idx) => (
-            <pre key={idx} className="max-h-36 overflow-auto rounded border border-white/10 bg-black/25 p-2 font-mono text-[10px] text-forge-mist">
-              {JSON.stringify(row, null, 2)}
-            </pre>
+            <div key={idx} className="max-h-36 overflow-auto rounded border border-white/10 bg-black/25 p-2 text-[11px] text-forge-mist">
+              <HumanDataView value={row} compact />
+            </div>
           ))}
         </div>
       </Panel>

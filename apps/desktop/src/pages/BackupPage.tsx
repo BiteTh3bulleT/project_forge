@@ -1,6 +1,7 @@
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useState } from "react";
 
+import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -46,7 +47,7 @@ export function BackupPage() {
 
   return (
     <div className="space-y-6">
-      <Panel title="Backup & export" subtitle="Portable JSON bundles (not raw sqlite dumps). Version tags are operator-owned." actions={<GhostButton onClick={() => void refresh()}>Refresh</GhostButton>}>
+      <Panel title="Backup & export" subtitle="Portable bundles, not raw sqlite dumps. Version tags are operator-owned." actions={<GhostButton onClick={() => void refresh()}>Refresh</GhostButton>}>
         {err ? <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
         <div className="mt-3 space-y-1 text-xs text-forge-mist">
           <div>
@@ -92,7 +93,7 @@ export function BackupPage() {
       </Panel>
 
       <Panel title="Restore bundle" subtitle="Conservative merge. Always dry-run against an unknown file first.">
-        <input className="forge-input" value={restorePath} onChange={(e) => setRestorePath(e.target.value)} placeholder="absolute path to bundle JSON" />
+        <input className="forge-input" value={restorePath} onChange={(e) => setRestorePath(e.target.value)} placeholder="absolute path to backup bundle" />
         <label className="mt-3 flex items-center gap-2 text-xs text-forge-mist">
           <input type="checkbox" checked={restoreDry} onChange={(e) => setRestoreDry(e.target.checked)} />
           Dry run
@@ -109,9 +110,9 @@ export function BackupPage() {
           </PrimaryButton>
         </div>
         {restoreResult ? (
-          <pre className="mt-4 max-h-64 overflow-auto rounded border border-white/10 bg-black/30 p-3 font-mono text-[11px] text-forge-mist">
-            {JSON.stringify(restoreResult, null, 2)}
-          </pre>
+          <div className="mt-4 max-h-64 overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
+            <HumanDataView value={restoreResult} />
+          </div>
         ) : null}
       </Panel>
 

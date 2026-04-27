@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { FoldSection } from "../components/FoldSection";
+import { HumanDataView } from "../components/HumanDataView";
 import {
   api,
   type AuditTraceLookupReport,
@@ -202,26 +203,22 @@ function parseProcessRuntimeLine(items: ProcessHealthInvocation[]) {
 }
 
 function JsonBlock(props: { value: unknown; empty?: string; maxHeightClass?: string }) {
-  const text = useMemo(() => {
-    if (props.value == null) return "";
-    try {
-      return JSON.stringify(props.value, null, 2);
-    } catch {
-      return String(props.value);
-    }
-  }, [props.value]);
-  if (!text || text === "{}" || text === "[]" || text === "null") {
+  if (
+    props.value == null ||
+    (Array.isArray(props.value) && props.value.length === 0) ||
+    (typeof props.value === "object" && props.value !== null && Object.keys(props.value as Record<string, unknown>).length === 0)
+  ) {
     return <div className="text-xs text-forge-mist/75">{props.empty ?? "No recorded evidence."}</div>;
   }
   return (
-    <pre
+    <div
       className={[
-        "overflow-auto rounded border border-white/10 bg-black/25 p-3 font-mono text-[11px] text-forge-mist",
+        "overflow-auto rounded border border-white/10 bg-black/25 p-3 text-[11px] text-forge-mist",
         props.maxHeightClass ?? "max-h-[360px]",
       ].join(" ")}
     >
-      {text}
-    </pre>
+      <HumanDataView value={props.value} compact />
+    </div>
   );
 }
 
@@ -894,9 +891,9 @@ export function InspectorsPage() {
                   </div>
                 </FoldSection>
 
-                <FoldSection title="Raw Metadata" subtitle="Persisted metadata and included object ids.">
+                <FoldSection title="Snapshot Details" subtitle="Persisted details and included object ids.">
                   <div className="space-y-4">
-                    <JsonBlock value={snapshotDetail.metadata} empty="No metadata recorded." />
+                    <JsonBlock value={snapshotDetail.metadata} empty="No snapshot details recorded." />
                     <JsonBlock
                       value={{
                         state: snapshotDetail.includedStateIds,
@@ -1021,14 +1018,14 @@ export function InspectorsPage() {
                   </div>
                 </div>
 
-                <FoldSection title="Run Summary" subtitle="Dry-run report totals and summary payload." defaultOpen>
+                <FoldSection title="Run Summary" subtitle="Dry-run report totals and summary details." defaultOpen>
                   <div className="grid gap-3 md:grid-cols-3">
                     <MetricChip label="Considered" value={dreamReportDetail.candidatesConsidered ?? 0} />
                     <MetricChip label="Generated" value={dreamReportDetail.proposalsGenerated ?? 0} />
                     <MetricChip label="Warnings" value={dreamReportDetail.warnings?.length ?? 0} />
                   </div>
                   <div className="mt-3">
-                    <JsonBlock value={dreamReportDetail.summary} empty="No Dream summary payload recorded." maxHeightClass="max-h-[220px]" />
+                    <JsonBlock value={dreamReportDetail.summary} empty="No Dream summary details recorded." maxHeightClass="max-h-[220px]" />
                   </div>
                 </FoldSection>
 
@@ -1048,10 +1045,10 @@ export function InspectorsPage() {
                   </div>
                 </FoldSection>
 
-                <FoldSection title="Trace & Metadata" subtitle="Correlation, trace, and non-canonical report metadata.">
+                <FoldSection title="Trace & Details" subtitle="Correlation, trace, and non-canonical report details.">
                   <div className="grid gap-4 md:grid-cols-2">
-                    <JsonBlock value={dreamReportDetail.trace} empty="No trace payload recorded." />
-                    <JsonBlock value={dreamReportDetail.metadata} empty="No report metadata recorded." />
+                    <JsonBlock value={dreamReportDetail.trace} empty="No trace details recorded." />
+                    <JsonBlock value={dreamReportDetail.metadata} empty="No report details recorded." />
                   </div>
                 </FoldSection>
               </>
@@ -1124,9 +1121,9 @@ export function InspectorsPage() {
               </div>
             </FoldSection>
 
-            <FoldSection title="Payload & Retrieval" subtitle="Packet payload plus retrieved context and source references.">
+            <FoldSection title="Request & Retrieval" subtitle="Packet request details plus retrieved context and source references.">
               <div className="space-y-4">
-                <JsonBlock value={packet.requestPayload} empty="No request payload recorded." />
+                <JsonBlock value={packet.requestPayload} empty="No request details recorded." />
                 <JsonBlock value={packet.sourceReferences} empty="No source references recorded." />
                 <JsonBlock value={packet.retrievedContext} empty="No retrieved context recorded." />
               </div>
@@ -1394,7 +1391,7 @@ export function InspectorsPage() {
                       </tbody>
                     </table>
                   </div>
-                  <FoldSection title="Raw process invocations" subtitle="Traceable raw invocation payload for this correlation.">
+                  <FoldSection title="Process Invocation Details" subtitle="Traceable invocation details for this correlation.">
                     <JsonBlock value={report.processInvocations} empty="No process invocations recorded for this correlation." />
                   </FoldSection>
                 </FoldSection>

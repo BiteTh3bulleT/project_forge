@@ -3,6 +3,7 @@ import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
+import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -145,7 +146,9 @@ export function LineagePage() {
                     <div key={edge.id} className="rounded border border-white/10 bg-black/30 p-2 text-xs text-forge-mist">
                       <div>{edge.parentJobId} {"->"} {edge.childJobId}</div>
                       <div className="mt-1">{edge.relationType} | {formatTime(edge.createdAtMs)}</div>
-                      <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-[11px] text-forge-ash">{JSON.stringify(edge.changeSummary, null, 2)}</pre>
+                      <div className="mt-1 max-h-40 overflow-auto text-[11px] text-forge-ash">
+                        <HumanDataView value={edge.changeSummary} compact />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -161,7 +164,9 @@ export function LineagePage() {
                     <div key={edge.id} className="rounded border border-white/10 bg-black/30 p-2 text-xs text-forge-mist">
                       <div>{edge.parentJobId} {"->"} {edge.childJobId}</div>
                       <div className="mt-1">{edge.relationType} | {formatTime(edge.createdAtMs)}</div>
-                      <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-[11px] text-forge-ash">{JSON.stringify(edge.changeSummary, null, 2)}</pre>
+                      <div className="mt-1 max-h-40 overflow-auto text-[11px] text-forge-ash">
+                        <HumanDataView value={edge.changeSummary} compact />
+                      </div>
                     </div>
                   ))}
                 </div>

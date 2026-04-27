@@ -3,6 +3,7 @@ import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -156,9 +157,9 @@ export function JobDetailPage() {
             <div>Risk class: {detail.approvalRequest.riskClass}</div>
             <div>Write intent: {String(detail.approvalRequest.writeIntent)}</div>
           </div>
-          <pre className="mt-3 max-h-44 overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
-            {JSON.stringify(detail.approvalRequest.scopeSnapshot, null, 2)}
-          </pre>
+          <div className="mt-3 max-h-44 overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
+            <HumanDataView value={detail.approvalRequest.scopeSnapshot} compact />
+          </div>
           <div className="mt-3 flex gap-2">
             <PrimaryButton
               onClick={async () => {
@@ -185,9 +186,9 @@ export function JobDetailPage() {
       <Panel title="Packet Preview" subtitle="Versioned contract that this job executed against.">
         {detail.packet ? (
           <div className="space-y-3">
-            <pre className="max-h-[520px] overflow-auto rounded border border-white/10 bg-black/30 p-4 text-[11px] text-forge-mist">
-              {JSON.stringify(detail.packet, null, 2)}
-            </pre>
+            <div className="max-h-[520px] overflow-auto rounded border border-white/10 bg-black/30 p-4 text-[11px] text-forge-mist">
+              <HumanDataView value={detail.packet} />
+            </div>
             <div className="rounded border border-white/10 bg-black/20 p-3">
               <div className="text-xs font-semibold tracking-wide text-forge-mist">Packet Alignment Notes</div>
               {alignmentNotes.length === 0 ? (
@@ -262,9 +263,9 @@ export function JobDetailPage() {
                   <div className="text-[11px] text-forge-mist">#{ev.id} · {formatTime(ev.createdAtMs)}</div>
                 </div>
                 <div className="mt-2 text-xs text-forge-mist">{ev.message}</div>
-                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
-                  {JSON.stringify(ev.payload, null, 2)}
-                </pre>
+                <div className="mt-2 max-h-48 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
+                  <HumanDataView value={ev.payload} compact />
+                </div>
               </div>
             ))}
           </div>

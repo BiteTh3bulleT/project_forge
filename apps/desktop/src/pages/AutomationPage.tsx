@@ -2,25 +2,10 @@ import type { AutomationHistory, AutomationRule } from "@forge/shared";
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useState } from "react";
 
+import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
-
-function parseJSONMap(raw: string, field: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error(`${field} must be a JSON object`);
-    }
-    return parsed as Record<string, unknown>;
-  } catch (e) {
-    throw new Error(`${field} invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
-  }
-}
-
-function pretty(v: unknown): string {
-  return JSON.stringify(v ?? {}, null, 2);
-}
 
 export function AutomationPage() {
   const setStatus = useUiStore((s) => s.setStatusLine);
@@ -29,9 +14,9 @@ export function AutomationPage() {
   const [selectedRuleId, setSelectedRuleId] = useState<number | null>(null);
   const [name, setName] = useState("");
   const [trigger, setTrigger] = useState("");
-  const [condition, setCondition] = useState('{\n  "always": true\n}');
-  const [action, setAction] = useState('{\n  "type": "create_review"\n}');
-  const [scope, setScope] = useState("{}");
+  const [condition, setCondition] = useState("always: yes");
+  const [action, setAction] = useState("type: create_review");
+  const [scope, setScope] = useState("");
   const [enabled, setEnabled] = useState(true);
   const [dryRunDefault, setDryRunDefault] = useState(true);
   const [runDry, setRunDry] = useState(true);
@@ -59,9 +44,9 @@ export function AutomationPage() {
     setSelectedRuleId(rule.id);
     setName(rule.name);
     setTrigger(rule.trigger);
-    setCondition(pretty(rule.condition));
-    setAction(pretty(rule.action));
-    setScope(pretty(rule.scope));
+    setCondition(mapToReadableText(rule.condition));
+    setAction(mapToReadableText(rule.action));
+    setScope(mapToReadableText(rule.scope));
     setEnabled(rule.enabled);
     setDryRunDefault(rule.dryRunDefault);
   }
@@ -101,9 +86,9 @@ export function AutomationPage() {
         </div>
 
         <div className="mt-3 grid gap-3 md:grid-cols-3">
-          <JsonInput label="Condition JSON" value={condition} onChange={setCondition} />
-          <JsonInput label="Action JSON" value={action} onChange={setAction} />
-          <JsonInput label="Scope JSON" value={scope} onChange={setScope} />
+          <ReadableMapInput label="Condition rules" value={condition} onChange={setCondition} />
+          <ReadableMapInput label="Action rules" value={action} onChange={setAction} />
+          <ReadableMapInput label="Scope rules" value={scope} onChange={setScope} />
         </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
@@ -114,9 +99,9 @@ export function AutomationPage() {
                   id: selectedRuleId ?? undefined,
                   name,
                   trigger,
-                  condition: parseJSONMap(condition, "condition"),
-                  action: parseJSONMap(action, "action"),
-                  scope: parseJSONMap(scope, "scope"),
+                  condition: parseReadableMap(condition, "condition"),
+                  action: parseReadableMap(action, "action"),
+                  scope: parseReadableMap(scope, "scope"),
                   enabled,
                   dryRunDefault,
                 };
@@ -136,9 +121,9 @@ export function AutomationPage() {
               setSelectedRuleId(null);
               setName("");
               setTrigger("");
-              setCondition('{\n  "always": true\n}');
-              setAction('{\n  "type": "create_review"\n}');
-              setScope("{}");
+              setCondition("always: yes");
+              setAction("type: create_review");
+              setScope("");
               setEnabled(true);
               setDryRunDefault(true);
             }}
@@ -194,7 +179,7 @@ export function AutomationPage() {
           )}
         </Panel>
 
-        <Panel title="Automation History" subtitle="Immutable run history with preview/result payload snapshots.">
+        <Panel title="Automation History" subtitle="Immutable run history with preview and result snapshots.">
           {history.length === 0 ? (
             <div className="text-sm text-forge-mist">No history rows yet.</div>
           ) : (
@@ -216,24 +201,75 @@ export function AutomationPage() {
         </Panel>
       </div>
 
-      <Panel title="Last Run Payload" subtitle="Most recent rule run preview/execution payload.">
+      <Panel title="Last Run Details" subtitle="Most recent rule run preview or execution result.">
         {!runResult ? (
-          <div className="text-sm text-forge-mist">Run a rule to inspect payload output.</div>
+          <div className="text-sm text-forge-mist">Run a rule to inspect the latest result.</div>
         ) : (
-          <pre className="max-h-[320px] overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
-            {JSON.stringify(runResult, null, 2)}
-          </pre>
+          <div className="max-h-[320px] overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
+            <HumanDataView value={runResult} />
+          </div>
         )}
       </Panel>
     </div>
   );
 }
 
-function JsonInput(props: { label: string; value: string; onChange: (v: string) => void }) {
+function ReadableMapInput(props: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div>
       <label className="text-xs text-forge-mist">{props.label}</label>
       <textarea className="forge-input mt-1 min-h-[130px] font-mono text-[12px]" value={props.value} onChange={(e) => props.onChange(e.target.value)} />
+      <div className="mt-1 text-[10px] text-forge-mist/65">Use one key: value rule per line.</div>
     </div>
   );
+}
+
+function mapToReadableText(value: unknown, prefix = ""): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  return Object.entries(value as Record<string, unknown>)
+    .flatMap(([key, item]) => {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (item && typeof item === "object" && !Array.isArray(item)) return mapToReadableText(item, path).split("\n").filter(Boolean);
+      return `${path}: ${formatReadableValue(item)}`;
+    })
+    .join("\n");
+}
+
+function parseReadableMap(raw: string, field: string): Record<string, unknown> {
+  const root: Record<string, unknown> = {};
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (const line of lines) {
+    const splitAt = line.indexOf(":");
+    if (splitAt < 1) throw new Error(`${field} rule is missing a colon: ${line}`);
+    const path = line.slice(0, splitAt).trim().split(".").filter(Boolean);
+    let cursor = root;
+    for (const segment of path.slice(0, -1)) {
+      const next = cursor[segment];
+      if (!next || typeof next !== "object" || Array.isArray(next)) cursor[segment] = {};
+      cursor = cursor[segment] as Record<string, unknown>;
+    }
+    cursor[path[path.length - 1]] = parseReadableValue(line.slice(splitAt + 1).trim());
+  }
+  return root;
+}
+
+function formatReadableValue(value: unknown) {
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (Array.isArray(value)) return value.join(", ");
+  if (value == null) return "none";
+  return String(value);
+}
+
+function parseReadableValue(value: string): unknown {
+  const normalized = value.toLowerCase();
+  if (normalized === "yes" || normalized === "true") return true;
+  if (normalized === "no" || normalized === "false") return false;
+  if (normalized === "none" || normalized === "null") return null;
+  const numberValue = Number(value);
+  if (value !== "" && Number.isFinite(numberValue)) return numberValue;
+  if (value.includes(",")) return value.split(",").map((part) => part.trim()).filter(Boolean);
+  return value;
 }

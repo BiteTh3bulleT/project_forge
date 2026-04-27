@@ -2,6 +2,7 @@ import type { ProjectContextRecord } from "@forge/shared";
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useState } from "react";
 
+import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -116,10 +117,10 @@ export function ProjectContextPage() {
             </div>
           </Panel>
 
-          <Panel title="Normalized Summary" subtitle="Structured digest extracted from context source.">
-            <pre className="max-h-[360px] overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
-              {JSON.stringify(record.normalizedSummary, null, 2)}
-            </pre>
+          <Panel title="Normalized Summary" subtitle="Readable digest extracted from context source.">
+            <div className="max-h-[360px] overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
+              <HumanDataView value={record.normalizedSummary} />
+            </div>
           </Panel>
 
           <Panel title="Generated Briefing" subtitle="FORGE-owned durable briefing used in packet generation and handoffs.">

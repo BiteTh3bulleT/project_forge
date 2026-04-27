@@ -151,6 +151,34 @@ func TestToolCapabilityRegistryRejectsUnknownStatusAtRegistrationBoundaries(t *t
 	}
 }
 
+func TestCapabilityStatusTransitionUnknownRiskIsConservative(t *testing.T) {
+	t.Parallel()
+	transition := ClassifyCapabilityStatusTransition(domain.ToolCapability{
+		ID:     "custom.unknown_risk",
+		Domain: "custom",
+		Name:   "unknown_risk",
+		Status: domain.ToolCapabilityDisabled,
+		Effect: []domain.ToolEffect{domain.ToolEffectRead},
+		Risk:   domain.ToolRisk("unknown"),
+	}, domain.ToolCapabilityActive)
+	if !transition.RequiresApproval || transition.RiskClass != "high" {
+		t.Fatalf("expected unknown risk transition to require high-risk approval, got %#v", transition)
+	}
+}
+
+func TestGatewayDirectCapabilityStatusUpdateCannotActivateDangerousCapability(t *testing.T) {
+	t.Parallel()
+	gw, _, _ := newToolSurfaceGatewayHarness(t)
+	if _, _, _, err := gw.UpdateCapabilityStatusWithMetadata(context.Background(), "process.spawn_process", domain.ToolCapabilityActive, CapabilityStatusUpdateMetadata{
+		Actor:          "operator-a",
+		Reason:         "stale direct path should still be governed",
+		RiskClass:      "high",
+		TransitionRisk: "high",
+	}); err == nil {
+		t.Fatalf("expected direct dangerous activation to require approval")
+	}
+}
+
 func TestToolCapabilityRegistryDangerousDefaultsNotFreelyActive(t *testing.T) {
 	t.Parallel()
 	reg := NewToolCapabilityRegistry()
@@ -450,6 +478,243 @@ func TestGatewayApprovalFingerprintRejectsReplayForDifferentShape(t *testing.T) 
 			mustGatewayInvocationDeniedReasonContains(t, st, req.CorrelationID, "fingerprint mismatch")
 			mustAuditActionCount(t, st, "tool.denied", req.CorrelationID)
 		})
+	}
+}
+
+func TestGatewayApprovalFingerprintMatchesSyntheticGatewayJobReplay(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	gw, st, workspace := newToolSurfaceGatewayHarness(t)
+	laneID := "approval.fingerprint.synthetic.job"
+	if _, err := gw.lanes.Save(ctx, lanes.Lane{
+		ID:               laneID,
+		Name:             "Approval Fingerprint Synthetic Job",
+		Description:      "Approval-gated lane for synthetic gateway job replay",
+		ActionType:       "invoke",
+		AllowedPaths:     []string{workspace},
+		WriteIntent:      true,
+		RequiresApproval: true,
+		RiskClass:        "safe_write",
+		MaxBytes:         1024,
+		Enabled:          true,
+	}); err != nil {
+		t.Fatalf("save lane: %v", err)
+	}
+
+	req := Request{
+		ToolID:        "fs.write",
+		LaneID:        laneID,
+		Action:        "invoke",
+		CorrelationID: "corr-approval-fingerprint-synthetic-open",
+		TraceID:       "trace-approval-fingerprint-synthetic-open",
+		Paths:         []string{"scratch/fingerprint-synthetic-approved.txt"},
+		Input:         map[string]any{"contents": "approved via synthetic job\n"},
+		Initiator:     "chat",
+		Metadata: map[string]any{
+			"chatUserRequest": "write a synthetic approval replay test file",
+		},
+	}
+	first, err := gw.Execute(ctx, req)
+	if err != nil {
+		t.Fatalf("open approval: %v", err)
+	}
+	if first.Status != StatusNeedsApprov {
+		t.Fatalf("expected needs_approval, got %s (%s)", first.Status, first.DeniedReason)
+	}
+	approvalID := approvalRequestIDFromResult(first)
+	if approvalID <= 0 {
+		t.Fatalf("missing approval request id in %#v", first.Data)
+	}
+	jobID, _ := first.Data["jobId"].(string)
+	if strings.TrimSpace(jobID) == "" {
+		t.Fatalf("missing synthetic job id in %#v", first.Data)
+	}
+	if _, err := gw.approvals.Decide(ctx, approvalID, "operator-a", "approved", "synthetic job replay approval"); err != nil {
+		t.Fatalf("approve request: %v", err)
+	}
+	if _, err := st.DB.ExecContext(ctx, `UPDATE jobs SET approval_status = 'granted' WHERE id = ?`, jobID); err != nil {
+		t.Fatalf("mark job approval granted: %v", err)
+	}
+
+	var metadataJSON string
+	if err := st.DB.QueryRowContext(ctx, `SELECT metadata_json FROM jobs WHERE id = ?`, jobID).Scan(&metadataJSON); err != nil {
+		t.Fatalf("load synthetic job metadata: %v", err)
+	}
+	var meta struct {
+		UserRequest    string         `json:"userRequest"`
+		RequestPayload map[string]any `json:"requestPayload"`
+	}
+	if err := json.Unmarshal([]byte(metadataJSON), &meta); err != nil {
+		t.Fatalf("decode metadata: %v", err)
+	}
+	payload := meta.RequestPayload
+	replayJobID := jobID
+	replayReq := Request{
+		ToolID:              strings.TrimSpace(testReadString(payload, "toolId")),
+		LaneID:              strings.TrimSpace(testReadString(payload, "laneId")),
+		Domain:              strings.TrimSpace(testReadString(payload, "domain")),
+		Action:              strings.TrimSpace(testReadString(payload, "action")),
+		RiskClass:           strings.TrimSpace(testReadString(payload, "riskClass")),
+		ExecutionLevel:      strings.TrimSpace(testReadString(payload, "executionLevel")),
+		CorrelationID:       "corr-approval-fingerprint-synthetic-replay",
+		TraceID:             "trace-approval-fingerprint-synthetic-replay",
+		Paths:               testReadStringSlice(payload, "paths"),
+		Input:               testReadMap(payload, "input"),
+		JobID:               &replayJobID,
+		Initiator:           strings.TrimSpace(testReadString(payload, "initiator")),
+		Source:              strings.TrimSpace(testReadString(payload, "source")),
+		WorkspaceID:         strings.TrimSpace(testReadString(payload, "workspaceId")),
+		ProvenanceActor:     strings.TrimSpace(testReadString(payload, "provenanceActor")),
+		ProvenanceActorType: strings.TrimSpace(testReadString(payload, "provenanceActorType")),
+	}
+	if replayReq.Initiator == "" {
+		replayReq.Initiator = "job"
+	}
+	res, err := gw.Execute(ctx, replayReq)
+	if err != nil {
+		t.Fatalf("execute synthetic replay: %v", err)
+	}
+	if res.Status != StatusOK {
+		t.Fatalf("synthetic job replay should succeed, got %s (%s)", res.Status, res.DeniedReason)
+	}
+}
+
+func TestGatewayApprovalFingerprintMatchesDesktopOpenSyntheticJobReplay(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	gw, st, workspace := newToolSurfaceGatewayHarness(t)
+	laneID := "approval.fingerprint.desktop.open"
+	if _, err := gw.lanes.Save(ctx, lanes.Lane{
+		ID:               laneID,
+		Name:             "Approval Fingerprint Desktop Open",
+		Description:      "Approval-gated desktop.open lane for synthetic gateway job replay",
+		ActionType:       "invoke",
+		AllowedPaths:     []string{workspace},
+		WriteIntent:      true,
+		RequiresApproval: true,
+		RiskClass:        "dangerous",
+		MaxBytes:         1024,
+		Enabled:          true,
+	}); err != nil {
+		t.Fatalf("save lane: %v", err)
+	}
+
+	req := Request{
+		ToolID:        "desktop.open",
+		LaneID:        laneID,
+		Action:        "invoke",
+		CorrelationID: "corr-approval-fingerprint-desktop-open",
+		TraceID:       "trace-approval-fingerprint-desktop-open",
+		Input:         map[string]any{"application": "minecraft"},
+		Initiator:     "chat",
+		Metadata: map[string]any{
+			"chatUserRequest": "Open minecraft please.",
+		},
+	}
+	first, err := gw.Execute(ctx, req)
+	if err != nil {
+		t.Fatalf("open approval: %v", err)
+	}
+	if first.Status != StatusNeedsApprov {
+		t.Fatalf("expected needs_approval, got %s (%s)", first.Status, first.DeniedReason)
+	}
+	approvalID := approvalRequestIDFromResult(first)
+	if approvalID <= 0 {
+		t.Fatalf("missing approval request id in %#v", first.Data)
+	}
+	jobID, _ := first.Data["jobId"].(string)
+	if strings.TrimSpace(jobID) == "" {
+		t.Fatalf("missing synthetic job id in %#v", first.Data)
+	}
+	if _, err := gw.approvals.Decide(ctx, approvalID, "operator-a", "approved", "desktop open replay approval"); err != nil {
+		t.Fatalf("approve request: %v", err)
+	}
+	if _, err := st.DB.ExecContext(ctx, `UPDATE jobs SET approval_status = 'granted' WHERE id = ?`, jobID); err != nil {
+		t.Fatalf("mark job approval granted: %v", err)
+	}
+
+	var metadataJSON string
+	if err := st.DB.QueryRowContext(ctx, `SELECT metadata_json FROM jobs WHERE id = ?`, jobID).Scan(&metadataJSON); err != nil {
+		t.Fatalf("load synthetic job metadata: %v", err)
+	}
+	var meta struct {
+		RequestPayload map[string]any `json:"requestPayload"`
+	}
+	if err := json.Unmarshal([]byte(metadataJSON), &meta); err != nil {
+		t.Fatalf("decode metadata: %v", err)
+	}
+	payload := meta.RequestPayload
+	replayJobID := jobID
+	replayReq := Request{
+		ToolID:              strings.TrimSpace(testReadString(payload, "toolId")),
+		LaneID:              strings.TrimSpace(testReadString(payload, "laneId")),
+		Domain:              strings.TrimSpace(testReadString(payload, "domain")),
+		Action:              strings.TrimSpace(testReadString(payload, "action")),
+		RiskClass:           strings.TrimSpace(testReadString(payload, "riskClass")),
+		ExecutionLevel:      strings.TrimSpace(testReadString(payload, "executionLevel")),
+		CorrelationID:       "corr-approval-fingerprint-desktop-open-replay",
+		TraceID:             "trace-approval-fingerprint-desktop-open-replay",
+		Input:               testReadMap(payload, "input"),
+		JobID:               &replayJobID,
+		Initiator:           strings.TrimSpace(testReadString(payload, "initiator")),
+		Source:              strings.TrimSpace(testReadString(payload, "source")),
+		WorkspaceID:         strings.TrimSpace(testReadString(payload, "workspaceId")),
+		ProvenanceActor:     strings.TrimSpace(testReadString(payload, "provenanceActor")),
+		ProvenanceActorType: strings.TrimSpace(testReadString(payload, "provenanceActorType")),
+	}
+	lane, err := gw.lanes.Get(ctx, laneID)
+	if err != nil {
+		t.Fatalf("load lane: %v", err)
+	}
+	tool := gw.tools["desktop.open"]
+	granted, err := gw.approvalGrantPresent(ctx, replayReq, lane, tool, replayReq.RiskClass, replayReq.ExecutionLevel, nil)
+	if err != nil {
+		t.Fatalf("desktop.open replay approval check failed: %v", err)
+	}
+	if !granted {
+		t.Fatalf("expected desktop.open replay approval to be granted")
+	}
+}
+
+func testReadString(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	switch v := m[key].(type) {
+	case string:
+		return v
+	default:
+		return ""
+	}
+}
+
+func testReadMap(m map[string]any, key string) map[string]any {
+	if m == nil {
+		return nil
+	}
+	if v, ok := m[key].(map[string]any); ok {
+		return v
+	}
+	return nil
+}
+
+func testReadStringSlice(m map[string]any, key string) []string {
+	if m == nil {
+		return nil
+	}
+	switch raw := m[key].(type) {
+	case []string:
+		return raw
+	case []any:
+		out := make([]string, 0, len(raw))
+		for _, v := range raw {
+			if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
 	}
 }
 

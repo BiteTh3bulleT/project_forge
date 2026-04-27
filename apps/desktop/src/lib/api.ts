@@ -1482,8 +1482,34 @@ export const api = {
         }>;
       }>("/api/gateway/tools"),
     capabilities: () => j<{ capabilities: ToolCapability[] }>("/api/gateway/capabilities"),
-    updateCapabilityStatus: (id: string, body: { status: ToolCapabilityStatus; reason?: string }) =>
-      j<{ capability: ToolCapability; previousStatus: ToolCapabilityStatus; auditCategory: string }>(
+    updateCapabilityStatus: (
+      id: string,
+      body: {
+        status: ToolCapabilityStatus;
+        reason?: string;
+        actor?: string;
+        actorKind?: string;
+        source?: string;
+        approvalId?: string;
+        correlationId?: string;
+        traceId?: string;
+        dryRun?: boolean;
+      },
+    ) =>
+      j<{
+        success: boolean;
+        capability?: ToolCapability;
+        capabilityId?: string;
+        previousStatus: ToolCapabilityStatus;
+        newStatus: ToolCapabilityStatus;
+        riskClass?: string;
+        approvalRequired?: boolean;
+        approvalRequestId?: number;
+        rejectionReason?: string;
+        correlationId?: string;
+        traceId?: string;
+        auditCategory?: string;
+      }>(
         `/api/gateway/capabilities/${encodeURIComponent(id)}/status`,
         {
           method: "PATCH",

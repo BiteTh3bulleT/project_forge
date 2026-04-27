@@ -86,10 +86,14 @@ High-risk mappings are explicitly `approval_only` in `activeMappings`, including
 - `future_iris` does not bypass policy in current tests.
 - Gateway terminal status decisions (`needs_approval`, `unsupported`, `disabled`) produce explicit audit entries (`tool.needs_approval`, `tool.unsupported`, `tool.disabled`).
 - Capability status governance is operator-visible and auditable through `PATCH /api/gateway/capabilities/{id}/status`.
-- Transitions into `deferred`/`disabled`/`stubbed`/`deprecated` require explicit reason text at the API boundary.
+- Capability status changes are authority-shaping mutations. Mutating transitions require explicit actor/provenance and reason metadata.
+- High-risk elevation, including dangerous `approval_only -> active` and disabled/deferred/stubbed/deprecated -> active transitions, requires a matching approval request fingerprint before the override is persisted.
+- Safe lowering transitions such as `active -> approval_only`, `active -> disabled`, and `approval_only -> disabled` remain allowed without approval, but still persist actor, reason, previous/new status, transition risk, correlation id, trace id, and audit linkage.
+- Direct legacy/stale gateway status update calls cannot activate dangerous capabilities without approval metadata.
 
 ## Remaining hardening backlog
 
 1. Expand tests for capability-level workspace path boundaries and policy overrides.
 2. Keep retired non-capability mutation routes non-executable.
 3. Add more service-specific harness tests for configured dependency failures.
+4. Add operator UI affordances for the new approval-required capability status response.

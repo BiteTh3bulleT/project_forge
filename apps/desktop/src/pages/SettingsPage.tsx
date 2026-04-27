@@ -543,7 +543,7 @@ export function SettingsPage() {
                   className="forge-input mt-1"
                   value={telegramDefaultChatId}
                   onChange={(e) => setTelegramDefaultChatId(e.target.value)}
-                  placeholder="Fallback chat id when payload lacks chat id"
+                  placeholder="Fallback chat id when the request has no chat id"
                 />
               </div>
               {telegramStatusErr ? (
@@ -589,7 +589,7 @@ export function SettingsPage() {
                   className="forge-input mt-1"
                   value={discordDefaultChannelId}
                   onChange={(e) => setDiscordDefaultChannelId(e.target.value)}
-                  placeholder="Fallback channel when payload lacks channel_id"
+                  placeholder="Fallback channel when the request has no channel id"
                 />
               </div>
               <div>
@@ -670,7 +670,7 @@ export function SettingsPage() {
               className="forge-input mt-1"
               value={remoteProbeMessage}
               onChange={(e) => setRemoteProbeMessage(e.target.value)}
-              placeholder="Probe payload text"
+              placeholder="Probe message text"
             />
           </div>
           <div>

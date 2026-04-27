@@ -2,6 +2,7 @@ import type { RetrievalMode, RetrievalResultVSASignal, RetrievalRun } from "@for
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useState } from "react";
 
+import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -244,10 +245,14 @@ export function RetrievalRunsPage() {
                       ) : null}
                       <div className="mt-2 text-xs text-forge-mist whitespace-pre-wrap">{row.snippet}</div>
                       {selectionByResult[row.id] ? (
-                        <pre className="mt-2 overflow-x-auto rounded border border-white/10 bg-black/35 p-2 text-[11px] text-forge-mist">{JSON.stringify(selectionByResult[row.id], null, 2)}</pre>
+                        <div className="mt-2 overflow-x-auto rounded border border-white/10 bg-black/35 p-2 text-[11px] text-forge-mist">
+                          <HumanDataView value={selectionByResult[row.id]} compact />
+                        </div>
                       ) : null}
                       {vsaSignal?.explain ? (
-                        <pre className="mt-2 overflow-x-auto rounded border border-white/10 bg-black/35 p-2 text-[11px] text-forge-mist">{JSON.stringify(vsaSignal.explain, null, 2)}</pre>
+                        <div className="mt-2 overflow-x-auto rounded border border-white/10 bg-black/35 p-2 text-[11px] text-forge-mist">
+                          <HumanDataView value={vsaSignal.explain} compact />
+                        </div>
                       ) : null}
                       <div className="mt-2 flex flex-wrap gap-2">
                         {[

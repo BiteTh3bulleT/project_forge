@@ -18,7 +18,17 @@ import (
 // UpdateStatus.
 type ToolCapabilityOverrideStore interface {
 	LoadOverrides(ctx context.Context) (map[string]domain.ToolCapabilityStatus, error)
-	SaveOverride(ctx context.Context, capabilityID string, status domain.ToolCapabilityStatus, actor, reason string) error
+	SaveOverride(ctx context.Context, capabilityID string, status domain.ToolCapabilityStatus, actor, reason string, meta ToolCapabilityOverrideMetadata) error
+}
+
+type ToolCapabilityOverrideMetadata struct {
+	PreviousStatus    domain.ToolCapabilityStatus
+	ActorKind         string
+	RiskClass         string
+	TransitionRisk    string
+	ApprovalRequestID *int64
+	CorrelationID     string
+	TraceID           string
 }
 
 type ToolCapabilityRegistry struct {
@@ -90,22 +100,43 @@ func (s *SQLiteOverrideStore) LoadOverrides(ctx context.Context) (map[string]dom
 	return out, rows.Err()
 }
 
-func (s *SQLiteOverrideStore) SaveOverride(ctx context.Context, capabilityID string, status domain.ToolCapabilityStatus, actor, reason string) error {
+func (s *SQLiteOverrideStore) SaveOverride(ctx context.Context, capabilityID string, status domain.ToolCapabilityStatus, actor, reason string, meta ToolCapabilityOverrideMetadata) error {
 	if strings.TrimSpace(actor) == "" {
 		actor = "operator"
 	}
+	var approvalRequestID any
+	if meta.ApprovalRequestID != nil {
+		approvalRequestID = *meta.ApprovalRequestID
+	}
 	_, err := s.DB.ExecContext(ctx, `
-INSERT INTO tool_capability_overrides(capability_id, status, reason, actor, updated_at)
-VALUES(?,?,?,?,?)
+INSERT INTO tool_capability_overrides(
+  capability_id, status, reason, actor, actor_kind, previous_status,
+  risk_class, transition_risk, approval_request_id, correlation_id, trace_id, updated_at
+)
+VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(capability_id) DO UPDATE SET
   status=excluded.status,
   reason=excluded.reason,
   actor=excluded.actor,
+  actor_kind=excluded.actor_kind,
+  previous_status=excluded.previous_status,
+  risk_class=excluded.risk_class,
+  transition_risk=excluded.transition_risk,
+  approval_request_id=excluded.approval_request_id,
+  correlation_id=excluded.correlation_id,
+  trace_id=excluded.trace_id,
   updated_at=excluded.updated_at`,
 		strings.ToLower(strings.TrimSpace(capabilityID)),
 		string(status),
 		reason,
 		actor,
+		strings.TrimSpace(meta.ActorKind),
+		string(meta.PreviousStatus),
+		strings.TrimSpace(meta.RiskClass),
+		strings.TrimSpace(meta.TransitionRisk),
+		approvalRequestID,
+		strings.TrimSpace(meta.CorrelationID),
+		strings.TrimSpace(meta.TraceID),
 		time.Now().UnixMilli(),
 	)
 	return err
@@ -213,6 +244,12 @@ func (r *ToolCapabilityRegistry) UpdateStatus(id string, status domain.ToolCapab
 // configured, persists the override so it survives restart. Reason is
 // operator-visible context (e.g. "approved rollout", "incident 123").
 func (r *ToolCapabilityRegistry) UpdateStatusWithReason(ctx context.Context, id string, status domain.ToolCapabilityStatus, actor, reason string) (domain.ToolCapability, bool, error) {
+	return r.UpdateStatusWithMetadata(ctx, id, status, actor, reason, ToolCapabilityOverrideMetadata{})
+}
+
+// UpdateStatusWithMetadata updates the in-memory state and persists
+// governance metadata for the latest operator override.
+func (r *ToolCapabilityRegistry) UpdateStatusWithMetadata(ctx context.Context, id string, status domain.ToolCapabilityStatus, actor, reason string, meta ToolCapabilityOverrideMetadata) (domain.ToolCapability, bool, error) {
 	status = domain.ToolCapabilityStatus(strings.TrimSpace(strings.ToLower(string(status))))
 	if !domain.IsKnownToolCapabilityStatus(status) {
 		return domain.ToolCapability{}, false, fmt.Errorf("tool capability status %q is unknown", status)
@@ -229,7 +266,7 @@ func (r *ToolCapabilityRegistry) UpdateStatusWithReason(ctx context.Context, id 
 	store := r.store
 	r.mu.Unlock()
 	if store != nil {
-		if err := store.SaveOverride(ctx, key, status, actor, reason); err != nil {
+		if err := store.SaveOverride(ctx, key, status, actor, reason, meta); err != nil {
 			return row, true, fmt.Errorf("persist tool capability override: %w", err)
 		}
 	}

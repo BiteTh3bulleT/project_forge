@@ -2,6 +2,7 @@ import type { AdapterInfo } from "@forge/shared";
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useState } from "react";
 
+import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { useUiStore } from "../stores/uiStore";
 
@@ -28,7 +29,7 @@ export function AdaptersPage() {
     <div className="space-y-6">
       <Panel
         title="Adapters"
-        subtitle="Bounded workers behind a common payload contract: capability, scope, write intent, packet ref, timeout, dry-run, correlation id."
+        subtitle="Bounded workers behind a common request contract: capability, scope, write intent, packet ref, timeout, dry-run, correlation id."
         actions={<GhostButton onClick={() => void refresh()}>Refresh</GhostButton>}
       >
         {err ? <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
@@ -39,9 +40,11 @@ export function AdaptersPage() {
           <Panel key={a.id} title={a.displayName} subtitle={`Status: ${a.status}`}>
             <div className="text-sm text-forge-mist">{a.detail}</div>
             <div className="mt-2 text-xs text-forge-mist">Capabilities: {a.capabilities.join(", ") || "none"}</div>
-            <div className="mt-3 rounded-md border border-white/10 bg-black/25 p-3 font-mono text-[11px] text-forge-mist">
-              <div className="text-forge-ash">config</div>
-              <pre className="mt-2 whitespace-pre-wrap break-words">{JSON.stringify(a.config, null, 2)}</pre>
+            <div className="mt-3 rounded-md border border-white/10 bg-black/25 p-3 text-[11px] text-forge-mist">
+              <div className="text-forge-ash">Configuration</div>
+              <div className="mt-2">
+                <HumanDataView value={a.config} compact />
+              </div>
             </div>
             <div className="mt-4 flex gap-2">
               <PrimaryButton

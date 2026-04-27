@@ -1,6 +1,7 @@
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useCallback, useEffect, useState } from "react";
 
+import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -263,23 +264,25 @@ export function ActionLanesPage() {
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               <div className="rounded border border-white/10 bg-black/20 p-2">
-                <div className="text-[10px] font-semibold text-forge-ash">allowedPaths</div>
-                <pre className="mt-1 max-h-28 overflow-auto whitespace-pre-wrap font-mono text-[10px] text-forge-mist">{JSON.stringify(ln.allowedPaths, null, 2)}</pre>
+                <div className="text-[10px] font-semibold text-forge-ash">Allowed paths</div>
+                <div className="mt-1 max-h-28 overflow-auto text-[10px] text-forge-mist">
+                  <HumanDataView value={ln.allowedPaths} compact />
+                </div>
               </div>
               <div className="rounded border border-white/10 bg-black/20 p-2">
-                <div className="text-[10px] font-semibold text-forge-ash">forbiddenPaths / expectedArtifacts</div>
-                <pre className="mt-1 max-h-28 overflow-auto font-mono text-[10px] text-forge-mist">
-                  {JSON.stringify({ forbiddenPaths: ln.forbiddenPaths, expectedArtifacts: ln.expectedArtifacts }, null, 2)}
-                </pre>
+                <div className="text-[10px] font-semibold text-forge-ash">Forbidden paths / expected artifacts</div>
+                <div className="mt-1 max-h-28 overflow-auto text-[10px] text-forge-mist">
+                  <HumanDataView value={{ forbiddenPaths: ln.forbiddenPaths, expectedArtifacts: ln.expectedArtifacts }} compact />
+                </div>
               </div>
             </div>
             {!ln.builtin ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 <GhostButton
                   onClick={() => {
-                    const allowed = window.prompt("Allowed paths (JSON array or one path per line)", pathsToText(ln.allowedPaths));
+                    const allowed = window.prompt("Allowed paths (one path per line)", pathsToText(ln.allowedPaths));
                     if (allowed == null) return;
-                    const forbidden = window.prompt("Forbidden paths (JSON array or lines)", pathsToText(ln.forbiddenPaths));
+                    const forbidden = window.prompt("Forbidden paths (one path per line)", pathsToText(ln.forbiddenPaths));
                     if (forbidden == null) return;
                     void saveLane({
                       ...ln,

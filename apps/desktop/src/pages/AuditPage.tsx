@@ -2,6 +2,7 @@ import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
+import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 
@@ -28,28 +29,23 @@ function cx(...parts: Array<string | false | null | undefined>) {
 }
 
 function JsonBlock(props: { value: unknown; empty?: string; maxHeightClass?: string }) {
-  const text = useMemo(() => {
-    if (props.value == null) return "";
-    try {
-      return JSON.stringify(props.value, null, 2);
-    } catch {
-      return String(props.value);
-    }
-  }, [props.value]);
-
-  if (!text || text === "{}" || text === "[]" || text === "null") {
-    return <div className="text-xs text-forge-mist/75">{props.empty ?? "No recorded payload."}</div>;
+  if (
+    props.value == null ||
+    (Array.isArray(props.value) && props.value.length === 0) ||
+    (typeof props.value === "object" && props.value !== null && Object.keys(props.value as Record<string, unknown>).length === 0)
+  ) {
+    return <div className="text-xs text-forge-mist/75">{props.empty ?? "No recorded details."}</div>;
   }
 
   return (
-    <pre
+    <div
       className={cx(
-        "overflow-auto rounded border border-white/10 bg-black/25 p-3 font-mono text-[11px] text-forge-mist",
+        "overflow-auto rounded border border-white/10 bg-black/25 p-3 text-[11px] text-forge-mist",
         props.maxHeightClass ?? "max-h-[220px]",
       )}
     >
-      {text}
-    </pre>
+      <HumanDataView value={props.value} compact />
+    </div>
   );
 }
 
@@ -232,7 +228,7 @@ export function AuditPage() {
                 {rec.subjectType ? <CountPill label="Subject" value={`${rec.subjectType}:${rec.subjectId || "—"}`} /> : null}
               </div>
               <div className="mt-3">
-                <JsonBlock value={rec.payload} empty="No payload recorded for this trace event." maxHeightClass="max-h-[180px]" />
+                <JsonBlock value={rec.payload} empty="No details recorded for this trace event." maxHeightClass="max-h-[180px]" />
               </div>
             </div>
           ))}

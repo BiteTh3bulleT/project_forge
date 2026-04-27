@@ -2,6 +2,7 @@ import type { ApprovalPreset, Dossier, ExecutionStrategy, PacketGuidance, Policy
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useState } from "react";
 
+import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -24,7 +25,7 @@ export function PolicyPage() {
   const [presetEditorId, setPresetEditorId] = useState("");
   const [presetEditorName, setPresetEditorName] = useState("");
   const [presetEditorDescription, setPresetEditorDescription] = useState("");
-  const [presetEditorProfile, setPresetEditorProfile] = useState("{\n  \"autoRun\": {\n    \"read_only\": true,\n    \"external_reasoning\": true,\n    \"write_files\": false,\n    \"run_commands\": false\n  }\n}");
+  const [presetEditorProfile, setPresetEditorProfile] = useState(defaultPresetProfileText());
   const [err, setErr] = useState<string | null>(null);
 
   async function load() {
@@ -57,7 +58,7 @@ export function PolicyPage() {
     setPresetEditorId(p.id);
     setPresetEditorName(p.name);
     setPresetEditorDescription(p.description);
-    setPresetEditorProfile(JSON.stringify(p.profile, null, 2));
+    setPresetEditorProfile(profileToReadableText(p.profile));
   }
 
   return (
@@ -111,16 +112,17 @@ export function PolicyPage() {
           <input className="forge-input mt-1" value={presetEditorDescription} onChange={(e) => setPresetEditorDescription(e.target.value)} />
         </div>
         <div className="mb-3">
-          <label className="text-xs text-forge-mist">Profile JSON</label>
+          <label className="text-xs text-forge-mist">Profile rules</label>
           <textarea className="forge-input mt-1 min-h-[140px] font-mono text-[12px]" value={presetEditorProfile} onChange={(e) => setPresetEditorProfile(e.target.value)} />
+          <div className="mt-1 text-[11px] text-forge-mist/75">Use one rule per line, for example: autoRun.read_only: yes</div>
         </div>
         <div className="mb-3 flex gap-2">
           <PrimaryButton
             onClick={async () => {
               try {
-                const parsed = JSON.parse(presetEditorProfile);
+                const parsed = parseReadableProfile(presetEditorProfile);
                 if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-                  setErr("Preset profile must be a JSON object.");
+                  setErr("Preset profile must contain one or more profile rules.");
                   return;
                 }
                 await api.policy.savePreset({
@@ -144,7 +146,7 @@ export function PolicyPage() {
               setPresetEditorId("");
               setPresetEditorName("");
               setPresetEditorDescription("");
-              setPresetEditorProfile("{\n  \"autoRun\": {\n    \"read_only\": true,\n    \"external_reasoning\": true,\n    \"write_files\": false,\n    \"run_commands\": false\n  }\n}");
+              setPresetEditorProfile(defaultPresetProfileText());
             }}
           >
             New Preset Draft
@@ -166,9 +168,9 @@ export function PolicyPage() {
                 </div>
                 <div className="mt-1">{p.description}</div>
                 <div className="mt-1">editable {String(p.editable)} · updated {formatTime(p.updatedAtMs)}</div>
-                <pre className="mt-2 max-h-40 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
-                  {JSON.stringify(p.profile, null, 2)}
-                </pre>
+                <div className="mt-2 max-h-40 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
+                  <HumanDataView value={p.profile} compact />
+                </div>
               </button>
             ))}
           </div>
@@ -248,9 +250,9 @@ export function PolicyPage() {
                   confidence {(r.confidence * 100).toFixed(1)}% · inferred {String(r.inferred)} · override {String(r.operatorOverrideAllowed)}
                 </div>
                 <div className="mt-1">reasons: {r.reasons.join(" | ")}</div>
-                <pre className="mt-2 max-h-44 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
-                  {JSON.stringify({ evidence: r.evidence, packetShape: r.packetShape }, null, 2)}
-                </pre>
+                <div className="mt-2 max-h-44 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
+                  <HumanDataView value={{ evidence: r.evidence, packetShape: r.packetShape }} compact />
+                </div>
               </div>
             ))}
           </div>
@@ -311,9 +313,9 @@ export function PolicyPage() {
                 </div>
                 <div className="mt-1">issues: {g.issues.join(" | ") || "none"}</div>
                 <div className="mt-1">recommendations: {g.recommendations.join(" | ") || "none"}</div>
-                <pre className="mt-2 max-h-36 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
-                  {JSON.stringify(g.evidence, null, 2)}
-                </pre>
+                <div className="mt-2 max-h-36 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
+                  <HumanDataView value={g.evidence} compact />
+                </div>
               </div>
             ))
           )}
@@ -321,4 +323,75 @@ export function PolicyPage() {
       </Panel>
     </div>
   );
+}
+
+function defaultPresetProfileText() {
+  return [
+    "autoRun.read_only: yes",
+    "autoRun.external_reasoning: yes",
+    "autoRun.write_files: no",
+    "autoRun.run_commands: no",
+  ].join("\n");
+}
+
+function profileToReadableText(value: unknown, prefix = ""): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  return Object.entries(value as Record<string, unknown>)
+    .flatMap(([key, item]) => {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        return profileToReadableText(item, path).split("\n").filter(Boolean);
+      }
+      return `${path}: ${formatProfileValue(item)}`;
+    })
+    .join("\n");
+}
+
+function formatProfileValue(value: unknown) {
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (Array.isArray(value)) return value.join(", ");
+  if (value == null) return "none";
+  return String(value);
+}
+
+function parseReadableProfile(text: string): Record<string, unknown> {
+  const root: Record<string, unknown> = {};
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
+
+  for (const line of lines) {
+    const splitAt = line.indexOf(":");
+    if (splitAt < 1) throw new Error(`Profile rule is missing a colon: ${line}`);
+    const path = line.slice(0, splitAt).trim().split(".").filter(Boolean);
+    if (path.length === 0) throw new Error(`Profile rule is missing a key: ${line}`);
+    let cursor = root;
+    for (const segment of path.slice(0, -1)) {
+      const next = cursor[segment];
+      if (!next || typeof next !== "object" || Array.isArray(next)) {
+        cursor[segment] = {};
+      }
+      cursor = cursor[segment] as Record<string, unknown>;
+    }
+    cursor[path[path.length - 1]] = parseProfileValue(line.slice(splitAt + 1).trim());
+  }
+
+  return root;
+}
+
+function parseProfileValue(value: string): unknown {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "yes" || normalized === "true") return true;
+  if (normalized === "no" || normalized === "false") return false;
+  if (normalized === "none" || normalized === "null") return null;
+  const numberValue = Number(value);
+  if (value !== "" && Number.isFinite(numberValue)) return numberValue;
+  if (value.includes(",")) {
+    return value
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+  return value;
 }

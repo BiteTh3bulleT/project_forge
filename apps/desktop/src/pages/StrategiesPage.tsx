@@ -17,22 +17,6 @@ function parseCSV(v: string): string[] {
     .filter(Boolean);
 }
 
-function jsonPretty(v: unknown) {
-  return JSON.stringify(v ?? {}, null, 2);
-}
-
-function parseJSON(raw: string, field: string): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error(`${field} must be a JSON object`);
-    }
-    return parsed as Record<string, unknown>;
-  } catch (e) {
-    throw new Error(`${field} invalid JSON: ${e instanceof Error ? e.message : String(e)}`);
-  }
-}
-
 export function StrategiesPage() {
   const setStatus = useUiStore((s) => s.setStatusLine);
   const [strategies, setStrategies] = useState<ExecutionStrategy[]>([]);
@@ -46,9 +30,9 @@ export function StrategiesPage() {
   const [approvalRequired, setApprovalRequired] = useState(true);
   const [approvalPresetId, setApprovalPresetId] = useState("balanced");
   const [expectedArtifacts, setExpectedArtifacts] = useState("task_packet, adapter_output, job_result");
-  const [packetRules, setPacketRules] = useState("{\n  \"targetItems\": 8,\n  \"maxItems\": 14\n}");
-  const [successCriteria, setSuccessCriteria] = useState("{\n  \"requiresSummary\": true\n}");
-  const [retryGuidance, setRetryGuidance] = useState("{\n  \"maxRetries\": 2,\n  \"adjustment\": \"tighten_scope\"\n}");
+  const [packetRules, setPacketRules] = useState("targetItems: 8\nmaxItems: 14");
+  const [successCriteria, setSuccessCriteria] = useState("requiresSummary: yes");
+  const [retryGuidance, setRetryGuidance] = useState("maxRetries: 2\nadjustment: tighten_scope");
   const [enabled, setEnabled] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -76,9 +60,9 @@ export function StrategiesPage() {
     setApprovalRequired(row.approvalRequired);
     setApprovalPresetId(row.approvalPresetId ?? "");
     setExpectedArtifacts(toCSV(row.expectedArtifacts));
-    setPacketRules(jsonPretty(row.packetRules));
-    setSuccessCriteria(jsonPretty(row.successCriteria));
-    setRetryGuidance(jsonPretty(row.retryGuidance));
+    setPacketRules(mapToReadableText(row.packetRules));
+    setSuccessCriteria(mapToReadableText(row.successCriteria));
+    setRetryGuidance(mapToReadableText(row.retryGuidance));
     setEnabled(row.enabled);
   }
 
@@ -153,9 +137,9 @@ export function StrategiesPage() {
         </div>
 
         <div className="mt-3 grid gap-3 md:grid-cols-3">
-          <JsonField label="Packet rules" value={packetRules} onChange={setPacketRules} />
-          <JsonField label="Success criteria" value={successCriteria} onChange={setSuccessCriteria} />
-          <JsonField label="Retry guidance" value={retryGuidance} onChange={setRetryGuidance} />
+          <RuleField label="Packet rules" value={packetRules} onChange={setPacketRules} />
+          <RuleField label="Success criteria" value={successCriteria} onChange={setSuccessCriteria} />
+          <RuleField label="Retry guidance" value={retryGuidance} onChange={setRetryGuidance} />
         </div>
 
         <div className="mt-3 flex gap-2">
@@ -168,12 +152,12 @@ export function StrategiesPage() {
                   taskType,
                   targetAdapter,
                   retrievalMode,
-                  packetRules: parseJSON(packetRules, "packetRules"),
+                  packetRules: parseReadableMap(packetRules, "packet rules"),
                   approvalRequired,
                   approvalPresetId: approvalPresetId.trim() || undefined,
                   expectedArtifacts: parseCSV(expectedArtifacts),
-                  successCriteria: parseJSON(successCriteria, "successCriteria"),
-                  retryGuidance: parseJSON(retryGuidance, "retryGuidance"),
+                  successCriteria: parseReadableMap(successCriteria, "success criteria"),
+                  retryGuidance: parseReadableMap(retryGuidance, "retry guidance"),
                   enabled,
                 };
                 const res = await api.strategies.save(payload);
@@ -198,9 +182,9 @@ export function StrategiesPage() {
               setApprovalRequired(true);
               setApprovalPresetId("balanced");
               setExpectedArtifacts("task_packet, adapter_output, job_result");
-              setPacketRules("{\n  \"targetItems\": 8,\n  \"maxItems\": 14\n}");
-              setSuccessCriteria("{\n  \"requiresSummary\": true\n}");
-              setRetryGuidance("{\n  \"maxRetries\": 2\n}");
+              setPacketRules("targetItems: 8\nmaxItems: 14");
+              setSuccessCriteria("requiresSummary: yes");
+              setRetryGuidance("maxRetries: 2");
               setEnabled(true);
             }}
           >
@@ -241,11 +225,62 @@ export function StrategiesPage() {
   );
 }
 
-function JsonField(props: { label: string; value: string; onChange: (v: string) => void }) {
+function RuleField(props: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div>
       <label className="text-xs text-forge-mist">{props.label}</label>
       <textarea className="forge-input mt-1 min-h-[140px] font-mono text-[12px]" value={props.value} onChange={(e) => props.onChange(e.target.value)} />
+      <div className="mt-1 text-[10px] text-forge-mist/65">Use one key: value rule per line.</div>
     </div>
   );
+}
+
+function mapToReadableText(value: unknown, prefix = ""): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  return Object.entries(value as Record<string, unknown>)
+    .flatMap(([key, item]) => {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (item && typeof item === "object" && !Array.isArray(item)) return mapToReadableText(item, path).split("\n").filter(Boolean);
+      return `${path}: ${formatReadableValue(item)}`;
+    })
+    .join("\n");
+}
+
+function parseReadableMap(raw: string, field: string): Record<string, unknown> {
+  const root: Record<string, unknown> = {};
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (const line of lines) {
+    const splitAt = line.indexOf(":");
+    if (splitAt < 1) throw new Error(`${field} rule is missing a colon: ${line}`);
+    const path = line.slice(0, splitAt).trim().split(".").filter(Boolean);
+    let cursor = root;
+    for (const segment of path.slice(0, -1)) {
+      const next = cursor[segment];
+      if (!next || typeof next !== "object" || Array.isArray(next)) cursor[segment] = {};
+      cursor = cursor[segment] as Record<string, unknown>;
+    }
+    cursor[path[path.length - 1]] = parseReadableValue(line.slice(splitAt + 1).trim());
+  }
+  return root;
+}
+
+function formatReadableValue(value: unknown) {
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (Array.isArray(value)) return value.join(", ");
+  if (value == null) return "none";
+  return String(value);
+}
+
+function parseReadableValue(value: string): unknown {
+  const normalized = value.toLowerCase();
+  if (normalized === "yes" || normalized === "true") return true;
+  if (normalized === "no" || normalized === "false") return false;
+  if (normalized === "none" || normalized === "null") return null;
+  const numberValue = Number(value);
+  if (value !== "" && Number.isFinite(numberValue)) return numberValue;
+  if (value.includes(",")) return value.split(",").map((part) => part.trim()).filter(Boolean);
+  return value;
 }

@@ -1,11 +1,12 @@
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useCallback, useEffect, useState } from "react";
 
+import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
 
-/** Matches `permissions.Profile` JSON from forge-core. */
+/** Matches `permissions.Profile` from forge-core. */
 export type PermissionProfile = {
   id: string;
   createdAtMs: number;
@@ -181,9 +182,9 @@ export function ExecutionPermissionsPage() {
       >
         {err ? <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
         {summary ? (
-          <pre className="mt-3 max-h-32 overflow-auto rounded border border-white/10 bg-black/25 p-3 font-mono text-[11px] text-forge-mist">
-            {JSON.stringify(summary, null, 2)}
-          </pre>
+          <div className="mt-3 max-h-32 overflow-auto rounded border border-white/10 bg-black/25 p-3 text-[11px] text-forge-mist">
+            <HumanDataView value={summary} compact />
+          </div>
         ) : null}
       </Panel>
 

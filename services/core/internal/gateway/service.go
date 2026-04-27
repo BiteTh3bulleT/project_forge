@@ -325,7 +325,22 @@ func (g *Gateway) Capability(id string) (domain.ToolCapability, bool) {
 	return g.capabilities.Get(id)
 }
 
+type CapabilityStatusUpdateMetadata struct {
+	Actor             string
+	ActorKind         string
+	Reason            string
+	RiskClass         string
+	TransitionRisk    string
+	ApprovalRequestID *int64
+	CorrelationID     string
+	TraceID           string
+}
+
 func (g *Gateway) UpdateCapabilityStatus(id string, status domain.ToolCapabilityStatus) (domain.ToolCapability, domain.ToolCapability, bool, error) {
+	return g.UpdateCapabilityStatusWithMetadata(context.Background(), id, status, CapabilityStatusUpdateMetadata{Actor: "operator"})
+}
+
+func (g *Gateway) UpdateCapabilityStatusWithMetadata(ctx context.Context, id string, status domain.ToolCapabilityStatus, meta CapabilityStatusUpdateMetadata) (domain.ToolCapability, domain.ToolCapability, bool, error) {
 	if g.capabilities == nil {
 		return domain.ToolCapability{}, domain.ToolCapability{}, false, fmt.Errorf("capability registry unavailable")
 	}
@@ -333,7 +348,26 @@ func (g *Gateway) UpdateCapabilityStatus(id string, status domain.ToolCapability
 	if !found {
 		return domain.ToolCapability{}, domain.ToolCapability{}, false, nil
 	}
-	updated, ok, err := g.capabilities.UpdateStatus(id, status)
+	if previous.Status != status && strings.TrimSpace(meta.Reason) == "" {
+		return domain.ToolCapability{}, domain.ToolCapability{}, false, fmt.Errorf("capability status change reason is required")
+	}
+	if previous.Status != status && strings.TrimSpace(meta.Actor) == "" {
+		return domain.ToolCapability{}, domain.ToolCapability{}, false, fmt.Errorf("capability status change actor is required")
+	}
+	transition := ClassifyCapabilityStatusTransition(previous, status)
+	if transition.RequiresApproval && meta.ApprovalRequestID == nil {
+		return domain.ToolCapability{}, domain.ToolCapability{}, false, fmt.Errorf("capability status transition requires approval: %s -> %s for %s", previous.Status, status, id)
+	}
+	overrideMeta := ToolCapabilityOverrideMetadata{
+		PreviousStatus:    previous.Status,
+		ActorKind:         meta.ActorKind,
+		RiskClass:         meta.RiskClass,
+		TransitionRisk:    meta.TransitionRisk,
+		ApprovalRequestID: meta.ApprovalRequestID,
+		CorrelationID:     meta.CorrelationID,
+		TraceID:           meta.TraceID,
+	}
+	updated, ok, err := g.capabilities.UpdateStatusWithMetadata(ctx, id, status, meta.Actor, meta.Reason, overrideMeta)
 	if err != nil {
 		return domain.ToolCapability{}, domain.ToolCapability{}, false, err
 	}
@@ -341,6 +375,103 @@ func (g *Gateway) UpdateCapabilityStatus(id string, status domain.ToolCapability
 		return domain.ToolCapability{}, domain.ToolCapability{}, false, nil
 	}
 	return previous, updated, true, nil
+}
+
+type CapabilityStatusTransition struct {
+	RiskClass        string   `json:"riskClass"`
+	RequiresApproval bool     `json:"requiresApproval"`
+	Elevation        bool     `json:"elevation"`
+	Dangerous        bool     `json:"dangerous"`
+	Reasons          []string `json:"reasons"`
+}
+
+func ClassifyCapabilityStatusTransition(previous domain.ToolCapability, nextStatus domain.ToolCapabilityStatus) CapabilityStatusTransition {
+	nextStatus = domain.ToolCapabilityStatus(strings.TrimSpace(strings.ToLower(string(nextStatus))))
+	out := CapabilityStatusTransition{
+		RiskClass: statusTransitionRiskLow,
+		Reasons:   []string{},
+	}
+	prevRank := capabilityStatusFreedomRank(previous.Status)
+	nextRank := capabilityStatusFreedomRank(nextStatus)
+	out.Elevation = nextRank > prevRank
+	out.Dangerous, out.Reasons = capabilityDangerReasons(previous)
+	if previous.Risk.Rank() >= domain.ToolRiskHigh.Rank() {
+		out.Dangerous = true
+		out.Reasons = appendUniqueString(out.Reasons, "capability risk is "+string(previous.Risk))
+	}
+	if out.Elevation {
+		out.RiskClass = statusTransitionRiskMedium
+		out.Reasons = appendUniqueString(out.Reasons, "transition increases execution freedom")
+	}
+	if out.Elevation && (nextStatus == domain.ToolCapabilityActive || out.Dangerous) {
+		out.RiskClass = statusTransitionRiskHigh
+		out.RequiresApproval = true
+	}
+	if previous.Status == domain.ToolCapabilityApprovalOnly && nextStatus == domain.ToolCapabilityActive && out.Dangerous {
+		out.RiskClass = statusTransitionRiskHigh
+		out.RequiresApproval = true
+		out.Reasons = appendUniqueString(out.Reasons, "approval_only to active removes approval gate")
+	}
+	if previous.Status == nextStatus {
+		out.RiskClass = statusTransitionRiskLow
+		out.RequiresApproval = false
+		out.Elevation = false
+		out.Reasons = appendUniqueString(out.Reasons, "status unchanged")
+	}
+	if previous.Risk.Rank() > domain.ToolRiskCritical.Rank() {
+		out.RiskClass = statusTransitionRiskHigh
+		out.RequiresApproval = true
+		out.Dangerous = true
+		out.Reasons = appendUniqueString(out.Reasons, "unknown capability risk is conservative")
+	}
+	return out
+}
+
+const (
+	statusTransitionRiskLow    = "low"
+	statusTransitionRiskMedium = "medium"
+	statusTransitionRiskHigh   = "high"
+)
+
+func capabilityStatusFreedomRank(status domain.ToolCapabilityStatus) int {
+	switch status {
+	case domain.ToolCapabilityActive:
+		return 3
+	case domain.ToolCapabilityApprovalOnly:
+		return 2
+	case domain.ToolCapabilityDisabled, domain.ToolCapabilityStubbed, domain.ToolCapabilityDeferred, domain.ToolCapabilityDeprecated:
+		return 1
+	default:
+		return 0
+	}
+}
+
+func capabilityDangerReasons(capability domain.ToolCapability) (bool, []string) {
+	reasons := []string{}
+	for _, effect := range capability.Effect {
+		switch effect {
+		case domain.ToolEffectWrite, domain.ToolEffectExecute, domain.ToolEffectNetwork, domain.ToolEffectExternal, domain.ToolEffectPrivileged, domain.ToolEffectDestructive:
+			reasons = appendUniqueString(reasons, "effect "+string(effect))
+		}
+	}
+	switch strings.TrimSpace(strings.ToLower(capability.Domain)) {
+	case "process", "network", "identity", "external", "config", "backup", "device", "code":
+		reasons = appendUniqueString(reasons, "domain "+capability.Domain)
+	}
+	return len(reasons) > 0, reasons
+}
+
+func appendUniqueString(rows []string, value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return rows
+	}
+	for _, row := range rows {
+		if row == value {
+			return rows
+		}
+	}
+	return append(rows, value)
 }
 
 // Execute runs the full pipeline: lane resolution, permission check,
@@ -990,11 +1121,13 @@ func (g *Gateway) ExecuteTool(ctx context.Context, req domain.ToolRequest) (doma
 
 func (g *Gateway) recordNeedsApproval(ctx context.Context, req Request, lane *lanes.Lane, tool Tool, risk, level, profileID, reason string) (*Result, error) {
 	var approvalReqID *int64
-	effectiveJobID, jobIDPtr, err := g.resolveApprovalJobID(ctx, req, lane, tool, risk, level)
+	reqForApproval := req
+	reqForApproval.Input = gatewayApprovalRequestInput(tool, reqForApproval)
+	effectiveJobID, jobIDPtr, err := g.resolveApprovalJobID(ctx, reqForApproval, lane, tool, risk, level)
 	if err != nil {
 		return nil, err
 	}
-	reqForInv := req
+	reqForInv := reqForApproval
 	reqForInv.JobID = jobIDPtr
 
 	if g.approvals != nil && strings.TrimSpace(effectiveJobID) != "" {
@@ -1114,14 +1247,7 @@ func (g *Gateway) insertChatGatewayApprovalJob(ctx context.Context, req Request,
 	if raw := strings.TrimSpace(metadataString(req.Metadata, "chatUserRequest")); raw != "" {
 		userRequest = raw
 	}
-	approvalInput := cloneToolOutput(nonNilMap(req.Input))
-	if tool.ID() == "desktop.open" {
-		if _, ok := approvalInput["query"]; !ok || strings.TrimSpace(fmt.Sprintf("%v", approvalInput["query"])) == "" {
-			if raw := strings.TrimSpace(metadataString(req.Metadata, "chatUserRequest")); raw != "" {
-				approvalInput["query"] = raw
-			}
-		}
-	}
+	approvalInput := gatewayApprovalRequestInput(tool, req)
 	meta := map[string]any{
 		"templateId":    "gateway_action",
 		"userRequest":   userRequest,
@@ -1129,16 +1255,21 @@ func (g *Gateway) insertChatGatewayApprovalJob(ctx context.Context, req Request,
 		"executionMode": "governed_tool",
 		"createdBy":     nonEmpty(req.Initiator, "chat"),
 		"requestPayload": map[string]any{
-			"toolId":         tool.ID(),
-			"laneId":         lane.ID,
-			"action":         nonEmpty(req.Action, tool.Action()),
-			"domain":         tool.Domain(),
-			"riskClass":      risk,
-			"executionLevel": level,
-			"correlationId":  req.CorrelationID,
-			"paths":          req.Paths,
-			"input":          approvalInput,
-			"dryRun":         req.DryRun,
+			"toolId":              tool.ID(),
+			"laneId":              lane.ID,
+			"action":              nonEmpty(req.Action, tool.Action()),
+			"domain":              tool.Domain(),
+			"riskClass":           risk,
+			"executionLevel":      level,
+			"correlationId":       req.CorrelationID,
+			"paths":               req.Paths,
+			"input":               approvalInput,
+			"dryRun":              req.DryRun,
+			"initiator":           req.Initiator,
+			"source":              req.Source,
+			"workspaceId":         req.WorkspaceID,
+			"provenanceActor":     req.ProvenanceActor,
+			"provenanceActorType": req.ProvenanceActorType,
 		},
 	}
 	metaJSON, _ := json.Marshal(meta)
@@ -1168,6 +1299,18 @@ INSERT INTO jobs(
 		return "", fmt.Errorf("insert chat gateway job: %w", err)
 	}
 	return id, nil
+}
+
+func gatewayApprovalRequestInput(tool Tool, req Request) map[string]any {
+	approvalInput := cloneToolOutput(nonNilMap(req.Input))
+	if tool != nil && tool.ID() == "desktop.open" {
+		if _, ok := approvalInput["query"]; !ok || strings.TrimSpace(fmt.Sprintf("%v", approvalInput["query"])) == "" {
+			if raw := strings.TrimSpace(metadataString(req.Metadata, "chatUserRequest")); raw != "" {
+				approvalInput["query"] = raw
+			}
+		}
+	}
+	return approvalInput
 }
 
 func (g *Gateway) recordDryRun(ctx context.Context, req Request, lane *lanes.Lane, tool Tool, risk, level, profileID string) (*Result, error) {
@@ -2230,9 +2373,9 @@ func (t *desktopOpenTool) Execute(ctx context.Context, req Request) (Result, err
 		if err != nil {
 			return Result{}, err
 		}
-		out, err := runCmd(ctx, "", "xdg-open", target)
+		pid, out, err := desktopOpenTarget(ctx, target)
 		return Result{
-			Data:    map[string]any{"mode": "path", "path": target, "output": out, "ok": err == nil},
+			Data:    map[string]any{"mode": "path", "path": target, "pid": pid, "output": out, "ok": err == nil},
 			Message: "open attempted",
 		}, nil
 	}
@@ -2247,9 +2390,9 @@ func (t *desktopOpenTool) Execute(ctx context.Context, req Request) (Result, err
 	}
 
 	if desktopLooksLikeURL(appHint) {
-		out, err := runCmd(ctx, "", "xdg-open", appHint)
+		pid, out, err := desktopOpenTarget(ctx, appHint)
 		return Result{
-			Data:    map[string]any{"mode": "url", "target": appHint, "output": out, "ok": err == nil},
+			Data:    map[string]any{"mode": "url", "target": appHint, "pid": pid, "output": out, "ok": err == nil},
 			Message: "open attempted",
 		}, nil
 	}
@@ -2262,9 +2405,9 @@ func (t *desktopOpenTool) Execute(ctx context.Context, req Request) (Result, err
 		if !pathContains(t.workspace, target) {
 			return Result{}, errors.New("desktop.open input.path must resolve inside workspace")
 		}
-		out, err := runCmd(ctx, "", "xdg-open", target)
+		pid, out, err := desktopOpenTarget(ctx, target)
 		return Result{
-			Data:    map[string]any{"mode": "path", "path": target, "output": out, "ok": err == nil},
+			Data:    map[string]any{"mode": "path", "path": target, "pid": pid, "output": out, "ok": err == nil},
 			Message: "open attempted",
 		}, nil
 	}
@@ -2280,8 +2423,7 @@ func (t *desktopOpenTool) Execute(ctx context.Context, req Request) (Result, err
 		}
 		args = append(args, terminalArgs...)
 	}
-	parts := append([]string{command}, args...)
-	pid, runErr := runDetachedCmd("", parts...)
+	pid, runErr := desktopLaunchApp(command, args)
 	out := ""
 	return Result{
 		Data: map[string]any{
@@ -2462,6 +2604,9 @@ func desktopResolveAppLaunch(raw string) (command string, args []string, appName
 		if len(candidate) == 0 {
 			continue
 		}
+		if desktopLooksLikeURL(candidate[0]) || strings.HasSuffix(strings.ToLower(candidate[0]), ":") || strings.HasPrefix(strings.ToLower(candidate[0]), "shell:") {
+			return candidate[0], candidate[1:], hint, nil
+		}
 		if _, lookErr := exec.LookPath(candidate[0]); lookErr == nil {
 			return candidate[0], candidate[1:], hint, nil
 		}
@@ -2519,6 +2664,9 @@ func desktopLaunchCandidates(hint string) [][]string {
 			{"gtk-launch", "org.gnome.Software.desktop"},
 		}
 	default:
+		if platform := desktopPlatformLaunchCandidates(normalized); len(platform) > 0 {
+			return platform
+		}
 		fields := strings.Fields(normalized)
 		if len(fields) > 0 && desktopSafeCommandToken(fields[0]) {
 			return [][]string{{fields[0]}}
