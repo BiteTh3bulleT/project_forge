@@ -401,6 +401,11 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	if am, handled := s.maybeRespondHyperlaneNoModel(ctx, threadID, um.ID, um.Content); handled {
+		out["assistantMessage"] = am
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
 
 	var ollamaAdapter adapters.Adapter
 	if adapter, getErr := s.adapters.Get("ollama"); getErr == nil {
@@ -952,6 +957,17 @@ func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Reques
 	var ollamaAdapter adapters.Adapter
 	if adapter, getErr := s.adapters.Get("ollama"); getErr == nil {
 		ollamaAdapter = adapter
+	}
+	if am, handled := s.maybeRespondHyperlaneNoModel(ctx, threadID, userMessageID, umContent); handled {
+		s.initSSE(w)
+		if am == nil {
+			b, _ := json.Marshal(map[string]any{"message": "assistant reply could not be saved"})
+			fmt.Fprintf(w, "event: error\ndata: %s\n\n", string(b))
+			w.(http.Flusher).Flush()
+			return
+		}
+		s.writeSSEEvent(w, map[string]any{"assistantMessage": am})
+		return
 	}
 	if !chatOllamaStreamCapable(ctx, ollamaAdapter) {
 		s.initSSE(w)
