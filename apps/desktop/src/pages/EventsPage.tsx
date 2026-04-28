@@ -37,7 +37,7 @@ export function EventsPage() {
           <div className="text-sm text-forge-mist">No events yet (or core offline).</div>
         ) : (
           events.map((ev) => (
-            <div key={ev.id} className="rounded-lg border border-white/10 bg-forge-iron/40 p-4">
+            <div key={ev.id} className="rounded-lg border border-forge-platinum/10 bg-forge-iron/40 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm font-semibold text-forge-ash">{ev.type}</div>
                 <div className="text-[11px] text-forge-mist">{formatTime(ev.createdAtMs)}</div>

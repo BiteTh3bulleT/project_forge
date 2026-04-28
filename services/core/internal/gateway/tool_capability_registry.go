@@ -360,6 +360,7 @@ func defaultToolCapabilities() []domain.ToolCapability {
 		"external.send_email":         {"gatewayToolId": "external.send_email", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
 		"external.post_message":       {"gatewayToolId": "external.post_message", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
 		"external.call_api":           {"gatewayToolId": "external.call_api", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
+		"external.search_web":         {"gatewayToolId": "web.search", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
 		"external.create_issue":       {"gatewayToolId": "external.create_issue", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
 		"external.update_issue":       {"gatewayToolId": "external.update_issue", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
 		"time.get_system_time":        {"gatewayToolId": "time.now", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskNone, "lane": domain.ToolLaneIO},

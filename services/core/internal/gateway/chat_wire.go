@@ -17,6 +17,8 @@ var legacyChatToolAliases = map[string]string{
 	"filesystem_write_file":       "fs.write",
 	"shell_run_scoped":            "proc.run",
 	"git_status":                  "git.status",
+	"web_search":                  "web.search",
+	"search_web":                  "web.search",
 }
 
 // ChatModelName returns a stable OpenAI-safe function name for a gateway tool ID.
@@ -34,7 +36,7 @@ func DefaultChatLane(toolID string) (string, bool) {
 		return "git.write", true
 	case "system.service_status", "system.service_control", "system.logs":
 		return "system.privileged", true
-	case "net.interfaces", "net.dns_lookup", "net.connectivity", "net.fetch":
+	case "net.interfaces", "net.dns_lookup", "net.connectivity", "net.fetch", "web.search":
 		return "network.inspect", true
 	case "desktop.notify", "desktop.open":
 		return "desktop.session", true
@@ -189,6 +191,7 @@ Arguments for every tool:
 Execution always goes through gateway.Execute with permission profiles and action lanes.
 If the gateway denies a call or a tool is not listed, say so plainly — never invent results.
 Tools not listed in the manifest are not callable from this chat runtime.
+When a listed filesystem/process/web tool matches the operator request, call the tool. Do not claim sandbox restrictions, missing filesystem access, or ask the operator to copy/paste shell commands unless the gateway result explicitly denies or errors.
 `
 	if len(names) == 0 {
 		return head + "\nNo gateway tools are currently exposed to chat (lane mapping missing)."

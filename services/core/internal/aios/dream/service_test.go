@@ -2,12 +2,14 @@ package dream
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"forge/projectforge/services/core/internal/aios/rulecells"
 	"forge/projectforge/services/core/internal/store"
 )
 
@@ -33,6 +35,48 @@ func TestDreamReplaySelectorFindsRecentCandidatesAndRespectsScope(t *testing.T) 
 	}
 	if !hasSource(report.Candidates, "journal_event") || !hasSource(report.Candidates, "context_snapshot") || !hasSource(report.Candidates, "memory_note") {
 		t.Fatalf("expected journal/context/memory candidates, got %+v", report.Candidates)
+	}
+}
+
+func TestDreamConsumesRestoreOutcomeFeedback(t *testing.T) {
+	ctx := context.Background()
+	st, svc, now := newDreamHarness(t)
+	mustExec(t, st, `INSERT INTO restore_outcome_events(id,created_at,updated_at,workspace_id,lane_id,query,context_packet_id,snapshot_id,snapshot_kind,restore_score,requires_fresh_compile,selected_evidence_json,selected_state_keys_json,selected_loop_ids_json,selected_artifact_ids_json,outcome,outcome_confidence,operator_feedback,correction_summary,downstream_action_type,downstream_object_id,metadata_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"outcome-corrected", now-1000, now-1000, "ws-dream", "control.semantic", "restore blockers", "ctx-corrected", "snap-corrected", "restore", 0.7, 0, `["note-a"]`, `[]`, `[]`, `[]`, "operator_corrected", 1.0, "wrong context", "operator corrected restore", "compile_context", "ctx-corrected", `{}`)
+	mustExec(t, st, `INSERT INTO restore_outcome_events(id,created_at,updated_at,workspace_id,lane_id,query,context_packet_id,snapshot_id,snapshot_kind,restore_score,requires_fresh_compile,selected_evidence_json,selected_state_keys_json,selected_loop_ids_json,selected_artifact_ids_json,outcome,outcome_confidence,operator_feedback,correction_summary,downstream_action_type,downstream_object_id,metadata_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"outcome-gap-a", now-2000, now-2000, "ws-dream", "control.semantic", "missing memory", "ctx-gap-a", "", "restore", 0.2, 1, `[]`, `[]`, `[]`, `[]`, "fresh_compile_required", 1.0, "", "", "compile_context", "ctx-gap-a", `{}`)
+	mustExec(t, st, `INSERT INTO restore_outcome_events(id,created_at,updated_at,workspace_id,lane_id,query,context_packet_id,snapshot_id,snapshot_kind,restore_score,requires_fresh_compile,selected_evidence_json,selected_state_keys_json,selected_loop_ids_json,selected_artifact_ids_json,outcome,outcome_confidence,operator_feedback,correction_summary,downstream_action_type,downstream_object_id,metadata_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"outcome-helpful", now-3000, now-3000, "ws-dream", "control.semantic", "good restore", "ctx-helpful", "snap-helpful", "restore", 0.9, 0, `["note-good"]`, `[]`, `[]`, `[]`, "helpful", 1.0, "", "", "compile_context", "ctx-helpful", `{}`)
+
+	report, err := svc.Run(ctx, RunRequest{Mode: ModeNap, WorkspaceID: "ws-dream", LaneID: "control.semantic", MaxCandidates: 20})
+	if err != nil {
+		t.Fatalf("dream run: %v", err)
+	}
+	if len(report.RestoreOutcomeCandidates) != 3 {
+		t.Fatalf("expected restore outcome candidates, got %+v", report.RestoreOutcomeCandidates)
+	}
+	correctedCandidateID := ""
+	for _, candidate := range report.RestoreOutcomeCandidates {
+		if containsString(candidate.SourceIDs, "outcome-corrected") {
+			correctedCandidateID = candidate.CandidateID
+			break
+		}
+	}
+	if correctedCandidateID == "" {
+		t.Fatalf("missing corrected restore outcome candidate: %+v", report.RestoreOutcomeCandidates)
+	}
+	correctedScore := findScore(t, report.SalienceScores, correctedCandidateID)
+	if correctedScore.TotalSalience < 0.88 {
+		t.Fatalf("operator corrected outcome should be very high salience, got %+v", correctedScore)
+	}
+	if len(report.MemoryGapProposals) == 0 {
+		t.Fatalf("expected memory gap proposal from fresh compile outcome")
+	}
+	if len(report.StaleEvidenceReviewProposals) == 0 {
+		t.Fatalf("expected review proposal from operator corrected outcome")
+	}
+	if len(report.HelpfulEvidencePromotionProposals) == 0 {
+		t.Fatalf("expected helpful evidence promotion proposal")
 	}
 }
 
@@ -209,6 +253,133 @@ func TestDreamReportPersistenceIsNonCanonicalEvidence(t *testing.T) {
 	}
 }
 
+func TestDreamRuleCellsBoostCorrectionAndTracePackVersion(t *testing.T) {
+	ctx := context.Background()
+	st, svc, now := newDreamHarness(t)
+	insertDreamFixtures(t, st, now)
+	svc.SetRuleEngine(rulecells.MustStaticEngine())
+
+	report, err := svc.Run(ctx, RunRequest{Mode: ModeNap, WorkspaceID: "ws-dream", LaneID: "control.semantic"})
+	if err != nil {
+		t.Fatalf("dream run: %v", err)
+	}
+	correction := findScore(t, report.SalienceScores, "evt-correction")
+	if correction.RuleSalienceAdjustment <= 0 || correction.TotalSalience <= correction.PreRuleTotalSalience {
+		t.Fatalf("expected correction salience boost, got %+v", correction)
+	}
+	if correction.RuleTrace == nil {
+		t.Fatalf("expected correction rule trace")
+	}
+	packs, ok := correction.RuleTrace["rule_packs"].([]map[string]any)
+	if !ok || len(packs) != 1 || packs[0]["pack_id"] != rulecells.PackLymphaticDreamID || packs[0]["version"] != rulecells.StaticPackVersion {
+		t.Fatalf("expected lymphatic pack version trace, got %#v", correction.RuleTrace["rule_packs"])
+	}
+	if _, ok := report.Trace["rule_cells"]; !ok {
+		t.Fatalf("expected report rule cell trace, got %+v", report.Trace)
+	}
+}
+
+func TestDreamRuleCellsBlockLongTermPromotionOnContradiction(t *testing.T) {
+	now := int64(1760000000000)
+	candidate := replayCandidate("memory_note", "contradictory", "ws", "lane", now-1000, "unresolved contradiction", []string{"contradiction", "unresolved"}, "", "")
+	scores := []SalienceScore{{
+		CandidateID:        candidate.CandidateID,
+		ContradictionScore: 1,
+		TotalSalience:      0.95,
+		Confidence:         0.95,
+	}}
+	svc := NewService(nil)
+	svc.SetRuleEngine(rulecells.MustStaticEngine())
+	_, blocked, warnings := svc.applyRuleCells(context.Background(), []ReplayCandidate{candidate}, scores, now)
+	if len(warnings) != 0 {
+		t.Fatalf("unexpected warnings: %+v", warnings)
+	}
+	if !blocked[candidate.CandidateID] {
+		t.Fatalf("expected contradiction to block long-term promotion")
+	}
+	routes := []RoutingProposal{{CandidateID: candidate.CandidateID, Decision: PromoteLongTerm, Confidence: 0.95, DryRun: true}}
+	applyLongTermBlocks(routes, blocked)
+	if routes[0].Decision != NeedsReview || !strings.Contains(routes[0].Reason, "rule cell") {
+		t.Fatalf("expected stricter routing to needs_review, got %+v", routes[0])
+	}
+}
+
+func TestDreamRuleCellsCapAndClampSalience(t *testing.T) {
+	ctx := context.Background()
+	st, svc, now := newDreamHarness(t)
+	insertDreamFixtures(t, st, now)
+	svc.SetRuleEngine(dreamStaticRuleEngine{result: rulecells.RunResult{
+		Outputs: []rulecells.RuleOutput{
+			{Type: rulecells.OutputScoreAdjustment, ScoreDelta: 2.0},
+			{Type: rulecells.OutputScoreAdjustment, ScoreDelta: 2.0},
+			{Type: rulecells.OutputScoreAdjustment, ScoreDelta: 2.0},
+		},
+		Trace: rulecells.RuleTrace{
+			TraceID:      "trace-dream-cap",
+			Lane:         rulecells.LaneLymphatic,
+			Phase:        rulecells.PhaseSalienceScoring,
+			InputID:      "candidate",
+			RulePacks:    []rulecells.RulePackRef{{ID: "pack.dream.cap", Version: "0.1.0"}},
+			MatchedRules: []rulecells.MatchedRuleTrace{{RuleID: "rule.dream.cap", PackID: "pack.dream.cap", PackVersion: "0.1.0"}},
+			Outputs:      []rulecells.RuleOutput{{Type: rulecells.OutputScoreAdjustment, ScoreDelta: 2.0}},
+		},
+	}})
+
+	report, err := svc.Run(ctx, RunRequest{Mode: ModeNap, WorkspaceID: "ws-dream", LaneID: "control.semantic"})
+	if err != nil {
+		t.Fatalf("dream run: %v", err)
+	}
+	if len(report.SalienceScores) == 0 {
+		t.Fatalf("expected salience scores")
+	}
+	for _, score := range report.SalienceScores {
+		if score.RuleSalienceAdjustment != maxDreamRuleSalienceAdjustment {
+			t.Fatalf("expected capped salience adjustment %.2f, got %+v", maxDreamRuleSalienceAdjustment, score)
+		}
+		if score.TotalSalience < 0 || score.TotalSalience > 1 {
+			t.Fatalf("expected final salience clamped to 0..1, got %+v", score)
+		}
+	}
+}
+
+func TestDreamRuleEngineErrorFallsBackWithWarning(t *testing.T) {
+	ctx := context.Background()
+	st, svc, now := newDreamHarness(t)
+	insertDreamFixtures(t, st, now)
+	before := tableCounts(t, st)
+	svc.SetRuleEngine(dreamStaticRuleEngine{err: errors.New("boom")})
+
+	report, err := svc.Run(ctx, RunRequest{Mode: ModeNap, WorkspaceID: "ws-dream", LaneID: "control.semantic"})
+	if err != nil {
+		t.Fatalf("dream run should not fail on rule engine error: %v", err)
+	}
+	if len(report.Warnings) == 0 || !strings.Contains(strings.Join(report.Warnings, "\n"), "dream rule engine failed") {
+		t.Fatalf("expected explicit rule engine warning, got %+v", report.Warnings)
+	}
+	if got := tableCounts(t, st); got != before {
+		t.Fatalf("Dream rule failure fallback committed canonical changes: before=%v after=%v", before, got)
+	}
+}
+
+func TestDreamRuleEngineNilKeepsBaseSalience(t *testing.T) {
+	ctx := context.Background()
+	st, svc, now := newDreamHarness(t)
+	insertDreamFixtures(t, st, now)
+
+	report, err := svc.Run(ctx, RunRequest{Mode: ModeNap, WorkspaceID: "ws-dream", LaneID: "control.semantic"})
+	if err != nil {
+		t.Fatalf("dream run: %v", err)
+	}
+	for _, score := range report.SalienceScores {
+		if score.RuleSalienceAdjustment != 0 || score.RuleTrace != nil {
+			t.Fatalf("nil rule engine should preserve base salience, got %+v", score)
+		}
+	}
+	if _, ok := report.Trace["rule_cells"]; ok {
+		t.Fatalf("nil rule engine should not emit rule trace, got %+v", report.Trace)
+	}
+}
+
 func TestDreamNoModelRuntimeVectorOrControlLaneBypass(t *testing.T) {
 	raw, err := os.ReadFile("service.go")
 	if err != nil {
@@ -280,6 +451,15 @@ func hasSource(candidates []ReplayCandidate, source string) bool {
 	return false
 }
 
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
 func findScore(t *testing.T, scores []SalienceScore, idPart string) SalienceScore {
 	t.Helper()
 	for _, score := range scores {
@@ -305,4 +485,13 @@ func findRoute(t *testing.T, routes []RoutingProposal, idPart string) RoutingPro
 	}
 	t.Fatalf("route containing %q not found in %+v", idPart, routes)
 	return RoutingProposal{}
+}
+
+type dreamStaticRuleEngine struct {
+	result rulecells.RunResult
+	err    error
+}
+
+func (s dreamStaticRuleEngine) Run(context.Context, rulecells.RunInput, rulecells.RunOptions) (rulecells.RunResult, error) {
+	return s.result, s.err
 }

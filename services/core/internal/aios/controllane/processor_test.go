@@ -497,6 +497,12 @@ func TestCompileContextSnapshotPersistenceOptIn(t *testing.T) {
 	if len(store.snapshot().contextSnapshots) != 0 || len(store.snapshot().artifacts) != 0 {
 		t.Fatalf("persistSnapshot=false should not write snapshot evidence")
 	}
+	if len(store.snapshot().restoreOutcomes) != 0 {
+		t.Fatalf("persistSnapshot=false should not write restore outcome evidence")
+	}
+	if draft, ok := readOnlyRes.StateSummary["restoreOutcome"].(map[string]any); !ok || draft["outcome"] != string(RestoreOutcomeUnknown) {
+		t.Fatalf("expected non-persisted restore outcome draft, got %#v", readOnlyRes.StateSummary["restoreOutcome"])
+	}
 	if len(readOnlyRes.Warnings) != 1 || readOnlyRes.Warnings[0] != "compile_context is deterministic Phase 2 stub" {
 		t.Fatalf("expected unchanged warning for persistSnapshot=false, got %v", readOnlyRes.Warnings)
 	}
@@ -517,6 +523,9 @@ func TestCompileContextSnapshotPersistenceOptIn(t *testing.T) {
 	state := store.snapshot()
 	if len(state.contextSnapshots) != 1 {
 		t.Fatalf("expected one persisted context snapshot, got %d", len(state.contextSnapshots))
+	}
+	if len(state.restoreOutcomes) != 1 {
+		t.Fatalf("expected one persisted restore outcome event, got %d", len(state.restoreOutcomes))
 	}
 	if len(state.artifacts) != 1 {
 		t.Fatalf("expected one persisted artifact ref, got %d", len(state.artifacts))
@@ -559,6 +568,15 @@ func TestCompileContextSnapshotPersistenceOptIn(t *testing.T) {
 	}
 	if decision := readString(persistedRes.StateSummary, "restoreDecision"); decision != "fresh_compile_no_candidates" {
 		t.Fatalf("expected first persisted compile to report no candidates decision, got %q", decision)
+	}
+	outcomeSummary, ok := persistedRes.StateSummary["restoreOutcome"].(map[string]any)
+	if !ok || outcomeSummary["outcome"] != string(RestoreOutcomeNoCandidate) {
+		t.Fatalf("expected no-candidate restore outcome summary, got %#v", persistedRes.StateSummary["restoreOutcome"])
+	}
+	for _, outcome := range state.restoreOutcomes {
+		if outcome.Outcome != RestoreOutcomeNoCandidate || !outcome.RequiresFreshCompile || outcome.ContextPacketID == "" {
+			t.Fatalf("unexpected restore outcome event: %+v", outcome)
+		}
 	}
 }
 
@@ -680,6 +698,18 @@ func TestCompileContextSnapshotBelowThresholdFallsBackToFreshCompile(t *testing.
 	if reason, ok := packet.RestoreSnapshot.Metadata["restore_reason_json"].(map[string]any); !ok || reason["decision_reason"] != "top candidate score below threshold" {
 		t.Fatalf("expected restore reason decision_reason, got %#v", packet.RestoreSnapshot.Metadata["restore_reason_json"])
 	}
+	foundFreshOutcome := false
+	for _, outcome := range state.restoreOutcomes {
+		if outcome.ContextPacketID == packetID {
+			foundFreshOutcome = true
+			if outcome.Outcome != RestoreOutcomeFreshCompileRequired || !outcome.RequiresFreshCompile {
+				t.Fatalf("expected fresh-compile restore outcome for below-threshold packet, got %+v", outcome)
+			}
+		}
+	}
+	if !foundFreshOutcome {
+		t.Fatalf("missing restore outcome for below-threshold packet %q", packetID)
+	}
 }
 
 func TestCompileContextSnapshotDryRunDoesNotWrite(t *testing.T) {
@@ -703,6 +733,9 @@ func TestCompileContextSnapshotDryRunDoesNotWrite(t *testing.T) {
 	state := store.snapshot()
 	if len(state.contextSnapshots) != 0 || len(state.artifacts) != 0 {
 		t.Fatalf("dry-run must not write snapshot rows or artifact refs")
+	}
+	if len(state.restoreOutcomes) != 0 {
+		t.Fatalf("dry-run must not write restore outcome rows")
 	}
 }
 

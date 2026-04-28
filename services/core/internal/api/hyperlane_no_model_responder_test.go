@@ -19,7 +19,7 @@ func TestHyperlaneNoModelStatusQuery(t *testing.T) {
 	before := canonicalCounts(t, st)
 	resp := postHyperlaneChat(t, srv, "what is forge core status?")
 
-	assertHyperlaneNoModelResponse(t, resp, "status_query", "forge.status")
+	assertHyperlaneNoModelResponse(t, resp, "status_query", "structured.status")
 	if !strings.Contains(resp.AssistantMessage.Content, "FORGE status") {
 		t.Fatalf("unexpected status response: %s", resp.AssistantMessage.Content)
 	}
@@ -32,7 +32,7 @@ func TestHyperlaneNoModelDiagnosticsQuery(t *testing.T) {
 	srv, st, fake := newHyperlaneNoModelHarness(t)
 	resp := postHyperlaneChat(t, srv, "show diagnostics summary")
 
-	assertHyperlaneNoModelResponse(t, resp, "diagnostics_query", "forge.diagnostics")
+	assertHyperlaneNoModelResponse(t, resp, "diagnostics_query", "structured.diagnostics")
 	if !strings.Contains(resp.AssistantMessage.Content, "Diagnostics summary") {
 		t.Fatalf("unexpected diagnostics response: %s", resp.AssistantMessage.Content)
 	}
@@ -49,7 +49,7 @@ func TestHyperlaneNoModelModelRuntimeStatusQuery(t *testing.T) {
 
 	resp := postHyperlaneChat(t, srv, "modelruntime status and loaded models")
 
-	assertHyperlaneNoModelResponse(t, resp, "modelruntime_status", "modelruntime.status")
+	assertHyperlaneNoModelResponse(t, resp, "modelruntime_status", "structured.modelruntime_status")
 	if !strings.Contains(resp.AssistantMessage.Content, "latest loaded model=m1") {
 		t.Fatalf("unexpected modelruntime response: %s", resp.AssistantMessage.Content)
 	}
@@ -66,7 +66,7 @@ func TestHyperlaneNoModelRestoreInspectionQuery(t *testing.T) {
 
 	resp := postHyperlaneChat(t, srv, "latest restore score")
 
-	assertHyperlaneNoModelResponse(t, resp, "restore_inspection", "context.restore.inspect")
+	assertHyperlaneNoModelResponse(t, resp, "restore_inspection", "structured.restore_inspector")
 	if !strings.Contains(resp.AssistantMessage.Content, "restore-current") || !strings.Contains(resp.AssistantMessage.Content, "requires fresh compile=true") {
 		t.Fatalf("unexpected restore response: %s", resp.AssistantMessage.Content)
 	}
@@ -82,7 +82,7 @@ func TestHyperlaneNoModelDreamReportQuery(t *testing.T) {
 
 	resp := postHyperlaneChat(t, srv, "latest Dream report")
 
-	assertHyperlaneNoModelResponse(t, resp, "dream_report_inspection", "dream.report.inspect")
+	assertHyperlaneNoModelResponse(t, resp, "dream_report_inspection", "structured.dream_reports")
 	if !strings.Contains(resp.AssistantMessage.Content, "dream-current") || !strings.Contains(resp.AssistantMessage.Content, "dry-run=true") {
 		t.Fatalf("unexpected dream response: %s", resp.AssistantMessage.Content)
 	}
@@ -114,7 +114,7 @@ func TestHyperlaneNoModelDoesNotLeakWrongWorkspaceDataAndHandlesEmptyState(t *te
 	seedDreamReportNoModel(t, st, "other-workspace", "dream-other-workspace")
 
 	restoreResp := postHyperlaneChat(t, srv, "latest restore inspection")
-	assertHyperlaneNoModelResponse(t, restoreResp, "restore_inspection", "context.restore.inspect")
+	assertHyperlaneNoModelResponse(t, restoreResp, "restore_inspection", "structured.restore_inspector")
 	if strings.Contains(restoreResp.AssistantMessage.Content, "restore-other-workspace") {
 		t.Fatalf("restore response leaked wrong workspace data: %s", restoreResp.AssistantMessage.Content)
 	}
@@ -123,7 +123,7 @@ func TestHyperlaneNoModelDoesNotLeakWrongWorkspaceDataAndHandlesEmptyState(t *te
 	}
 
 	dreamResp := postHyperlaneChat(t, srv, "dream reports")
-	assertHyperlaneNoModelResponse(t, dreamResp, "dream_report_inspection", "dream.report.inspect")
+	assertHyperlaneNoModelResponse(t, dreamResp, "dream_report_inspection", "structured.dream_reports")
 	if strings.Contains(dreamResp.AssistantMessage.Content, "dream-other-workspace") {
 		t.Fatalf("dream response leaked wrong workspace data: %s", dreamResp.AssistantMessage.Content)
 	}

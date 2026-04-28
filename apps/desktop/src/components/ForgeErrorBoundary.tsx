@@ -36,7 +36,7 @@ export class ForgeErrorBoundary extends Component<Props, State> {
             </div>
           </header>
           <div className="forge-panel__body">
-            <pre className="max-h-[min(50vh,28rem)] overflow-auto whitespace-pre-wrap rounded-md border border-white/10 bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-forge-mist">
+            <pre className="max-h-[min(50vh,28rem)] overflow-auto whitespace-pre-wrap rounded-md border border-forge-platinum/10 bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-forge-mist">
               {this.state.message}
             </pre>
           </div>

@@ -1,12 +1,15 @@
 package controllane
 
 import (
+	"context"
+	"fmt"
 	"math"
 	"sort"
 	"strings"
 	"unicode"
 
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/aios/rulecells"
 )
 
 const (
@@ -47,37 +50,42 @@ type compileContextRestoreCandidate struct {
 }
 
 type compileContextRestoreCandidateScore struct {
-	SnapshotID           string   `json:"snapshotId"`
-	ContextPacketID      string   `json:"contextPacketId,omitempty"`
-	WorkspaceID          string   `json:"workspaceId,omitempty"`
-	LaneID               string   `json:"laneId,omitempty"`
-	SelectedPaths        []string `json:"selectedPaths,omitempty"`
-	CreatedAt            int64    `json:"createdAt"`
-	SnapshotKind         string   `json:"snapshotKind,omitempty"`
-	Fingerprint          string   `json:"fingerprint,omitempty"`
-	ParentSnapshotID     string   `json:"parentSnapshotId,omitempty"`
-	HeaderOnly           bool     `json:"headerOnly"`
-	QueryScore           float64  `json:"queryScore"`
-	ScopeScore           float64  `json:"scopeScore"`
-	KindScore            float64  `json:"kindScore"`
-	LineageScore         float64  `json:"lineageScore"`
-	StateOverlapScore    float64  `json:"stateOverlapScore"`
-	LoopOverlapScore     float64  `json:"loopOverlapScore"`
-	ArtifactOverlapScore float64  `json:"artifactOverlapScore"`
-	NodeOverlapScore     float64  `json:"nodeOverlapScore"`
-	EdgeOverlapScore     float64  `json:"edgeOverlapScore"`
-	RecencyScore         float64  `json:"recencyScore"`
-	FingerprintBonus     float64  `json:"fingerprintBonus"`
-	PreferredHintBonus   float64  `json:"preferredHintBonus"`
-	StalenessPenalty     float64  `json:"stalenessPenalty"`
-	FreshnessPenalty     float64  `json:"freshnessPenalty"`
-	ContradictionPenalty float64  `json:"contradictionPenalty"`
-	HeaderOnlyPenalty    float64  `json:"headerOnlyPenalty"`
-	TotalScore           float64  `json:"totalScore"`
-	Confidence           float64  `json:"confidence"`
-	RequiresFreshCompile bool     `json:"requiresFreshCompile"`
-	Explain              []string `json:"explain"`
-	Selected             bool     `json:"selected"`
+	SnapshotID           string         `json:"snapshotId"`
+	ContextPacketID      string         `json:"contextPacketId,omitempty"`
+	WorkspaceID          string         `json:"workspaceId,omitempty"`
+	LaneID               string         `json:"laneId,omitempty"`
+	SelectedPaths        []string       `json:"selectedPaths,omitempty"`
+	CreatedAt            int64          `json:"createdAt"`
+	SnapshotKind         string         `json:"snapshotKind,omitempty"`
+	Fingerprint          string         `json:"fingerprint,omitempty"`
+	ParentSnapshotID     string         `json:"parentSnapshotId,omitempty"`
+	HeaderOnly           bool           `json:"headerOnly"`
+	QueryScore           float64        `json:"queryScore"`
+	ScopeScore           float64        `json:"scopeScore"`
+	KindScore            float64        `json:"kindScore"`
+	LineageScore         float64        `json:"lineageScore"`
+	StateOverlapScore    float64        `json:"stateOverlapScore"`
+	LoopOverlapScore     float64        `json:"loopOverlapScore"`
+	ArtifactOverlapScore float64        `json:"artifactOverlapScore"`
+	NodeOverlapScore     float64        `json:"nodeOverlapScore"`
+	EdgeOverlapScore     float64        `json:"edgeOverlapScore"`
+	RecencyScore         float64        `json:"recencyScore"`
+	FingerprintBonus     float64        `json:"fingerprintBonus"`
+	PreferredHintBonus   float64        `json:"preferredHintBonus"`
+	StalenessPenalty     float64        `json:"stalenessPenalty"`
+	FreshnessPenalty     float64        `json:"freshnessPenalty"`
+	ContradictionPenalty float64        `json:"contradictionPenalty"`
+	HeaderOnlyPenalty    float64        `json:"headerOnlyPenalty"`
+	PreRuleTotalScore    float64        `json:"preRuleTotalScore,omitempty"`
+	RuleScoreAdjustment  float64        `json:"ruleScoreAdjustment,omitempty"`
+	RuleTrace            map[string]any `json:"ruleTrace,omitempty"`
+	OutcomeAdjustment    float64        `json:"outcomeAdjustment,omitempty"`
+	OutcomeTrace         map[string]any `json:"outcomeTrace,omitempty"`
+	TotalScore           float64        `json:"totalScore"`
+	Confidence           float64        `json:"confidence"`
+	RequiresFreshCompile bool           `json:"requiresFreshCompile"`
+	Explain              []string       `json:"explain"`
+	Selected             bool           `json:"selected"`
 }
 
 type compileContextRestoreSelection struct {
@@ -94,7 +102,18 @@ type compileContextRestoreSelection struct {
 	RequestWorkspace string
 	RequestLane      string
 	RequestSnapKind  string
+	RuleTrace        *rulecells.RuleTrace
+	RuleWarnings     []string
+	CacheHit         bool
+	CacheKey         string
 }
+
+const (
+	maxRestoreRuleScoreAdjustment       = 0.12
+	maxRestoreIndividualScoreAdjustment = 0.06
+	maxRestoreOutcomeScoreAdjustment    = 0.08
+	maxRestoreOutcomeIndividualAdjust   = 0.04
+)
 
 func selectCompileContextRestoreCandidate(now int64, current compiledContextSnapshot, packets []domain.ContextPacket, snapshotKind string, hints compileContextResumeHints) compileContextRestoreSelection {
 	selection := compileContextRestoreSelection{
@@ -167,6 +186,138 @@ func selectCompileContextRestoreCandidate(now int64, current compiledContextSnap
 	return selection
 }
 
+func selectCompileContextRestoreCandidateWithRules(ctx context.Context, engine RuleEngine, now int64, current compiledContextSnapshot, packets []domain.ContextPacket, snapshotKind string, hints compileContextResumeHints) compileContextRestoreSelection {
+	selection := selectCompileContextRestoreCandidate(now, current, packets, snapshotKind, hints)
+	if engine == nil || len(selection.Candidates) == 0 || selection.Decision == "fresh_compile_forced" {
+		return selection
+	}
+	for idx := range selection.Candidates {
+		score := &selection.Candidates[idx].Score
+		score.PreRuleTotalScore = score.TotalScore
+		facts := map[string]any{
+			"query_exact":          score.QueryScore == 1,
+			"query_overlap":        score.QueryScore,
+			"stale":                score.StalenessPenalty > 0 || score.FreshnessPenalty > 0 || isHardStale(now, score.CreatedAt),
+			"contradiction_marker": score.ContradictionPenalty > 0,
+			"base_score":           score.TotalScore,
+			"confidence":           score.Confidence,
+			"wrong_workspace":      strings.TrimSpace(score.WorkspaceID) != "" && strings.TrimSpace(selection.RequestWorkspace) != "" && strings.TrimSpace(score.WorkspaceID) != strings.TrimSpace(selection.RequestWorkspace),
+		}
+		result, err := engine.Run(ctx, rulecells.RunInput{
+			Lane:      rulecells.LaneArterial,
+			Phase:     rulecells.PhaseRestoreScoring,
+			InputID:   score.SnapshotID,
+			InputType: "restore_candidate",
+			Facts:     facts,
+		}, rulecells.RunOptions{DryRun: true, MaxLatencyMs: 5})
+		if err != nil {
+			selection.RuleWarnings = append(selection.RuleWarnings, "restore rule engine failed: "+err.Error())
+			continue
+		}
+		if selection.RuleTrace == nil {
+			traceCopy := result.Trace
+			selection.RuleTrace = &traceCopy
+		}
+		score.RuleTrace = ruleTraceMap(result.Trace)
+		selection.RuleWarnings = append(selection.RuleWarnings, result.Warnings...)
+		adjustment := boundedScoreAdjustment(result.Outputs, maxRestoreIndividualScoreAdjustment, maxRestoreRuleScoreAdjustment)
+		score.RuleScoreAdjustment = adjustment
+		score.TotalScore = clamp01(score.TotalScore + adjustment)
+		score.Confidence = clamp01((score.TotalScore + score.ScopeScore + score.QueryScore) / 3)
+		if hasOutput(result.Outputs, rulecells.OutputFreshCompileRequired) {
+			score.RequiresFreshCompile = true
+			score.Explain = append(score.Explain, "rule cell requires fresh compile")
+		} else {
+			score.RequiresFreshCompile = score.TotalScore < selection.Threshold || isHardStale(now, score.CreatedAt)
+		}
+		if adjustment != 0 {
+			score.Explain = append(score.Explain, fmt.Sprintf("rule cell score adjustment %.3f", adjustment))
+		}
+	}
+	sort.Slice(selection.Candidates, func(i, j int) bool {
+		if selection.Candidates[i].Score.TotalScore == selection.Candidates[j].Score.TotalScore {
+			if selection.Candidates[i].Snapshot.Header.CreatedAt == selection.Candidates[j].Snapshot.Header.CreatedAt {
+				return selection.Candidates[i].Snapshot.Header.SnapshotID < selection.Candidates[j].Snapshot.Header.SnapshotID
+			}
+			return selection.Candidates[i].Snapshot.Header.CreatedAt > selection.Candidates[j].Snapshot.Header.CreatedAt
+		}
+		return selection.Candidates[i].Score.TotalScore > selection.Candidates[j].Score.TotalScore
+	})
+	selection.TopScore = 0
+	selection.SelectedIndex = -1
+	for idx := range selection.Candidates {
+		selection.Candidates[idx].Score.Selected = false
+	}
+	if len(selection.Candidates) > 0 {
+		selection.TopScore = selection.Candidates[0].Score.TotalScore
+		if selection.TopScore >= selection.Threshold && !selection.Candidates[0].Score.RequiresFreshCompile {
+			selection.Decision = "selected"
+			selection.SelectedIndex = 0
+			selection.Candidates[0].Score.Selected = true
+		} else {
+			selection.Decision = "fresh_compile_below_threshold"
+		}
+	}
+	return selection
+}
+
+func selectCompileContextRestoreCandidateWithFeedback(ctx context.Context, engine RuleEngine, now int64, current compiledContextSnapshot, packets []domain.ContextPacket, snapshotKind string, hints compileContextResumeHints, outcomes []RestoreOutcomeEvent) compileContextRestoreSelection {
+	selection := selectCompileContextRestoreCandidateWithRules(ctx, engine, now, current, packets, snapshotKind, hints)
+	if len(outcomes) == 0 || len(selection.Candidates) == 0 || selection.Decision == "fresh_compile_forced" {
+		return selection
+	}
+	sort.SliceStable(outcomes, func(i, j int) bool {
+		if outcomes[i].CreatedAt == outcomes[j].CreatedAt {
+			return outcomes[i].ID < outcomes[j].ID
+		}
+		return outcomes[i].CreatedAt > outcomes[j].CreatedAt
+	})
+	for idx := range selection.Candidates {
+		score := &selection.Candidates[idx].Score
+		adjustment, trace := restoreOutcomeUtilityAdjustment(*score, current.Header.Query, outcomes)
+		if adjustment == 0 && len(trace) == 0 {
+			continue
+		}
+		score.OutcomeAdjustment = adjustment
+		score.OutcomeTrace = trace
+		score.TotalScore = clamp01(score.TotalScore + adjustment)
+		score.Confidence = clamp01((score.TotalScore + score.ScopeScore + score.QueryScore) / 3)
+		score.RequiresFreshCompile = score.TotalScore < selection.Threshold || isHardStale(now, score.CreatedAt)
+		if adjustment != 0 {
+			score.Explain = append(score.Explain, fmt.Sprintf("restore outcome utility adjustment %.3f", adjustment))
+		}
+	}
+	rerankRestoreSelection(&selection)
+	return selection
+}
+
+func rerankRestoreSelection(selection *compileContextRestoreSelection) {
+	sort.Slice(selection.Candidates, func(i, j int) bool {
+		if selection.Candidates[i].Score.TotalScore == selection.Candidates[j].Score.TotalScore {
+			if selection.Candidates[i].Snapshot.Header.CreatedAt == selection.Candidates[j].Snapshot.Header.CreatedAt {
+				return selection.Candidates[i].Snapshot.Header.SnapshotID < selection.Candidates[j].Snapshot.Header.SnapshotID
+			}
+			return selection.Candidates[i].Snapshot.Header.CreatedAt > selection.Candidates[j].Snapshot.Header.CreatedAt
+		}
+		return selection.Candidates[i].Score.TotalScore > selection.Candidates[j].Score.TotalScore
+	})
+	selection.TopScore = 0
+	selection.SelectedIndex = -1
+	for idx := range selection.Candidates {
+		selection.Candidates[idx].Score.Selected = false
+	}
+	if len(selection.Candidates) > 0 {
+		selection.TopScore = selection.Candidates[0].Score.TotalScore
+		if selection.TopScore >= selection.Threshold && !selection.Candidates[0].Score.RequiresFreshCompile {
+			selection.Decision = "selected"
+			selection.SelectedIndex = 0
+			selection.Candidates[0].Score.Selected = true
+		} else {
+			selection.Decision = "fresh_compile_below_threshold"
+		}
+	}
+}
+
 func scoreRestoreCandidate(now int64, current compiledContextSnapshot, candidate compileContextRestoreCandidate, hints compileContextResumeHints, expectedKind string) compileContextRestoreCandidateScore {
 	score := compileContextRestoreCandidateScore{
 		SnapshotID:       strings.TrimSpace(candidate.Snapshot.Header.SnapshotID),
@@ -221,6 +372,7 @@ func scoreRestoreCandidate(now int64, current compiledContextSnapshot, candidate
 		score.PreferredHintBonus
 	total := weightedBase - score.StalenessPenalty - score.FreshnessPenalty - score.ContradictionPenalty - score.HeaderOnlyPenalty
 	score.TotalScore = clamp01(total)
+	score.PreRuleTotalScore = score.TotalScore
 	score.Confidence = clamp01((score.TotalScore + score.ScopeScore + score.QueryScore) / 3)
 	score.RequiresFreshCompile = score.TotalScore < clamp01(nonZero(hints.MinimumScore, defaultRestoreMinScore)) || isHardStale(now, candidate.Snapshot.Header.CreatedAt)
 	score.Explain = buildRestoreScoreExplain(score)
@@ -263,6 +415,14 @@ func normalizeRestoreQuery(raw string) string {
 		return ' '
 	}, raw)
 	return strings.Join(strings.Fields(raw), " ")
+}
+
+func trimSnapshotFingerprint(raw string, max int) string {
+	raw = strings.TrimSpace(raw)
+	if max <= 0 || len(raw) <= max {
+		return raw
+	}
+	return raw[:max]
 }
 
 func tokenSet(norm string) map[string]struct{} {
@@ -572,7 +732,7 @@ func (s compileContextRestoreSelection) restoreScoresMetadata() map[string]any {
 		selectedHeaderOnly = selected.HeaderOnly
 	}
 	trace := s.selectionTraceMetadata()
-	return map[string]any{
+	out := map[string]any{
 		"decision":                s.Decision,
 		"decision_reason":         s.decisionReason(),
 		"threshold":               s.Threshold,
@@ -590,7 +750,15 @@ func (s compileContextRestoreSelection) restoreScoresMetadata() map[string]any {
 		"selected_header_only":    selectedHeaderOnly,
 		"restore_trace":           trace,
 		"restore_package":         s.restorePackageMetadata(false),
+		"cache_hit":               s.CacheHit,
 	}
+	if len(s.RuleWarnings) > 0 {
+		out["rule_warnings"] = append([]string(nil), s.RuleWarnings...)
+	}
+	if s.RuleTrace != nil {
+		out["rule_trace"] = ruleTraceMap(*s.RuleTrace)
+	}
+	return out
 }
 
 func (s compileContextRestoreSelection) decisionReason() string {
@@ -640,6 +808,10 @@ func (s compileContextRestoreSelection) selectionTraceMetadata() map[string]any 
 	trace := map[string]any{
 		"decision_reason": s.decisionReason(),
 		"decision":        s.Decision,
+		"cache": map[string]any{
+			"hit":             s.CacheHit,
+			"key_fingerprint": trimSnapshotFingerprint(s.CacheKey, 96),
+		},
 		"retrieval": map[string]any{
 			"candidate_pool_count":    len(s.Candidates) + s.FilteredOut,
 			"candidate_count":         len(s.Candidates),
@@ -864,7 +1036,7 @@ func (s compileContextRestoreSelection) topCandidateSnapshotID() string {
 }
 
 func (r compileContextRestoreCandidateScore) explainableBreakdown() map[string]any {
-	return map[string]any{
+	out := map[string]any{
 		"snapshot_id":            r.SnapshotID,
 		"created_at":             r.CreatedAt,
 		"snapshot_kind":          r.SnapshotKind,
@@ -889,11 +1061,172 @@ func (r compileContextRestoreCandidateScore) explainableBreakdown() map[string]a
 		"staleness_penalty":      r.StalenessPenalty,
 		"freshness_penalty":      r.FreshnessPenalty,
 		"header_only_penalty":    r.HeaderOnlyPenalty,
+		"pre_rule_total_score":   r.PreRuleTotalScore,
+		"rule_score_adjustment":  r.RuleScoreAdjustment,
 		"total":                  r.TotalScore,
 		"total_score":            r.TotalScore,
 		"confidence":             r.Confidence,
 		"requires_fresh_compile": r.RequiresFreshCompile,
 		"explain":                r.Explain,
+	}
+	if r.RuleTrace != nil {
+		out["rule_trace"] = r.RuleTrace
+	}
+	if r.OutcomeAdjustment != 0 {
+		out["outcome_adjustment"] = r.OutcomeAdjustment
+	}
+	if r.OutcomeTrace != nil {
+		out["outcome_trace"] = r.OutcomeTrace
+	}
+	return out
+}
+
+func restoreOutcomeUtilityAdjustment(score compileContextRestoreCandidateScore, query string, outcomes []RestoreOutcomeEvent) (float64, map[string]any) {
+	total := 0.0
+	counts := map[string]int{}
+	ids := []string{}
+	queryFamily := normalizeRestoreQuery(query)
+	for _, event := range outcomes {
+		match := strings.TrimSpace(event.SnapshotID) != "" && strings.TrimSpace(event.SnapshotID) == strings.TrimSpace(score.SnapshotID)
+		if !match && strings.TrimSpace(event.ContextPacketID) != "" && strings.TrimSpace(event.ContextPacketID) == strings.TrimSpace(score.ContextPacketID) {
+			match = true
+		}
+		queryMatch := queryFamily != "" && normalizeRestoreQuery(event.Query) == queryFamily
+		if !match && !queryMatch {
+			continue
+		}
+		delta := restoreOutcomeDelta(event.Outcome, match, queryMatch)
+		if delta == 0 {
+			continue
+		}
+		if event.OutcomeConfidence > 0 {
+			delta *= clamp01(event.OutcomeConfidence)
+		}
+		if delta > maxRestoreOutcomeIndividualAdjust {
+			delta = maxRestoreOutcomeIndividualAdjust
+		}
+		if delta < -maxRestoreOutcomeIndividualAdjust {
+			delta = -maxRestoreOutcomeIndividualAdjust
+		}
+		total += delta
+		counts[string(event.Outcome)]++
+		ids = append(ids, event.ID)
+	}
+	if total > maxRestoreOutcomeScoreAdjustment {
+		total = maxRestoreOutcomeScoreAdjustment
+	}
+	if total < -maxRestoreOutcomeScoreAdjustment {
+		total = -maxRestoreOutcomeScoreAdjustment
+	}
+	total = math.Round(total*1000) / 1000
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	sort.Strings(ids)
+	return total, map[string]any{
+		"outcome_ids":           ids,
+		"outcome_counts":        counts,
+		"individual_cap":        maxRestoreOutcomeIndividualAdjust,
+		"total_cap":             maxRestoreOutcomeScoreAdjustment,
+		"bounded_adjustment":    total,
+		"non_canonical_signal":  true,
+		"authority_effect":      "advisory_score_only",
+		"final_score_clamped":   true,
+		"query_family_included": queryFamily != "",
+	}
+}
+
+func restoreOutcomeDelta(outcome RestoreOutcome, directMatch, queryMatch bool) float64 {
+	switch outcome {
+	case RestoreOutcomeHelpful:
+		if directMatch {
+			return 0.025
+		}
+	case RestoreOutcomeNotHelpful:
+		if directMatch {
+			return -0.025
+		}
+	case RestoreOutcomeHarmful, RestoreOutcomeContradictory, RestoreOutcomeOperatorCorrected:
+		if directMatch {
+			return -0.04
+		}
+		if queryMatch {
+			return -0.02
+		}
+	case RestoreOutcomeStale, RestoreOutcomeFailedExecution:
+		if directMatch {
+			return -0.03
+		}
+		if queryMatch {
+			return -0.015
+		}
+	case RestoreOutcomeFreshCompileRequired, RestoreOutcomeNoCandidate:
+		if queryMatch {
+			return -0.015
+		}
+	}
+	return 0
+}
+
+func boundedScoreAdjustment(outputs []rulecells.RuleOutput, individualCap, totalCap float64) float64 {
+	total := 0.0
+	for _, output := range outputs {
+		if output.Type != rulecells.OutputScoreAdjustment {
+			continue
+		}
+		delta := output.ScoreDelta
+		if delta > individualCap {
+			delta = individualCap
+		}
+		if delta < -individualCap {
+			delta = -individualCap
+		}
+		total += delta
+	}
+	if total > totalCap {
+		return totalCap
+	}
+	if total < -totalCap {
+		return -totalCap
+	}
+	return math.Round(total*1000) / 1000
+}
+
+func hasOutput(outputs []rulecells.RuleOutput, typ rulecells.OutputType) bool {
+	for _, output := range outputs {
+		if output.Type == typ {
+			return true
+		}
+	}
+	return false
+}
+
+func ruleTraceMap(trace rulecells.RuleTrace) map[string]any {
+	packs := make([]map[string]any, 0, len(trace.RulePacks))
+	for _, pack := range trace.RulePacks {
+		packs = append(packs, map[string]any{"pack_id": pack.ID, "version": pack.Version})
+	}
+	matched := make([]map[string]any, 0, len(trace.MatchedRules))
+	for _, rule := range trace.MatchedRules {
+		matched = append(matched, map[string]any{
+			"rule_id":      rule.RuleID,
+			"rule_version": rule.RuleVersion,
+			"pack_id":      rule.PackID,
+			"pack_version": rule.PackVersion,
+			"output_types": rule.OutputTypes,
+			"explain":      rule.Explain,
+		})
+	}
+	return map[string]any{
+		"trace_id":        trace.TraceID,
+		"lane":            trace.Lane,
+		"phase":           trace.Phase,
+		"input_id":        trace.InputID,
+		"latency_ms":      trace.LatencyMs,
+		"rules_evaluated": trace.RulesEvaluated,
+		"rule_packs":      packs,
+		"matched_rules":   matched,
+		"warnings":        trace.Warnings,
 	}
 }
 

@@ -205,7 +205,7 @@ export function StrategiesPage() {
                 onClick={() => selectStrategy(s)}
                 className={[
                   "w-full rounded border px-3 py-2 text-left",
-                  selected === s.id ? "border-forge-ember/40 bg-black/30" : "border-white/10 bg-black/20 hover:border-forge-ember/35",
+                  selected === s.id ? "border-forge-ember/40 bg-black/30" : "border-forge-platinum/10 bg-black/20 hover:border-forge-ember/35",
                 ].join(" ")}
               >
                 <div className="text-sm font-semibold text-forge-ash">{s.name}</div>

@@ -128,6 +128,13 @@ function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
+const SHELL_RAIL_COLLAPSED_KEY = "forge.shellRailCollapsed.v1";
+
+function readStoredShellRailCollapsed() {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(SHELL_RAIL_COLLAPSED_KEY) === "true";
+}
+
 export function AppShell(props: AppShellProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -149,6 +156,7 @@ export function AppShell(props: AppShellProps) {
   const [windows, setWindows] = useState<FloatingWindow[]>([]);
   const [dragging, setDragging] = useState<{ id: number; dx: number; dy: number } | null>(null);
   const [windowSeq, setWindowSeq] = useState(1);
+  const [railCollapsed, setRailCollapsed] = useState(() => readStoredShellRailCollapsed());
   const isMainWindow = props.isMainWindow;
 
   useEffect(() => {
@@ -174,6 +182,14 @@ export function AppShell(props: AppShellProps) {
   }, [isMainWindow]);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(SHELL_RAIL_COLLAPSED_KEY, String(railCollapsed));
+    } catch {
+      // Cosmetic shell preference; ignore storage failures.
+    }
+  }, [railCollapsed]);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
@@ -181,6 +197,10 @@ export function AppShell(props: AppShellProps) {
       if (event.ctrlKey && event.key.toLowerCase() === "m") {
         event.preventDefault();
         switchMode(uiMode === "cognitive" ? "metrics" : "cognitive");
+      }
+      if (event.ctrlKey && event.key.toLowerCase() === "b") {
+        event.preventDefault();
+        setRailCollapsed((value) => !value);
       }
       if (event.key === "Escape") {
         setWindows((items) => items.filter((item) => item.pinned));
@@ -264,6 +284,7 @@ export function AppShell(props: AppShellProps) {
   const runtimeState = core === "offline" ? "offline" : shellErr ? "degraded" : "online";
   const pinnedWindows = windows.filter((item) => item.pinned);
   const floatingWindows = windows.filter((item) => !item.pinned);
+  const isChatRoute = pathname === "/chat";
 
   return (
     <div className="forge-shell-frame flex h-full min-h-0 flex-col text-forge-ash">
@@ -303,9 +324,19 @@ export function AppShell(props: AppShellProps) {
       ) : null}
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="forge-category-rail">
-          <div className="px-3 py-3">
-            <CommandBar compact />
+        <aside className={cx("forge-category-rail", railCollapsed && "forge-category-rail--collapsed")}>
+          <div className="forge-category-rail__top">
+            <button
+              type="button"
+              onClick={() => setRailCollapsed((value) => !value)}
+              className="forge-rail-toggle"
+              aria-label={railCollapsed ? "Open left toolbar" : "Collapse left toolbar"}
+              title={railCollapsed ? "Open toolbar (Ctrl+B)" : "Collapse toolbar (Ctrl+B)"}
+            >
+              <span aria-hidden>{railCollapsed ? ">" : "<"}</span>
+              <span className={railCollapsed ? "sr-only" : ""}>{railCollapsed ? "Open" : "Collapse"}</span>
+            </button>
+            {!railCollapsed ? <CommandBar compact /> : null}
           </div>
           <nav className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-3">
             {navGroups.map((group) => {
@@ -318,9 +349,10 @@ export function AppShell(props: AppShellProps) {
                     onClick={() => toggleGroup(group.label)}
                     className={cx("forge-nav-group__trigger", groupActive && "forge-nav-group__trigger--active")}
                     aria-expanded={expanded}
+                    title={railCollapsed ? group.label : undefined}
                   >
-                    <span>{group.label}</span>
-                    <span>{expanded ? "-" : "+"}</span>
+                    <span>{railCollapsed ? group.label.slice(0, 2).toUpperCase() : group.label}</span>
+                    {!railCollapsed ? <span>{expanded ? "-" : "+"}</span> : null}
                   </button>
                   {expanded ? (
                     <div className="mt-1 space-y-1">
@@ -336,9 +368,10 @@ export function AppShell(props: AppShellProps) {
                             }}
                             className={cx("forge-nav-item", active && "forge-nav-item--active")}
                             aria-current={active ? "page" : undefined}
+                            title={railCollapsed ? item.label : undefined}
                           >
                             <span className="forge-nav-item__short">{item.short}</span>
-                            <span className="min-w-0 truncate">{item.label}</span>
+                            <span className={cx("forge-nav-item__label min-w-0 truncate", railCollapsed && "sr-only")}>{item.label}</span>
                           </button>
                         );
                       })}
@@ -348,10 +381,10 @@ export function AppShell(props: AppShellProps) {
               );
             })}
           </nav>
-          <div className="border-t border-white/10 p-2">
-            <button type="button" onClick={() => openWindow("surfaces", "Surface Directory")} className="forge-nav-item w-full">
+          <div className="border-t border-forge-platinum/10 p-2">
+            <button type="button" onClick={() => openWindow("surfaces", "Surface Directory")} className="forge-nav-item w-full" title={railCollapsed ? "More" : undefined}>
               <span className="forge-nav-item__short">··</span>
-              <span>More</span>
+              <span className={cx("forge-nav-item__label", railCollapsed && "sr-only")}>More</span>
             </button>
           </div>
         </aside>
@@ -368,31 +401,33 @@ export function AppShell(props: AppShellProps) {
             </div>
           ) : null}
 
-          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(74,99,255,0.08),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0))]">
-            <main className="forge-desktop-surface">
-              <div className="forge-window-frame forge-window-frame--focus">
-                <div className="forge-focus-head">
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist/55">
-                      {uiMode === "metrics" ? "System Metrics" : "Cognitive State"}
+          <div className="forge-main-field flex min-h-0 min-w-0 flex-1 overflow-hidden">
+            <main className={cx("forge-desktop-surface", isChatRoute && "forge-desktop-surface--flush")}>
+              <div className={cx("forge-window-frame forge-window-frame--focus", isChatRoute && "forge-window-frame--chat")}>
+                {!isChatRoute ? (
+                  <div className="forge-focus-head">
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist/55">
+                        {uiMode === "metrics" ? "System Metrics" : "Cognitive State"}
+                      </div>
+                      <div className="mt-1 truncate text-sm font-semibold text-forge-ash">{currentTool.label}</div>
                     </div>
-                    <div className="mt-1 truncate text-sm font-semibold text-forge-ash">{currentTool.label}</div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    {level !== "none" ? (
-                      <button type="button" onClick={() => openWindow("diagnostics", "Attention")} className="forge-chip forge-chip--warn px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
-                        Attention {attentionCount}
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {level !== "none" ? (
+                        <button type="button" onClick={() => openWindow("diagnostics", "Attention")} className="forge-chip forge-chip--warn px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
+                          Attention {attentionCount}
+                        </button>
+                      ) : null}
+                      <button type="button" onClick={() => openWindow("inspector", "Inspector")} className="forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
+                        Inspector
                       </button>
-                    ) : null}
-                    <button type="button" onClick={() => openWindow("inspector", "Inspector")} className="forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
-                      Inspector
-                    </button>
-                    <button type="button" onClick={() => openWindow("snapshot", "Restore Snapshot")} className="forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
-                      Snapshot
-                    </button>
+                      <button type="button" onClick={() => openWindow("snapshot", "Restore Snapshot")} className="forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
+                        Snapshot
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className={pathname === "/chat" ? "min-h-0 flex flex-1 overflow-hidden p-3 sm:p-4" : "min-h-0 flex-1 overflow-auto px-4 py-4 sm:px-5 lg:px-6"}>
+                ) : null}
+                <div className={isChatRoute ? "min-h-0 flex flex-1 overflow-hidden p-0" : "min-h-0 flex-1 overflow-auto px-4 py-4 sm:px-5 lg:px-6"}>
                   {props.children}
                 </div>
               </div>

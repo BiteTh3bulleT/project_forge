@@ -22,7 +22,10 @@ type fakeModelRuntime struct {
 	models      map[string]ModelRuntimeModel
 	loaded      map[string]bool
 	chatErr     error
+	chatContent string
 	healthErr   error
+	queueStatus ModelRuntimeQueueStatus
+	queueErr    error
 	importCalls int
 	listCalls   int
 	getCalls    int
@@ -210,6 +213,9 @@ func (f *fakeModelRuntime) Chat(_ context.Context, req ModelRuntimeChatRequest) 
 	if strings.TrimSpace(req.Prompt) != "" {
 		content = "echo: " + strings.TrimSpace(req.Prompt)
 	}
+	if strings.TrimSpace(f.chatContent) != "" {
+		content = f.chatContent
+	}
 	return ModelRuntimeChatResult{
 		Content:      content,
 		FinishReason: "stop",
@@ -265,6 +271,12 @@ func (f *fakeModelRuntime) QueueStatus(_ context.Context, req ModelRuntimeReques
 	defer f.mu.Unlock()
 	f.queueCalls++
 	f.lastMeta = req
+	if f.queueErr != nil {
+		return ModelRuntimeQueueStatus{}, f.queueErr
+	}
+	if f.queueStatus.PolicyState != "" || f.queueStatus.Depth != 0 || len(f.queueStatus.Active) > 0 || len(f.queueStatus.Pending) > 0 {
+		return f.queueStatus, nil
+	}
 	active := map[string]string{}
 	for id, isLoaded := range f.loaded {
 		if isLoaded {
@@ -384,6 +396,60 @@ func TestModelRuntimeForgeListEndpoint(t *testing.T) {
 	}
 	if v1Payload.CorrelationID != "corr-v1-list" || v1Payload.TraceID != "trace-v1-list" || v1Payload.WorkspaceID != "ws-a" {
 		t.Fatalf("unexpected v1 request meta: correlation=%q trace=%q workspace=%q", v1Payload.CorrelationID, v1Payload.TraceID, v1Payload.WorkspaceID)
+	}
+}
+
+func TestModelRuntimeEncodedRouteModelIDs(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := newModelRuntimeHarness(t)
+	fake := newFakeModelRuntime()
+	fake.models["phi3:3.8b"] = ModelRuntimeModel{
+		ID:           "phi3:3.8b",
+		DisplayName:  "Phi 3",
+		Backend:      "fake",
+		Format:       "gguf",
+		Status:       "available",
+		Capabilities: []string{"chat", "completion"},
+	}
+	srv.modelRuntime = fake
+
+	getReq := httptest.NewRequest(http.MethodGet, "/forge/models/phi3%3A3.8b", nil)
+	getRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(getRR, getReq)
+	if getRR.Code != http.StatusOK {
+		t.Fatalf("encoded get status=%d body=%s", getRR.Code, strings.TrimSpace(getRR.Body.String()))
+	}
+
+	compatReq := httptest.NewRequest(http.MethodGet, "/forge/models/phi3%3A3.8b/compatibility", nil)
+	compatRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(compatRR, compatReq)
+	if compatRR.Code != http.StatusOK {
+		t.Fatalf("encoded compatibility status=%d body=%s", compatRR.Code, strings.TrimSpace(compatRR.Body.String()))
+	}
+
+	loadBody := governanceBody(map[string]any{"correlationId": "corr-encoded-load"})
+	loadApprovalID := requestAndApproveModelGovernance(t, srv, "/forge/models/phi3%3A3.8b/load", loadBody)
+	loadBody["approvalId"] = fmt.Sprintf("%d", loadApprovalID)
+	loadRaw, err := json.Marshal(loadBody)
+	if err != nil {
+		t.Fatalf("marshal load body: %v", err)
+	}
+	loadReq := httptest.NewRequest(http.MethodPost, "/forge/models/phi3%3A3.8b/load", bytes.NewReader(loadRaw))
+	loadRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(loadRR, loadReq)
+	if loadRR.Code != http.StatusOK {
+		t.Fatalf("encoded load status=%d body=%s", loadRR.Code, strings.TrimSpace(loadRR.Body.String()))
+	}
+
+	chatReq := httptest.NewRequest(http.MethodPost, "/forge/models/phi3%3A3.8b/chat", bytes.NewReader([]byte(`{"messages":[{"role":"user","content":"hello"}]}`)))
+	chatRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(chatRR, chatReq)
+	if chatRR.Code != http.StatusOK {
+		t.Fatalf("encoded chat status=%d body=%s", chatRR.Code, strings.TrimSpace(chatRR.Body.String()))
+	}
+	if got := strings.TrimSpace(fake.lastChat.ModelID); got != "phi3:3.8b" {
+		t.Fatalf("expected decoded model id, got=%q", got)
 	}
 }
 

@@ -72,3 +72,95 @@ func TestCanonicalCognitiveWritesStayBounded(t *testing.T) {
 		t.Fatalf("found direct canonical cognitive write paths outside allowed kernel/restore boundaries:\n%s", strings.Join(violations, "\n"))
 	}
 }
+
+// TestKernelProcessorHasSingleConstructionSite guards the second authority
+// invariant: `controllane.NewProcessor` is the only legitimate constructor of
+// the FORGE kernel, and production code should pin a single construction site
+// so a future feature cannot quietly stand up a parallel kernel. The current
+// pinned site is `services/core/internal/api/autonomy_maintenance_loop.go`.
+// When the kernel is hoisted to `api/server.go` and threaded into autonomy,
+// update `expected` to that path. Adding a *third* call site without an
+// explicit allow-list update is the failure this test catches.
+func TestKernelProcessorHasSingleConstructionSite(t *testing.T) {
+	expected := []string{
+		filepath.Join("services", "core", "internal", "api", "autonomy_maintenance_loop.go"),
+	}
+	assertProductionCallSites(t, `\bcontrollane\.NewProcessor\b`, expected, "controllane.NewProcessor")
+}
+
+// TestGatewayHasSingleConstructionSite mirrors the kernel invariant for the
+// tool execution write root. `gateway.New` must be called exactly once in
+// production, from `api/server.go`. Tools register *into* that gateway; they
+// do not stand up their own.
+func TestGatewayHasSingleConstructionSite(t *testing.T) {
+	expected := []string{
+		filepath.Join("services", "core", "internal", "api", "server.go"),
+	}
+	assertProductionCallSites(t, `\bgateway\.New\(`, expected, "gateway.New")
+}
+
+func assertProductionCallSites(t *testing.T, pattern string, expected []string, label string) {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatalf("failed to resolve caller path")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", ".."))
+	internalRoot := filepath.Join(repoRoot, "services", "core", "internal")
+
+	allowed := make(map[string]struct{}, len(expected))
+	for _, p := range expected {
+		allowed[filepath.Clean(p)] = struct{}{}
+	}
+
+	rx := regexp.MustCompile(pattern)
+
+	found := map[string]struct{}{}
+	err := filepath.WalkDir(internalRoot, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(repoRoot, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.Clean(rel)
+		// The kernel and gateway packages may reference their own constructors
+		// in docstrings and unexported helpers; we only police *external*
+		// callers, since intra-package construction can't open a parallel
+		// write root.
+		if strings.HasPrefix(rel, filepath.Join("services", "core", "internal", "aios", "controllane")) ||
+			strings.HasPrefix(rel, filepath.Join("services", "core", "internal", "gateway")) {
+			return nil
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !rx.Match(body) {
+			return nil
+		}
+		found[rel] = struct{}{}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("authority guard walk for %s failed: %v", label, err)
+	}
+
+	for site := range found {
+		if _, ok := allowed[site]; !ok {
+			t.Fatalf("%s called from unexpected production site %s; if this is intentional, update the allow-list in authority_guard_test.go and document the new write root in docs/status/duplicate_systems.md", label, site)
+		}
+	}
+	for _, site := range expected {
+		if _, ok := found[site]; !ok {
+			t.Fatalf("%s expected at %s but no call site found; the pinned construction site has moved — update the allow-list to match the new bootstrap path", label, site)
+		}
+	}
+}

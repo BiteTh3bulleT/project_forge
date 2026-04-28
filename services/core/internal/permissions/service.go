@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -88,7 +89,7 @@ func (s *Service) EnsureDefaults(ctx context.Context, workspaceDir string) error
 		AllowedWritePaths:    []string{filepath.Join(workspaceDir, "scratch")},
 		AllowedExecutePaths:  []string{},
 		ForbiddenPaths:       []string{"/etc", "/var", "/usr", "/boot", "/root", "~/.ssh", "~/.aws", "~/.gnupg"},
-		AllowedTools:         []string{"fs.read", "fs.list", "fs.mkdir", "repo.inspect", "git.status", "git.diff", "git.branch", "validate.project_context", "net.interfaces", "net.dns_lookup", "net.connectivity", "time.now"},
+		AllowedTools:         []string{"fs.read", "fs.list", "fs.mkdir", "repo.inspect", "git.status", "git.diff", "git.branch", "validate.project_context", "net.interfaces", "net.dns_lookup", "net.connectivity", "web.search", "time.now"},
 		ApprovalRequiredRisk: []string{"medium", "high"},
 		MaxBytesPerWrite:     512 * 1024,
 		AllowNetwork:         false,
@@ -118,7 +119,7 @@ func (s *Service) EnsureDefaults(ctx context.Context, workspaceDir string) error
 		AllowedWritePaths:    []string{filepath.Join(workspaceDir, "artifacts"), filepath.Join(workspaceDir, "exports"), filepath.Join(workspaceDir, "scratch")},
 		AllowedExecutePaths:  []string{},
 		ForbiddenPaths:       []string{"/etc", "/var", "/usr", "/boot", "/root", "~/.ssh", "~/.aws", "~/.gnupg"},
-		AllowedTools:         []string{"fs.read", "fs.list", "fs.mkdir", "fs.rename", "fs.copy", "fs.delete", "fs.write", "fs.chmod", "git.status", "git.diff", "git.branch", "git.commit", "git.checkout", "git.stash", "git.apply_patch", "repo.inspect", "validate.project_context", "proc.run", "proc.terminate", "system.service_status", "system.service_control", "system.logs", "desktop.notify", "desktop.open", "net.interfaces", "net.dns_lookup", "net.connectivity", "net.fetch", "secret.get"},
+		AllowedTools:         []string{"fs.read", "fs.list", "fs.mkdir", "fs.rename", "fs.copy", "fs.delete", "fs.write", "fs.chmod", "git.status", "git.diff", "git.branch", "git.commit", "git.checkout", "git.stash", "git.apply_patch", "repo.inspect", "validate.project_context", "proc.run", "proc.terminate", "system.service_status", "system.service_control", "system.logs", "desktop.notify", "desktop.open", "net.interfaces", "net.dns_lookup", "net.connectivity", "net.fetch", "web.search", "secret.get"},
 		ApprovalRequiredRisk: []string{"medium", "high"},
 		MaxBytesPerWrite:     2 * 1024 * 1024,
 		AllowNetwork:         false,
@@ -160,7 +161,7 @@ func (s *Service) EnsureGatewayToolPolicy(ctx context.Context, workspaceDir stri
 		"proc.run", "proc.terminate",
 		"system.service_status", "system.service_control", "system.logs",
 		"desktop.notify", "desktop.open",
-		"net.interfaces", "net.dns_lookup", "net.connectivity", "net.fetch",
+		"net.interfaces", "net.dns_lookup", "net.connectivity", "net.fetch", "web.search",
 		"time.now",
 		"secret.get",
 		"legacy.adapter.invoke",
@@ -612,7 +613,7 @@ func anyMatch(scopes []string, target string) bool {
 }
 
 func normalizePath(p string) string {
-	trimmed := strings.TrimSpace(p)
+	trimmed := expandUserPath(strings.TrimSpace(p))
 	if trimmed == "" {
 		return trimmed
 	}
@@ -628,7 +629,8 @@ func normalizePath(p string) string {
 // "..".
 func pathScopeMatch(target, scope string) bool {
 	t := strings.TrimSpace(target)
-	s := strings.TrimSpace(scope)
+	s := expandUserPath(strings.TrimSpace(scope))
+	t = expandUserPath(t)
 	if t == "" || s == "" {
 		return false
 	}
@@ -655,4 +657,22 @@ func pathScopeMatch(target, scope string) bool {
 		return false
 	}
 	return !strings.HasPrefix(rel, string(filepath.Separator))
+}
+
+func expandUserPath(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return p
+	}
+	if p != "~" && !strings.HasPrefix(p, "~/") {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return p
+	}
+	if p == "~" {
+		return home
+	}
+	return filepath.Join(home, strings.TrimPrefix(p, "~/"))
 }

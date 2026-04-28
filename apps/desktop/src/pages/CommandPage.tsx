@@ -73,7 +73,7 @@ function Quick(props: { title: string; body: string; onClick: () => void }) {
     <button
       type="button"
       onClick={props.onClick}
-      className="rounded-md border border-white/10 bg-forge-slate/20 p-4 text-left hover:border-forge-ember/35 hover:bg-forge-slate/35"
+      className="rounded-md border border-forge-platinum/10 bg-forge-slate/20 p-4 text-left hover:border-forge-ember/35 hover:bg-forge-slate/35"
     >
       <div className="text-sm font-semibold text-forge-ash">{props.title}</div>
       <div className="mt-2 text-xs text-forge-mist">{props.body}</div>

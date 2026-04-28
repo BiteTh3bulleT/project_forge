@@ -3,6 +3,8 @@ package gateway
 import (
 	"regexp"
 	"strings"
+
+	"forge/projectforge/services/core/internal/aios/hyperlane"
 )
 
 var (
@@ -10,6 +12,7 @@ var (
 	reMakeFolder  = regexp.MustCompile(`(?i)(?:create|make)\s+(?:a\s+)?(?:directory|dir|folder)(?:\s+(?:at|in|under|for|:))?\s+['"]?([^'"\n]+?)['"]?(?:\s|$)`)
 	reActionVerb  = regexp.MustCompile(`(?i)\b(create|write|save|edit|modify|update|delete|remove|rename|move|copy|run|execute|build|test|install|commit|checkout|stash|chmod|fetch|scan|open|start|stop|restart|read|list|show)\b`)
 	reStatusProbe = regexp.MustCompile(`(?i)\b(how\s+are|is\s+everything|is\s+it\s+working|any\s+updates|any\s+progress|where\s+are\s+we|what\s+is\s+the\s+status|status\s+of|how\s+is\s+it\s+going|what\s+is\s+next|did\s+it\s+work|seemed\s+to\s+work|was\s+it\s+created|was\s+that\s+created|was\s+the\s+file\s+created|did\s+that\s+work)\b`)
+	reURL         = regexp.MustCompile(`https?://[^\s]+`)
 )
 
 var smallTalkTurns = map[string]struct{}{
@@ -77,25 +80,27 @@ func ForcedChatModelName(user string) string {
 	if wantsCompositeFilesystemWorkflow(user) {
 		return ""
 	}
-	if wantsFilesystemMkdir(user) {
-		return ChatModelName("fs.mkdir")
-	}
-	if wantsListDirectory(user) {
-		return ChatModelName("fs.list")
-	}
-	if wantsReadFile(user) {
-		return ChatModelName("fs.read")
-	}
-	if wantsWriteFile(user) {
-		return ChatModelName("fs.write")
-	}
-	if wantsShellRun(user) {
-		return ChatModelName("proc.run")
-	}
-	if wantsGitStatus(user) {
-		return ChatModelName("git.status")
+	intent := ParseHyperlaneIntent(user)
+	switch intent.Route {
+	case hyperlane.RouteGatewayFSMkdir,
+		hyperlane.RouteGatewayFSList,
+		hyperlane.RouteGatewayFSRead,
+		hyperlane.RouteGatewayFSWrite,
+		hyperlane.RouteGatewayProcRun,
+		hyperlane.RouteGatewayWebSearch,
+		hyperlane.RouteGatewayNetFetch,
+		hyperlane.RouteGatewayDesktopOpen,
+		hyperlane.RouteGatewayGitStatus:
+		return ChatModelName(intent.Route)
 	}
 	return ""
+}
+
+// IsCompositeFilesystemWorkflow reports whether a user turn combines folder creation
+// with a follow-on file write/create step. Chat dispatch uses this to avoid
+// executing partial filesystem side effects before the write action is approved.
+func IsCompositeFilesystemWorkflow(user string) bool {
+	return wantsCompositeFilesystemWorkflow(user)
 }
 
 func wantsCompositeFilesystemWorkflow(user string) bool {
@@ -188,6 +193,20 @@ func wantsWriteFile(user string) bool {
 	if strings.Contains(s, "create a file") || strings.Contains(s, "create file") {
 		return true
 	}
+	if IsVideoGameJournalWebpageIntent(user) {
+		return true
+	}
+	if (strings.Contains(s, "create") || strings.Contains(s, "write") || strings.Contains(s, "make") || strings.Contains(s, "save")) &&
+		(strings.Contains(s, "webpage") || strings.Contains(s, "web page") || strings.Contains(s, "html page")) {
+		return true
+	}
+	if (strings.Contains(s, "create") || strings.Contains(s, "write") || strings.Contains(s, "save")) &&
+		(strings.Contains(s, " file") || strings.Contains(s, " script")) &&
+		(strings.Contains(s, "svg") || strings.Contains(s, "json") || strings.Contains(s, "markdown") || strings.Contains(s, "text") ||
+			strings.Contains(s, "html") || strings.Contains(s, "css") || strings.Contains(s, "javascript") || strings.Contains(s, "typescript") ||
+			strings.Contains(s, "go file") || strings.Contains(s, ".go") || strings.Contains(s, "python")) {
+		return true
+	}
 	if strings.Contains(s, "create a script") || strings.Contains(s, "create script") {
 		return true
 	}
@@ -215,6 +234,64 @@ func wantsShellRun(user string) bool {
 		return true
 	}
 	return false
+}
+
+func wantsWebSearch(user string) bool {
+	s := strings.TrimSpace(strings.ToLower(user))
+	if s == "" {
+		return false
+	}
+	if strings.Contains(s, "search the web") || strings.Contains(s, "web search") || strings.Contains(s, "look up") || strings.Contains(s, "google ") {
+		return true
+	}
+	if strings.Contains(s, "weather") && (strings.Contains(s, " today") || strings.Contains(s, " current") || strings.Contains(s, " forecast")) {
+		return strings.Contains(s, " in ") || strings.Contains(s, " for ") || strings.Contains(s, " at ")
+	}
+	return strings.HasPrefix(s, "search ") && !strings.Contains(s, "/")
+}
+
+func wantsURLFetch(user string) bool {
+	s := strings.TrimSpace(strings.ToLower(user))
+	if s == "" || !reURL.MatchString(user) {
+		return false
+	}
+	return strings.Contains(s, "fetch") || strings.Contains(s, "read") || strings.Contains(s, "inspect") || strings.Contains(s, "summarize")
+}
+
+func wantsBrowserOpen(user string) bool {
+	s := strings.TrimSpace(strings.ToLower(user))
+	if s == "" {
+		return false
+	}
+	return reURL.MatchString(user) && (strings.Contains(s, "open browser") || strings.Contains(s, "open in browser") || strings.Contains(s, "browse to") || strings.Contains(s, "open url"))
+}
+
+func ParseWebSearchQuery(user string) (string, bool) {
+	s := strings.TrimSpace(user)
+	if s == "" || !wantsWebSearch(s) {
+		return "", false
+	}
+	lower := strings.ToLower(s)
+	prefixes := []string{"search the web for", "search web for", "web search for", "look up", "google", "search"}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(lower, prefix) {
+			query := strings.TrimSpace(s[len(prefix):])
+			query = strings.Trim(query, " :")
+			if query != "" {
+				return query, true
+			}
+		}
+	}
+	return s, true
+}
+
+func ParseURLFromText(user string) (string, bool) {
+	raw := strings.TrimSpace(reURL.FindString(user))
+	if raw == "" {
+		return "", false
+	}
+	raw = strings.TrimRight(raw, ".,);]")
+	return raw, true
 }
 
 func wantsGitStatus(user string) bool {
@@ -280,6 +357,12 @@ func ShouldAttachChatTools(user string) bool {
 		return true
 	}
 	if _, _, ok := ParsePythonBannerScriptIntent(user); ok {
+		return true
+	}
+	if _, _, ok := ParseDownloadSorterScriptIntent(user); ok {
+		return true
+	}
+	if IsVideoGameJournalWebpageIntent(user) {
 		return true
 	}
 	if _, ok := ParseShellCommand(user); ok {

@@ -53,12 +53,12 @@ export function WorkspaceLayoutsPage() {
     <div className="space-y-6">
       <Panel title="Workspace Layouts" subtitle="Monitor-aware multi-window presets backed by real display detection and Tauri window placement.">
         {!supported ? (
-          <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-forge-mist">
+          <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-4 text-sm text-forge-mist">
             Multi-window and monitor placement require the Tauri desktop runtime. The browser shell can read saved presets but will not simulate displays or extra windows.
           </div>
         ) : null}
         {fallbackNotice ? (
-          <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-forge-mist">
+          <div className="mt-3 rounded-xl border border-forge-platinum/10 bg-black/20 p-4 text-sm text-forge-mist">
             <div className="font-semibold text-forge-ash">Fallback applied</div>
             <div className="mt-1">{fallbackNotice}</div>
             <button type="button" className="mt-3 forge-btn forge-btn--ghost" onClick={() => clearFallbackNotice()}>
@@ -76,11 +76,11 @@ export function WorkspaceLayoutsPage() {
       {supported ? (
         <Panel title="Monitor Roles" subtitle="Assign one monitor as Main and add optional labels to the role list.">
           <div className="space-y-3">
-            {monitorRoleCatalog.length === 0 ? <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">No displays detected yet.</div> : null}
+            {monitorRoleCatalog.length === 0 ? <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3 text-sm text-forge-mist">No displays detected yet.</div> : null}
             {monitorRoleCatalog.map((monitor) => {
               const isMain = monitor.id === monitorDesignations.mainMonitorId;
               return (
-                <div key={monitor.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                <div key={monitor.id} className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <div className="text-sm font-semibold text-forge-ash">
@@ -130,12 +130,12 @@ export function WorkspaceLayoutsPage() {
                 onClick={() => selectLayout(layout.id)}
                 className={[
                   "w-full rounded-xl border px-3 py-3 text-left transition",
-                  selectedLayout?.id === layout.id ? "border-white/20 bg-black/30" : "border-white/10 bg-black/20 hover:border-white/20",
+                  selectedLayout?.id === layout.id ? "border-forge-platinum/20 bg-black/30" : "border-forge-platinum/10 bg-black/20 hover:border-forge-platinum/20",
                 ].join(" ")}
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-sm font-semibold text-forge-ash">{layout.name}</div>
-                  {activeLayoutId === layout.id ? <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-forge-mist">active</span> : null}
+                  {activeLayoutId === layout.id ? <span className="rounded-full border border-forge-platinum/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-forge-mist">active</span> : null}
                 </div>
                 <div className="mt-1 text-xs text-forge-mist">{layout.windows.length} windows · updated {new Date(layout.updatedAtMs).toLocaleString()}</div>
               </button>
@@ -168,7 +168,7 @@ export function WorkspaceLayoutsPage() {
               </label>
               <div className="mt-4 space-y-4">
                 {selectedLayout.windows.map((windowRecord, index) => (
-                  <div key={windowRecord.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                  <div key={windowRecord.id} className="rounded-xl border border-forge-platinum/10 bg-black/20 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <div className="text-sm font-semibold text-forge-ash">{windowRecord.title}</div>
@@ -266,7 +266,7 @@ export function WorkspaceLayoutsPage() {
                         {assignableShellTools.map((tool) => {
                           const checked = windowRecord.assignedRoutes.includes(tool.route);
                           return (
-                            <label key={tool.route} className="flex items-start gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-forge-mist">
+                            <label key={tool.route} className="flex items-start gap-2 rounded-lg border border-forge-platinum/10 bg-black/20 px-3 py-2 text-sm text-forge-mist">
                               <input
                                 type="checkbox"
                                 checked={checked}
@@ -305,7 +305,7 @@ export function WorkspaceLayoutsPage() {
                   <div className="text-sm text-forge-mist">No runtime windows registered yet.</div>
                 ) : (
                   runtimeWindows.map((windowRecord) => (
-                    <div key={windowRecord.runtimeLabel} className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">
+                    <div key={windowRecord.runtimeLabel} className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3 text-sm text-forge-mist">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="font-semibold text-forge-ash">{windowRecord.title}</div>
                         <span className="text-[11px]">{windowRecord.isFocused ? "focused" : "background"}</span>
@@ -327,7 +327,7 @@ export function WorkspaceLayoutsPage() {
 
 function MetricCard(props: { label: string; value: string; detail: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+    <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-4">
       <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist">{props.label}</div>
       <div className="mt-2 text-lg font-semibold text-forge-ash">{props.value}</div>
       <div className="mt-1 text-xs leading-relaxed text-forge-mist">{props.detail}</div>

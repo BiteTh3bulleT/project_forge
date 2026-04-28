@@ -151,16 +151,10 @@ func (b *OpenAICompatBackend) Generate(ctx context.Context, req GenerateRequest)
 	}
 	content := ""
 	finishReason := ""
+	warnings := []string(nil)
 	promptTokens := 0
 	completionTokens := 0
-	if choices, ok := raw["choices"].([]any); ok && len(choices) > 0 {
-		if first, ok := choices[0].(map[string]any); ok {
-			finishReason, _ = first["finish_reason"].(string)
-			if message, ok := first["message"].(map[string]any); ok {
-				content, _ = message["content"].(string)
-			}
-		}
-	}
+	content, finishReason, warnings = extractOpenAICompatGeneration(raw)
 	if usage, ok := raw["usage"].(map[string]any); ok {
 		promptTokens = intFromAny(usage["prompt_tokens"])
 		completionTokens = intFromAny(usage["completion_tokens"])
@@ -168,7 +162,7 @@ func (b *OpenAICompatBackend) Generate(ctx context.Context, req GenerateRequest)
 	if content == "" {
 		return GenerateResult{}, errors.New("openai-compatible response missing content")
 	}
-	result := GenerateResult{Content: content, FinishReason: finishReason, PromptTokens: promptTokens, CompletionTokens: completionTokens, Backend: b.kind, ModelID: req.ModelID}
+	result := GenerateResult{Content: content, FinishReason: finishReason, PromptTokens: promptTokens, CompletionTokens: completionTokens, Backend: b.kind, ModelID: req.ModelID, Warnings: warnings}
 	if result.FinishReason == "" {
 		result.FinishReason = "stop"
 	}
@@ -179,6 +173,115 @@ func (b *OpenAICompatBackend) Generate(ctx context.Context, req GenerateRequest)
 		result.CompletionTokens = len(strings.Fields(result.Content))
 	}
 	return result, nil
+}
+
+func extractOpenAICompatGeneration(raw map[string]any) (string, string, []string) {
+	warnings := []string(nil)
+	finishReason := ""
+	if choices, ok := raw["choices"].([]any); ok && len(choices) > 0 {
+		if first, ok := choices[0].(map[string]any); ok {
+			finishReason, _ = first["finish_reason"].(string)
+			if content := openAICompatContentFromChoice(first, false); strings.TrimSpace(content) != "" {
+				return content, finishReason, warnings
+			}
+			if content := openAICompatContentFromChoice(first, true); strings.TrimSpace(content) != "" {
+				warnings = append(warnings, "openai-compatible response used reasoning-content fallback")
+				return content, finishReason, warnings
+			}
+		}
+	}
+	if content := openAICompatTextFromValue(raw["output_text"], false); strings.TrimSpace(content) != "" {
+		return content, finishReason, warnings
+	}
+	if content := openAICompatTextFromValue(raw["response"], false); strings.TrimSpace(content) != "" {
+		return content, finishReason, warnings
+	}
+	if content := openAICompatTextFromValue(raw["content"], false); strings.TrimSpace(content) != "" {
+		return content, finishReason, warnings
+	}
+	return "", finishReason, warnings
+}
+
+func openAICompatContentFromChoice(choice map[string]any, includeReasoning bool) string {
+	if message, ok := choice["message"].(map[string]any); ok {
+		if content := openAICompatTextFromValue(message["content"], includeReasoning); strings.TrimSpace(content) != "" {
+			return content
+		}
+		if includeReasoning {
+			for _, key := range []string{"reasoning_content", "reasoning", "thinking"} {
+				if content := openAICompatTextFromValue(message[key], true); strings.TrimSpace(content) != "" {
+					return content
+				}
+			}
+		}
+	}
+	for _, key := range []string{"text", "content", "output_text"} {
+		if content := openAICompatTextFromValue(choice[key], includeReasoning); strings.TrimSpace(content) != "" {
+			return content
+		}
+	}
+	return ""
+}
+
+func openAICompatTextFromValue(value any, includeReasoning bool) string {
+	switch typed := value.(type) {
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return ""
+		}
+		return typed
+	case []any:
+		parts := make([]string, 0, len(typed))
+		for _, part := range typed {
+			if text := openAICompatTextFromPart(part, includeReasoning); strings.TrimSpace(text) != "" {
+				parts = append(parts, strings.TrimSpace(text))
+			}
+		}
+		return strings.Join(parts, "\n")
+	case []map[string]any:
+		parts := make([]string, 0, len(typed))
+		for _, part := range typed {
+			if text := openAICompatTextFromPart(part, includeReasoning); strings.TrimSpace(text) != "" {
+				parts = append(parts, strings.TrimSpace(text))
+			}
+		}
+		return strings.Join(parts, "\n")
+	case map[string]any:
+		return openAICompatTextFromPart(typed, includeReasoning)
+	default:
+		return ""
+	}
+}
+
+func openAICompatTextFromPart(part any, includeReasoning bool) string {
+	switch typed := part.(type) {
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return ""
+		}
+		return typed
+	case map[string]any:
+		partType, _ := typed["type"].(string)
+		partType = strings.ToLower(strings.TrimSpace(partType))
+		if !includeReasoning && strings.Contains(partType, "reason") {
+			return ""
+		}
+		for _, key := range []string{"text", "content", "output_text"} {
+			if text := openAICompatTextFromValue(typed[key], includeReasoning); strings.TrimSpace(text) != "" {
+				return text
+			}
+		}
+		if includeReasoning {
+			for _, key := range []string{"reasoning_content", "reasoning", "thinking"} {
+				if text := openAICompatTextFromValue(typed[key], true); strings.TrimSpace(text) != "" {
+					return text
+				}
+			}
+		}
+		return ""
+	default:
+		return ""
+	}
 }
 
 func (b *OpenAICompatBackend) Health(ctx context.Context) (BackendHealth, error) {

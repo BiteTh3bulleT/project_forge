@@ -38,6 +38,27 @@ func (s *Server) maybeRespondHyperlaneNoModel(
 
 	result := s.respondHyperlaneNoModel(ctx, intent)
 	latency := time.Since(start).Milliseconds()
+	latencyTrace := map[string]any{
+		"total_request_ms":        latency,
+		"hyperlane_ms":            latency,
+		"restore_ms":              int64(0),
+		"context_compile_ms":      int64(0),
+		"modelruntime_ms":         int64(0),
+		"gateway_preflight_ms":    int64(0),
+		"gateway_execution_ms":    int64(0),
+		"model_calls_avoided":     1,
+		"fresh_compile_avoided":   0,
+		"tokens_estimated":        0,
+		"context_budget_class":    "tiny",
+		"output_mode":             "brief",
+		"hyperlane_intent_type":   result.IntentType,
+		"hyperlane_route":         result.Route,
+		"hyperlane_confidence":    result.Confidence,
+		"hyperlane_matched_rule":  result.MatchedRule,
+		"modelruntime_avoided":    true,
+		"context_compile_avoided": result.ContextCompileAvoided,
+		"gateway_avoided":         true,
+	}
 	metadata := map[string]any{
 		"replyToUserMessageId":       userMessageID,
 		"hyperlane_intent_type":      result.IntentType,
@@ -56,6 +77,7 @@ func (s *Server) maybeRespondHyperlaneNoModel(
 		"toolGatewayActivity":        map[string]any{"executionState": "skipped", "toolCallEmitted": false, "reason": "hyperlane_no_model_structured_response"},
 		"modelRuntimeActivity":       map[string]any{"executionState": "skipped", "reason": "hyperlane_no_model_structured_response"},
 		"hyperlane_structured_route": result.Details,
+		"chatLatencyTrace":           latencyTrace,
 	}
 
 	am, err := s.chat.AppendMessage(ctx, threadID, "assistant", result.Content, metadata)
@@ -76,7 +98,7 @@ func (s *Server) maybeRespondHyperlaneNoModel(
 func (s *Server) respondHyperlaneNoModel(ctx context.Context, intent hyperlane.Intent) hyperlaneResponderResult {
 	base := hyperlaneResponderResult{
 		Route:                   intent.Route,
-		IntentType:              intent.Type,
+		IntentType:              string(intent.Type),
 		Confidence:              intent.Confidence,
 		MatchedRule:             intent.MatchedRule,
 		ContextCompileAvoided:   true,
@@ -128,7 +150,7 @@ func (s *Server) hyperlaneStatusResponse(ctx context.Context, result hyperlaneRe
 	} else {
 		b.WriteString(" Safe mode is not forced.")
 	}
-	b.WriteString(fmt.Sprintf(" Model runtime service configured: %t; registry status rows: %d; loaded rows: %d.", s.modelRuntime != nil, runtimeSummary.RegistryStatusRows, runtimeSummary.ActiveLoadedRows))
+	b.WriteString(fmt.Sprintf(" Model runtime service configured: %t; registry status rows: %d; loaded rows: %d. Fast path: no model call.", s.modelRuntime != nil, runtimeSummary.RegistryStatusRows, runtimeSummary.ActiveLoadedRows))
 	result.Content = b.String()
 	return result
 }
@@ -142,7 +164,7 @@ func (s *Server) hyperlaneDiagnosticsResponse(ctx context.Context, result hyperl
 		"diagnosticsRoute":   "/api/process/health?correlationId=<id>",
 	}
 	result.Content = fmt.Sprintf(
-		"Diagnostics summary: recent event rows=%d, recent error events=%d, gateway invocations=%d, denied=%d, needs_approval=%d. For a process trace, use `/api/process/health?correlationId=<id>` or `traceId=<id>`.",
+		"Diagnostics fast path. Diagnostics summary: recent event rows=%d, recent error events=%d, gateway invocations=%d, denied=%d, needs_approval=%d. For a process trace, use `/api/process/health?correlationId=<id>` or `traceId=<id>`.",
 		events.Total,
 		events.Errors,
 		gatewayCounts.Total,
@@ -168,7 +190,7 @@ func (s *Server) hyperlaneModelRuntimeStatusResponse(ctx context.Context, result
 		"warnings":           summary.Warnings,
 	}
 	result.Content = fmt.Sprintf(
-		"Model runtime status: service configured=%t, runtime enabled=%t, safe mode=%t. Registry status rows=%d; active loaded rows=%d; latest loaded model=%s (%s). Queue/health were not queried on the no-model path.",
+		"Modelruntime fast path. Model runtime status: service configured=%t, runtime enabled=%t, safe mode=%t. Registry status rows=%d; active loaded rows=%d; latest loaded model=%s (%s). Queue/health were not queried on the no-model path.",
 		s.modelRuntime != nil,
 		s.cfg.EnableModelRuntime,
 		s.cfg.SafeModeForceCPUOnly,
@@ -189,7 +211,7 @@ func (s *Server) hyperlaneRestoreInspectionResponse(ctx context.Context, result 
 	}
 	if !found {
 		result.Details = map[string]any{"count": 0, "workspaceId": strings.TrimSpace(s.cfg.WorkspaceDir)}
-		result.Content = "Restore inspection: no restore snapshots were found for the current workspace."
+		result.Content = "No restore package is attached to this chat context. Restore inspection: no restore snapshots were found for the current workspace."
 		return result
 	}
 	summary := summarizeContextSnapshotRow(row)
@@ -225,7 +247,7 @@ func (s *Server) hyperlaneDreamReportInspectionResponse(ctx context.Context, res
 	}
 	if !found {
 		result.Details = map[string]any{"count": count, "workspaceId": strings.TrimSpace(s.cfg.WorkspaceDir)}
-		result.Content = "Dream report inspection: no Dream reports were found for the current workspace."
+		result.Content = "Dream Mode report inspection: no Dream reports were found for the current workspace."
 		return result
 	}
 	result.Details = map[string]any{
@@ -242,7 +264,7 @@ func (s *Server) hyperlaneDreamReportInspectionResponse(ctx context.Context, res
 		"canonicalWriteCommitted": rec.CanonicalWriteCommitted,
 	}
 	result.Content = fmt.Sprintf(
-		"Dream report inspection: %d report(s) for current workspace. Latest `%s` is %s/%s, dry-run=%t, candidates=%d, proposals=%d.",
+		"Dream Mode report inspection: %d report(s) for current workspace. Latest `%s` is %s/%s, dry-run=%t, candidates=%d, proposals=%d.",
 		count,
 		rec.ID,
 		rec.Mode,

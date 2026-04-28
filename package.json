@@ -12,6 +12,7 @@
     "build:core": "node ./scripts/check-vsa-files.mjs --require-tracked && cd services/core && go build ./...",
     "build:desktop": "npm -w @forge/desktop run build",
     "typecheck:desktop": "npm -w @forge/desktop run typecheck",
+    "test:desktop": "npm -w @forge/desktop run test",
     "validate:desktop": "npm -w @forge/desktop run validate",
     "test:core": "node ./scripts/check-vsa-files.mjs --require-tracked && cd services/core && go test ./...",
     "vet:core": "node ./scripts/check-vsa-files.mjs --require-tracked && cd services/core && go vet ./...",

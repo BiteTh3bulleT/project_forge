@@ -175,7 +175,7 @@ export function CanvasPage() {
                 onClick={() => void loadBoard(b.id)}
                 className={[
                   "w-full rounded border px-2 py-2 text-left text-xs",
-                  active?.id === b.id ? "border-forge-ember/40 bg-forge-slate/50 text-forge-ash" : "border-white/10 bg-black/20 text-forge-mist hover:border-forge-ember/25",
+                  active?.id === b.id ? "border-forge-ember/40 bg-forge-slate/50 text-forge-ash" : "border-forge-platinum/10 bg-black/20 text-forge-mist hover:border-forge-ember/25",
                 ].join(" ")}
               >
                 <div className="truncate font-semibold">{b.title}</div>
@@ -211,7 +211,7 @@ export function CanvasPage() {
           <div className="text-sm text-forge-mist">Select or create a board.</div>
         ) : (
           <div className="space-y-4">
-            <div className="rounded border border-white/10 bg-black/25 p-3 text-xs text-forge-mist">
+            <div className="rounded border border-forge-platinum/10 bg-black/25 p-3 text-xs text-forge-mist">
               <div className="font-semibold text-forge-ash">Add note</div>
               <div className="mt-2 grid gap-2 md:grid-cols-2">
                 <label>
@@ -225,7 +225,7 @@ export function CanvasPage() {
                 </label>
                 <label>
                   <span className="text-[10px] uppercase tracking-wide">Placement</span>
-                  <div className="mt-1 rounded border border-white/10 bg-black/30 px-2 py-2 text-[11px] text-forge-mist">
+                  <div className="mt-1 rounded border border-forge-platinum/10 bg-black/30 px-2 py-2 text-[11px] text-forge-mist">
                     {nextPlacement.x}, {nextPlacement.y}
                   </div>
                 </label>
@@ -246,7 +246,7 @@ export function CanvasPage() {
               </div>
             </div>
 
-            <div className="relative min-h-[720px] overflow-auto rounded border border-white/10 bg-[#0a0c10]">
+            <div className="relative min-h-[720px] overflow-auto rounded border border-forge-platinum/10 bg-forge-black">
               {active.notes.length === 0 ? (
                 <div className="p-4 text-sm text-forge-mist">Board is empty. Add a note block above.</div>
               ) : (
@@ -408,14 +408,14 @@ function NoteCard(props: {
     <div
       className={[
         "absolute rounded border bg-forge-iron/80 shadow-lg backdrop-blur",
-        selected ? "border-forge-ember/45 ring-1 ring-inset ring-forge-ember/35" : "border-white/15",
+        selected ? "border-forge-ember/45 ring-1 ring-inset ring-forge-ember/35" : "border-forge-platinum/15",
         dragging || resizing ? "ring-1 ring-inset ring-forge-ember/40" : "",
       ].join(" ")}
       style={{ left: x, top: y, width: w, height: h, zIndex: note.pinned ? 2 : 1 }}
       onPointerDown={() => onSelect()}
     >
       <div
-        className="flex cursor-move items-center justify-between gap-1 border-b border-white/10 px-2 py-1"
+        className="flex cursor-move items-center justify-between gap-1 border-b border-forge-platinum/10 px-2 py-1"
         onPointerDown={startDrag}
         title="Click and hold to drag"
       >
@@ -436,14 +436,14 @@ function NoteCard(props: {
         value={body}
         onChange={(e) => setBody(e.target.value)}
       />
-      <div className="absolute bottom-0 left-0 right-0 space-y-1 border-t border-white/10 bg-black/40 p-2 text-[10px] text-forge-mist">
+      <div className="absolute bottom-0 left-0 right-0 space-y-1 border-t border-forge-platinum/10 bg-black/40 p-2 text-[10px] text-forge-mist">
         <div className="text-[10px]">Auto-saved · select and press Delete/Backspace to remove</div>
       </div>
       <button
         type="button"
         aria-label="Resize note"
         title="Click and pull to resize"
-        className="absolute bottom-1 right-1 h-4 w-4 cursor-nwse-resize rounded-sm border border-white/20 bg-white/10"
+        className="absolute bottom-1 right-1 h-4 w-4 cursor-nwse-resize rounded-sm border border-forge-platinum/20 bg-forge-platinum/10"
         onPointerDown={startResize}
       />
     </div>

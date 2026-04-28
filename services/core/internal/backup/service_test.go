@@ -51,7 +51,7 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 		"artifacts", "artifact_refs",
 		"memory_notes", "semantic_links", "state_items", "state_versions", "open_loops",
 		"contradiction_records", "supersession_records", "derived_models",
-		"context_packet_snapshots", "dream_reports", "semantic_idempotency_keys", "provenance_records",
+		"context_packet_snapshots", "dream_reports", "restore_outcome_events", "semantic_idempotency_keys", "provenance_records",
 		"project_context_records", "evaluation_records", "gateway_invocations", "audit_records",
 		"autonomy_settings",
 		"permission_profiles", "approval_presets", "execution_strategies",

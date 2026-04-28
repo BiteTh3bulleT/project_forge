@@ -52,6 +52,18 @@ type ModelRuntimeListRequest struct {
 	Meta ModelRuntimeRequestMeta `json:"meta"`
 }
 
+func modelRuntimeRouteModelID(r *http.Request) string {
+	raw := strings.TrimSpace(chi.URLParam(r, "id"))
+	if raw == "" {
+		return ""
+	}
+	decoded, err := url.PathUnescape(raw)
+	if err != nil {
+		return raw
+	}
+	return strings.TrimSpace(decoded)
+}
+
 type ModelRuntimeControlRequest struct {
 	Meta     ModelRuntimeRequestMeta `json:"meta"`
 	Actor    string                  `json:"actor,omitempty"`
@@ -88,6 +100,7 @@ type ModelRuntimeChatRequest struct {
 	Parameters    map[string]any            `json:"parameters,omitempty"`
 	MaxTokens     int                       `json:"maxTokens,omitempty"`
 	TimeoutMs     int                       `json:"timeoutMs,omitempty"`
+	MaxAttempts   int                       `json:"maxAttempts,omitempty"`
 	Stream        bool                      `json:"stream,omitempty"`
 	Actor         string                    `json:"actor,omitempty"`
 	Source        string                    `json:"source,omitempty"`
@@ -278,17 +291,6 @@ type modelRuntimeCodeCarrier interface {
 	ErrorCode() string
 }
 
-func modelRuntimeRouteID(r *http.Request) string {
-	raw := strings.TrimSpace(chi.URLParam(r, "id"))
-	if raw == "" {
-		return ""
-	}
-	if decoded, err := url.PathUnescape(raw); err == nil {
-		return strings.TrimSpace(decoded)
-	}
-	return raw
-}
-
 func (s *Server) handleForgeModelsList(w http.ResponseWriter, r *http.Request) {
 	runtimeSvc, meta, ok := s.requireModelRuntime(w, r, "model.runtime.list")
 	if !ok {
@@ -443,7 +445,7 @@ func (s *Server) handleForgeModelGet(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	id := modelRuntimeRouteID(r)
+	id := modelRuntimeRouteModelID(r)
 	if id == "" {
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "MODEL_ID_REQUIRED", message: "model id is required"}, meta)
 		return
@@ -466,7 +468,7 @@ func (s *Server) handleForgeModelCompatibility(w http.ResponseWriter, r *http.Re
 	if !ok {
 		return
 	}
-	id := modelRuntimeRouteID(r)
+	id := modelRuntimeRouteModelID(r)
 	if id == "" {
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "MODEL_ID_REQUIRED", message: "model id is required"}, meta)
 		return
@@ -512,7 +514,7 @@ func (s *Server) handleForgeModelControl(w http.ResponseWriter, r *http.Request,
 	if !ok {
 		return
 	}
-	id := modelRuntimeRouteID(r)
+	id := modelRuntimeRouteModelID(r)
 	if id == "" {
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "MODEL_ID_REQUIRED", message: "model id is required"}, initialMeta)
 		return
@@ -582,7 +584,7 @@ func (s *Server) handleForgeModelManagement(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	id := modelRuntimeRouteID(r)
+	id := modelRuntimeRouteModelID(r)
 	if id == "" {
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "MODEL_ID_REQUIRED", message: "model id is required"}, initialMeta)
 		return
@@ -664,7 +666,7 @@ func (s *Server) handleForgeModelChat(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	pathModelID := modelRuntimeRouteID(r)
+	pathModelID := modelRuntimeRouteModelID(r)
 	if pathModelID == "" {
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "MODEL_ID_REQUIRED", message: "model id is required"}, initialMeta)
 		return

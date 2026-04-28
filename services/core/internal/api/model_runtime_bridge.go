@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -56,6 +57,9 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service, telemet
 	}
 
 	modelStore := modelruntime.NewModelStore(cfg.ModelHome, modelruntime.ModelStoreOptions{StrictChecksum: false})
+	if err := os.MkdirAll(filepath.Join(cfg.ModelHome, "models"), 0o755); err != nil {
+		log.Printf("model runtime model home init warning: %v", err)
+	}
 	registry := modelruntime.NewModelRegistry(modelStore)
 	models := []modelruntime.ModelManifest{}
 	registered, err := registry.Scan(context.Background())
@@ -759,7 +763,8 @@ func (b *modelRuntimeBridge) Chat(ctx context.Context, req ModelRuntimeChatReque
 	}
 
 	result, err := b.runtime.ExecuteChatRole(ctx, modelruntime.ChatExecutionRequest{
-		Role: resolveModelRuntimeChatRole(req.Role),
+		Role:        resolveModelRuntimeChatRole(req.Role),
+		MaxAttempts: req.MaxAttempts,
 		GenerateRequest: modelruntime.GenerateRequest{
 			ModelID:       strings.TrimSpace(req.ModelID),
 			Backend:       modelruntime.ParseModelBackendKind(req.Backend),

@@ -1,10 +1,13 @@
 package controllane
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/aios/rulecells"
 )
 
 func TestSelectCompileContextRestoreCandidateDeterministicRanking(t *testing.T) {
@@ -72,6 +75,41 @@ func TestSelectCompileContextRestoreCandidateDeterministicRanking(t *testing.T) 
 	}
 	if selectionA.Candidates[2].Score.SnapshotID != "ctx-candidate-stale" {
 		t.Fatalf("expected stale snapshot to rank last, got %q", selectionA.Candidates[2].Score.SnapshotID)
+	}
+}
+
+func TestRestoreOutcomeFeedbackAdjustsCandidateScoreWithinCaps(t *testing.T) {
+	currentPacket := createTestContextPacketSnapshot("ctx-current-feedback", "ws-main", 1760004000000)
+	currentPacket.Query = "summarize blockers"
+	current := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
+		Packet:        currentPacket,
+		SnapshotID:    currentPacket.ID,
+		SnapshotKind:  "restore",
+		CorrelationID: "corr-current-feedback",
+		TraceID:       "trace-current-feedback",
+		SyscallID:     "syscall-current-feedback",
+		ProposedBy:    "user",
+		CommittedBy:   "forge_kernel",
+	}, nil)
+	candidate := makeSnapshotCandidatePacket("ctx-feedback-candidate", currentPacket, 1760003900000, "restore")
+	base := selectCompileContextRestoreCandidateWithFeedback(context.Background(), nil, currentPacket.CreatedAt, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{}, nil)
+	helpful := selectCompileContextRestoreCandidateWithFeedback(context.Background(), nil, currentPacket.CreatedAt, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{}, []RestoreOutcomeEvent{
+		{ID: "outcome-helpful", CreatedAt: 1760003990000, WorkspaceID: "ws-main", Query: "summarize blockers", SnapshotID: "ctx-feedback-candidate", Outcome: RestoreOutcomeHelpful, OutcomeConfidence: 1},
+	})
+	harmfulEvents := []RestoreOutcomeEvent{}
+	for i := 0; i < 10; i++ {
+		harmfulEvents = append(harmfulEvents, RestoreOutcomeEvent{ID: "outcome-harmful-" + string(rune('a'+i)), CreatedAt: 1760003990000 + int64(i), WorkspaceID: "ws-main", Query: "summarize blockers", SnapshotID: "ctx-feedback-candidate", Outcome: RestoreOutcomeHarmful, OutcomeConfidence: 1})
+	}
+	harmful := selectCompileContextRestoreCandidateWithFeedback(context.Background(), nil, currentPacket.CreatedAt, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{}, harmfulEvents)
+
+	if helpful.Candidates[0].Score.OutcomeAdjustment <= 0 || helpful.Candidates[0].Score.TotalScore <= base.Candidates[0].Score.TotalScore {
+		t.Fatalf("expected helpful outcome to boost score: base=%+v helpful=%+v", base.Candidates[0].Score, helpful.Candidates[0].Score)
+	}
+	if harmful.Candidates[0].Score.OutcomeAdjustment < -maxRestoreOutcomeScoreAdjustment || harmful.Candidates[0].Score.TotalScore >= base.Candidates[0].Score.TotalScore {
+		t.Fatalf("expected harmful outcomes to penalize within cap: base=%+v harmful=%+v", base.Candidates[0].Score, harmful.Candidates[0].Score)
+	}
+	if harmful.Candidates[0].Score.TotalScore < 0 || harmful.Candidates[0].Score.TotalScore > 1 {
+		t.Fatalf("score must remain clamped, got %+v", harmful.Candidates[0].Score)
 	}
 }
 
@@ -434,6 +472,230 @@ func TestInMemoryListContextSnapshotsFiltersAndOrders(t *testing.T) {
 	if list[0].ID != "ctx-main-b" || list[1].ID != "ctx-main-a" {
 		t.Fatalf("expected created_at descending order, got %s then %s", list[0].ID, list[1].ID)
 	}
+}
+
+func TestRestoreRuleCellsApplyStalePenaltyAndTracePackVersion(t *testing.T) {
+	now := int64(1760004300000)
+	currentPacket := createTestContextPacketSnapshot("ctx-current-rule-stale", "ws-main", now)
+	currentPacket.Query = "summarize blockers"
+	current := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
+		Packet:        currentPacket,
+		SnapshotID:    currentPacket.ID,
+		SnapshotKind:  "restore",
+		CorrelationID: "corr-current-rule-stale",
+		TraceID:       "trace-current-rule-stale",
+		SyscallID:     "syscall-current-rule-stale",
+		ProposedBy:    "user",
+		CommittedBy:   "forge_kernel",
+	}, nil)
+	stalePacket := currentPacket
+	stalePacket.ID = "ctx-stale-rule"
+	stalePacket.Query = "old unrelated context"
+	stalePacket.CreatedAt = now - restoreFreshnessHorizonMs - 1000
+	stale := makeSnapshotCandidatePacket(stalePacket.ID, stalePacket, stalePacket.CreatedAt, "restore")
+
+	selection := selectCompileContextRestoreCandidateWithRules(context.Background(), rulecells.MustStaticEngine(), now, current, []domain.ContextPacket{stale}, "restore", compileContextResumeHints{})
+	if len(selection.Candidates) != 1 {
+		t.Fatalf("expected one candidate, got %d", len(selection.Candidates))
+	}
+	score := selection.Candidates[0].Score
+	if score.RuleScoreAdjustment >= 0 {
+		t.Fatalf("expected stale penalty rule adjustment, got %+v", score)
+	}
+	if score.PreRuleTotalScore <= score.TotalScore {
+		t.Fatalf("expected rule-adjusted total to drop: pre=%f total=%f", score.PreRuleTotalScore, score.TotalScore)
+	}
+	if score.RuleTrace == nil {
+		t.Fatalf("expected candidate rule trace")
+	}
+	packs, ok := score.RuleTrace["rule_packs"].([]map[string]any)
+	if !ok || len(packs) != 1 || packs[0]["pack_id"] != rulecells.PackArterialRestoreID || packs[0]["version"] != rulecells.StaticPackVersion {
+		t.Fatalf("expected arterial restore pack version trace, got %#v", score.RuleTrace["rule_packs"])
+	}
+}
+
+func TestRestoreRuleCellsCapAndClampScoreAdjustments(t *testing.T) {
+	now := int64(1760004300000)
+	currentPacket := createTestContextPacketSnapshot("ctx-current-rule-cap", "ws-main", now)
+	currentPacket.Query = "summarize blockers"
+	current := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
+		Packet:        currentPacket,
+		SnapshotID:    currentPacket.ID,
+		SnapshotKind:  "restore",
+		CorrelationID: "corr-current-rule-cap",
+		TraceID:       "trace-current-rule-cap",
+		SyscallID:     "syscall-current-rule-cap",
+		ProposedBy:    "user",
+		CommittedBy:   "forge_kernel",
+	}, nil)
+	candidate := makeSnapshotCandidatePacket("ctx-rule-cap", currentPacket, now-1000, "restore")
+	engine := staticRuleEngine{result: rulecells.RunResult{
+		Outputs: []rulecells.RuleOutput{
+			{Type: rulecells.OutputScoreAdjustment, ScoreDelta: 2.0},
+			{Type: rulecells.OutputScoreAdjustment, ScoreDelta: 2.0},
+			{Type: rulecells.OutputScoreAdjustment, ScoreDelta: 2.0},
+		},
+		Trace: rulecells.RuleTrace{
+			TraceID:      "trace-cap",
+			Lane:         rulecells.LaneArterial,
+			Phase:        rulecells.PhaseRestoreScoring,
+			InputID:      "ctx-rule-cap",
+			RulePacks:    []rulecells.RulePackRef{{ID: "pack.cap", Version: "0.1.0"}},
+			MatchedRules: []rulecells.MatchedRuleTrace{{RuleID: "rule.cap", PackID: "pack.cap", PackVersion: "0.1.0"}},
+			Outputs:      []rulecells.RuleOutput{{Type: rulecells.OutputScoreAdjustment, ScoreDelta: 2.0}},
+		},
+	}}
+
+	selection := selectCompileContextRestoreCandidateWithRules(context.Background(), engine, now, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{})
+	score := selection.Candidates[0].Score
+	if score.RuleScoreAdjustment != maxRestoreRuleScoreAdjustment {
+		t.Fatalf("expected capped total adjustment %.2f, got %.3f", maxRestoreRuleScoreAdjustment, score.RuleScoreAdjustment)
+	}
+	if score.TotalScore < 0 || score.TotalScore > 1 {
+		t.Fatalf("expected final score clamped to 0..1, got %.3f", score.TotalScore)
+	}
+}
+
+func TestRestoreRuleEngineErrorFallsBackWithWarning(t *testing.T) {
+	now := int64(1760004300000)
+	currentPacket := createTestContextPacketSnapshot("ctx-current-rule-error", "ws-main", now)
+	currentPacket.Query = "summarize blockers"
+	current := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
+		Packet:        currentPacket,
+		SnapshotID:    currentPacket.ID,
+		SnapshotKind:  "restore",
+		CorrelationID: "corr-current-rule-error",
+		TraceID:       "trace-current-rule-error",
+		SyscallID:     "syscall-current-rule-error",
+		ProposedBy:    "user",
+		CommittedBy:   "forge_kernel",
+	}, nil)
+	candidate := makeSnapshotCandidatePacket("ctx-rule-error", currentPacket, now-1000, "restore")
+	base := selectCompileContextRestoreCandidate(now, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{})
+	selection := selectCompileContextRestoreCandidateWithRules(context.Background(), staticRuleEngine{err: errors.New("boom")}, now, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{})
+	if selection.Decision != base.Decision || selection.TopScore != base.TopScore {
+		t.Fatalf("expected base scoring fallback, base=%+v selection=%+v", base, selection)
+	}
+	if len(selection.RuleWarnings) == 0 || !strings.Contains(selection.RuleWarnings[0], "restore rule engine failed") {
+		t.Fatalf("expected explicit rule warning, got %+v", selection.RuleWarnings)
+	}
+}
+
+func TestRestoreRuleEngineNilKeepsBaseScoring(t *testing.T) {
+	now := int64(1760004300000)
+	currentPacket := createTestContextPacketSnapshot("ctx-current-rule-disabled", "ws-main", now)
+	currentPacket.Query = "summarize blockers"
+	current := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
+		Packet:        currentPacket,
+		SnapshotID:    currentPacket.ID,
+		SnapshotKind:  "restore",
+		CorrelationID: "corr-current-rule-disabled",
+		TraceID:       "trace-current-rule-disabled",
+		SyscallID:     "syscall-current-rule-disabled",
+		ProposedBy:    "user",
+		CommittedBy:   "forge_kernel",
+	}, nil)
+	candidate := makeSnapshotCandidatePacket("ctx-rule-disabled", currentPacket, now-1000, "restore")
+	base := selectCompileContextRestoreCandidate(now, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{})
+	selection := selectCompileContextRestoreCandidateWithRules(context.Background(), nil, now, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{})
+	if selection.Decision != base.Decision || selection.TopScore != base.TopScore || len(selection.RuleWarnings) != 0 {
+		t.Fatalf("expected nil engine to preserve base scoring, base=%+v selection=%+v", base, selection)
+	}
+}
+
+func TestRestoreScoringCacheHitMissInvalidationAndScope(t *testing.T) {
+	resetRestoreScoringCacheForTest()
+	t.Cleanup(resetRestoreScoringCacheForTest)
+	now := int64(1760004300000)
+	currentPacket := createTestContextPacketSnapshot("ctx-cache-current", "ws-main", now)
+	currentPacket.Query = "summarize blockers"
+	current := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
+		Packet:        currentPacket,
+		SnapshotID:    currentPacket.ID,
+		SnapshotKind:  "restore",
+		CorrelationID: "corr-cache",
+		TraceID:       "trace-cache",
+		SyscallID:     "syscall-cache",
+		ProposedBy:    "user",
+		CommittedBy:   "forge_kernel",
+	}, nil)
+	candidate := makeSnapshotCandidatePacket("ctx-cache-candidate", currentPacket, now-1000, "restore")
+
+	first := selectCompileContextRestoreCandidateCached(context.Background(), nil, now, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{}, nil, false)
+	if first.CacheHit {
+		t.Fatalf("expected first scoring run to miss cache")
+	}
+	second := selectCompileContextRestoreCandidateCached(context.Background(), nil, now+1000, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{}, nil, false)
+	if !second.CacheHit {
+		t.Fatalf("expected repeated scoring run to hit cache")
+	}
+	if first.TopScore != second.TopScore || first.Decision != second.Decision {
+		t.Fatalf("expected cached result to match non-cache scoring, first=%+v second=%+v", first, second)
+	}
+
+	newCandidate := makeSnapshotCandidatePacket("ctx-cache-new", currentPacket, now+2000, "restore")
+	invalidated := selectCompileContextRestoreCandidateCached(context.Background(), nil, now+2000, current, []domain.ContextPacket{newCandidate, candidate}, "restore", compileContextResumeHints{}, nil, false)
+	if invalidated.CacheHit {
+		t.Fatalf("expected new snapshot candidate set to invalidate cache")
+	}
+
+	otherWorkspacePacket := currentPacket
+	otherWorkspacePacket.Scope.WorkspaceID = "ws-other"
+	otherCurrent := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
+		Packet:        otherWorkspacePacket,
+		SnapshotID:    "ctx-cache-current-other",
+		SnapshotKind:  "restore",
+		CorrelationID: "corr-cache-other",
+		TraceID:       "trace-cache-other",
+		SyscallID:     "syscall-cache-other",
+		ProposedBy:    "user",
+		CommittedBy:   "forge_kernel",
+	}, nil)
+	otherCandidate := makeSnapshotCandidatePacket("ctx-cache-other", otherWorkspacePacket, now-1000, "restore")
+	other := selectCompileContextRestoreCandidateCached(context.Background(), nil, now+3000, otherCurrent, []domain.ContextPacket{otherCandidate}, "restore", compileContextResumeHints{}, nil, false)
+	if other.CacheHit {
+		t.Fatalf("expected wrong workspace not to share restore cache")
+	}
+}
+
+func TestRestoreScoringCacheCanBeDisabled(t *testing.T) {
+	resetRestoreScoringCacheForTest()
+	t.Cleanup(resetRestoreScoringCacheForTest)
+	now := int64(1760004300000)
+	currentPacket := createTestContextPacketSnapshot("ctx-cache-disabled-current", "ws-main", now)
+	currentPacket.Query = "summarize blockers"
+	current := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
+		Packet:        currentPacket,
+		SnapshotID:    currentPacket.ID,
+		SnapshotKind:  "restore",
+		CorrelationID: "corr-cache-disabled",
+		TraceID:       "trace-cache-disabled",
+		SyscallID:     "syscall-cache-disabled",
+		ProposedBy:    "user",
+		CommittedBy:   "forge_kernel",
+	}, nil)
+	candidate := makeSnapshotCandidatePacket("ctx-cache-disabled-candidate", currentPacket, now-1000, "restore")
+
+	first := selectCompileContextRestoreCandidateCached(context.Background(), nil, now, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{}, nil, true)
+	second := selectCompileContextRestoreCandidateCached(context.Background(), nil, now+1000, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{}, nil, true)
+	if first.CacheHit || second.CacheHit {
+		t.Fatalf("expected disabled restore cache to miss, first=%t second=%t", first.CacheHit, second.CacheHit)
+	}
+
+	setRestoreScoringCacheEnabledForTest(false)
+	third := selectCompileContextRestoreCandidateCached(context.Background(), nil, now+2000, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{}, nil, false)
+	if third.CacheHit {
+		t.Fatalf("expected globally disabled restore cache to miss")
+	}
+}
+
+type staticRuleEngine struct {
+	result rulecells.RunResult
+	err    error
+}
+
+func (s staticRuleEngine) Run(context.Context, rulecells.RunInput, rulecells.RunOptions) (rulecells.RunResult, error) {
+	return s.result, s.err
 }
 
 func makeSnapshotCandidatePacket(id string, packet domain.ContextPacket, ts int64, kind string) domain.ContextPacket {

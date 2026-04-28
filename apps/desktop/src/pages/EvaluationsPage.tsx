@@ -170,7 +170,7 @@ export function EvaluationsPage() {
           ) : (
             <div className="space-y-2">
               {metrics.map((m) => (
-                <div key={`${m.adapter}`} className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+                <div key={`${m.adapter}`} className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
                   <div className="font-semibold text-forge-ash">{m.adapter}</div>
                   <div className="mt-1">runs {m.runs} | success {(m.successRate * 100).toFixed(1)}% | retry {(m.retryRate * 100).toFixed(1)}%</div>
                   <div className="mt-1">quality {m.avgQuality.toFixed(2)} | usefulness {m.avgUsefulness.toFixed(2)} | suitability {m.avgAdapterSuitability.toFixed(2)}</div>
@@ -186,7 +186,7 @@ export function EvaluationsPage() {
           ) : (
             <div className="space-y-2">
               {evaluations.map((e) => (
-                <div key={e.id} className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+                <div key={e.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
                   <div className="font-semibold text-forge-ash">#{e.id} - {e.jobId}</div>
                   <div className="mt-1">{formatTime(e.createdAtMs)} | success {String(e.success)} | retry {String(e.retryRecommended)}</div>
                   <div className="mt-1">Q {e.qualityRating} | U {e.usefulnessRating} | C {e.correctnessConfidence} | P {e.packetQualityRating} | A {e.adapterSuitability}</div>

@@ -273,7 +273,7 @@ export function DossiersPage() {
                 type="button"
                 className={[
                   "w-full rounded border px-3 py-2 text-left",
-                  selectedID === d.id ? "border-forge-ember/40 bg-black/30" : "border-white/10 bg-black/20 hover:border-forge-ember/35",
+                  selectedID === d.id ? "border-forge-ember/40 bg-black/30" : "border-forge-platinum/10 bg-black/20 hover:border-forge-ember/35",
                 ].join(" ")}
                 onClick={() => {
                   setSelectedID(d.id);
@@ -312,13 +312,13 @@ export function DossiersPage() {
           <div className="text-sm text-forge-mist">Select a dossier to inspect details.</div>
         ) : (
           <div className="space-y-4">
-            <div className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
               <div className="text-sm font-semibold text-forge-ash">{detail.dossier.name}</div>
               <div className="mt-2">{detail.dossier.description || "No description"}</div>
               <div className="mt-2">Routing notes: {detail.dossier.routingNotes || "none"}</div>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded border border-white/10 bg-black/20 p-3">
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
                 <div className="text-xs font-semibold tracking-wide text-forge-mist">Linked Sources</div>
                 {detail.sources.length === 0 ? (
                   <div className="mt-2 text-xs text-forge-mist">No source links.</div>
@@ -332,7 +332,7 @@ export function DossiersPage() {
                   </div>
                 )}
               </div>
-              <div className="rounded border border-white/10 bg-black/20 p-3">
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
                 <div className="text-xs font-semibold tracking-wide text-forge-mist">Recent Jobs</div>
                 {detail.recentJobs.length === 0 ? (
                   <div className="mt-2 text-xs text-forge-mist">No linked jobs.</div>
@@ -347,14 +347,14 @@ export function DossiersPage() {
                 )}
               </div>
             </div>
-            <div className="rounded border border-white/10 bg-black/20 p-3">
+            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
               <div className="text-xs font-semibold tracking-wide text-forge-mist">Brief History</div>
               {detail.briefs.length === 0 ? (
                 <div className="mt-2 text-xs text-forge-mist">No brief snapshots yet.</div>
               ) : (
                 <div className="mt-2 space-y-2">
                   {detail.briefs.slice(0, 6).map((b) => (
-                    <div key={b.id} className="rounded border border-white/10 bg-black/30 p-2">
+                    <div key={b.id} className="rounded border border-forge-platinum/10 bg-black/30 p-2">
                       <div className="text-[11px] text-forge-mist">
                         brief #{b.id} - {formatTime(b.createdAtMs)}
                       </div>
@@ -365,7 +365,7 @@ export function DossiersPage() {
               )}
             </div>
 
-            <div className="rounded border border-white/10 bg-black/20 p-3">
+            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
               <div className="text-xs font-semibold tracking-wide text-forge-mist">Dossier Reviews</div>
               {dossierReviews.length === 0 ? (
                 <div className="mt-2 text-xs text-forge-mist">No review records linked to this dossier.</div>
@@ -380,7 +380,7 @@ export function DossiersPage() {
               )}
             </div>
 
-            <div className="rounded border border-white/10 bg-black/20 p-3">
+            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
               <div className="text-xs font-semibold tracking-wide text-forge-mist">Memory View</div>
               {!memoryView ? (
                 <div className="mt-2 text-xs text-forge-mist">No dossier memory view loaded.</div>
@@ -389,7 +389,7 @@ export function DossiersPage() {
                   <div>
                     observations {memoryView.observationCount} · stale {memoryView.staleObservationCount} · signals {memoryView.recentSignals.length}
                   </div>
-                  <div className="rounded border border-white/10 bg-black/30 p-2">
+                  <div className="rounded border border-forge-platinum/10 bg-black/30 p-2">
                     <div className="text-[11px] font-semibold text-forge-ash">VSA Coverage + Health</div>
                     {!vsaSummary ? (
                       <div className="mt-1 text-[11px]">No VSA summary available.</div>
@@ -407,7 +407,7 @@ export function DossiersPage() {
                       </div>
                     )}
                   </div>
-                  <div className="rounded border border-white/10 bg-black/30 p-2">
+                  <div className="rounded border border-forge-platinum/10 bg-black/30 p-2">
                     <div className="text-[11px] font-semibold text-forge-ash">Recent observations</div>
                     {memoryView.recentObservations.length === 0 ? (
                       <div className="mt-1 text-[11px]">No observations yet.</div>
@@ -421,7 +421,7 @@ export function DossiersPage() {
                       </div>
                     )}
                   </div>
-                  <div className="rounded border border-white/10 bg-black/30 p-2">
+                  <div className="rounded border border-forge-platinum/10 bg-black/30 p-2">
                     <div className="text-[11px] font-semibold text-forge-ash">Recent packet alignment notes</div>
                     {memoryView.recentAlignmentNotes.length === 0 ? (
                       <div className="mt-1 text-[11px]">No packet alignment notes yet.</div>
@@ -449,7 +449,7 @@ export function DossiersPage() {
           <div className="text-sm text-forge-mist">Select a dossier first.</div>
         ) : uiMode === "cognitive" && !showAdvancedProfile ? (
           <div className="space-y-3">
-            <div className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
+            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
               Advanced policy profile controls are hidden in cognitive mode to reduce noise.
             </div>
             <PrimaryButton onClick={() => setShowAdvancedProfile(true)}>Show Advanced Controls</PrimaryButton>
@@ -566,9 +566,9 @@ export function DossiersPage() {
             </div>
 
             {profile ? (
-              <div className="rounded border border-white/10 bg-black/20 p-3 text-[11px] text-forge-mist">Profile updated {formatTime(profile.updatedAtMs)}</div>
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-[11px] text-forge-mist">Profile updated {formatTime(profile.updatedAtMs)}</div>
             ) : (
-              <div className="rounded border border-white/10 bg-black/20 p-3 text-[11px] text-forge-mist">No profile yet. Save to create one.</div>
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-[11px] text-forge-mist">No profile yet. Save to create one.</div>
             )}
 
             <div className="text-[11px] text-forge-mist">Known strategy ids: {strategyHint || "none"}</div>

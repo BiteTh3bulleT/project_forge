@@ -168,7 +168,7 @@ export function SourcesPage() {
           <button
             type="button"
             onClick={() => navigate("/jobs")}
-            className="rounded border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-medium text-forge-mist transition hover:border-forge-ember/35 hover:text-forge-ash"
+            className="rounded border border-forge-platinum/10 bg-black/20 px-2.5 py-1 text-[11px] font-medium text-forge-mist transition hover:border-forge-ember/35 hover:text-forge-ash"
           >
             Open Jobs
           </button>
@@ -188,11 +188,11 @@ export function SourcesPage() {
               const state = sourceState(s);
               const busy = sourceBusyId === s.id;
               return (
-                <div key={s.id} className="rounded-lg border border-white/10 bg-forge-slate/20 p-4">
+                <div key={s.id} className="rounded-lg border border-forge-platinum/10 bg-forge-slate/20 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded border border-white/10 bg-black/25 px-1.5 py-0.5 font-mono text-[10px] text-forge-mist">
+                        <span className="rounded border border-forge-platinum/10 bg-black/25 px-1.5 py-0.5 font-mono text-[10px] text-forge-mist">
                           #{s.id}
                         </span>
                         <StatePill state={state} />
@@ -243,18 +243,18 @@ function safeTime(ms: number | null | undefined): string {
 function StatePill(props: { state: "new" | "indexing" | "ready" | "error" }) {
   const cls =
     props.state === "ready"
-      ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-200"
+      ? "border-forge-ultramarine/35 bg-forge-ultramarine/10 text-forge-platinum"
       : props.state === "indexing"
-        ? "border-sky-400/40 bg-sky-500/10 text-sky-200"
+        ? "border-forge-ultramarine/40 bg-forge-ultramarine/10 text-forge-platinum"
         : props.state === "error"
           ? "border-forge-ember/40 bg-forge-ember/10 text-forge-emberSoft"
-          : "border-white/15 bg-white/5 text-forge-mist";
+          : "border-forge-platinum/15 bg-forge-platinum/5 text-forge-mist";
   return <span className={`rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}>{props.state}</span>;
 }
 
 function StatChip(props: { label: string; value: string; alert?: boolean }) {
   return (
-    <div className={`rounded border bg-black/20 p-2.5 ${props.alert ? "border-forge-ember/35" : "border-white/10"}`}>
+    <div className={`rounded border bg-black/20 p-2.5 ${props.alert ? "border-forge-ember/35" : "border-forge-platinum/10"}`}>
       <div className="text-[10px] uppercase tracking-wide text-forge-mist">{props.label}</div>
       <div className={`mt-1 text-lg font-semibold ${props.alert ? "text-forge-emberSoft" : "text-forge-ash"}`}>{props.value}</div>
     </div>

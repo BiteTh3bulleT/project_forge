@@ -1,6 +1,13 @@
 package api
 
-import "testing"
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"forge/projectforge/services/core/internal/gateway"
+)
 
 func TestNormalizeChatInvokeArgsInputString(t *testing.T) {
 	paths, input := normalizeChatInvokeArgs(map[string]any{
@@ -24,6 +31,22 @@ func TestNormalizeChatInvokeArgsPathsStringSlice(t *testing.T) {
 	})
 	if len(paths) != 2 || paths[0] != "one.txt" || paths[1] != "two.txt" {
 		t.Fatalf("unexpected paths: %v", paths)
+	}
+}
+
+func TestNormalizeChatInvokeArgsDownloadsAlias(t *testing.T) {
+	paths, _ := normalizeChatInvokeArgs(map[string]any{
+		"path": "Downloads/RandomSVGs",
+	})
+	if len(paths) != 1 || paths[0] != "~/Downloads/RandomSVGs" {
+		t.Fatalf("unexpected Downloads alias paths: %v", paths)
+	}
+
+	paths, _ = normalizeChatInvokeArgs(map[string]any{
+		"paths": []any{"/Downloads/RandomSVGs/turtle.svg"},
+	})
+	if len(paths) != 1 || paths[0] != "~/Downloads/RandomSVGs/turtle.svg" {
+		t.Fatalf("unexpected absolute Downloads alias paths: %v", paths)
 	}
 }
 
@@ -58,4 +81,47 @@ func TestPathAllowedNonRootWorkspaceRejectsOutsidePath(t *testing.T) {
 	if pathAllowed("/tmp/project", "/etc/passwd") {
 		t.Fatalf("expected non-root workspace to reject outside paths")
 	}
+}
+
+func TestDispatchSuppressesCompositeMkdirBeforeGateway(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	var stages []string
+	user := `Create a directory in Downloads called PeanutButterJellyTime. Inside that folder create an svg file of a flower.`
+	got := srv.dispatchToolCall(
+		context.Background(),
+		"corr-composite-mkdir",
+		0,
+		gateway.ChatModelName("fs.mkdir"),
+		`{"path":"~/Downloads/PeanutButterJellyTime"}`,
+		user,
+		func(stage string, _ map[string]any) {
+			stages = append(stages, stage)
+		},
+	)
+
+	if got.state != "ok" {
+		t.Fatalf("expected suppressed mkdir to return ok for model continuation, got state=%q text=%q", got.state, got.text)
+	}
+	result, ok := got.executionResult.(map[string]any)
+	if !ok || result["suppressed"] != true {
+		t.Fatalf("expected suppressed execution result, got %#v", got.executionResult)
+	}
+	if !containsStage(stages, "composite_mkdir_suppressed") {
+		t.Fatalf("expected composite_mkdir_suppressed stage, got %v", stages)
+	}
+	if _, err := os.Stat(filepath.Join(home, "Downloads", "PeanutButterJellyTime")); !os.IsNotExist(err) {
+		t.Fatalf("expected suppressed mkdir to leave no directory, stat err=%v", err)
+	}
+}
+
+func containsStage(stages []string, want string) bool {
+	for _, stage := range stages {
+		if stage == want {
+			return true
+		}
+	}
+	return false
 }

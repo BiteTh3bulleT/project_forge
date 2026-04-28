@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/aios/rulecells"
 )
 
 type ForgeKernelProcessor interface {
@@ -19,6 +20,7 @@ type ProcessorOptions struct {
 	TxRunner     TransactionRunner
 	AuditSink    AuditSink
 	NowMillis    func() int64
+	RuleEngine   RuleEngine
 }
 
 type Processor struct {
@@ -29,6 +31,11 @@ type Processor struct {
 	txRunner     TransactionRunner
 	auditSink    AuditSink
 	nowMillis    func() int64
+	ruleEngine   RuleEngine
+}
+
+type RuleEngine interface {
+	Run(ctx context.Context, in rulecells.RunInput, opts rulecells.RunOptions) (rulecells.RunResult, error)
 }
 
 type auditLinkingRunner interface {
@@ -69,6 +76,7 @@ func NewProcessor(opts ProcessorOptions) *Processor {
 		txRunner:     tx,
 		auditSink:    opts.AuditSink,
 		nowMillis:    nowFn,
+		ruleEngine:   opts.RuleEngine,
 	}
 }
 

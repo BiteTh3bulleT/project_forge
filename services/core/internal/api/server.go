@@ -21,6 +21,7 @@ import (
 
 	"forge/projectforge/services/core/internal/adapters"
 	"forge/projectforge/services/core/internal/aios/dream"
+	"forge/projectforge/services/core/internal/aios/rulecells"
 	"forge/projectforge/services/core/internal/approvals"
 	"forge/projectforge/services/core/internal/artifacts"
 	"forge/projectforge/services/core/internal/audit"
@@ -174,7 +175,9 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		Timeout:     time.Duration(cfg.IntelGPUTelemetryTimeoutMs) * time.Millisecond,
 	})
 	modelRuntimeSvc := initModelRuntimeService(cfg, auditSvc, gpuTelemetrySvc, intelTelemetrySvc)
+	ruleEngine := rulecells.MustStaticEngine()
 	dreamSvc := dream.NewService(st.DB)
+	dreamSvc.SetRuleEngine(ruleEngine)
 	var autonomyLoop *AutonomyMaintenanceLoop
 	if loop := newDefaultAutonomyMaintenanceLoop(st.DB, cfg, ev, memorySvc); loop != nil {
 		autonomyLoop = loop
@@ -527,6 +530,9 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/context/restore/{id}/candidates", s.handleContextRestoreCandidates)
 			r.Get("/context/restore/{id}/score", s.handleContextRestoreScore)
 			r.Get("/context/restore/{id}/resume-hints", s.handleContextRestoreResumeHints)
+			r.Get("/context/restore/outcomes", s.handleRestoreOutcomeList)
+			r.Get("/context/restore/outcomes/{id}", s.handleRestoreOutcomeGet)
+			r.Post("/context/restore/outcomes/{id}/feedback", s.handleRestoreOutcomeFeedback)
 			r.Get("/process/health", s.handleProcessHealthTrace)
 			r.Get("/project-context", s.handleGetProjectContext)
 			r.Post("/project-context/import", s.handleImportProjectContext)

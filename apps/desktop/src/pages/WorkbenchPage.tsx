@@ -158,7 +158,7 @@ export function WorkbenchPage() {
                   onClick={() => void openArtifact(a)}
                   className={[
                     "w-full rounded border px-2 py-2 text-left text-xs",
-                    selected?.id === a.id ? "border-forge-ember/40 bg-forge-slate/40" : "border-white/10 bg-black/20 hover:border-forge-ember/25",
+                    selected?.id === a.id ? "border-forge-ember/40 bg-forge-slate/40" : "border-forge-platinum/10 bg-black/20 hover:border-forge-ember/25",
                   ].join(" ")}
                 >
                   <div className="truncate font-semibold text-forge-ash">
@@ -211,7 +211,7 @@ export function WorkbenchPage() {
           <div className="text-sm text-forge-mist">Select an artifact from the index.</div>
         ) : (
           <div className="space-y-3">
-            <div className="rounded border border-white/10 bg-black/25 p-3 text-xs text-forge-mist">
+            <div className="rounded border border-forge-platinum/10 bg-black/25 p-3 text-xs text-forge-mist">
               <div className="font-mono text-[11px]">{selected.filePath}</div>
               <div className="mt-1">MIME: {selected.mimeType || "—"}</div>
               <div className="mt-1">Created: {formatTime(selected.createdAtMs)}</div>
@@ -220,17 +220,17 @@ export function WorkbenchPage() {
             {!content ? (
               <div className="text-sm text-forge-mist">Loading or unavailable…</div>
             ) : content.previewLimited && !content.textual ? (
-              <div className="rounded border border-white/10 bg-black/30 p-3 text-sm text-forge-mist">
+              <div className="rounded border border-forge-platinum/10 bg-black/30 p-3 text-sm text-forge-mist">
                 Preview is not available for this file type. The artifact exists on disk; use your editor or export tools outside FORGE if needed.
               </div>
             ) : (
-              <pre className="max-h-[min(60vh,640px)] overflow-auto whitespace-pre-wrap rounded border border-white/10 bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-forge-mist">
+              <pre className="max-h-[min(60vh,640px)] overflow-auto whitespace-pre-wrap rounded border border-forge-platinum/10 bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-forge-mist">
                 {content.text}
               </pre>
             )}
 
             {selected ? (
-              <div className="rounded border border-white/10 bg-black/25 p-3">
+              <div className="rounded border border-forge-platinum/10 bg-black/25 p-3">
                 <div className="mb-2 text-xs font-semibold text-forge-ash">Compare with another artifact</div>
                 <div className="flex flex-wrap gap-2">
                   <input
@@ -284,7 +284,7 @@ export function WorkbenchPage() {
             {selected && content?.textual && compare?.content.textual ? (
               <div>
                 <div className="mb-2 text-xs font-semibold text-forge-ash">Line diff</div>
-                <pre className="max-h-[min(60vh,640px)] overflow-auto whitespace-pre-wrap rounded border border-white/10 bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-forge-mist">
+                <pre className="max-h-[min(60vh,640px)] overflow-auto whitespace-pre-wrap rounded border border-forge-platinum/10 bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-forge-mist">
                   {buildLineDiff(content.text, compare.content.text)}
                 </pre>
               </div>
@@ -293,9 +293,9 @@ export function WorkbenchPage() {
             {jobDetail && jobDetail.events.length > 0 ? (
               <div>
                 <div className="mb-2 text-xs font-semibold text-forge-ash">Recent job events (tail)</div>
-                <div className="max-h-56 space-y-1 overflow-auto rounded border border-white/10 bg-black/25 p-2 text-[11px] text-forge-mist">
+                <div className="max-h-56 space-y-1 overflow-auto rounded border border-forge-platinum/10 bg-black/25 p-2 text-[11px] text-forge-mist">
                   {jobDetail.events.slice(-12).map((ev) => (
-                    <div key={ev.id} className="border-b border-white/5 py-1 last:border-0">
+                    <div key={ev.id} className="border-b border-forge-platinum/5 py-1 last:border-0">
                       <span className="text-forge-ash">{ev.type}</span> · {formatTime(ev.createdAtMs)}
                       <div className="text-forge-mist/90">{ev.message}</div>
                     </div>

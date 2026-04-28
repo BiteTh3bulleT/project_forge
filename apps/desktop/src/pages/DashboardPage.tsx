@@ -45,8 +45,8 @@ export function DashboardPage() {
             api.modelRuntime.usage().catch(() => ({ usage: null as ModelRuntimeUsageSummary | null })),
           ])
         : [
-            { health: coreHealth ? ({ ok: false, status: coreHealth.modelRuntime?.status || "unavailable", backend: "disabled" } satisfies ModelRuntimeHealth) : null },
-            { queue: { depth: 0, scheduler: "disabled" } satisfies ModelRuntimeQueueStatus },
+            { health: coreHealth ? ({ ok: false, status: coreHealth.modelRuntime?.status || "not enabled", backend: "not configured" } satisfies ModelRuntimeHealth) : null },
+            { queue: { depth: 0, scheduler: "not enabled" } satisfies ModelRuntimeQueueStatus },
             { usage: emptyUsage() },
           ];
       setSummary(dash);
@@ -175,6 +175,12 @@ export function DashboardPage() {
       </FoldSection>
 
       <FoldSection title="Model Runtime Health" subtitle="Runtime, loaded-model, and scheduler state.">
+        {health && !health.ok && (health.backend === "not configured" || health.status === "unavailable") ? (
+          <div className="mb-3 rounded-xl border border-forge-platinum/10 bg-black/20 p-3 text-sm text-forge-mist">
+            FORGE core is online. Governed modelruntime is not enabled for this process. Chat may still use the configured Ollama adapter, but registry/load controls require
+            `FORGE_ENABLE_MODEL_RUNTIME=true` plus a backend endpoint such as `FORGE_LLAMA_CPP_ENDPOINT` or `FORGE_MODEL_OPENAI_COMPAT_ENDPOINT`.
+          </div>
+        ) : null}
         <SectionRows
           rows={[
             ["Health", health?.status || (health?.ok ? "ok" : "unknown")],
@@ -274,7 +280,7 @@ function Distribution(props: { title: string; counts: Record<string, number> }) 
                 <span>{label}</span>
                 <span className="text-forge-ash">{value}</span>
               </div>
-              <div className="mt-1 h-1.5 rounded bg-white/10">
+              <div className="mt-1 h-1.5 rounded bg-forge-platinum/10">
                 <div className="h-full rounded bg-forge-electric/70" style={{ width: `${width}%` }} />
               </div>
             </div>

@@ -119,7 +119,7 @@ export function LineagePage() {
                 type="button"
                 className={[
                   "w-full rounded border px-3 py-2 text-left",
-                  j.id === jobId ? "border-forge-ember/40 bg-black/30" : "border-white/10 bg-black/20 hover:border-forge-ember/35",
+                  j.id === jobId ? "border-forge-ember/40 bg-black/30" : "border-forge-platinum/10 bg-black/20 hover:border-forge-ember/35",
                 ].join(" ")}
                 onClick={() => setJobId(j.id)}
               >
@@ -136,14 +136,14 @@ export function LineagePage() {
           <div className="text-sm text-forge-mist">No lineage loaded.</div>
         ) : (
           <div className="grid gap-4 xl:grid-cols-3">
-            <div className="rounded border border-white/10 bg-black/20 p-3">
+            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
               <div className="text-xs font-semibold tracking-wide text-forge-mist">Parents</div>
               {lineage.parents.length === 0 ? (
                 <div className="mt-2 text-xs text-forge-mist">No parents.</div>
               ) : (
                 <div className="mt-2 space-y-2">
                   {lineage.parents.map((edge) => (
-                    <div key={edge.id} className="rounded border border-white/10 bg-black/30 p-2 text-xs text-forge-mist">
+                    <div key={edge.id} className="rounded border border-forge-platinum/10 bg-black/30 p-2 text-xs text-forge-mist">
                       <div>{edge.parentJobId} {"->"} {edge.childJobId}</div>
                       <div className="mt-1">{edge.relationType} | {formatTime(edge.createdAtMs)}</div>
                       <div className="mt-1 max-h-40 overflow-auto text-[11px] text-forge-ash">
@@ -154,14 +154,14 @@ export function LineagePage() {
                 </div>
               )}
             </div>
-            <div className="rounded border border-white/10 bg-black/20 p-3">
+            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
               <div className="text-xs font-semibold tracking-wide text-forge-mist">Children</div>
               {lineage.children.length === 0 ? (
                 <div className="mt-2 text-xs text-forge-mist">No children.</div>
               ) : (
                 <div className="mt-2 space-y-2">
                   {lineage.children.map((edge) => (
-                    <div key={edge.id} className="rounded border border-white/10 bg-black/30 p-2 text-xs text-forge-mist">
+                    <div key={edge.id} className="rounded border border-forge-platinum/10 bg-black/30 p-2 text-xs text-forge-mist">
                       <div>{edge.parentJobId} {"->"} {edge.childJobId}</div>
                       <div className="mt-1">{edge.relationType} | {formatTime(edge.createdAtMs)}</div>
                       <div className="mt-1 max-h-40 overflow-auto text-[11px] text-forge-ash">
@@ -172,14 +172,14 @@ export function LineagePage() {
                 </div>
               )}
             </div>
-            <div className="rounded border border-white/10 bg-black/20 p-3">
+            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
               <div className="text-xs font-semibold tracking-wide text-forge-mist">Related Jobs</div>
               {lineage.relatedJobs.length === 0 ? (
                 <div className="mt-2 text-xs text-forge-mist">No related jobs.</div>
               ) : (
                 <div className="mt-2 space-y-2">
                   {lineage.relatedJobs.map((j) => (
-                    <button key={j.id} type="button" className="w-full rounded border border-white/10 bg-black/30 p-2 text-left text-xs text-forge-mist" onClick={() => navigate(`/jobs/${j.id}`)}>
+                    <button key={j.id} type="button" className="w-full rounded border border-forge-platinum/10 bg-black/30 p-2 text-left text-xs text-forge-mist" onClick={() => navigate(`/jobs/${j.id}`)}>
                       <div className="font-semibold text-forge-ash">{j.id}</div>
                       <div className="mt-1">{j.status} | {j.targetAdapter}</div>
                     </button>

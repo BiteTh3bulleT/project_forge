@@ -241,7 +241,7 @@ func scopeDenied(paths, allowed, denied []string) bool {
 		return false
 	}
 	for _, p := range paths {
-		p = filepath.Clean(strings.TrimSpace(p))
+		p = filepath.Clean(expandUserPath(strings.TrimSpace(p)))
 		if p == "" {
 			continue
 		}
@@ -271,7 +271,8 @@ func pathWithinScope(path, scope string) bool {
 	if scope == "" {
 		return false
 	}
-	path = filepath.Clean(path)
+	path = filepath.Clean(expandUserPath(path))
+	scope = expandUserPath(scope)
 	if !filepath.IsAbs(path) {
 		if abs, err := filepath.Abs(path); err == nil {
 			path = abs

@@ -84,7 +84,7 @@ export function MemoryDetailPage() {
       </Panel>
 
       <Panel title="Text" subtitle={`${chunk.contentLength} bytes (UTF-8 length may differ from byte length for non-ASCII).`}>
-        <pre className="max-h-[560px] overflow-auto whitespace-pre-wrap rounded-md border border-white/10 bg-black/30 p-4 font-mono text-xs leading-relaxed text-forge-ash">
+        <pre className="max-h-[560px] overflow-auto whitespace-pre-wrap rounded-md border border-forge-platinum/10 bg-black/30 p-4 font-mono text-xs leading-relaxed text-forge-ash">
           {chunk.content}
         </pre>
       </Panel>
