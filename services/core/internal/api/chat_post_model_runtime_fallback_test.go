@@ -713,6 +713,71 @@ func TestChatPostSyncNoModelStatusDoesNotRequireGateway(t *testing.T) {
 	}
 }
 
+func TestChatPostForcedToolOmissionUsesForgeGatewayNotModelCapabilityClaim(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
+	var sawOllama bool
+	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/chat" {
+			t.Fatalf("unexpected ollama path %s", r.URL.Path)
+		}
+		sawOllama = true
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"message":{"role":"assistant","content":"I can't access the web or use tools from here."},"done":true}`))
+	}))
+	defer ollama.Close()
+
+	ctx := context.Background()
+	if err := upsertSetting(ctx, st.DB, "ollama_base_url", ollama.URL); err != nil {
+		t.Fatalf("set ollama base url: %v", err)
+	}
+	if err := upsertSetting(ctx, st.DB, "ollama_model", "tool-omission-model"); err != nil {
+		t.Fatalf("set ollama model: %v", err)
+	}
+
+	thread, err := srv.chat.CreateThread(ctx, "tool omission authority", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	raw := []byte(`{"content":"search the web for FORGE docs","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	if !sawOllama {
+		t.Fatalf("expected ollama request")
+	}
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message")
+	}
+	content := strings.ToLower(payload.AssistantMessage.Content)
+	if strings.Contains(content, "can't access") || strings.Contains(content, "cannot access") || strings.Contains(content, "use tools from here") {
+		t.Fatalf("model capability claim leaked into assistant content: %q", payload.AssistantMessage.Content)
+	}
+	if !strings.Contains(payload.AssistantMessage.Content, "FORGE (deterministic web search):") {
+		t.Fatalf("expected FORGE gateway-controlled fallback response, got %q", payload.AssistantMessage.Content)
+	}
+	activity := metadataMap(payload.AssistantMessage.Metadata, "toolGatewayActivity")
+	if activity["modelContentDiscarded"] != true {
+		t.Fatalf("expected modelContentDiscarded=true activity=%#v", activity)
+	}
+	if got := strings.TrimSpace(asString(activity["toolSelected"])); got != "web.search" {
+		t.Fatalf("toolSelected=%q activity=%#v", got, activity)
+	}
+	if activity["syntheticToolExecution"] != true {
+		t.Fatalf("expected syntheticToolExecution=true activity=%#v", activity)
+	}
+	if got := strings.TrimSpace(asString(activity["executionState"])); got == "model_omitted_tool_calls" || got == "" {
+		t.Fatalf("executionState=%q activity=%#v", got, activity)
+	}
+	assertGatewayInvocationCount(t, st, 1)
+}
+
 func TestChatPostSyncRestoreInspectorDoesNotLeakOtherThreadMetadata(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	fakeRuntime := newFakeModelRuntime()
@@ -1083,6 +1148,54 @@ func TestChatAssistantStreamFallsBackToModelRuntimeWhenOllamaStreamUnavailable(t
 	if fakeRuntime.chatCalls == 0 {
 		t.Fatalf("expected model runtime chat call")
 	}
+}
+
+func TestChatAssistantStreamRoutesStatusWithoutModel(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	srv.modelRuntime = fakeRuntime
+	before := canonicalCounts(t, st)
+
+	thread, err := srv.chat.CreateThread(context.Background(), "status deterministic sse", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	um, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "forge status", map[string]any{"source": "operator"})
+	if err != nil {
+		t.Fatalf("append user message: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/assistant-stream?userMessageId="+strconv.FormatInt(um.ID, 10),
+		nil,
+	)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "event: done") {
+		t.Fatalf("expected done SSE event, got body=%s", body)
+	}
+	if !strings.Contains(body, `"hyperlaneNoModel":true`) ||
+		!strings.Contains(body, `"hyperlane_intent_type":"status_query"`) ||
+		!strings.Contains(body, `"hyperlane_route":"structured.status"`) ||
+		!strings.Contains(body, `"modelruntime_avoided":true`) ||
+		!strings.Contains(body, `"gateway_avoided":true`) ||
+		!strings.Contains(body, `"context_compile_avoided":true`) {
+		t.Fatalf("expected hyperlane no-model trace in SSE payload, got body=%s", body)
+	}
+	if strings.Contains(body, `"modelRuntimeOk":true`) {
+		t.Fatalf("expected no modelruntime success metadata on no-model route, got body=%s", body)
+	}
+	if fakeRuntime.chatCalls != 0 || fakeRuntime.healthCalls != 0 || fakeRuntime.queueCalls != 0 || fakeRuntime.loadedCalls != 0 {
+		t.Fatalf("expected no modelruntime calls, chat=%d health=%d queue=%d loaded=%d", fakeRuntime.chatCalls, fakeRuntime.healthCalls, fakeRuntime.queueCalls, fakeRuntime.loadedCalls)
+	}
+	assertGatewayInvocationCount(t, st, 0)
+	assertCanonicalCounts(t, st, before)
 }
 
 func TestChatAssistantStreamUsesNativeOllamaStreamForNoToolChat(t *testing.T) {

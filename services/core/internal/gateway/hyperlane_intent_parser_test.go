@@ -69,6 +69,8 @@ func TestParseHyperlaneIntentNoModelQueries(t *testing.T) {
 		wantRoute string
 	}{
 		{name: "status", user: "what is the status", wantType: hyperlane.IntentStatusQuery, wantRoute: hyperlane.RouteStructuredStatus},
+		{name: "chat memory", user: "do we have cross chat context and memory?", wantType: hyperlane.IntentChatMemoryInspection, wantRoute: hyperlane.RouteChatMemoryInspector},
+		{name: "chat history lookup", user: "On 4/16/2026 at 3:54:49 PM, what did I ask you to do?", wantType: hyperlane.IntentChatHistoryLookup, wantRoute: hyperlane.RouteChatHistoryLookup},
 		{name: "diagnostics", user: "show diagnostics and what is degraded", wantType: hyperlane.IntentDiagnosticsQuery, wantRoute: hyperlane.RouteStructuredDiagnostics},
 		{name: "restore inspection", user: "show recent restore decisions", wantType: hyperlane.IntentRestoreInspection, wantRoute: hyperlane.RouteRestoreInspector},
 		{name: "dream report", user: "show latest Dream report", wantType: hyperlane.IntentDreamReportInspection, wantRoute: hyperlane.RouteDreamReportInspector},

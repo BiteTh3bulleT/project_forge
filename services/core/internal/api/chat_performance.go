@@ -139,6 +139,8 @@ func isSupportedNoModelHyperlaneIntent(intent hyperlane.Intent) bool {
 	switch intent.Type {
 	case hyperlane.IntentStatusQuery,
 		hyperlane.IntentDiagnosticsQuery,
+		hyperlane.IntentChatMemoryInspection,
+		hyperlane.IntentChatHistoryLookup,
 		hyperlane.IntentRestoreInspection,
 		hyperlane.IntentDreamReportInspection,
 		hyperlane.IntentModelruntimeStatus:

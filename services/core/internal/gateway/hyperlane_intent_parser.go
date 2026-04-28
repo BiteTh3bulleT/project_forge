@@ -33,6 +33,12 @@ func ParseHyperlaneIntentWithDirectoryHint(user, dirHint string) hyperlane.Inten
 	if isModelruntimeStatusQuery(lower) {
 		return routeIntent(id, hyperlane.IntentModelruntimeStatus, 0.91, "runtime", hyperlane.RouteModelruntimeStatus, false, false, false, "none", "modelruntime_status_query", nil, nil)
 	}
+	if isChatHistoryLookupQuery(lower) {
+		return routeIntent(id, hyperlane.IntentChatHistoryLookup, 0.9, "operator", hyperlane.RouteChatHistoryLookup, false, false, false, "none", "chat_history_lookup_query", map[string]any{"query": raw}, nil)
+	}
+	if isChatMemoryInspectionQuery(lower) {
+		return routeIntent(id, hyperlane.IntentChatMemoryInspection, 0.88, "operator", hyperlane.RouteChatMemoryInspector, false, false, false, "none", "chat_memory_inspection_query", nil, nil)
+	}
 	if isDiagnosticsQuery(lower) {
 		return routeIntent(id, hyperlane.IntentDiagnosticsQuery, 0.89, "operator", hyperlane.RouteStructuredDiagnostics, false, false, false, "none", "diagnostics_query", nil, nil)
 	}
@@ -132,6 +138,18 @@ func isDiagnosticsQuery(s string) bool {
 		strings.Contains(s, "what is degraded") ||
 		strings.Contains(s, "show degraded") ||
 		strings.Contains(s, "why is forge slow")
+}
+
+func isChatMemoryInspectionQuery(s string) bool {
+	return (strings.Contains(s, "cross chat") || strings.Contains(s, "cross-chat") || strings.Contains(s, "chat context") || strings.Contains(s, "chat memory") || strings.Contains(s, "conversation history")) &&
+		(strings.Contains(s, "do we have") || strings.Contains(s, "implemented") || strings.Contains(s, "status") || strings.Contains(s, "active") || strings.Contains(s, "available") || strings.Contains(s, "memory") || strings.Contains(s, "context"))
+}
+
+func isChatHistoryLookupQuery(s string) bool {
+	if !(strings.Contains(s, "what did i ask") || strings.Contains(s, "what did i say") || strings.Contains(s, "what was my request") || strings.Contains(s, "what did the user ask")) {
+		return false
+	}
+	return strings.Contains(s, " on ") || strings.HasPrefix(s, "on ") || strings.Contains(s, "/")
 }
 
 func isRestoreInspectionQuery(s string) bool {

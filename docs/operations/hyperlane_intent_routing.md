@@ -8,10 +8,11 @@ Hyperlane routes only. It does not execute tools, mutate canonical truth, call m
 
 ## Runtime Boundary
 
-- Structured status, diagnostics, restore, Dream, and modelruntime inspection requests can route to no-model structured responders.
+- Structured status, diagnostics, local chat memory/history, restore, Dream, and modelruntime inspection requests route to no-model structured responders in chat POST and assistant-stream handling when the intent is deterministic and supported.
 - Filesystem and process requests become gateway-bound proposals only.
 - Gateway still owns tool execution, capability checks, workspace scope, approvals, and audit.
 - Kernel/control lane remains the only authority for canonical truth.
+- Model prose does not decide what is available. If modelruntime is asked for a governed tool call and returns a capability claim or refusal instead, chat handling discards that prose and lets FORGE deterministic routing, gateway policy, approval checks, and structured runtime state decide the result.
 
 ## Safety Rules
 
@@ -39,6 +40,10 @@ Every parse includes:
 - rejected reason when unknown or unsafe
 
 The trace is compact and suitable for chat/process diagnostics. It is not a durable authority record.
+
+No-model chat responses copy the intent trace into assistant message metadata and `chatLatencyTrace`, and mark `modelruntime_avoided=true`, `gateway_avoided=true`, and `context_compile_avoided=true`. Responders read bounded structured state only; they do not execute tools, write files, run commands, or call modelruntime health/chat APIs.
+
+Chat memory responders distinguish local persisted chat history from canonical memory. `chat_threads` and `chat_messages` are non-canonical conversation history. The `remoteCrossChatContext` and Discord cross-chat settings control remote-ingress thread sharing; they do not by themselves make semantic memory canonical.
 
 ## Templates
 

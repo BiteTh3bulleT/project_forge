@@ -81,9 +81,9 @@ type ChatPaneLayout = {
 
 const CHAT_PANE_LAYOUT_KEY = "forge.chatPaneLayout.v1";
 const DEFAULT_CHAT_PANE_LAYOUT: ChatPaneLayout = {
-  threadWidth: 280,
-  inspectorWidth: 380,
-  inspectorListHeight: 260,
+  threadWidth: 260,
+  inspectorWidth: 420,
+  inspectorListHeight: 240,
 };
 
 function clampNumber(value: number, min: number, max: number) {

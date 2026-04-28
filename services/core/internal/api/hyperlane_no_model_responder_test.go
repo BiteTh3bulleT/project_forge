@@ -40,6 +40,53 @@ func TestHyperlaneNoModelDiagnosticsQuery(t *testing.T) {
 	assertGatewayInvocationCount(t, st, 0)
 }
 
+func TestHyperlaneNoModelChatMemoryInspectionQuery(t *testing.T) {
+	srv, st, fake := newHyperlaneNoModelHarness(t)
+	before := canonicalCounts(t, st)
+	if err := upsertSetting(context.Background(), st.DB, remoteCrossChatContextKey, "true"); err != nil {
+		t.Fatalf("set remote cross chat: %v", err)
+	}
+	thread, err := srv.chat.CreateThread(context.Background(), "memory status seed", nil)
+	if err != nil {
+		t.Fatalf("create seed thread: %v", err)
+	}
+	if _, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "seed memory question", nil); err != nil {
+		t.Fatalf("append seed message: %v", err)
+	}
+
+	resp := postHyperlaneChat(t, srv, "Do we have cross chat context and memory?")
+
+	assertHyperlaneNoModelResponse(t, resp, "chat_memory_inspection", "structured.chat_memory")
+	if !strings.Contains(resp.AssistantMessage.Content, "local chat persistence is active") || !strings.Contains(resp.AssistantMessage.Content, "Remote cross-chat context is true") {
+		t.Fatalf("unexpected chat memory response: %s", resp.AssistantMessage.Content)
+	}
+	assertNoModelRuntimeCalls(t, fake)
+	assertGatewayInvocationCount(t, st, 0)
+	assertCanonicalCounts(t, st, before)
+}
+
+func TestHyperlaneNoModelChatHistoryLookupByTimestamp(t *testing.T) {
+	srv, st, fake := newHyperlaneNoModelHarness(t)
+	before := canonicalCounts(t, st)
+	target := time.Date(2026, time.April, 16, 15, 54, 49, 0, time.Local)
+	thread, err := srv.chat.CreateThread(context.Background(), "E2E Tool Audit", nil)
+	if err != nil {
+		t.Fatalf("create seed thread: %v", err)
+	}
+	mustExecHyperlane(t, st, `INSERT INTO chat_messages(thread_id, role, content, created_at, metadata_json) VALUES(?,?,?,?,?)`,
+		thread.ID, "user", "Create a directory in Downloads called PeanutButterJellyTime. Inside that folder create an svg file of a flower.", target.UnixMilli(), `{}`)
+
+	resp := postHyperlaneChat(t, srv, "On 4/16/2026 at 3:54:49 PM, what did I ask you to do?")
+
+	assertHyperlaneNoModelResponse(t, resp, "chat_history_lookup", "structured.chat_history_lookup")
+	if !strings.Contains(resp.AssistantMessage.Content, "PeanutButterJellyTime") || !strings.Contains(resp.AssistantMessage.Content, "E2E Tool Audit") {
+		t.Fatalf("unexpected chat history lookup response: %s", resp.AssistantMessage.Content)
+	}
+	assertNoModelRuntimeCalls(t, fake)
+	assertGatewayInvocationCount(t, st, 0)
+	assertCanonicalCounts(t, st, before)
+}
+
 func TestHyperlaneNoModelModelRuntimeStatusQuery(t *testing.T) {
 	srv, st, fake := newHyperlaneNoModelHarness(t)
 	mustExecHyperlane(t, st, `INSERT INTO model_manifests(id, schema_version, display_name, family, format, backend, model_path, discovered_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
@@ -134,6 +181,49 @@ func TestHyperlaneNoModelDoesNotLeakWrongWorkspaceDataAndHandlesEmptyState(t *te
 	assertGatewayInvocationCount(t, st, 0)
 }
 
+func TestHyperlaneNoModelAssistantStreamReturnsStructuredResponse(t *testing.T) {
+	srv, st, fake := newHyperlaneNoModelHarness(t)
+	before := canonicalCounts(t, st)
+	thread, err := srv.chat.CreateThread(context.Background(), "hyperlane no-model stream", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	um, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "show diagnostics summary", map[string]any{"source": "operator"})
+	if err != nil {
+		t.Fatalf("append user message: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/assistant-stream?userMessageId="+strconv.FormatInt(um.ID, 10), nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("stream status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	if !strings.Contains(rr.Body.String(), "assistantMessage") || !strings.Contains(rr.Body.String(), "hyperlane_no_model_structured_response") {
+		t.Fatalf("expected structured no-model SSE response, body=%s", rr.Body.String())
+	}
+
+	detail, err := srv.chat.GetThread(context.Background(), thread.ID)
+	if err != nil {
+		t.Fatalf("load thread: %v", err)
+	}
+	var assistant *chatPostAssistantMessage
+	for i := len(detail.Messages) - 1; i >= 0; i-- {
+		msg := detail.Messages[i]
+		if msg.Role == "assistant" {
+			assistant = &chatPostAssistantMessage{Content: msg.Content, Metadata: msg.Metadata}
+			break
+		}
+	}
+	if assistant == nil {
+		t.Fatalf("expected persisted assistant message")
+	}
+	assertHyperlaneNoModelResponse(t, chatPostResponse{AssistantMessage: assistant}, "diagnostics_query", "structured.diagnostics")
+	assertNoModelRuntimeCalls(t, fake)
+	assertGatewayInvocationCount(t, st, 0)
+	assertCanonicalCounts(t, st, before)
+}
+
 func newHyperlaneNoModelHarness(t *testing.T) (*Server, *store.Store, *fakeModelRuntime) {
 	t.Helper()
 	srv, st := newBackupAuditHarness(t)
@@ -181,6 +271,14 @@ func assertHyperlaneNoModelResponse(t *testing.T, resp chatPostResponse, intentT
 	if got := strings.TrimSpace(asString(meta["hyperlane_matched_rule"])); got == "" {
 		t.Fatalf("expected hyperlane_matched_rule metadata=%#v", meta)
 	}
+	if got := strings.TrimSpace(asString(meta["hyperlane_parser_version"])); got == "" {
+		t.Fatalf("expected hyperlane_parser_version metadata=%#v", meta)
+	}
+	if htrace, ok := meta["hyperlane_trace"].(map[string]any); !ok {
+		t.Fatalf("expected hyperlane_trace metadata=%#v", meta)
+	} else if got := strings.TrimSpace(asString(htrace["matched_rule"])); got == "" {
+		t.Fatalf("expected hyperlane_trace matched_rule metadata=%#v", meta)
+	}
 	if ok, _ := meta["modelruntime_avoided"].(bool); !ok {
 		t.Fatalf("expected modelruntime_avoided=true metadata=%#v", meta)
 	}
@@ -195,6 +293,30 @@ func assertHyperlaneNoModelResponse(t *testing.T, resp chatPostResponse, intentT
 	}
 	if _, ok := meta["latency_ms"].(float64); !ok {
 		t.Fatalf("expected latency_ms metadata=%#v", meta)
+	}
+	trace, ok := meta["chatLatencyTrace"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected chatLatencyTrace metadata=%#v", meta)
+	}
+	if got := strings.TrimSpace(asString(trace["hyperlane_intent_type"])); got != intentType {
+		t.Fatalf("trace hyperlane_intent_type=%q want %q trace=%#v", got, intentType, trace)
+	}
+	if got := strings.TrimSpace(asString(trace["hyperlane_route"])); got != route {
+		t.Fatalf("trace hyperlane_route=%q want %q trace=%#v", got, route, trace)
+	}
+	if ok, _ := trace["modelruntime_avoided"].(bool); !ok {
+		t.Fatalf("expected trace modelruntime_avoided=true trace=%#v", trace)
+	}
+	if ok, _ := trace["context_compile_avoided"].(bool); !ok {
+		t.Fatalf("expected trace context_compile_avoided=true trace=%#v", trace)
+	}
+	if ok, _ := trace["gateway_avoided"].(bool); !ok {
+		t.Fatalf("expected trace gateway_avoided=true trace=%#v", trace)
+	}
+	if htrace, ok := trace["hyperlane_trace"].(map[string]any); !ok {
+		t.Fatalf("expected trace hyperlane_trace trace=%#v", trace)
+	} else if got := strings.TrimSpace(asString(htrace["matched_rule"])); got == "" {
+		t.Fatalf("expected trace hyperlane_trace matched_rule trace=%#v", trace)
 	}
 }
 

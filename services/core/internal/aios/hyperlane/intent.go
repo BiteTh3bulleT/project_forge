@@ -6,6 +6,8 @@ type IntentType string
 const (
 	IntentStatusQuery           IntentType = "status_query"
 	IntentDiagnosticsQuery      IntentType = "diagnostics_query"
+	IntentChatMemoryInspection  IntentType = "chat_memory_inspection"
+	IntentChatHistoryLookup     IntentType = "chat_history_lookup"
 	IntentRestoreInspection     IntentType = "restore_inspection"
 	IntentDreamReportInspection IntentType = "dream_report_inspection"
 	IntentMkdir                 IntentType = "mkdir"
@@ -25,6 +27,8 @@ const ParserVersion = "hyperlane.intent.v0.1"
 const (
 	RouteStructuredStatus      = "structured.status"
 	RouteStructuredDiagnostics = "structured.diagnostics"
+	RouteChatMemoryInspector   = "structured.chat_memory"
+	RouteChatHistoryLookup     = "structured.chat_history_lookup"
 	RouteRestoreInspector      = "structured.restore_inspector"
 	RouteDreamReportInspector  = "structured.dream_reports"
 	RouteModelruntimeStatus    = "structured.modelruntime_status"
@@ -41,6 +45,8 @@ const (
 	RouteUnknown               = "unknown"
 	RouteStatusQuery           = RouteStructuredStatus
 	RouteDiagnosticsQuery      = RouteStructuredDiagnostics
+	RouteChatMemoryInspection  = RouteChatMemoryInspector
+	RouteChatHistoryLookupHint = RouteChatHistoryLookup
 	RouteRestoreInspection     = RouteRestoreInspector
 	RouteDreamReportInspection = RouteDreamReportInspector
 	RouteModelRuntimeStatus    = RouteModelruntimeStatus
@@ -100,7 +106,7 @@ func SupportsNoModelRoute(intent Intent) bool {
 		return false
 	}
 	switch intent.Route {
-	case RouteStructuredStatus, RouteStructuredDiagnostics, RouteRestoreInspector, RouteDreamReportInspector, RouteModelruntimeStatus:
+	case RouteStructuredStatus, RouteStructuredDiagnostics, RouteChatMemoryInspector, RouteChatHistoryLookup, RouteRestoreInspector, RouteDreamReportInspector, RouteModelruntimeStatus:
 		return true
 	default:
 		return false

@@ -527,7 +527,7 @@ export function ModelsPage() {
       >
         {err ? <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
         <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.95fr)]">
-          <div className="rounded border border-forge-accent/20 bg-[linear-gradient(135deg,rgba(20,27,37,0.98),rgba(6,10,14,0.92))] p-4 shadow-[0_0_0_1px_rgba(122,162,255,0.04)]">
+          <div className="rounded border border-forge-accent/20 bg-[linear-gradient(135deg,rgba(23,26,29,0.98),rgba(6,7,8,0.92))] p-4 shadow-[0_0_0_1px_rgba(215,181,109,0.05)]">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-forge-mist/75">Runtime Overview</div>
@@ -620,7 +620,7 @@ export function ModelsPage() {
             </div>
           </div>
 
-          <div className="rounded border border-forge-electric/20 bg-[linear-gradient(180deg,rgba(12,18,27,0.96),rgba(6,10,14,0.94))] p-4 shadow-[0_0_0_1px_rgba(75,187,255,0.05)]">
+          <div className="rounded border border-forge-electric/20 bg-[linear-gradient(180deg,rgba(18,20,22,0.96),rgba(6,7,8,0.94))] p-4 shadow-[0_0_0_1px_rgba(215,181,109,0.06)]">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-forge-electric/80">Chat Model Preference</div>
@@ -781,7 +781,7 @@ export function ModelsPage() {
                     className={cx(
                       "w-full rounded border px-4 py-4 text-left transition focus:outline-none focus:ring-2 focus:ring-forge-accent/40",
                       isSelected
-                        ? "border-forge-accent/55 bg-[linear-gradient(135deg,rgba(20,30,44,0.9),rgba(10,15,24,0.92))] shadow-[0_0_0_1px_rgba(122,162,255,0.05)]"
+                        ? "border-forge-accent/55 bg-[linear-gradient(135deg,rgba(27,29,31,0.9),rgba(9,10,11,0.92))] shadow-[0_0_0_1px_rgba(215,181,109,0.06)]"
                         : "border-white/10 bg-black/20 hover:border-forge-accent/40 hover:bg-black/25",
                     )}
                   >
@@ -902,7 +902,7 @@ export function ModelsPage() {
               <div className="text-sm text-forge-mist">Select a registered model to inspect compatibility and model details.</div>
             ) : (
               <div className="space-y-4">
-                <div className="rounded border border-forge-accent/20 bg-[linear-gradient(135deg,rgba(20,30,44,0.88),rgba(8,13,20,0.92))] p-4">
+                <div className="rounded border border-forge-accent/20 bg-[linear-gradient(135deg,rgba(27,29,31,0.88),rgba(8,9,10,0.92))] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="font-mono text-sm text-forge-ash">{selectedModelSummary.id}</div>

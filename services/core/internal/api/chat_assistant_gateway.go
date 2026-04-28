@@ -546,14 +546,15 @@ func (s *Server) completeAssistantWithGatewayTools(
 					break
 				}
 				if forcedModel != "" {
-					if strings.TrimSpace(content) == "" {
-						final.WriteString("(empty model response)")
-					} else {
-						final.WriteString(content)
+					if strings.TrimSpace(content) != "" {
+						pushStage("model_prose_discarded", map[string]any{
+							"reason": "forced tool route omitted tool_calls; model prose cannot decide FORGE capability or availability",
+						})
+						gwActivity["modelProseDiscarded"] = true
 					}
-					final.WriteString("\n\n---\nFORGE: No tool_calls were returned for this turn, so nothing ran through the gateway from the model. If the text above claims directories, files, or \"gateway ok\" results, that is not a verified tool outcome for this message.")
+					final.WriteString(forgeAuthorityToolOmissionMessage(forcedModel))
 					terminalState = "model_omitted_tool_calls"
-					gwActivity["failureReason"] = "Ollama returned no tool_calls while a tool was forced; prose is not verified gateway output unless a deterministic fallback ran."
+					gwActivity["failureReason"] = "Ollama returned no tool_calls while a tool was forced; model prose discarded because FORGE owns capability and availability decisions."
 					stopLoop = true
 					break
 				}
@@ -1526,6 +1527,14 @@ func (s *Server) completeAssistantWithModelRuntime(
 		return nil, "assistant reply could not be saved"
 	}
 	return am, ""
+}
+
+func forgeAuthorityToolOmissionMessage(forcedModel string) string {
+	toolID := strings.TrimSpace(forcedModel)
+	if toolID == "" {
+		toolID = "requested tool"
+	}
+	return fmt.Sprintf("FORGE authority boundary: the request was routed to `%s`, but the model returned prose instead of a governed tool call. I discarded the model prose because the model does not decide what FORGE can access or execute. No gateway action ran for this message; retrying should go through FORGE preflight, gateway policy, and approval/capability checks.", toolID)
 }
 
 func deterministicNoToolChatReply(content string) (string, bool) {

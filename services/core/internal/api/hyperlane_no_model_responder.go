@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +40,14 @@ func (s *Server) maybeRespondHyperlaneNoModel(
 
 	result := s.respondHyperlaneNoModel(ctx, intent)
 	latency := time.Since(start).Milliseconds()
+	intentTrace := map[string]any{
+		"parser_version":  intent.Trace.ParserVersion,
+		"matched_rule":    intent.Trace.MatchedRule,
+		"confidence":      intent.Trace.Confidence,
+		"route":           intent.Trace.Route,
+		"warnings":        intent.Trace.Warnings,
+		"rejected_reason": intent.Trace.RejectedReason,
+	}
 	latencyTrace := map[string]any{
 		"total_request_ms":        latency,
 		"hyperlane_ms":            latency,
@@ -55,6 +65,7 @@ func (s *Server) maybeRespondHyperlaneNoModel(
 		"hyperlane_route":         result.Route,
 		"hyperlane_confidence":    result.Confidence,
 		"hyperlane_matched_rule":  result.MatchedRule,
+		"hyperlane_trace":         intentTrace,
 		"modelruntime_avoided":    true,
 		"context_compile_avoided": result.ContextCompileAvoided,
 		"gateway_avoided":         true,
@@ -65,6 +76,8 @@ func (s *Server) maybeRespondHyperlaneNoModel(
 		"hyperlane_route":            result.Route,
 		"hyperlane_confidence":       result.Confidence,
 		"hyperlane_matched_rule":     result.MatchedRule,
+		"hyperlane_parser_version":   intent.Trace.ParserVersion,
+		"hyperlane_trace":            intentTrace,
 		"modelruntime_avoided":       true,
 		"context_compile_avoided":    result.ContextCompileAvoided,
 		"gateway_avoided":            true,
@@ -110,6 +123,10 @@ func (s *Server) respondHyperlaneNoModel(ctx context.Context, intent hyperlane.I
 		return s.hyperlaneStatusResponse(ctx, base)
 	case hyperlane.RouteDiagnosticsQuery:
 		return s.hyperlaneDiagnosticsResponse(ctx, base)
+	case hyperlane.RouteChatMemoryInspection:
+		return s.hyperlaneChatMemoryInspectionResponse(ctx, base)
+	case hyperlane.RouteChatHistoryLookup:
+		return s.hyperlaneChatHistoryLookupResponse(ctx, intent, base)
 	case hyperlane.RouteModelRuntimeStatus:
 		return s.hyperlaneModelRuntimeStatusResponse(ctx, base)
 	case hyperlane.RouteRestoreInspection:
@@ -122,6 +139,84 @@ func (s *Server) respondHyperlaneNoModel(ctx context.Context, intent hyperlane.I
 		base.Content = "Hyperlane could not resolve a supported no-model route. Falling back to normal assistant handling."
 		return base
 	}
+}
+
+func (s *Server) hyperlaneChatMemoryInspectionResponse(ctx context.Context, result hyperlaneResponderResult) hyperlaneResponderResult {
+	counts := s.chatMemoryCounts(ctx)
+	remoteCrossChat := false
+	discordCrossChat := false
+	if s != nil && s.st != nil && s.st.DB != nil {
+		remoteCrossChat = parseRemoteBool(loadSetting(s.st.DB, remoteCrossChatContextKey, "false"))
+		discordCrossChat = parseRemoteBool(loadSetting(s.st.DB, discordGatewayCrossChatContextKey, "false"))
+	}
+	result.Details = map[string]any{
+		"chatThreads":                 counts.Threads,
+		"chatMessages":                counts.Messages,
+		"userMessages":                counts.UserMessages,
+		"assistantMessages":           counts.AssistantMessages,
+		"localChatPersistence":        true,
+		"localChatWorkspaceScoped":    false,
+		"remoteCrossChatContext":      remoteCrossChat,
+		"discordCrossChatContext":     discordCrossChat,
+		"canonicalMemoryAuthority":    false,
+		"nonCanonicalConversationLog": true,
+		"warnings":                    counts.Warnings,
+	}
+	result.Content = fmt.Sprintf(
+		"Chat memory fast path: local chat persistence is active with %d thread(s), %d message(s), and %d user message(s). Remote cross-chat context is %t; Discord cross-chat context is %t. This is persisted conversation history, not canonical semantic memory.",
+		counts.Threads,
+		counts.Messages,
+		counts.UserMessages,
+		remoteCrossChat,
+		discordCrossChat,
+	)
+	if !counts.Available {
+		result.Content = "Chat memory fast path: chat storage is unavailable: " + strings.Join(counts.Warnings, "; ")
+	}
+	return result
+}
+
+func (s *Server) hyperlaneChatHistoryLookupResponse(ctx context.Context, intent hyperlane.Intent, result hyperlaneResponderResult) hyperlaneResponderResult {
+	query := strings.TrimSpace(asString(intent.Arguments["query"]))
+	target, ok := parseChatHistoryLookupTime(query)
+	result.ContextMetadataRead = true
+	result.Details = map[string]any{
+		"query":                       query,
+		"localChatPersistence":        true,
+		"localChatWorkspaceScoped":    false,
+		"canonicalMemoryAuthority":    false,
+		"nonCanonicalConversationLog": true,
+	}
+	if !ok {
+		result.Details["parseError"] = "date/time not recognized"
+		result.Content = "Chat history lookup: I can search persisted chat messages, but I could not parse the requested date and time."
+		return result
+	}
+	match, found, err := s.lookupUserChatMessageNear(ctx, target, 2*time.Minute)
+	result.Details["targetAtMs"] = target.UnixMilli()
+	result.Details["targetAt"] = target.Format(time.RFC3339)
+	if err != nil {
+		result.Details["error"] = err.Error()
+		result.Content = "Chat history lookup: structured chat history is unavailable: " + err.Error()
+		return result
+	}
+	if !found {
+		result.Content = "Chat history lookup: no persisted user message was found near " + target.Format("1/2/2006 3:04:05 PM") + "."
+		return result
+	}
+	result.Details["messageId"] = match.ID
+	result.Details["threadId"] = match.ThreadID
+	result.Details["threadTitle"] = match.ThreadTitle
+	result.Details["createdAtMs"] = match.CreatedAtMs
+	result.Details["createdAt"] = time.UnixMilli(match.CreatedAtMs).Format(time.RFC3339)
+	result.Content = fmt.Sprintf(
+		"Chat history lookup: on %s you asked: %q. Thread: `%s` (#%d).",
+		time.UnixMilli(match.CreatedAtMs).Format("1/2/2006 3:04:05 PM"),
+		match.Content,
+		match.ThreadTitle,
+		match.ThreadID,
+	)
+	return result
 }
 
 func (s *Server) hyperlaneStatusResponse(ctx context.Context, result hyperlaneResponderResult) hyperlaneResponderResult {
@@ -307,6 +402,99 @@ func (s *Server) countRecentGatewayStates(ctx context.Context) recentGatewayCoun
 	_ = s.st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM gateway_invocations WHERE created_at >= ? AND status = 'denied'`, since).Scan(&out.Denied)
 	_ = s.st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM gateway_invocations WHERE created_at >= ? AND status = 'needs_approval'`, since).Scan(&out.NeedsApproval)
 	return out
+}
+
+type chatMemoryStatusCounts struct {
+	Available         bool
+	Threads           int
+	Messages          int
+	UserMessages      int
+	AssistantMessages int
+	Warnings          []string
+}
+
+func (s *Server) chatMemoryCounts(ctx context.Context) chatMemoryStatusCounts {
+	out := chatMemoryStatusCounts{}
+	if s == nil || s.st == nil || s.st.DB == nil {
+		out.Warnings = append(out.Warnings, "store unavailable")
+		return out
+	}
+	out.Available = true
+	if err := s.st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM chat_threads`).Scan(&out.Threads); err != nil {
+		out.Available = false
+		out.Warnings = append(out.Warnings, "chat_threads: "+err.Error())
+	}
+	if err := s.st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM chat_messages`).Scan(&out.Messages); err != nil {
+		out.Available = false
+		out.Warnings = append(out.Warnings, "chat_messages: "+err.Error())
+	}
+	_ = s.st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM chat_messages WHERE role = 'user'`).Scan(&out.UserMessages)
+	_ = s.st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM chat_messages WHERE role = 'assistant'`).Scan(&out.AssistantMessages)
+	return out
+}
+
+type chatHistoryLookupMessage struct {
+	ID          int64
+	ThreadID    int64
+	ThreadTitle string
+	Content     string
+	CreatedAtMs int64
+}
+
+func (s *Server) lookupUserChatMessageNear(ctx context.Context, target time.Time, window time.Duration) (chatHistoryLookupMessage, bool, error) {
+	if s == nil || s.st == nil || s.st.DB == nil {
+		return chatHistoryLookupMessage{}, false, fmt.Errorf("store unavailable")
+	}
+	targetMs := target.UnixMilli()
+	windowMs := window.Milliseconds()
+	row := s.st.DB.QueryRowContext(ctx, `
+SELECT m.id, m.thread_id, COALESCE(t.title,''), m.content, m.created_at
+FROM chat_messages m
+JOIN chat_threads t ON t.id = m.thread_id
+WHERE m.role = 'user' AND m.created_at BETWEEN ? AND ?
+ORDER BY ABS(m.created_at - ?) ASC, m.id DESC
+LIMIT 1`, targetMs-windowMs, targetMs+windowMs, targetMs)
+	var msg chatHistoryLookupMessage
+	if err := row.Scan(&msg.ID, &msg.ThreadID, &msg.ThreadTitle, &msg.Content, &msg.CreatedAtMs); err != nil {
+		if err == sql.ErrNoRows {
+			return chatHistoryLookupMessage{}, false, nil
+		}
+		return chatHistoryLookupMessage{}, false, err
+	}
+	return msg, true, nil
+}
+
+var chatHistoryTimePattern = regexp.MustCompile(`(?i)(\d{1,2})/(\d{1,2})/(\d{4})\s+(?:at\s+)?(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?`)
+
+func parseChatHistoryLookupTime(raw string) (time.Time, bool) {
+	match := chatHistoryTimePattern.FindStringSubmatch(strings.TrimSpace(raw))
+	if len(match) == 0 {
+		return time.Time{}, false
+	}
+	month, _ := strconv.Atoi(match[1])
+	day, _ := strconv.Atoi(match[2])
+	year, _ := strconv.Atoi(match[3])
+	hour, _ := strconv.Atoi(match[4])
+	minute, _ := strconv.Atoi(match[5])
+	second := 0
+	if strings.TrimSpace(match[6]) != "" {
+		second, _ = strconv.Atoi(match[6])
+	}
+	ampm := strings.ToLower(strings.TrimSpace(match[7]))
+	switch ampm {
+	case "pm":
+		if hour < 12 {
+			hour += 12
+		}
+	case "am":
+		if hour == 12 {
+			hour = 0
+		}
+	}
+	if month < 1 || month > 12 || day < 1 || day > 31 || hour < 0 || hour > 23 || minute > 59 || second > 59 {
+		return time.Time{}, false
+	}
+	return time.Date(year, time.Month(month), day, hour, minute, second, 0, time.Local), true
 }
 
 type modelRuntimeStructuredSummary struct {

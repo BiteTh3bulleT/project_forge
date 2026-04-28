@@ -19,7 +19,7 @@ The v0 router helpers are thin wrappers over `rulecells.Engine.Run`:
 
 Only Arterial restore scoring and Lymphatic Dream routing are wired into real v0 runtime paths in this pass. Runtime and operator packs exist as deterministic router coverage but do not change deep runtime or UI behavior.
 
-The chat API also uses a narrow Hyperlane-style no-model classifier for latency. It is not a new Rule Cell integration point and does not change runtime authority. It classifies obvious status, diagnostics, mode, degraded-state, and restore-inspector requests so they can return structured CPU-local replies without modelruntime, gateway execution, or heavy context assembly.
+The chat API also consumes the Hyperlane deterministic intent router for no-model structured responses. It is not a new Rule Cell integration point and does not change runtime authority. It classifies obvious status, diagnostics, mode, degraded-state, chat-memory, timestamped chat-history, restore-inspector, Dream-report, and modelruntime-status requests so chat POST and assistant-stream handling can return compact structured CPU-local replies before modelruntime, gateway execution, or heavy context assembly are considered.
 
 ## Deterministic Intent Routing
 
@@ -41,7 +41,7 @@ The v0 intent model records:
 - `matched_rule`
 - `trace`
 
-Supported v0 intent types include structured no-model queries (`status_query`, `diagnostics_query`, `restore_inspection`, `dream_report_inspection`, `modelruntime_status`), gateway-bound file/process proposals (`mkdir`, `read_file`, `write_file`, `list_directory`, `run_command`, `generate_template`, `gateway_tool_request`), and `unknown`.
+Supported v0 intent types include structured no-model queries (`status_query`, `diagnostics_query`, `chat_memory_inspection`, `chat_history_lookup`, `restore_inspection`, `dream_report_inspection`, `modelruntime_status`), gateway-bound file/process proposals (`mkdir`, `read_file`, `write_file`, `list_directory`, `run_command`, `generate_template`, `gateway_tool_request`), and `unknown`.
 
 Route hints use existing FORGE routes and gateway tool ids:
 
@@ -53,6 +53,8 @@ Route hints use existing FORGE routes and gateway tool ids:
 - status/diagnostics/restore/Dream/modelruntime inspection -> structured no-model routes
 
 The router does not execute tools. Gateway policy, capability checks, workspace scope, approvals, and audit still decide whether any gateway-bound proposal can run. Shell command intents are always marked high-risk with an approval hint.
+
+Model prose is never an authority source for capability or availability. A model may propose a governed tool call, but it may not decide whether FORGE can access files, open a browser, search the web, inspect memory, or use modelruntime. If a request is routed to a governed tool and the model returns prose instead of the required tool call, FORGE discards that prose and relies on deterministic fallback, gateway policy, or an explicit authority-boundary response.
 
 Each parse emits compact trace data with parser version, matched rule, confidence, route, warnings, and rejected reason for unsafe or unknown input.
 
@@ -97,4 +99,4 @@ Pack id/version appears in traces so score changes can be explained later.
 
 V0 packs carry small millisecond budgets. A budget miss is a warning in the trace, not a retry trigger. Hyperlane does not retry rules and does not fan out to independent workers.
 
-Chat latency traces record `hyperlane_ms`, `context_budget_class`, `output_mode`, and `model_calls_avoided` so operators can verify that deterministic requests stayed on the CPU fast path.
+Chat latency traces record `hyperlane_ms`, `context_budget_class`, `output_mode`, `hyperlane_intent_type`, `hyperlane_route`, `hyperlane_matched_rule`, parser trace metadata, and `model_calls_avoided` so operators can verify that deterministic requests stayed on the CPU fast path.
