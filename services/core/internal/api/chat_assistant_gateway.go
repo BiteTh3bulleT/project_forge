@@ -32,17 +32,19 @@ const (
 const assistantContentFallback = "I couldn't produce a clean assistant response. Try again, or check the selected model/runtime."
 
 type modelRuntimePromptBudget struct {
-	ThreadMessages     int
-	IncludedMessages   int
-	TruncatedMessages  int
-	TranscriptChars    int
-	MemoryChars        int
-	AttachmentChars    int
-	UserChars          int
-	SystemChars        int
-	TotalChars         int
-	Compacted          bool
-	AttachmentsTrimmed bool
+	ThreadMessages         int
+	IncludedMessages       int
+	TruncatedMessages      int
+	TranscriptChars        int
+	MemoryChars            int
+	CrossThreadMemoryChars int
+	ObservationMemoryChars int
+	AttachmentChars        int
+	UserChars              int
+	SystemChars            int
+	TotalChars             int
+	Compacted              bool
+	AttachmentsTrimmed     bool
 }
 
 func (s *Server) buildChatLLMMessages(ctx context.Context, th *chat.ThreadDetail) (system string, user string) {
@@ -54,6 +56,12 @@ func (s *Server) buildChatLLMMessages(ctx context.Context, th *chat.ThreadDetail
 	user = "---\nTHREAD TITLE: " + th.Title + "\n---\n" + transcript
 	if memoryContext := buildPersistedThreadMemoryContext(th.Messages, chatTranscriptTurns, chatThreadMemoryContextMaxMessages, chatThreadMemoryContextMaxRunes); memoryContext != "" {
 		user += "\n\n---\nEARLIER THREAD MEMORY\n" + memoryContext
+	}
+	if crossThreadMemory := s.buildCrossThreadChatContext(ctx, th.ID, chatCrossThreadContextMaxMessages, chatCrossThreadContextMaxRunes); crossThreadMemory != "" {
+		user += "\n\n---\nRELATED CHAT MEMORY\n" + crossThreadMemory
+	}
+	if observationMemory := s.buildMemoryObservationContext(ctx, th.DossierID, chatMemoryObservationMaxItems, chatMemoryObservationMaxRunes); observationMemory != "" {
+		user += "\n\n---\nMEMORY OBSERVATIONS\n" + observationMemory
 	}
 	if att := s.buildThreadAttachmentContext(ctx, th); att != "" {
 		user += "\n\n---\nATTACHMENTS CONTEXT\n" + att
@@ -77,6 +85,14 @@ func (s *Server) buildModelRuntimePlainChatMessages(ctx context.Context, th *cha
 	if memoryContext := buildPersistedThreadMemoryContext(th.Messages, modelRuntimePlainChatMessages, 6, modelRuntimePlainChatMemoryMax); memoryContext != "" {
 		budget.MemoryChars = len(memoryContext)
 		system = strings.TrimSpace(system) + "\n\nEarlier thread memory:\n" + memoryContext
+	}
+	if crossThreadMemory := s.buildCrossThreadChatContext(ctx, th.ID, 4, 800); crossThreadMemory != "" {
+		budget.CrossThreadMemoryChars = len(crossThreadMemory)
+		system = strings.TrimSpace(system) + "\n\nRelated chat memory:\n" + crossThreadMemory
+	}
+	if observationMemory := s.buildMemoryObservationContext(ctx, th.DossierID, 4, 800); observationMemory != "" {
+		budget.ObservationMemoryChars = len(observationMemory)
+		system = strings.TrimSpace(system) + "\n\nMemory observations:\n" + observationMemory
 	}
 	if budget.Compacted {
 		system = strings.TrimSpace(system) + "\n\nRecent chat context was compacted for local model runtime latency. Answer only the latest operator turn."
@@ -137,17 +153,19 @@ func (s *Server) buildModelRuntimePlainChatMessages(ctx context.Context, th *cha
 
 func modelRuntimePromptBudgetMap(b modelRuntimePromptBudget) map[string]any {
 	return map[string]any{
-		"threadMessages":     b.ThreadMessages,
-		"includedMessages":   b.IncludedMessages,
-		"truncatedMessages":  b.TruncatedMessages,
-		"transcriptChars":    b.TranscriptChars,
-		"memoryChars":        b.MemoryChars,
-		"attachmentChars":    b.AttachmentChars,
-		"userChars":          b.UserChars,
-		"systemChars":        b.SystemChars,
-		"totalChars":         b.TotalChars,
-		"compacted":          b.Compacted,
-		"attachmentsTrimmed": b.AttachmentsTrimmed,
+		"threadMessages":         b.ThreadMessages,
+		"includedMessages":       b.IncludedMessages,
+		"truncatedMessages":      b.TruncatedMessages,
+		"transcriptChars":        b.TranscriptChars,
+		"memoryChars":            b.MemoryChars,
+		"crossThreadMemoryChars": b.CrossThreadMemoryChars,
+		"observationMemoryChars": b.ObservationMemoryChars,
+		"attachmentChars":        b.AttachmentChars,
+		"userChars":              b.UserChars,
+		"systemChars":            b.SystemChars,
+		"totalChars":             b.TotalChars,
+		"compacted":              b.Compacted,
+		"attachmentsTrimmed":     b.AttachmentsTrimmed,
 	}
 }
 

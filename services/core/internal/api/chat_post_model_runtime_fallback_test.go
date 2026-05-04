@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"forge/projectforge/services/core/internal/config"
+	"forge/projectforge/services/core/internal/memory"
 	"forge/projectforge/services/core/internal/store"
 )
 
@@ -327,14 +328,14 @@ func TestModelRuntimePromptIncludesEarlierSameThreadMemory(t *testing.T) {
 	}
 }
 
-func TestChatLLMMessagesIncludeEarlierThreadMemoryWithoutOtherThreadLeak(t *testing.T) {
+func TestChatLLMMessagesIncludeEarlierAndRelatedChatMemory(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 
 	other, err := srv.chat.CreateThread(context.Background(), "other thread", nil)
 	if err != nil {
 		t.Fatalf("create other thread: %v", err)
 	}
-	if _, err := srv.chat.AppendMessage(context.Background(), other.ID, "user", "do not leak other-thread context", nil); err != nil {
+	if _, err := srv.chat.AppendMessage(context.Background(), other.ID, "user", "remember the cross-thread deployment token is amber bridge", nil); err != nil {
 		t.Fatalf("append other thread message: %v", err)
 	}
 
@@ -359,8 +360,44 @@ func TestChatLLMMessagesIncludeEarlierThreadMemoryWithoutOtherThreadLeak(t *test
 	if !strings.Contains(user, "EARLIER THREAD MEMORY") || !strings.Contains(user, "use sqlite") {
 		t.Fatalf("expected earlier current-thread memory in user prompt, got %q", user)
 	}
-	if strings.Contains(user, "do not leak other-thread context") {
-		t.Fatalf("other thread context leaked into prompt: %q", user)
+	if !strings.Contains(user, "RELATED CHAT MEMORY") || !strings.Contains(user, "amber bridge") {
+		t.Fatalf("expected bounded related chat memory in user prompt, got %q", user)
+	}
+}
+
+func TestChatLLMMessagesIncludeMemoryObservations(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	obs, err := srv.memory.RecordObservation(context.Background(), memory.RecordObservationRequest{
+		Type:              "decision",
+		Summary:           "The operator prefers compact context cards for memory-heavy chat.",
+		RawContent:        "Memory observation fallback content",
+		OriginKind:        "test",
+		OriginID:          "chat-memory-observation",
+		Confidence:        0.9,
+		VerificationState: "observed",
+	})
+	if err != nil {
+		t.Fatalf("record observation: %v", err)
+	}
+	if obs.ID == 0 {
+		t.Fatalf("expected observation id")
+	}
+
+	thread, err := srv.chat.CreateThread(context.Background(), "memory observations", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	if _, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "what should you remember?", nil); err != nil {
+		t.Fatalf("append message: %v", err)
+	}
+
+	detail, err := srv.chat.GetThread(context.Background(), thread.ID)
+	if err != nil {
+		t.Fatalf("get thread: %v", err)
+	}
+	_, user := srv.buildChatLLMMessages(context.Background(), detail)
+	if !strings.Contains(user, "MEMORY OBSERVATIONS") || !strings.Contains(user, "compact context cards") {
+		t.Fatalf("expected memory observations in user prompt, got %q", user)
 	}
 }
 

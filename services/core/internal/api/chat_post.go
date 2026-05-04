@@ -25,6 +25,10 @@ const (
 	chatAttachmentExcerptRunes         = 800
 	chatThreadMemoryContextMaxMessages = 8
 	chatThreadMemoryContextMaxRunes    = 1800
+	chatCrossThreadContextMaxMessages  = 6
+	chatCrossThreadContextMaxRunes     = 1400
+	chatMemoryObservationMaxItems      = 5
+	chatMemoryObservationMaxRunes      = 1400
 )
 
 const chatAssistantVisibilityGuard = `
@@ -86,10 +90,151 @@ func (s *Server) buildChatPrompt(ctx context.Context, th *chat.ThreadDetail) str
 	if threadMemory != "" {
 		prompt += "\n\n---\nEARLIER THREAD MEMORY\n" + threadMemory
 	}
+	if crossThreadMemory := s.buildCrossThreadChatContext(ctx, th.ID, chatCrossThreadContextMaxMessages, chatCrossThreadContextMaxRunes); crossThreadMemory != "" {
+		prompt += "\n\n---\nRELATED CHAT MEMORY\n" + crossThreadMemory
+	}
+	if observationMemory := s.buildMemoryObservationContext(ctx, th.DossierID, chatMemoryObservationMaxItems, chatMemoryObservationMaxRunes); observationMemory != "" {
+		prompt += "\n\n---\nMEMORY OBSERVATIONS\n" + observationMemory
+	}
 	if attachments != "" {
 		prompt += "\n\n---\nATTACHMENTS CONTEXT\n" + attachments
 	}
 	return prompt
+}
+
+func (s *Server) buildCrossThreadChatContext(ctx context.Context, currentThreadID int64, maxMessages, maxRunes int) string {
+	if s == nil || s.st == nil || s.st.DB == nil {
+		return ""
+	}
+	if maxMessages <= 0 {
+		maxMessages = chatCrossThreadContextMaxMessages
+	}
+	if maxRunes <= 0 {
+		maxRunes = chatCrossThreadContextMaxRunes
+	}
+
+	rows, err := s.st.DB.QueryContext(ctx, `
+SELECT m.id, m.thread_id, COALESCE(t.title, ''), m.role, m.content
+FROM chat_messages m
+JOIN chat_threads t ON t.id = m.thread_id
+WHERE m.thread_id <> ?
+  AND m.role IN ('user', 'assistant')
+  AND TRIM(m.content) <> ''
+ORDER BY m.created_at DESC, m.id DESC
+LIMIT ?`, currentThreadID, maxMessages)
+	if err != nil {
+		return ""
+	}
+	defer rows.Close()
+
+	type row struct {
+		messageID int64
+		threadID  int64
+		title     string
+		role      string
+		content   string
+	}
+	items := []row{}
+	for rows.Next() {
+		var item row
+		if err := rows.Scan(&item.messageID, &item.threadID, &item.title, &item.role, &item.content); err != nil {
+			return ""
+		}
+		item.content = strings.Join(strings.Fields(item.content), " ")
+		if item.content != "" {
+			items = append(items, item)
+		}
+	}
+	if len(items) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString("Persisted messages from other local chat threads. This is non-canonical conversation history; use it only as contextual recall.\n")
+	for i := len(items) - 1; i >= 0; i-- {
+		item := items[i]
+		role := strings.ToUpper(strings.TrimSpace(item.role))
+		if role == "" {
+			role = "MESSAGE"
+		}
+		title := strings.TrimSpace(item.title)
+		if title == "" {
+			title = "Conversation"
+		}
+		line := fmt.Sprintf("thread #%d %q %s #%d: %s\n", item.threadID, trimSummary(title, 120), role, item.messageID, trimSummary(item.content, 240))
+		if len([]rune(b.String()+line)) > maxRunes {
+			b.WriteString("...")
+			break
+		}
+		b.WriteString(line)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func (s *Server) buildMemoryObservationContext(ctx context.Context, dossierID *int64, maxItems, maxRunes int) string {
+	if s == nil || s.st == nil || s.st.DB == nil {
+		return ""
+	}
+	if maxItems <= 0 {
+		maxItems = chatMemoryObservationMaxItems
+	}
+	if maxRunes <= 0 {
+		maxRunes = chatMemoryObservationMaxRunes
+	}
+
+	query := `
+SELECT id, type, summary, raw_content, origin_kind, origin_id
+FROM memory_observations
+WHERE stale = 0`
+	args := []any{}
+	if dossierID != nil && *dossierID > 0 {
+		query += ` AND dossier_id = ?`
+		args = append(args, *dossierID)
+	}
+	query += ` ORDER BY usefulness_score DESC, observed_at DESC, id DESC LIMIT ?`
+	args = append(args, maxItems)
+
+	rows, err := s.st.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return ""
+	}
+	defer rows.Close()
+
+	var b strings.Builder
+	b.WriteString("Recent structured memory observations. These are non-canonical retrieval hints; do not treat them as proof without source evidence.\n")
+	count := 0
+	for rows.Next() {
+		var id int64
+		var typ, summary, raw, originKind, originID string
+		if err := rows.Scan(&id, &typ, &summary, &raw, &originKind, &originID); err != nil {
+			return ""
+		}
+		text := strings.Join(strings.Fields(nonEmpty(summary, raw)), " ")
+		if text == "" {
+			continue
+		}
+		origin := strings.TrimSpace(originKind)
+		if strings.TrimSpace(originID) != "" {
+			if origin != "" {
+				origin += ":"
+			}
+			origin += strings.TrimSpace(originID)
+		}
+		if origin == "" {
+			origin = "unscoped"
+		}
+		line := fmt.Sprintf("observation #%d [%s, %s]: %s\n", id, nonEmpty(strings.TrimSpace(typ), "observation"), origin, trimSummary(text, 260))
+		if len([]rune(b.String()+line)) > maxRunes {
+			b.WriteString("...")
+			break
+		}
+		b.WriteString(line)
+		count++
+	}
+	if count == 0 {
+		return ""
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func buildPersistedThreadMemoryContext(messages []chat.Message, excludedRecent, maxMessages, maxRunes int) string {
