@@ -1,6 +1,6 @@
 # FORGE-K Architecture Overview
 
-Status: Phase 0 architecture baseline.
+Status: Phase 9 runtime driver boundary implemented; Phase 1-9 simulator implementation baseline.
 
 FORGE-K is a deterministic cognitive microkernel for governed semantic work. It owns canonical truth through semantic syscalls, deterministic validation, journaled commits, and replayable evidence. Model runtimes are drivers attached to the operating system; they may propose interpretations, actions, or text, but they do not own truth authority.
 
@@ -24,6 +24,12 @@ The Kernel is the only component that commits canonical state. Every proposed st
 ## Model-as-Driver Principle
 
 Models are runtime drivers. A model may classify, summarize, draft, rank, or propose. A model must not directly mutate memory, bypass admission, decide capability authority, or create canonical truth. Driver output is converted into typed proposal envelopes and must pass rule validation, Courthouse admission, and Kernel commit paths.
+
+## Runtime Driver Boundary
+
+Phase 9 implements the Runtime Driver Boundary as `SIMULATOR_ONLY / DRIVER_BOUNDARY_ONLY`. The boundary covers `RuntimeDriver`, driver and capability manifests, generate request/result envelopes, registry/service behavior, syscalls, capability gates, journaled events, and deterministic mock-driver testing. Runtime drivers may receive ContextBundle refs, canonical prompt text, and KV metadata refs, but their output is proposal evidence only.
+
+Phase 9 does not wire FORGE-K into the live daemon, replace live `modelruntime`, call real model backends, change public APIs or gateway behavior, or perform live KV reuse. Real backend integration requires a later explicit `LIVE_INTEGRATION` phase.
 
 ## Three-Domain Control Model
 

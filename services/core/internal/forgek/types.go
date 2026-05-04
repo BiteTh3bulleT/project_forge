@@ -24,17 +24,22 @@ const (
 	ObjectTypeRestoreSeed       = "RestoreSeed"
 	ObjectTypeContextBlock      = "ContextBlock"
 	ObjectTypeContextBundle     = "ContextBundle"
+	ObjectTypeKVCacheManifest   = "KVCacheManifest"
+	ObjectTypeRuntimeDriver     = "RuntimeDriverManifest"
+	ObjectTypeRuntimeResult     = "RuntimeGenerateResult"
 )
 
 const (
-	AuthorityProposal   = "PROPOSAL"
-	AuthorityValidated  = "VALIDATED"
-	AuthorityAdmitted   = "ADMITTED"
-	AuthorityCompiled   = "COMPILED"
-	AuthorityCommitted  = "COMMITTED"
-	AuthorityShape      = "SHAPE"
-	AuthoritySuperseded = "SUPERSEDED"
-	AuthorityExpired    = "EXPIRED"
+	AuthorityProposal     = "PROPOSAL"
+	AuthorityValidated    = "VALIDATED"
+	AuthorityAdmitted     = "ADMITTED"
+	AuthorityCompiled     = "COMPILED"
+	AuthorityCommitted    = "COMMITTED"
+	AuthorityShape        = "SHAPE"
+	AuthorityAcceleration = "ACCELERATION"
+	AuthorityDriver       = "DRIVER_BOUNDARY"
+	AuthoritySuperseded   = "SUPERSEDED"
+	AuthorityExpired      = "EXPIRED"
 )
 
 const (
@@ -109,6 +114,25 @@ const (
 	SyscallContextValidateLayout         = "context.validate_layout"
 	SyscallContextHash                   = "context.hash"
 	SyscallContextRead                   = "context.read"
+	SyscallKVRegister                    = "kv.register"
+	SyscallKVLookup                      = "kv.lookup"
+	SyscallKVRecordHit                   = "kv.record_hit"
+	SyscallKVRecordMiss                  = "kv.record_miss"
+	SyscallKVInvalidate                  = "kv.invalidate"
+	SyscallKVEvict                       = "kv.evict"
+	SyscallKVPromote                     = "kv.promote"
+	SyscallKVDemote                      = "kv.demote"
+	SyscallKVGetManifest                 = "kv.get_manifest"
+	SyscallKVListManifests               = "kv.list_manifests"
+	SyscallKVValidateIdentity            = "kv.validate_identity"
+	SyscallKVRead                        = "kv.read"
+	SyscallRuntimeRegisterDriver         = "runtime.register_driver"
+	SyscallRuntimeListDrivers            = "runtime.list_drivers"
+	SyscallRuntimeGetDriver              = "runtime.get_driver"
+	SyscallRuntimeCapabilities           = "runtime.capabilities"
+	SyscallRuntimeGenerate               = "runtime.generate"
+	SyscallRuntimeHealth                 = "runtime.health"
+	SyscallRuntimeRead                   = "runtime.read"
 )
 
 const (
@@ -149,6 +173,17 @@ const (
 	JournalEventContextCompiled                = "CONTEXT_COMPILED"
 	JournalEventContextCompiledFromSnapshot    = "CONTEXT_COMPILED_FROM_SNAPSHOT"
 	JournalEventContextCompiledFromRestoreSeed = "CONTEXT_COMPILED_FROM_RESTORE_SEED"
+	JournalEventKVCacheRegistered              = "KV_CACHE_REGISTERED"
+	JournalEventKVCacheHit                     = "KV_CACHE_HIT"
+	JournalEventKVCacheMiss                    = "KV_CACHE_MISS"
+	JournalEventKVCacheInvalidated             = "KV_CACHE_INVALIDATED"
+	JournalEventKVCacheEvicted                 = "KV_CACHE_EVICTED"
+	JournalEventKVCachePromoted                = "KV_CACHE_PROMOTED"
+	JournalEventKVCacheDemoted                 = "KV_CACHE_DEMOTED"
+	JournalEventRuntimeDriverRegistered        = "RUNTIME_DRIVER_REGISTERED"
+	JournalEventRuntimeGenerationRequested     = "RUNTIME_GENERATION_REQUESTED"
+	JournalEventRuntimeGenerationCompleted     = "RUNTIME_GENERATION_COMPLETED"
+	JournalEventRuntimeGenerationFailed        = "RUNTIME_GENERATION_FAILED"
 )
 
 const (

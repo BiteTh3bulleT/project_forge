@@ -5,7 +5,9 @@ import (
 
 	"forge/projectforge/services/core/internal/forgek/contextcompiler"
 	"forge/projectforge/services/core/internal/forgek/court"
+	"forge/projectforge/services/core/internal/forgek/kv"
 	"forge/projectforge/services/core/internal/forgek/palace"
+	forgekRuntime "forge/projectforge/services/core/internal/forgek/runtime"
 	"forge/projectforge/services/core/internal/forgek/semantic"
 	"forge/projectforge/services/core/internal/forgek/snapshots"
 )
@@ -25,6 +27,8 @@ type Kernel struct {
 	semantic     *semantic.SemanticAlgebraService
 	snapshots    *snapshots.Service
 	context      *contextcompiler.Service
+	kv           *kv.Service
+	runtime      *forgekRuntime.Service
 	ids          IDProvider
 	clock        Clock
 }
@@ -49,6 +53,8 @@ func NewKernel(options KernelOptions) *Kernel {
 		semantic:     semantic.NewSemanticAlgebraService(),
 		snapshots:    snapshots.NewService(),
 		context:      contextcompiler.NewService(),
+		kv:           kv.NewService(),
+		runtime:      forgekRuntime.NewService(),
 		ids:          ids,
 		clock:        clock,
 	}
@@ -90,6 +96,14 @@ func (k *Kernel) Snapshots() *snapshots.Service {
 
 func (k *Kernel) ContextCompiler() *contextcompiler.Service {
 	return k.context
+}
+
+func (k *Kernel) KV() *kv.Service {
+	return k.kv
+}
+
+func (k *Kernel) Runtime() *forgekRuntime.Service {
+	return k.runtime
 }
 
 func (k *Kernel) DispatchSyscall(request SyscallRequest) SyscallResult {
@@ -192,4 +206,6 @@ func (k *Kernel) registerCoreSyscalls() {
 	k.registerSemanticSyscalls(mustRegister)
 	k.registerSnapshotSyscalls(mustRegister)
 	k.registerContextSyscalls(mustRegister)
+	k.registerKVSyscalls(mustRegister)
+	k.registerRuntimeSyscalls(mustRegister)
 }

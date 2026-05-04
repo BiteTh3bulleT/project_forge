@@ -1,10 +1,10 @@
 # Context Compiler and Deterministic KV Cache
 
-Status: Phase 7 Context Compiler implemented in the FORGE-K simulator. Phase 8 Deterministic KV Cache is not implemented.
+Status: Phase 7 Context Compiler and Phase 8 Deterministic KV System are implemented in the FORGE-K simulator.
 
 The Context Compiler turns admitted semantic shape, snapshot refs, and restore seeds into deterministic, token-addressable ContextBlocks and ContextBundles. The KV cache accelerates exact reusable token shapes in a later phase. Neither context shape nor KV reuse is canonical memory.
 
-Phase 7 scope is `SIMULATOR_ONLY` under `services/core/internal/forgek/contextcompiler` and `services/core/internal/forgek/context_syscalls.go`. It is not wired into the live daemon and does not modify the live AI-OS `COMPILE_CONTEXT` path.
+Phase 7 scope is `SIMULATOR_ONLY` under `services/core/internal/forgek/contextcompiler` and `services/core/internal/forgek/context_syscalls.go`. Phase 8 scope is `SIMULATOR_ONLY` under `services/core/internal/forgek/kv` and `services/core/internal/forgek/kv_syscalls.go`. Neither phase is wired into the live daemon, and neither modifies the live AI-OS `COMPILE_CONTEXT`, gateway, model runtime, route, or public API paths.
 
 ## ContextBlock
 
@@ -100,7 +100,7 @@ Phase 7 cache eligibility is metadata only. It records `CACHE_ALWAYS`, `CACHE_IF
 
 Recommended defaults are implemented: doctrine, policy, and tool contracts are `CACHE_ALWAYS`; workspace/case/palace/admitted/contradiction/snapshot restore seed shape is `CACHE_IF_STABLE`; active constraints, current task, volatile detail, and future placeholders are `CACHE_EPHEMERAL`; user messages are `DO_NOT_CACHE`.
 
-Phase 8 cache eligibility requires deterministic identity at the token and runtime assumption level. Eligible cache entries must be represented by a KVCacheManifest.
+Phase 8 cache eligibility requires deterministic identity at the token and runtime assumption level. Eligible cache entries are represented by a KVCacheManifest.
 
 This is inference/runtime KV reuse, not the existing restore scoring cache. Restore scoring metadata is shape/evidence for context selection; Deterministic KV Cache is acceleration for exact reusable token shapes.
 
@@ -133,33 +133,18 @@ The FORGE-K simulator registers:
 
 Compile syscalls require capability and journal `CONTEXT_COMPILED`, `CONTEXT_COMPILED_FROM_SNAPSHOT`, or `CONTEXT_COMPILED_FROM_RESTORE_SEED`. Read/hash/layout syscalls require context read capability and do not journal mutations.
 
-## Current Limitations
-
-- No live daemon integration.
-- No changes to live AI-OS `COMPILE_CONTEXT`.
-- No model calls, runtime drivers, external retrieval, or route changes.
-- Token counts are deterministic estimates, not tokenizer-specific counts.
-- `token_input_hash` is tokenizer-neutral and does not validate model/tokenizer identity.
-- No KVCacheManifest, nine-gate validation, cache lookup, cache reuse, or cache eviction.
-
 ## KVCacheManifest
 
 A KVCacheManifest records:
 
-- manifest id
-- model id
-- model revision
-- tokenizer id
-- tokenizer revision
-- chat template id/version
-- prompt layout version
-- policy/syscall schema version
-- ContextBlock ids
-- final token ids hash
-- runtime KV assumptions
-- backend mode
-- cache tier
-- created time and expiration policy
+- `cache_id`, `cache_mode`, workspace/case refs, `bundle_id`, optional `block_id`, optional snapshot/restore-seed refs
+- context identity refs and hashes: `bundle_hash`, `stable_prefix_hash`, `volatile_suffix_hash`, and `token_input_hash`
+- model id/revision, tokenizer id/revision, chat template hash, prompt layout hash, policy schema hash, and syscall schema hash
+- optional `final_token_ids_hash` placeholder for later tokenizer-specific work
+- runtime assumptions: backend, runtime version, attention backend, rope config hash, KV precision, and cache salt
+- memory tier, status, reuse count, timestamps, invalidation reason, journal refs, and metadata
+
+KVCacheManifest is acceleration metadata. It is not semantic evidence, not canonical truth, not memory, and not a runtime tensor store.
 
 ## Deterministic KV Cache Modes
 
@@ -173,7 +158,7 @@ Reuse is allowed from a Context-Shape Snapshot when source refs, hashes, layout 
 
 ### BACKEND_COMPOSITIONAL
 
-Reuse is delegated to a backend that supports compositional KV reuse. FORGE-K still validates identity inputs and treats backend reuse as acceleration only.
+Reuse is delegated to a backend that supports compositional KV reuse in a future runtime integration phase. In Phase 8 this mode is metadata-only and never performs non-prefix reuse.
 
 ## Nine-Gate Deterministic KV Validation
 
@@ -184,34 +169,86 @@ Reuse is delegated to a backend that supports compositional KV reuse. FORGE-K st
 5. same chat template
 6. same prompt layout version
 7. same policy/syscall schema version
-8. same final token IDs
+8. same final token IDs, or same `token_input_hash` as the Phase 8 simulator placeholder when final token IDs do not exist yet
 9. same runtime KV assumptions
 
 All gates must pass for reuse.
 
+Phase 8 uses tokenizer-neutral `token_input_hash` as a deterministic identity placeholder. A later runtime-driver phase may replace or supplement this with model/tokenizer-specific final token IDs.
+
 ## Cache Hit Rules
 
-- A hit may accelerate runtime execution only.
+- A Phase 8 hit is simulator validation only.
 - A hit must cite the KVCacheManifest.
 - A hit must not imply that memory exists or that evidence is admitted.
 - A hit must not bypass policy, admission, or semantic syscall validation.
+- A hit must not call model runtimes or reuse live backend cache.
 
 ## Cache Miss Rules
 
-- A miss falls back to normal context compilation and runtime-driver execution.
+- A Phase 8 miss is safe metadata: it never mutates context, snapshots, source objects, or canonical truth.
 - A miss is not an error unless the caller requested cache-only behavior.
-- Miss reasons should be recorded for diagnostics and Lymphatic eviction/compaction policy.
+- Miss reasons may be recorded for diagnostics and future maintenance policy.
 
 ## Invalidation Rules
 
-Invalidate cache entries when any validation gate changes, when source shape is superseded, when policy revokes eligibility, when runtime assumptions change, when expiration policy fires, or when Lymphatic Lane marks the entry stale.
+Invalidate cache entries when any validation gate changes, when source shape is superseded, when policy revokes eligibility, when runtime assumptions change, when expiration policy fires, or when future maintenance policy marks the entry stale.
 
 ## Cache Tiers
 
 | Tier | Purpose |
 |---|---|
-| Hot | Immediate prefix reuse for current runtime session |
-| Warm | Recent deterministic prefix reuse across related requests |
-| Cold | Persisted manifests or restorable shape metadata requiring validation before use |
+| `GPU_HOT` | Simulator metadata for an immediately reusable runtime tier |
+| `CPU_WARM` | Simulator metadata for recent deterministic prefix reuse |
+| `DISK_COLD` | Simulator metadata for persisted manifests |
+| `REMOTE_COLD` | Simulator metadata for remote/cold manifests |
+| `NONE` | No placement tier |
 
 Doctrine: KV cache is not memory.
+
+## KV Syscalls
+
+The FORGE-K simulator registers:
+
+- `kv.register`
+- `kv.lookup`
+- `kv.record_hit`
+- `kv.record_miss`
+- `kv.invalidate`
+- `kv.evict`
+- `kv.promote`
+- `kv.demote`
+- `kv.get_manifest`
+- `kv.list_manifests`
+- `kv.validate_identity`
+
+Mutating syscalls require capability and journal `KV_CACHE_REGISTERED`, `KV_CACHE_HIT`, `KV_CACHE_MISS`, `KV_CACHE_INVALIDATED`, `KV_CACHE_EVICTED`, `KV_CACHE_PROMOTED`, or `KV_CACHE_DEMOTED`. Read and validation syscalls require KV read capability and do not mutate state.
+
+## Phase 8 Implemented Scope
+
+Phase 8 implements KV metadata and validation only:
+
+- in-memory KV service owned by the FORGE-K simulator kernel
+- KVCacheManifest registration from existing ContextBundle or ContextBlock refs
+- deterministic lookup with nine-gate identity validation
+- hit/miss recording, invalidation, eviction, promotion, and demotion metadata
+- simulator memory tiers and status lifecycle
+- integration with Context Compiler by reference only
+- tests proving cache hits do not become truth, evidence, memory, live runtime calls, or live KV reuse
+
+## Phase 9 Runtime Boundary Interaction
+
+Phase 9 implements a simulator-only runtime driver boundary. A `RuntimeGenerateRequest` may cite a ContextBundle, ContextBlock, snapshot, restore-seed, case refs, and KV lookup metadata, but the runtime driver receives those as refs or prepared prompt text only.
+
+The runtime driver must not compile context, admit evidence, mutate ContextBundles, register KV manifests, store real KV tensors, or perform backend KV reuse. A `RuntimeGenerateResult` is proposal output with provenance and driver/model metadata; it is not canonical truth and must pass existing validation, admission, and Kernel commit paths before any durable mutation.
+
+## Current Limitations
+
+- No live daemon integration.
+- No changes to live AI-OS `COMPILE_CONTEXT`.
+- No real model calls, external retrieval, route changes, or public API changes.
+- Token counts are deterministic estimates, not tokenizer-specific counts.
+- `token_input_hash` is tokenizer-neutral and is a Phase 8 identity placeholder when final token IDs are unavailable.
+- No real KV tensors are stored.
+- No runtime backend cache lookup, registration, reuse, eviction, or tier movement occurs.
+- Phase 9 implements the simulator runtime-driver boundary with a deterministic mock driver only; any live runtime interaction still requires a later explicitly scoped `LIVE_INTEGRATION` phase.

@@ -32,7 +32,7 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 - [x] **H** Snapshot shape-not-truth tests for Phase 6 implementation.
 - [x] **H** ContextBlock deterministic serialization tests for Phase 7.
 - [x] **H** Token input hashing identity tests for Phase 7.
-- [ ] **H** KV nine-gate validation tests before Phase 8.
+- [x] **H** KV nine-gate validation tests for Phase 8.
 - [ ] **M** Static/import guard for legacy memory mutation boundaries.
 - [ ] **M** Shutdown/lifecycle tests after lifecycle extraction.
 - [ ] **M** Local API auth tests if token auth is introduced.
@@ -45,6 +45,7 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 - [x] **H** Update `docs/status/implementation_matrix.md` with legacy/live AI-OS boundary note and FORGE-K status cross-link.
 - [x] **M** Update `docs/roadmap/forge_k_build_phases.md` with the Phase 6 scope decision.
 - [x] **M** Add `services/core/internal/forgek/README.md`.
+- [x] **M** Document Phase 9 Runtime Driver Boundary as `SIMULATOR_ONLY / DRIVER_BOUNDARY_ONLY`.
 - [ ] **M** Add comments or docs that `internal/api/phase*.go` names refer to legacy FORGE feature phases, not FORGE-K phases.
 - [ ] **L** Document Windows smoke limitations or add a PowerShell smoke path.
 
@@ -68,8 +69,8 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 ## Deferred Work
 
 - [x] FORGE-K Phase 7 Context Compiler. Scope is recorded as `SIMULATOR_ONLY`.
-- [ ] FORGE-K Phase 8 Deterministic KV System.
-- [ ] FORGE-K Phase 9 Runtime Driver Integration.
+- [x] FORGE-K Phase 8 Deterministic KV System. Scope is recorded as `SIMULATOR_ONLY`.
+- [x] FORGE-K Phase 9 Runtime Driver Integration implementation. Boundary scope is recorded as `SIMULATOR_ONLY / DRIVER_BOUNDARY_ONLY`.
 - [ ] FORGE-K Phase 10 Lymphatic Lane.
 - [ ] FORGE-K Phase 11 Rust Kernel Core.
 - [ ] FORGE-K Phase 12 FORGE Daemon.
@@ -89,3 +90,6 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 - [x] Phase 6 scope decision is recorded.
 - [x] Phase 6 snapshot simulator tests pass under `go test ./internal/forgek/...`.
 - [x] Phase 7 Context Compiler simulator tests pass under `go test ./internal/forgek/...`.
+- [x] Phase 8 Deterministic KV simulator tests pass under `go test ./internal/forgek/...`.
+- [x] Phase 9 Runtime Driver Boundary scope is recorded before implementation.
+- [x] Phase 9 Runtime Driver Boundary simulator tests pass under `go test ./internal/forgek/...`.

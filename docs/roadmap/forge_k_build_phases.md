@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 7 simulator implementation baseline.
+Status: Phase 9 runtime driver boundary simulator implementation baseline.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -137,17 +137,21 @@ Validation criteria: cache reuse requires all nine gates; cache cannot act as me
 
 What not to do: reuse KV across model/tokenizer/template/layout/schema/runtime mismatches.
 
+Implementation status: implemented and tested in `services/core/internal/forgek/kv` and `services/core/internal/forgek/kv_syscalls.go`. Scope is simulator-only; the KV system stores metadata and validation records only, does not store real runtime KV tensors, does not call model runtimes, does not perform live backend cache reuse, and is not wired into the live daemon.
+
 ## Phase 9 - Runtime Driver Integration
 
-Scope: `LIVE_INTEGRATION`.
+Scope: `SIMULATOR_ONLY / DRIVER_BOUNDARY_ONLY`.
 
-Goal: attach model/runtime drivers behind proposal-only interfaces.
+Goal: define the simulator boundary that treats model runtimes as governed drivers and keeps runtime output proposal-only.
 
-Deliverables: runtime driver envelopes, model revision capture, tokenizer/template capture, proposal conversion.
+Deliverables: RuntimeDriver interface, RuntimeDriverManifest, RuntimeCapabilityManifest, RuntimeGenerateRequest, RuntimeGenerateResult, RuntimeDriverRegistry, RuntimeService or RuntimeBroker, deterministic MockRuntimeDriver, context refs by reference only, and KV metadata refs by reference only.
 
-Validation criteria: runtime output cannot mutate canonical state; capability and policy checks remain Kernel-owned.
+Validation criteria: runtime output cannot mutate canonical state; manifests do not grant authority; capability and policy checks remain Kernel-owned; context refs are not admitted or compiled by drivers; KV metadata does not become live KV reuse.
 
-What not to do: add API keys to repo or let runtime drivers own authority.
+What not to do: wire FORGE-K into the live daemon, replace live `modelruntime`, change public APIs or routes, call real OpenAI/Ollama/vLLM/SGLang/TensorRT backends, perform real KV cache reuse, or let runtime drivers own authority.
+
+Implementation status: implemented and tested in `services/core/internal/forgek/runtime` and `services/core/internal/forgek/runtime_syscalls.go`. Scope is simulator-only/driver-boundary-only; the active driver is deterministic mock-only, runtime output is proposal-only, and the implementation is not wired into the live daemon.
 
 ## Phase 10 - Lymphatic Lane
 

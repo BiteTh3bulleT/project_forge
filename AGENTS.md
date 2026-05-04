@@ -36,6 +36,8 @@ Last convergence sweep update: 2026-04-22 (branch-local status alignment).
 - **2026-04-22**: Model Runtime M3 management is implemented (`/forge/models*` plus gated `/v1/*` with import/register flows, lifecycle governance, scheduler/limits/policy hooks, and managed backend selection); M4 items remain (streaming, delete-file approval flow, stronger backend/process control).
 - **2026-04-23**: `COMPILE_CONTEXT` restore selection now includes deterministic candidate listing/ranking (scope/query/kind), thresholded fresh-compile fallback, and persisted `restore_scores_json` + `resume_hints_json` metadata (still non-canonical evidence).
 - **2026-04-24**: CPU/RAM kernel + GPU accelerator operating split is explicitly documented and wired through runtime policy/config health surfaces; safe-mode CPU-only runbook is available (`docs/architecture/cpu_ram_kernel_gpu_accelerator_split.md`, `docs/runbooks/no_gpu_boot_and_recovery.md`).
+- **2026-05-04**: FORGE-K Phase 8 Deterministic KV System is implemented/tested in the simulator only (`services/core/internal/forgek/kv`); it records KV manifests and validates identity gates as acceleration metadata, with no live daemon wiring or runtime KV reuse.
+- **2026-05-04**: FORGE-K Phase 9 Runtime Driver Boundary is implemented/tested in the simulator only (`services/core/internal/forgek/runtime`); it uses deterministic mock drivers and proposal-only runtime results, with no live daemon wiring, real model calls, route changes, or live KV reuse.
 - Append-only per-job event streams as execution truth
 - Approval gates with separated request and decision records
 - Context normalization into durable guidance files (`AGENTS.md`, `CLAUDE.md`, briefing, cursor rule)

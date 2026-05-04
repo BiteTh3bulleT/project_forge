@@ -6,9 +6,9 @@ FORGE is a local-first AI workspace for inspectable, approval-gated engineering 
 
 FORGE-K is the deterministic cognitive microkernel architecture inside FORGE. It exists to keep canonical truth under Kernel authority while model runtimes, tools, adapters, and neurons operate as bounded proposal or driver surfaces.
 
-Current checkpoint: FORGE-K Phase 1-7 are implemented and tested in the simulator under `services/core/internal/forgek`. Phase 6 adds Context-Shape Snapshot models, lifecycle service, snapshot syscalls, deterministic shape hashing, diff support, restore-seed support, supersession behavior, capability checks, journaled lifecycle events, and shape-not-truth tests. Phase 7 adds the Context Compiler with ContextBlock, ContextBundle, PromptLayout, deterministic serialization, content and token input hashing, cache eligibility metadata, context syscalls, capability checks, journaled compile events, snapshot/restore-seed compilation by reference, and shape-not-truth tests.
+Current checkpoint: FORGE-K Phase 1-9 are implemented and tested in the simulator under `services/core/internal/forgek`. Phase 6 adds Context-Shape Snapshot models, lifecycle service, snapshot syscalls, deterministic shape hashing, diff support, restore-seed support, supersession behavior, capability checks, journaled lifecycle events, and shape-not-truth tests. Phase 7 adds the Context Compiler with ContextBlock, ContextBundle, PromptLayout, deterministic serialization, content and token input hashing, cache eligibility metadata, context syscalls, capability checks, journaled compile events, snapshot/restore-seed compilation by reference, and shape-not-truth tests. Phase 8 adds the Deterministic KV metadata system with KVCacheManifest, lookup request/result, nine-gate identity validation, tier metadata, invalidation/eviction, KV syscalls, capability checks, journaled metadata transitions, context integration by reference, and acceleration-not-memory tests. Phase 9 adds the simulator Runtime Driver Boundary with runtime manifests, capability manifests, deterministic mock driver, runtime registry/service, runtime syscalls, capability checks, journaled generation events, context/KV integration by reference, and model-as-driver tests.
 
-ADR 0005 defines the live-authority boundary: FORGE-K is the target architecture, but the live daemon still uses the existing AI-OS, gateway, permissions, lane, audit, model runtime, and API authority paths. Phases 6 and 7 are implemented as `SIMULATOR_ONLY`; snapshots and the Context Compiler are not wired into the live daemon and do not modify live AI-OS snapshot/restore or `COMPILE_CONTEXT` behavior. Phase 8 Deterministic KV is not started.
+ADR 0005 defines the live-authority boundary: FORGE-K is the target architecture, but the live daemon still uses the existing AI-OS, gateway, permissions, lane, audit, model runtime, and API authority paths. Phases 6, 7, and 8 are implemented as `SIMULATOR_ONLY`; Phase 9 is implemented as `SIMULATOR_ONLY / DRIVER_BOUNDARY_ONLY`. These phases are not wired into the live daemon and do not modify live AI-OS snapshot/restore, `COMPILE_CONTEXT`, model runtime, gateway, route, or public API behavior.
 
 Development principles:
 
@@ -31,6 +31,7 @@ FORGE-K architecture links:
 - `docs/architecture/semantic_algebra.md`
 - `docs/architecture/snapshots.md`
 - `docs/architecture/context_compiler_and_kv_cache.md`
+- `docs/architecture/runtime_driver_boundary.md`
 - `docs/architecture/kernel_simulator.md`
 - `docs/architecture/forge_1_cpu_concept.md`
 - `docs/roadmap/forge_k_build_phases.md`
