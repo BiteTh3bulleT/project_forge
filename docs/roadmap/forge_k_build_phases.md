@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -205,11 +205,15 @@ Scope: `RESEARCH_ONLY / SIMULATOR_ONLY`.
 
 Goal: expand shared deterministic fixtures and parity tests after Phase 11B proves the initial crate boundary.
 
-Deliverables: valid/invalid fixtures for KernelObject, Capability, JournalEvent, Snapshot, ContextBlock, ContextBundle, KVCacheManifest, RuntimeDriverManifest, MaintenanceReport, CleanupProposal, canonical serialization golden files, hash golden files, and failure-mode fixtures.
+Implemented deliverables: shared fixture schema notes, valid/invalid fixtures for Snapshot, ContextBlock, ContextBundle, KVCacheManifest, and RuntimeDriverManifest, canonical serialization golden files, expanded hash golden manifest, Go test-only fixture parity tests, Rust fixture validation/drift tests, and the optional root helper `test:forgek:parity`.
 
-Validation criteria: fixture corpus is versioned, language-neutral, deterministic, and does not create live daemon authority.
+Deferred deliverables: KernelObject, richer Capability, JournalEvent, MaintenanceReport, CleanupProposal, and KV gate-specific failure fixtures.
 
-What not to do: treat fixture parity as live integration or bypass ADR 0005.
+Validation criteria: fixture corpus is versioned, language-neutral, deterministic, and does not create live daemon authority. Go and Rust fixture checks pass, and root `npm test` remains independent of Rust.
+
+Implementation status: implemented in `services/core/internal/forgek/fixture_parity_test.go`, `crates/forgek-validate`, `fixtures/forgek`, and `scripts/forgek-parity.mjs`. No live daemon integration, cgo, Go production Rust call, public API, route, gateway, modelruntime, controllane, or CI dependency was added.
+
+What not to do: treat fixture parity as live integration, call Rust from Go production code, make Rust required for normal Go runtime execution, or bypass ADR 0005.
 
 ## Phase 12 - FORGE Daemon
 

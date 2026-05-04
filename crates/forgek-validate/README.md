@@ -34,6 +34,10 @@ npm run validate:forgek-fixtures
 - generated IDs, timestamps, journal refs, and existing hash fields excluded from stable identity hashes
 - validators for Snapshot, ContextBlock, ContextBundle, KVCacheManifest, RuntimeDriverManifest, and capability-like fixtures
 - conservative rejection of secret-looking runtime manifest fields
+- corpus parity checks for every fixture under `fixtures/forgek/valid` and `fixtures/forgek/invalid`
+- canonical golden comparisons for checked-in canonical fixture outputs
+- `validate-fixtures` golden hash comparison for flat and expanded `golden/hashes.json` manifests
+- drift tests for excluded timestamps, stable identity fields, missing refs, runtime secret-looking fields, and KV runtime identity assumptions
 
 ## Non-Goals
 

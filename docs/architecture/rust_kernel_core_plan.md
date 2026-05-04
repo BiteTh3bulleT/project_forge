@@ -1,16 +1,18 @@
 # Rust Kernel Core Plan
 
-Status: Phase 11A research and planning complete. Phase 11B is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`.
+Status: Phase 11A research and planning complete. Phase 11B and Phase 11C are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`.
 
 Phase 11A does not add Rust code, a Rust crate, live daemon wiring, public APIs, routes, gateway behavior, model runtime behavior, or Go runtime behavior changes. FORGE-K Phase 1-10 remains implemented and tested as a Go simulator under `services/core/internal/forgek`.
 
 Phase 11B adds a standalone Rust validation crate at `crates/forgek-validate` and shared fixtures under `fixtures/forgek`. It does not add Go imports, cgo, live daemon wiring, public APIs, routes, gateway behavior, model runtime behavior, or Go runtime behavior changes.
 
+Phase 11C aligns Go and Rust against the same shared fixture corpus. It adds Go test-only parity checks, expanded Rust fixture validation and drift tests, golden canonical JSON comparisons, golden stable hash comparisons, and the optional `npm run test:forgek:parity` helper. It still does not add Go production calls into Rust, cgo, live daemon wiring, public APIs, routes, gateway behavior, model runtime behavior, or Go runtime behavior changes.
+
 ## Executive Summary
 
 Rust is worth considering for a narrow future FORGE-K kernel-core boundary because several simulator contracts have become deterministic, validation-heavy, and testable across language boundaries. Rust should not replace FORGE, the Go simulator, the live daemon, the gateway, model runtimes, or live AI-OS controllane behavior.
 
-Phase 11B implements the recommended standalone Rust validation crate with a CLI test harness, but it is not live integration and does not make Rust authoritative. The crate owns deterministic validation primitives only: canonical JSON normalization, stable SHA-256 hashing, and manifest validation for snapshots, context compiler outputs, KV manifests, runtime driver manifests, and capability-like fixtures. Go remains the simulator orchestrator and live daemon language until an explicit later `LIVE_INTEGRATION` phase.
+Phase 11B implements the recommended standalone Rust validation crate with a CLI test harness, but it is not live integration and does not make Rust authoritative. Phase 11C uses that crate and the Go simulator tests against the same deterministic fixture corpus. The crate owns deterministic validation primitives only: canonical JSON normalization, stable SHA-256 hashing, and manifest validation for snapshots, context compiler outputs, KV manifests, runtime driver manifests, and capability-like fixtures. Go remains the simulator orchestrator and live daemon language until an explicit later `LIVE_INTEGRATION` phase.
 
 ## Current FORGE-K Simulator Status
 
@@ -179,7 +181,13 @@ Phase 11B starts the deterministic shared corpus with:
 - canonical serialization golden files
 - hash golden files
 
-Future fixture expansion should add KernelObject, Capability, JournalEvent, LymphaticPolicy, MaintenanceReport, CleanupProposal, failed-gate fixtures, and cross-language Go/Rust parity checks.
+Phase 11C adds the first explicit cross-language Go/Rust parity checks:
+
+- Go fixture parity tests load `fixtures/forgek/valid`, reject known invalid fixture shapes, compare golden canonical JSON, and verify stable hashes against `fixtures/forgek/golden/hashes.json`.
+- Rust validator tests validate every valid fixture, reject every invalid fixture, compare golden canonical JSON, verify the expanded hash manifest, and prove expected drift behavior for included and excluded fields.
+- The root helper `npm run test:forgek:parity` runs Go simulator package tests, Rust crate tests, Rust fixture validation, and a Node-side golden hash manifest check.
+
+Future fixture expansion should add KernelObject, richer Capability fixtures, JournalEvent, LymphaticPolicy, MaintenanceReport, CleanupProposal, and KV gate-specific failure fixtures.
 
 Go tests should remain authoritative. Rust tests should prove parity against the shared corpus.
 
@@ -188,7 +196,7 @@ Go tests should remain authoritative. Rust tests should prove parity against the
 1. Freeze string constants and minimal schema versions for the first validation targets.
 2. Add golden fixtures from the Go simulator.
 3. Build a standalone Rust crate and CLI harness in Phase 11B. Completed in `crates/forgek-validate`.
-4. Run Go and Rust against the same fixtures.
+4. Run Go and Rust against the same fixtures. Completed in Phase 11C for the initial fixture set.
 5. Keep Rust out of live daemon and Go simulator hot paths until parity is stable.
 6. Consider cgo, WASM, or service integration only in a later explicit phase.
 
@@ -241,6 +249,36 @@ Phase 11B validation passed:
 - `npm run build:core`
 - `npm run lint`
 - `npm test`
+
+## Phase 11C Scope
+
+Phase 11C is implemented only as `SIMULATOR_ONLY / RESEARCH_ONLY`.
+
+Implemented deliverables:
+
+- fixture schema documentation at `fixtures/forgek/README.md`
+- Go test-only parity checks at `services/core/internal/forgek/fixture_parity_test.go`
+- Rust tests for valid fixtures, invalid fixtures, canonical golden files, hash manifests, and drift behavior
+- expanded human-readable hash manifest at `fixtures/forgek/golden/hashes.json`
+- optional root parity helper `test:forgek:parity`
+
+Still deferred:
+
+- no cgo
+- no live daemon import
+- no Go production calls into Rust
+- no gateway/modelruntime/API route changes
+- no CI dependency
+- no live controllane behavior change
+- no Rust ownership of simulator orchestration
+- no KernelObject, JournalEvent, MaintenanceReport, CleanupProposal, or KV gate-specific fixture families yet
+
+Phase 11C validation passed:
+
+- `cd services/core && go test ./internal/forgek/...`
+- `cd crates/forgek-validate && cargo test`
+- `cd crates/forgek-validate && cargo run -- validate-fixtures ../../fixtures/forgek`
+- `npm run test:forgek:parity`
 
 ## What Not To Do
 

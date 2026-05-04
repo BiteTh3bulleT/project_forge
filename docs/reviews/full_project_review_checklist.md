@@ -48,6 +48,7 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 - [x] **M** Document Phase 9 Runtime Driver Boundary as `SIMULATOR_ONLY / DRIVER_BOUNDARY_ONLY`.
 - [x] **M** Document Phase 10 Lymphatic Lane as `SIMULATOR_ONLY`, maintenance reports/proposals only, with no live daemon, dream/autonomy, cleanup, route, gateway, modelruntime, or controllane wiring.
 - [x] **M** Complete Phase 11A Rust Kernel Core research/planning docs and ADR 0006 without Rust implementation.
+- [x] **M** Document Phase 11C Go/Rust test corpus alignment as `RESEARCH_ONLY / SIMULATOR_ONLY`.
 - [ ] **M** Add comments or docs that `internal/api/phase*.go` names refer to legacy FORGE feature phases, not FORGE-K phases.
 - [ ] **L** Document Windows smoke limitations or add a PowerShell smoke path.
 
@@ -76,6 +77,7 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 - [x] FORGE-K Phase 10 Lymphatic Lane simulator implementation. Scope is recorded as `SIMULATOR_ONLY`.
 - [x] FORGE-K Phase 11A Rust Kernel Core research/planning. Scope is `RESEARCH_ONLY / DOCS_ONLY`.
 - [x] FORGE-K Phase 11B Rust deterministic validation crate.
+- [x] FORGE-K Phase 11C Go/Rust test corpus alignment.
 - [ ] FORGE-K Phase 12 FORGE Daemon.
 - [ ] FORGE-1 phases 13-14.
 - [ ] Gateway service decomposition.
@@ -100,3 +102,4 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 - [x] Phase 10 Lymphatic Lane simulator tests pass under `go test ./internal/forgek/...`.
 - [x] Phase 11A Rust Kernel Core planning scope is recorded as `RESEARCH_ONLY / DOCS_ONLY`.
 - [x] ADR 0006 records the Rust boundary without marking Rust implementation complete.
+- [x] Phase 11C Go/Rust fixture parity passes under `go test ./internal/forgek/...`, `cargo test`, Rust fixture validation, and `npm run test:forgek:parity`.

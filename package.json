@@ -16,6 +16,7 @@
     "validate:desktop": "npm -w @forge/desktop run validate",
     "test:rust:forgek": "cd crates/forgek-validate && cargo test",
     "validate:forgek-fixtures": "cd crates/forgek-validate && cargo run -- validate-fixtures ../../fixtures/forgek",
+    "test:forgek:parity": "node ./scripts/forgek-parity.mjs",
     "test:core": "node ./scripts/check-vsa-files.mjs --require-tracked && cd services/core && go test ./...",
     "vet:core": "node ./scripts/check-vsa-files.mjs --require-tracked && cd services/core && go vet ./...",
     "test": "npm run test:core",

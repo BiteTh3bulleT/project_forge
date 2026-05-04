@@ -26,6 +26,7 @@ go test ./internal/forgek/...
 - Phase 10 Lymphatic Lane: `lymphatic`, `lymphatic_syscalls.go`
 - Phase 11A Rust Kernel Core Research / Planning: docs only, no Rust code
 - Phase 11B Rust Deterministic Validation Boundary: standalone crate outside this package at `crates/forgek-validate`
+- Phase 11C Go/Rust Test Corpus Alignment: test-only parity in `fixture_parity_test.go`, shared fixtures outside this package at `fixtures/forgek`
 
 ## Authority Boundary
 
@@ -43,6 +44,8 @@ Phase 11A is `RESEARCH_ONLY / DOCS_ONLY`. It records the possible Rust boundary 
 
 Phase 11B is `RESEARCH_ONLY / SIMULATOR_ONLY`. It adds a standalone Rust crate at `crates/forgek-validate` for deterministic fixture validation and shared fixtures under `fixtures/forgek`. It must not add Rust code to this Go package, import Rust from Go, use cgo, add live daemon wiring, change routes, change gateway behavior, alter `modelruntime`, or change live AI-OS controllane behavior.
 
+Phase 11C is `RESEARCH_ONLY / SIMULATOR_ONLY`. It adds Go test-only parity checks for the shared fixture corpus in `fixture_parity_test.go`. The tests load fixtures and golden files directly; they do not invoke Rust, add cgo, alter production Go code, or make Rust required for normal Go runtime execution.
+
 ## Future Rust Boundary
 
 What remains Go for now:
@@ -57,7 +60,7 @@ What remains Go for now:
 - Lymphatic sweep policy and cleanup proposal generation
 - all live daemon, gateway, route, controllane, and modelruntime behavior
 
-What Phase 11B begins validating in Rust:
+What Phase 11B begins validating in Rust and Phase 11C aligns with Go tests:
 
 - canonical serialization validation
 - deterministic hashing
@@ -67,9 +70,10 @@ What Phase 11B begins validating in Rust:
 - Snapshot, ContextBlock, ContextBundle, KVCacheManifest, and RuntimeDriverManifest validation
 - KV nine-gate validation
 
-Phase 11B validation:
+Phase 11B/11C validation:
 
 - Go simulator tests remain in this package: `cd services/core && go test ./internal/forgek/...`
 - Rust crate tests run outside this package: `cd crates/forgek-validate && cargo test`
 - Fixture validation runs through the standalone CLI: `npm run validate:forgek-fixtures`
+- Go/Rust parity can be run explicitly with `npm run test:forgek:parity`
 - current package state: no Rust code, Cargo metadata, cgo, or Go production calls exist here

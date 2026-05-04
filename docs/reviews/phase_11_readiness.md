@@ -1,14 +1,14 @@
 # Phase 11 Readiness Review
 
-Status: Phase 11A research and planning complete. Phase 11B is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`.
+Status: Phase 11A research and planning complete. Phase 11B and Phase 11C are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`.
 
-Scope: Phase 11A was `RESEARCH_ONLY / DOCS_ONLY`; Phase 11B is `RESEARCH_ONLY / SIMULATOR_ONLY`.
+Scope: Phase 11A was `RESEARCH_ONLY / DOCS_ONLY`; Phase 11B and Phase 11C are `RESEARCH_ONLY / SIMULATOR_ONLY`.
 
 ## Readiness Summary
 
 FORGE-K Phase 1-10 is implemented and tested in the Go simulator under `services/core/internal/forgek`. The repository now has a standalone Rust validation boundary for deterministic fixtures, but it is not ready for Rust to own runtime orchestration, live daemon state, gateway behavior, model runtime behavior, route behavior, or canonical mutation.
 
-Phase 11B implements the recommended standalone Rust deterministic validation crate and CLI harness at `crates/forgek-validate`. It remains research-only/simulator-only: it defines first-pass fixture scope, validation result vocabulary, canonicalization, hashing, and CLI behavior, but it must not add live integration, cgo, routes, gateway behavior, model runtime behavior, or canonical mutation.
+Phase 11B implements the recommended standalone Rust deterministic validation crate and CLI harness at `crates/forgek-validate`. Phase 11C aligns Go and Rust against the same deterministic fixture corpus with Go parity tests, Rust validation/drift tests, canonical golden JSON, golden stable hashes, and an optional root parity helper. Both remain research-only/simulator-only: they define fixture scope, validation result vocabulary, canonicalization, hashing, and parity behavior, but they must not add live integration, cgo, routes, gateway behavior, model runtime behavior, or canonical mutation.
 
 ## Current Phase 1-10 Status
 
@@ -26,6 +26,7 @@ Phase 11B implements the recommended standalone Rust deterministic validation cr
 | Phase 10 Lymphatic Lane | Implemented and tested in Go simulator, reports/proposals only |
 | Phase 11A Rust Kernel Core Research / Planning | Planning complete |
 | Phase 11B Rust Deterministic Validation Boundary | Implemented and tested as research-only/simulator-only |
+| Phase 11C Go/Rust Test Corpus Alignment | Implemented and tested as research-only/simulator-only |
 
 ## Recorded Phase 11A Validation
 
@@ -61,10 +62,19 @@ Phase 11B validation for this implementation checkpoint:
 | `npm run lint` | Passed. |
 | `npm test` | Passed. |
 
+Phase 11C validation for this implementation checkpoint:
+
+| Command | Result |
+| --- | --- |
+| `cd services/core && go test ./internal/forgek/...` | Passed. |
+| `cd crates/forgek-validate && cargo test` | Passed. |
+| `cd crates/forgek-validate && cargo run -- validate-fixtures ../../fixtures/forgek` | Passed. |
+| `npm run test:forgek:parity` | Passed. |
+
 ## Remaining Blockers Before Any Live Rust Integration
 
 - The first stable fixture corpus exists, but it is intentionally limited to Snapshot, ContextBlock, ContextBundle, KVCacheManifest, RuntimeDriverManifest, and capability-like fixture validation.
-- Canonical serialization exists in Rust for the first fixture set, but Go/Rust parity is not yet enforced by CI.
+- Canonical serialization exists in Rust and Go test-only parity checks for the first fixture set, but Go/Rust parity is not yet enforced by CI.
 - Hash inputs need versioned schema declarations before live or cross-process authority can depend on them.
 - Error codes are still lightweight validation strings rather than a shared machine-enforced error code vocabulary.
 - Some package policies are intentionally broadening, especially Memory Palace scoring, semantic planning, runtime integration, and Lymphatic sweep coverage.
@@ -148,7 +158,7 @@ Phase 11B creates or consumes shared fixtures for:
 - hash golden files
 - failure-mode fixtures for missing workspace, missing refs, missing token hash, bad cache mode, and secret-looking runtime fields
 
-Future fixture expansion should add KernelObject, richer Capability fixtures, JournalEvent, MaintenanceReport, CleanupProposal, KV gate-specific failures, and explicit Go/Rust parity checks.
+Phase 11C adds explicit Go/Rust parity checks for this initial fixture set. Future fixture expansion should add KernelObject, richer Capability fixtures, JournalEvent, MaintenanceReport, CleanupProposal, and KV gate-specific failures.
 
 ## Stable Contract Requirements
 
@@ -173,4 +183,4 @@ The following must be versioned or explicitly frozen for the first Rust target:
 
 ## Recommended Next Step
 
-Move to Phase 11C as `RESEARCH_ONLY / SIMULATOR_ONLY`: expand the shared fixture corpus and add explicit Go/Rust parity tests. Do not integrate Rust into the live daemon, cgo, routes, gateway, model runtime, controllane, or public APIs.
+Move to a scoped Phase 11D or Phase 12 planning pass only after deciding whether the next work is broader fixture hardening, CI opt-in, or live-daemon design. Do not integrate Rust into the live daemon, cgo, routes, gateway, model runtime, controllane, or public APIs without an explicit `LIVE_INTEGRATION` design and tests.

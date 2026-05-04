@@ -1,5 +1,152 @@
 {
+  "schema_version": "forgek.golden_hashes.v1",
+  "scope": "RESEARCH_ONLY_SIMULATOR_ONLY",
+  "hash_algorithm": "sha256(canonical_json(stable_projection))",
   "context_block_hash": "b2ee5d2e8a536ab05129a304aa2c20533a0c2f81b75ec4f880bd247f39a7f726",
+  "context_bundle_hash": "3c123b818035bc75fd1097932ad1d4b5ab7002527b74d98f6b821de1f16063d4",
   "kv_manifest_identity_hash": "d857a12564fdb42e67d141c355a7ad1c015878a0a667e74841215564f7d0507f",
-  "snapshot_shape_hash": "e3ae559748a4a5f589d107c4d0ffbcf20b9aeed31310f7bf53f491332f3996ba"
+  "runtime_manifest_hash": "02442e160f16b3c9d3a2def8b889b045369145a95aa7ad0078a97b0afb50c3d5",
+  "snapshot_shape_hash": "e3ae559748a4a5f589d107c4d0ffbcf20b9aeed31310f7bf53f491332f3996ba",
+  "stable_projection": {
+    "canonicalization_summary": "Object keys sorted recursively; string whitespace normalized; unordered reference/set arrays sorted before hashing.",
+    "excluded_fields": [
+      "created_at",
+      "updated_at",
+      "sealed_at",
+      "expired_at",
+      "last_used_at",
+      "invalidated_at",
+      "journal_refs",
+      "shape_hash",
+      "source_hash",
+      "content_hash",
+      "token_input_hash",
+      "bundle_hash",
+      "stable_prefix_hash",
+      "volatile_suffix_hash",
+      "cache_id",
+      "snapshot_id",
+      "block_id",
+      "bundle_id",
+      "driver_id",
+      "reuse_count"
+    ]
+  },
+  "fixtures": [
+    {
+      "fixture_path": "valid/context_block.valid.json",
+      "fixture_kind": "context_block",
+      "hash_kind": "context_block_hash",
+      "expected_hash": "b2ee5d2e8a536ab05129a304aa2c20533a0c2f81b75ec4f880bd247f39a7f726",
+      "included_fields_summary": [
+        "block type",
+        "workspace/case scope",
+        "provenance refs",
+        "canonical text summary",
+        "layout/cache/policy fields",
+        "creator and metadata"
+      ],
+      "excluded_fields_summary": [
+        "block id",
+        "creation timestamp",
+        "content hash",
+        "token input hash"
+      ]
+    },
+    {
+      "fixture_path": "valid/context_bundle.valid.json",
+      "fixture_kind": "context_bundle",
+      "hash_kind": "context_bundle_hash",
+      "expected_hash": "3c123b818035bc75fd1097932ad1d4b5ab7002527b74d98f6b821de1f16063d4",
+      "included_fields_summary": [
+        "workspace/case scope",
+        "layout id/version",
+        "normalized block projection",
+        "canonical prompt text",
+        "token estimate",
+        "cache eligibility summary",
+        "source refs",
+        "creator and metadata"
+      ],
+      "excluded_fields_summary": [
+        "bundle id",
+        "nested block id",
+        "creation timestamps",
+        "bundle hash",
+        "stable prefix hash",
+        "content hashes",
+        "token input hashes"
+      ]
+    },
+    {
+      "fixture_path": "valid/kv_cache_manifest.valid.json",
+      "fixture_kind": "kv_cache_manifest",
+      "hash_kind": "kv_manifest_identity_hash",
+      "expected_hash": "d857a12564fdb42e67d141c355a7ad1c015878a0a667e74841215564f7d0507f",
+      "included_fields_summary": [
+        "cache mode",
+        "workspace/case scope",
+        "bundle identity refs",
+        "model/tokenizer revisions",
+        "runtime and attention backend identity",
+        "policy/syscall schema hashes",
+        "rope config hash",
+        "precision/memory tier/cache salt",
+        "status and metadata"
+      ],
+      "excluded_fields_summary": [
+        "cache id",
+        "creation timestamp",
+        "bundle hash",
+        "stable prefix hash",
+        "token input hash",
+        "reuse counter",
+        "KV tensors are not present"
+      ]
+    },
+    {
+      "fixture_path": "valid/runtime_driver_manifest.valid.json",
+      "fixture_kind": "runtime_driver_manifest",
+      "hash_kind": "runtime_manifest_hash",
+      "expected_hash": "02442e160f16b3c9d3a2def8b889b045369145a95aa7ad0078a97b0afb50c3d5",
+      "included_fields_summary": [
+        "driver name/kind/version",
+        "runtime backend/version",
+        "supported models and capabilities",
+        "feature flags",
+        "deterministic test marker",
+        "proposal-only authority level",
+        "metadata"
+      ],
+      "excluded_fields_summary": [
+        "driver id",
+        "creation timestamp",
+        "secret-like fields are not present",
+        "live runtime authority is not present"
+      ]
+    },
+    {
+      "fixture_path": "valid/snapshot_manifest.valid.json",
+      "fixture_kind": "snapshot_manifest",
+      "hash_kind": "snapshot_shape_hash",
+      "expected_hash": "e3ae559748a4a5f589d107c4d0ffbcf20b9aeed31310f7bf53f491332f3996ba",
+      "included_fields_summary": [
+        "snapshot type",
+        "workspace/case scope",
+        "status",
+        "source refs",
+        "context block refs",
+        "KV manifest refs",
+        "summary",
+        "creator and metadata"
+      ],
+      "excluded_fields_summary": [
+        "snapshot id",
+        "creation/seal timestamps",
+        "shape hash",
+        "source hash",
+        "canonical truth is not present"
+      ]
+    }
+  ]
 }
