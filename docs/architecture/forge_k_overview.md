@@ -1,6 +1,6 @@
 # FORGE-K Architecture Overview
 
-Status: Phase 10 Lymphatic Lane implemented/tested in the simulator only; Phase 1-10 simulator implementation baseline.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 1-10 simulator implementation baseline remains Go-only.
 
 FORGE-K is a deterministic cognitive microkernel for governed semantic work. It owns canonical truth through semantic syscalls, deterministic validation, journaled commits, and replayable evidence. Model runtimes are drivers attached to the operating system; they may propose interpretations, actions, or text, but they do not own truth authority.
 
@@ -36,6 +36,12 @@ Phase 9 does not wire FORGE-K into the live daemon, replace live `modelruntime`,
 Phase 10 implements the Lymphatic Lane as `SIMULATOR_ONLY`. The simulator surface lives under `services/core/internal/forgek/lymphatic` plus `services/core/internal/forgek/lymphatic_syscalls.go` and associated tests.
 
 The Lymphatic Lane is the maintenance lane for deterministic hygiene: Lymphatic Sweeps, Maintenance Reports, Cleanup Proposals, Cache Hygiene, Snapshot Hygiene, Runtime Result Hygiene, and Contradiction Sweeps. Reports and proposals are evidence only. The lane must not silently mutate canonical truth, delete provenance, change live dream/autonomy cleanup behavior, add routes, change gateway/modelruntime behavior, or wire itself into the live daemon.
+
+## Rust Kernel Core Planning
+
+Phase 11A is `RESEARCH_ONLY / DOCS_ONLY`. ADR 0006 and `docs/architecture/rust_kernel_core_plan.md` define a possible future Rust boundary for deterministic validation primitives such as canonical serialization, hashing, manifest validation, capability predicate checks, journal integrity checks, and KV nine-gate validation.
+
+Phase 11A does not implement Rust, add a Rust crate, replace the Go simulator, change Go runtime behavior, or integrate with the live daemon. The recommended future Phase 11B boundary is a standalone Rust crate and CLI fixture harness, not cgo or live daemon wiring.
 
 ## Three-Domain Control Model
 

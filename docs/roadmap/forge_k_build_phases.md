@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 10 Lymphatic Lane simulator implementation baseline.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11 implementation is not started.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -167,17 +167,43 @@ What not to do: run full maintenance on every turn, delete provenance, mutate ca
 
 Implementation status: implemented and tested in `services/core/internal/forgek/lymphatic`, `services/core/internal/forgek/lymphatic_syscalls.go`, and related tests. Scope is simulator-only; maintenance reports and cleanup proposals are proposal/evidence surfaces only, and the implementation is not wired into the live daemon.
 
-## Phase 11 - Rust Kernel Core
+## Phase 11A - Rust Kernel Core Research / Planning
 
-Scope: `RESEARCH_ONLY`.
+Scope: `RESEARCH_ONLY / DOCS_ONLY`.
 
-Goal: move core deterministic kernel contracts into a Rust implementation boundary.
+Goal: decide whether a future Rust Kernel Core is justified, what the safe boundary should be, and which FORGE-K primitives are stable enough to port later.
 
-Deliverables: Rust syscall core, validation modules, journal interfaces, FFI or service boundary plan.
+Deliverables: Rust boundary plan, readiness review, ADR 0006, package stability assessment, data serialization requirements, risk register, and Phase 11B recommendation.
 
-Validation criteria: deterministic tests pass; parity with simulator; no model dependency in kernel correctness.
+Validation criteria: docs exist; `go test ./internal/forgek/...` passes before and after the planning pass; no Rust code, crate, live daemon integration, public API, route, gateway, modelruntime, or Go behavior changes are introduced.
 
-What not to do: rewrite all applications or introduce untested unsafe authority paths.
+Implementation status: completed as a research/docs pass in `docs/architecture/rust_kernel_core_plan.md`, `docs/reviews/phase_11_readiness.md`, and ADR 0006. Rust implementation remains not started.
+
+What not to do: implement Rust, add `Cargo.toml`, add a Rust crate, wire FORGE-K into the live daemon, change syscalls, create a second authority path, or introduce untested unsafe authority paths.
+
+## Phase 11B - Rust Deterministic Validation Crate
+
+Scope: `RESEARCH_ONLY / SIMULATOR_ONLY` unless a later prompt explicitly records a different safe scope.
+
+Goal: optionally create a standalone Rust crate and CLI test harness for deterministic validation primitives.
+
+Recommended deliverables: canonical serialization validation, hash validation, capability predicate validation, journal hash-chain verification, manifest validation, KV nine-gate validation, and shared fixture/golden-file parity with the Go simulator.
+
+Validation criteria: Rust and Go agree on shared fixtures; no live daemon integration; no cgo; no public API, route, gateway, modelruntime, or live controllane behavior changes.
+
+What not to do: replace the Go simulator, call model runtimes, mutate state, add live authority, or add Rust dependencies to CI without explicit Phase 11B approval.
+
+## Phase 11C - Go/Rust Test Corpus Alignment
+
+Scope: `RESEARCH_ONLY / SIMULATOR_ONLY`.
+
+Goal: expand shared deterministic fixtures and parity tests after Phase 11B proves the initial crate boundary.
+
+Deliverables: valid/invalid fixtures for KernelObject, Capability, JournalEvent, Snapshot, ContextBlock, ContextBundle, KVCacheManifest, RuntimeDriverManifest, MaintenanceReport, CleanupProposal, canonical serialization golden files, hash golden files, and failure-mode fixtures.
+
+Validation criteria: fixture corpus is versioned, language-neutral, deterministic, and does not create live daemon authority.
+
+What not to do: treat fixture parity as live integration or bypass ADR 0005.
 
 ## Phase 12 - FORGE Daemon
 

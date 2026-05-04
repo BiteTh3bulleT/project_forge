@@ -2,7 +2,7 @@
 
 Companion to `docs/reviews/full_project_review.md` (2026-05-03).
 
-This is a concise status read of FORGE-K phases against the current repository. The key distinction is that Phase 1-10 are implemented in the simulator package `services/core/internal/forgek`, while the live daemon still uses the existing AI-OS/gateway/permissions/lane/audit authority paths. ADR 0005 records that FORGE-K is target architecture, not live daemon authority yet.
+This is a concise status read of FORGE-K phases against the current repository. The key distinction is that Phase 1-10 are implemented in the simulator package `services/core/internal/forgek`, while the live daemon still uses the existing AI-OS/gateway/permissions/lane/audit authority paths. ADR 0005 records that FORGE-K is target architecture, not live daemon authority yet. Phase 11A is research/docs only; Rust implementation remains deferred.
 
 | Phase | Title | Status | Where It Lives | Tests / Evidence | Open Work |
 | --- | --- | --- | --- | --- | --- |
@@ -17,19 +17,21 @@ This is a concise status read of FORGE-K phases against the current repository. 
 | 8 | Deterministic KV System | IMPLEMENTED + TESTED | `services/core/internal/forgek/kv/*`, `kv_syscalls.go`, `docs/architecture/context_compiler_and_kv_cache.md`. Scope recorded as `SIMULATOR_ONLY`; no real KV tensors or runtime backend cache reuse are implemented. | KVCacheManifest, lookup request/result, nine-gate validation, tiers, invalidation/eviction, service, context integration, syscall, capability, journal, and acceleration-not-memory tests pass under `go test ./internal/forgek/...`. | Live KV reuse, runtime drivers, tokenizer-specific final token IDs, and live daemon integration remain deferred. |
 | 9 | Runtime Driver Integration | IMPLEMENTED + TESTED | `services/core/internal/forgek/runtime/*`, `runtime_syscalls.go`, `docs/architecture/runtime_driver_boundary.md`. Scope recorded as `SIMULATOR_ONLY / DRIVER_BOUNDARY_ONLY`; live `modelruntime`, gateway, routes, APIs, and live KV reuse are unchanged. | Runtime manifest, capability manifest, deterministic mock driver, registry/service, syscall, capability, journal, context-ref, KV-metadata, and model-as-driver tests pass under `go test ./internal/forgek/...`. | Real backend drivers, streaming, tool calling, live daemon integration, and live KV reuse remain deferred. |
 | 10 | Lymphatic Lane | IMPLEMENTED + TESTED | `services/core/internal/forgek/lymphatic/*`, `lymphatic_syscalls.go`, `lymphatic_syscalls_test.go`, `docs/architecture/lymphatic_lane.md`. Scope recorded as `SIMULATOR_ONLY`; live dream/autonomy cleanup paths remain separate. | `go test ./internal/forgek/...` passes, including lymphatic package and syscall tests. | No live daemon wiring. Broader domain-specific hygiene expansion remains future simulator work. |
-| 11 | Rust Kernel Core | NOT STARTED | None. | None. | Future work. |
+| 11A | Rust Kernel Core Research / Planning | PLANNING COMPLETE; IMPLEMENTATION NOT STARTED | `docs/architecture/rust_kernel_core_plan.md`, `docs/reviews/phase_11_readiness.md`, ADR 0006. | `cd services/core && go test ./internal/forgek/...` passed before the planning pass. | Rust implementation deferred until Phase 11B approval; no Rust code or live integration exists. |
+| 11B | Rust Deterministic Validation Crate | NOT STARTED | None. | None. | Optional future `RESEARCH_ONLY / SIMULATOR_ONLY` crate and CLI fixture harness. |
+| 11C | Go/Rust Test Corpus Alignment | NOT STARTED | None. | None. | Optional future shared fixture and golden-file parity work. |
 | 12 | FORGE Daemon | PARTIAL OUTSIDE FORGE-K | Existing `services/core/main.go` daemon. | Live daemon tests exist indirectly. | Not FORGE-K-governed yet. |
 | 13 | FORGE-1 Simulator | NOT STARTED | Concept doc only. | None. | Future research. |
 | 14 | FORGE-1 Prototype Research | DOCUMENTED CONCEPT ONLY | `docs/architecture/forge_1_cpu_concept.md`. | None. | Future research. |
 
 ## Readiness Notes
 
-- `go test ./internal/forgek/...` passes, including Phase 6 snapshot tests, Phase 7 Context Compiler tests, Phase 8 deterministic KV tests, and Phase 9 runtime boundary tests.
+- `go test ./internal/forgek/...` passes, including Phase 6 snapshot tests, Phase 7 Context Compiler tests, Phase 8 deterministic KV tests, Phase 9 runtime boundary tests, and Phase 10 Lymphatic Lane tests.
 - Representative API route inventory tests pass.
 - `npm run build:core`, `npm run lint`, and `npm test` pass in this Phase 9 pass.
 - Desktop typecheck/build is blocked by local Node workspace package resolution.
 - FORGE-K remains simulator authority only; the live daemon still uses AI-OS/gateway/permissions/lane/audit authority paths.
-- The safest next path is Phase 11 Rust Kernel Core research/planning or Phase 10 simulator hardening under the recorded `SIMULATOR_ONLY` marker; do not wire Phase 7, Phase 8, Phase 9, or Phase 10 into the live daemon without a `LIVE_INTEGRATION` design and tests.
+- The safest next path is Phase 11B Rust deterministic validation crate research under `RESEARCH_ONLY / SIMULATOR_ONLY`, starting with shared fixtures and a standalone CLI harness. Do not wire Phase 7, Phase 8, Phase 9, Phase 10, or future Rust code into the live daemon without a `LIVE_INTEGRATION` design and tests.
 
 ## Phase 6 Validation
 
@@ -67,3 +69,11 @@ This is a concise status read of FORGE-K phases against the current repository. 
 - The implemented output surface is Maintenance Reports and Cleanup Proposals only.
 - Phase 10 must not wire into the live daemon, live dream/autonomy behavior, live cleanup jobs, public APIs, routes, gateway, modelruntime, or AI-OS controllane behavior.
 - Phase 10 must not silently mutate canonical truth or destroy provenance; any meaningful mutation remains a semantic syscall/Kernel responsibility.
+
+## Phase 11A Validation
+
+- Phase 11A is recorded as `RESEARCH_ONLY / DOCS_ONLY`.
+- ADR 0006 is accepted and records a Rust boundary for deterministic validation primitives only.
+- `docs/architecture/rust_kernel_core_plan.md` and `docs/reviews/phase_11_readiness.md` define the recommended boundary, package stability assessment, stable contracts, test corpus strategy, risk register, and Phase 11B recommendation.
+- `cd services/core && go test ./internal/forgek/...` passed before the planning pass and after docs were updated.
+- No Rust code, Rust crate, `Cargo.toml`, live daemon integration, public API, route, gateway, modelruntime, live controllane, or Go runtime behavior change exists in Phase 11A.

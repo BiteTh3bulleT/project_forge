@@ -24,6 +24,7 @@ go test ./internal/forgek/...
 - Phase 8 Deterministic KV System: `kv`, `kv_syscalls.go`
 - Phase 9 Runtime Driver Boundary: `runtime`, `runtime_syscalls.go`
 - Phase 10 Lymphatic Lane: `lymphatic`, `lymphatic_syscalls.go`
+- Phase 11A Rust Kernel Core Research / Planning: docs only, no Rust code
 
 ## Authority Boundary
 
@@ -36,3 +37,29 @@ Phase 8 registers deterministic KV manifests and validates identity gates as acc
 Phase 9 is implemented as `SIMULATOR_ONLY / DRIVER_BOUNDARY_ONLY`. Runtime drivers are governed driver surfaces that may return proposal output with manifests, capability metadata, context refs, and KV metadata refs. The active implementation is a deterministic mock driver only. It must not call real model backends, mutate Kernel objects except through runtime syscalls, admit evidence, write snapshots or ContextBundles, register KV manifests, perform live KV reuse, alter live `modelruntime`, change gateway behavior, add routes, or route live daemon state through FORGE-K.
 
 Phase 10 is implemented as `SIMULATOR_ONLY`. The Lymphatic Lane produces deterministic Maintenance Reports and Cleanup Proposals only. It must not silently mutate source objects, delete provenance, wire into live daemon cleanup, change live dream/autonomy behavior, alter live `modelruntime`, change gateway behavior, add routes, or route live daemon state through FORGE-K.
+
+Phase 11A is `RESEARCH_ONLY / DOCS_ONLY`. It records the possible Rust boundary for deterministic validation primitives only. The simulator remains Go-owned, live daemon authority remains outside FORGE-K, and no Rust crate or Rust integration exists yet.
+
+## Future Rust Boundary
+
+What remains Go for now:
+
+- Kernel orchestration and syscall dispatch
+- simulator service ownership and object registry mutation
+- Courthouse policy decisions
+- Memory Palace retrieval scoring
+- Semantic Algebra operation execution and future planning
+- Context Compiler block selection policy
+- Runtime driver invocation and backend integration
+- Lymphatic sweep policy and cleanup proposal generation
+- all live daemon, gateway, route, controllane, and modelruntime behavior
+
+What may later become Rust after Phase 11B approval:
+
+- canonical serialization validation
+- deterministic hashing
+- ref normalization and ID validation
+- capability predicate evaluation from immutable inputs
+- journal hash-chain verification
+- Snapshot, ContextBlock, ContextBundle, KVCacheManifest, and RuntimeDriverManifest validation
+- KV nine-gate validation
