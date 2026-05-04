@@ -1,5 +1,5 @@
 import type { ApprovalRequest } from "@forge/shared";
-import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
+import { GhostButton, PrimaryButton } from "@forge/ui";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -8,9 +8,54 @@ import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
 
+function approvalStatusClass(status: string) {
+  if (status === "pending") return "forge-ops-status forge-ops-status--warn";
+  if (status === "approved") return "forge-ops-status forge-ops-status--ok";
+  if (status === "denied") return "forge-ops-status forge-ops-status--bad";
+  return "forge-ops-status forge-ops-status--muted";
+}
+
+function riskClassName(risk: string) {
+  const normalized = risk.trim().toLowerCase();
+  if (normalized === "high" || normalized === "critical")
+    return "forge-ops-status forge-ops-status--bad";
+  if (normalized === "medium") return "forge-ops-status forge-ops-status--warn";
+  if (normalized === "low") return "forge-ops-status forge-ops-status--ok";
+  return "forge-ops-status forge-ops-status--muted";
+}
+
+function ApprovalMetric(props: {
+  label: string;
+  value: string | number;
+  detail: string;
+  tone?: "ok" | "warn" | "bad" | "muted";
+}) {
+  const toneClass =
+    props.tone === "ok"
+      ? "text-emerald-300"
+      : props.tone === "warn"
+        ? "text-amber-300"
+        : props.tone === "bad"
+          ? "text-red-300"
+          : "text-forge-ash";
+  return (
+    <div className="forge-ops-card p-4">
+      <div className="forge-ops-label">{props.label}</div>
+      <div
+        className={`mt-2 text-3xl font-semibold tracking-normal ${toneClass}`}
+      >
+        {props.value}
+      </div>
+      <div className="mt-2 text-xs text-forge-mist/65">{props.detail}</div>
+    </div>
+  );
+}
+
 export function ApprovalsPage() {
   const setStatus = useUiStore((s) => s.setStatusLine);
-  const [statusFilter, setStatusFilter] = useState<"pending" | "resolved">("pending");
+  const [statusFilter, setStatusFilter] = useState<"pending" | "resolved">(
+    "pending",
+  );
   const [rows, setRows] = useState<ApprovalRequest[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
@@ -30,85 +75,246 @@ export function ApprovalsPage() {
     return () => window.clearInterval(id);
   }, [statusFilter]);
 
+  const pendingCount = rows.filter((row) => row.status === "pending").length;
+  const writeIntentCount = rows.filter((row) => row.writeIntent).length;
+  const highRiskCount = rows.filter((row) =>
+    ["high", "critical"].includes(String(row.riskClass).toLowerCase()),
+  ).length;
+  const resolvedCount = rows.length - pendingCount;
+
   return (
-    <div className="space-y-6">
-      <Panel
-        title="Approvals"
-        subtitle="Operator gate for medium/high-risk actions. Requests and decisions are separate records."
-        actions={<GhostButton onClick={() => void refresh()}>Refresh</GhostButton>}
-      >
-        <div className="flex gap-2">
-          <button
-            type="button"
-            className={statusFilter === "pending" ? "forge-btn forge-btn--primary" : "forge-btn forge-btn--ghost"}
-            onClick={() => setStatusFilter("pending")}
-          >
-            Pending
-          </button>
-          <button
-            type="button"
-            className={statusFilter === "resolved" ? "forge-btn forge-btn--primary" : "forge-btn forge-btn--ghost"}
-            onClick={() => setStatusFilter("resolved")}
-          >
-            Resolved
-          </button>
+    <div className="forge-ops-board space-y-5">
+      <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="forge-ops-label">Operator Gate</div>
+          <h1 className="mt-2 text-2xl font-semibold tracking-normal text-forge-ash sm:text-3xl">
+            Approvals queue
+          </h1>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-forge-mist/75">
+            Separate request and decision records for governed actions, write
+            intent, and adapter execution boundaries.
+          </p>
         </div>
-        {err ? <div className="mt-4 rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
-      </Panel>
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={
+              pendingCount > 0
+                ? "forge-ops-status forge-ops-status--warn"
+                : "forge-ops-status forge-ops-status--ok"
+            }
+          >
+            {pendingCount > 0 ? `${pendingCount} pending` : "Clear"}
+          </span>
+          <GhostButton onClick={() => void refresh()}>Refresh</GhostButton>
+        </div>
+      </header>
 
-      <Panel title="Approval Queue" subtitle="Review scope snapshot, write intent, and requested adapter before deciding.">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <ApprovalMetric
+          label="Loaded"
+          value={rows.length}
+          detail={`${statusFilter} filter`}
+          tone="muted"
+        />
+        <ApprovalMetric
+          label="Pending"
+          value={pendingCount}
+          detail="awaiting operator"
+          tone={pendingCount > 0 ? "warn" : "ok"}
+        />
+        <ApprovalMetric
+          label="Write Intent"
+          value={writeIntentCount}
+          detail="mutation requested"
+          tone={writeIntentCount > 0 ? "warn" : "muted"}
+        />
+        <ApprovalMetric
+          label="High Risk"
+          value={highRiskCount}
+          detail={`${resolvedCount} resolved in view`}
+          tone={highRiskCount > 0 ? "bad" : "ok"}
+        />
+      </section>
+
+      <section className="forge-ops-panel">
+        <div className="forge-ops-panel__head flex-col items-stretch sm:flex-row sm:items-center">
+          <div>
+            <div className="forge-ops-title">Gate Filters</div>
+            <div className="mt-1 text-xs text-forge-mist/65">
+              Switch between open requests and completed decision records.
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className={
+                statusFilter === "pending"
+                  ? "forge-btn forge-btn--primary"
+                  : "forge-btn forge-btn--ghost"
+              }
+              onClick={() => setStatusFilter("pending")}
+            >
+              Pending
+            </button>
+            <button
+              type="button"
+              className={
+                statusFilter === "resolved"
+                  ? "forge-btn forge-btn--primary"
+                  : "forge-btn forge-btn--ghost"
+              }
+              onClick={() => setStatusFilter("resolved")}
+            >
+              Resolved
+            </button>
+          </div>
+        </div>
+        {err ? (
+          <div className="m-4 rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
+            {err}
+          </div>
+        ) : null}
+      </section>
+
+      <section className="forge-ops-panel">
+        <div className="forge-ops-panel__head">
+          <div>
+            <div className="forge-ops-title">Approval Queue</div>
+            <div className="mt-1 text-xs text-forge-mist/65">
+              Review scope snapshot, write intent, and requested adapter before
+              deciding.
+            </div>
+          </div>
+          <span className="font-mono text-[11px] text-forge-mist/60">
+            limit 120
+          </span>
+        </div>
         {rows.length === 0 ? (
-          <div className="text-sm text-forge-mist">No approval records in this filter.</div>
+          <div className="forge-ops-panel__body text-sm text-forge-mist">
+            No approval records in this filter.
+          </div>
         ) : (
-          <div className="space-y-3">
+          <div className="divide-y divide-white/10">
             {rows.map((r) => (
-              <div key={r.id} className="rounded border border-white/10 bg-black/20 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-sm font-semibold text-forge-ash">Request #{r.id}</div>
-                  <div className="text-[11px] text-forge-mist">{r.status} · {formatTime(r.createdAtMs)}</div>
-                </div>
-                <div className="mt-2 text-xs text-forge-mist">
-                  Job: <Link className="text-forge-ash underline" to={`/jobs/${r.jobId}`}>{r.jobId}</Link> · {r.requestedAction} · {r.requestedAdapter}
-                </div>
-                <div className="mt-1 text-xs text-forge-mist">Risk: {r.riskClass} · Write intent: {String(r.writeIntent)}</div>
-                <div className="mt-1 text-xs text-forge-mist">Summary: {r.requestSummary}</div>
-
-                <div className="mt-3 max-h-40 overflow-auto rounded border border-white/10 bg-black/30 p-2 text-[11px] text-forge-mist">
-                  <HumanDataView value={r.scopeSnapshot} compact />
-                </div>
-
-                {r.status === "pending" ? (
-                  <div className="mt-3 flex gap-2">
-                    <PrimaryButton
-                      onClick={async () => {
-                        await api.approvals.approve(r.id, "Approved from approvals queue");
-                        setStatus(`Approved request ${r.id}.`);
-                        await refresh();
-                      }}
-                    >
-                      Approve
-                    </PrimaryButton>
-                    <GhostButton
-                      onClick={async () => {
-                        await api.approvals.deny(r.id, "Denied from approvals queue");
-                        setStatus(`Denied request ${r.id}.`);
-                        await refresh();
-                      }}
-                    >
-                      Deny
-                    </GhostButton>
+              <article
+                key={r.id}
+                className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_18rem]"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-forge-ash">
+                        Request #{r.id}
+                      </div>
+                      <div className="mt-1 text-xs text-forge-mist/70">
+                        Job{" "}
+                        <Link
+                          className="font-mono text-forge-emberSoft underline"
+                          to={`/jobs/${r.jobId}`}
+                        >
+                          {r.jobId}
+                        </Link>{" "}
+                        · {formatTime(r.createdAtMs)}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className={approvalStatusClass(r.status)}>
+                        {r.status}
+                      </span>
+                      <span className={riskClassName(r.riskClass)}>
+                        {r.riskClass || "risk unset"}
+                      </span>
+                    </div>
                   </div>
-                ) : r.decision ? (
-                  <div className="mt-3 text-xs text-forge-mist">
-                    Decision: {r.decision.decision} by {r.decision.actor} at {formatTime(r.decision.createdAtMs)}
-                    {r.decision.note ? ` · ${r.decision.note}` : ""}
+                  <div className="mt-3 text-sm text-forge-ash">
+                    {r.requestSummary}
                   </div>
-                ) : null}
-              </div>
+                  <div className="mt-3 grid gap-2 text-[11px] text-forge-mist sm:grid-cols-3">
+                    <div className="rounded border border-white/10 bg-black/20 px-3 py-2">
+                      <div className="forge-ops-label">Action</div>
+                      <div className="mt-1 truncate text-forge-ash">
+                        {r.requestedAction || "none"}
+                      </div>
+                    </div>
+                    <div className="rounded border border-white/10 bg-black/20 px-3 py-2">
+                      <div className="forge-ops-label">Adapter</div>
+                      <div className="mt-1 truncate text-forge-ash">
+                        {r.requestedAdapter || "gateway"}
+                      </div>
+                    </div>
+                    <div className="rounded border border-white/10 bg-black/20 px-3 py-2">
+                      <div className="forge-ops-label">Write Intent</div>
+                      <div
+                        className={
+                          r.writeIntent
+                            ? "mt-1 text-amber-300"
+                            : "mt-1 text-forge-ash"
+                        }
+                      >
+                        {r.writeIntent ? "requested" : "none"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 max-h-44 overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
+                    <div className="forge-ops-label mb-2">Scope Snapshot</div>
+                    <HumanDataView value={r.scopeSnapshot} compact />
+                  </div>
+                </div>
+
+                <aside className="rounded border border-white/10 bg-black/20 p-3">
+                  {r.status === "pending" ? (
+                    <div className="grid gap-2">
+                      <PrimaryButton
+                        className="w-full"
+                        onClick={async () => {
+                          await api.approvals.approve(
+                            r.id,
+                            "Approved from approvals queue",
+                          );
+                          setStatus(`Approved request ${r.id}.`);
+                          await refresh();
+                        }}
+                      >
+                        Approve
+                      </PrimaryButton>
+                      <GhostButton
+                        className="w-full"
+                        onClick={async () => {
+                          await api.approvals.deny(
+                            r.id,
+                            "Denied from approvals queue",
+                          );
+                          setStatus(`Denied request ${r.id}.`);
+                          await refresh();
+                        }}
+                      >
+                        Deny
+                      </GhostButton>
+                    </div>
+                  ) : r.decision ? (
+                    <div className="text-xs text-forge-mist">
+                      <div className="forge-ops-label">Decision</div>
+                      <div className="mt-2 text-sm font-semibold text-forge-ash">
+                        {r.decision.decision}
+                      </div>
+                      <div className="mt-1">by {r.decision.actor}</div>
+                      <div className="mt-1">
+                        {formatTime(r.decision.createdAtMs)}
+                      </div>
+                      {r.decision.note ? (
+                        <div className="mt-3 rounded border border-white/10 bg-black/25 p-2">
+                          {r.decision.note}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </aside>
+              </article>
             ))}
           </div>
         )}
-      </Panel>
+      </section>
     </div>
   );
 }

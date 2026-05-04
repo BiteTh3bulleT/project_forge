@@ -25,6 +25,11 @@ Last convergence sweep update: 2026-04-22 (branch-local status alignment).
 - Do not treat snapshots as truth. Snapshots preserve semantic shape for restoration and inspection.
 - Do not treat KV cache as memory. KV cache is deterministic acceleration only and must pass identity validation before reuse.
 
+## FORGE-K Live Authority Boundary
+- The FORGE-K simulator under `services/core/internal/forgek` is not live daemon authority yet.
+- Do not assume FORGE-K doctrine is enforced in live AI-OS, gateway, permissions, lane, audit, model runtime, or API paths.
+- Do not route live state mutation through FORGE-K without an explicit integration phase, design, tests, and documentation updates. See `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
+
 ## Project Priorities
 - **2026-04-15**: Phase 2 execution/approval/packet/context systems landed.
 - **2026-04-22**: Legacy adapter invoke ingress is removed from API routing; tool execution authority is gateway-only.

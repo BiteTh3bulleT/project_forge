@@ -19,10 +19,12 @@ import (
 )
 
 const (
-	chatTranscriptTurns               = 12
-	chatAttachmentContextMaxMessages  = 6
-	chatAttachmentContextMaxArtifacts = 8
-	chatAttachmentExcerptRunes        = 800
+	chatTranscriptTurns                = 12
+	chatAttachmentContextMaxMessages   = 6
+	chatAttachmentContextMaxArtifacts  = 8
+	chatAttachmentExcerptRunes         = 800
+	chatThreadMemoryContextMaxMessages = 8
+	chatThreadMemoryContextMaxRunes    = 1800
 )
 
 const chatAssistantVisibilityGuard = `
@@ -78,11 +80,60 @@ func (s *Server) chatOperatorSystemPrompt() string {
 func (s *Server) buildChatPrompt(ctx context.Context, th *chat.ThreadDetail) string {
 	transcript := s.chat.BuildTranscript(th.Messages, chatTranscriptTurns)
 	sys := s.chatOperatorSystemPrompt()
+	threadMemory := buildPersistedThreadMemoryContext(th.Messages, chatTranscriptTurns, chatThreadMemoryContextMaxMessages, chatThreadMemoryContextMaxRunes)
 	attachments := s.buildThreadAttachmentContext(ctx, th)
-	if attachments != "" {
-		return sys + "\n\n---\nTHREAD TITLE: " + th.Title + "\n---\n" + transcript + "\n\n---\nATTACHMENTS CONTEXT\n" + attachments
+	prompt := sys + "\n\n---\nTHREAD TITLE: " + th.Title + "\n---\n" + transcript
+	if threadMemory != "" {
+		prompt += "\n\n---\nEARLIER THREAD MEMORY\n" + threadMemory
 	}
-	return sys + "\n\n---\nTHREAD TITLE: " + th.Title + "\n---\n" + transcript
+	if attachments != "" {
+		prompt += "\n\n---\nATTACHMENTS CONTEXT\n" + attachments
+	}
+	return prompt
+}
+
+func buildPersistedThreadMemoryContext(messages []chat.Message, excludedRecent, maxMessages, maxRunes int) string {
+	if len(messages) == 0 {
+		return ""
+	}
+	if excludedRecent < 0 {
+		excludedRecent = 0
+	}
+	if maxMessages <= 0 {
+		maxMessages = chatThreadMemoryContextMaxMessages
+	}
+	if maxRunes <= 0 {
+		maxRunes = chatThreadMemoryContextMaxRunes
+	}
+
+	olderEnd := len(messages) - excludedRecent
+	if olderEnd <= 0 {
+		return ""
+	}
+	start := olderEnd - maxMessages
+	if start < 0 {
+		start = 0
+	}
+
+	var b strings.Builder
+	b.WriteString("Persisted messages from earlier in this same chat thread. This is non-canonical conversation history; use it only as contextual recall.\n")
+	for _, msg := range messages[start:olderEnd] {
+		role := strings.ToUpper(strings.TrimSpace(msg.Role))
+		if role == "" {
+			role = "MESSAGE"
+		}
+		content := strings.Join(strings.Fields(msg.Content), " ")
+		if content == "" {
+			continue
+		}
+		line := fmt.Sprintf("%s #%d: %s\n", role, msg.ID, trimSummary(content, 260))
+		if len([]rune(b.String()+line)) > maxRunes {
+			b.WriteString("...")
+			break
+		}
+		b.WriteString(line)
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func messageAttachmentIDs(metadata map[string]any) []int64 {

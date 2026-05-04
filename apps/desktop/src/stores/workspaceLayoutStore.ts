@@ -1,5 +1,10 @@
 import { create } from "zustand";
-import { type Window, LogicalPosition, LogicalSize, getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  type Window,
+  LogicalPosition,
+  LogicalSize,
+  getCurrentWindow,
+} from "@tauri-apps/api/window";
 
 import { assignableShellTools } from "../layout/shellConfig";
 import {
@@ -19,7 +24,15 @@ import {
 const STORAGE_KEY = "forge.workspace.layouts.v2";
 const STORAGE_KEY_LEGACY = "forge.workspace.layouts.v1";
 
-type WindowRole = "chat" | "workbench" | "canvas" | "dossier" | "ops" | "review" | "settings" | "mixed";
+type WindowRole =
+  | "chat"
+  | "workbench"
+  | "canvas"
+  | "dossier"
+  | "ops"
+  | "review"
+  | "settings"
+  | "mixed";
 
 type MonitorDesignation = {
   mainMonitorId: string | null;
@@ -101,7 +114,11 @@ type WorkspaceLayoutState = {
   deleteLayout: (layoutId: string) => Promise<void>;
   addLayoutWindow: (layoutId: string) => void;
   removeLayoutWindow: (layoutId: string, windowId: string) => void;
-  updateLayoutWindow: (layoutId: string, windowId: string, patch: Partial<LayoutWindowRecord>) => void;
+  updateLayoutWindow: (
+    layoutId: string,
+    windowId: string,
+    patch: Partial<LayoutWindowRecord>,
+  ) => void;
   activateLayout: (layoutId: string) => Promise<void>;
   captureRuntimeIntoLayout: (layoutId: string) => Promise<void>;
   clearFallbackNotice: () => void;
@@ -167,7 +184,8 @@ function normalizeMonitorDesignations(raw: unknown): MonitorDesignation {
     return { mainMonitorId: null, customLabels: {} };
   }
   const input = raw as { mainMonitorId?: unknown; customLabels?: unknown };
-  const rawMainMonitorId = typeof input.mainMonitorId === "string" ? input.mainMonitorId : null;
+  const rawMainMonitorId =
+    typeof input.mainMonitorId === "string" ? input.mainMonitorId : null;
   const customLabels: Record<string, string> = {};
   if (typeof input.customLabels === "object" && input.customLabels !== null) {
     for (const [monitorId, value] of Object.entries(input.customLabels)) {
@@ -180,7 +198,10 @@ function normalizeMonitorDesignations(raw: unknown): MonitorDesignation {
   return { mainMonitorId: rawMainMonitorId, customLabels };
 }
 
-function canonicalMonitorDesignations(monitors: MonitorSnapshot[], incoming: MonitorDesignation) {
+function canonicalMonitorDesignations(
+  monitors: MonitorSnapshot[],
+  incoming: MonitorDesignation,
+) {
   const monitorIds = new Set(monitors.map((monitor) => monitor.id));
   const keptLabels: Record<string, string> = {};
   for (const [monitorId, label] of Object.entries(incoming.customLabels)) {
@@ -189,11 +210,17 @@ function canonicalMonitorDesignations(monitors: MonitorSnapshot[], incoming: Mon
     }
   }
   const preferredMain = incoming.mainMonitorId;
-  const mainMonitorId = preferredMain && monitorIds.has(preferredMain) ? preferredMain : monitors[0]?.id ?? null;
+  const mainMonitorId =
+    preferredMain && monitorIds.has(preferredMain)
+      ? preferredMain
+      : (monitors[0]?.id ?? null);
   return { mainMonitorId, customLabels: keptLabels };
 }
 
-function buildMonitorRoleCatalog(monitors: MonitorSnapshot[], designations: MonitorDesignation) {
+function buildMonitorRoleCatalog(
+  monitors: MonitorSnapshot[],
+  designations: MonitorDesignation,
+) {
   const sortedMonitors = [...monitors].sort((a, b) => a.ordinal - b.ordinal);
   const canonical = canonicalMonitorDesignations(sortedMonitors, designations);
   const roleByMonitorId: MonitorRoleMap = {};
@@ -201,14 +228,21 @@ function buildMonitorRoleCatalog(monitors: MonitorSnapshot[], designations: Moni
 
   let secondary = 1;
   for (const monitor of sortedMonitors) {
-    const role = monitor.id === canonical.mainMonitorId ? "main" : `secondary_${secondary++}`;
+    const role =
+      monitor.id === canonical.mainMonitorId
+        ? "main"
+        : `secondary_${secondary++}`;
     roleByMonitorId[monitor.id] = role;
     monitorByRole[role] = monitor;
   }
   return { roleByMonitorId, monitorByRole, canonical };
 }
 
-function roleToMonitor(monitors: MonitorSnapshot[], designations: MonitorDesignation, role: string | null) {
+function roleToMonitor(
+  monitors: MonitorSnapshot[],
+  designations: MonitorDesignation,
+  role: string | null,
+) {
   if (!role) return null;
   const normalizedRole = parseMonitorRole(role);
   if (!normalizedRole) return null;
@@ -216,7 +250,10 @@ function roleToMonitor(monitors: MonitorSnapshot[], designations: MonitorDesigna
   return catalog.monitorByRole[normalizedRole] ?? null;
 }
 
-function monitorStateFromDesignations(monitors: MonitorSnapshot[], designations: MonitorDesignation) {
+function monitorStateFromDesignations(
+  monitors: MonitorSnapshot[],
+  designations: MonitorDesignation,
+) {
   const catalog = buildMonitorRoleCatalog(monitors, designations);
   return {
     monitorDesignations: catalog.canonical,
@@ -238,26 +275,41 @@ function deriveMonitorState(monitors: MonitorSnapshot[], doc: LayoutDoc) {
   };
 }
 
-function resolveWindowPlacement(windowRecord: LayoutWindowRecord, monitors: MonitorSnapshot[], designations: MonitorDesignation) {
-  const roleMatch = roleToMonitor(monitors, designations, windowRecord.targetMonitorRole);
-  const preferred = windowRecord.targetMonitorId ? monitors.find((monitor) => monitor.id === windowRecord.targetMonitorId) : null;
+function resolveWindowPlacement(
+  windowRecord: LayoutWindowRecord,
+  monitors: MonitorSnapshot[],
+  designations: MonitorDesignation,
+) {
+  const roleMatch = roleToMonitor(
+    monitors,
+    designations,
+    windowRecord.targetMonitorRole,
+  );
+  const preferred = windowRecord.targetMonitorId
+    ? monitors.find((monitor) => monitor.id === windowRecord.targetMonitorId)
+    : null;
   const ordinal = monitors[windowRecord.targetMonitorOrdinal] ?? null;
   const chosen = roleMatch ?? preferred ?? ordinal ?? monitors[0] ?? null;
   const fallbackReason = !chosen
     ? "No displays available."
     : windowRecord.targetMonitorRole && !roleMatch
       ? `Monitor role ${windowRecord.targetMonitorRole} unavailable for ${windowRecord.title}; placed on ${chosen.name ?? `display ${chosen.ordinal + 1}`}.`
-    : preferred
-      ? null
-      : windowRecord.targetMonitorId
-        ? `Target display unavailable for ${windowRecord.title}; placed on ${chosen.name ?? `display ${chosen.ordinal + 1}`}.`
-        : monitors[windowRecord.targetMonitorOrdinal] == null && monitors.length > 0
-          ? `Expected display ${windowRecord.targetMonitorOrdinal + 1} unavailable; placed on ${chosen.name ?? `display ${chosen.ordinal + 1}`}.`
-          : null;
+      : preferred
+        ? null
+        : windowRecord.targetMonitorId
+          ? `Target display unavailable for ${windowRecord.title}; placed on ${chosen.name ?? `display ${chosen.ordinal + 1}`}.`
+          : monitors[windowRecord.targetMonitorOrdinal] == null &&
+              monitors.length > 0
+            ? `Expected display ${windowRecord.targetMonitorOrdinal + 1} unavailable; placed on ${chosen.name ?? `display ${chosen.ordinal + 1}`}.`
+            : null;
 
   return {
     monitor: chosen,
-    bounds: windowRecord.bounds ?? (chosen ? logicalBoundsForMonitor(chosen, windowRecord.targetMonitorOrdinal) : { x: 60, y: 60, width: 1200, height: 780 }),
+    bounds:
+      windowRecord.bounds ??
+      (chosen
+        ? logicalBoundsForMonitor(chosen, windowRecord.targetMonitorOrdinal)
+        : { x: 60, y: 60, width: 1200, height: 780 }),
     fallbackReason,
   };
 }
@@ -272,8 +324,26 @@ function seedLayouts(): LayoutPreset[] {
       updatedAtMs: createdAtMs,
       lastActivatedAtMs: null,
       windows: [
-        { ...defaultWindowForLayout({ runtimeLabel: "main", title: "FORGE Build", role: "chat", targetMonitorOrdinal: 0, activeRoute: "/chat" }), assignedRoutes: ["/chat", "/jobs", "/workbench"] },
-        { ...defaultWindowForLayout({ runtimeLabel: "forge-build-workbench", title: "FORGE Workbench", role: "workbench", targetMonitorOrdinal: 1, activeRoute: "/workbench" }), assignedRoutes: ["/workbench", "/jobs"] },
+        {
+          ...defaultWindowForLayout({
+            runtimeLabel: "main",
+            title: "FORGE Build",
+            role: "chat",
+            targetMonitorOrdinal: 0,
+            activeRoute: "/chat",
+          }),
+          assignedRoutes: ["/chat", "/jobs", "/workbench"],
+        },
+        {
+          ...defaultWindowForLayout({
+            runtimeLabel: "forge-build-workbench",
+            title: "FORGE Workbench",
+            role: "workbench",
+            targetMonitorOrdinal: 1,
+            activeRoute: "/workbench",
+          }),
+          assignedRoutes: ["/workbench", "/jobs"],
+        },
       ],
     },
     {
@@ -283,8 +353,26 @@ function seedLayouts(): LayoutPreset[] {
       updatedAtMs: createdAtMs,
       lastActivatedAtMs: null,
       windows: [
-        { ...defaultWindowForLayout({ runtimeLabel: "main", title: "FORGE Research", role: "chat", targetMonitorOrdinal: 0, activeRoute: "/chat" }), assignedRoutes: ["/chat", "/memory", "/dossiers"] },
-        { ...defaultWindowForLayout({ runtimeLabel: "forge-research-canvas", title: "FORGE Canvas", role: "canvas", targetMonitorOrdinal: 1, activeRoute: "/canvas" }), assignedRoutes: ["/canvas", "/dossiers"] },
+        {
+          ...defaultWindowForLayout({
+            runtimeLabel: "main",
+            title: "FORGE Research",
+            role: "chat",
+            targetMonitorOrdinal: 0,
+            activeRoute: "/chat",
+          }),
+          assignedRoutes: ["/chat", "/memory", "/dossiers"],
+        },
+        {
+          ...defaultWindowForLayout({
+            runtimeLabel: "forge-research-canvas",
+            title: "FORGE Canvas",
+            role: "canvas",
+            targetMonitorOrdinal: 1,
+            activeRoute: "/canvas",
+          }),
+          assignedRoutes: ["/canvas", "/dossiers"],
+        },
       ],
     },
     {
@@ -294,8 +382,26 @@ function seedLayouts(): LayoutPreset[] {
       updatedAtMs: createdAtMs,
       lastActivatedAtMs: null,
       windows: [
-        { ...defaultWindowForLayout({ runtimeLabel: "main", title: "FORGE Ops", role: "ops", targetMonitorOrdinal: 0, activeRoute: "/jobs" }), assignedRoutes: ["/jobs", "/approvals", "/reviews", "/events"] },
-        { ...defaultWindowForLayout({ runtimeLabel: "forge-ops-review", title: "FORGE Review", role: "review", targetMonitorOrdinal: 1, activeRoute: "/reviews" }), assignedRoutes: ["/reviews", "/approvals"] },
+        {
+          ...defaultWindowForLayout({
+            runtimeLabel: "main",
+            title: "FORGE Ops",
+            role: "ops",
+            targetMonitorOrdinal: 0,
+            activeRoute: "/jobs",
+          }),
+          assignedRoutes: ["/jobs", "/approvals", "/reviews", "/events"],
+        },
+        {
+          ...defaultWindowForLayout({
+            runtimeLabel: "forge-ops-review",
+            title: "FORGE Review",
+            role: "review",
+            targetMonitorOrdinal: 1,
+            activeRoute: "/reviews",
+          }),
+          assignedRoutes: ["/reviews", "/approvals"],
+        },
       ],
     },
     {
@@ -305,8 +411,26 @@ function seedLayouts(): LayoutPreset[] {
       updatedAtMs: createdAtMs,
       lastActivatedAtMs: null,
       windows: [
-        { ...defaultWindowForLayout({ runtimeLabel: "main", title: "FORGE Deep Work", role: "chat", targetMonitorOrdinal: 0, activeRoute: "/chat" }), assignedRoutes: ["/chat", "/canvas"] },
-        { ...defaultWindowForLayout({ runtimeLabel: "forge-deep-workbench", title: "FORGE Workbench", role: "workbench", targetMonitorOrdinal: 1, activeRoute: "/workbench" }), assignedRoutes: ["/workbench", "/dossiers"] },
+        {
+          ...defaultWindowForLayout({
+            runtimeLabel: "main",
+            title: "FORGE Deep Work",
+            role: "chat",
+            targetMonitorOrdinal: 0,
+            activeRoute: "/chat",
+          }),
+          assignedRoutes: ["/chat", "/canvas"],
+        },
+        {
+          ...defaultWindowForLayout({
+            runtimeLabel: "forge-deep-workbench",
+            title: "FORGE Workbench",
+            role: "workbench",
+            targetMonitorOrdinal: 1,
+            activeRoute: "/workbench",
+          }),
+          assignedRoutes: ["/workbench", "/dossiers"],
+        },
       ],
     },
   ];
@@ -327,7 +451,10 @@ function emptyDoc(): LayoutDoc {
   };
 }
 
-function normalizeLayoutDoc(raw: LayoutDoc | null, monitors: MonitorSnapshot[] = []) {
+function normalizeLayoutDoc(
+  raw: LayoutDoc | null,
+  monitors: MonitorSnapshot[] = [],
+) {
   const doc = {
     ...emptyDoc(),
     ...(raw ?? {}),
@@ -340,56 +467,145 @@ function normalizeLayoutDoc(raw: LayoutDoc | null, monitors: MonitorSnapshot[] =
   doc.layouts = doc.layouts.map((layout) => {
     const source = layout as LayoutPreset & { windows?: unknown };
     return {
-      id: typeof source.id === "string" && source.id ? source.id : uid("layout"),
-      name: typeof source.name === "string" && source.name ? source.name : "Recovered Layout",
-      createdAtMs: typeof source.createdAtMs === "number" && Number.isFinite(source.createdAtMs) ? source.createdAtMs : nowMs(),
-      updatedAtMs: typeof source.updatedAtMs === "number" && Number.isFinite(source.updatedAtMs) ? source.updatedAtMs : nowMs(),
+      id:
+        typeof source.id === "string" && source.id ? source.id : uid("layout"),
+      name:
+        typeof source.name === "string" && source.name
+          ? source.name
+          : "Recovered Layout",
+      createdAtMs:
+        typeof source.createdAtMs === "number" &&
+        Number.isFinite(source.createdAtMs)
+          ? source.createdAtMs
+          : nowMs(),
+      updatedAtMs:
+        typeof source.updatedAtMs === "number" &&
+        Number.isFinite(source.updatedAtMs)
+          ? source.updatedAtMs
+          : nowMs(),
       lastActivatedAtMs:
-        typeof source.lastActivatedAtMs === "number" && Number.isFinite(source.lastActivatedAtMs) ? source.lastActivatedAtMs : null,
-      windows: Array.isArray(source.windows) && source.windows.length > 0
-        ? source.windows.map((windowRecord) => {
-            const windowSource = windowRecord as LayoutWindowRecord & { fallbackReason?: unknown; assignedRoutes?: unknown; targetMonitorRole?: unknown };
-            return {
-              id: typeof windowSource.id === "string" && windowSource.id ? windowSource.id : uid("window"),
-              runtimeLabel: typeof windowSource.runtimeLabel === "string" && windowSource.runtimeLabel ? windowSource.runtimeLabel : uid("window"),
-              title: typeof windowSource.title === "string" && windowSource.title ? windowSource.title : "FORGE Window",
-              role: windowSource.role === "chat" || windowSource.role === "workbench" || windowSource.role === "canvas" || windowSource.role === "dossier" || windowSource.role === "ops" ||
-                windowSource.role === "review" || windowSource.role === "settings" || windowSource.role === "mixed"
-                ? windowSource.role
-                : "mixed",
-              assignedRoutes: sanitizeRoutes(
-                Array.isArray(windowSource.assignedRoutes)
-                  ? (windowSource.assignedRoutes.filter((route) => typeof route === "string") as string[])
-                  : defaultRoutesForRole(windowSource.role === "chat" || windowSource.role === "workbench" || windowSource.role === "canvas" || windowSource.role === "dossier" || windowSource.role === "ops" || windowSource.role === "review" || windowSource.role === "settings" || windowSource.role === "mixed" ? windowSource.role : "mixed"),
-              ),
-              activeRoute: typeof windowSource.activeRoute === "string" && windowSource.activeRoute ? windowSource.activeRoute : "/chat",
-              targetMonitorId: typeof windowSource.targetMonitorId === "string" && windowSource.targetMonitorId.length > 0 ? windowSource.targetMonitorId : null,
-              targetMonitorOrdinal: typeof windowSource.targetMonitorOrdinal === "number" && Number.isFinite(windowSource.targetMonitorOrdinal) ? windowSource.targetMonitorOrdinal : 0,
-              targetMonitorRole: parseMonitorRole(windowSource.targetMonitorRole),
-              bounds:
-                windowSource.bounds &&
-                typeof windowSource.bounds === "object" &&
-                Number.isFinite(windowSource.bounds.x) &&
-                Number.isFinite(windowSource.bounds.y) &&
-                Number.isFinite(windowSource.bounds.width) &&
-                Number.isFinite(windowSource.bounds.height)
-                  ? windowSource.bounds
-                  : null,
-              fallbackReason: typeof windowSource.fallbackReason === "string" && windowSource.fallbackReason.length > 0 ? windowSource.fallbackReason : null,
-            };
-          })
-        : [defaultWindowForLayout({ runtimeLabel: "main", title: "FORGE Window", role: "mixed", targetMonitorOrdinal: 0, activeRoute: "/chat" })],
+        typeof source.lastActivatedAtMs === "number" &&
+        Number.isFinite(source.lastActivatedAtMs)
+          ? source.lastActivatedAtMs
+          : null,
+      windows:
+        Array.isArray(source.windows) && source.windows.length > 0
+          ? source.windows.map((windowRecord) => {
+              const windowSource = windowRecord as LayoutWindowRecord & {
+                fallbackReason?: unknown;
+                assignedRoutes?: unknown;
+                targetMonitorRole?: unknown;
+              };
+              return {
+                id:
+                  typeof windowSource.id === "string" && windowSource.id
+                    ? windowSource.id
+                    : uid("window"),
+                runtimeLabel:
+                  typeof windowSource.runtimeLabel === "string" &&
+                  windowSource.runtimeLabel
+                    ? windowSource.runtimeLabel
+                    : uid("window"),
+                title:
+                  typeof windowSource.title === "string" && windowSource.title
+                    ? windowSource.title
+                    : "FORGE Window",
+                role:
+                  windowSource.role === "chat" ||
+                  windowSource.role === "workbench" ||
+                  windowSource.role === "canvas" ||
+                  windowSource.role === "dossier" ||
+                  windowSource.role === "ops" ||
+                  windowSource.role === "review" ||
+                  windowSource.role === "settings" ||
+                  windowSource.role === "mixed"
+                    ? windowSource.role
+                    : "mixed",
+                assignedRoutes: sanitizeRoutes(
+                  Array.isArray(windowSource.assignedRoutes)
+                    ? (windowSource.assignedRoutes.filter(
+                        (route) => typeof route === "string",
+                      ) as string[])
+                    : defaultRoutesForRole(
+                        windowSource.role === "chat" ||
+                          windowSource.role === "workbench" ||
+                          windowSource.role === "canvas" ||
+                          windowSource.role === "dossier" ||
+                          windowSource.role === "ops" ||
+                          windowSource.role === "review" ||
+                          windowSource.role === "settings" ||
+                          windowSource.role === "mixed"
+                          ? windowSource.role
+                          : "mixed",
+                      ),
+                ),
+                activeRoute:
+                  typeof windowSource.activeRoute === "string" &&
+                  windowSource.activeRoute
+                    ? windowSource.activeRoute
+                    : "/chat",
+                targetMonitorId:
+                  typeof windowSource.targetMonitorId === "string" &&
+                  windowSource.targetMonitorId.length > 0
+                    ? windowSource.targetMonitorId
+                    : null,
+                targetMonitorOrdinal:
+                  typeof windowSource.targetMonitorOrdinal === "number" &&
+                  Number.isFinite(windowSource.targetMonitorOrdinal)
+                    ? windowSource.targetMonitorOrdinal
+                    : 0,
+                targetMonitorRole: parseMonitorRole(
+                  windowSource.targetMonitorRole,
+                ),
+                bounds:
+                  windowSource.bounds &&
+                  typeof windowSource.bounds === "object" &&
+                  Number.isFinite(windowSource.bounds.x) &&
+                  Number.isFinite(windowSource.bounds.y) &&
+                  Number.isFinite(windowSource.bounds.width) &&
+                  Number.isFinite(windowSource.bounds.height)
+                    ? windowSource.bounds
+                    : null,
+                fallbackReason:
+                  typeof windowSource.fallbackReason === "string" &&
+                  windowSource.fallbackReason.length > 0
+                    ? windowSource.fallbackReason
+                    : null,
+              };
+            })
+          : [
+              defaultWindowForLayout({
+                runtimeLabel: "main",
+                title: "FORGE Window",
+                role: "mixed",
+                targetMonitorOrdinal: 0,
+                activeRoute: "/chat",
+              }),
+            ],
     };
   });
 
-  doc.monitorDesignations = normalizeMonitorDesignations(doc.monitorDesignations);
+  doc.monitorDesignations = normalizeMonitorDesignations(
+    doc.monitorDesignations,
+  );
   ensureDocMonitors(doc, monitors);
-  doc.runtimeWindows = Array.isArray(doc.runtimeWindows) ? doc.runtimeWindows : [];
-  doc.lastKnownMonitors = Array.isArray(doc.lastKnownMonitors) ? doc.lastKnownMonitors : [];
-  doc.lastMonitorSignature = typeof doc.lastMonitorSignature === "string" ? doc.lastMonitorSignature : "";
-  doc.fallbackNotice = typeof doc.fallbackNotice === "string" ? doc.fallbackNotice : null;
+  doc.runtimeWindows = Array.isArray(doc.runtimeWindows)
+    ? doc.runtimeWindows
+    : [];
+  doc.lastKnownMonitors = Array.isArray(doc.lastKnownMonitors)
+    ? doc.lastKnownMonitors
+    : [];
+  doc.lastMonitorSignature =
+    typeof doc.lastMonitorSignature === "string"
+      ? doc.lastMonitorSignature
+      : "";
+  doc.fallbackNotice =
+    typeof doc.fallbackNotice === "string" ? doc.fallbackNotice : null;
   doc.lastRestoreAtMs =
-    typeof doc.lastRestoreAtMs === "number" && Number.isFinite(doc.lastRestoreAtMs) ? doc.lastRestoreAtMs : null;
+    typeof doc.lastRestoreAtMs === "number" &&
+    Number.isFinite(doc.lastRestoreAtMs)
+      ? doc.lastRestoreAtMs
+      : null;
   return ensureActiveLayout(doc);
 }
 
@@ -408,7 +624,9 @@ function loadDoc(monitors: MonitorSnapshot[] = []): LayoutDoc {
   if (typeof window === "undefined") return emptyDoc();
   try {
     const latest = parseStoredDoc(window.localStorage.getItem(STORAGE_KEY));
-    const legacy = latest ? null : parseStoredDoc(window.localStorage.getItem(STORAGE_KEY_LEGACY));
+    const legacy = latest
+      ? null
+      : parseStoredDoc(window.localStorage.getItem(STORAGE_KEY_LEGACY));
     return normalizeLayoutDoc(latest ?? legacy, monitors);
   } catch {
     return emptyDoc();
@@ -439,7 +657,11 @@ function ensureActiveLayout(doc: LayoutDoc): LayoutDoc {
 
 function isInvalidWindowHandleError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error ?? "");
-  return message.includes("Invalid window handle") || message.includes("is not found") || message.includes("not found");
+  return (
+    message.includes("Invalid window handle") ||
+    message.includes("is not found") ||
+    message.includes("not found")
+  );
 }
 
 async function reclaimWindowLabel(runtimeWindow: Window) {
@@ -454,7 +676,10 @@ async function restoreWindow(runtimeWindow: Window) {
     setFocus?: () => Promise<void>;
     restore?: () => Promise<void>;
   };
-  const isMinimized = typeof maybeWindow.isMinimized === "function" ? await maybeWindow.isMinimized().catch(() => false) : false;
+  const isMinimized =
+    typeof maybeWindow.isMinimized === "function"
+      ? await maybeWindow.isMinimized().catch(() => false)
+      : false;
   if (isMinimized && typeof maybeWindow.unminimize === "function") {
     await maybeWindow.unminimize().catch(() => undefined);
   } else if (isMinimized && typeof maybeWindow.restore === "function") {
@@ -471,7 +696,11 @@ async function bringWindowFront(runtimeWindow: Window, setFocus = false) {
   }
 }
 
-async function syncOrRecreateWindow(layoutWindow: LayoutWindowRecord, bounds: { x: number; y: number; width: number; height: number }, options: { route: string; setFocus?: boolean }) {
+async function syncOrRecreateWindow(
+  layoutWindow: LayoutWindowRecord,
+  bounds: { x: number; y: number; width: number; height: number },
+  options: { route: string; setFocus?: boolean },
+) {
   const targetWindow = await getWindowByLabel(layoutWindow.runtimeLabel);
   if (!targetWindow) {
     return createShellWindow({
@@ -483,8 +712,12 @@ async function syncOrRecreateWindow(layoutWindow: LayoutWindowRecord, bounds: { 
   }
   try {
     await targetWindow.setTitle(layoutWindow.title).catch(() => undefined);
-    await targetWindow.setPosition(new LogicalPosition(bounds.x, bounds.y)).catch(() => undefined);
-    await targetWindow.setSize(new LogicalSize(bounds.width, bounds.height)).catch(() => undefined);
+    await targetWindow
+      .setPosition(new LogicalPosition(bounds.x, bounds.y))
+      .catch(() => undefined);
+    await targetWindow
+      .setSize(new LogicalSize(bounds.width, bounds.height))
+      .catch(() => undefined);
     await navigateWindow(layoutWindow.runtimeLabel, options.route);
     await bringWindowFront(targetWindow, options.setFocus === true);
     return targetWindow;
@@ -494,7 +727,10 @@ async function syncOrRecreateWindow(layoutWindow: LayoutWindowRecord, bounds: { 
     }
     await reclaimWindowLabel(targetWindow).catch(() => undefined);
     if (typeof console !== "undefined") {
-      console.warn(`[FORGE] window ${layoutWindow.runtimeLabel} has invalid handle, recreating`, error);
+      console.warn(
+        `[FORGE] window ${layoutWindow.runtimeLabel} has invalid handle, recreating`,
+        error,
+      );
     }
     return createShellWindow({
       label: layoutWindow.runtimeLabel,
@@ -518,21 +754,34 @@ function logicalBoundsForMonitor(monitor: MonitorSnapshot, index: number) {
   const workHeight = Math.round(monitor.workArea.height / monitor.scaleFactor);
   const width = Math.max(920, Math.round(workWidth * 0.78));
   const height = Math.max(640, Math.round(workHeight * 0.84));
-  const x = workX + Math.max(20, Math.round((workWidth - width) * 0.5)) + index * 18;
-  const y = workY + Math.max(20, Math.round((workHeight - height) * 0.08)) + index * 18;
-  return { x, y, width: Math.min(width, workWidth), height: Math.min(height, workHeight) };
+  const x =
+    workX + Math.max(20, Math.round((workWidth - width) * 0.5)) + index * 18;
+  const y =
+    workY + Math.max(20, Math.round((workHeight - height) * 0.08)) + index * 18;
+  return {
+    x,
+    y,
+    width: Math.min(width, workWidth),
+    height: Math.min(height, workHeight),
+  };
 }
 
 function mergeRuntimeWindow(doc: LayoutDoc, next: RuntimeWindowRecord) {
-  const runtimeWindows = doc.runtimeWindows.filter((item) => item.runtimeLabel !== next.runtimeLabel);
+  const runtimeWindows = doc.runtimeWindows.filter(
+    (item) => item.runtimeLabel !== next.runtimeLabel,
+  );
   runtimeWindows.push(next);
-  doc.runtimeWindows = runtimeWindows.sort((a, b) => a.runtimeLabel.localeCompare(b.runtimeLabel));
+  doc.runtimeWindows = runtimeWindows.sort((a, b) =>
+    a.runtimeLabel.localeCompare(b.runtimeLabel),
+  );
 }
 
 async function syncRuntimeWindowRegistry(doc: LayoutDoc) {
   const runtimeWindows = await listRuntimeWindows();
   const liveLabels = new Set(runtimeWindows.map((item) => item.label));
-  doc.runtimeWindows = doc.runtimeWindows.filter((item) => liveLabels.has(item.runtimeLabel) || item.runtimeLabel === "main");
+  doc.runtimeWindows = doc.runtimeWindows.filter(
+    (item) => liveLabels.has(item.runtimeLabel) || item.runtimeLabel === "main",
+  );
 }
 
 async function navigateWindow(runtimeLabel: string, route: string) {
@@ -541,12 +790,17 @@ async function navigateWindow(runtimeLabel: string, route: string) {
   await target.emit(WORKSPACE_NAVIGATE_EVENT, { route });
 }
 
-async function syncCurrentRuntimeWindow(pathname: string, monitors: MonitorSnapshot[] = []) {
+async function syncCurrentRuntimeWindow(
+  pathname: string,
+  monitors: MonitorSnapshot[] = [],
+) {
   const currentLabel = await getCurrentWindowLabel();
   const snapshot = await getCurrentWindowSnapshot();
   const doc = loadDoc(monitors);
   const activeLayout = findLayout(doc, doc.activeLayoutId);
-  const layoutWindow = activeLayout?.windows.find((item) => item.runtimeLabel === currentLabel) ?? null;
+  const layoutWindow =
+    activeLayout?.windows.find((item) => item.runtimeLabel === currentLabel) ??
+    null;
   const next: RuntimeWindowRecord = {
     runtimeLabel: currentLabel,
     layoutId: activeLayout?.id ?? null,
@@ -572,9 +826,14 @@ async function syncCurrentRuntimeWindow(pathname: string, monitors: MonitorSnaps
   return doc;
 }
 
-async function applyLayout(layoutId: string, markRestore = false, monitors: MonitorSnapshot[] = []) {
+async function applyLayout(
+  layoutId: string,
+  markRestore = false,
+  monitors: MonitorSnapshot[] = [],
+) {
   if (!isTauriDesktop()) return loadDoc(monitors);
-  const resolvedMonitors = monitors.length > 0 ? monitors : await listAvailableMonitors();
+  const resolvedMonitors =
+    monitors.length > 0 ? monitors : await listAvailableMonitors();
   const doc = loadDoc(resolvedMonitors);
   const layout = findLayout(doc, layoutId);
   if (!layout) return doc;
@@ -590,16 +849,27 @@ async function applyLayout(layoutId: string, markRestore = false, monitors: Moni
 
   for (const windowRecord of layout.windows) {
     if (!windowRecord.runtimeLabel) continue;
-    const resolved = resolveWindowPlacement(windowRecord, resolvedMonitors, doc.monitorDesignations);
+    const resolved = resolveWindowPlacement(
+      windowRecord,
+      resolvedMonitors,
+      doc.monitorDesignations,
+    );
     windowRecord.fallbackReason = resolved.fallbackReason;
     if (resolved.fallbackReason) fallbacks.push(resolved.fallbackReason);
 
-    const targetWindow = windowRecord.runtimeLabel === currentLabel ? null : await getWindowByLabel(windowRecord.runtimeLabel);
+    const targetWindow =
+      windowRecord.runtimeLabel === currentLabel
+        ? null
+        : await getWindowByLabel(windowRecord.runtimeLabel);
     if (windowRecord.runtimeLabel === currentLabel) {
       const appWindow = getCurrentWindow();
       await appWindow.setTitle(windowRecord.title);
-      await appWindow.setPosition(new LogicalPosition(resolved.bounds.x, resolved.bounds.y)).catch(() => undefined);
-      await appWindow.setSize(new LogicalSize(resolved.bounds.width, resolved.bounds.height)).catch(() => undefined);
+      await appWindow
+        .setPosition(new LogicalPosition(resolved.bounds.x, resolved.bounds.y))
+        .catch(() => undefined);
+      await appWindow
+        .setSize(new LogicalSize(resolved.bounds.width, resolved.bounds.height))
+        .catch(() => undefined);
       await navigateWindow(currentLabel, windowRecord.activeRoute);
       await bringWindowFront(appWindow, true).catch(() => undefined);
     } else if (targetWindow) {
@@ -612,7 +882,10 @@ async function applyLayout(layoutId: string, markRestore = false, monitors: Moni
         if (isInvalidWindowHandleError(error)) {
           await reclaimWindowLabel(targetWindow).catch(() => undefined);
           if (typeof console !== "undefined") {
-            console.warn(`[FORGE] window ${windowRecord.runtimeLabel} could not be restored`, error);
+            console.warn(
+              `[FORGE] window ${windowRecord.runtimeLabel} could not be restored`,
+              error,
+            );
           }
           await createShellWindow({
             label: windowRecord.runtimeLabel,
@@ -650,283 +923,348 @@ async function applyLayout(layoutId: string, markRestore = false, monitors: Moni
   return doc;
 }
 
-export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>((set, get) => ({
-  ready: false,
-  supported: false,
-  currentWindowLabel: "main",
-  monitorDesignations: { mainMonitorId: null, customLabels: {} },
-  monitorRoleMap: {},
-  activeLayoutId: null,
-  selectedLayoutId: null,
-  layouts: [],
-  monitors: [],
-  runtimeWindows: [],
-  fallbackNotice: null,
-  hydrate: async (pathname) => {
-    const supported = isTauriDesktop();
-    const currentWindowLabel = await getCurrentWindowLabel();
-    const monitors = supported ? await listAvailableMonitors() : [];
-    let doc = loadDoc(monitors);
-    doc = ensureActiveLayout(doc);
-    if (supported) {
-      doc = await syncCurrentRuntimeWindow(pathname, monitors);
-      if (currentWindowLabel === "main" && doc.activeLayoutId) {
-        doc = await applyLayout(doc.activeLayoutId, true, monitors);
+export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>(
+  (set, get) => ({
+    ready: false,
+    supported: false,
+    currentWindowLabel: "main",
+    monitorDesignations: { mainMonitorId: null, customLabels: {} },
+    monitorRoleMap: {},
+    activeLayoutId: null,
+    selectedLayoutId: null,
+    layouts: [],
+    monitors: [],
+    runtimeWindows: [],
+    fallbackNotice: null,
+    hydrate: async (pathname) => {
+      const supported = isTauriDesktop();
+      const currentWindowLabel = await getCurrentWindowLabel();
+      const monitors = supported ? await listAvailableMonitors() : [];
+      let doc = loadDoc(monitors);
+      doc = ensureActiveLayout(doc);
+      if (supported) {
+        doc = await syncCurrentRuntimeWindow(pathname, monitors);
+        if (currentWindowLabel === "main" && doc.activeLayoutId) {
+          doc = await applyLayout(doc.activeLayoutId, true, monitors);
+        }
       }
-    }
-    const monitorState = deriveMonitorState(monitors, doc);
-    set({
-      ready: true,
-      supported,
-      currentWindowLabel,
-      activeLayoutId: doc.activeLayoutId,
-      selectedLayoutId: doc.selectedLayoutId,
-      layouts: clone(doc.layouts),
-      runtimeWindows: clone(doc.runtimeWindows),
-      monitors: clone(monitors),
-      monitorDesignations: clone(monitorState.monitorDesignations),
-      monitorRoleMap: monitorState.monitorRoleMap,
-      fallbackNotice: doc.fallbackNotice,
-    });
-  },
-  refreshEnvironment: async () => {
-    const supported = get().supported;
-    if (!supported) return;
-  const currentWindowLabel = get().currentWindowLabel;
-    const monitors = await listAvailableMonitors();
-    const signature = monitorSignature(monitors);
-    const doc = loadDoc(monitors);
-    const changed = doc.lastMonitorSignature !== signature;
-    doc.lastKnownMonitors = monitors;
-    doc.lastMonitorSignature = signature;
-    persistDoc(doc);
-    if (changed && currentWindowLabel === "main" && doc.activeLayoutId) {
-      const refreshed = await applyLayout(doc.activeLayoutId, false, monitors);
-      doc.layouts = refreshed.layouts;
-      doc.runtimeWindows = refreshed.runtimeWindows;
-      doc.fallbackNotice = refreshed.fallbackNotice;
-      doc.lastRestoreAtMs = refreshed.lastRestoreAtMs;
-      doc.monitorDesignations = refreshed.monitorDesignations;
-    } else {
-      const route = doc.runtimeWindows.find((item) => item.runtimeLabel === currentWindowLabel)?.currentRoute ?? "/chat";
-      const refreshed = await syncCurrentRuntimeWindow(route, monitors);
-      doc.layouts = refreshed.layouts;
-      doc.runtimeWindows = refreshed.runtimeWindows;
-      doc.fallbackNotice = refreshed.fallbackNotice;
-      doc.lastRestoreAtMs = refreshed.lastRestoreAtMs;
-    }
-    const monitorState = deriveMonitorState(monitors, doc);
-    set({
-      layouts: clone(doc.layouts),
-      monitorDesignations: monitorState.monitorDesignations,
-      monitorRoleMap: monitorState.monitorRoleMap,
-      monitors: clone(doc.lastKnownMonitors),
-      runtimeWindows: clone(doc.runtimeWindows),
-      fallbackNotice: doc.fallbackNotice,
-      activeLayoutId: doc.activeLayoutId,
-      selectedLayoutId: doc.selectedLayoutId,
-    });
-  },
-  syncCurrentRoute: async (pathname) => {
-    const doc = await syncCurrentRuntimeWindow(pathname, get().monitors);
-    const monitorState = deriveMonitorState(get().monitors, doc);
-    set({
-      activeLayoutId: doc.activeLayoutId,
-      selectedLayoutId: doc.selectedLayoutId,
-      layouts: clone(doc.layouts),
-      monitorDesignations: monitorState.monitorDesignations,
-      monitorRoleMap: monitorState.monitorRoleMap,
-      runtimeWindows: clone(doc.runtimeWindows),
-      fallbackNotice: doc.fallbackNotice,
-    });
-  },
-  createLayout: (name) => {
-    const doc = loadDoc(get().monitors);
-    const label = name.trim() || "New Layout";
-    const layoutId = uid("layout");
-    const createdAtMs = nowMs();
-    doc.layouts.push({
-      id: layoutId,
-      name: label,
-      createdAtMs,
-      updatedAtMs: createdAtMs,
-      lastActivatedAtMs: null,
-      windows: [defaultWindowForLayout({ runtimeLabel: "main", title: `FORGE ${label}`, role: "mixed", targetMonitorOrdinal: 0, activeRoute: "/chat" })],
-    });
-    doc.selectedLayoutId = layoutId;
-    persistDoc(doc);
-    set({ layouts: clone(doc.layouts), selectedLayoutId: layoutId });
-  },
-  selectLayout: (layoutId) => {
-    const doc = loadDoc(get().monitors);
-    doc.selectedLayoutId = layoutId;
-    persistDoc(doc);
-    set({ selectedLayoutId: layoutId });
-  },
-  renameLayout: (layoutId, name) => {
-    const doc = loadDoc(get().monitors);
-    const layout = findLayout(doc, layoutId);
-    if (!layout) return;
-    layout.name = name.trim() || layout.name;
-    layout.updatedAtMs = nowMs();
-    persistDoc(doc);
-    set({ layouts: clone(doc.layouts) });
-  },
-  duplicateLayout: (layoutId) => {
-    const doc = loadDoc(get().monitors);
-    const layout = findLayout(doc, layoutId);
-    if (!layout) return;
-    const createdAtMs = nowMs();
-    const cloneLayout: LayoutPreset = clone(layout);
-    cloneLayout.id = uid("layout");
-    cloneLayout.name = `${layout.name} Copy`;
-    cloneLayout.createdAtMs = createdAtMs;
-    cloneLayout.updatedAtMs = createdAtMs;
-    cloneLayout.lastActivatedAtMs = null;
-    cloneLayout.windows = cloneLayout.windows.map((windowRecord, index) => ({
-      ...windowRecord,
-      id: uid("window"),
-      runtimeLabel: index === 0 ? "main" : uid(`forge-${cloneLayout.id}`),
-    }));
-    doc.layouts.push(cloneLayout);
-    doc.selectedLayoutId = cloneLayout.id;
-    persistDoc(doc);
-    set({ layouts: clone(doc.layouts), selectedLayoutId: cloneLayout.id });
-  },
-  deleteLayout: async (layoutId) => {
-    const doc = loadDoc(get().monitors);
-    if (doc.layouts.length <= 1) return;
-    doc.layouts = doc.layouts.filter((layout) => layout.id !== layoutId);
-    if (doc.activeLayoutId === layoutId) {
-      doc.activeLayoutId = doc.layouts[0]?.id ?? null;
-    }
-    if (doc.selectedLayoutId === layoutId) {
-      doc.selectedLayoutId = doc.layouts[0]?.id ?? null;
-    }
-    persistDoc(doc);
-    if (doc.activeLayoutId) {
-      await applyLayout(doc.activeLayoutId, false, get().monitors);
-    }
-    set({
-      layouts: clone(doc.layouts),
-      activeLayoutId: doc.activeLayoutId,
-      selectedLayoutId: doc.selectedLayoutId,
-    });
-  },
-  addLayoutWindow: (layoutId) => {
-    const doc = loadDoc(get().monitors);
-    const layout = findLayout(doc, layoutId);
-    if (!layout) return;
-    const nextIndex = layout.windows.length;
-    layout.windows.push(defaultWindowForLayout({ runtimeLabel: uid(`forge-${layout.id}`), title: `FORGE Window ${nextIndex + 1}`, role: "mixed", targetMonitorOrdinal: nextIndex, activeRoute: "/chat" }));
-    layout.updatedAtMs = nowMs();
-    persistDoc(doc);
-    set({ layouts: clone(doc.layouts) });
-  },
-  removeLayoutWindow: (layoutId, windowId) => {
-    const doc = loadDoc(get().monitors);
-    const layout = findLayout(doc, layoutId);
-    if (!layout) return;
-    if (layout.windows.length <= 1) return;
-    const target = layout.windows.find((item) => item.id === windowId);
-    if (!target || target.runtimeLabel === "main") return;
-    layout.windows = layout.windows.filter((item) => item.id !== windowId);
-    layout.updatedAtMs = nowMs();
-    persistDoc(doc);
-    set({ layouts: clone(doc.layouts) });
-  },
-  updateLayoutWindow: (layoutId, windowId, patch) => {
-    const doc = loadDoc(get().monitors);
-    const layout = findLayout(doc, layoutId);
-    if (!layout) return;
-    const target = layout.windows.find((item) => item.id === windowId);
-    if (!target) return;
-    if (patch.assignedRoutes) {
-      patch.assignedRoutes = sanitizeRoutes(patch.assignedRoutes);
-    }
-    Object.assign(target, patch);
-    target.assignedRoutes = sanitizeRoutes(target.assignedRoutes);
-    if (!target.assignedRoutes.includes(target.activeRoute)) {
-      target.activeRoute = target.assignedRoutes[0] ?? "/chat";
-    }
-    if (target.runtimeLabel === "main") {
-      target.runtimeLabel = "main";
-    }
-    layout.updatedAtMs = nowMs();
-    const monitorState = deriveMonitorState(get().monitors, doc);
-    persistDoc(doc);
-    set({ layouts: clone(doc.layouts), monitorDesignations: monitorState.monitorDesignations, monitorRoleMap: monitorState.monitorRoleMap });
-  },
-  setMainMonitor: (monitorId) => {
-    const currentMonitors = get().monitors;
-    const doc = loadDoc(currentMonitors);
-    const hasMonitor = currentMonitors.some((monitor) => monitor.id === monitorId);
-    if (!hasMonitor) return;
-    doc.monitorDesignations.mainMonitorId = monitorId;
-    doc.monitorDesignations.customLabels = normalizeMonitorDesignations(doc.monitorDesignations).customLabels;
-    const next = monitorStateFromDesignations(currentMonitors, doc.monitorDesignations);
-    doc.monitorDesignations = next.monitorDesignations;
-    persistDoc(doc);
-    set({ monitorDesignations: next.monitorDesignations, monitorRoleMap: next.monitorRoleMap });
-    const activeLayoutId = doc.activeLayoutId;
-    if (activeLayoutId) {
-      void applyLayout(activeLayoutId, false, currentMonitors).catch(() => undefined);
-    }
-  },
-  setMonitorRoleLabel: (monitorId, label) => {
-    const currentMonitors = get().monitors;
-    const doc = loadDoc(currentMonitors);
-    const cleanLabel = label.trim();
-    if (!currentMonitors.some((monitor) => monitor.id === monitorId)) return;
-    if (cleanLabel.length === 0) {
-      delete doc.monitorDesignations.customLabels[monitorId];
-    } else {
-      doc.monitorDesignations.customLabels[monitorId] = cleanLabel;
-    }
-    const next = monitorStateFromDesignations(currentMonitors, doc.monitorDesignations);
-    doc.monitorDesignations = next.monitorDesignations;
-    persistDoc(doc);
-    set({ monitorDesignations: next.monitorDesignations, monitorRoleMap: next.monitorRoleMap });
-  },
-  activateLayout: async (layoutId) => {
-    const doc = await applyLayout(layoutId, false, get().monitors);
-    const monitorState = deriveMonitorState(get().monitors, doc);
-    set({
-      activeLayoutId: doc.activeLayoutId,
-      selectedLayoutId: doc.selectedLayoutId,
-      layouts: clone(doc.layouts),
-      monitorDesignations: monitorState.monitorDesignations,
-      monitorRoleMap: monitorState.monitorRoleMap,
-      runtimeWindows: clone(doc.runtimeWindows),
-      monitors: clone(doc.lastKnownMonitors),
-      fallbackNotice: doc.fallbackNotice,
-    });
-  },
-  captureRuntimeIntoLayout: async (layoutId) => {
-    const doc = loadDoc(get().monitors);
-    const layout = findLayout(doc, layoutId);
-    if (!layout) return;
-    for (const runtimeWindow of doc.runtimeWindows) {
-      const layoutWindow = layout.windows.find((item) => item.runtimeLabel === runtimeWindow.runtimeLabel);
-      if (!layoutWindow) continue;
-      layoutWindow.bounds = runtimeWindow.bounds;
-      layoutWindow.activeRoute = runtimeWindow.currentRoute;
-      layoutWindow.targetMonitorId = runtimeWindow.monitorId;
-      const matchedMonitor = doc.lastKnownMonitors.find((monitor) => monitor.id === runtimeWindow.monitorId);
-      layoutWindow.targetMonitorOrdinal = matchedMonitor?.ordinal ?? layoutWindow.targetMonitorOrdinal;
-      layoutWindow.targetMonitorRole = matchedMonitor ? (monitorStateFromDesignations(doc.lastKnownMonitors, doc.monitorDesignations).monitorRoleMap[matchedMonitor.id] ?? null) : layoutWindow.targetMonitorRole;
-      layoutWindow.title = runtimeWindow.title;
-    }
-    layout.updatedAtMs = nowMs();
-    const monitorState = deriveMonitorState(get().monitors, doc);
-    persistDoc(doc);
-    set({ layouts: clone(doc.layouts), monitorDesignations: monitorState.monitorDesignations, monitorRoleMap: monitorState.monitorRoleMap });
-  },
-  clearFallbackNotice: () => {
-    const doc = loadDoc(get().monitors);
-    doc.fallbackNotice = null;
-    const monitorState = deriveMonitorState(get().monitors, doc);
-    persistDoc(doc);
-    set({ fallbackNotice: null, monitorDesignations: monitorState.monitorDesignations, monitorRoleMap: monitorState.monitorRoleMap });
-  },
-}));
+      const monitorState = deriveMonitorState(monitors, doc);
+      set({
+        ready: true,
+        supported,
+        currentWindowLabel,
+        activeLayoutId: doc.activeLayoutId,
+        selectedLayoutId: doc.selectedLayoutId,
+        layouts: clone(doc.layouts),
+        runtimeWindows: clone(doc.runtimeWindows),
+        monitors: clone(monitors),
+        monitorDesignations: clone(monitorState.monitorDesignations),
+        monitorRoleMap: monitorState.monitorRoleMap,
+        fallbackNotice: doc.fallbackNotice,
+      });
+    },
+    refreshEnvironment: async () => {
+      const supported = get().supported;
+      if (!supported) return;
+      const currentWindowLabel = get().currentWindowLabel;
+      const monitors = await listAvailableMonitors();
+      const signature = monitorSignature(monitors);
+      const doc = loadDoc(monitors);
+      const changed = doc.lastMonitorSignature !== signature;
+      doc.lastKnownMonitors = monitors;
+      doc.lastMonitorSignature = signature;
+      persistDoc(doc);
+      if (changed && currentWindowLabel === "main" && doc.activeLayoutId) {
+        const refreshed = await applyLayout(
+          doc.activeLayoutId,
+          false,
+          monitors,
+        );
+        doc.layouts = refreshed.layouts;
+        doc.runtimeWindows = refreshed.runtimeWindows;
+        doc.fallbackNotice = refreshed.fallbackNotice;
+        doc.lastRestoreAtMs = refreshed.lastRestoreAtMs;
+        doc.monitorDesignations = refreshed.monitorDesignations;
+      } else {
+        const route =
+          doc.runtimeWindows.find(
+            (item) => item.runtimeLabel === currentWindowLabel,
+          )?.currentRoute ?? "/chat";
+        const refreshed = await syncCurrentRuntimeWindow(route, monitors);
+        doc.layouts = refreshed.layouts;
+        doc.runtimeWindows = refreshed.runtimeWindows;
+        doc.fallbackNotice = refreshed.fallbackNotice;
+        doc.lastRestoreAtMs = refreshed.lastRestoreAtMs;
+      }
+      const monitorState = deriveMonitorState(monitors, doc);
+      set({
+        layouts: clone(doc.layouts),
+        monitorDesignations: monitorState.monitorDesignations,
+        monitorRoleMap: monitorState.monitorRoleMap,
+        monitors: clone(doc.lastKnownMonitors),
+        runtimeWindows: clone(doc.runtimeWindows),
+        fallbackNotice: doc.fallbackNotice,
+        activeLayoutId: doc.activeLayoutId,
+        selectedLayoutId: doc.selectedLayoutId,
+      });
+    },
+    syncCurrentRoute: async (pathname) => {
+      const doc = await syncCurrentRuntimeWindow(pathname, get().monitors);
+      const monitorState = deriveMonitorState(get().monitors, doc);
+      set({
+        activeLayoutId: doc.activeLayoutId,
+        selectedLayoutId: doc.selectedLayoutId,
+        layouts: clone(doc.layouts),
+        monitorDesignations: monitorState.monitorDesignations,
+        monitorRoleMap: monitorState.monitorRoleMap,
+        runtimeWindows: clone(doc.runtimeWindows),
+        fallbackNotice: doc.fallbackNotice,
+      });
+    },
+    createLayout: (name) => {
+      const doc = loadDoc(get().monitors);
+      const label = name.trim() || "New Layout";
+      const layoutId = uid("layout");
+      const createdAtMs = nowMs();
+      doc.layouts.push({
+        id: layoutId,
+        name: label,
+        createdAtMs,
+        updatedAtMs: createdAtMs,
+        lastActivatedAtMs: null,
+        windows: [
+          defaultWindowForLayout({
+            runtimeLabel: "main",
+            title: `FORGE ${label}`,
+            role: "mixed",
+            targetMonitorOrdinal: 0,
+            activeRoute: "/chat",
+          }),
+        ],
+      });
+      doc.selectedLayoutId = layoutId;
+      persistDoc(doc);
+      set({ layouts: clone(doc.layouts), selectedLayoutId: layoutId });
+    },
+    selectLayout: (layoutId) => {
+      const doc = loadDoc(get().monitors);
+      doc.selectedLayoutId = layoutId;
+      persistDoc(doc);
+      set({ selectedLayoutId: layoutId });
+    },
+    renameLayout: (layoutId, name) => {
+      const doc = loadDoc(get().monitors);
+      const layout = findLayout(doc, layoutId);
+      if (!layout) return;
+      layout.name = name.trim() || layout.name;
+      layout.updatedAtMs = nowMs();
+      persistDoc(doc);
+      set({ layouts: clone(doc.layouts) });
+    },
+    duplicateLayout: (layoutId) => {
+      const doc = loadDoc(get().monitors);
+      const layout = findLayout(doc, layoutId);
+      if (!layout) return;
+      const createdAtMs = nowMs();
+      const cloneLayout: LayoutPreset = clone(layout);
+      cloneLayout.id = uid("layout");
+      cloneLayout.name = `${layout.name} Copy`;
+      cloneLayout.createdAtMs = createdAtMs;
+      cloneLayout.updatedAtMs = createdAtMs;
+      cloneLayout.lastActivatedAtMs = null;
+      cloneLayout.windows = cloneLayout.windows.map((windowRecord, index) => ({
+        ...windowRecord,
+        id: uid("window"),
+        runtimeLabel: index === 0 ? "main" : uid(`forge-${cloneLayout.id}`),
+      }));
+      doc.layouts.push(cloneLayout);
+      doc.selectedLayoutId = cloneLayout.id;
+      persistDoc(doc);
+      set({ layouts: clone(doc.layouts), selectedLayoutId: cloneLayout.id });
+    },
+    deleteLayout: async (layoutId) => {
+      const doc = loadDoc(get().monitors);
+      if (doc.layouts.length <= 1) return;
+      doc.layouts = doc.layouts.filter((layout) => layout.id !== layoutId);
+      if (doc.activeLayoutId === layoutId) {
+        doc.activeLayoutId = doc.layouts[0]?.id ?? null;
+      }
+      if (doc.selectedLayoutId === layoutId) {
+        doc.selectedLayoutId = doc.layouts[0]?.id ?? null;
+      }
+      persistDoc(doc);
+      if (doc.activeLayoutId) {
+        await applyLayout(doc.activeLayoutId, false, get().monitors);
+      }
+      set({
+        layouts: clone(doc.layouts),
+        activeLayoutId: doc.activeLayoutId,
+        selectedLayoutId: doc.selectedLayoutId,
+      });
+    },
+    addLayoutWindow: (layoutId) => {
+      const doc = loadDoc(get().monitors);
+      const layout = findLayout(doc, layoutId);
+      if (!layout) return;
+      const nextIndex = layout.windows.length;
+      layout.windows.push(
+        defaultWindowForLayout({
+          runtimeLabel: uid(`forge-${layout.id}`),
+          title: `FORGE Window ${nextIndex + 1}`,
+          role: "mixed",
+          targetMonitorOrdinal: nextIndex,
+          activeRoute: "/chat",
+        }),
+      );
+      layout.updatedAtMs = nowMs();
+      persistDoc(doc);
+      set({ layouts: clone(doc.layouts) });
+    },
+    removeLayoutWindow: (layoutId, windowId) => {
+      const doc = loadDoc(get().monitors);
+      const layout = findLayout(doc, layoutId);
+      if (!layout) return;
+      if (layout.windows.length <= 1) return;
+      const target = layout.windows.find((item) => item.id === windowId);
+      if (!target || target.runtimeLabel === "main") return;
+      layout.windows = layout.windows.filter((item) => item.id !== windowId);
+      layout.updatedAtMs = nowMs();
+      persistDoc(doc);
+      set({ layouts: clone(doc.layouts) });
+    },
+    updateLayoutWindow: (layoutId, windowId, patch) => {
+      const doc = loadDoc(get().monitors);
+      const layout = findLayout(doc, layoutId);
+      if (!layout) return;
+      const target = layout.windows.find((item) => item.id === windowId);
+      if (!target) return;
+      if (patch.assignedRoutes) {
+        patch.assignedRoutes = sanitizeRoutes(patch.assignedRoutes);
+      }
+      Object.assign(target, patch);
+      target.assignedRoutes = sanitizeRoutes(target.assignedRoutes);
+      if (!target.assignedRoutes.includes(target.activeRoute)) {
+        target.activeRoute = target.assignedRoutes[0] ?? "/chat";
+      }
+      if (target.runtimeLabel === "main") {
+        target.runtimeLabel = "main";
+      }
+      layout.updatedAtMs = nowMs();
+      const monitorState = deriveMonitorState(get().monitors, doc);
+      persistDoc(doc);
+      set({
+        layouts: clone(doc.layouts),
+        monitorDesignations: monitorState.monitorDesignations,
+        monitorRoleMap: monitorState.monitorRoleMap,
+      });
+    },
+    setMainMonitor: (monitorId) => {
+      const currentMonitors = get().monitors;
+      const doc = loadDoc(currentMonitors);
+      const hasMonitor = currentMonitors.some(
+        (monitor) => monitor.id === monitorId,
+      );
+      if (!hasMonitor) return;
+      doc.monitorDesignations.mainMonitorId = monitorId;
+      doc.monitorDesignations.customLabels = normalizeMonitorDesignations(
+        doc.monitorDesignations,
+      ).customLabels;
+      const next = monitorStateFromDesignations(
+        currentMonitors,
+        doc.monitorDesignations,
+      );
+      doc.monitorDesignations = next.monitorDesignations;
+      persistDoc(doc);
+      set({
+        monitorDesignations: next.monitorDesignations,
+        monitorRoleMap: next.monitorRoleMap,
+      });
+      const activeLayoutId = doc.activeLayoutId;
+      if (activeLayoutId) {
+        void applyLayout(activeLayoutId, false, currentMonitors).catch(
+          () => undefined,
+        );
+      }
+    },
+    setMonitorRoleLabel: (monitorId, label) => {
+      const currentMonitors = get().monitors;
+      const doc = loadDoc(currentMonitors);
+      const cleanLabel = label.trim();
+      if (!currentMonitors.some((monitor) => monitor.id === monitorId)) return;
+      if (cleanLabel.length === 0) {
+        delete doc.monitorDesignations.customLabels[monitorId];
+      } else {
+        doc.monitorDesignations.customLabels[monitorId] = cleanLabel;
+      }
+      const next = monitorStateFromDesignations(
+        currentMonitors,
+        doc.monitorDesignations,
+      );
+      doc.monitorDesignations = next.monitorDesignations;
+      persistDoc(doc);
+      set({
+        monitorDesignations: next.monitorDesignations,
+        monitorRoleMap: next.monitorRoleMap,
+      });
+    },
+    activateLayout: async (layoutId) => {
+      const doc = await applyLayout(layoutId, false, get().monitors);
+      const monitorState = deriveMonitorState(get().monitors, doc);
+      set({
+        activeLayoutId: doc.activeLayoutId,
+        selectedLayoutId: doc.selectedLayoutId,
+        layouts: clone(doc.layouts),
+        monitorDesignations: monitorState.monitorDesignations,
+        monitorRoleMap: monitorState.monitorRoleMap,
+        runtimeWindows: clone(doc.runtimeWindows),
+        monitors: clone(doc.lastKnownMonitors),
+        fallbackNotice: doc.fallbackNotice,
+      });
+    },
+    captureRuntimeIntoLayout: async (layoutId) => {
+      const doc = loadDoc(get().monitors);
+      const layout = findLayout(doc, layoutId);
+      if (!layout) return;
+      for (const runtimeWindow of doc.runtimeWindows) {
+        const layoutWindow = layout.windows.find(
+          (item) => item.runtimeLabel === runtimeWindow.runtimeLabel,
+        );
+        if (!layoutWindow) continue;
+        layoutWindow.bounds = runtimeWindow.bounds;
+        layoutWindow.activeRoute = runtimeWindow.currentRoute;
+        layoutWindow.targetMonitorId = runtimeWindow.monitorId;
+        const matchedMonitor = doc.lastKnownMonitors.find(
+          (monitor) => monitor.id === runtimeWindow.monitorId,
+        );
+        layoutWindow.targetMonitorOrdinal =
+          matchedMonitor?.ordinal ?? layoutWindow.targetMonitorOrdinal;
+        layoutWindow.targetMonitorRole = matchedMonitor
+          ? (monitorStateFromDesignations(
+              doc.lastKnownMonitors,
+              doc.monitorDesignations,
+            ).monitorRoleMap[matchedMonitor.id] ?? null)
+          : layoutWindow.targetMonitorRole;
+        layoutWindow.title = runtimeWindow.title;
+      }
+      layout.updatedAtMs = nowMs();
+      const monitorState = deriveMonitorState(get().monitors, doc);
+      persistDoc(doc);
+      set({
+        layouts: clone(doc.layouts),
+        monitorDesignations: monitorState.monitorDesignations,
+        monitorRoleMap: monitorState.monitorRoleMap,
+      });
+    },
+    clearFallbackNotice: () => {
+      const doc = loadDoc(get().monitors);
+      doc.fallbackNotice = null;
+      const monitorState = deriveMonitorState(get().monitors, doc);
+      persistDoc(doc);
+      set({
+        fallbackNotice: null,
+        monitorDesignations: monitorState.monitorDesignations,
+        monitorRoleMap: monitorState.monitorRoleMap,
+      });
+    },
+  }),
+);

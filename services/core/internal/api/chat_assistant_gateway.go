@@ -20,6 +20,7 @@ const (
 	modelRuntimePlainChatMessageMax     = 800
 	modelRuntimePlainChatUserMax        = 6000
 	modelRuntimePlainChatSystemMax      = 3200
+	modelRuntimePlainChatMemoryMax      = 1000
 	modelRuntimePlainChatAttachmentMax  = 1200
 	modelRuntimePlainChatMaxOutputToken = 384
 	modelRuntimePlainChatTimeoutMs      = 30000
@@ -35,6 +36,7 @@ type modelRuntimePromptBudget struct {
 	IncludedMessages   int
 	TruncatedMessages  int
 	TranscriptChars    int
+	MemoryChars        int
 	AttachmentChars    int
 	UserChars          int
 	SystemChars        int
@@ -50,6 +52,9 @@ func (s *Server) buildChatLLMMessages(ctx context.Context, th *chat.ThreadDetail
 		sys += "\n\n" + s.gateway.ChatSystemSupplement()
 	}
 	user = "---\nTHREAD TITLE: " + th.Title + "\n---\n" + transcript
+	if memoryContext := buildPersistedThreadMemoryContext(th.Messages, chatTranscriptTurns, chatThreadMemoryContextMaxMessages, chatThreadMemoryContextMaxRunes); memoryContext != "" {
+		user += "\n\n---\nEARLIER THREAD MEMORY\n" + memoryContext
+	}
 	if att := s.buildThreadAttachmentContext(ctx, th); att != "" {
 		user += "\n\n---\nATTACHMENTS CONTEXT\n" + att
 	}
@@ -68,6 +73,10 @@ func (s *Server) buildModelRuntimePlainChatMessages(ctx context.Context, th *cha
 
 	if title := strings.TrimSpace(th.Title); title != "" {
 		system = strings.TrimSpace(system) + "\n\nThread title: " + trimSummary(title, 160)
+	}
+	if memoryContext := buildPersistedThreadMemoryContext(th.Messages, modelRuntimePlainChatMessages, 6, modelRuntimePlainChatMemoryMax); memoryContext != "" {
+		budget.MemoryChars = len(memoryContext)
+		system = strings.TrimSpace(system) + "\n\nEarlier thread memory:\n" + memoryContext
 	}
 	if budget.Compacted {
 		system = strings.TrimSpace(system) + "\n\nRecent chat context was compacted for local model runtime latency. Answer only the latest operator turn."
@@ -132,6 +141,7 @@ func modelRuntimePromptBudgetMap(b modelRuntimePromptBudget) map[string]any {
 		"includedMessages":   b.IncludedMessages,
 		"truncatedMessages":  b.TruncatedMessages,
 		"transcriptChars":    b.TranscriptChars,
+		"memoryChars":        b.MemoryChars,
 		"attachmentChars":    b.AttachmentChars,
 		"userChars":          b.UserChars,
 		"systemChars":        b.SystemChars,

@@ -1,5 +1,5 @@
 import type { JobDetail } from "@forge/shared";
-import { GhostButton, Panel } from "@forge/ui";
+import { GhostButton, PrimaryButton } from "@forge/ui";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
@@ -14,7 +14,11 @@ export function WorkbenchPage() {
   const artifactIdParam = params.get("artifactId");
   const [artifacts, setArtifacts] = useState<ForgeArtifact[]>([]);
   const [selected, setSelected] = useState<ForgeArtifact | null>(null);
-  const [content, setContent] = useState<{ text: string; textual: boolean; previewLimited: boolean } | null>(null);
+  const [content, setContent] = useState<{
+    text: string;
+    textual: boolean;
+    previewLimited: boolean;
+  } | null>(null);
   const [compareId, setCompareId] = useState("");
   const [compare, setCompare] = useState<{
     artifact: ForgeArtifact;
@@ -121,182 +125,339 @@ export function WorkbenchPage() {
   }, [artifactIdParam]);
 
   return (
-    <div className="grid min-h-[560px] gap-4 xl:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
-      <div className="space-y-4">
-        <Panel
-          title="Artifact index"
-          subtitle="Files recorded in SQLite with paths under the core artifact directory."
-          actions={<GhostButton onClick={() => void refreshList()}>Refresh list</GhostButton>}
-        >
-          <label className="block text-xs text-forge-mist">
-            Filter by job id
-            <input
-              className="forge-input mt-1 w-full font-mono text-xs"
-              value={jobId}
-              onChange={(e) => {
-                const v = e.target.value;
-                setParams((prev) => {
-                  const p = new URLSearchParams(prev);
-                  if (v.trim()) p.set("jobId", v.trim());
-                  else p.delete("jobId");
-                  return p;
-                });
-              }}
-              placeholder="job id (optional)"
-            />
-          </label>
-          {err ? <div className="mt-2 rounded border border-forge-ember/30 bg-forge-ember/10 p-2 text-xs text-forge-ash">{err}</div> : null}
-          <div className="mt-3 max-h-[min(52vh,520px)] space-y-1 overflow-auto">
-            {artifacts.length === 0 ? (
-              <div className="text-sm text-forge-mist">No artifacts match this filter.</div>
-            ) : (
-              artifacts.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void openArtifact(a)}
-                  className={[
-                    "w-full rounded border px-2 py-2 text-left text-xs",
-                    selected?.id === a.id ? "border-forge-ember/40 bg-forge-slate/40" : "border-forge-platinum/10 bg-black/20 hover:border-forge-ember/25",
-                  ].join(" ")}
-                >
-                  <div className="truncate font-semibold text-forge-ash">
-                    #{a.id} · {a.type}: {a.title}
-                  </div>
-                  <div className="mt-0.5 font-mono text-[10px] text-forge-mist/80">{a.filePath}</div>
-                  {a.jobId ? <div className="mt-0.5 text-[10px] text-forge-mist">job {a.jobId}</div> : null}
-                </button>
-              ))
-            )}
+    <div className="forge-ops-board space-y-4">
+      <header className="rounded-lg border border-forge-platinum/10 bg-forge-carbon/80 p-4 shadow-[0_18px_60px_rgba(0,0,0,0.32)] lg:flex lg:items-end lg:justify-between lg:gap-4">
+        <div>
+          <div className="forge-ops-label">Workbench</div>
+          <h1 className="mt-2 text-2xl font-semibold tracking-normal text-forge-ash">
+            Artifact builder
+          </h1>
+          <p className="mt-1 max-w-2xl text-sm leading-6 text-forge-mist/75">
+            Inspect recorded outputs, compare revisions, and keep job evidence
+            in view.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="forge-ops-status forge-ops-status--muted">
+            {artifacts.length} artifacts
+          </span>
+          <GhostButton className="h-9 px-3" onClick={() => void refreshList()}>
+            Refresh list
+          </GhostButton>
+        </div>
+      </header>
+
+      {err ? (
+        <div className="forge-ops-panel border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
+          {err}
+        </div>
+      ) : null}
+
+      <div className="grid min-h-[560px] gap-4 xl:grid-cols-[minmax(16rem,19rem)_minmax(0,1fr)_minmax(17rem,21rem)]">
+        <aside className="forge-ops-panel min-w-0 bg-forge-carbon/90 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
+          <div className="forge-ops-panel__head">
+            <div>
+              <div className="forge-ops-title">Artifact Index</div>
+              <div className="mt-1 text-xs text-forge-mist/65">
+                SQLite records and file-backed outputs.
+              </div>
+            </div>
           </div>
-        </Panel>
-
-        {jobDetail ? (
-          <Panel title="Job context" subtitle="Latest projection for the filtered job id.">
-            <div className="space-y-2 text-xs text-forge-mist">
-              <div className="font-semibold text-forge-ash">{jobDetail.job.title}</div>
-              <div>
-                {jobDetail.job.status} · {jobDetail.job.targetAdapter} · packet {jobDetail.job.taskPacketId ?? "—"}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Link className="text-forge-emberSoft underline" to={`/jobs/${encodeURIComponent(jobDetail.job.id)}`}>
-                  Job detail
-                </Link>
-                <Link className="text-forge-emberSoft underline" to={`/chat`}>
-                  Chat
-                </Link>
-              </div>
-            </div>
-          </Panel>
-        ) : jobId.trim() ? (
-          <Panel title="Job context" subtitle="Could not load job (check id), or core offline.">
-            <div className="text-xs text-forge-mist">Artifacts may still list if they reference this job id.</div>
-          </Panel>
-        ) : null}
-      </div>
-
-      <Panel
-        title={selected ? `Inspect · #${selected.id}` : "Viewer"}
-        subtitle="Textual artifacts load file contents from disk when path and MIME are considered safe. Binary files show metadata only."
-        actions={
-          selected?.jobId ? (
-            <Link className="forge-btn forge-btn--primary inline-flex items-center" to={`/jobs/${encodeURIComponent(selected.jobId)}`}>
-              Open job
-            </Link>
-          ) : null
-        }
-      >
-        {!selected ? (
-          <div className="text-sm text-forge-mist">Select an artifact from the index.</div>
-        ) : (
-          <div className="space-y-3">
-            <div className="rounded border border-forge-platinum/10 bg-black/25 p-3 text-xs text-forge-mist">
-              <div className="font-mono text-[11px]">{selected.filePath}</div>
-              <div className="mt-1">MIME: {selected.mimeType || "—"}</div>
-              <div className="mt-1">Created: {formatTime(selected.createdAtMs)}</div>
-            </div>
-
-            {!content ? (
-              <div className="text-sm text-forge-mist">Loading or unavailable…</div>
-            ) : content.previewLimited && !content.textual ? (
-              <div className="rounded border border-forge-platinum/10 bg-black/30 p-3 text-sm text-forge-mist">
-                Preview is not available for this file type. The artifact exists on disk; use your editor or export tools outside FORGE if needed.
-              </div>
-            ) : (
-              <pre className="max-h-[min(60vh,640px)] overflow-auto whitespace-pre-wrap rounded border border-forge-platinum/10 bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-forge-mist">
-                {content.text}
-              </pre>
-            )}
-
-            {selected ? (
-              <div className="rounded border border-forge-platinum/10 bg-black/25 p-3">
-                <div className="mb-2 text-xs font-semibold text-forge-ash">Compare with another artifact</div>
-                <div className="flex flex-wrap gap-2">
-                  <input
-                    className="forge-input max-w-[12rem] font-mono text-xs"
-                    value={compareId}
-                    onChange={(e) => setCompareId(e.target.value)}
-                    placeholder="artifact id"
-                  />
-                  <GhostButton
-                    onClick={async () => {
-                      const id = Number(compareId);
-                      if (!Number.isFinite(id) || id <= 0) {
-                        setErr("Compare artifact id must be a positive number.");
-                        return;
-                      }
-                      if (id === selected.id) {
-                        setErr("Choose a different artifact id to compare.");
-                        return;
-                      }
-                      try {
-                        await openCompareArtifact(id);
-                        setErr(null);
-                      } catch (e) {
-                        setErr(e instanceof Error ? e.message : String(e));
-                      }
-                    }}
+          <div className="forge-ops-panel__body">
+            <label className="block text-xs text-forge-mist">
+              <span className="forge-ops-label">Job filter</span>
+              <input
+                className="forge-input mt-2 w-full font-mono text-xs"
+                value={jobId}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setParams((prev) => {
+                    const p = new URLSearchParams(prev);
+                    if (v.trim()) p.set("jobId", v.trim());
+                    else p.delete("jobId");
+                    return p;
+                  });
+                }}
+                placeholder="job id (optional)"
+              />
+            </label>
+            <div className="mt-3 max-h-[min(62vh,680px)] space-y-1 overflow-auto pr-1">
+              {artifacts.length === 0 ? (
+                <div className="rounded border border-dashed border-forge-platinum/15 bg-black/35 p-4 text-xs text-forge-mist">
+                  <div className="font-semibold text-forge-ash">
+                    No artifacts found
+                  </div>
+                  <div className="mt-1 leading-5 text-forge-mist/75">
+                    Clear the job filter or refresh after a job writes evidence.
+                  </div>
+                </div>
+              ) : (
+                artifacts.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
                     disabled={busy}
+                    onClick={() => void openArtifact(a)}
+                    className={[
+                      "w-full rounded border px-2.5 py-2 text-left text-xs transition shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
+                      selected?.id === a.id
+                        ? "border-forge-ember/50 bg-forge-ember/10 text-forge-ash shadow-[inset_3px_0_0_rgba(255,122,51,0.8)]"
+                        : "border-forge-platinum/10 bg-black/25 text-forge-mist hover:border-forge-ember/30 hover:bg-forge-ember/5",
+                    ].join(" ")}
                   >
-                    Load compare artifact
-                  </GhostButton>
-                  {compare ? (
-                    <GhostButton
-                      onClick={() => {
-                        setCompare(null);
-                        setCompareId("");
-                      }}
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                      <span className="truncate font-semibold text-forge-ash">
+                        {a.title}
+                      </span>
+                      <span className="shrink-0 font-mono text-[10px] text-forge-emberSoft">
+                        #{a.id}
+                      </span>
+                    </div>
+                    <div className="mt-1 truncate font-mono text-[10px] text-forge-mist/75">
+                      {a.type} · {a.filePath}
+                    </div>
+                    {a.jobId ? (
+                      <div className="mt-1 truncate text-[10px] text-forge-mist/65">
+                        job {a.jobId}
+                      </div>
+                    ) : null}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </aside>
+
+        <main className="forge-ops-panel min-w-0 bg-forge-carbon/90 shadow-[0_22px_70px_rgba(0,0,0,0.34)]">
+          <div className="forge-ops-panel__head">
+            <div className="min-w-0">
+              <div className="forge-ops-title truncate">
+                {selected
+                  ? `Inspect #${selected.id}: ${selected.title}`
+                  : "Viewer"}
+              </div>
+              <div className="mt-1 text-xs text-forge-mist/65">
+                Safe textual preview and line-level comparison.
+              </div>
+            </div>
+            {selected?.jobId ? (
+              <Link
+                className="forge-btn forge-btn--primary inline-flex items-center"
+                to={`/jobs/${encodeURIComponent(selected.jobId)}`}
+              >
+                Open job
+              </Link>
+            ) : null}
+          </div>
+          <div className="forge-ops-panel__body">
+            {!selected ? (
+              <div className="flex min-h-[460px] items-center justify-center rounded border border-dashed border-forge-platinum/15 bg-black/35 p-6 text-center text-sm text-forge-mist">
+                <div className="max-w-sm">
+                  <div className="text-base font-semibold text-forge-ash">
+                    Select an artifact
+                  </div>
+                  <p className="mt-2 leading-6 text-forge-mist/75">
+                    Open an output to inspect its textual preview, metadata, and
+                    compare it against another artifact.
+                  </p>
+                  {artifacts[0] ? (
+                    <PrimaryButton
+                      className="mt-4 h-9 px-3"
+                      onClick={() => void openArtifact(artifacts[0])}
                       disabled={busy}
                     >
-                      Clear compare
-                    </GhostButton>
+                      Open latest
+                    </PrimaryButton>
                   ) : null}
                 </div>
-                {compare ? (
-                  <div className="mt-2 text-[11px] text-forge-mist">
-                    Comparing #{selected.id} ({selected.type}) with #{compare.artifact.id} ({compare.artifact.type})
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {!content ? (
+                  <div className="text-sm text-forge-mist">
+                    Loading or unavailable…
+                  </div>
+                ) : content.previewLimited && !content.textual ? (
+                  <div className="rounded border border-forge-platinum/10 bg-black/30 p-3 text-sm text-forge-mist">
+                    Preview is not available for this file type. The artifact
+                    exists on disk; use your editor or export tools outside
+                    FORGE if needed.
+                  </div>
+                ) : (
+                  <pre className="max-h-[min(60vh,640px)] overflow-auto whitespace-pre-wrap rounded border border-forge-platinum/10 bg-black/55 p-3 font-mono text-[11px] leading-relaxed text-forge-mist shadow-inner">
+                    {content.text}
+                  </pre>
+                )}
+
+                {selected ? (
+                  <div className="rounded border border-forge-platinum/10 bg-black/30 p-3">
+                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-xs font-semibold text-forge-ash">
+                        Compare artifact
+                      </div>
+                      {compare ? (
+                        <span className="rounded-full border border-forge-ember/25 bg-forge-ember/10 px-2 py-0.5 font-mono text-[10px] text-forge-emberSoft">
+                          #{selected.id} / #{compare.artifact.id}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        className="forge-input max-w-[12rem] font-mono text-xs"
+                        value={compareId}
+                        onChange={(e) => setCompareId(e.target.value)}
+                        placeholder="artifact id"
+                      />
+                      <PrimaryButton
+                        className="h-9 px-3"
+                        onClick={async () => {
+                          const id = Number(compareId);
+                          if (!Number.isFinite(id) || id <= 0) {
+                            setErr(
+                              "Compare artifact id must be a positive number.",
+                            );
+                            return;
+                          }
+                          if (id === selected.id) {
+                            setErr(
+                              "Choose a different artifact id to compare.",
+                            );
+                            return;
+                          }
+                          try {
+                            await openCompareArtifact(id);
+                            setErr(null);
+                          } catch (e) {
+                            setErr(e instanceof Error ? e.message : String(e));
+                          }
+                        }}
+                        disabled={busy}
+                      >
+                        Load compare
+                      </PrimaryButton>
+                      {compare ? (
+                        <GhostButton
+                          className="h-9 px-3"
+                          onClick={() => {
+                            setCompare(null);
+                            setCompareId("");
+                          }}
+                          disabled={busy}
+                        >
+                          Clear compare
+                        </GhostButton>
+                      ) : null}
+                    </div>
+                    {compare ? (
+                      <div className="mt-2 text-[11px] text-forge-mist">
+                        Comparing #{selected.id} ({selected.type}) with #
+                        {compare.artifact.id} ({compare.artifact.type})
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {selected && content?.textual && compare?.content.textual ? (
+                  <div>
+                    <div className="mb-2 text-xs font-semibold text-forge-ash">
+                      Line diff
+                    </div>
+                    <pre className="max-h-[min(60vh,640px)] overflow-auto whitespace-pre-wrap rounded border border-forge-platinum/10 bg-black/55 p-3 font-mono text-[11px] leading-relaxed text-forge-mist shadow-inner">
+                      {buildLineDiff(content.text, compare.content.text)}
+                    </pre>
                   </div>
                 ) : null}
               </div>
-            ) : null}
+            )}
+          </div>
+        </main>
 
-            {selected && content?.textual && compare?.content.textual ? (
-              <div>
-                <div className="mb-2 text-xs font-semibold text-forge-ash">Line diff</div>
-                <pre className="max-h-[min(60vh,640px)] overflow-auto whitespace-pre-wrap rounded border border-forge-platinum/10 bg-black/40 p-3 font-mono text-[11px] leading-relaxed text-forge-mist">
-                  {buildLineDiff(content.text, compare.content.text)}
-                </pre>
+        <aside className="forge-ops-panel min-w-0 bg-forge-carbon/90 shadow-[0_18px_50px_rgba(0,0,0,0.28)]">
+          <div className="forge-ops-panel__head">
+            <div>
+              <div className="forge-ops-title">Inspector</div>
+              <div className="mt-1 text-xs text-forge-mist/65">
+                Metadata, job projection, and evidence tail.
+              </div>
+            </div>
+          </div>
+          <div className="forge-ops-panel__body space-y-4">
+            {selected ? (
+              <div className="space-y-2 text-xs text-forge-mist">
+                <div className="forge-ops-label">Selected artifact</div>
+                <div className="rounded border border-forge-platinum/10 bg-black/25 p-3">
+                  <div className="font-semibold text-forge-ash">
+                    {selected.type} #{selected.id}
+                  </div>
+                  <div className="mt-2 break-all font-mono text-[11px]">
+                    {selected.filePath}
+                  </div>
+                  <div className="mt-2 grid gap-1 text-[11px]">
+                    <div>MIME: {selected.mimeType || "—"}</div>
+                    <div>Created: {formatTime(selected.createdAtMs)}</div>
+                    <div>
+                      Preview:{" "}
+                      {content?.textual
+                        ? "text"
+                        : content?.previewLimited
+                          ? "limited"
+                          : "pending"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded border border-dashed border-forge-platinum/15 bg-black/30 p-3 text-xs text-forge-mist">
+                Select an artifact to reveal MIME, path, preview state, and job
+                context.
+              </div>
+            )}
+
+            {jobDetail ? (
+              <div className="space-y-2 text-xs text-forge-mist">
+                <div className="forge-ops-label">Job context</div>
+                <div className="rounded border border-forge-platinum/10 bg-black/25 p-3">
+                  <div className="font-semibold text-forge-ash">
+                    {jobDetail.job.title}
+                  </div>
+                  <div className="mt-1">
+                    {jobDetail.job.status} · {jobDetail.job.targetAdapter} ·
+                    packet {jobDetail.job.taskPacketId ?? "—"}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Link
+                      className="text-forge-emberSoft underline"
+                      to={`/jobs/${encodeURIComponent(jobDetail.job.id)}`}
+                    >
+                      Job detail
+                    </Link>
+                    <Link
+                      className="text-forge-emberSoft underline"
+                      to={`/chat`}
+                    >
+                      Chat
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ) : jobId.trim() ? (
+              <div className="rounded border border-forge-platinum/10 bg-black/25 p-3 text-xs text-forge-mist">
+                Could not load job context. Artifacts may still reference this
+                job id.
               </div>
             ) : null}
 
             {jobDetail && jobDetail.events.length > 0 ? (
               <div>
-                <div className="mb-2 text-xs font-semibold text-forge-ash">Recent job events (tail)</div>
-                <div className="max-h-56 space-y-1 overflow-auto rounded border border-forge-platinum/10 bg-black/25 p-2 text-[11px] text-forge-mist">
+                <div className="mb-2 forge-ops-label">Recent job events</div>
+                <div className="max-h-80 space-y-1 overflow-auto rounded border border-forge-platinum/10 bg-black/25 p-2 text-[11px] text-forge-mist">
                   {jobDetail.events.slice(-12).map((ev) => (
-                    <div key={ev.id} className="border-b border-forge-platinum/5 py-1 last:border-0">
-                      <span className="text-forge-ash">{ev.type}</span> · {formatTime(ev.createdAtMs)}
+                    <div
+                      key={ev.id}
+                      className="border-b border-forge-platinum/5 py-1 last:border-0"
+                    >
+                      <span className="text-forge-ash">{ev.type}</span> ·{" "}
+                      {formatTime(ev.createdAtMs)}
                       <div className="text-forge-mist/90">{ev.message}</div>
                     </div>
                   ))}
@@ -304,8 +465,8 @@ export function WorkbenchPage() {
               </div>
             ) : null}
           </div>
-        )}
-      </Panel>
+        </aside>
+      </div>
     </div>
   );
 }

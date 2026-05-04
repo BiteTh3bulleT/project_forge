@@ -14,16 +14,27 @@
   --forge-text-rgb: 244 245 246;
   --forge-muted-rgb: 184 190 196;
   --forge-dim-rgb: 126 134 141;
-  --forge-cyan-rgb: 215 181 109;
-  --forge-mint-rgb: 226 229 231;
-  --forge-amber-rgb: 185 139 56;
-  --forge-amber-soft-rgb: 229 199 131;
-  --forge-danger-rgb: 210 92 92;
-  --forge-focus-rgb: 215 181 109;
+  --forge-cyan-rgb: 255 122 24;
+  --forge-mint-rgb: 34 197 94;
+  --forge-amber-rgb: 245 158 11;
+  --forge-amber-soft-rgb: 255 184 77;
+  --forge-danger-rgb: 239 68 68;
+  --forge-focus-rgb: 255 122 24;
   --forge-shadow: 0 24px 72px rgba(0, 0, 0, 0.46);
-  --forge-shadow-panel: 0 0 0 1px rgba(220, 224, 226, 0.1), 0 30px 80px rgba(0, 0, 0, 0.62);
-  --forge-highlight: linear-gradient(135deg, rgba(215, 181, 109, 0.18), rgba(226, 229, 231, 0.1) 52%, rgba(255, 255, 255, 0.06) 100%);
-  --forge-panel-gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01) 52%, transparent 100%);
+  --forge-shadow-panel:
+    0 0 0 1px rgba(220, 224, 226, 0.1), 0 30px 80px rgba(0, 0, 0, 0.62);
+  --forge-highlight: linear-gradient(
+    135deg,
+    rgba(215, 181, 109, 0.18),
+    rgba(226, 229, 231, 0.1) 52%,
+    rgba(255, 255, 255, 0.06) 100%
+  );
+  --forge-panel-gloss: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.01) 52%,
+    transparent 100%
+  );
   --forge-grid-opacity: 0.22;
   --forge-noise-opacity: 0.18;
 }
@@ -50,10 +61,22 @@ body {
   color: rgb(var(--forge-text-rgb));
   background-color: rgb(var(--forge-bg-rgb));
   background-image:
-    radial-gradient(circle at 14% -8%, rgba(215, 181, 109, 0.14), transparent 32%),
-    radial-gradient(circle at 88% 0%, rgba(226, 229, 231, 0.08), transparent 28%),
-    radial-gradient(circle at 50% 120%, rgba(255, 255, 255, 0.045), transparent 42%),
-    linear-gradient(155deg, #030303 0%, #090a0b 34%, #111315 68%, #030303 100%);
+    radial-gradient(
+      circle at 9% -10%,
+      rgba(255, 122, 24, 0.18),
+      transparent 30%
+    ),
+    radial-gradient(
+      circle at 88% 0%,
+      rgba(255, 255, 255, 0.07),
+      transparent 26%
+    ),
+    radial-gradient(
+      circle at 50% 120%,
+      rgba(34, 197, 94, 0.035),
+      transparent 38%
+    ),
+    linear-gradient(155deg, #020202 0%, #08090a 34%, #0d1012 68%, #010101 100%);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }
@@ -76,7 +99,11 @@ body::before {
       transparent 1px,
       transparent 3px
     );
-  background-size: 56px 56px, 56px 56px, 100% 100%, 120px 120px;
+  background-size:
+    56px 56px,
+    56px 56px,
+    100% 100%,
+    120px 120px;
   mask-image: radial-gradient(circle at center, black 60%, transparent 100%);
   animation: forge-drift 26s linear infinite;
 }
@@ -89,9 +116,21 @@ body::after {
   pointer-events: none;
   opacity: var(--forge-noise-opacity);
   background:
-    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.05), transparent 28%),
-    radial-gradient(circle at 0% 100%, rgba(215, 181, 109, 0.05), transparent 34%),
-    radial-gradient(circle at 100% 0%, rgba(255, 255, 255, 0.035), transparent 28%);
+    radial-gradient(
+      circle at 50% 0%,
+      rgba(255, 255, 255, 0.05),
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 0% 100%,
+      rgba(215, 181, 109, 0.05),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(255, 255, 255, 0.035),
+      transparent 28%
+    );
   mix-blend-mode: screen;
 }
 
@@ -162,17 +201,31 @@ html[data-theme="light"] {
   --forge-muted-rgb: 64 82 88;
   --forge-dim-rgb: 93 112 118;
   --forge-shadow: 0 22px 54px rgba(12, 24, 28, 0.12);
-  --forge-shadow-panel: 0 0 0 1px rgba(51, 96, 102, 0.08), 0 24px 64px rgba(12, 24, 28, 0.1);
-  --forge-highlight: linear-gradient(135deg, rgba(18, 10, 143, 0.13), rgba(49, 87, 255, 0.08) 52%, rgba(174, 188, 255, 0.08) 100%);
+  --forge-shadow-panel:
+    0 0 0 1px rgba(51, 96, 102, 0.08), 0 24px 64px rgba(12, 24, 28, 0.1);
+  --forge-highlight: linear-gradient(
+    135deg,
+    rgba(18, 10, 143, 0.13),
+    rgba(49, 87, 255, 0.08) 52%,
+    rgba(174, 188, 255, 0.08) 100%
+  );
   --forge-grid-opacity: 0.08;
   --forge-noise-opacity: 0.08;
 }
 
 html[data-theme="light"] body {
   background-image:
-    radial-gradient(circle at 12% -8%, rgba(18, 10, 143, 0.16), transparent 30%),
+    radial-gradient(
+      circle at 12% -8%,
+      rgba(18, 10, 143, 0.16),
+      transparent 30%
+    ),
     radial-gradient(circle at 88% 0%, rgba(49, 87, 255, 0.1), transparent 28%),
-    radial-gradient(circle at 50% 112%, rgba(174, 188, 255, 0.08), transparent 34%),
+    radial-gradient(
+      circle at 50% 112%,
+      rgba(174, 188, 255, 0.08),
+      transparent 34%
+    ),
     linear-gradient(160deg, #eef1ff 0%, #e6ebff 42%, #f6f8ff 100%);
 }
 
@@ -196,13 +249,25 @@ html[data-theme="light"] body {
 }
 
 .forge-panel {
-  @apply overflow-hidden rounded-2xl border bg-forge-carbon/85 shadow-panel;
+  @apply overflow-hidden rounded-lg border bg-forge-carbon/85 shadow-panel;
   border-color: rgba(var(--forge-border-rgb), 0.22);
   background-image:
     var(--forge-panel-gloss),
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.9), rgba(var(--forge-panel-soft-rgb), 0.82)),
-    radial-gradient(circle at 100% 0%, rgba(var(--forge-cyan-rgb), 0.12), transparent 42%),
-    radial-gradient(circle at 0% 100%, rgba(var(--forge-amber-rgb), 0.12), transparent 48%);
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.9),
+      rgba(var(--forge-panel-soft-rgb), 0.82)
+    ),
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(var(--forge-cyan-rgb), 0.12),
+      transparent 42%
+    ),
+    radial-gradient(
+      circle at 0% 100%,
+      rgba(var(--forge-amber-rgb), 0.12),
+      transparent 48%
+    );
   backdrop-filter: blur(10px);
   box-shadow: var(--forge-shadow-panel);
 }
@@ -215,7 +280,11 @@ html[data-theme="light"] body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), transparent 24%);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.04),
+    transparent 24%
+  );
   opacity: 0.7;
 }
 
@@ -224,7 +293,12 @@ html[data-theme="light"] body {
   z-index: 1;
   border-color: rgba(var(--forge-border-rgb), 0.18);
   background-image:
-    linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.12), rgba(var(--forge-amber-rgb), 0.08) 56%, transparent),
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.12),
+      rgba(var(--forge-amber-rgb), 0.08) 56%,
+      transparent
+    ),
     linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent);
 }
 
@@ -248,13 +322,17 @@ html[data-theme="light"] body {
 }
 
 .forge-fold {
-  @apply rounded-2xl border bg-black/20;
+  @apply rounded-lg border bg-black/20;
   border-color: rgba(var(--forge-border-rgb), 0.16);
-  background-image: linear-gradient(180deg, rgba(var(--forge-panel-soft-rgb), 0.68), rgba(0, 0, 0, 0.12));
+  background-image: linear-gradient(
+    180deg,
+    rgba(var(--forge-panel-soft-rgb), 0.68),
+    rgba(0, 0, 0, 0.12)
+  );
 }
 
 .forge-fold__summary {
-  @apply flex cursor-pointer list-none flex-col gap-1 rounded-2xl px-4 py-3;
+  @apply flex cursor-pointer list-none flex-col gap-1 rounded-lg px-4 py-3;
 }
 
 .forge-fold__summary::-webkit-details-marker {
@@ -278,24 +356,43 @@ html[data-theme="light"] body {
   @apply relative overflow-hidden rounded-[1.5rem] border bg-forge-carbon/70;
   border-color: rgba(var(--forge-border-strong-rgb), 0.22);
   background-image:
-    linear-gradient(155deg, rgba(var(--forge-panel-rgb), 0.78), rgba(var(--forge-panel-strong-rgb), 0.66)),
-    radial-gradient(circle at 18% 0%, rgba(var(--forge-cyan-rgb), 0.2), transparent 42%),
-    radial-gradient(circle at 100% 12%, rgba(var(--forge-amber-rgb), 0.22), transparent 44%);
+    linear-gradient(
+      155deg,
+      rgba(var(--forge-panel-rgb), 0.78),
+      rgba(var(--forge-panel-strong-rgb), 0.66)
+    ),
+    radial-gradient(
+      circle at 18% 0%,
+      rgba(var(--forge-cyan-rgb), 0.2),
+      transparent 42%
+    ),
+    radial-gradient(
+      circle at 100% 12%,
+      rgba(var(--forge-amber-rgb), 0.22),
+      transparent 44%
+    );
   box-shadow: var(--forge-shadow);
 }
 
 .forge-hero::after {
   height: 1px;
   inset: 0 0 auto;
-  background: linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.7), rgba(var(--forge-amber-rgb), 0.35), transparent 82%);
+  background: linear-gradient(
+    90deg,
+    rgba(var(--forge-cyan-rgb), 0.7),
+    rgba(var(--forge-amber-rgb), 0.35),
+    transparent 82%
+  );
 }
 
 .forge-btn {
-  @apply inline-flex items-center justify-center rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] transition;
+  @apply inline-flex items-center justify-center rounded-md border px-3 py-2 text-xs font-semibold uppercase transition;
   position: relative;
   z-index: 1;
   border-color: rgba(var(--forge-border-rgb), 0.28);
-  transition-property: transform, border-color, background-color, box-shadow, color;
+  letter-spacing: 0;
+  transition-property:
+    transform, border-color, background-color, box-shadow, color;
   transition-duration: 160ms;
   transition-timing-function: ease;
 }
@@ -320,20 +417,102 @@ html[data-theme="light"] body {
 .forge-btn--primary {
   @apply text-forge-black;
   border-color: rgba(var(--forge-cyan-rgb), 0.48);
-  background-image: linear-gradient(120deg, rgba(var(--forge-cyan-rgb), 0.94) 0%, rgba(var(--forge-mint-rgb), 0.94) 52%, rgba(var(--forge-amber-soft-rgb), 0.92) 100%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.34), 0 12px 26px rgba(0, 0, 0, 0.28);
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 143, 54, 0.98),
+    rgba(var(--forge-cyan-rgb), 0.96)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    0 12px 26px rgba(0, 0, 0, 0.28);
 }
 
 .forge-btn--primary:hover {
   border-color: rgba(var(--forge-cyan-rgb), 0.72);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.38), 0 16px 30px rgba(0, 0, 0, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.38),
+    0 16px 30px rgba(0, 0, 0, 0.34);
+}
+
+.forge-ops-board .forge-btn--primary {
+  border-color: rgba(var(--forge-cyan-rgb), 0.68);
+  background: linear-gradient(180deg, #ff9a3d, #ff7a18);
+  color: #050505;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 14px 28px rgba(255, 122, 24, 0.18);
+}
+
+.forge-ops-board .forge-panel {
+  border-radius: 8px;
+  border-color: var(--ops-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.028), transparent 44%),
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(var(--forge-cyan-rgb), 0.055),
+      transparent 34%
+    ),
+    linear-gradient(180deg, var(--ops-panel), var(--ops-panel-soft));
+  box-shadow:
+    0 16px 44px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.forge-ops-board .forge-panel__head {
+  min-height: 3.65rem;
+  border-color: rgba(var(--forge-border-rgb), 0.11);
+  background: transparent;
+  padding: 0.9rem 1rem;
+}
+
+.forge-ops-board .forge-panel__body {
+  padding: 1rem;
+}
+
+.forge-ops-board .forge-panel__title {
+  color: rgb(var(--forge-text-rgb));
+  font-size: 0.92rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.forge-ops-board .forge-panel__sub {
+  color: rgba(var(--forge-muted-rgb), 0.68);
+  font-size: 0.76rem;
+}
+
+.forge-ops-board .forge-fold,
+.forge-ops-board .rounded-2xl,
+.forge-ops-board .rounded-xl {
+  border-radius: 8px;
+}
+
+.forge-ops-board .rounded-full {
+  border-radius: 999px;
+}
+
+.forge-window-frame .bg-black\/20,
+.forge-window-frame .bg-black\/25,
+.forge-window-frame .bg-black\/30,
+.forge-window-frame .bg-white\/5,
+.forge-window-frame .bg-forge-iron\/30 {
+  background-color: rgba(7, 8, 9, 0.36);
 }
 
 .forge-btn--ghost {
   @apply text-forge-bone;
   background:
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.7), rgba(var(--forge-panel-soft-rgb), 0.54)),
-    linear-gradient(135deg, rgba(var(--forge-cyan-rgb), 0.08), rgba(var(--forge-amber-rgb), 0.06));
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.7),
+      rgba(var(--forge-panel-soft-rgb), 0.54)
+    ),
+    linear-gradient(
+      135deg,
+      rgba(var(--forge-cyan-rgb), 0.08),
+      rgba(var(--forge-amber-rgb), 0.06)
+    );
   backdrop-filter: blur(6px);
 }
 
@@ -344,15 +523,27 @@ html[data-theme="light"] body {
 }
 
 .forge-input {
-  @apply w-full rounded-xl border bg-forge-charcoal/75 px-3 py-2 text-sm text-forge-bone outline-none ring-0 placeholder:text-forge-gray/70;
+  @apply w-full rounded-md border bg-forge-charcoal/75 px-3 py-2 text-sm text-forge-bone outline-none ring-0 placeholder:text-forge-gray/70;
   position: relative;
   z-index: 2;
   border-color: rgba(var(--forge-border-rgb), 0.28);
   background-image:
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.84), rgba(var(--forge-panel-soft-rgb), 0.78)),
-    linear-gradient(135deg, rgba(var(--forge-cyan-rgb), 0.06), rgba(var(--forge-amber-rgb), 0.04));
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.84),
+      rgba(var(--forge-panel-soft-rgb), 0.78)
+    ),
+    linear-gradient(
+      135deg,
+      rgba(var(--forge-cyan-rgb), 0.06),
+      rgba(var(--forge-amber-rgb), 0.04)
+    );
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease, transform 160ms ease;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease,
+    transform 160ms ease;
 }
 
 .forge-input:hover {
@@ -363,20 +554,38 @@ html[data-theme="light"] body {
 .forge-input:focus-visible {
   z-index: 30;
   border-color: rgba(var(--forge-cyan-rgb), 0.66);
-  box-shadow: 0 0 0 3px rgba(var(--forge-focus-rgb), 0.18), 0 12px 26px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 0 0 3px rgba(var(--forge-focus-rgb), 0.18),
+    0 12px 26px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 select.forge-input {
   padding-right: 2.5rem;
   background-image:
-    linear-gradient(45deg, transparent 50%, rgba(var(--forge-cyan-rgb), 0.9) 50%),
-    linear-gradient(135deg, rgba(var(--forge-cyan-rgb), 0.9) 50%, transparent 50%),
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.84), rgba(var(--forge-panel-soft-rgb), 0.78));
+    linear-gradient(
+      45deg,
+      transparent 50%,
+      rgba(var(--forge-cyan-rgb), 0.9) 50%
+    ),
+    linear-gradient(
+      135deg,
+      rgba(var(--forge-cyan-rgb), 0.9) 50%,
+      transparent 50%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.84),
+      rgba(var(--forge-panel-soft-rgb), 0.78)
+    );
   background-position:
     calc(100% - 1rem) calc(50% - 1px),
     calc(100% - 0.7rem) calc(50% - 1px),
     0 0;
-  background-size: 0.38rem 0.38rem, 0.38rem 0.38rem, 100% 100%;
+  background-size:
+    0.38rem 0.38rem,
+    0.38rem 0.38rem,
+    100% 100%;
   background-repeat: no-repeat;
   -webkit-appearance: none;
   appearance: none;
@@ -416,7 +625,9 @@ html[data-contrast="high"] .forge-context-card,
 html[data-contrast="high"] .forge-dock__item,
 html[data-contrast="high"] .forge-chip {
   border-color: rgba(var(--forge-border-strong-rgb), 0.34);
-  box-shadow: 0 0 0 1px rgba(var(--forge-border-strong-rgb), 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 0 0 1px rgba(var(--forge-border-strong-rgb), 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 html[data-effects="off"] body::before,
@@ -464,9 +675,21 @@ html[data-effects="subtle"] .forge-context-panel,
 html[data-effects="subtle"] .forge-context-card {
   background-image:
     var(--forge-panel-gloss),
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.9), rgba(var(--forge-panel-soft-rgb), 0.82)),
-    radial-gradient(circle at 100% 0%, rgba(var(--forge-cyan-rgb), 0.12), transparent 42%),
-    radial-gradient(circle at 0% 100%, rgba(var(--forge-amber-rgb), 0.12), transparent 48%);
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.9),
+      rgba(var(--forge-panel-soft-rgb), 0.82)
+    ),
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(var(--forge-cyan-rgb), 0.12),
+      transparent 42%
+    ),
+    radial-gradient(
+      circle at 0% 100%,
+      rgba(var(--forge-amber-rgb), 0.12),
+      transparent 48%
+    );
 }
 
 html[data-effects="subtle"] .forge-dock__item:hover,
@@ -495,24 +718,59 @@ html[data-effects="subtle"] .forge-context-card:hover {
 .forge-kbd {
   @apply rounded-xl border px-1.5 py-0.5 font-mono text-[10px] tracking-wide text-forge-bone/95;
   border-color: rgba(var(--forge-border-rgb), 0.26);
-  background: linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.8), rgba(0, 0, 0, 0.28));
+  background: linear-gradient(
+    180deg,
+    rgba(var(--forge-panel-rgb), 0.8),
+    rgba(0, 0, 0, 0.28)
+  );
 }
 
 .forge-shell-brand {
-  @apply flex h-10 w-10 items-center justify-center rounded-xl border font-mono text-sm font-semibold tracking-[0.28em] text-forge-bone;
-  border-color: rgba(var(--forge-cyan-rgb), 0.24);
+  @apply flex h-10 w-10 items-center justify-center rounded-lg border font-mono text-sm font-semibold tracking-[0.18em] text-forge-bone;
+  border-color: rgba(var(--forge-border-strong-rgb), 0.34);
   background:
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.84), rgba(var(--forge-panel-soft-rgb), 0.76)),
-    radial-gradient(circle at 50% 0%, rgba(var(--forge-cyan-rgb), 0.18), transparent 60%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 10px 20px rgba(0, 0, 0, 0.2);
+    linear-gradient(180deg, rgba(27, 30, 33, 0.96), rgba(4, 5, 6, 0.98)),
+    radial-gradient(
+      circle at 50% 0%,
+      rgba(var(--forge-cyan-rgb), 0.28),
+      transparent 60%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 0 0 1px rgba(var(--forge-cyan-rgb), 0.08),
+    0 12px 24px rgba(0, 0, 0, 0.32);
+}
+
+.forge-shell-lockup {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.forge-shell-product {
+  color: rgb(var(--forge-text-rgb));
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
 }
 
 .forge-topbar {
   @apply flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3;
   border-color: rgba(var(--forge-border-rgb), 0.18);
   background:
-    linear-gradient(180deg, rgba(var(--forge-bg-elevated-rgb), 0.96), rgba(var(--forge-bg-rgb), 0.95)),
-    linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.08), transparent 34%, rgba(var(--forge-amber-rgb), 0.06) 100%);
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-bg-elevated-rgb), 0.96),
+      rgba(var(--forge-bg-rgb), 0.95)
+    ),
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.08),
+      transparent 34%,
+      rgba(var(--forge-amber-rgb), 0.06) 100%
+    );
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
   backdrop-filter: blur(14px);
   animation: forge-pulse 14s ease-in-out infinite;
@@ -525,50 +783,152 @@ html[data-effects="subtle"] .forge-context-card:hover {
 }
 
 .forge-status-strip {
-  @apply flex h-14 shrink-0 items-center justify-between gap-3 border-b px-3 sm:px-4;
-  border-color: rgba(var(--forge-border-rgb), 0.16);
+  @apply flex h-14 shrink-0 items-center justify-between gap-2 border-b px-2.5 sm:px-3;
+  border-color: rgba(var(--forge-border-strong-rgb), 0.22);
   background:
-    linear-gradient(180deg, rgba(var(--forge-bg-elevated-rgb), 0.96), rgba(var(--forge-bg-rgb), 0.95)),
-    linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.07), transparent 46%, rgba(var(--forge-amber-rgb), 0.05));
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
+    linear-gradient(180deg, rgba(14, 16, 18, 0.98), rgba(3, 3, 3, 0.98)),
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.11),
+      transparent 28%,
+      rgba(255, 255, 255, 0.035)
+    );
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.42),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.035);
   backdrop-filter: blur(14px);
 }
 
+.forge-mobile-rail-toggle {
+  display: none;
+  height: 2.1rem;
+  width: 2.1rem;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.18);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.34);
+  color: rgb(var(--forge-text-rgb));
+  font-family: theme(fontFamily.mono);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.forge-mobile-rail-toggle:hover,
+.forge-mobile-rail-toggle:focus-visible {
+  border-color: rgba(var(--forge-cyan-rgb), 0.48);
+  box-shadow: 0 0 0 2px rgba(var(--forge-cyan-rgb), 0.14);
+  outline: none;
+}
+
+.forge-mobile-rail-toggle__mark {
+  display: grid;
+  width: 0.9rem;
+  gap: 0.18rem;
+}
+
+.forge-mobile-rail-toggle__mark span {
+  display: block;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.forge-mobile-rail-backdrop {
+  display: none;
+}
+
 .forge-category-rail {
-  @apply flex w-[16.5rem] shrink-0 flex-col border-r;
-  border-color: rgba(var(--forge-border-rgb), 0.16);
+  @apply flex w-[16rem] shrink-0 flex-col border-r;
+  border-color: rgba(var(--forge-border-strong-rgb), 0.18);
   background:
-    linear-gradient(180deg, rgba(var(--forge-bg-elevated-rgb), 0.98), rgba(var(--forge-bg-rgb), 0.96)),
-    linear-gradient(180deg, rgba(var(--forge-cyan-rgb), 0.04), transparent 26%);
+    radial-gradient(
+      circle at 0% 0%,
+      rgba(var(--forge-cyan-rgb), 0.13),
+      transparent 28%
+    ),
+    linear-gradient(180deg, rgba(16, 18, 20, 0.99), rgba(4, 4, 4, 0.99));
+  box-shadow:
+    12px 0 34px rgba(0, 0, 0, 0.34),
+    inset -1px 0 0 rgba(255, 255, 255, 0.03);
 }
 
 .forge-category-rail--collapsed {
-  width: 4.75rem;
+  width: 4.35rem;
 }
 
 .forge-category-rail__top {
   display: grid;
-  gap: 0.5rem;
-  padding: 0.55rem;
-  border-bottom: 1px solid rgba(var(--forge-border-strong-rgb), 0.12);
+  gap: 0.55rem;
+  padding: 0.65rem;
+  border-bottom: 1px solid rgba(var(--forge-border-strong-rgb), 0.14);
+}
+
+.forge-rail-brand-card {
+  display: flex;
+  min-height: 3.2rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.14);
+  border-radius: 8px;
+  padding: 0.68rem 0.78rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.055), transparent 48%),
+    linear-gradient(
+      135deg,
+      rgba(var(--forge-cyan-rgb), 0.16),
+      rgba(255, 255, 255, 0.028) 62%
+    ),
+    rgba(0, 0, 0, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 16px 32px rgba(0, 0, 0, 0.22);
+}
+
+.forge-rail-brand-card__label {
+  color: rgba(var(--forge-muted-rgb), 0.58);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.forge-rail-brand-card__title {
+  margin-top: 0.32rem;
+  color: rgb(var(--forge-text-rgb));
+  font-size: 0.95rem;
+  font-weight: 850;
+  letter-spacing: 0.025em;
+  line-height: 1;
+}
+
+.forge-rail-brand-card__light {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: rgb(var(--forge-mint-rgb));
+  box-shadow:
+    0 0 0 4px rgba(var(--forge-mint-rgb), 0.09),
+    0 0 18px rgba(var(--forge-mint-rgb), 0.48);
 }
 
 .forge-rail-toggle {
   display: inline-flex;
-  min-height: 2.25rem;
+  min-height: 2rem;
   width: 100%;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
-  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.2);
-  border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgba(32, 37, 42, 0.82), rgba(8, 9, 10, 0.88)),
-    linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.06), transparent);
-  color: rgb(var(--forge-text-rgb));
-  font-size: 0.68rem;
+  gap: 0.4rem;
+  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.16);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  color: rgba(var(--forge-muted-rgb), 0.86);
+  font-size: 0.66rem;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0;
   line-height: 1;
   text-transform: uppercase;
   white-space: nowrap;
@@ -584,55 +944,80 @@ html[data-effects="subtle"] .forge-context-card:hover {
 }
 
 .forge-category-rail--collapsed .forge-rail-toggle {
-  min-height: 2.35rem;
+  min-height: 2.15rem;
   padding: 0;
   font-size: 0.75rem;
 }
 
 .forge-nav-group {
-  @apply rounded-2xl bg-black/10 px-1.5 py-1.5;
+  @apply rounded-lg px-1 py-1;
+  background: rgba(255, 255, 255, 0.012);
+  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.045);
 }
 
 .forge-nav-group__trigger {
-  @apply flex w-full items-center justify-between rounded-xl px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist/70 transition;
+  @apply flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-[10px] font-bold uppercase text-forge-mist/65 transition;
+  letter-spacing: 0.025em;
 }
 
 .forge-nav-group__trigger:hover,
 .forge-nav-group__trigger--active {
   @apply text-forge-ash;
-  background: rgba(var(--forge-panel-rgb), 0.42);
+  background: rgba(var(--forge-cyan-rgb), 0.08);
 }
 
 .forge-nav-item {
-  @apply flex min-h-10 items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs text-forge-mist transition;
+  @apply flex min-h-9 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-forge-mist transition;
   border: 1px solid transparent;
+  position: relative;
 }
 
 .forge-nav-item:hover {
   @apply text-forge-ash;
-  border-color: rgba(var(--forge-cyan-rgb), 0.18);
-  background: rgba(var(--forge-panel-rgb), 0.52);
+  border-color: rgba(var(--forge-cyan-rgb), 0.22);
+  background: rgba(var(--forge-cyan-rgb), 0.075);
 }
 
 .forge-nav-item--active {
   @apply text-forge-ash;
-  border-color: rgba(var(--forge-cyan-rgb), 0.34);
+  border-color: rgba(var(--forge-cyan-rgb), 0.42);
   background:
-    linear-gradient(135deg, rgba(var(--forge-cyan-rgb), 0.13), rgba(var(--forge-amber-rgb), 0.08)),
-    rgba(var(--forge-panel-rgb), 0.62);
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.26),
+      rgba(var(--forge-cyan-rgb), 0.08) 56%,
+      transparent
+    ),
+    rgba(255, 255, 255, 0.035);
+  box-shadow:
+    inset 3px 0 0 rgb(var(--forge-cyan-rgb)),
+    0 10px 20px rgba(0, 0, 0, 0.22);
 }
 
 .forge-nav-item__short {
-  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border font-mono text-[9px] font-semibold tracking-[0.12em] text-forge-bone;
-  border-color: rgba(var(--forge-border-rgb), 0.18);
-  background: rgba(0, 0, 0, 0.28);
+  @apply flex h-6 w-6 shrink-0 items-center justify-center rounded border font-mono text-[9px] font-semibold text-forge-bone;
+  border-color: rgba(var(--forge-border-strong-rgb), 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent),
+    rgba(0, 0, 0, 0.38);
+  letter-spacing: 0;
+}
+
+.forge-nav-item--active .forge-nav-item__short {
+  border-color: rgba(var(--forge-cyan-rgb), 0.5);
+  background: rgba(var(--forge-cyan-rgb), 0.16);
+  color: rgb(255 236 221);
 }
 
 .forge-dock {
   @apply flex w-[5.5rem] shrink-0 flex-col border-r;
   border-color: rgba(var(--forge-border-rgb), 0.18);
   background:
-    linear-gradient(180deg, rgba(var(--forge-bg-elevated-rgb), 0.98), rgba(var(--forge-bg-rgb), 0.96)),
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-bg-elevated-rgb), 0.98),
+      rgba(var(--forge-bg-rgb), 0.96)
+    ),
     linear-gradient(180deg, rgba(var(--forge-cyan-rgb), 0.05), transparent 24%);
 }
 
@@ -645,24 +1030,47 @@ html[data-effects="subtle"] .forge-context-card:hover {
 .forge-dock__item:hover {
   border-color: rgba(var(--forge-cyan-rgb), 0.18);
   color: rgb(var(--forge-text-rgb));
-  background-image: linear-gradient(145deg, rgba(var(--forge-cyan-rgb), 0.1), rgba(var(--forge-amber-rgb), 0.06) 75%);
+  background-image: linear-gradient(
+    145deg,
+    rgba(var(--forge-cyan-rgb), 0.1),
+    rgba(var(--forge-amber-rgb), 0.06) 75%
+  );
 }
 
 .forge-dock__item--active {
   color: rgb(var(--forge-text-rgb));
   border-color: rgba(var(--forge-cyan-rgb), 0.32);
   background:
-    linear-gradient(165deg, rgba(var(--forge-cyan-rgb), 0.18), rgba(var(--forge-mint-rgb), 0.1) 56%, rgba(var(--forge-amber-rgb), 0.16)),
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.8), rgba(var(--forge-panel-soft-rgb), 0.64));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 14px 32px rgba(0, 0, 0, 0.24);
+    linear-gradient(
+      165deg,
+      rgba(var(--forge-cyan-rgb), 0.18),
+      rgba(var(--forge-mint-rgb), 0.1) 56%,
+      rgba(var(--forge-amber-rgb), 0.16)
+    ),
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.8),
+      rgba(var(--forge-panel-soft-rgb), 0.64)
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 14px 32px rgba(0, 0, 0, 0.24);
 }
 
 .forge-dock__glyph {
   @apply flex h-9 w-9 items-center justify-center rounded-xl border font-mono text-[10px] font-semibold tracking-[0.16em] text-forge-bone;
   border-color: rgba(var(--forge-border-rgb), 0.24);
   background:
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.88), rgba(0, 0, 0, 0.3)),
-    radial-gradient(circle at 50% 0%, rgba(var(--forge-cyan-rgb), 0.18), transparent 64%);
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.88),
+      rgba(0, 0, 0, 0.3)
+    ),
+    radial-gradient(
+      circle at 50% 0%,
+      rgba(var(--forge-cyan-rgb), 0.18),
+      transparent 64%
+    );
 }
 
 .forge-dock__label {
@@ -674,16 +1082,33 @@ html[data-effects="subtle"] .forge-context-card:hover {
   z-index: 1;
   border-color: rgba(var(--forge-border-rgb), 0.16);
   background:
-    linear-gradient(180deg, rgba(var(--forge-bg-elevated-rgb), 0.92), rgba(var(--forge-bg-rgb), 0.9)),
-    linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.05), transparent 30%, rgba(var(--forge-amber-rgb), 0.04) 100%);
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-bg-elevated-rgb), 0.92),
+      rgba(var(--forge-bg-rgb), 0.9)
+    ),
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.05),
+      transparent 30%,
+      rgba(var(--forge-amber-rgb), 0.04) 100%
+    );
 }
 
 .forge-task {
   @apply flex min-w-[13rem] max-w-[18rem] items-center gap-2 rounded-2xl border px-3 py-2 text-forge-bone transition;
   border-color: rgba(var(--forge-border-rgb), 0.18);
   background:
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.76), rgba(var(--forge-panel-soft-rgb), 0.66)),
-    linear-gradient(135deg, rgba(var(--forge-cyan-rgb), 0.06), rgba(var(--forge-amber-rgb), 0.04));
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.76),
+      rgba(var(--forge-panel-soft-rgb), 0.66)
+    ),
+    linear-gradient(
+      135deg,
+      rgba(var(--forge-cyan-rgb), 0.06),
+      rgba(var(--forge-amber-rgb), 0.04)
+    );
 }
 
 .forge-task:hover {
@@ -694,54 +1119,91 @@ html[data-effects="subtle"] .forge-context-card:hover {
 .forge-task--active {
   border-color: rgba(var(--forge-cyan-rgb), 0.34);
   background-image:
-    linear-gradient(145deg, rgba(var(--forge-cyan-rgb), 0.16), rgba(var(--forge-mint-rgb), 0.08) 56%, rgba(var(--forge-amber-rgb), 0.12)),
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.82), rgba(var(--forge-panel-soft-rgb), 0.72));
+    linear-gradient(
+      145deg,
+      rgba(var(--forge-cyan-rgb), 0.16),
+      rgba(var(--forge-mint-rgb), 0.08) 56%,
+      rgba(var(--forge-amber-rgb), 0.12)
+    ),
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.82),
+      rgba(var(--forge-panel-soft-rgb), 0.72)
+    );
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .forge-desktop-surface {
-  @apply flex min-h-0 min-w-0 flex-1 overflow-hidden p-3 sm:p-4 xl:p-5;
+  @apply flex min-h-0 min-w-0 flex-1 overflow-hidden p-2.5 sm:p-3 xl:p-4;
 }
 
 .forge-desktop-surface--flush {
-  padding: 0.75rem;
+  padding: 0.6rem;
 }
 
 .forge-window-frame {
-  @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[1.55rem] border;
-  border-color: rgba(var(--forge-border-rgb), 0.18);
+  @apply flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border;
+  border-color: rgba(var(--forge-border-strong-rgb), 0.18);
   background:
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.96), rgba(var(--forge-bg-rgb), 0.98)),
-    radial-gradient(circle at 100% 0%, rgba(var(--forge-cyan-rgb), 0.08), transparent 40%);
-  box-shadow: var(--forge-shadow);
+    radial-gradient(
+      circle at 50% -8%,
+      rgba(var(--forge-cyan-rgb), 0.085),
+      transparent 28%
+    ),
+    linear-gradient(180deg, rgba(14, 16, 18, 0.985), rgba(2, 2, 2, 0.995));
+  box-shadow:
+    0 22px 64px rgba(0, 0, 0, 0.52),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.forge-window-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(var(--forge-cyan-rgb), 0.86),
+    rgba(255, 255, 255, 0.34) 38%,
+    transparent 82%
+  );
+  opacity: 0.72;
 }
 
 .forge-window-frame__head {
   @apply flex shrink-0 flex-wrap items-start justify-between gap-3 border-b px-4 py-3 sm:px-5;
   border-color: rgba(var(--forge-border-rgb), 0.16);
-  background: linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.08), rgba(var(--forge-amber-rgb), 0.06) 72%, transparent);
+  background: linear-gradient(
+    90deg,
+    rgba(var(--forge-cyan-rgb), 0.08),
+    rgba(var(--forge-amber-rgb), 0.06) 72%,
+    transparent
+  );
 }
 
 .forge-window-frame--focus {
-  border-radius: 1rem;
+  border-radius: 8px;
 }
 
 .forge-window-frame--chat {
-  border-radius: 18px;
+  border-radius: 10px;
 }
 
 .forge-focus-head {
-  @apply flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-4 py-3 sm:px-5;
-  border-color: rgba(var(--forge-border-rgb), 0.14);
-  background: linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.06), transparent 48%, rgba(var(--forge-amber-rgb), 0.04));
+  @apply flex shrink-0 flex-wrap items-center justify-between gap-3 border-b px-3 py-2.5 sm:px-4;
+  border-color: rgba(var(--forge-border-strong-rgb), 0.18);
+  background:
+    linear-gradient(180deg, rgba(18, 20, 22, 0.96), rgba(7, 8, 9, 0.95)),
+    linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.09), transparent 42%);
 }
 
 .forge-pinned-panel {
   @apply hidden w-[22rem] shrink-0 flex-col gap-3 overflow-y-auto border-l p-3 xl:flex;
-  border-color: rgba(var(--forge-border-rgb), 0.14);
+  border-color: rgba(var(--forge-border-strong-rgb), 0.12);
   background:
-    linear-gradient(180deg, rgba(var(--forge-bg-elevated-rgb), 0.96), rgba(var(--forge-bg-rgb), 0.94)),
-    linear-gradient(180deg, rgba(var(--forge-cyan-rgb), 0.04), transparent 20%);
+    linear-gradient(180deg, rgba(13, 15, 17, 0.98), rgba(4, 4, 4, 0.98)),
+    linear-gradient(180deg, rgba(var(--forge-cyan-rgb), 0.045), transparent 20%);
 }
 
 .forge-floating-window {
@@ -751,12 +1213,12 @@ html[data-effects="subtle"] .forge-context-card:hover {
 }
 
 .forge-floating-card {
-  @apply overflow-hidden rounded-2xl border text-forge-bone shadow-panel;
-  border-color: rgba(var(--forge-border-rgb), 0.22);
+  @apply overflow-hidden rounded-lg border text-forge-bone shadow-panel;
+  border-color: rgba(var(--forge-border-strong-rgb), 0.18);
   background:
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.98), rgba(var(--forge-bg-rgb), 0.98)),
-    radial-gradient(circle at 100% 0%, rgba(var(--forge-cyan-rgb), 0.1), transparent 44%);
-  backdrop-filter: blur(14px);
+    linear-gradient(180deg, rgba(16, 18, 20, 0.98), rgba(5, 5, 5, 0.99)),
+    linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.06), transparent 44%);
+  backdrop-filter: blur(10px);
 }
 
 .forge-floating-card--pinned {
@@ -765,12 +1227,13 @@ html[data-effects="subtle"] .forge-context-card:hover {
 
 .forge-floating-card__head {
   @apply flex cursor-move items-center justify-between gap-3 border-b px-3 py-2;
-  border-color: rgba(var(--forge-border-rgb), 0.14);
-  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(var(--forge-border-strong-rgb), 0.12);
+  background: rgba(0, 0, 0, 0.32);
 }
 
 .forge-window-btn {
-  @apply rounded-lg border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-forge-mist transition;
+  @apply rounded border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-semibold uppercase text-forge-mist transition;
+  letter-spacing: 0;
 }
 
 .forge-window-btn:hover {
@@ -780,7 +1243,7 @@ html[data-effects="subtle"] .forge-context-card:hover {
 
 .forge-window-action,
 .forge-surface-link {
-  @apply flex w-full items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-left text-xs text-forge-mist transition;
+  @apply flex w-full items-center gap-2 rounded-md border border-white/10 bg-black/20 px-3 py-2 text-left text-xs text-forge-mist transition;
 }
 
 .forge-window-action:hover,
@@ -795,7 +1258,11 @@ html[data-effects="subtle"] .forge-context-card:hover {
   z-index: 2;
   border-color: rgba(var(--forge-border-rgb), 0.18);
   background:
-    linear-gradient(180deg, rgba(var(--forge-bg-elevated-rgb), 0.92), rgba(var(--forge-bg-rgb), 0.88)),
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-bg-elevated-rgb), 0.92),
+      rgba(var(--forge-bg-rgb), 0.88)
+    ),
     linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.05), transparent);
 }
 
@@ -804,8 +1271,16 @@ html[data-effects="subtle"] .forge-context-card:hover {
   z-index: 3;
   border-color: rgba(var(--forge-border-rgb), 0.16);
   background:
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.86), rgba(var(--forge-panel-soft-rgb), 0.82)),
-    linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.05), rgba(var(--forge-amber-rgb), 0.03));
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.86),
+      rgba(var(--forge-panel-soft-rgb), 0.82)
+    ),
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.05),
+      rgba(var(--forge-amber-rgb), 0.03)
+    );
 }
 
 .forge-chat-footer {
@@ -813,22 +1288,41 @@ html[data-effects="subtle"] .forge-context-card:hover {
   z-index: 3;
   border-color: rgba(var(--forge-border-rgb), 0.18);
   background:
-    linear-gradient(180deg, rgba(var(--forge-bg-elevated-rgb), 0.9), rgba(var(--forge-bg-rgb), 0.94)),
-    linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.05), transparent 38%, rgba(var(--forge-amber-rgb), 0.04));
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-bg-elevated-rgb), 0.9),
+      rgba(var(--forge-bg-rgb), 0.94)
+    ),
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.05),
+      transparent 38%,
+      rgba(var(--forge-amber-rgb), 0.04)
+    );
 }
 
 .forge-chat-composer {
   @apply max-h-[300px] min-h-[80px] flex-1 resize-none rounded-2xl border px-4 py-3 text-[15px] leading-relaxed text-forge-bone outline-none placeholder:text-forge-gray/60;
   border-color: rgba(var(--forge-border-rgb), 0.24);
   background:
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.9), rgba(var(--forge-panel-soft-rgb), 0.82)),
-    linear-gradient(145deg, rgba(var(--forge-cyan-rgb), 0.05), rgba(var(--forge-amber-rgb), 0.03));
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.9),
+      rgba(var(--forge-panel-soft-rgb), 0.82)
+    ),
+    linear-gradient(
+      145deg,
+      rgba(var(--forge-cyan-rgb), 0.05),
+      rgba(var(--forge-amber-rgb), 0.03)
+    );
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 .forge-chat-composer:focus {
   border-color: rgba(var(--forge-cyan-rgb), 0.58);
-  box-shadow: 0 0 0 3px rgba(var(--forge-focus-rgb), 0.18), 0 14px 30px rgba(0, 0, 0, 0.16);
+  box-shadow:
+    0 0 0 3px rgba(var(--forge-focus-rgb), 0.18),
+    0 14px 30px rgba(0, 0, 0, 0.16);
 }
 
 .forge-chat-action-btn {
@@ -837,8 +1331,16 @@ html[data-effects="subtle"] .forge-context-card:hover {
   z-index: 2;
   border-color: rgba(var(--forge-border-rgb), 0.24);
   background:
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.76), rgba(var(--forge-panel-soft-rgb), 0.66)),
-    linear-gradient(135deg, rgba(var(--forge-cyan-rgb), 0.08), rgba(var(--forge-amber-rgb), 0.06));
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.76),
+      rgba(var(--forge-panel-soft-rgb), 0.66)
+    ),
+    linear-gradient(
+      135deg,
+      rgba(var(--forge-cyan-rgb), 0.08),
+      rgba(var(--forge-amber-rgb), 0.06)
+    );
 }
 
 .forge-chat-action-btn:hover {
@@ -848,19 +1350,49 @@ html[data-effects="subtle"] .forge-context-card:hover {
 }
 
 .forge-chat-layout {
-  grid-template-columns: var(--forge-chat-thread-width, 280px) 7px minmax(28rem, 1fr) 7px var(--forge-chat-inspector-width, 380px);
+  grid-template-columns:
+    var(--forge-chat-thread-width, 280px) 7px minmax(28rem, 1fr)
+    7px var(--forge-chat-inspector-width, 380px);
   isolation: isolate;
   border: 1px solid rgba(var(--forge-border-strong-rgb), 0.18);
   border-radius: 18px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 32%),
-    radial-gradient(circle at 50% 0%, rgba(var(--forge-cyan-rgb), 0.08), transparent 34%),
+    radial-gradient(
+      circle at 50% 0%,
+      rgba(var(--forge-cyan-rgb), 0.08),
+      transparent 34%
+    ),
     linear-gradient(180deg, rgba(6, 7, 8, 0.98), rgba(1, 1, 1, 0.98));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 34px 90px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 34px 90px rgba(0, 0, 0, 0.5);
+}
+
+.forge-chat-layout--ops {
+  --ops-border: rgba(var(--forge-border-strong-rgb), 0.13);
+  --ops-panel: rgba(14, 18, 23, 0.86);
+  --ops-panel-soft: rgba(11, 14, 18, 0.72);
+  border-radius: 8px;
+  border-color: var(--ops-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.028), transparent 44%),
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(var(--forge-cyan-rgb), 0.055),
+      transparent 34%
+    ),
+    linear-gradient(180deg, var(--ops-panel), var(--ops-panel-soft));
+  box-shadow:
+    0 16px 44px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
 }
 
 .forge-chat-layout--empty {
-  grid-template-columns: var(--forge-chat-thread-width, 280px) 7px minmax(0, 1fr);
+  grid-template-columns: var(--forge-chat-thread-width, 280px) 7px minmax(
+      0,
+      1fr
+    );
 }
 
 .forge-chat-thread-rail {
@@ -876,7 +1408,12 @@ html[data-effects="subtle"] .forge-context-card:hover {
   width: 7px;
   cursor: col-resize;
   background:
-    linear-gradient(180deg, transparent, rgba(var(--forge-border-strong-rgb), 0.12), transparent),
+    linear-gradient(
+      180deg,
+      transparent,
+      rgba(var(--forge-border-strong-rgb), 0.12),
+      transparent
+    ),
     rgba(0, 0, 0, 0.24);
 }
 
@@ -910,12 +1447,20 @@ html[data-effects="subtle"] .forge-context-card:hover {
   @apply px-4 py-3;
   background:
     linear-gradient(180deg, rgba(20, 23, 26, 0.96), rgba(10, 11, 12, 0.94)),
-    linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.06), rgba(255, 255, 255, 0.025));
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.06),
+      rgba(255, 255, 255, 0.025)
+    );
 }
 
 .forge-chat-messages {
   background:
-    radial-gradient(circle at 50% -10%, rgba(var(--forge-cyan-rgb), 0.055), transparent 34%),
+    radial-gradient(
+      circle at 50% -10%,
+      rgba(var(--forge-cyan-rgb), 0.055),
+      transparent 34%
+    ),
     linear-gradient(180deg, rgba(3, 3, 3, 0.68), rgba(0, 0, 0, 0.94));
 }
 
@@ -927,8 +1472,15 @@ html[data-effects="subtle"] .forge-context-card:hover {
   @apply px-4 py-2.5;
   background:
     linear-gradient(180deg, rgba(13, 15, 17, 0.94), rgba(4, 4, 4, 0.98)),
-    linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.055), transparent 48%, rgba(255, 255, 255, 0.025));
-  box-shadow: 0 -18px 44px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.055);
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.055),
+      transparent 48%,
+      rgba(255, 255, 255, 0.025)
+    );
+  box-shadow:
+    0 -18px 44px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
 .forge-chat-routing-strip {
@@ -943,9 +1495,15 @@ html[data-effects="subtle"] .forge-context-card:hover {
   border-radius: 18px;
   background:
     linear-gradient(180deg, rgba(21, 24, 27, 0.94), rgba(8, 9, 10, 0.96)),
-    radial-gradient(circle at 100% 0%, rgba(var(--forge-cyan-rgb), 0.08), transparent 44%);
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(var(--forge-cyan-rgb), 0.08),
+      transparent 44%
+    );
   padding: 0.65rem;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 18px 44px rgba(0, 0, 0, 0.24);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 44px rgba(0, 0, 0, 0.24);
 }
 
 .forge-chat-compose-row {
@@ -968,7 +1526,9 @@ html[data-effects="subtle"] .forge-context-card:hover {
 
 .forge-chat-composer:focus {
   border-color: rgba(var(--forge-cyan-rgb), 0.58);
-  box-shadow: 0 0 0 2px rgba(var(--forge-cyan-rgb), 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 0 0 2px rgba(var(--forge-cyan-rgb), 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .forge-chat-compose-actions {
@@ -984,7 +1544,11 @@ html[data-effects="subtle"] .forge-context-card:hover {
   color: rgb(var(--forge-text-rgb));
   background:
     linear-gradient(180deg, rgba(42, 48, 54, 0.86), rgba(15, 17, 19, 0.9)),
-    linear-gradient(120deg, rgba(var(--forge-cyan-rgb), 0.08), rgba(255, 255, 255, 0.035));
+    linear-gradient(
+      120deg,
+      rgba(var(--forge-cyan-rgb), 0.08),
+      rgba(255, 255, 255, 0.035)
+    );
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -993,12 +1557,47 @@ html[data-effects="subtle"] .forge-context-card:hover {
   background-color: rgba(42, 48, 54, 0.96);
 }
 
+.forge-chat-primary-btn {
+  min-height: 2.05rem;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--forge-cyan-rgb), 0.58);
+  background: linear-gradient(180deg, #ff9a3d, #ff7a18);
+  color: #050505;
+  font-weight: 700;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 14px 28px rgba(255, 122, 24, 0.18);
+}
+
+.forge-chat-primary-btn:hover {
+  border-color: rgba(var(--forge-cyan-rgb), 0.72);
+  background: linear-gradient(180deg, #ffa64d, #ff8124);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    0 16px 30px rgba(255, 122, 24, 0.22);
+}
+
+.forge-chat-primary-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+  box-shadow: none;
+}
+
 .forge-chat-inspector {
   display: flex;
   border-color: rgba(var(--forge-border-strong-rgb), 0.16) !important;
   background:
     linear-gradient(180deg, rgba(18, 20, 22, 0.98), rgba(7, 8, 9, 0.98)),
-    radial-gradient(circle at 100% 0%, rgba(var(--forge-cyan-rgb), 0.065), transparent 36%);
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(var(--forge-cyan-rgb), 0.065),
+      transparent 36%
+    );
 }
 
 .forge-chat-inspector button {
@@ -1013,7 +1612,12 @@ html[data-effects="subtle"] .forge-context-card:hover {
   height: 7px;
   cursor: row-resize;
   background:
-    linear-gradient(90deg, transparent, rgba(var(--forge-border-strong-rgb), 0.16), transparent),
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(var(--forge-border-strong-rgb), 0.16),
+      transparent
+    ),
     rgba(0, 0, 0, 0.28);
 }
 
@@ -1021,13 +1625,23 @@ html[data-effects="subtle"] .forge-context-card:hover {
   border-color: rgba(var(--forge-border-strong-rgb), 0.14) !important;
   background:
     linear-gradient(180deg, rgba(20, 22, 24, 0.94), rgba(8, 9, 10, 0.96)),
-    radial-gradient(circle at 100% 0%, rgba(255, 255, 255, 0.04), transparent 34%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055), 0 12px 34px rgba(0, 0, 0, 0.24);
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(255, 255, 255, 0.04),
+      transparent 34%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    0 12px 34px rgba(0, 0, 0, 0.24);
 }
 
 .forge-chat-empty-state {
   background:
-    radial-gradient(circle at 50% 26%, rgba(var(--forge-cyan-rgb), 0.1), transparent 30%),
+    radial-gradient(
+      circle at 50% 26%,
+      rgba(var(--forge-cyan-rgb), 0.1),
+      transparent 30%
+    ),
     linear-gradient(180deg, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0.74));
 }
 
@@ -1035,7 +1649,11 @@ html[data-effects="subtle"] .forge-context-card:hover {
   @apply hidden w-[24rem] shrink-0 border-l p-3 xl:flex xl:flex-col xl:gap-3 xl:overflow-y-auto;
   border-color: rgba(var(--forge-border-rgb), 0.16);
   background:
-    linear-gradient(180deg, rgba(var(--forge-bg-elevated-rgb), 0.97), rgba(var(--forge-bg-rgb), 0.95)),
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-bg-elevated-rgb), 0.97),
+      rgba(var(--forge-bg-rgb), 0.95)
+    ),
     linear-gradient(180deg, rgba(var(--forge-cyan-rgb), 0.04), transparent 18%);
 }
 
@@ -1044,8 +1662,16 @@ html[data-effects="subtle"] .forge-context-card:hover {
   z-index: 1;
   border-color: rgba(var(--forge-border-rgb), 0.18);
   background:
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.9), rgba(var(--forge-panel-soft-rgb), 0.78)),
-    linear-gradient(145deg, rgba(var(--forge-cyan-rgb), 0.08), rgba(var(--forge-amber-rgb), 0.06));
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.9),
+      rgba(var(--forge-panel-soft-rgb), 0.78)
+    ),
+    linear-gradient(
+      145deg,
+      rgba(var(--forge-cyan-rgb), 0.08),
+      rgba(var(--forge-amber-rgb), 0.06)
+    );
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
   animation: forge-reveal 0.34s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -1063,10 +1689,18 @@ html[data-effects="subtle"] .forge-context-card:hover {
   @apply inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] text-forge-gray;
   position: relative;
   z-index: 1;
-  border-color: rgba(var(--forge-border-rgb), 0.22);
+  min-height: 1.8rem;
+  border-color: rgba(var(--forge-border-strong-rgb), 0.22);
   background:
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.84), rgba(var(--forge-panel-soft-rgb), 0.72)),
-    linear-gradient(135deg, rgba(var(--forge-cyan-rgb), 0.05), rgba(var(--forge-amber-rgb), 0.03));
+    linear-gradient(180deg, rgba(24, 27, 30, 0.9), rgba(5, 6, 7, 0.9)),
+    linear-gradient(
+      135deg,
+      rgba(var(--forge-cyan-rgb), 0.07),
+      rgba(var(--forge-amber-rgb), 0.03)
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 18px rgba(0, 0, 0, 0.24);
 }
 
 .forge-chip--muted {
@@ -1077,32 +1711,64 @@ html[data-effects="subtle"] .forge-context-card:hover {
 .forge-chip--ok {
   border-color: rgba(var(--forge-mint-rgb), 0.48);
   background:
-    linear-gradient(180deg, rgba(var(--forge-mint-rgb), 0.16), rgba(var(--forge-mint-rgb), 0.08)),
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.9), rgba(var(--forge-panel-soft-rgb), 0.74));
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-mint-rgb), 0.16),
+      rgba(var(--forge-mint-rgb), 0.08)
+    ),
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.9),
+      rgba(var(--forge-panel-soft-rgb), 0.74)
+    );
   color: rgb(220 255 244);
 }
 
 .forge-chip--warn {
   border-color: rgba(var(--forge-amber-rgb), 0.56);
   background:
-    linear-gradient(180deg, rgba(var(--forge-amber-rgb), 0.18), rgba(var(--forge-amber-rgb), 0.08)),
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.9), rgba(var(--forge-panel-soft-rgb), 0.74));
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-amber-rgb), 0.18),
+      rgba(var(--forge-amber-rgb), 0.08)
+    ),
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.9),
+      rgba(var(--forge-panel-soft-rgb), 0.74)
+    );
   color: rgb(255 230 196);
 }
 
 .forge-chip--info {
   border-color: rgba(var(--forge-cyan-rgb), 0.54);
   background:
-    linear-gradient(180deg, rgba(var(--forge-cyan-rgb), 0.16), rgba(var(--forge-cyan-rgb), 0.08)),
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.9), rgba(var(--forge-panel-soft-rgb), 0.74));
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-cyan-rgb), 0.16),
+      rgba(var(--forge-cyan-rgb), 0.08)
+    ),
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.9),
+      rgba(var(--forge-panel-soft-rgb), 0.74)
+    );
   color: rgb(213 248 255);
 }
 
 .forge-chip--accent {
   border-color: rgba(var(--forge-cyan-rgb), 0.34);
   background:
-    linear-gradient(180deg, rgba(var(--forge-cyan-rgb), 0.12), rgba(var(--forge-amber-rgb), 0.1)),
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.9), rgba(var(--forge-panel-soft-rgb), 0.74));
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-cyan-rgb), 0.12),
+      rgba(var(--forge-amber-rgb), 0.1)
+    ),
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.9),
+      rgba(var(--forge-panel-soft-rgb), 0.74)
+    );
   color: rgb(var(--forge-text-rgb));
 }
 
@@ -1110,16 +1776,32 @@ html[data-effects="subtle"] .forge-context-card:hover {
   @apply flex justify-between gap-2 rounded-xl border px-3 py-2 text-[11px] text-forge-gray;
   border-color: rgba(var(--forge-border-rgb), 0.16);
   background:
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.76), rgba(var(--forge-panel-soft-rgb), 0.66)),
-    linear-gradient(135deg, rgba(var(--forge-cyan-rgb), 0.05), rgba(var(--forge-amber-rgb), 0.03));
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.76),
+      rgba(var(--forge-panel-soft-rgb), 0.66)
+    ),
+    linear-gradient(
+      135deg,
+      rgba(var(--forge-cyan-rgb), 0.05),
+      rgba(var(--forge-amber-rgb), 0.03)
+    );
 }
 
 .forge-stat {
   @apply flex flex-col gap-1 rounded-xl border px-3 py-3 text-forge-bone;
   border-color: rgba(var(--forge-border-rgb), 0.18);
   background:
-    linear-gradient(180deg, rgba(var(--forge-panel-rgb), 0.78), rgba(var(--forge-panel-soft-rgb), 0.68)),
-    linear-gradient(145deg, rgba(var(--forge-cyan-rgb), 0.06), rgba(var(--forge-amber-rgb), 0.04));
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.78),
+      rgba(var(--forge-panel-soft-rgb), 0.68)
+    ),
+    linear-gradient(
+      145deg,
+      rgba(var(--forge-cyan-rgb), 0.06),
+      rgba(var(--forge-amber-rgb), 0.04)
+    );
 }
 
 .forge-sim-graph__edge {
@@ -1160,8 +1842,16 @@ html[data-effects="subtle"] .forge-context-card:hover {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 100% 0%, rgba(var(--forge-cyan-rgb), 0.24), transparent 52%),
-    radial-gradient(circle at 0% 100%, rgba(var(--forge-amber-rgb), 0.22), transparent 58%);
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(var(--forge-cyan-rgb), 0.24),
+      transparent 52%
+    ),
+    radial-gradient(
+      circle at 0% 100%,
+      rgba(var(--forge-amber-rgb), 0.22),
+      transparent 58%
+    );
   opacity: 0;
   transition: opacity 180ms ease;
   pointer-events: none;
@@ -1225,7 +1915,9 @@ html[data-effects="subtle"] .forge-context-card:hover {
   }
 
   .forge-chat-layout {
-    grid-template-columns: minmax(13.5rem, var(--forge-chat-thread-width, 260px)) 7px minmax(0, 1fr);
+    grid-template-columns:
+      minmax(13.5rem, var(--forge-chat-thread-width, 260px))
+      7px minmax(0, 1fr);
   }
 
   .forge-chat-resizer--right,
@@ -1251,16 +1943,45 @@ html[data-effects="subtle"] .forge-context-card:hover {
     @apply px-3 py-2.5;
   }
 
+  .forge-status-strip {
+    height: auto;
+    min-height: 3rem;
+    overflow-x: hidden;
+  }
+
+  .forge-mobile-rail-toggle {
+    display: grid;
+  }
+
   .forge-dock {
     @apply hidden;
   }
 
   .forge-desktop-surface {
-    @apply p-2;
+    @apply p-1.5;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
   }
 
   .forge-window-frame {
-    @apply rounded-[1.1rem];
+    @apply rounded-lg;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .forge-desktop-surface--flush {
+    padding: 0.35rem;
+  }
+
+  .forge-window-frame--chat,
+  .forge-window-frame--chat > div {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
   }
 
   .forge-taskstrip {
@@ -1274,6 +1995,37 @@ html[data-effects="subtle"] .forge-context-card:hover {
   .forge-chat-layout {
     display: flex !important;
     flex-direction: column;
+    width: calc(100vw - 1.25rem);
+    max-width: calc(100vw - 1.25rem);
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .forge-chat-layout > section {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .forge-chat-content-width,
+  .forge-chat-composer-shell,
+  .forge-chat-routing-strip {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .forge-chat-layout > *,
+  .forge-chat-layout header,
+  .forge-chat-layout footer,
+  .forge-chat-layout section {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .forge-chat-composer-shell,
+  .forge-chat-routing-strip {
+    overflow: hidden;
+    border-radius: 12px;
   }
 
   .forge-chat-thread-rail {
@@ -1288,14 +2040,403 @@ html[data-effects="subtle"] .forge-context-card:hover {
   .forge-chat-header,
   .forge-chat-toolbar,
   .forge-chat-footer {
-    @apply px-3;
+    @apply px-2.5;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   .forge-chat-messages {
     @apply px-3 py-4;
   }
 
-  .forge-chat-compose-actions {
+  .forge-chat-message-stack,
+  .forge-chat-message-stack > * {
+    width: 100%;
+    max-width: 100%;
     min-width: 0;
+  }
+
+  .forge-chat-message-stack code,
+  .forge-chat-message-stack pre,
+  .forge-chat-message-stack p,
+  .forge-chat-message-stack span {
+    overflow-wrap: anywhere;
+  }
+
+  .forge-chat-empty-state {
+    align-items: stretch;
+    padding: 0.75rem;
+  }
+
+  .forge-chat-empty-state > div {
+    width: min(100%, calc(100vw - 2rem));
+    max-width: 100%;
+    min-width: 0;
+    margin-right: auto;
+    margin-left: auto;
+    overflow-wrap: anywhere;
+  }
+
+  .forge-chat-empty-state p {
+    max-width: 24ch;
+  }
+
+  .forge-chat-compose-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .forge-chat-compose-actions {
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+
+  .forge-chat-composer {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .forge-chat-compose-actions .forge-chat-action-btn,
+  .forge-chat-compose-actions .forge-chat-primary-btn {
+    width: 100%;
+    min-width: 0;
+    padding-right: 0.65rem;
+    padding-left: 0.65rem;
+  }
+
+  .forge-chat-routing-strip button,
+  .forge-chat-routing-strip a,
+  .forge-chat-routing-strip label {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .forge-chat-routing-strip .truncate {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .forge-chat-routing-strip > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: flex-start;
+  }
+
+  .forge-chat-routing-strip > div > div:last-child {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: 1fr;
+  }
+
+  .forge-chat-routing-strip > div > div:last-child > * {
+    justify-content: center;
+    text-align: center;
+  }
+}
+
+.forge-ops-board {
+  --ops-border: rgba(var(--forge-border-strong-rgb), 0.13);
+  --ops-border-strong: rgba(var(--forge-border-strong-rgb), 0.22);
+  --ops-panel: rgba(14, 18, 23, 0.86);
+  --ops-panel-soft: rgba(11, 14, 18, 0.72);
+  width: 100%;
+  max-width: 96rem;
+  margin: 0 auto;
+  color: rgb(var(--forge-text-rgb));
+}
+
+.forge-ops-card,
+.forge-ops-panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.16);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 42%),
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(var(--forge-cyan-rgb), 0.07),
+      transparent 34%
+    ),
+    linear-gradient(180deg, rgba(15, 18, 22, 0.92), rgba(8, 10, 13, 0.86));
+  box-shadow:
+    0 18px 52px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.forge-ops-card::before,
+.forge-ops-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(var(--forge-cyan-rgb), 0.46),
+    rgba(255, 255, 255, 0.18),
+    transparent 72%
+  );
+  opacity: 0.5;
+}
+
+.forge-ops-panel__head {
+  display: flex;
+  min-height: 3.65rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid rgba(var(--forge-border-rgb), 0.11);
+  padding: 0.9rem 1rem;
+}
+
+.forge-ops-panel__body {
+  padding: 1rem;
+}
+
+.forge-ops-label {
+  color: rgba(var(--forge-muted-rgb), 0.72);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.forge-ops-title {
+  color: rgb(var(--forge-text-rgb));
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.forge-ops-subtle {
+  color: rgba(var(--forge-muted-rgb), 0.74);
+}
+
+.forge-ops-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 1.35rem;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--forge-border-rgb), 0.12);
+  padding: 0.15rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.forge-ops-status::before {
+  content: "";
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 12px currentColor;
+  opacity: 0.78;
+}
+
+.forge-ops-status--ok {
+  border-color: rgba(var(--forge-mint-rgb), 0.24);
+  background: rgba(var(--forge-mint-rgb), 0.14);
+  color: rgb(109 242 160);
+}
+
+.forge-ops-status--warn {
+  border-color: rgba(var(--forge-amber-rgb), 0.26);
+  background: rgba(var(--forge-amber-rgb), 0.13);
+  color: rgb(255 204 92);
+}
+
+.forge-ops-status--bad {
+  border-color: rgba(var(--forge-danger-rgb), 0.28);
+  background: rgba(var(--forge-danger-rgb), 0.13);
+  color: rgb(255 132 132);
+}
+
+.forge-ops-status--muted {
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(var(--forge-muted-rgb), 0.82);
+}
+
+.forge-ops-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.76rem;
+}
+
+.forge-ops-table th {
+  padding: 0.55rem 0.65rem;
+  color: rgba(var(--forge-muted-rgb), 0.58);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.forge-ops-table td {
+  border-top: 1px solid rgba(var(--forge-border-rgb), 0.1);
+  padding: 0.62rem 0.65rem;
+  color: rgba(var(--forge-text-rgb), 0.9);
+  vertical-align: middle;
+}
+
+.forge-ops-table tr:hover td {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.forge-ops-sparkline {
+  height: 1.65rem;
+  min-width: 5.25rem;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      135deg,
+      transparent 0 14%,
+      rgba(var(--forge-mint-rgb), 0.55) 15% 17%,
+      transparent 18% 34%,
+      rgba(var(--forge-mint-rgb), 0.75) 35% 38%,
+      transparent 39% 58%,
+      rgba(var(--forge-mint-rgb), 0.45) 59% 62%,
+      transparent 63%
+    ),
+    rgba(var(--forge-mint-rgb), 0.08);
+}
+
+.forge-ops-sparkline--bad {
+  background:
+    linear-gradient(
+      135deg,
+      transparent 0 14%,
+      rgba(var(--forge-danger-rgb), 0.55) 15% 17%,
+      transparent 18% 34%,
+      rgba(var(--forge-danger-rgb), 0.75) 35% 38%,
+      transparent 39% 58%,
+      rgba(var(--forge-danger-rgb), 0.45) 59% 62%,
+      transparent 63%
+    ),
+    rgba(var(--forge-danger-rgb), 0.08);
+}
+
+.forge-ops-progress {
+  height: 0.45rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.forge-ops-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    rgb(var(--forge-cyan-rgb)),
+    rgb(var(--forge-mint-rgb))
+  );
+}
+
+@media (max-width: 768px) {
+  .forge-ops-board {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .forge-ops-panel__head,
+  .forge-ops-panel__body {
+    padding: 0.8rem;
+  }
+
+  .forge-ops-panel__head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .forge-ops-panel__head > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .forge-category-rail {
+    position: fixed;
+    inset: 3rem auto 0 0;
+    z-index: 50;
+    display: flex;
+    width: min(18rem, 86vw);
+    transform: translateX(-102%);
+    transition: transform 180ms ease;
+    box-shadow: 20px 0 54px rgba(0, 0, 0, 0.54);
+  }
+
+  .forge-category-rail--collapsed {
+    width: min(18rem, 86vw);
+  }
+
+  .forge-category-rail--mobile-open {
+    transform: translateX(0);
+  }
+
+  .forge-category-rail--collapsed .forge-nav-item__label,
+  .forge-category-rail--collapsed .forge-nav-group__trigger span:first-child {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+
+  .forge-category-rail--collapsed .forge-nav-group__trigger span:first-child {
+    text-transform: uppercase;
+  }
+
+  .forge-category-rail--collapsed .forge-nav-group__trigger {
+    justify-content: space-between;
+  }
+
+  .forge-shell-frame--rail-open .forge-mobile-rail-backdrop {
+    position: fixed;
+    inset: 3rem 0 0;
+    z-index: 45;
+    display: block;
+    border: 0;
+    background: rgba(0, 0, 0, 0.58);
+    backdrop-filter: blur(2px);
+  }
+
+  .forge-status-strip {
+    overflow-x: hidden;
+  }
+
+  .forge-status-strip > div:last-child .forge-chip {
+    display: none;
+  }
+
+  .forge-status-strip > div:last-child .forge-chip {
+    padding: 0.32rem 0.52rem !important;
+    font-size: 0.56rem !important;
+    letter-spacing: 0.06em !important;
+  }
+
+  .forge-focus-head > div:last-child {
+    display: none;
+  }
+
+  .forge-window-frame--focus {
+    border-radius: 0.8rem;
+  }
+
+  .forge-ops-table th:nth-child(3),
+  .forge-ops-table td:nth-child(3),
+  .forge-ops-table th:nth-child(4),
+  .forge-ops-table td:nth-child(4) {
+    display: none;
   }
 }

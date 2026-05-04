@@ -80,7 +80,8 @@ export const useUiStore = create<UiState>((set) => ({
     }),
   toggleContrastPreference: () =>
     set((s) => {
-      const next: ContrastPreference = s.contrastPreference === "high" ? "normal" : "high";
+      const next: ContrastPreference =
+        s.contrastPreference === "high" ? "normal" : "high";
       if (typeof window !== "undefined") {
         window.localStorage.setItem("forge.ui.contrast", next);
       }
@@ -88,7 +89,8 @@ export const useUiStore = create<UiState>((set) => ({
     }),
   toggleEffectsPreference: () =>
     set((s) => {
-      const next: EffectsPreference = s.effectsPreference === "subtle" ? "off" : "subtle";
+      const next: EffectsPreference =
+        s.effectsPreference === "subtle" ? "off" : "subtle";
       if (typeof window !== "undefined") {
         window.localStorage.setItem("forge.ui.effects", next);
       }

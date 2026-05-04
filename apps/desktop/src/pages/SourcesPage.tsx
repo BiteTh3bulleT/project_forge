@@ -74,8 +74,14 @@ export function SourcesPage() {
     if (reindexAllBusy) return;
     setReindexAllBusy(true);
     try {
-      const res = await api.commands.execute("reindex", { via: "sources_page" });
-      setStatus(res.jobId ? `Re-index all job queued: ${res.jobId}.` : "Re-index all submitted.");
+      const res = await api.commands.execute("reindex", {
+        via: "sources_page",
+      });
+      setStatus(
+        res.jobId
+          ? `Re-index all job queued: ${res.jobId}.`
+          : "Re-index all submitted.",
+      );
       if (res.jobId) navigate(`/jobs/${res.jobId}`);
       await refresh();
     } catch (e) {
@@ -124,22 +130,30 @@ export function SourcesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="forge-ops-board space-y-5">
       <Panel
         title="Source Folders"
         subtitle="Connect local directories, monitor index state, and queue bounded re-index jobs."
-        actions={<GhostButton onClick={() => void refresh()}>Refresh</GhostButton>}
+        actions={
+          <GhostButton onClick={() => void refresh()}>Refresh</GhostButton>
+        }
       >
         <div className="grid gap-3 md:grid-cols-4">
           <StatChip label="total" value={String(stats.total)} />
           <StatChip label="ready" value={String(stats.ready)} />
           <StatChip label="indexing" value={String(stats.indexing)} />
-          <StatChip label="errors" value={String(stats.errors)} alert={stats.errors > 0} />
+          <StatChip
+            label="errors"
+            value={String(stats.errors)}
+            alert={stats.errors > 0}
+          />
         </div>
 
         <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">
           <div className="flex-1">
-            <label className="text-xs font-semibold tracking-wide text-forge-mist">Folder path</label>
+            <label className="text-xs font-semibold tracking-wide text-forge-mist">
+              Folder path
+            </label>
             <input
               className="forge-input mt-1"
               value={path}
@@ -153,16 +167,24 @@ export function SourcesPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             {workspaceDir ? (
-              <GhostButton onClick={() => setPath(workspaceDir)}>Use Workspace Root</GhostButton>
+              <GhostButton onClick={() => setPath(workspaceDir)}>
+                Use Workspace Root
+              </GhostButton>
             ) : null}
-            <PrimaryButton onClick={() => void addSource()} disabled={!canAdd || adding}>
+            <PrimaryButton
+              onClick={() => void addSource()}
+              disabled={!canAdd || adding}
+            >
               {adding ? "Adding…" : "Add Source"}
             </PrimaryButton>
           </div>
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <GhostButton onClick={() => void queueReindexAll()} disabled={stats.total === 0 || reindexAllBusy}>
+          <GhostButton
+            onClick={() => void queueReindexAll()}
+            disabled={stats.total === 0 || reindexAllBusy}
+          >
             {reindexAllBusy ? "Queueing…" : "Re-index All Sources"}
           </GhostButton>
           <button
@@ -175,20 +197,30 @@ export function SourcesPage() {
         </div>
 
         {err ? (
-          <div className="mt-4 rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div>
+          <div className="mt-4 rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
+            {err}
+          </div>
         ) : null}
       </Panel>
 
-      <Panel title="Connected Sources" subtitle="Per-source state, scan timestamps, and actions.">
+      <Panel
+        title="Connected Sources"
+        subtitle="Per-source state, scan timestamps, and actions."
+      >
         {sources.length === 0 ? (
-          <div className="text-sm text-forge-mist">No sources yet. Add a folder to begin ingestion.</div>
+          <div className="text-sm text-forge-mist">
+            No sources yet. Add a folder to begin ingestion.
+          </div>
         ) : (
           <div className="space-y-3">
             {sources.map((s) => {
               const state = sourceState(s);
               const busy = sourceBusyId === s.id;
               return (
-                <div key={s.id} className="rounded-lg border border-forge-platinum/10 bg-forge-slate/20 p-4">
+                <div
+                  key={s.id}
+                  className="rounded-lg border border-forge-platinum/10 bg-forge-slate/20 p-4"
+                >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -197,9 +229,12 @@ export function SourcesPage() {
                         </span>
                         <StatePill state={state} />
                       </div>
-                      <div className="mt-2 break-all font-mono text-xs text-forge-ash">{s.path}</div>
+                      <div className="mt-2 break-all font-mono text-xs text-forge-ash">
+                        {s.path}
+                      </div>
                       <div className="mt-2 text-[11px] text-forge-mist">
-                        added {formatTime(s.createdAtMs)} · started {safeTime(s.lastScanStartedMs)} · completed{" "}
+                        added {formatTime(s.createdAtMs)} · started{" "}
+                        {safeTime(s.lastScanStartedMs)} · completed{" "}
                         {safeTime(s.lastScanCompletedMs)}
                       </div>
                       {s.lastError ? (
@@ -209,10 +244,16 @@ export function SourcesPage() {
                       ) : null}
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <GhostButton onClick={() => void queueReindexSource(s)} disabled={busy}>
+                      <GhostButton
+                        onClick={() => void queueReindexSource(s)}
+                        disabled={busy}
+                      >
                         {busy ? "Queueing…" : "Re-index"}
                       </GhostButton>
-                      <GhostButton onClick={() => void removeSource(s)} disabled={busy}>
+                      <GhostButton
+                        onClick={() => void removeSource(s)}
+                        disabled={busy}
+                      >
                         Remove
                       </GhostButton>
                     </div>
@@ -249,14 +290,28 @@ function StatePill(props: { state: "new" | "indexing" | "ready" | "error" }) {
         : props.state === "error"
           ? "border-forge-ember/40 bg-forge-ember/10 text-forge-emberSoft"
           : "border-forge-platinum/15 bg-forge-platinum/5 text-forge-mist";
-  return <span className={`rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}>{props.state}</span>;
+  return (
+    <span
+      className={`rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${cls}`}
+    >
+      {props.state}
+    </span>
+  );
 }
 
 function StatChip(props: { label: string; value: string; alert?: boolean }) {
   return (
-    <div className={`rounded border bg-black/20 p-2.5 ${props.alert ? "border-forge-ember/35" : "border-forge-platinum/10"}`}>
-      <div className="text-[10px] uppercase tracking-wide text-forge-mist">{props.label}</div>
-      <div className={`mt-1 text-lg font-semibold ${props.alert ? "text-forge-emberSoft" : "text-forge-ash"}`}>{props.value}</div>
+    <div
+      className={`rounded border bg-black/20 p-2.5 ${props.alert ? "border-forge-ember/35" : "border-forge-platinum/10"}`}
+    >
+      <div className="text-[10px] uppercase tracking-wide text-forge-mist">
+        {props.label}
+      </div>
+      <div
+        className={`mt-1 text-lg font-semibold ${props.alert ? "text-forge-emberSoft" : "text-forge-ash"}`}
+      >
+        {props.value}
+      </div>
     </div>
   );
 }

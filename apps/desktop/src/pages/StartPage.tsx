@@ -1,4 +1,9 @@
-import type { AdapterInfo, DashboardSummary, ProjectContextRecord, SourceRow } from "@forge/shared";
+import type {
+  AdapterInfo,
+  DashboardSummary,
+  ProjectContextRecord,
+  SourceRow,
+} from "@forge/shared";
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -13,7 +18,8 @@ export function StartPage() {
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [sources, setSources] = useState<SourceRow[]>([]);
-  const [contextRecord, setContextRecord] = useState<ProjectContextRecord | null>(null);
+  const [contextRecord, setContextRecord] =
+    useState<ProjectContextRecord | null>(null);
   const [adapters, setAdapters] = useState<AdapterInfo[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<string>("");
@@ -42,8 +48,12 @@ export function StartPage() {
     return () => window.clearInterval(id);
   }, []);
 
-  const activeJobs = Array.isArray(summary?.activeJobs) ? summary.activeJobs : [];
-  const recentFailures = Array.isArray(summary?.recentFailures) ? summary.recentFailures : [];
+  const activeJobs = Array.isArray(summary?.activeJobs)
+    ? summary.activeJobs
+    : [];
+  const recentFailures = Array.isArray(summary?.recentFailures)
+    ? summary.recentFailures
+    : [];
 
   const readiness = useMemo(
     () => [
@@ -51,7 +61,10 @@ export function StartPage() {
         id: "sources",
         title: "Source folders",
         done: sources.length > 0,
-        detail: sources.length > 0 ? `${sources.length} source(s) indexed` : "No sources configured yet",
+        detail:
+          sources.length > 0
+            ? `${sources.length} source(s) indexed`
+            : "No sources configured yet",
         actionLabel: "Open Sources",
         onAction: () => navigate("/sources"),
       },
@@ -68,7 +81,8 @@ export function StartPage() {
       {
         id: "adapters",
         title: "Adapters",
-        done: adapters.length > 0 && adapters.some((a) => isAdapterReady(a.status)),
+        done:
+          adapters.length > 0 && adapters.some((a) => isAdapterReady(a.status)),
         detail: `${adapters.filter((a) => isAdapterReady(a.status)).length}/${adapters.length} ready`,
         actionLabel: "Open Adapters",
         onAction: () => navigate("/adapters"),
@@ -86,10 +100,22 @@ export function StartPage() {
         onAction: () => navigate("/jobs"),
       },
     ],
-    [activeJobs.length, adapters, contextRecord, navigate, sources.length, summary],
+    [
+      activeJobs.length,
+      adapters,
+      contextRecord,
+      navigate,
+      sources.length,
+      summary,
+    ],
   );
 
-  async function runQuick(name: string, args: Record<string, unknown>, success: string, to: string) {
+  async function runQuick(
+    name: string,
+    args: Record<string, unknown>,
+    success: string,
+    to: string,
+  ) {
     setBusy(name);
     try {
       const res = await api.commands.execute(name, args);
@@ -104,23 +130,34 @@ export function StartPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="forge-ops-board space-y-5">
       <Panel
         className="forge-hero"
         title="Start Here"
         subtitle="FORGE in cognitive mode: connect context, run bounded jobs, review results, and keep control over risky actions."
         actions={<GhostButton onClick={() => void load()}>Refresh</GhostButton>}
       >
-        {err ? <div className="rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
+        {err ? (
+          <div className="rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
+            {err}
+          </div>
+        ) : null}
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {readiness.map((row) => (
-            <div key={row.id} className="rounded border border-forge-platinum/10 bg-black/20 p-3">
+            <div
+              key={row.id}
+              className="rounded border border-forge-platinum/10 bg-black/20 p-3"
+            >
               <div className="flex items-center justify-between gap-2">
-                <div className="text-xs font-semibold uppercase tracking-wide text-forge-mist">{row.title}</div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-forge-mist">
+                  {row.title}
+                </div>
                 <span
                   className={[
                     "rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                    row.done ? "bg-forge-ultramarine/15 text-forge-platinum" : "bg-forge-platinum/10 text-forge-mist",
+                    row.done
+                      ? "bg-forge-ultramarine/15 text-forge-platinum"
+                      : "bg-forge-platinum/10 text-forge-mist",
                   ].join(" ")}
                 >
                   {row.done ? "ready" : "needs setup"}
@@ -139,9 +176,14 @@ export function StartPage() {
         </div>
       </Panel>
 
-      <Panel title="Quick Actions" subtitle="One-click launches for common operator tasks.">
+      <Panel
+        title="Quick Actions"
+        subtitle="One-click launches for common operator tasks."
+      >
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-          <PrimaryButton onClick={() => navigate("/memory")}>Search Memory</PrimaryButton>
+          <PrimaryButton onClick={() => navigate("/memory")}>
+            Search Memory
+          </PrimaryButton>
           <GhostButton
             onClick={() =>
               void runQuick(
@@ -159,7 +201,9 @@ export function StartPage() {
             onClick={() =>
               void runQuick(
                 "ollama_summary",
-                { query: "Summarize relevant current context and pending work." },
+                {
+                  query: "Summarize relevant current context and pending work.",
+                },
                 "Ollama summary job queued",
                 "/jobs",
               )
@@ -172,22 +216,34 @@ export function StartPage() {
             onClick={() =>
               void runQuick(
                 "normalize_project_context",
-                { query: "Normalize project context and refresh guidance files." },
+                {
+                  query:
+                    "Normalize project context and refresh guidance files.",
+                },
                 "Context normalization job queued",
                 "/project-context",
               )
             }
             disabled={busy !== ""}
           >
-            {busy === "normalize_project_context" ? "Queueing…" : "Normalize Project Context"}
+            {busy === "normalize_project_context"
+              ? "Queueing…"
+              : "Normalize Project Context"}
           </GhostButton>
-          <GhostButton onClick={() => navigate("/approvals")}>Open Approvals Queue</GhostButton>
-          <GhostButton onClick={() => navigate("/reviews")}>Open Review Queue</GhostButton>
+          <GhostButton onClick={() => navigate("/approvals")}>
+            Open Approvals Queue
+          </GhostButton>
+          <GhostButton onClick={() => navigate("/reviews")}>
+            Open Review Queue
+          </GhostButton>
         </div>
       </Panel>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Panel title="Active Jobs" subtitle="Running or waiting jobs that may need attention.">
+        <Panel
+          title="Active Jobs"
+          subtitle="Running or waiting jobs that may need attention."
+        >
           {!summary || activeJobs.length === 0 ? (
             <div className="text-sm text-forge-mist">No active jobs.</div>
           ) : (
@@ -199,20 +255,29 @@ export function StartPage() {
                   onClick={() => navigate(`/jobs/${job.id}`)}
                   className="w-full rounded border border-forge-platinum/10 bg-black/20 p-3 text-left transition hover:border-forge-ember/35"
                 >
-                  <div className="text-sm font-semibold text-forge-ash">{job.title}</div>
+                  <div className="text-sm font-semibold text-forge-ash">
+                    {job.title}
+                  </div>
                   <div className="mt-1 text-xs text-forge-mist">
                     {job.status} · {job.targetAdapter}
                   </div>
-                  <div className="mt-1 text-[11px] text-forge-mist">{formatTime(job.createdAtMs)}</div>
+                  <div className="mt-1 text-[11px] text-forge-mist">
+                    {formatTime(job.createdAtMs)}
+                  </div>
                 </button>
               ))}
             </div>
           )}
         </Panel>
 
-        <Panel title="Operator Queue" subtitle="Work blocked on approvals or reviews.">
+        <Panel
+          title="Operator Queue"
+          subtitle="Work blocked on approvals or reviews."
+        >
           {!summary ? (
-            <div className="text-sm text-forge-mist">Loading queue counters…</div>
+            <div className="text-sm text-forge-mist">
+              Loading queue counters…
+            </div>
           ) : (
             <div className="space-y-3">
               <QueueRow
@@ -246,12 +311,21 @@ function isAdapterReady(status: string | undefined): boolean {
   return normalized === "ready" || normalized === "degraded";
 }
 
-function QueueRow(props: { label: string; value: number; actionLabel: string; onAction: () => void }) {
+function QueueRow(props: {
+  label: string;
+  value: number;
+  actionLabel: string;
+  onAction: () => void;
+}) {
   return (
     <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-xs uppercase tracking-wide text-forge-mist">{props.label}</div>
-        <div className="text-lg font-semibold text-forge-ash">{props.value}</div>
+        <div className="text-xs uppercase tracking-wide text-forge-mist">
+          {props.label}
+        </div>
+        <div className="text-lg font-semibold text-forge-ash">
+          {props.value}
+        </div>
       </div>
       <button
         type="button"

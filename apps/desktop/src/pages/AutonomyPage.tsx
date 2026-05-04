@@ -1,8 +1,11 @@
 import type { ForgeEvent } from "@forge/shared";
-import { GhostButton, Panel } from "@forge/ui";
-import { useEffect, useState } from "react";
+import { GhostButton } from "@forge/ui";
+import { useEffect, useState, type ReactNode } from "react";
 
-import { HumanDataView, summarizeHumanValue } from "../components/HumanDataView";
+import {
+  HumanDataView,
+  summarizeHumanValue,
+} from "../components/HumanDataView";
 import {
   api,
   type AutonomyBudgetRecord,
@@ -32,14 +35,24 @@ export function AutonomyPage() {
   const [charters, setCharters] = useState<AutonomyCharterRecord[]>([]);
   const [events, setEvents] = useState<ForgeEvent[]>([]);
   const [selectedIntentId, setSelectedIntentId] = useState<string>("");
-  const [intentExplain, setIntentExplain] = useState<Record<string, unknown> | null>(null);
+  const [intentExplain, setIntentExplain] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   async function refresh() {
     setLoading(true);
     try {
-      const [statusRes, intentsRes, decisionsRes, budgetsRes, chartersRes, eventsRes] = await Promise.all([
+      const [
+        statusRes,
+        intentsRes,
+        decisionsRes,
+        budgetsRes,
+        chartersRes,
+        eventsRes,
+      ] = await Promise.all([
         api.autonomy.status(),
         api.autonomy.intents({ limit: 40 }),
         api.autonomy.decisions(40),
@@ -49,9 +62,13 @@ export function AutonomyPage() {
       ]);
       setStatus(statusRes);
       setIntents(Array.isArray(intentsRes.intents) ? intentsRes.intents : []);
-      setDecisions(Array.isArray(decisionsRes.decisions) ? decisionsRes.decisions : []);
+      setDecisions(
+        Array.isArray(decisionsRes.decisions) ? decisionsRes.decisions : [],
+      );
       setBudgets(Array.isArray(budgetsRes.budgets) ? budgetsRes.budgets : []);
-      setCharters(Array.isArray(chartersRes.charters) ? chartersRes.charters : []);
+      setCharters(
+        Array.isArray(chartersRes.charters) ? chartersRes.charters : [],
+      );
       setEvents(Array.isArray(eventsRes.events) ? eventsRes.events : []);
       setErr(null);
     } catch (e) {
@@ -80,40 +97,93 @@ export function AutonomyPage() {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="forge-ops-board space-y-5">
+      <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="forge-ops-label">Autonomy Oversight</div>
+          <h1 className="mt-2 text-2xl font-semibold tracking-normal text-forge-ash sm:text-3xl">
+            Autonomy command board
+          </h1>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-forge-mist/75">
+            Track dream-state activity, intents, decisions, budgets, charters,
+            and autonomy event evidence.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={
+              status?.available
+                ? "forge-ops-status forge-ops-status--ok"
+                : "forge-ops-status forge-ops-status--warn"
+            }
+          >
+            {status?.available ? status.mode || "available" : "inactive"}
+          </span>
+          <GhostButton onClick={() => void refresh()} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh"}
+          </GhostButton>
+        </div>
+      </header>
+
       <Panel
         title="Autonomy"
         subtitle="Track dream-state, maintenance/improvement activity, intents, decisions, budgets, and charters."
-        actions={
-          <GhostButton onClick={() => void refresh()} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh"}
-          </GhostButton>
-        }
       >
-        {err ? <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
+        {err ? (
+          <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
+            {err}
+          </div>
+        ) : null}
         {!status?.available ? (
           <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-forge-ash">
-            Autonomy loop is not active{status?.reason ? ` (${status.reason})` : ""}.
+            Autonomy loop is not active
+            {status?.reason ? ` (${status.reason})` : ""}.
           </div>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard label="Mode" value={status.mode || "—"} />
-            <MetricCard label="Workspace" value={status.scope?.workspaceId || "—"} />
-            <MetricCard label="Dream State" value={status.dream?.active ? "active" : "idle/off"} />
-            <MetricCard label="Last Tick" value={fmtTime(status.dream?.lastTickAt)} />
-            <MetricCard label="Last Maintenance" value={fmtTime(status.dream?.lastMaintenanceAt)} />
-            <MetricCard label="Last Improvement" value={fmtTime(status.dream?.lastImprovementAt)} />
-            <MetricCard label="Active Intents" value={String(status.counts?.activeIntents ?? 0)} />
-            <MetricCard label="Recent Decisions" value={String(status.counts?.recentDecisions ?? 0)} />
+            <MetricCard
+              label="Workspace"
+              value={status.scope?.workspaceId || "—"}
+            />
+            <MetricCard
+              label="Dream State"
+              value={status.dream?.active ? "active" : "idle/off"}
+            />
+            <MetricCard
+              label="Last Tick"
+              value={fmtTime(status.dream?.lastTickAt)}
+            />
+            <MetricCard
+              label="Last Maintenance"
+              value={fmtTime(status.dream?.lastMaintenanceAt)}
+            />
+            <MetricCard
+              label="Last Improvement"
+              value={fmtTime(status.dream?.lastImprovementAt)}
+            />
+            <MetricCard
+              label="Active Intents"
+              value={String(status.counts?.activeIntents ?? 0)}
+            />
+            <MetricCard
+              label="Recent Decisions"
+              value={String(status.counts?.recentDecisions ?? 0)}
+            />
           </div>
         )}
       </Panel>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <Panel title="Intents" subtitle="Self-initiated and agent-fed intent queue.">
+        <Panel
+          title="Intents"
+          subtitle="Self-initiated and agent-fed intent queue."
+        >
           <div className="space-y-2">
             {intents.length === 0 ? (
-              <div className="text-sm text-forge-mist">No intents recorded.</div>
+              <div className="text-sm text-forge-mist">
+                No intents recorded.
+              </div>
             ) : (
               intents.map((intent) => (
                 <button
@@ -122,18 +192,27 @@ export function AutonomyPage() {
                   onClick={() => void loadIntentExplain(intent.id)}
                   className={[
                     "w-full rounded-lg border bg-forge-iron/40 p-3 text-left",
-                    selectedIntentId === intent.id ? "border-forge-electric/70" : "border-white/10",
+                    selectedIntentId === intent.id
+                      ? "border-forge-electric/70"
+                      : "border-white/10",
                   ].join(" ")}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-sm font-semibold text-forge-ash">{intent.title || intent.id}</div>
-                    <div className="text-[11px] text-forge-mist">{intent.status}</div>
+                    <div className="text-sm font-semibold text-forge-ash">
+                      {intent.title || intent.id}
+                    </div>
+                    <div className="text-[11px] text-forge-mist">
+                      {intent.status}
+                    </div>
                   </div>
                   <div className="mt-1 text-[11px] text-forge-mist">
-                    {intent.type} · risk {intent.risk || "unknown"} · {fmtTime(intent.updatedAt)}
+                    {intent.type} · risk {intent.risk || "unknown"} ·{" "}
+                    {fmtTime(intent.updatedAt)}
                   </div>
                   {intent.blockedReasons?.length ? (
-                    <div className="mt-1 text-[11px] text-forge-emberSoft">{shortText(intent.blockedReasons[0])}</div>
+                    <div className="mt-1 text-[11px] text-forge-emberSoft">
+                      {shortText(intent.blockedReasons[0])}
+                    </div>
                   ) : null}
                 </button>
               ))
@@ -141,34 +220,55 @@ export function AutonomyPage() {
           </div>
         </Panel>
 
-        <Panel title="Intent Explanation" subtitle="Structured explain output for selected intent.">
+        <Panel
+          title="Intent Explanation"
+          subtitle="Structured explain output for selected intent."
+        >
           {intentExplain ? (
             <div className="max-h-96 overflow-auto rounded-lg border border-white/10 bg-black/30 p-3 text-[11px] leading-relaxed text-forge-mist">
               <HumanDataView value={intentExplain} />
             </div>
           ) : (
-            <div className="text-sm text-forge-mist">Select an intent to inspect explain details.</div>
+            <div className="text-sm text-forge-mist">
+              Select an intent to inspect explain details.
+            </div>
           )}
         </Panel>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <Panel title="Decisions" subtitle="Autonomy policy decisions with risk and outcome.">
+        <Panel
+          title="Decisions"
+          subtitle="Autonomy policy decisions with risk and outcome."
+        >
           <div className="space-y-2">
             {decisions.length === 0 ? (
-              <div className="text-sm text-forge-mist">No decisions recorded.</div>
+              <div className="text-sm text-forge-mist">
+                No decisions recorded.
+              </div>
             ) : (
               decisions.map((decision) => (
-                <div key={decision.id} className="rounded-lg border border-white/10 bg-forge-iron/40 p-3">
+                <div
+                  key={decision.id}
+                  className="rounded-lg border border-white/10 bg-forge-iron/40 p-3"
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-sm font-semibold text-forge-ash">{decision.decision}</div>
-                    <div className="text-[11px] text-forge-mist">{fmtTime(decision.createdAt)}</div>
+                    <div className="text-sm font-semibold text-forge-ash">
+                      {decision.decision}
+                    </div>
+                    <div className="text-[11px] text-forge-mist">
+                      {fmtTime(decision.createdAt)}
+                    </div>
                   </div>
                   <div className="mt-1 text-[11px] text-forge-mist">
-                    intent {decision.intentId} · risk {decision.risk || "unknown"} · level {decision.autonomyLevel || "—"}
+                    intent {decision.intentId} · risk{" "}
+                    {decision.risk || "unknown"} · level{" "}
+                    {decision.autonomyLevel || "—"}
                   </div>
                   {decision.deniedReasons?.length ? (
-                    <div className="mt-1 text-[11px] text-forge-emberSoft">{shortText(decision.deniedReasons[0])}</div>
+                    <div className="mt-1 text-[11px] text-forge-emberSoft">
+                      {shortText(decision.deniedReasons[0])}
+                    </div>
                   ) : null}
                 </div>
               ))
@@ -176,18 +276,32 @@ export function AutonomyPage() {
           </div>
         </Panel>
 
-        <Panel title="Autonomy Events" subtitle="Recent autonomy.* event stream.">
+        <Panel
+          title="Autonomy Events"
+          subtitle="Recent autonomy.* event stream."
+        >
           <div className="space-y-2">
             {events.length === 0 ? (
-              <div className="text-sm text-forge-mist">No autonomy events yet.</div>
+              <div className="text-sm text-forge-mist">
+                No autonomy events yet.
+              </div>
             ) : (
               events.map((ev) => (
-                <div key={ev.id} className="rounded-lg border border-white/10 bg-forge-iron/40 p-3">
+                <div
+                  key={ev.id}
+                  className="rounded-lg border border-white/10 bg-forge-iron/40 p-3"
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-sm font-semibold text-forge-ash">{ev.type}</div>
-                    <div className="text-[11px] text-forge-mist">{fmtTime(ev.createdAtMs)}</div>
+                    <div className="text-sm font-semibold text-forge-ash">
+                      {ev.type}
+                    </div>
+                    <div className="text-[11px] text-forge-mist">
+                      {fmtTime(ev.createdAtMs)}
+                    </div>
                   </div>
-                  <div className="mt-1 text-[11px] text-forge-mist">{shortText(ev.payload, 260)}</div>
+                  <div className="mt-1 text-[11px] text-forge-mist">
+                    {shortText(ev.payload, 260)}
+                  </div>
                 </div>
               ))
             )}
@@ -196,37 +310,66 @@ export function AutonomyPage() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <Panel title="Budgets" subtitle="Freedom budget usage and reset windows.">
+        <Panel
+          title="Budgets"
+          subtitle="Freedom budget usage and reset windows."
+        >
           <div className="space-y-2">
             {budgets.length === 0 ? (
               <div className="text-sm text-forge-mist">No budgets loaded.</div>
             ) : (
               budgets.map((budget) => (
-                <div key={budget.id} className="rounded-lg border border-white/10 bg-forge-iron/40 p-3">
+                <div
+                  key={budget.id}
+                  className="rounded-lg border border-white/10 bg-forge-iron/40 p-3"
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-sm font-semibold text-forge-ash">{budget.name}</div>
-                    <div className="text-[11px] text-forge-mist">{budget.status}</div>
+                    <div className="text-sm font-semibold text-forge-ash">
+                      {budget.name}
+                    </div>
+                    <div className="text-[11px] text-forge-mist">
+                      {budget.status}
+                    </div>
                   </div>
-                  <div className="mt-1 text-[11px] text-forge-mist">{budget.id} · {budget.period} · resets {fmtTime(budget.resetsAt)}</div>
+                  <div className="mt-1 text-[11px] text-forge-mist">
+                    {budget.id} · {budget.period} · resets{" "}
+                    {fmtTime(budget.resetsAt)}
+                  </div>
                 </div>
               ))
             )}
           </div>
         </Panel>
 
-        <Panel title="Charters" subtitle="Scope-bounded action authority definitions.">
+        <Panel
+          title="Charters"
+          subtitle="Scope-bounded action authority definitions."
+        >
           <div className="space-y-2">
             {charters.length === 0 ? (
               <div className="text-sm text-forge-mist">No charters loaded.</div>
             ) : (
               charters.map((charter) => (
-                <div key={charter.id} className="rounded-lg border border-white/10 bg-forge-iron/40 p-3">
+                <div
+                  key={charter.id}
+                  className="rounded-lg border border-white/10 bg-forge-iron/40 p-3"
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="text-sm font-semibold text-forge-ash">{charter.name}</div>
-                    <div className="text-[11px] text-forge-mist">{charter.status}</div>
+                    <div className="text-sm font-semibold text-forge-ash">
+                      {charter.name}
+                    </div>
+                    <div className="text-[11px] text-forge-mist">
+                      {charter.status}
+                    </div>
                   </div>
-                  <div className="mt-1 text-[11px] text-forge-mist">{charter.id}</div>
-                  {charter.purpose ? <div className="mt-1 text-[11px] text-forge-mist">{shortText(charter.purpose, 180)}</div> : null}
+                  <div className="mt-1 text-[11px] text-forge-mist">
+                    {charter.id}
+                  </div>
+                  {charter.purpose ? (
+                    <div className="mt-1 text-[11px] text-forge-mist">
+                      {shortText(charter.purpose, 180)}
+                    </div>
+                  ) : null}
                 </div>
               ))
             )}
@@ -239,9 +382,39 @@ export function AutonomyPage() {
 
 function MetricCard(props: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-forge-iron/40 p-3">
-      <div className="text-[10px] uppercase tracking-[0.14em] text-forge-mist">{props.label}</div>
-      <div className="mt-1 text-sm font-semibold text-forge-ash">{props.value}</div>
+    <div className="forge-ops-card p-3">
+      <div className="forge-ops-label">{props.label}</div>
+      <div className="mt-2 text-lg font-semibold text-forge-ash">
+        {props.value}
+      </div>
     </div>
+  );
+}
+
+function Panel(props: {
+  title: string;
+  subtitle?: string;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="forge-ops-panel">
+      <div className="forge-ops-panel__head">
+        <div>
+          <div className="forge-ops-title">{props.title}</div>
+          {props.subtitle ? (
+            <div className="mt-1 text-xs text-forge-mist/65">
+              {props.subtitle}
+            </div>
+          ) : null}
+        </div>
+        {props.actions ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {props.actions}
+          </div>
+        ) : null}
+      </div>
+      <div className="forge-ops-panel__body">{props.children}</div>
+    </section>
   );
 }

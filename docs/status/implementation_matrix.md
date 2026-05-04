@@ -2,6 +2,8 @@
 
 Observed against this branch on 2026-04-22.
 
+Top note: this matrix tracks legacy/live AI-OS implementation status and current daemon authority paths. It is not the FORGE-K simulator phase matrix. For FORGE-K Phase 0-14 status, including the simulator/live authority boundary, see `docs/reviews/current_phase_status.md` and ADR 0005 (`docs/adr/0005-forge-k-simulator-vs-live-authority.md`).
+
 Status values: `real`, `partial`, `legacy-boundary`, `blocked`, `scaffold`, `deferred`.
 
 | Subsystem | Current authoritative path | Status | Evidence | Main remaining gap |

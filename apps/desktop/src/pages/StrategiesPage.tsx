@@ -29,16 +29,27 @@ export function StrategiesPage() {
   const [retrievalMode, setRetrievalMode] = useState("hybrid");
   const [approvalRequired, setApprovalRequired] = useState(true);
   const [approvalPresetId, setApprovalPresetId] = useState("balanced");
-  const [expectedArtifacts, setExpectedArtifacts] = useState("task_packet, adapter_output, job_result");
-  const [packetRules, setPacketRules] = useState("targetItems: 8\nmaxItems: 14");
-  const [successCriteria, setSuccessCriteria] = useState("requiresSummary: yes");
-  const [retryGuidance, setRetryGuidance] = useState("maxRetries: 2\nadjustment: tighten_scope");
+  const [expectedArtifacts, setExpectedArtifacts] = useState(
+    "task_packet, adapter_output, job_result",
+  );
+  const [packetRules, setPacketRules] = useState(
+    "targetItems: 8\nmaxItems: 14",
+  );
+  const [successCriteria, setSuccessCriteria] = useState(
+    "requiresSummary: yes",
+  );
+  const [retryGuidance, setRetryGuidance] = useState(
+    "maxRetries: 2\nadjustment: tighten_scope",
+  );
   const [enabled, setEnabled] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
   async function load() {
     try {
-      const [s, p] = await Promise.all([api.strategies.list({ limit: 240 }), api.policy.listPresets(80)]);
+      const [s, p] = await Promise.all([
+        api.strategies.list({ limit: 240 }),
+        api.policy.listPresets(80),
+      ]);
       setStrategies(s.strategies);
       setPresets(p.presets);
       setErr(null);
@@ -73,36 +84,68 @@ export function StrategiesPage() {
   const presetOptions = useMemo(() => presets.map((p) => p.id), [presets]);
 
   return (
-    <div className="space-y-6">
+    <div className="forge-ops-board space-y-5">
       <Panel
         title="Execution Strategies"
         subtitle="Reusable execution contracts that define adapter, retrieval, packet rules, approval needs, and success expectations."
         actions={<GhostButton onClick={() => void load()}>Refresh</GhostButton>}
       >
-        {err ? <div className="rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
+        {err ? (
+          <div className="rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
+            {err}
+          </div>
+        ) : null}
         <div className="grid gap-3 md:grid-cols-3">
           <div>
-            <label className="text-xs font-semibold tracking-wide text-forge-mist">Strategy id</label>
-            <input className="forge-input mt-1" value={id} onChange={(e) => setId(e.target.value)} placeholder="e.g. repo_analysis" />
+            <label className="text-xs font-semibold tracking-wide text-forge-mist">
+              Strategy id
+            </label>
+            <input
+              className="forge-input mt-1"
+              value={id}
+              onChange={(e) => setId(e.target.value)}
+              placeholder="e.g. repo_analysis"
+            />
           </div>
           <div>
-            <label className="text-xs font-semibold tracking-wide text-forge-mist">Name</label>
-            <input className="forge-input mt-1" value={name} onChange={(e) => setName(e.target.value)} />
+            <label className="text-xs font-semibold tracking-wide text-forge-mist">
+              Name
+            </label>
+            <input
+              className="forge-input mt-1"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
           <div>
-            <label className="text-xs font-semibold tracking-wide text-forge-mist">Task type</label>
-            <input className="forge-input mt-1" value={taskType} onChange={(e) => setTaskType(e.target.value)} placeholder="repo_analysis" />
+            <label className="text-xs font-semibold tracking-wide text-forge-mist">
+              Task type
+            </label>
+            <input
+              className="forge-input mt-1"
+              value={taskType}
+              onChange={(e) => setTaskType(e.target.value)}
+              placeholder="repo_analysis"
+            />
           </div>
         </div>
 
         <div className="mt-3 grid gap-3 md:grid-cols-4">
           <div>
             <label className="text-xs text-forge-mist">Adapter</label>
-            <input className="forge-input mt-1" value={targetAdapter} onChange={(e) => setTargetAdapter(e.target.value)} />
+            <input
+              className="forge-input mt-1"
+              value={targetAdapter}
+              onChange={(e) => setTargetAdapter(e.target.value)}
+            />
           </div>
           <div>
             <label className="text-xs text-forge-mist">Retrieval mode</label>
-            <select className="forge-input mt-1" value={retrievalMode} onChange={(e) => setRetrievalMode(e.target.value)}>
+            <select
+              className="forge-input mt-1"
+              value={retrievalMode}
+              onChange={(e) => setRetrievalMode(e.target.value)}
+            >
               <option value="keyword">keyword</option>
               <option value="semantic">semantic</option>
               <option value="hybrid">hybrid</option>
@@ -110,7 +153,11 @@ export function StrategiesPage() {
           </div>
           <div>
             <label className="text-xs text-forge-mist">Approval preset</label>
-            <select className="forge-input mt-1" value={approvalPresetId} onChange={(e) => setApprovalPresetId(e.target.value)}>
+            <select
+              className="forge-input mt-1"
+              value={approvalPresetId}
+              onChange={(e) => setApprovalPresetId(e.target.value)}
+            >
               <option value="">(none)</option>
               {presetOptions.map((p) => (
                 <option key={p} value={p}>
@@ -121,25 +168,51 @@ export function StrategiesPage() {
           </div>
           <div className="flex items-end gap-3 pb-2">
             <label className="flex items-center gap-2 text-xs text-forge-mist">
-              <input type="checkbox" checked={approvalRequired} onChange={(e) => setApprovalRequired(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={approvalRequired}
+                onChange={(e) => setApprovalRequired(e.target.checked)}
+              />
               Approval required
             </label>
             <label className="flex items-center gap-2 text-xs text-forge-mist">
-              <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={enabled}
+                onChange={(e) => setEnabled(e.target.checked)}
+              />
               Enabled
             </label>
           </div>
         </div>
 
         <div className="mt-3">
-          <label className="text-xs text-forge-mist">Expected artifacts (comma separated)</label>
-          <input className="forge-input mt-1" value={expectedArtifacts} onChange={(e) => setExpectedArtifacts(e.target.value)} />
+          <label className="text-xs text-forge-mist">
+            Expected artifacts (comma separated)
+          </label>
+          <input
+            className="forge-input mt-1"
+            value={expectedArtifacts}
+            onChange={(e) => setExpectedArtifacts(e.target.value)}
+          />
         </div>
 
         <div className="mt-3 grid gap-3 md:grid-cols-3">
-          <RuleField label="Packet rules" value={packetRules} onChange={setPacketRules} />
-          <RuleField label="Success criteria" value={successCriteria} onChange={setSuccessCriteria} />
-          <RuleField label="Retry guidance" value={retryGuidance} onChange={setRetryGuidance} />
+          <RuleField
+            label="Packet rules"
+            value={packetRules}
+            onChange={setPacketRules}
+          />
+          <RuleField
+            label="Success criteria"
+            value={successCriteria}
+            onChange={setSuccessCriteria}
+          />
+          <RuleField
+            label="Retry guidance"
+            value={retryGuidance}
+            onChange={setRetryGuidance}
+          />
         </div>
 
         <div className="mt-3 flex gap-2">
@@ -156,8 +229,14 @@ export function StrategiesPage() {
                   approvalRequired,
                   approvalPresetId: approvalPresetId.trim() || undefined,
                   expectedArtifacts: parseCSV(expectedArtifacts),
-                  successCriteria: parseReadableMap(successCriteria, "success criteria"),
-                  retryGuidance: parseReadableMap(retryGuidance, "retry guidance"),
+                  successCriteria: parseReadableMap(
+                    successCriteria,
+                    "success criteria",
+                  ),
+                  retryGuidance: parseReadableMap(
+                    retryGuidance,
+                    "retry guidance",
+                  ),
                   enabled,
                 };
                 const res = await api.strategies.save(payload);
@@ -193,7 +272,10 @@ export function StrategiesPage() {
         </div>
       </Panel>
 
-      <Panel title="Strategy Inventory" subtitle="Persisted strategy records used by routing policy and operator selection.">
+      <Panel
+        title="Strategy Inventory"
+        subtitle="Persisted strategy records used by routing policy and operator selection."
+      >
         {strategies.length === 0 ? (
           <div className="text-sm text-forge-mist">No strategies found.</div>
         ) : (
@@ -205,17 +287,24 @@ export function StrategiesPage() {
                 onClick={() => selectStrategy(s)}
                 className={[
                   "w-full rounded border px-3 py-2 text-left",
-                  selected === s.id ? "border-forge-ember/40 bg-black/30" : "border-forge-platinum/10 bg-black/20 hover:border-forge-ember/35",
+                  selected === s.id
+                    ? "border-forge-ember/40 bg-black/30"
+                    : "border-forge-platinum/10 bg-black/20 hover:border-forge-ember/35",
                 ].join(" ")}
               >
-                <div className="text-sm font-semibold text-forge-ash">{s.name}</div>
+                <div className="text-sm font-semibold text-forge-ash">
+                  {s.name}
+                </div>
                 <div className="mt-1 text-xs text-forge-mist">
                   {s.id} · {s.taskType} · {s.targetAdapter} · {s.retrievalMode}
                 </div>
                 <div className="mt-1 text-[11px] text-forge-mist">
-                  approval {String(s.approvalRequired)} · preset {s.approvalPresetId ?? "none"} · enabled {String(s.enabled)}
+                  approval {String(s.approvalRequired)} · preset{" "}
+                  {s.approvalPresetId ?? "none"} · enabled {String(s.enabled)}
                 </div>
-                <div className="mt-1 text-[11px] text-forge-mist">updated {formatTime(s.updatedAtMs)}</div>
+                <div className="mt-1 text-[11px] text-forge-mist">
+                  updated {formatTime(s.updatedAtMs)}
+                </div>
               </button>
             ))}
           </div>
@@ -225,12 +314,22 @@ export function StrategiesPage() {
   );
 }
 
-function RuleField(props: { label: string; value: string; onChange: (v: string) => void }) {
+function RuleField(props: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <div>
       <label className="text-xs text-forge-mist">{props.label}</label>
-      <textarea className="forge-input mt-1 min-h-[140px] font-mono text-[12px]" value={props.value} onChange={(e) => props.onChange(e.target.value)} />
-      <div className="mt-1 text-[10px] text-forge-mist/65">Use one key: value rule per line.</div>
+      <textarea
+        className="forge-input mt-1 min-h-[140px] font-mono text-[12px]"
+        value={props.value}
+        onChange={(e) => props.onChange(e.target.value)}
+      />
+      <div className="mt-1 text-[10px] text-forge-mist/65">
+        Use one key: value rule per line.
+      </div>
     </div>
   );
 }
@@ -240,7 +339,8 @@ function mapToReadableText(value: unknown, prefix = ""): string {
   return Object.entries(value as Record<string, unknown>)
     .flatMap(([key, item]) => {
       const path = prefix ? `${prefix}.${key}` : key;
-      if (item && typeof item === "object" && !Array.isArray(item)) return mapToReadableText(item, path).split("\n").filter(Boolean);
+      if (item && typeof item === "object" && !Array.isArray(item))
+        return mapToReadableText(item, path).split("\n").filter(Boolean);
       return `${path}: ${formatReadableValue(item)}`;
     })
     .join("\n");
@@ -254,15 +354,19 @@ function parseReadableMap(raw: string, field: string): Record<string, unknown> {
     .filter(Boolean);
   for (const line of lines) {
     const splitAt = line.indexOf(":");
-    if (splitAt < 1) throw new Error(`${field} rule is missing a colon: ${line}`);
+    if (splitAt < 1)
+      throw new Error(`${field} rule is missing a colon: ${line}`);
     const path = line.slice(0, splitAt).trim().split(".").filter(Boolean);
     let cursor = root;
     for (const segment of path.slice(0, -1)) {
       const next = cursor[segment];
-      if (!next || typeof next !== "object" || Array.isArray(next)) cursor[segment] = {};
+      if (!next || typeof next !== "object" || Array.isArray(next))
+        cursor[segment] = {};
       cursor = cursor[segment] as Record<string, unknown>;
     }
-    cursor[path[path.length - 1]] = parseReadableValue(line.slice(splitAt + 1).trim());
+    cursor[path[path.length - 1]] = parseReadableValue(
+      line.slice(splitAt + 1).trim(),
+    );
   }
   return root;
 }
@@ -281,6 +385,10 @@ function parseReadableValue(value: string): unknown {
   if (normalized === "none" || normalized === "null") return null;
   const numberValue = Number(value);
   if (value !== "" && Number.isFinite(numberValue)) return numberValue;
-  if (value.includes(",")) return value.split(",").map((part) => part.trim()).filter(Boolean);
+  if (value.includes(","))
+    return value
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
   return value;
 }

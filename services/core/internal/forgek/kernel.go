@@ -3,9 +3,11 @@ package forgek
 import (
 	"fmt"
 
+	"forge/projectforge/services/core/internal/forgek/contextcompiler"
 	"forge/projectforge/services/core/internal/forgek/court"
 	"forge/projectforge/services/core/internal/forgek/palace"
 	"forge/projectforge/services/core/internal/forgek/semantic"
+	"forge/projectforge/services/core/internal/forgek/snapshots"
 )
 
 type KernelOptions struct {
@@ -21,6 +23,8 @@ type Kernel struct {
 	court        *court.Service
 	palace       *palace.Service
 	semantic     *semantic.SemanticAlgebraService
+	snapshots    *snapshots.Service
+	context      *contextcompiler.Service
 	ids          IDProvider
 	clock        Clock
 }
@@ -43,6 +47,8 @@ func NewKernel(options KernelOptions) *Kernel {
 		court:        court.NewService(),
 		palace:       palace.NewService(),
 		semantic:     semantic.NewSemanticAlgebraService(),
+		snapshots:    snapshots.NewService(),
+		context:      contextcompiler.NewService(),
 		ids:          ids,
 		clock:        clock,
 	}
@@ -76,6 +82,14 @@ func (k *Kernel) Palace() *palace.Service {
 
 func (k *Kernel) Semantic() *semantic.SemanticAlgebraService {
 	return k.semantic
+}
+
+func (k *Kernel) Snapshots() *snapshots.Service {
+	return k.snapshots
+}
+
+func (k *Kernel) ContextCompiler() *contextcompiler.Service {
+	return k.context
 }
 
 func (k *Kernel) DispatchSyscall(request SyscallRequest) SyscallResult {
@@ -176,4 +190,6 @@ func (k *Kernel) registerCoreSyscalls() {
 	k.registerCourtSyscalls(mustRegister)
 	k.registerPalaceSyscalls(mustRegister)
 	k.registerSemanticSyscalls(mustRegister)
+	k.registerSnapshotSyscalls(mustRegister)
+	k.registerContextSyscalls(mustRegister)
 }

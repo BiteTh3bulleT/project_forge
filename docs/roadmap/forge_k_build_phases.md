@@ -1,10 +1,23 @@
 # FORGE-K Build Phases
 
-Status: Phase 5 roadmap baseline.
+Status: Phase 7 simulator implementation baseline.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
+## Scope Markers
+
+Every future FORGE-K phase must declare one scope marker before work starts:
+
+- `SIMULATOR_ONLY`: confined to `services/core/internal/forgek`, docs, and tests; live daemon authority is unchanged.
+- `LIVE_INTEGRATION`: intentionally changes live daemon authority or routes live state through FORGE-K boundaries; requires explicit integration design and tests.
+- `DOCS_ONLY`: documentation, status, or planning only.
+- `RESEARCH_ONLY`: exploratory work that cannot be treated as production authority.
+
+Current live-authority boundary: ADR 0005 records that FORGE-K is target architecture but not live daemon authority yet. Live daemon state mutation still uses existing AI-OS/gateway/permissions/lane/audit paths.
+
 ## Phase 0 - Architecture Baseline
+
+Scope: `DOCS_ONLY`.
 
 Goal: establish durable doctrine, terminology, boundaries, ADRs, diagrams, glossary, and roadmap.
 
@@ -15,6 +28,8 @@ Validation criteria: required docs exist; diagrams parse; no runtime logic intro
 What not to do: implement kernel runtime, agent loops, runtime drivers, cache systems, or memory mutation paths.
 
 ## Phase 1 - Kernel Simulator
+
+Scope: `SIMULATOR_ONLY`.
 
 Goal: create a minimal userspace simulator for semantic syscall lifecycle and journal behavior.
 
@@ -28,6 +43,8 @@ Implementation status: initial userspace simulator lives in `services/core/inter
 
 ## Phase 2 - Neuron Fabric
 
+Scope: `SIMULATOR_ONLY`.
+
 Goal: implement typed neuron envelopes and bounded scheduling primitives.
 
 Deliverables: neuron input/output contracts, neural proposal interfaces, rule validation interfaces, syscall request envelopes, scheduler tests.
@@ -39,6 +56,8 @@ What not to do: create monolithic agent loops or model-owned state.
 Implementation status: initial Neuron Fabric lives in `services/core/internal/forgek/neurons` with manifest, envelope, neural/rule base behavior, scheduler, and narrow Kernel syscall client tests.
 
 ## Phase 3 - Courthouse Minimal
+
+Scope: `SIMULATOR_ONLY`.
 
 Goal: implement minimal evidence admission for cases, claims, exhibits, and rulings.
 
@@ -52,6 +71,8 @@ Implementation status: minimal Courthouse models, service, kernel-owned semantic
 
 ## Phase 4 - Memory Palace Minimal
 
+Scope: `SIMULATOR_ONLY`.
+
 Goal: implement scoped retrieval topology for rooms, anchors, routes, and candidate objects.
 
 Deliverables: room/anchor/route contracts, candidate retrieval, provenance-aware results.
@@ -63,6 +84,8 @@ What not to do: build raw chat memory or make vector search authoritative.
 Implementation status: minimal Memory Palace models, deterministic route scoring, service, kernel-owned semantic syscalls, capability gates, journaled route traces, and Courthouse boundary tests live in `services/core/internal/forgek/palace` and `services/core/internal/forgek`.
 
 ## Phase 5 - Semantic Algebra
+
+Scope: `SIMULATOR_ONLY`.
 
 Goal: implement typed semantic objects and deterministic operators.
 
@@ -76,6 +99,8 @@ Implementation status: minimal SemanticObject, SemanticOperation, SemanticTransf
 
 ## Phase 6 - Snapshots
 
+Scope: `SIMULATOR_ONLY`.
+
 Goal: implement Context-Shape Snapshots for restoration and inspection.
 
 Deliverables: snapshot schemas, source refs, hashes, operation records, supersession behavior.
@@ -84,7 +109,11 @@ Validation criteria: snapshots are non-canonical; snapshots cite sources; restor
 
 What not to do: store full canonical content copies or treat snapshots as current state.
 
+Implementation status: implemented and tested in `services/core/internal/forgek/snapshots` and `services/core/internal/forgek/snapshot_syscalls.go`. Scope is simulator-only; snapshots are not wired into the live daemon, and live state is not routed through FORGE-K during this phase.
+
 ## Phase 7 - Context Compiler
+
+Scope: `SIMULATOR_ONLY`.
 
 Goal: implement deterministic context compilation and the expansion/contraction loop.
 
@@ -94,7 +123,11 @@ Validation criteria: same admitted inputs produce stable block order and token h
 
 What not to do: let model prose decide context admission or layout authority.
 
+Implementation status: implemented and tested in `services/core/internal/forgek/contextcompiler` and `services/core/internal/forgek/context_syscalls.go`. Scope is simulator-only; the Context Compiler is not wired into the live daemon, live AI-OS `COMPILE_CONTEXT` behavior is unchanged, and live state is not routed through FORGE-K during this phase.
+
 ## Phase 8 - Deterministic KV System
+
+Scope: `SIMULATOR_ONLY`.
 
 Goal: implement deterministic KV cache manifests and validation gates.
 
@@ -106,6 +139,8 @@ What not to do: reuse KV across model/tokenizer/template/layout/schema/runtime m
 
 ## Phase 9 - Runtime Driver Integration
 
+Scope: `LIVE_INTEGRATION`.
+
 Goal: attach model/runtime drivers behind proposal-only interfaces.
 
 Deliverables: runtime driver envelopes, model revision capture, tokenizer/template capture, proposal conversion.
@@ -115,6 +150,8 @@ Validation criteria: runtime output cannot mutate canonical state; capability an
 What not to do: add API keys to repo or let runtime drivers own authority.
 
 ## Phase 10 - Lymphatic Lane
+
+Scope: `SIMULATOR_ONLY`.
 
 Goal: implement deferred maintenance for cleanup, contradictions, stale loops, cache eviction, and compaction.
 
@@ -126,6 +163,8 @@ What not to do: run full maintenance on every turn or delete provenance.
 
 ## Phase 11 - Rust Kernel Core
 
+Scope: `RESEARCH_ONLY`.
+
 Goal: move core deterministic kernel contracts into a Rust implementation boundary.
 
 Deliverables: Rust syscall core, validation modules, journal interfaces, FFI or service boundary plan.
@@ -135,6 +174,8 @@ Validation criteria: deterministic tests pass; parity with simulator; no model d
 What not to do: rewrite all applications or introduce untested unsafe authority paths.
 
 ## Phase 12 - FORGE Daemon
+
+Scope: `LIVE_INTEGRATION`.
 
 Goal: expose FORGE-K as a governed local daemon.
 
@@ -146,6 +187,8 @@ What not to do: expose uncontrolled tool execution or remote authority by defaul
 
 ## Phase 13 - FORGE-1 Simulator
 
+Scope: `RESEARCH_ONLY`.
+
 Goal: simulate candidate FORGE-1 instruction families and hardware blocks.
 
 Deliverables: simulator contracts, instruction traces, workload benchmarks, correctness tests.
@@ -155,6 +198,8 @@ Validation criteria: simulator behavior matches documented kernel semantics; per
 What not to do: claim hardware readiness or replace the userspace kernel path.
 
 ## Phase 14 - FORGE-1 Prototype Research
+
+Scope: `RESEARCH_ONLY`.
 
 Goal: evaluate hardware/software co-design feasibility for governed execution acceleration.
 

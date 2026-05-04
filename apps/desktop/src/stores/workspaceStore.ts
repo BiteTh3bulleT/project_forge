@@ -18,10 +18,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
       reject(new Error(`request timed out after ${ms}ms`));
     }, ms);
   });
-  return Promise.race([
-    promise,
-    timeoutPromise,
-  ]).finally(() => clearTimeout(timeoutId));
+  return Promise.race([promise, timeoutPromise]).finally(() =>
+    clearTimeout(timeoutId),
+  );
 }
 
 export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
@@ -39,7 +38,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         set({
           core: "online",
           meta: get().meta,
-          lastCoreError: metaError instanceof Error ? `metadata degraded: ${metaError.message}` : `metadata degraded: ${String(metaError)}`,
+          lastCoreError:
+            metaError instanceof Error
+              ? `metadata degraded: ${metaError.message}`
+              : `metadata degraded: ${String(metaError)}`,
         });
         return;
       }

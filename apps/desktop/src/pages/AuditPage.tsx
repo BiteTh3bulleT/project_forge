@@ -1,4 +1,4 @@
-import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
+import { GhostButton, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
@@ -28,13 +28,23 @@ function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
-function JsonBlock(props: { value: unknown; empty?: string; maxHeightClass?: string }) {
+function JsonBlock(props: {
+  value: unknown;
+  empty?: string;
+  maxHeightClass?: string;
+}) {
   if (
     props.value == null ||
     (Array.isArray(props.value) && props.value.length === 0) ||
-    (typeof props.value === "object" && props.value !== null && Object.keys(props.value as Record<string, unknown>).length === 0)
+    (typeof props.value === "object" &&
+      props.value !== null &&
+      Object.keys(props.value as Record<string, unknown>).length === 0)
   ) {
-    return <div className="text-xs text-forge-mist/75">{props.empty ?? "No recorded details."}</div>;
+    return (
+      <div className="text-xs text-forge-mist/75">
+        {props.empty ?? "No recorded details."}
+      </div>
+    );
   }
 
   return (
@@ -57,12 +67,61 @@ function CountPill(props: { label: string; value: string | number }) {
   );
 }
 
+function AuditMetric(props: {
+  label: string;
+  value: string | number;
+  detail: string;
+  tone?: "ok" | "warn" | "bad" | "muted";
+}) {
+  const toneClass =
+    props.tone === "ok"
+      ? "text-emerald-300"
+      : props.tone === "warn"
+        ? "text-amber-300"
+        : props.tone === "bad"
+          ? "text-red-300"
+          : "text-forge-ash";
+  return (
+    <div className="forge-ops-card p-4">
+      <div className="forge-ops-label">{props.label}</div>
+      <div
+        className={`mt-2 text-3xl font-semibold tracking-normal ${toneClass}`}
+      >
+        {props.value}
+      </div>
+      <div className="mt-2 text-xs text-forge-mist/65">{props.detail}</div>
+    </div>
+  );
+}
+
+function auditOutcomeClass(outcome: string) {
+  const normalized = outcome.trim().toLowerCase();
+  if (
+    normalized === "success" ||
+    normalized === "approved" ||
+    normalized === "allowed"
+  )
+    return "forge-ops-status forge-ops-status--ok";
+  if (
+    normalized === "failed" ||
+    normalized === "error" ||
+    normalized === "denied" ||
+    normalized === "blocked"
+  )
+    return "forge-ops-status forge-ops-status--bad";
+  if (normalized === "pending" || normalized === "requested")
+    return "forge-ops-status forge-ops-status--warn";
+  return "forge-ops-status forge-ops-status--muted";
+}
+
 export function AuditPage() {
   const [params, setParams] = useSearchParams();
   const jobId = useMemo(() => params.get("jobId") ?? "", [params]);
   const [category, setCategory] = useState(() => params.get("category") ?? "");
   const [outcome, setOutcome] = useState(() => params.get("outcome") ?? "");
-  const [correlation, setCorrelation] = useState(() => params.get("correlationId") ?? "");
+  const [correlation, setCorrelation] = useState(
+    () => params.get("correlationId") ?? "",
+  );
   const [traceId, setTraceId] = useState(() => params.get("traceId") ?? "");
   const [records, setRecords] = useState<AuditRecord[]>([]);
   const [trace, setTrace] = useState<AuditRecord[]>([]);
@@ -128,131 +187,289 @@ export function AuditPage() {
     }
   }, []);
 
-  const distinctCategories = useMemo(() => new Set(records.map((record) => record.category)).size, [records]);
-  const distinctCorrelations = useMemo(() => new Set(records.map((record) => record.correlationId).filter(Boolean)).size, [records]);
+  const distinctCategories = useMemo(
+    () => new Set(records.map((record) => record.category)).size,
+    [records],
+  );
+  const distinctCorrelations = useMemo(
+    () =>
+      new Set(records.map((record) => record.correlationId).filter(Boolean))
+        .size,
+    [records],
+  );
+  const failureCount = useMemo(
+    () =>
+      records.filter((record) =>
+        ["failed", "error", "denied", "blocked"].includes(
+          record.outcome.trim().toLowerCase(),
+        ),
+      ).length,
+    [records],
+  );
 
   return (
-    <div className="space-y-6">
-      <Panel
-        title="Audit & trace"
-        subtitle="Append-only audit records with correlation ids. Use trace view to answer what happened, in order, for one logical operation."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Link
-              to={correlation ? `/inspectors?correlationId=${encodeURIComponent(correlation)}` : "/inspectors"}
-              className="rounded border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
-            >
-              Open inspectors
-            </Link>
-            <GhostButton onClick={() => void loadList()}>Refresh list</GhostButton>
-          </div>
-        }
-      >
-        {jobId ? (
-          <div className="mb-3 text-xs text-forge-mist">
-            Filtered by job <span className="font-mono text-forge-ash">{jobId}</span>{" "}
-            <button
-              type="button"
-              className="text-forge-emberSoft underline"
-              onClick={() => {
-                setCategory("");
-                setOutcome("");
-                setCorrelation("");
-                setTraceId("");
-                setParams({});
-              }}
-            >
-              clear
-            </button>
-          </div>
-        ) : null}
-        <div className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-          <div className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-forge-mist">
-            Use the list to find a governed action, then pivot into a single correlation trace to reconstruct the exact sequence of persisted audit events.
-          </div>
-          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-            <div className="text-[10px] uppercase tracking-[0.14em] text-forge-mist/65">Current view</div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <CountPill label="Rows" value={records.length} />
-              <CountPill label="Categories" value={distinctCategories} />
-              <CountPill label="Correlations" value={distinctCorrelations} />
-            </div>
-          </div>
+    <div className="forge-ops-board space-y-5">
+      <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="forge-ops-label">Audit Trail</div>
+          <h1 className="mt-2 text-2xl font-semibold tracking-normal text-forge-ash sm:text-3xl">
+            Audit & trace
+          </h1>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-forge-mist/75">
+            Append-only records with correlation pivots for reconstructing
+            governed operations in sequence.
+          </p>
         </div>
-        {err ? <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
-        <div className="mt-3 grid gap-2 md:grid-cols-3">
-          <input className="forge-input" placeholder="category" value={category} onChange={(e) => setCategory(e.target.value)} />
-          <input className="forge-input" placeholder="outcome" value={outcome} onChange={(e) => setOutcome(e.target.value)} />
-          <input className="forge-input" placeholder="correlation id" value={correlation} onChange={(e) => setCorrelation(e.target.value)} />
-        </div>
-        <div className="mt-2">
-          <PrimaryButton onClick={() => void loadList()}>Apply filters</PrimaryButton>
-        </div>
-      </Panel>
-
-      <Panel title="Correlation trace" subtitle="Loads oldest→newest for a single correlation id.">
-        <div className="flex flex-wrap gap-2">
-          <input className="forge-input min-w-[240px] flex-1" value={traceId} onChange={(e) => setTraceId(e.target.value)} placeholder="corr-…" />
-          <PrimaryButton
-            onClick={() => void loadTrace()}
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            to={
+              correlation
+                ? `/inspectors?correlationId=${encodeURIComponent(correlation)}`
+                : "/inspectors"
+            }
+            className="forge-btn forge-btn--ghost"
           >
-            Load trace
-          </PrimaryButton>
+            Open inspectors
+          </Link>
+          <GhostButton onClick={() => void loadList()}>
+            Refresh list
+          </GhostButton>
         </div>
-        {traceErr ? <div className="mt-3 rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{traceErr}</div> : null}
-        {trace.length > 0 ? (
-          <div className="mt-3 flex flex-wrap gap-2">
-            <CountPill label="Events" value={trace.length} />
-            <CountPill label="Correlation" value={trace[0]?.correlationId || traceId || "—"} />
-            {trace[0]?.jobId ? <CountPill label="Job" value={trace[0].jobId} /> : null}
-            {trace[0]?.approvalRequestId ? <CountPill label="Approval" value={trace[0].approvalRequestId} /> : null}
-          </div>
-        ) : null}
-        <div className="mt-4 space-y-2">
-          {trace.length === 0 ? <div className="text-sm text-forge-mist">No trace loaded.</div> : null}
-          {trace.map((rec) => (
-            <div key={rec.id} className="rounded-xl border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="font-mono text-forge-ash">
-                  {rec.createdAtMs ? formatTime(rec.createdAtMs) : ""} · {rec.category}.{rec.action}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <CountPill label="Outcome" value={rec.outcome} />
-                  <CountPill label="Risk" value={rec.riskClass} />
-                </div>
-              </div>
-              <div className="mt-2 text-sm text-forge-ash">{rec.summary}</div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {rec.gatewayInvocationId ? <CountPill label="Gateway" value={rec.gatewayInvocationId} /> : null}
-                {rec.approvalRequestId ? <CountPill label="Approval" value={rec.approvalRequestId} /> : null}
-                {rec.subjectType ? <CountPill label="Subject" value={`${rec.subjectType}:${rec.subjectId || "—"}`} /> : null}
-              </div>
-              <div className="mt-3">
-                <JsonBlock value={rec.payload} empty="No details recorded for this trace event." maxHeightClass="max-h-[180px]" />
-              </div>
-            </div>
-          ))}
-        </div>
-      </Panel>
+      </header>
 
-      <Panel title="Recent records" subtitle="Newest-first list from the audit table.">
-        <div className="space-y-2">
-          {records.length === 0 ? <div className="text-sm text-forge-mist">No records (or core offline).</div> : null}
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <AuditMetric
+          label="Rows"
+          value={records.length}
+          detail="current list result"
+          tone="muted"
+        />
+        <AuditMetric
+          label="Categories"
+          value={distinctCategories}
+          detail="event families"
+          tone="muted"
+        />
+        <AuditMetric
+          label="Correlations"
+          value={distinctCorrelations}
+          detail="trace pivots"
+          tone="ok"
+        />
+        <AuditMetric
+          label="Failures"
+          value={failureCount}
+          detail="denied, blocked, or failed"
+          tone={failureCount > 0 ? "bad" : "ok"}
+        />
+      </section>
+
+      <section className="forge-ops-panel">
+        <div className="forge-ops-panel__head">
+          <div>
+            <div className="forge-ops-title">Record Filters</div>
+            <div className="mt-1 text-xs text-forge-mist/65">
+              Find governed actions by category, outcome, job, or correlation
+              id.
+            </div>
+          </div>
+          <span className="font-mono text-[11px] text-forge-mist/60">
+            limit 120
+          </span>
+        </div>
+        <div className="forge-ops-panel__body">
+          {jobId ? (
+            <div className="mb-3 text-xs text-forge-mist">
+              Filtered by job{" "}
+              <span className="font-mono text-forge-ash">{jobId}</span>{" "}
+              <button
+                type="button"
+                className="text-forge-emberSoft underline"
+                onClick={() => {
+                  setCategory("");
+                  setOutcome("");
+                  setCorrelation("");
+                  setTraceId("");
+                  setParams({});
+                }}
+              >
+                clear
+              </button>
+            </div>
+          ) : null}
+          {err ? (
+            <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
+              {err}
+            </div>
+          ) : null}
+          <div className="mt-3 grid gap-2 md:grid-cols-3">
+            <input
+              className="forge-input"
+              placeholder="category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            />
+            <input
+              className="forge-input"
+              placeholder="outcome"
+              value={outcome}
+              onChange={(e) => setOutcome(e.target.value)}
+            />
+            <input
+              className="forge-input"
+              placeholder="correlation id"
+              value={correlation}
+              onChange={(e) => setCorrelation(e.target.value)}
+            />
+          </div>
+          <div className="mt-2">
+            <PrimaryButton onClick={() => void loadList()}>
+              Apply filters
+            </PrimaryButton>
+          </div>
+        </div>
+      </section>
+
+      <section className="forge-ops-panel">
+        <div className="forge-ops-panel__head">
+          <div>
+            <div className="forge-ops-title">Correlation Trace</div>
+            <div className="mt-1 text-xs text-forge-mist/65">
+              Loads oldest to newest for a single correlation id.
+            </div>
+          </div>
+          {trace.length > 0 ? (
+            <span className="forge-ops-status forge-ops-status--ok">
+              {trace.length} events
+            </span>
+          ) : null}
+        </div>
+        <div className="forge-ops-panel__body">
+          <div className="flex flex-wrap gap-2">
+            <input
+              className="forge-input min-w-[240px] flex-1"
+              value={traceId}
+              onChange={(e) => setTraceId(e.target.value)}
+              placeholder="corr-…"
+            />
+            <PrimaryButton onClick={() => void loadTrace()}>
+              Load trace
+            </PrimaryButton>
+          </div>
+          {traceErr ? (
+            <div className="mt-3 rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
+              {traceErr}
+            </div>
+          ) : null}
+          {trace.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <CountPill label="Events" value={trace.length} />
+              <CountPill
+                label="Correlation"
+                value={trace[0]?.correlationId || traceId || "—"}
+              />
+              {trace[0]?.jobId ? (
+                <CountPill label="Job" value={trace[0].jobId} />
+              ) : null}
+              {trace[0]?.approvalRequestId ? (
+                <CountPill
+                  label="Approval"
+                  value={trace[0].approvalRequestId}
+                />
+              ) : null}
+            </div>
+          ) : null}
+          <div className="mt-4 space-y-2">
+            {trace.length === 0 ? (
+              <div className="text-sm text-forge-mist">No trace loaded.</div>
+            ) : null}
+            {trace.map((rec) => (
+              <div
+                key={rec.id}
+                className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="font-mono text-forge-ash">
+                    {rec.createdAtMs ? formatTime(rec.createdAtMs) : ""} ·{" "}
+                    {rec.category}.{rec.action}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className={auditOutcomeClass(rec.outcome)}>
+                      {rec.outcome || "unknown"}
+                    </span>
+                    <CountPill label="Risk" value={rec.riskClass} />
+                  </div>
+                </div>
+                <div className="mt-2 text-sm text-forge-ash">{rec.summary}</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {rec.gatewayInvocationId ? (
+                    <CountPill
+                      label="Gateway"
+                      value={rec.gatewayInvocationId}
+                    />
+                  ) : null}
+                  {rec.approvalRequestId ? (
+                    <CountPill label="Approval" value={rec.approvalRequestId} />
+                  ) : null}
+                  {rec.subjectType ? (
+                    <CountPill
+                      label="Subject"
+                      value={`${rec.subjectType}:${rec.subjectId || "—"}`}
+                    />
+                  ) : null}
+                </div>
+                <div className="mt-3">
+                  <JsonBlock
+                    value={rec.payload}
+                    empty="No details recorded for this trace event."
+                    maxHeightClass="max-h-[180px]"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="forge-ops-panel">
+        <div className="forge-ops-panel__head">
+          <div>
+            <div className="forge-ops-title">Recent Records</div>
+            <div className="mt-1 text-xs text-forge-mist/65">
+              Newest-first list from the audit table.
+            </div>
+          </div>
+        </div>
+        <div className="divide-y divide-white/10">
+          {records.length === 0 ? (
+            <div className="forge-ops-panel__body text-sm text-forge-mist">
+              No records (or core offline).
+            </div>
+          ) : null}
           {records.map((rec) => (
-            <div key={rec.id} className="rounded-xl border border-white/10 bg-forge-iron/30 p-3 text-xs text-forge-mist">
+            <article key={rec.id} className="p-4 text-xs text-forge-mist">
               <div className="flex flex-wrap justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-forge-ash">{rec.category}.{rec.action}</span>
-                  <CountPill label="Outcome" value={rec.outcome} />
+                  <span className="font-mono text-forge-ash">
+                    {rec.category}.{rec.action}
+                  </span>
+                  <span className={auditOutcomeClass(rec.outcome)}>
+                    {rec.outcome || "unknown"}
+                  </span>
                   <CountPill label="Risk" value={rec.riskClass} />
                 </div>
                 <span>{formatTime(rec.createdAtMs)}</span>
               </div>
               <div className="mt-2 text-sm text-forge-ash">{rec.summary}</div>
               <div className="mt-2 flex flex-wrap gap-2">
-                <CountPill label="Correlation" value={rec.correlationId || "—"} />
+                <CountPill
+                  label="Correlation"
+                  value={rec.correlationId || "—"}
+                />
                 {rec.jobId ? <CountPill label="Job" value={rec.jobId} /> : null}
-                {rec.gatewayInvocationId ? <CountPill label="Gateway" value={rec.gatewayInvocationId} /> : null}
+                {rec.gatewayInvocationId ? (
+                  <CountPill label="Gateway" value={rec.gatewayInvocationId} />
+                ) : null}
               </div>
               <div className="mt-3 flex flex-wrap gap-2 text-[11px]">
                 {rec.correlationId ? (
@@ -276,10 +493,10 @@ export function AuditPage() {
                   </>
                 ) : null}
               </div>
-            </div>
+            </article>
           ))}
         </div>
-      </Panel>
+      </section>
     </div>
   );
 }

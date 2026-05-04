@@ -8,12 +8,12 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 
 - [x] **B** Repair `TestChatPostSyncRoutesDownloadSorterThroughGateway` so it does not depend on the real Windows user Downloads directory.
 - [x] **B** Repair `TestChatPostSyncMultiSVGUsesDeterministicGatewayShortcut` for the same host-path issue.
-- [ ] **B** Add ADR 0005: FORGE-K simulator authority vs live AI-OS/gateway authority.
+- [x] **B** Add ADR 0005: FORGE-K simulator authority vs live AI-OS/gateway authority.
 
 ## High-Priority Stabilization
 
 - [ ] **H** Repair local Node workspace dependency resolution so `@forge/shared`, `@forge/ui`, and `vitest` resolve for desktop validation.
-- [ ] **H** Decide whether Phase 6 Snapshots is simulator-only or the first live integration step.
+- [x] **H** Decide whether Phase 6 Snapshots is simulator-only or the first live integration step. Recorded as `SIMULATOR_ONLY`.
 - [ ] **H** Add model runtime path safety tests for unsafe model IDs and managed-store safe joins.
 - [ ] **H** Add gateway secret result persistence tests and define redaction/handle behavior.
 - [ ] **H** Keep `services/core/internal/api/server_route_inventory_test.go` passing during all API refactors.
@@ -29,9 +29,9 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 
 ## Tests To Add
 
-- [ ] **H** Snapshot shape-not-truth tests before Phase 6 implementation.
-- [ ] **H** ContextBlock deterministic serialization tests before Phase 7.
-- [ ] **H** Token hashing identity tests before Phase 7.
+- [x] **H** Snapshot shape-not-truth tests for Phase 6 implementation.
+- [x] **H** ContextBlock deterministic serialization tests for Phase 7.
+- [x] **H** Token input hashing identity tests for Phase 7.
 - [ ] **H** KV nine-gate validation tests before Phase 8.
 - [ ] **M** Static/import guard for legacy memory mutation boundaries.
 - [ ] **M** Shutdown/lifecycle tests after lifecycle extraction.
@@ -40,11 +40,11 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 
 ## Docs To Update
 
-- [ ] **B** Create ADR 0005.
-- [ ] **H** Update `AGENTS.md` with a short authority coexistence note once ADR 0005 exists.
-- [ ] **H** Update `docs/status/implementation_matrix.md` with FORGE-K Phase 0-14 status.
-- [ ] **M** Update `docs/roadmap/forge_k_build_phases.md` with the Phase 6 scope decision.
-- [ ] **M** Add `services/core/internal/forgek/README.md`.
+- [x] **B** Create ADR 0005.
+- [x] **H** Update `AGENTS.md` with a short authority coexistence note once ADR 0005 exists.
+- [x] **H** Update `docs/status/implementation_matrix.md` with legacy/live AI-OS boundary note and FORGE-K status cross-link.
+- [x] **M** Update `docs/roadmap/forge_k_build_phases.md` with the Phase 6 scope decision.
+- [x] **M** Add `services/core/internal/forgek/README.md`.
 - [ ] **M** Add comments or docs that `internal/api/phase*.go` names refer to legacy FORGE feature phases, not FORGE-K phases.
 - [ ] **L** Document Windows smoke limitations or add a PowerShell smoke path.
 
@@ -58,15 +58,16 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 
 ## Safe Next Tasks
 
-- [ ] Stabilize the two failing API tests.
+- [x] Stabilize the two failing API tests.
 - [ ] Repair Node workspace dependency state and rerun desktop validation.
-- [ ] Write ADR 0005.
+- [x] Write ADR 0005.
 - [ ] Continue API refactor Phase C only after tests are green.
-- [ ] Begin Phase 6 Snapshots only after the scope decision and snapshot invariant tests exist.
+- [x] Implement Phase 6 Snapshots with snapshot invariant tests. Scope is recorded as `SIMULATOR_ONLY`.
+- [x] Implement Phase 7 Context Compiler with deterministic serialization, token input hash, and shape-not-truth tests. Scope is recorded as `SIMULATOR_ONLY`.
 
 ## Deferred Work
 
-- [ ] FORGE-K Phase 7 Context Compiler.
+- [x] FORGE-K Phase 7 Context Compiler. Scope is recorded as `SIMULATOR_ONLY`.
 - [ ] FORGE-K Phase 8 Deterministic KV System.
 - [ ] FORGE-K Phase 9 Runtime Driver Integration.
 - [ ] FORGE-K Phase 10 Lymphatic Lane.
@@ -79,10 +80,12 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 
 ## Acceptance Criteria Before New Feature Work
 
-- [ ] `npm test` passes.
-- [ ] `npm run build:core` passes.
-- [ ] `npm run lint` passes.
+- [x] `npm test` passes.
+- [x] `npm run build:core` passes.
+- [x] `npm run lint` passes.
 - [ ] Desktop dependency resolution is repaired enough for meaningful typecheck/build results.
-- [ ] ADR 0005 exists.
-- [ ] Route inventory guardrails pass.
-- [ ] Phase 6 scope decision is recorded.
+- [x] ADR 0005 exists.
+- [x] Route inventory guardrails pass.
+- [x] Phase 6 scope decision is recorded.
+- [x] Phase 6 snapshot simulator tests pass under `go test ./internal/forgek/...`.
+- [x] Phase 7 Context Compiler simulator tests pass under `go test ./internal/forgek/...`.

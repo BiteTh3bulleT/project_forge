@@ -55,21 +55,34 @@ export function CommandBar(props: { compact?: boolean }) {
           query: "Build task packet from current project context.",
         });
         navigate(res.jobId ? `/jobs/${res.jobId}` : "/jobs");
-        setStatus(res.jobId ? `Packet job queued: ${res.jobId}.` : "Packet job queued.");
+        setStatus(
+          res.jobId ? `Packet job queued: ${res.jobId}.` : "Packet job queued.",
+        );
         return;
       }
       if (id === "ollama") {
         const res = await api.commands.execute("ollama_summary", {
-          query: "Summarize relevant project context and active execution state.",
+          query:
+            "Summarize relevant project context and active execution state.",
         });
         navigate(res.jobId ? `/jobs/${res.jobId}` : "/jobs");
-        setStatus(res.jobId ? `Ollama summary queued: ${res.jobId}.` : "Ollama summary queued.");
+        setStatus(
+          res.jobId
+            ? `Ollama summary queued: ${res.jobId}.`
+            : "Ollama summary queued.",
+        );
         return;
       }
       if (id === "reindex") {
-        const res = await api.commands.execute("reindex", { via: "command_bar_quick_action" });
+        const res = await api.commands.execute("reindex", {
+          via: "command_bar_quick_action",
+        });
         navigate(res.jobId ? `/jobs/${res.jobId}` : "/jobs");
-        setStatus(res.jobId ? `Re-index job queued: ${res.jobId}.` : "Re-index submitted.");
+        setStatus(
+          res.jobId
+            ? `Re-index job queued: ${res.jobId}.`
+            : "Re-index submitted.",
+        );
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -120,7 +133,19 @@ export function CommandBar(props: { compact?: boolean }) {
         return;
       }
 
-      if (verb === "jobs" || verb === "dashboard" || verb === "chat" || verb === "reviews" || verb === "approvals" || verb === "memory" || verb === "dossiers" || verb === "policy" || verb === "settings" || verb === "sources" || verb === "adapters") {
+      if (
+        verb === "jobs" ||
+        verb === "dashboard" ||
+        verb === "chat" ||
+        verb === "reviews" ||
+        verb === "approvals" ||
+        verb === "memory" ||
+        verb === "dossiers" ||
+        verb === "policy" ||
+        verb === "settings" ||
+        verb === "sources" ||
+        verb === "adapters"
+      ) {
         const path = verb === "dashboard" ? "/dashboard" : `/${verb}`;
         navigate(path);
         setStatus(`Opened ${verb}.`);
@@ -151,9 +176,15 @@ export function CommandBar(props: { compact?: boolean }) {
       }
 
       if (verb === ":reindex" || verb === "reindex") {
-        const res = await api.commands.execute("reindex", { via: "command.bar" });
+        const res = await api.commands.execute("reindex", {
+          via: "command.bar",
+        });
         navigate(res.jobId ? `/jobs/${res.jobId}` : "/jobs");
-        setStatus(res.jobId ? `Re-index job queued: ${res.jobId}.` : "Re-index command submitted.");
+        setStatus(
+          res.jobId
+            ? `Re-index job queued: ${res.jobId}.`
+            : "Re-index command submitted.",
+        );
         setDraft("");
         return;
       }
@@ -162,7 +193,9 @@ export function CommandBar(props: { compact?: boolean }) {
         const q = tail || "Build context packet";
         const res = await api.commands.execute("search_packet", { query: q });
         navigate(res.jobId ? `/jobs/${res.jobId}` : "/jobs");
-        setStatus(res.jobId ? `Packet job queued: ${res.jobId}.` : "Packet job queued.");
+        setStatus(
+          res.jobId ? `Packet job queued: ${res.jobId}.` : "Packet job queued.",
+        );
         setDraft("");
         return;
       }
@@ -171,18 +204,33 @@ export function CommandBar(props: { compact?: boolean }) {
         const [subRaw, ...rem] = tail.split(" ");
         const sub = subRaw?.toLowerCase() ?? "";
         if (sub === "summary") {
-          const q = rem.join(" ").trim() || "Summarize relevant project context.";
-          const res = await api.commands.execute("ollama_summary", { query: q });
+          const q =
+            rem.join(" ").trim() || "Summarize relevant project context.";
+          const res = await api.commands.execute("ollama_summary", {
+            query: q,
+          });
           navigate(res.jobId ? `/jobs/${res.jobId}` : "/jobs");
-          setStatus(res.jobId ? `Ollama summary job queued: ${res.jobId}.` : "Ollama summary job queued.");
+          setStatus(
+            res.jobId
+              ? `Ollama summary job queued: ${res.jobId}.`
+              : "Ollama summary job queued.",
+          );
           setDraft("");
           return;
         }
         if (sub === "plan") {
-          const q = rem.join(" ").trim() || "Draft implementation plan from indexed context.";
-          const res = await api.commands.execute("plan_from_index", { query: q });
+          const q =
+            rem.join(" ").trim() ||
+            "Draft implementation plan from indexed context.";
+          const res = await api.commands.execute("plan_from_index", {
+            query: q,
+          });
           navigate(res.jobId ? `/jobs/${res.jobId}` : "/jobs");
-          setStatus(res.jobId ? `Planning job queued: ${res.jobId}.` : "Planning job queued.");
+          setStatus(
+            res.jobId
+              ? `Planning job queued: ${res.jobId}.`
+              : "Planning job queued.",
+          );
           setDraft("");
           return;
         }
@@ -193,9 +241,15 @@ export function CommandBar(props: { compact?: boolean }) {
         const sub = subRaw?.toLowerCase() ?? "";
         if (sub === "packet") {
           const q = rem.join(" ").trim() || "Prepare Codex handoff packet.";
-          const res = await api.commands.execute("prepare_codex_handoff", { query: q });
+          const res = await api.commands.execute("prepare_codex_handoff", {
+            query: q,
+          });
           navigate(res.jobId ? `/jobs/${res.jobId}` : "/jobs");
-          setStatus(res.jobId ? `Codex handoff job queued: ${res.jobId}.` : "Codex handoff job queued.");
+          setStatus(
+            res.jobId
+              ? `Codex handoff job queued: ${res.jobId}.`
+              : "Codex handoff job queued.",
+          );
           setDraft("");
           return;
         }
@@ -205,16 +259,26 @@ export function CommandBar(props: { compact?: boolean }) {
         const [subRaw, ...rem] = tail.split(" ");
         const sub = subRaw?.toLowerCase() ?? "";
         if (sub === "packet") {
-          const q = rem.join(" ").trim() || "Prepare Claude Code handoff packet.";
-          const res = await api.commands.execute("prepare_claude_handoff", { query: q });
+          const q =
+            rem.join(" ").trim() || "Prepare Claude Code handoff packet.";
+          const res = await api.commands.execute("prepare_claude_handoff", {
+            query: q,
+          });
           navigate(res.jobId ? `/jobs/${res.jobId}` : "/jobs");
-          setStatus(res.jobId ? `Claude handoff job queued: ${res.jobId}.` : "Claude handoff job queued.");
+          setStatus(
+            res.jobId
+              ? `Claude handoff job queued: ${res.jobId}.`
+              : "Claude handoff job queued.",
+          );
           setDraft("");
           return;
         }
       }
 
-      if (verb === "context" && (tail.startsWith("import") || tail.startsWith("normalize"))) {
+      if (
+        verb === "context" &&
+        (tail.startsWith("import") || tail.startsWith("normalize"))
+      ) {
         const maybePath = tail.replace(/^(import|normalize)\s*/, "").trim();
         const res = await api.commands.execute("normalize_project_context", {
           query: "Normalize project context",
@@ -222,7 +286,11 @@ export function CommandBar(props: { compact?: boolean }) {
           notes: "Triggered from command bar",
         });
         navigate(res.jobId ? `/jobs/${res.jobId}` : "/project-context");
-        setStatus(res.jobId ? `Project context normalization job queued: ${res.jobId}.` : "Project context normalization queued.");
+        setStatus(
+          res.jobId
+            ? `Project context normalization job queued: ${res.jobId}.`
+            : "Project context normalization queued.",
+        );
         setDraft("");
         return;
       }
@@ -239,28 +307,33 @@ export function CommandBar(props: { compact?: boolean }) {
     }
   }
 
-  const quickButtons = uiMode === "cognitive"
-    ? [
-        { id: "start", label: "Start" },
-        { id: "memory", label: "Search Memory" },
-        { id: "packet", label: "Build Packet Job" },
-        { id: "ollama", label: "Run Ollama Summary" },
-        { id: "approvals", label: "Approvals" },
-      ]
-    : [
-        { id: "jobs", label: "Jobs" },
-        { id: "memory", label: "Memory" },
-        { id: "packet", label: "Packet Job" },
-        { id: "ollama", label: "Ollama" },
-        { id: "reindex", label: "Re-index" },
-      ];
+  const quickButtons =
+    uiMode === "cognitive"
+      ? [
+          { id: "start", label: "Start" },
+          { id: "memory", label: "Search Memory" },
+          { id: "packet", label: "Build Packet Job" },
+          { id: "ollama", label: "Run Ollama Summary" },
+          { id: "approvals", label: "Approvals" },
+        ]
+      : [
+          { id: "jobs", label: "Jobs" },
+          { id: "memory", label: "Memory" },
+          { id: "packet", label: "Packet Job" },
+          { id: "ollama", label: "Ollama" },
+          { id: "reindex", label: "Re-index" },
+        ];
 
   if (props.compact) {
     return (
       <div className="flex items-center gap-2">
         <input
           className="forge-input min-h-[2rem] py-1.5 text-[12px]"
-          placeholder={uiMode === "cognitive" ? "search auth | go /jobs" : "go /dashboard | :reindex"}
+          placeholder={
+            uiMode === "cognitive"
+              ? "search auth | go /jobs"
+              : "go /dashboard | :reindex"
+          }
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -269,7 +342,12 @@ export function CommandBar(props: { compact?: boolean }) {
           disabled={busy}
           aria-label="Command input"
         />
-        <button type="button" className="forge-btn forge-btn--primary h-8 px-3 py-1 text-[11px]" onClick={() => void run()} disabled={busy}>
+        <button
+          type="button"
+          className="forge-btn forge-btn--primary h-8 px-3 py-1 text-[11px]"
+          onClick={() => void run()}
+          disabled={busy}
+        >
           {busy ? "…" : "Run"}
         </button>
       </div>
@@ -280,24 +358,30 @@ export function CommandBar(props: { compact?: boolean }) {
     <div className="flex flex-col gap-2.5">
       <div className="flex flex-wrap gap-1.5">
         {quickButtons.map((btn) => (
-            <button
-              key={btn.id}
-              type="button"
-              onClick={() => void runQuick(btn.id)}
-              disabled={busy}
-              className="forge-chip forge-chip--muted whitespace-nowrap px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {btn.label}
-            </button>
-          ))}
-        </div>
+          <button
+            key={btn.id}
+            type="button"
+            onClick={() => void runQuick(btn.id)}
+            disabled={busy}
+            className="forge-chip forge-chip--muted whitespace-nowrap px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {btn.label}
+          </button>
+        ))}
+      </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist/55">Command</span>
+          <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist/55">
+            Command
+          </span>
           <input
             className="forge-input min-h-[2.25rem] py-1.5 text-[13px]"
-            placeholder={uiMode === "cognitive" ? "Try: search auth flow | go /jobs" : "go /dashboard | :reindex | codex packet auth fix"}
+            placeholder={
+              uiMode === "cognitive"
+                ? "Try: search auth flow | go /jobs"
+                : "go /dashboard | :reindex | codex packet auth fix"
+            }
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
@@ -308,7 +392,12 @@ export function CommandBar(props: { compact?: boolean }) {
           />
         </div>
         <div className="flex shrink-0 items-center gap-2 sm:pl-1">
-          <button type="button" className="forge-btn forge-btn--primary min-w-[4.5rem] px-4" onClick={() => void run()} disabled={busy}>
+          <button
+            type="button"
+            className="forge-btn forge-btn--primary min-w-[4.5rem] px-4"
+            onClick={() => void run()}
+            disabled={busy}
+          >
             {busy ? "…" : "Run"}
           </button>
           <span className="forge-kbd hidden sm:inline" title="Submit">

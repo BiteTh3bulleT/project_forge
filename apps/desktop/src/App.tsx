@@ -1,11 +1,21 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 
 import { ForgeErrorBoundary } from "./components/ForgeErrorBoundary";
 import { AppShell } from "./layout/AppShell";
-import { WORKSPACE_LAYOUT_EVENT, WORKSPACE_NAVIGATE_EVENT, isTauriDesktop } from "./lib/desktop";
+import {
+  WORKSPACE_LAYOUT_EVENT,
+  WORKSPACE_NAVIGATE_EVENT,
+  isTauriDesktop,
+} from "./lib/desktop";
 import { ActionLanesPage } from "./pages/ActionLanesPage";
 import { AdaptersPage } from "./pages/AdaptersPage";
 import { AuditPage } from "./pages/AuditPage";
@@ -76,7 +86,10 @@ function RoutedViews() {
         <Route path="/approvals" element={<ApprovalsPage />} />
         <Route path="/gateway" element={<ToolGatewayPage />} />
         <Route path="/action-lanes" element={<ActionLanesPage />} />
-        <Route path="/execution-permissions" element={<ExecutionPermissionsPage />} />
+        <Route
+          path="/execution-permissions"
+          element={<ExecutionPermissionsPage />}
+        />
         <Route path="/audit" element={<AuditPage />} />
         <Route path="/backup" element={<BackupPage />} />
         <Route path="/release" element={<ReleasePage />} />
@@ -98,12 +111,16 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const hydrateLayouts = useWorkspaceLayoutStore((s) => s.hydrate);
-  const refreshEnvironment = useWorkspaceLayoutStore((s) => s.refreshEnvironment);
+  const refreshEnvironment = useWorkspaceLayoutStore(
+    (s) => s.refreshEnvironment,
+  );
   const syncCurrentRoute = useWorkspaceLayoutStore((s) => s.syncCurrentRoute);
   const hydrateShell = useDesktopShellStore((s) => s.hydrate);
   const layoutReady = useWorkspaceLayoutStore((s) => s.ready);
   const locationRef = useRef(`${location.pathname}${location.search}`);
-  const currentWindowLabel = useWorkspaceLayoutStore((s) => s.currentWindowLabel);
+  const currentWindowLabel = useWorkspaceLayoutStore(
+    (s) => s.currentWindowLabel,
+  );
   const isMainWindow = layoutReady && currentWindowLabel === "main";
   const contrastPreference = useUiStore((s) => s.contrastPreference);
   const effectsPreference = useUiStore((s) => s.effectsPreference);
@@ -166,15 +183,27 @@ export default function App() {
 
     (async () => {
       const appWindow = getCurrentWindow();
-      const handleNavigate = await appWindow.listen<{ route: string }>(WORKSPACE_NAVIGATE_EVENT, (event) => {
-        if (event.payload?.route && event.payload.route !== locationRef.current) {
-          navigate(event.payload.route);
-        }
-      });
+      const handleNavigate = await appWindow.listen<{ route: string }>(
+        WORKSPACE_NAVIGATE_EVENT,
+        (event) => {
+          if (
+            event.payload?.route &&
+            event.payload.route !== locationRef.current
+          ) {
+            navigate(event.payload.route);
+          }
+        },
+      );
       disposers.push(handleNavigate);
-      disposers.push(await appWindow.onMoved(() => scheduleEnvironmentRefresh()));
-      disposers.push(await appWindow.onResized(() => scheduleEnvironmentRefresh()));
-      disposers.push(await appWindow.onFocusChanged(() => scheduleEnvironmentRefresh()));
+      disposers.push(
+        await appWindow.onMoved(() => scheduleEnvironmentRefresh()),
+      );
+      disposers.push(
+        await appWindow.onResized(() => scheduleEnvironmentRefresh()),
+      );
+      disposers.push(
+        await appWindow.onFocusChanged(() => scheduleEnvironmentRefresh()),
+      );
       if (isMainWindow) {
         disposers.push(
           await listen<{ origin?: string }>(WORKSPACE_LAYOUT_EVENT, (event) => {

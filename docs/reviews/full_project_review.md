@@ -9,7 +9,7 @@ Mode: review/planning only. No features, broad refactors, public API changes, or
 FORGE currently has two important implementation tracks:
 
 1. **The live FORGE core** under `services/core/internal/...`, exposed through the Go daemon and desktop shell. This path contains the current API, gateway, permissions, model runtime, AI-OS controllane, memory, chat, backup, release, and operational behavior.
-2. **The FORGE-K simulator** under `services/core/internal/forgek/...`. This is a self-contained deterministic cognitive microkernel simulator. Phases 1-5 are implemented and tested there, but non-test live code does not import it yet.
+2. **The FORGE-K simulator** under `services/core/internal/forgek/...`. This is a self-contained deterministic cognitive microkernel simulator. Phases 1-6 are implemented and tested there, but non-test live code does not import it yet.
 
 The biggest readiness issue is not that the FORGE-K simulator is weak. It is strong and well tested for its current scope. The issue is that the live daemon still relies on the pre-FORGE-K authority paths (`aios/controllane`, `gateway`, `permissions`, `lanes`, `audit`, and API handlers). That coexistence is acceptable only if documented explicitly before further integration work.
 
@@ -17,12 +17,13 @@ The live core builds and vets cleanly. The FORGE-K test suite passes. Aggregate 
 
 ## Current Status
 
-- **Phase 0-5 FORGE-K simulator:** implemented and tested.
-- **Phase 6+ FORGE-K:** documented only or not started.
+- **Phase 0-6 FORGE-K simulator:** implemented and tested.
+- **Phase 6 FORGE-K:** implemented as `SIMULATOR_ONLY`; no live daemon integration.
+- **Phase 7+ FORGE-K:** documented, partial outside FORGE-K, research-only, or not started depending on phase.
 - **Live daemon integration with FORGE-K:** not started.
 - **Live API:** functional but still carries large server, gateway, chat, model runtime, backup, and controllane monoliths.
 - **Build/vet:** core passes.
-- **Full core test suite:** blocked by two host-coupled API tests.
+- **Full core test suite:** `npm test` passes in the Phase 6 implementation pass.
 - **Desktop typecheck/build/tests:** blocked locally by Node workspace dependency resolution.
 - **Security/safety posture:** generally governed, but there are evidence-based high-risk findings around model store path safety and secret result persistence.
 
@@ -57,7 +58,7 @@ Commands run during this audit and by the parallel review team:
 | `npm run lint` | PASS | Runs VSA preflight and `cd services/core && go vet ./...`. |
 | `go test ./internal/forgek/...` | PASS | FORGE-K, court, palace, semantic, and neurons all pass. |
 | `go test ./internal/api -run "TestServerRouteInventory|TestLegacyAdapterInvokeRouteRemoved|TestOpenAICompatRoutesDisabledByDefault|TestOpenAICompatRoutesAreAvailableWhenAutoEnabledViaCompatFlag|TestServerShutdownWatchIsIdempotent|TestPatchSettings" -count=1` | PASS | Route inventory, OpenAI compatibility route gating, legacy adapter removal, shutdown, and settings guardrails pass. |
-| `npm test` / `go test ./...` | FAIL | Two API tests fail due host home path/lane scope mismatch. |
+| `npm test` / `go test ./...` | PASS | Rerun in the Phase 6 implementation pass; the previously host-coupled API tests pass. |
 | `npm run typecheck` | FAIL | Desktop TS module resolution failures for `@forge/shared`, `@forge/ui`, `vitest`, plus follow-on implicit-any errors. |
 | `npm -w @forge/desktop run build` | FAIL | Vite cannot resolve `@forge/ui` from desktop pages. |
 | `npm -w @forge/desktop run test -- --run` | FAIL | `vitest` not found in current local install. |
@@ -67,14 +68,14 @@ Commands run during this audit and by the parallel review team:
 | `go mod verify` | PASS | All modules verified. |
 | `govulncheck ./...` | NOT RUN | Tool not installed. |
 
-### Blocking Core Test Failures
+### Aggregate Core Test Status
 
-`npm test` fails in `services/core/internal/api`:
+The previous audit reported two host-coupled failures in `services/core/internal/api`:
 
 - `TestChatPostSyncRoutesDownloadSorterThroughGateway`
 - `TestChatPostSyncMultiSVGUsesDeterministicGatewayShortcut`
 
-Both route `~/Downloads/...` to the real Windows home directory (`C:\Users\rasho\Downloads\...`). The gateway denies those paths because they are outside the `fs.write.bounded` lane scope configured for the test. This looks like OS/fixture coupling, not a gateway behavior regression. It still blocks the aggregate core test command and should be fixed before further feature work.
+Both host-path issues are now marked repaired, and `npm test` passes in the Phase 6 implementation pass.
 
 ### Desktop Dependency Health
 
@@ -90,13 +91,13 @@ This blocks meaningful desktop typecheck/build/test validation on this machine.
 
 | Phase | Status | Evidence | Gaps |
 | --- | --- | --- | --- |
-| Phase 0 — Architecture Baseline | IMPLEMENTED | FORGE-K docs, ADRs 0001-0004, glossary, roadmap, DoD, diagrams. | ADR 0005 needed for FORGE-K/live AI-OS coexistence. |
+| Phase 0 — Architecture Baseline | IMPLEMENTED | FORGE-K docs, ADRs 0001-0005, glossary, roadmap, DoD, diagrams. | Keep live-authority boundary visible in future status reports. |
 | Phase 1 — Kernel Simulator | IMPLEMENTED + TESTED | `services/core/internal/forgek/{kernel,objects,syscalls,journal,capabilities,case_syscalls}.go` and tests. | In-memory only; not live daemon authority. |
 | Phase 2 — Neuron Fabric | IMPLEMENTED + TESTED | `services/core/internal/forgek/neurons/...` and tests. | Runtime/model-backed neurons deferred. |
 | Phase 3 — Courthouse Minimal | IMPLEMENTED + TESTED | `court` package, `court_syscalls.go`, tests. | Claim extraction and full adjudication deferred. |
 | Phase 4 — Memory Palace Minimal | IMPLEMENTED + TESTED | `palace` package, `palace_syscalls.go`, tests. | Embeddings/vector retrieval deferred. |
 | Phase 5 — Semantic Algebra | IMPLEMENTED + TESTED | `semantic` package, `semantic_syscalls.go`, tests. | Advanced policy/optimization deferred. |
-| Phase 6 — Snapshots | DOCUMENTED ONLY | `docs/architecture/snapshots.md`, ADR 0003. | No `forgek/snapshots` implementation or tests. |
+| Phase 6 — Snapshots | IMPLEMENTED + TESTED | `services/core/internal/forgek/snapshots/*`, `snapshot_syscalls.go`, `snapshot_syscalls_test.go`, snapshot package tests, `docs/architecture/snapshots.md`, ADR 0003; roadmap scope recorded as `SIMULATOR_ONLY`. | Persistence, live daemon integration, Context Compiler, token hashing, and deterministic KV cache remain deferred. |
 | Phase 7 — Context Compiler | DOCUMENTED / PARTIAL OUTSIDE FORGE-K | `docs/architecture/context_compiler_and_kv_cache.md`; live `aios/controllane/compile_context_*` exists but is not the FORGE-K deterministic ContextBlock compiler. | FORGE-K ContextBlock, token hashing, compiler loop absent. |
 | Phase 8 — Deterministic KV System | DOCUMENTED ONLY | ADR 0004 and context/KV architecture doc. | No KV manifest, nine-gate validation, or tier code. |
 | Phase 9 — Runtime Driver Integration | PARTIAL OUTSIDE FORGE-K | Live `modelruntime`, `gateway`, `aios/iolane` exist. | No FORGE-K runtime-driver boundary. |
@@ -110,7 +111,7 @@ This blocks meaningful desktop typecheck/build/test validation on this machine.
 
 | ID | Severity | Finding | Evidence | Why It Matters | Recommended Fix |
 | --- | --- | --- | --- | --- | --- |
-| AB-01 | HIGH | FORGE-K simulator is not live authority. | `rg` found `forgek` imports only inside `internal/forgek` and its tests. | Doctrine says FORGE-K owns truth, but the live daemon does not route through FORGE-K yet. | Add ADR 0005 and keep Phase 6 simulator-only unless integration is explicitly scoped. |
+| AB-01 | HIGH | FORGE-K simulator is not live authority. | `rg` found `forgek` imports only inside `internal/forgek` and its tests. | Doctrine says FORGE-K owns truth, but the live daemon does not route through FORGE-K yet. | ADR 0005 records the boundary; keep Phase 6 simulator-only unless a later integration phase is explicitly scoped. |
 | AB-02 | HIGH | Live memory mutation remains callable in-process outside semantic syscalls. | `services/core/internal/memory/service.go`, `retrieval.go`; HTTP legacy mutation routes are gated but service mutators remain exported. | A future caller could bypass the intended semantic syscall path. | Move canonical memory writes behind controllane/FORGE-K boundaries or add static/import tests. |
 | AB-03 | HIGH | Gateway secret retrieval can persist plaintext in invocation results. | `gateway/capability_backing_tool.go` returns plaintext; `gateway/service.go` persists result JSON. | Secrets can become durable records. | Return handles or redact sensitive fields before persistence. |
 | AB-04 | HIGH | Model store paths do not appear to validate model IDs as safe path segments. | `modelruntime/store_management.go`, `store.go`, `manifest.go`. | Path traversal or unsafe directory names could affect managed model storage. | Add one path-safe model ID validator and safe-join tests. |
@@ -181,7 +182,7 @@ Before adding new API routes:
 | Courthouse | Implemented and tested. | Exhibit submit/admit/reject, rulings, contradictions, supersession. | No full reasoning engine. |
 | Memory Palace | Implemented and tested. | Rooms, anchors, routes, candidate objects, deterministic scoring. | No vector/embedding integration. |
 | Semantic Algebra | Implemented and tested. | MERGE/DIFF/INTERSECT/CONTRADICT/SUPERSEDE/COMPRESS/DERIVE/PROMOTE/DEMOTE/EXPIRE and request-only boundary ops. | No advanced algebra planner. |
-| Snapshots | Documented only. | Doctrine is clear. | Implementation and invariant tests missing. |
+| Snapshots | Implemented and tested in FORGE-K simulator. | Models, lifecycle service, syscalls, deterministic shape hashing, diffs, restore seeds, capability gates, journal events, and shape-not-truth tests. | Persistence and live daemon integration deferred. |
 | Context Compiler | Documented only in FORGE-K. | Live restore scoring exists outside FORGE-K. | Need ContextBlock, stable token serialization, compiler loop. |
 | Deterministic KV cache | Documented only. | Doctrine and ADR exist. | No manifest or nine-gate validation. |
 | Runtime drivers | Live system partial; FORGE-K not started. | Model runtime M3-like surface exists. | FORGE-K driver boundary absent. |
@@ -194,10 +195,10 @@ Before adding new API routes:
 
 | Priority | Gap |
 | --- | --- |
-| BLOCKER | Repair the two host-coupled API tests so `go test ./...` / `npm test` can be trusted. |
+| BLOCKER | Rerun `go test ./...` / `npm test` after the two host-coupled API tests marked repaired in the checklist. |
 | HIGH | Add model store path traversal tests for import/load/archive/remove. |
 | HIGH | Add gateway secret redaction/persistence tests. |
-| HIGH | Add snapshot shape-not-truth tests before Phase 6 implementation. |
+| HIGH | Keep Phase 6 snapshot shape-not-truth tests passing during snapshot changes. |
 | HIGH | Add context block deterministic serialization and token hashing tests before Phase 7. |
 | HIGH | Add KV nine-gate validation tests before Phase 8. |
 | HIGH | Keep API route inventory tests as guardrails for all route refactors. |
@@ -211,13 +212,13 @@ Before adding new API routes:
 Accurate/current:
 
 - FORGE-K architecture overview, core doctrine, kernel simulator, neuron fabric, lane model, memory palace/courthouse, semantic algebra, snapshots, context/KV, FORGE-1 concept.
-- ADRs 0001-0004.
+- ADRs 0001-0005.
 - Glossary, roadmap, testing definition of done.
 - Server refactor review and route inventory review, now with Phase A/B status.
 
 Drift or missing:
 
-- ADR 0005 is missing: FORGE-K simulator vs live AI-OS authority boundary.
+- ADR 0005 now records the FORGE-K simulator vs live AI-OS authority boundary.
 - `docs/status/implementation_matrix.md` is legacy-oriented and does not clearly map FORGE-K Phase 0-14.
 - `docs/reviews/full_project_review.md` and companions needed refresh after route extraction; this audit resolves that.
 - `services/core/internal/forgek/README.md` is missing.
@@ -274,8 +275,8 @@ Positive evidence:
 
 | ID | Risk | Severity | Likelihood | Affected Area | Evidence | Mitigation |
 | --- | --- | --- | --- | --- | --- | --- |
-| R-01 | FORGE-K is implemented but not live authority. | HIGH | HIGH | architecture/runtime | No non-test imports outside `internal/forgek`. | ADR 0005; keep Phase 6 simulator-only unless integration is scoped. |
-| R-02 | Aggregate core tests fail. | HIGH | HIGH | CI/dev confidence | Two API path-scope tests fail. | Fix test HOME/path fixture. |
+| R-01 | FORGE-K is implemented but not live authority. | HIGH | HIGH | architecture/runtime | No non-test imports outside `internal/forgek`. | ADR 0005; Phase 6 scope recorded as simulator-only. |
+| R-02 | Aggregate core tests are now green. | LOW | LOW | CI/dev confidence | Prior API path-scope failures were repaired and `npm test` passes in the Phase 6 implementation pass. | Keep aggregate tests green during future changes. |
 | R-03 | Desktop validation blocked by dependency state. | HIGH | HIGH | desktop | `@forge/shared`, `@forge/ui`, `vitest` resolution failures. | Repair workspace install and document Node version. |
 | R-04 | Server/API still has lifecycle and dependency monolith risks. | HIGH | HIGH | API | `server.go` still owns construction/lifecycle/handlers. | Continue phased refactor after guardrails. |
 | R-05 | Gateway service is too large and owns too much execution logic. | HIGH | HIGH | gateway/security | 3596 LOC. | Split execution, policy, persistence, and adapters. |
@@ -293,33 +294,33 @@ This list is strict. Not every risk is a blocker.
 
 | Class | Item |
 | --- | --- |
-| BLOCKER | Fix the two host-coupled API tests so `npm test` / `go test ./...` can be trusted again. |
-| BLOCKER | Add ADR 0005 documenting FORGE-K simulator authority vs live AI-OS/gateway authority before any FORGE-K work touches live state. |
+| BLOCKER | Keep `npm test` / `go test ./...` passing after the host-coupled API test repairs. |
+| BLOCKER | Keep ADR 0005's FORGE-K simulator vs live AI-OS/gateway authority boundary enforced before any FORGE-K work touches live state. |
 | HIGH | Repair local Node workspace dependency resolution before making desktop-facing claims. |
-| HIGH | Decide whether Phase 6 Snapshots is simulator-only or the start of live integration. |
+| HIGH | Keep Phase 6 Snapshots simulator-only unless a later live integration phase explicitly changes scope. |
 | HIGH | Add model store path safety tests and a remediation plan. |
 | HIGH | Add gateway secret redaction/persistence tests and a remediation plan. |
 | HIGH | Continue server refactor Phase C/D only behind current route inventory tests. |
-| MEDIUM | Add a `services/core/internal/forgek/README.md` explaining simulator scope and test command. |
+| MEDIUM | Keep `services/core/internal/forgek/README.md` current with simulator scope and test command. |
 | MEDIUM | Update implementation/status docs to show FORGE-K Phase 0-14 alongside legacy AI-OS phases. |
 
 ## Recommended Next 3 Phases of Work
 
 1. **Stabilization Phase**
-   - Fix the two API tests.
+   - Keep aggregate core tests passing after the two API tests marked repaired in the checklist.
    - Repair local Node workspace dependency resolution.
    - Re-run `npm test`, `npm run typecheck`, and desktop build/test.
    - Add `govulncheck` availability or document it as optional.
 
 2. **Authority Reconciliation Phase**
-   - Write ADR 0005.
-   - Update `AGENTS.md`, `docs/status/implementation_matrix.md`, and `docs/roadmap/forge_k_build_phases.md` to state clearly that FORGE-K Phase 1-5 is a simulator and the live daemon remains on AI-OS/gateway authority until integration.
-   - Decide Phase 6 scope.
+   - Maintain ADR 0005 authority boundary.
+   - Keep `AGENTS.md`, `docs/status/implementation_matrix.md`, and `docs/roadmap/forge_k_build_phases.md` clear that FORGE-K Phase 1-6 is simulator-only and the live daemon remains on AI-OS/gateway authority until integration.
+   - Keep Phase 7 scope explicit before implementation.
 
 3. **Refactor and Safety Phase**
    - Continue `server.go` Phase C/D/E: settings/meta/health extraction, dependency grouping, lifecycle extraction.
    - Add path safety and secret persistence tests before implementing those fixes.
-   - Only then resume FORGE-K Phase 6 Snapshot implementation.
+   - Plan FORGE-K Phase 7 Context Compiler only after deterministic ContextBlock serialization and token hashing test design is recorded.
 
 ## Acceptance Criteria Before New Feature Work Resumes
 
@@ -328,7 +329,7 @@ This list is strict. Not every risk is a blocker.
 - Desktop dependency resolution is repaired enough for `npm run typecheck` to produce meaningful results.
 - ADR 0005 exists.
 - Route inventory tests stay green.
-- The Phase 6 scope decision is recorded.
+- The Phase 6 scope decision and implementation status are recorded.
 - High-risk path safety and secret persistence findings have tests or an approved stabilization task.
 
 ## Recommended Next Cursor/Codex Prompt
@@ -336,24 +337,24 @@ This list is strict. Not every risk is a blocker.
 ```text
 You are working in the FORGE repository.
 
-Task: Stabilize project readiness before new feature work.
+Task: Rerun project readiness checks before new feature work.
 
-This is a focused stabilization pass. Do not add features or change public APIs.
+This is a focused validation pass. Do not add features or change public APIs.
 
 Read:
 - docs/reviews/full_project_review.md
 - docs/reviews/full_project_review_checklist.md
 - docs/reviews/current_phase_status.md
 - AGENTS.md
-- services/core/internal/api/chat_post_model_runtime_fallback_test.go
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
 
 Goals:
-1. Fix the two host-coupled API tests so `go test ./...` passes on Windows and Linux without relying on the real user Downloads directory.
-2. Do not weaken gateway lane enforcement.
-3. Preserve existing route behavior and public APIs.
-4. Run `go test ./internal/api -run "TestChatPostSyncRoutesDownloadSorterThroughGateway|TestChatPostSyncMultiSVGUsesDeterministicGatewayShortcut" -count=1`.
-5. Run `npm test`.
-6. Document exact commands and results.
+1. Rerun `npm test` after the two host-coupled API tests marked repaired in the checklist.
+2. Rerun `npm run build:core` and `npm run lint`.
+3. Do not weaken gateway lane enforcement.
+4. Preserve existing route behavior and public APIs.
+5. Keep FORGE-K as simulator authority only; do not wire it into the live daemon.
+6. Document exact commands, results, and any remaining blockers.
 
-If test stabilization is completed, stop. Do not begin ADR 0005, server refactors, modelruntime fixes, or desktop dependency changes in the same pass.
+If validation completes, stop. Do not begin Phase 6 implementation, server refactors, modelruntime fixes, or desktop dependency changes in the same pass.
 ```

@@ -1,6 +1,12 @@
 import { emit } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { availableMonitors, getAllWindows, getCurrentWindow, type Monitor, type Window } from "@tauri-apps/api/window";
+import {
+  availableMonitors,
+  getAllWindows,
+  getCurrentWindow,
+  type Monitor,
+  type Window,
+} from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/core";
 
 export const WORKSPACE_LAYOUT_EVENT = "forge://workspace-layouts-updated";
@@ -71,7 +77,10 @@ export function monitorIdFromMonitor(monitor: Monitor) {
   ].join("|");
 }
 
-export function snapshotMonitor(monitor: Monitor, ordinal: number): MonitorSnapshot {
+export function snapshotMonitor(
+  monitor: Monitor,
+  ordinal: number,
+): MonitorSnapshot {
   return {
     id: monitorIdFromMonitor(monitor),
     ordinal,
@@ -90,12 +99,18 @@ export function snapshotMonitor(monitor: Monitor, ordinal: number): MonitorSnaps
 
 export function monitorSignature(monitors: MonitorSnapshot[]) {
   return monitors
-    .map((monitor) => `${monitor.id}:${monitor.workArea.x},${monitor.workArea.y},${monitor.workArea.width},${monitor.workArea.height}`)
+    .map(
+      (monitor) =>
+        `${monitor.id}:${monitor.workArea.x},${monitor.workArea.y},${monitor.workArea.width},${monitor.workArea.height}`,
+    )
     .sort()
     .join(";");
 }
 
-function areaIntersection(a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }) {
+function areaIntersection(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+) {
   const x1 = Math.max(a.x, b.x);
   const y1 = Math.max(a.y, b.y);
   const x2 = Math.min(a.x + a.width, b.x + b.width);
@@ -105,7 +120,10 @@ function areaIntersection(a: { x: number; y: number; width: number; height: numb
   return w * h;
 }
 
-function resolveMonitorFromBounds(monitors: Monitor[], bounds: { x: number; y: number; width: number; height: number }) {
+function resolveMonitorFromBounds(
+  monitors: Monitor[],
+  bounds: { x: number; y: number; width: number; height: number },
+) {
   if (monitors.length === 0) return null;
   let best: Monitor | null = null;
   let bestOverlap = -1;
@@ -169,20 +187,24 @@ export async function getCurrentWindowSnapshot(): Promise<RuntimeWindowSnapshot>
   }
   const appWindow = getCurrentWindow();
   const getMonitor = async () => {
-    const maybeWindow = appWindow as unknown as { currentMonitor?: () => Promise<Monitor | null> };
+    const maybeWindow = appWindow as unknown as {
+      currentMonitor?: () => Promise<Monitor | null>;
+    };
     if (typeof maybeWindow.currentMonitor === "function") {
       return maybeWindow.currentMonitor();
     }
     return null;
   };
-  const [title, focused, monitor, position, size, monitors] = await Promise.all([
-    appWindow.title(),
-    appWindow.isFocused(),
-    getMonitor(),
-    appWindow.outerPosition(),
-    appWindow.outerSize(),
-    availableMonitors().catch(() => [] as Monitor[]),
-  ]);
+  const [title, focused, monitor, position, size, monitors] = await Promise.all(
+    [
+      appWindow.title(),
+      appWindow.isFocused(),
+      getMonitor(),
+      appWindow.outerPosition(),
+      appWindow.outerSize(),
+      availableMonitors().catch(() => [] as Monitor[]),
+    ],
+  );
   const bounds = {
     x: position.x,
     y: position.y,
@@ -209,15 +231,31 @@ export function buildWindowUrl(route: string) {
   return `${baseWindowUrl()}#${route}`;
 }
 
-function parseDiagnosticsPayload(raw: unknown): DesktopSystemDiagnostics | null {
+function parseDiagnosticsPayload(
+  raw: unknown,
+): DesktopSystemDiagnostics | null {
   if (!raw || typeof raw !== "object") return null;
   const value = raw as Partial<DesktopSystemDiagnostics>;
-  const hostName = (value as Record<string, unknown>).hostName ?? (raw as Record<string, unknown>).host_name;
-  const osName = (value as Record<string, unknown>).osName ?? (raw as Record<string, unknown>).os_name;
-  const osVersion = (value as Record<string, unknown>).osVersion ?? (raw as Record<string, unknown>).os_version;
-  const kernelVersion = (value as Record<string, unknown>).kernelVersion ?? (raw as Record<string, unknown>).kernel_version;
-  const architecture = (value as Record<string, unknown>).architecture ?? (raw as Record<string, unknown>).architecture;
-  if (typeof hostName !== "string" || typeof osName !== "string" || typeof osVersion !== "string") {
+  const hostName =
+    (value as Record<string, unknown>).hostName ??
+    (raw as Record<string, unknown>).host_name;
+  const osName =
+    (value as Record<string, unknown>).osName ??
+    (raw as Record<string, unknown>).os_name;
+  const osVersion =
+    (value as Record<string, unknown>).osVersion ??
+    (raw as Record<string, unknown>).os_version;
+  const kernelVersion =
+    (value as Record<string, unknown>).kernelVersion ??
+    (raw as Record<string, unknown>).kernel_version;
+  const architecture =
+    (value as Record<string, unknown>).architecture ??
+    (raw as Record<string, unknown>).architecture;
+  if (
+    typeof hostName !== "string" ||
+    typeof osName !== "string" ||
+    typeof osVersion !== "string"
+  ) {
     return null;
   }
   return {
@@ -226,31 +264,114 @@ function parseDiagnosticsPayload(raw: unknown): DesktopSystemDiagnostics | null 
     osVersion: String(osVersion),
     kernelVersion: typeof kernelVersion === "string" ? kernelVersion : null,
     architecture: typeof architecture === "string" ? architecture : null,
-    uptimeSeconds: Number((value as Record<string, unknown>).uptimeSeconds ?? (raw as Record<string, unknown>).uptime_seconds) || 0,
-    cpuCount: Number((value as Record<string, unknown>).cpuCount ?? (raw as Record<string, unknown>).cpu_count) || 0,
-    totalMemoryBytes: Number((value as Record<string, unknown>).totalMemoryBytes ?? (raw as Record<string, unknown>).total_memory_bytes) || 0,
-    availableMemoryBytes: Number((value as Record<string, unknown>).availableMemoryBytes ?? (raw as Record<string, unknown>).available_memory_bytes) || 0,
-    usedMemoryBytes: Number((value as Record<string, unknown>).usedMemoryBytes ?? (raw as Record<string, unknown>).used_memory_bytes) || 0,
-    totalSwapBytes: Number((value as Record<string, unknown>).totalSwapBytes ?? (raw as Record<string, unknown>).total_swap_bytes) || 0,
-    availableSwapBytes: Number((value as Record<string, unknown>).availableSwapBytes ?? (raw as Record<string, unknown>).available_swap_bytes) || 0,
-    usedSwapBytes: Number((value as Record<string, unknown>).usedSwapBytes ?? (raw as Record<string, unknown>).used_swap_bytes) || 0,
-    process: value.process && typeof value.process === "object" ? {
-      pid: Number((value.process as { pid?: unknown }).pid || (value.process as { pid?: unknown })?.["pid"] || (value.process as { process_id?: unknown })?.["process_id"]) || 0,
-      name: String((value.process as { name?: unknown }).name || ""),
-      memoryBytes: Number((value.process as { memoryBytes?: unknown }).memoryBytes || (value.process as { memory_bytes?: unknown })?.["memory_bytes"]) || 0,
-      virtualMemoryBytes: Number((value.process as { virtualMemoryBytes?: unknown }).virtualMemoryBytes || (value.process as { virtual_memory_bytes?: unknown })?.["virtual_memory_bytes"]) || 0,
-      cpuUsagePercent: Number((value.process as { cpuUsagePercent?: unknown }).cpuUsagePercent || (value.process as { cpu_usage_percent?: unknown })?.["cpu_usage_percent"]) || 0,
-      runTimeSeconds: Number((value.process as { runTimeSeconds?: unknown }).runTimeSeconds || (value.process as { run_time_seconds?: unknown })?.["run_time_seconds"]) || 0,
-    } : null,
+    uptimeSeconds:
+      Number(
+        (value as Record<string, unknown>).uptimeSeconds ??
+          (raw as Record<string, unknown>).uptime_seconds,
+      ) || 0,
+    cpuCount:
+      Number(
+        (value as Record<string, unknown>).cpuCount ??
+          (raw as Record<string, unknown>).cpu_count,
+      ) || 0,
+    totalMemoryBytes:
+      Number(
+        (value as Record<string, unknown>).totalMemoryBytes ??
+          (raw as Record<string, unknown>).total_memory_bytes,
+      ) || 0,
+    availableMemoryBytes:
+      Number(
+        (value as Record<string, unknown>).availableMemoryBytes ??
+          (raw as Record<string, unknown>).available_memory_bytes,
+      ) || 0,
+    usedMemoryBytes:
+      Number(
+        (value as Record<string, unknown>).usedMemoryBytes ??
+          (raw as Record<string, unknown>).used_memory_bytes,
+      ) || 0,
+    totalSwapBytes:
+      Number(
+        (value as Record<string, unknown>).totalSwapBytes ??
+          (raw as Record<string, unknown>).total_swap_bytes,
+      ) || 0,
+    availableSwapBytes:
+      Number(
+        (value as Record<string, unknown>).availableSwapBytes ??
+          (raw as Record<string, unknown>).available_swap_bytes,
+      ) || 0,
+    usedSwapBytes:
+      Number(
+        (value as Record<string, unknown>).usedSwapBytes ??
+          (raw as Record<string, unknown>).used_swap_bytes,
+      ) || 0,
+    process:
+      value.process && typeof value.process === "object"
+        ? {
+            pid:
+              Number(
+                (value.process as { pid?: unknown }).pid ||
+                  (value.process as { pid?: unknown })?.["pid"] ||
+                  (value.process as { process_id?: unknown })?.["process_id"],
+              ) || 0,
+            name: String((value.process as { name?: unknown }).name || ""),
+            memoryBytes:
+              Number(
+                (value.process as { memoryBytes?: unknown }).memoryBytes ||
+                  (value.process as { memory_bytes?: unknown })?.[
+                    "memory_bytes"
+                  ],
+              ) || 0,
+            virtualMemoryBytes:
+              Number(
+                (value.process as { virtualMemoryBytes?: unknown })
+                  .virtualMemoryBytes ||
+                  (value.process as { virtual_memory_bytes?: unknown })?.[
+                    "virtual_memory_bytes"
+                  ],
+              ) || 0,
+            cpuUsagePercent:
+              Number(
+                (value.process as { cpuUsagePercent?: unknown })
+                  .cpuUsagePercent ||
+                  (value.process as { cpu_usage_percent?: unknown })?.[
+                    "cpu_usage_percent"
+                  ],
+              ) || 0,
+            runTimeSeconds:
+              Number(
+                (value.process as { runTimeSeconds?: unknown })
+                  .runTimeSeconds ||
+                  (value.process as { run_time_seconds?: unknown })?.[
+                    "run_time_seconds"
+                  ],
+              ) || 0,
+          }
+        : null,
     disks: Array.isArray(value.disks)
       ? value.disks.map((disk) => ({
           name: String((disk as { name?: unknown })?.name || ""),
-          mountPoint: String((disk as { mountPoint?: unknown })?.mountPoint || ""),
-          fileSystem: String((disk as { fileSystem?: unknown })?.fileSystem || ""),
-          totalBytes: Number((disk as { totalBytes?: unknown }).totalBytes || (disk as { total_bytes?: unknown })?.["total_bytes"]) || 0,
-          availableBytes: Number((disk as { availableBytes?: unknown }).availableBytes || (disk as { available_bytes?: unknown })?.["available_bytes"]) || 0,
-          usedBytes: Number((disk as { usedBytes?: unknown }).usedBytes || (disk as { used_bytes?: unknown })?.["used_bytes"]) || 0,
-      }))
+          mountPoint: String(
+            (disk as { mountPoint?: unknown })?.mountPoint || "",
+          ),
+          fileSystem: String(
+            (disk as { fileSystem?: unknown })?.fileSystem || "",
+          ),
+          totalBytes:
+            Number(
+              (disk as { totalBytes?: unknown }).totalBytes ||
+                (disk as { total_bytes?: unknown })?.["total_bytes"],
+            ) || 0,
+          availableBytes:
+            Number(
+              (disk as { availableBytes?: unknown }).availableBytes ||
+                (disk as { available_bytes?: unknown })?.["available_bytes"],
+            ) || 0,
+          usedBytes:
+            Number(
+              (disk as { usedBytes?: unknown }).usedBytes ||
+                (disk as { used_bytes?: unknown })?.["used_bytes"],
+            ) || 0,
+        }))
       : null,
   };
 }
@@ -262,7 +383,12 @@ export async function createShellWindow(options: {
   bounds: { x: number; y: number; width: number; height: number };
 }) {
   if (!isTauriDesktop()) return null;
-  if (!Number.isFinite(options.bounds.x) || !Number.isFinite(options.bounds.y) || !Number.isFinite(options.bounds.width) || !Number.isFinite(options.bounds.height)) {
+  if (
+    !Number.isFinite(options.bounds.x) ||
+    !Number.isFinite(options.bounds.y) ||
+    !Number.isFinite(options.bounds.width) ||
+    !Number.isFinite(options.bounds.height)
+  ) {
     options.bounds = { x: 60, y: 60, width: 1200, height: 780 };
   }
   try {
@@ -282,7 +408,10 @@ export async function createShellWindow(options: {
       await window.show();
     } catch (error) {
       if (typeof console !== "undefined") {
-        console.error(`[FORGE] failed to show new window ${options.label}`, error);
+        console.error(
+          `[FORGE] failed to show new window ${options.label}`,
+          error,
+        );
       }
     }
     return window;

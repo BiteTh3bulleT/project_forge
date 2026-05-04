@@ -1,5 +1,5 @@
-import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
-import { useCallback, useEffect, useState } from "react";
+import { GhostButton, PrimaryButton } from "@forge/ui";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
@@ -53,7 +53,9 @@ function emptyForm(): Record<string, string | boolean | number> {
   };
 }
 
-function profileToForm(p: PermissionProfile): Record<string, string | boolean | number> {
+function profileToForm(
+  p: PermissionProfile,
+): Record<string, string | boolean | number> {
   return {
     id: p.id,
     name: p.name,
@@ -70,7 +72,10 @@ function profileToForm(p: PermissionProfile): Record<string, string | boolean | 
   };
 }
 
-function formToProfile(f: Record<string, string | boolean | number>, existing?: PermissionProfile): Record<string, unknown> {
+function formToProfile(
+  f: Record<string, string | boolean | number>,
+  existing?: PermissionProfile,
+): Record<string, unknown> {
   const max = Number(String(f.maxBytesPerWrite));
   return {
     id: String(f.id).trim(),
@@ -97,8 +102,11 @@ export function ExecutionPermissionsPage() {
   const [active, setActive] = useState<PermissionProfile | null>(null);
   const [summary, setSummary] = useState<Record<string, unknown> | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [form, setForm] = useState<Record<string, string | boolean | number>>(emptyForm);
-  const [editingExistingId, setEditingExistingId] = useState<string | null>(null);
+  const [form, setForm] =
+    useState<Record<string, string | boolean | number>>(emptyForm);
+  const [editingExistingId, setEditingExistingId] = useState<string | null>(
+    null,
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -174,145 +182,395 @@ export function ExecutionPermissionsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <Panel
+    <div className="forge-ops-board space-y-5">
+      <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="forge-ops-label">Gateway Authority</div>
+          <h1 className="mt-2 text-2xl font-semibold tracking-normal text-forge-ash sm:text-3xl">
+            Execution permissions board
+          </h1>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-forge-mist/75">
+            Gateway path, network, tool, and write limits remain separate from
+            routing policy. Exactly one profile should be active.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={statusPillClass(active ? "ok" : "bad")}>
+            {active ? active.id : "no active profile"}
+          </span>
+          <GhostButton onClick={() => void refresh()}>Refresh</GhostButton>
+        </div>
+      </header>
+
+      {err ? (
+        <div className="forge-ops-panel border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
+          {err}
+        </div>
+      ) : null}
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricTile
+          label="Profiles"
+          value={String(profiles.length)}
+          detail="configured policies"
+          tone="muted"
+        />
+        <MetricTile
+          label="Active"
+          value={active ? "1" : "0"}
+          detail={active?.name ?? "none"}
+          tone={active ? "ok" : "bad"}
+        />
+        <MetricTile
+          label="Network"
+          value={active?.allowNetwork ? "allowed" : "denied"}
+          detail="active profile"
+          tone={active?.allowNetwork ? "warn" : "ok"}
+        />
+        <MetricTile
+          label="Max Write"
+          value={String(active?.maxBytesPerWrite ?? 0)}
+          detail="bytes per write"
+          tone="muted"
+        />
+      </section>
+
+      <OpsPanel
         title="Execution permissions"
-        subtitle="Gateway path and tool policy (distinct from routing policy). Exactly one profile should be active."
-        actions={<GhostButton onClick={() => void refresh()}>Refresh</GhostButton>}
+        subtitle="Gateway path and tool policy summary."
       >
-        {err ? <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
         {summary ? (
           <div className="mt-3 max-h-32 overflow-auto rounded border border-white/10 bg-black/25 p-3 text-[11px] text-forge-mist">
             <HumanDataView value={summary} compact />
           </div>
         ) : null}
-      </Panel>
+      </OpsPanel>
 
-      <Panel title="Active profile" subtitle="Used for every gateway invocation.">
+      <OpsPanel
+        title="Active profile"
+        subtitle="Used for every gateway invocation."
+      >
         {active ? (
-          <div className="space-y-2 text-sm text-forge-mist">
-            <div className="font-mono text-forge-ash">{active.id}</div>
-            <div>{active.name}</div>
-            <div className="text-xs">Updated {formatTime(active.updatedAtMs)}</div>
-            <div className="text-xs">Network: {active.allowNetwork ? "allowed" : "denied"} · Max write: {active.maxBytesPerWrite} bytes</div>
-            <button type="button" className="text-xs text-forge-emberSoft underline" onClick={() => startEdit(active)}>
+          <div className="forge-ops-card p-3 text-sm text-forge-mist">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <div className="font-mono text-forge-ash">{active.id}</div>
+                <div className="mt-1">{active.name}</div>
+              </div>
+              <span className={statusPillClass("ok")}>active</span>
+            </div>
+            <div className="mt-2 text-xs">
+              Updated {formatTime(active.updatedAtMs)}
+            </div>
+            <div className="text-xs">
+              Network: {active.allowNetwork ? "allowed" : "denied"} · Max write:{" "}
+              {active.maxBytesPerWrite} bytes
+            </div>
+            <button
+              type="button"
+              className="text-xs text-forge-emberSoft underline"
+              onClick={() => startEdit(active)}
+            >
               Edit in form below
             </button>
           </div>
         ) : (
-          <div className="text-sm text-forge-emberSoft">No active profile — activate one from the list.</div>
+          <div className="text-sm text-forge-emberSoft">
+            No active profile — activate one from the list.
+          </div>
         )}
-      </Panel>
+      </OpsPanel>
 
-      <Panel
+      <OpsPanel
         title="Create or edit profile"
         subtitle="Path and tool lists: one entry per line (commas also work). Saving upserts; checking Active will deactivate others."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <GhostButton onClick={startNew}>New profile</GhostButton>
-          </div>
-        }
       >
-        <div className="grid gap-3 md:grid-cols-2">
-          <label className="block text-xs text-forge-mist">
-            Id
-            <input
-              className="forge-input mt-1 font-mono text-xs"
-              value={String(form.id)}
-              onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
-              disabled={editingExistingId != null}
-            />
-          </label>
-          <label className="block text-xs text-forge-mist">
-            Name
-            <input className="forge-input mt-1" value={String(form.name)} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
-          </label>
-        </div>
-        <label className="mt-3 block text-xs text-forge-mist">
-          Description
-          <input className="forge-input mt-1" value={String(form.description)} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
-        </label>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <label className="block text-xs text-forge-mist">
-            Allowed read paths
-            <textarea className="forge-input mt-1 min-h-[88px] font-mono text-[11px]" value={String(form.allowedReadPaths)} onChange={(e) => setForm((f) => ({ ...f, allowedReadPaths: e.target.value }))} />
-          </label>
-          <label className="block text-xs text-forge-mist">
-            Allowed write paths
-            <textarea className="forge-input mt-1 min-h-[88px] font-mono text-[11px]" value={String(form.allowedWritePaths)} onChange={(e) => setForm((f) => ({ ...f, allowedWritePaths: e.target.value }))} />
-          </label>
-          <label className="block text-xs text-forge-mist">
-            Allowed execute paths
-            <textarea className="forge-input mt-1 min-h-[88px] font-mono text-[11px]" value={String(form.allowedExecutePaths)} onChange={(e) => setForm((f) => ({ ...f, allowedExecutePaths: e.target.value }))} />
-          </label>
-          <label className="block text-xs text-forge-mist">
-            Forbidden paths
-            <textarea className="forge-input mt-1 min-h-[88px] font-mono text-[11px]" value={String(form.forbiddenPaths)} onChange={(e) => setForm((f) => ({ ...f, forbiddenPaths: e.target.value }))} />
-          </label>
-          <label className="block text-xs text-forge-mist md:col-span-2">
-            Allowed tools (ids)
-            <textarea className="forge-input mt-1 min-h-[72px] font-mono text-[11px]" value={String(form.allowedTools)} onChange={(e) => setForm((f) => ({ ...f, allowedTools: e.target.value }))} />
-          </label>
-          <label className="block text-xs text-forge-mist md:col-span-2">
-            Approval required for risk classes
-            <textarea className="forge-input mt-1 min-h-[56px] font-mono text-[11px]" value={String(form.approvalRequiredRisks)} onChange={(e) => setForm((f) => ({ ...f, approvalRequiredRisks: e.target.value }))} placeholder="read_only, safe_write, scoped_execute, privileged, dangerous — one per line"
-            />
-          </label>
-        </div>
-        <div className="mt-3 flex flex-wrap items-end gap-4">
-          <label className="text-xs text-forge-mist">
-            Max bytes per write
-            <input
-              className="forge-input mt-1 max-w-[12rem] font-mono"
-              value={String(form.maxBytesPerWrite)}
-              onChange={(e) => setForm((f) => ({ ...f, maxBytesPerWrite: e.target.value }))}
-            />
-          </label>
-          <label className="flex items-center gap-2 text-xs text-forge-mist">
-            <input type="checkbox" checked={Boolean(form.allowNetwork)} onChange={(e) => setForm((f) => ({ ...f, allowNetwork: e.target.checked }))} />
-            Allow network
-          </label>
-          <label className="flex items-center gap-2 text-xs text-forge-mist">
-            <input type="checkbox" checked={Boolean(form.active)} onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))} />
-            Set active on save
-          </label>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <PrimaryButton onClick={() => void saveProfile()}>Save profile</PrimaryButton>
-        </div>
-      </Panel>
-
-      <Panel title="Profiles" subtitle="Activate, edit, or delete editable profiles.">
-        <div className="space-y-3">
-          {profiles.map((p) => (
-            <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-forge-slate/20 p-3">
-              <div className="min-w-0">
-                <div className="font-mono text-sm text-forge-ash">{p.id}</div>
-                <div className="text-xs text-forge-mist">{p.name}</div>
-                {p.active ? <div className="mt-1 text-[11px] text-forge-emberSoft">ACTIVE</div> : null}
-                {!p.editable ? <div className="mt-1 text-[10px] text-forge-mist/60">Built-in · not deletable</div> : null}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <PrimaryButton
-                  onClick={async () => {
-                    await api.executionPermissions.activateProfile(p.id);
-                    setStatus(`Activated ${p.id}`);
-                    await refresh();
-                  }}
-                >
-                  Activate
-                </PrimaryButton>
-                <GhostButton onClick={() => startEdit(p)} disabled={!p.editable}>
-                  Edit
-                </GhostButton>
-                <GhostButton onClick={() => void deleteProfile(p)} disabled={!p.editable || p.active}>
-                  Delete
-                </GhostButton>
-              </div>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="forge-ops-label">
+              {editingExistingId ? "Editing profile" : "Draft profile"}
             </div>
-          ))}
+            <div className="mt-1 text-xs text-forge-mist/70">
+              {editingExistingId ??
+                "Set an id, limits, and path boundaries before saving."}
+            </div>
+          </div>
+          <GhostButton onClick={startNew}>New profile</GhostButton>
         </div>
-      </Panel>
+        <div className="forge-ops-card p-3">
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="block text-xs font-semibold tracking-wide text-forge-mist">
+              Id
+              <input
+                className="forge-input mt-1 font-mono text-xs"
+                value={String(form.id)}
+                onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
+                disabled={editingExistingId != null}
+              />
+            </label>
+            <label className="block text-xs font-semibold tracking-wide text-forge-mist">
+              Name
+              <input
+                className="forge-input mt-1"
+                value={String(form.name)}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, name: e.target.value }))
+                }
+              />
+            </label>
+          </div>
+          <label className="mt-3 block text-xs font-semibold tracking-wide text-forge-mist">
+            Description
+            <input
+              className="forge-input mt-1"
+              value={String(form.description)}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, description: e.target.value }))
+              }
+            />
+          </label>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <label className="block text-xs font-semibold tracking-wide text-forge-mist">
+              Allowed read paths
+              <textarea
+                className="forge-input mt-1 min-h-[88px] font-mono text-[11px]"
+                value={String(form.allowedReadPaths)}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, allowedReadPaths: e.target.value }))
+                }
+              />
+            </label>
+            <label className="block text-xs font-semibold tracking-wide text-forge-mist">
+              Allowed write paths
+              <textarea
+                className="forge-input mt-1 min-h-[88px] font-mono text-[11px]"
+                value={String(form.allowedWritePaths)}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, allowedWritePaths: e.target.value }))
+                }
+              />
+            </label>
+            <label className="block text-xs font-semibold tracking-wide text-forge-mist">
+              Allowed execute paths
+              <textarea
+                className="forge-input mt-1 min-h-[88px] font-mono text-[11px]"
+                value={String(form.allowedExecutePaths)}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    allowedExecutePaths: e.target.value,
+                  }))
+                }
+              />
+            </label>
+            <label className="block text-xs font-semibold tracking-wide text-forge-mist">
+              Forbidden paths
+              <textarea
+                className="forge-input mt-1 min-h-[88px] font-mono text-[11px]"
+                value={String(form.forbiddenPaths)}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, forbiddenPaths: e.target.value }))
+                }
+              />
+            </label>
+            <label className="block text-xs font-semibold tracking-wide text-forge-mist md:col-span-2">
+              Allowed tools (ids)
+              <textarea
+                className="forge-input mt-1 min-h-[72px] font-mono text-[11px]"
+                value={String(form.allowedTools)}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, allowedTools: e.target.value }))
+                }
+              />
+            </label>
+            <label className="block text-xs font-semibold tracking-wide text-forge-mist md:col-span-2">
+              Approval required for risk classes
+              <textarea
+                className="forge-input mt-1 min-h-[56px] font-mono text-[11px]"
+                value={String(form.approvalRequiredRisks)}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    approvalRequiredRisks: e.target.value,
+                  }))
+                }
+                placeholder="read_only, safe_write, scoped_execute, privileged, dangerous — one per line"
+              />
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap items-end gap-4">
+            <label className="text-xs text-forge-mist">
+              Max bytes per write
+              <input
+                className="forge-input mt-1 max-w-[12rem] font-mono"
+                value={String(form.maxBytesPerWrite)}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, maxBytesPerWrite: e.target.value }))
+                }
+              />
+            </label>
+            <label className="flex items-center gap-2 text-xs text-forge-mist">
+              <input
+                type="checkbox"
+                checked={Boolean(form.allowNetwork)}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, allowNetwork: e.target.checked }))
+                }
+              />
+              Allow network
+            </label>
+            <label className="flex items-center gap-2 text-xs text-forge-mist">
+              <input
+                type="checkbox"
+                checked={Boolean(form.active)}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, active: e.target.checked }))
+                }
+              />
+              Set active on save
+            </label>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <PrimaryButton
+              className="w-full sm:w-auto"
+              onClick={() => void saveProfile()}
+            >
+              Save profile
+            </PrimaryButton>
+          </div>
+        </div>
+      </OpsPanel>
+
+      <OpsPanel
+        title="Profiles"
+        subtitle="Activate, edit, or delete editable profiles."
+      >
+        {profiles.length === 0 ? (
+          <EmptyState
+            title="No permission profiles"
+            detail="Create a profile to define gateway path, network, tool, and write limits."
+          />
+        ) : (
+          <div className="space-y-3">
+            {profiles.map((p) => (
+              <div
+                key={p.id}
+                className="forge-ops-card flex flex-wrap items-center justify-between gap-3 p-3"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="font-mono text-sm text-forge-ash">
+                      {p.id}
+                    </div>
+                    {p.active ? (
+                      <span className={statusPillClass("ok")}>active</span>
+                    ) : null}
+                    {!p.editable ? (
+                      <span className={statusPillClass("muted")}>built-in</span>
+                    ) : null}
+                  </div>
+                  <div className="text-xs text-forge-mist">{p.name}</div>
+                  <div className="mt-1 text-[10px] text-forge-mist/60">
+                    Updated {formatTime(p.updatedAtMs)} · network{" "}
+                    {p.allowNetwork ? "allowed" : "denied"}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <PrimaryButton
+                    onClick={async () => {
+                      await api.executionPermissions.activateProfile(p.id);
+                      setStatus(`Activated ${p.id}`);
+                      await refresh();
+                    }}
+                  >
+                    Activate
+                  </PrimaryButton>
+                  <GhostButton
+                    onClick={() => startEdit(p)}
+                    disabled={!p.editable}
+                  >
+                    Edit
+                  </GhostButton>
+                  <GhostButton
+                    onClick={() => void deleteProfile(p)}
+                    disabled={!p.editable || p.active}
+                  >
+                    Delete
+                  </GhostButton>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </OpsPanel>
     </div>
   );
+}
+
+function OpsPanel(props: {
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="forge-ops-panel">
+      <div className="forge-ops-panel__head">
+        <div>
+          <div className="forge-ops-title">{props.title}</div>
+          <div className="mt-1 text-xs text-forge-mist/65">
+            {props.subtitle}
+          </div>
+        </div>
+      </div>
+      <div className="forge-ops-panel__body">{props.children}</div>
+    </section>
+  );
+}
+
+function MetricTile(props: {
+  label: string;
+  value: string;
+  detail: string;
+  tone: string;
+}) {
+  return (
+    <div className="forge-ops-card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="forge-ops-label">{props.label}</div>
+          <div className="mt-2 truncate text-2xl font-semibold tracking-normal text-forge-ash">
+            {props.value}
+          </div>
+        </div>
+        <span className={statusPillClass(props.tone)}>{props.tone}</span>
+      </div>
+      <div className="mt-3 truncate text-xs text-forge-mist/65">
+        {props.detail}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState(props: { title: string; detail: string }) {
+  return (
+    <div className="forge-ops-card border-dashed p-4 text-sm">
+      <div className="font-semibold text-forge-ash">{props.title}</div>
+      <div className="mt-1 text-xs leading-5 text-forge-mist/70">
+        {props.detail}
+      </div>
+    </div>
+  );
+}
+
+function statusPillClass(status: string) {
+  if (status === "ok" || status === "active") {
+    return "forge-ops-status forge-ops-status--ok";
+  }
+  if (status === "bad") {
+    return "forge-ops-status forge-ops-status--bad";
+  }
+  if (status === "warn") {
+    return "forge-ops-status forge-ops-status--warn";
+  }
+  return "forge-ops-status forge-ops-status--muted";
 }

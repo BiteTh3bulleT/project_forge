@@ -295,6 +295,75 @@ func TestChatPostSyncBoundsPlainModelRuntimePrompt(t *testing.T) {
 	}
 }
 
+func TestModelRuntimePromptIncludesEarlierSameThreadMemory(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+
+	thread, err := srv.chat.CreateThread(context.Background(), "same thread recall", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	if _, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "remember the deployment code phrase is blue lantern", nil); err != nil {
+		t.Fatalf("append seed message: %v", err)
+	}
+	for i := 0; i < modelRuntimePlainChatMessages+2; i++ {
+		if _, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "filler message "+strconv.Itoa(i), nil); err != nil {
+			t.Fatalf("append filler message %d: %v", i, err)
+		}
+	}
+
+	detail, err := srv.chat.GetThread(context.Background(), thread.ID)
+	if err != nil {
+		t.Fatalf("get thread: %v", err)
+	}
+	messages, budget := srv.buildModelRuntimePlainChatMessages(context.Background(), detail)
+	if got := len(messages); got > modelRuntimePlainChatMessages+1 {
+		t.Fatalf("expected bounded system+recent messages, got=%d", got)
+	}
+	if budget.MemoryChars == 0 {
+		t.Fatalf("expected earlier thread memory budget to be recorded")
+	}
+	if !strings.Contains(messages[0].Content, "blue lantern") {
+		t.Fatalf("expected earlier same-thread memory in system prompt, got %q", messages[0].Content)
+	}
+}
+
+func TestChatLLMMessagesIncludeEarlierThreadMemoryWithoutOtherThreadLeak(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+
+	other, err := srv.chat.CreateThread(context.Background(), "other thread", nil)
+	if err != nil {
+		t.Fatalf("create other thread: %v", err)
+	}
+	if _, err := srv.chat.AppendMessage(context.Background(), other.ID, "user", "do not leak other-thread context", nil); err != nil {
+		t.Fatalf("append other thread message: %v", err)
+	}
+
+	thread, err := srv.chat.CreateThread(context.Background(), "long current thread", nil)
+	if err != nil {
+		t.Fatalf("create current thread: %v", err)
+	}
+	if _, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "remember the current-thread decision is use sqlite", nil); err != nil {
+		t.Fatalf("append seed message: %v", err)
+	}
+	for i := 0; i < chatTranscriptTurns+2; i++ {
+		if _, err := srv.chat.AppendMessage(context.Background(), thread.ID, "assistant", "current filler "+strconv.Itoa(i), nil); err != nil {
+			t.Fatalf("append filler message %d: %v", i, err)
+		}
+	}
+
+	detail, err := srv.chat.GetThread(context.Background(), thread.ID)
+	if err != nil {
+		t.Fatalf("get thread: %v", err)
+	}
+	_, user := srv.buildChatLLMMessages(context.Background(), detail)
+	if !strings.Contains(user, "EARLIER THREAD MEMORY") || !strings.Contains(user, "use sqlite") {
+		t.Fatalf("expected earlier current-thread memory in user prompt, got %q", user)
+	}
+	if strings.Contains(user, "do not leak other-thread context") {
+		t.Fatalf("other thread context leaked into prompt: %q", user)
+	}
+}
+
 func TestChatPostStreamRequestUsesSSEWhenOnlyModelRuntimeCanAnswer(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	fakeRuntime := newFakeModelRuntime()

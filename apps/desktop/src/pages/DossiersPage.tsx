@@ -38,7 +38,10 @@ function csv(raw: string[]): string {
 }
 
 function isOptionalEndpointMissing(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  const message =
+    error instanceof Error
+      ? error.message.toLowerCase()
+      : String(error).toLowerCase();
   return message.includes("404") || message.includes("not found");
 }
 
@@ -76,7 +79,9 @@ export function DossiersPage() {
   const [err, setErr] = useState<string | null>(null);
   const setStatus = useUiStore((s) => s.setStatusLine);
   const [showAdvancedProfile, setShowAdvancedProfile] = useState(false);
-  const [dossiersView, setDossiersView] = useState<"all" | "create" | "detail" | "policy">("all");
+  const [dossiersView, setDossiersView] = useState<
+    "all" | "create" | "detail" | "policy"
+  >("all");
 
   async function loadList() {
     try {
@@ -121,16 +126,22 @@ export function DossiersPage() {
       setDetail(d.detail);
       setProfile(p.profile);
       setMemoryView(mem.view);
-      setVSASummary(vsa.summary ?? mem.view.vsaSummary ?? d.detail.vsaSummary ?? null);
+      setVSASummary(
+        vsa.summary ?? mem.view.vsaSummary ?? d.detail.vsaSummary ?? null,
+      );
       if (p.profile) {
         setPreferredStrategiesRaw(csv(p.profile.preferredStrategies));
         setPreferredAdaptersRaw(csv(p.profile.preferredAdapters));
         setApprovalPresetId(p.profile.approvalPresetId ?? "");
-        setRetrievalMode(String((p.profile.retrievalDefaults?.mode as string) ?? "hybrid"));
+        setRetrievalMode(
+          String((p.profile.retrievalDefaults?.mode as string) ?? "hybrid"),
+        );
         setHighValueRaw(csv(p.profile.highValueFiles));
         setNoisyRaw(csv(p.profile.noisyFiles));
         setRoutingNotes(p.profile.routingNotes || "");
-        setAutomationBindingsRaw(p.profile.automationBindings.map((x) => String(x)).join(", "));
+        setAutomationBindingsRaw(
+          p.profile.automationBindings.map((x) => String(x)).join(", "),
+        );
       } else {
         setPreferredStrategiesRaw("");
         setPreferredAdaptersRaw("");
@@ -166,16 +177,25 @@ export function DossiersPage() {
     }
   }, [params, selectedID]);
 
-  const sourceHint = useMemo(() => sources.map((s) => `${s.id}:${s.path}`).join(" | "), [sources]);
-  const strategyHint = useMemo(() => strategies.map((s) => s.id).join(", "), [strategies]);
-  const rulesHint = useMemo(() => rules.map((r) => `${r.id}:${r.name}`).join(" | "), [rules]);
+  const sourceHint = useMemo(
+    () => sources.map((s) => `${s.id}:${s.path}`).join(" | "),
+    [sources],
+  );
+  const strategyHint = useMemo(
+    () => strategies.map((s) => s.id).join(", "),
+    [strategies],
+  );
+  const rulesHint = useMemo(
+    () => rules.map((r) => `${r.id}:${r.name}`).join(" | "),
+    [rules],
+  );
   const dossierReviews = useMemo(() => {
     if (!detail) return [];
     return reviews.filter((r) => r.dossierId === detail.dossier.id);
   }, [reviews, detail]);
 
   return (
-    <div className="space-y-6">
+    <div className="forge-ops-board space-y-5">
       <Panel
         title="Dossiers"
         subtitle={
@@ -187,7 +207,15 @@ export function DossiersPage() {
           <div className="flex items-center gap-2">
             <label className="text-[11px] text-forge-mist">
               View
-              <select className="forge-input ml-2 px-2 py-1 text-[11px]" value={dossiersView} onChange={(e) => setDossiersView(e.target.value as "all" | "create" | "detail" | "policy")}>
+              <select
+                className="forge-input ml-2 px-2 py-1 text-[11px]"
+                value={dossiersView}
+                onChange={(e) =>
+                  setDossiersView(
+                    e.target.value as "all" | "create" | "detail" | "policy",
+                  )
+                }
+              >
                 <option value="all">All</option>
                 <option value="create">Create + list</option>
                 <option value="detail">Detail</option>
@@ -198,11 +226,21 @@ export function DossiersPage() {
           </div>
         }
       >
-        {err ? <div className="rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">{err}</div> : null}
-        <FoldSection title="Create dossier" subtitle="Define a scoped project memory profile and source links." defaultOpen>
+        {err ? (
+          <div className="rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
+            {err}
+          </div>
+        ) : null}
+        <FoldSection
+          title="Create dossier"
+          subtitle="Define a scoped project memory profile and source links."
+          defaultOpen
+        >
           <div className="grid gap-3 md:grid-cols-2">
             <div>
-              <label className="text-xs font-semibold tracking-wide text-forge-mist">Name</label>
+              <label className="text-xs font-semibold tracking-wide text-forge-mist">
+                Name
+              </label>
               <input
                 aria-label="Dossier name"
                 className="forge-input mt-1"
@@ -212,7 +250,9 @@ export function DossiersPage() {
               />
             </div>
             <div>
-              <label className="text-xs font-semibold tracking-wide text-forge-mist">Source ids (comma separated)</label>
+              <label className="text-xs font-semibold tracking-wide text-forge-mist">
+                Source ids (comma separated)
+              </label>
               <input
                 aria-label="Source ids"
                 className="forge-input mt-1"
@@ -223,7 +263,9 @@ export function DossiersPage() {
             </div>
           </div>
           <div className="mt-3">
-            <label className="text-xs font-semibold tracking-wide text-forge-mist">Description</label>
+            <label className="text-xs font-semibold tracking-wide text-forge-mist">
+              Description
+            </label>
             <textarea
               aria-label="Dossier description"
               className="forge-input mt-1 min-h-[80px]"
@@ -257,326 +299,454 @@ export function DossiersPage() {
               Create Dossier
             </PrimaryButton>
           </div>
-          {sourceHint ? <div className="mt-3 text-[11px] text-forge-mist">Known sources: {sourceHint}</div> : null}
+          {sourceHint ? (
+            <div className="mt-3 text-[11px] text-forge-mist">
+              Known sources: {sourceHint}
+            </div>
+          ) : null}
         </FoldSection>
       </Panel>
 
-      {(dossiersView === "all" || dossiersView === "create") ? (
-      <Panel title="Dossier List" subtitle="Choose a dossier to inspect linked sources, recent jobs, briefs, reviews, and policy profile.">
-        {dossiers.length === 0 ? (
-          <div className="text-sm text-forge-mist">No dossiers yet.</div>
-        ) : (
-          <div className="space-y-2">
-            {dossiers.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                className={[
-                  "w-full rounded border px-3 py-2 text-left",
-                  selectedID === d.id ? "border-forge-ember/40 bg-black/30" : "border-forge-platinum/10 bg-black/20 hover:border-forge-ember/35",
-                ].join(" ")}
-                onClick={() => {
-                  setSelectedID(d.id);
-                  setParams({ dossierId: String(d.id) });
-                }}
-              >
-                <div className="text-sm font-semibold text-forge-ash">{d.name}</div>
-                <div className="mt-1 text-xs text-forge-mist">{d.description || "(no description)"}</div>
-                <div className="mt-1 text-[11px] text-forge-mist">updated {formatTime(d.updatedAtMs)}</div>
-              </button>
-            ))}
-          </div>
-        )}
-      </Panel>
+      {dossiersView === "all" || dossiersView === "create" ? (
+        <Panel
+          title="Dossier List"
+          subtitle="Choose a dossier to inspect linked sources, recent jobs, briefs, reviews, and policy profile."
+        >
+          {dossiers.length === 0 ? (
+            <div className="text-sm text-forge-mist">No dossiers yet.</div>
+          ) : (
+            <div className="space-y-2">
+              {dossiers.map((d) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  className={[
+                    "w-full rounded border px-3 py-2 text-left",
+                    selectedID === d.id
+                      ? "border-forge-ember/40 bg-black/30"
+                      : "border-forge-platinum/10 bg-black/20 hover:border-forge-ember/35",
+                  ].join(" ")}
+                  onClick={() => {
+                    setSelectedID(d.id);
+                    setParams({ dossierId: String(d.id) });
+                  }}
+                >
+                  <div className="text-sm font-semibold text-forge-ash">
+                    {d.name}
+                  </div>
+                  <div className="mt-1 text-xs text-forge-mist">
+                    {d.description || "(no description)"}
+                  </div>
+                  <div className="mt-1 text-[11px] text-forge-mist">
+                    updated {formatTime(d.updatedAtMs)}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </Panel>
       ) : null}
 
-      {(dossiersView === "all" || dossiersView === "detail") ? (
-      <Panel
-        title="Dossier Detail"
-        subtitle="Project brief, scope anchors, linked reviews, and recent execution memory."
-        actions={
-          detail ? (
-            <PrimaryButton
-              onClick={async () => {
-                await api.dossiers.generateBrief(detail.dossier.id, "Regenerated from dossier view");
-                setStatus(`Brief regenerated for dossier ${detail.dossier.id}.`);
-                await loadDetail(detail.dossier.id);
-              }}
-            >
-              Generate Brief
-            </PrimaryButton>
-          ) : null
-        }
-      >
-        {!detail ? (
-          <div className="text-sm text-forge-mist">Select a dossier to inspect details.</div>
-        ) : (
-          <div className="space-y-4">
-            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
-              <div className="text-sm font-semibold text-forge-ash">{detail.dossier.name}</div>
-              <div className="mt-2">{detail.dossier.description || "No description"}</div>
-              <div className="mt-2">Routing notes: {detail.dossier.routingNotes || "none"}</div>
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
-                <div className="text-xs font-semibold tracking-wide text-forge-mist">Linked Sources</div>
-                {detail.sources.length === 0 ? (
-                  <div className="mt-2 text-xs text-forge-mist">No source links.</div>
-                ) : (
-                  <div className="mt-2 space-y-1 text-xs text-forge-mist">
-                    {detail.sources.map((s) => (
-                      <div key={s.sourceId}>
-                        {s.sourceId} - {s.path}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
-                <div className="text-xs font-semibold tracking-wide text-forge-mist">Recent Jobs</div>
-                {detail.recentJobs.length === 0 ? (
-                  <div className="mt-2 text-xs text-forge-mist">No linked jobs.</div>
-                ) : (
-                  <div className="mt-2 space-y-1 text-xs text-forge-mist">
-                    {detail.recentJobs.slice(0, 8).map((j) => (
-                      <div key={j.jobId}>
-                        {j.jobId} - {j.status} - {j.targetAdapter}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
-              <div className="text-xs font-semibold tracking-wide text-forge-mist">Brief History</div>
-              {detail.briefs.length === 0 ? (
-                <div className="mt-2 text-xs text-forge-mist">No brief snapshots yet.</div>
-              ) : (
-                <div className="mt-2 space-y-2">
-                  {detail.briefs.slice(0, 6).map((b) => (
-                    <div key={b.id} className="rounded border border-forge-platinum/10 bg-black/30 p-2">
-                      <div className="text-[11px] text-forge-mist">
-                        brief #{b.id} - {formatTime(b.createdAtMs)}
-                      </div>
-                      <pre className="mt-1 max-h-44 overflow-auto whitespace-pre-wrap text-[11px] text-forge-ash">{b.summaryMarkdown}</pre>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
-              <div className="text-xs font-semibold tracking-wide text-forge-mist">Dossier Reviews</div>
-              {dossierReviews.length === 0 ? (
-                <div className="mt-2 text-xs text-forge-mist">No review records linked to this dossier.</div>
-              ) : (
-                <div className="mt-2 space-y-1 text-xs text-forge-mist">
-                  {dossierReviews.slice(0, 10).map((r) => (
-                    <div key={r.id}>
-                      #{r.id} - {r.status} - {r.targetType}:{r.targetId}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
-              <div className="text-xs font-semibold tracking-wide text-forge-mist">Memory View</div>
-              {!memoryView ? (
-                <div className="mt-2 text-xs text-forge-mist">No dossier memory view loaded.</div>
-              ) : (
-                <div className="mt-2 space-y-2 text-xs text-forge-mist">
-                  <div>
-                    observations {memoryView.observationCount} · stale {memoryView.staleObservationCount} · signals {memoryView.recentSignals.length}
-                  </div>
-                  <div className="rounded border border-forge-platinum/10 bg-black/30 p-2">
-                    <div className="text-[11px] font-semibold text-forge-ash">VSA Coverage + Health</div>
-                    {!vsaSummary ? (
-                      <div className="mt-1 text-[11px]">No VSA summary available.</div>
-                    ) : (
-                      <div className="mt-1 space-y-1 text-[11px]">
-                        <div>
-                          health {vsaSummary.health || "unknown"} · coverage {(vsaSummary.coverageScore * 100).toFixed(1)}%
-                        </div>
-                        <div>
-                          pointers {vsaSummary.pointerCount} · bindings {vsaSummary.bindingCount} · associations {vsaSummary.associationCount}
-                        </div>
-                        <div>
-                          last reindex run {vsaSummary.lastReindexRunId ?? "none"} · {vsaSummary.lastReindexAtMs ? formatTime(vsaSummary.lastReindexAtMs) : "never"}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="rounded border border-forge-platinum/10 bg-black/30 p-2">
-                    <div className="text-[11px] font-semibold text-forge-ash">Recent observations</div>
-                    {memoryView.recentObservations.length === 0 ? (
-                      <div className="mt-1 text-[11px]">No observations yet.</div>
-                    ) : (
-                      <div className="mt-1 space-y-1">
-                        {memoryView.recentObservations.slice(0, 8).map((o) => (
-                          <div key={o.id}>
-                            #{o.id} · {o.type} · useful {o.usefulnessCount} / noisy {o.noiseCount} · stale {String(o.stale)}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div className="rounded border border-forge-platinum/10 bg-black/30 p-2">
-                    <div className="text-[11px] font-semibold text-forge-ash">Recent packet alignment notes</div>
-                    {memoryView.recentAlignmentNotes.length === 0 ? (
-                      <div className="mt-1 text-[11px]">No packet alignment notes yet.</div>
-                    ) : (
-                      <div className="mt-1 space-y-1">
-                        {memoryView.recentAlignmentNotes.slice(0, 6).map((n) => (
-                          <div key={n.id}>
-                            packet {n.packetId} · result {n.retrievalResultId ?? "n/a"} · {n.note}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </Panel>
-      ) : null}
-
-      {(dossiersView === "all" || dossiersView === "policy") ? (
-      <Panel title="Dossier Policy Profile" subtitle="Dossier-specific strategy, adapter, retrieval, approval, and automation preferences.">
-        {!detail ? (
-          <div className="text-sm text-forge-mist">Select a dossier first.</div>
-        ) : uiMode === "cognitive" && !showAdvancedProfile ? (
-          <div className="space-y-3">
-            <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
-              Advanced policy profile controls are hidden in cognitive mode to reduce noise.
-            </div>
-            <PrimaryButton onClick={() => setShowAdvancedProfile(true)}>Show Advanced Controls</PrimaryButton>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <label className="text-xs text-forge-mist">Preferred strategies (ids, comma separated)</label>
-                <input
-                  aria-label="Preferred strategies"
-                  className="forge-input mt-1"
-                  value={preferredStrategiesRaw}
-                  onChange={(e) => setPreferredStrategiesRaw(e.target.value)}
-                  placeholder="repo_analysis, codex_implementation_handoff"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-forge-mist">Preferred adapters (comma separated)</label>
-                <input
-                  aria-label="Preferred adapters"
-                  className="forge-input mt-1"
-                  value={preferredAdaptersRaw}
-                  onChange={(e) => setPreferredAdaptersRaw(e.target.value)}
-                  placeholder="ollama, codex"
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <div>
-                <label className="text-xs text-forge-mist">Approval preset override</label>
-                <select aria-label="Approval preset override" className="forge-input mt-1" value={approvalPresetId} onChange={(e) => setApprovalPresetId(e.target.value)}>
-                  <option value="">(none)</option>
-                  {presets.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} ({p.id})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-forge-mist">Retrieval default mode</label>
-                <select aria-label="Retrieval default mode" className="forge-input mt-1" value={retrievalMode} onChange={(e) => setRetrievalMode(e.target.value)}>
-                  <option value="keyword">keyword</option>
-                  <option value="semantic">semantic</option>
-                  <option value="hybrid">hybrid</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-forge-mist">Automation bindings (rule ids)</label>
-                <input
-                  aria-label="Automation bindings"
-                  className="forge-input mt-1"
-                  value={automationBindingsRaw}
-                  onChange={(e) => setAutomationBindingsRaw(e.target.value)}
-                  placeholder="1, 4"
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <div>
-                <label className="text-xs text-forge-mist">High-value files (comma separated)</label>
-                <textarea
-                  aria-label="High-value files"
-                  className="forge-input mt-1 min-h-[70px]"
-                  value={highValueRaw}
-                  onChange={(e) => setHighValueRaw(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-xs text-forge-mist">Noisy files (comma separated)</label>
-                <textarea
-                  aria-label="Noisy files"
-                  className="forge-input mt-1 min-h-[70px]"
-                  value={noisyRaw}
-                  onChange={(e) => setNoisyRaw(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs text-forge-mist">Routing notes</label>
-              <textarea
-                aria-label="Routing notes"
-                className="forge-input mt-1 min-h-[70px]"
-                value={routingNotes}
-                onChange={(e) => setRoutingNotes(e.target.value)}
-              />
-            </div>
-
-            <div className="flex gap-2">
+      {dossiersView === "all" || dossiersView === "detail" ? (
+        <Panel
+          title="Dossier Detail"
+          subtitle="Project brief, scope anchors, linked reviews, and recent execution memory."
+          actions={
+            detail ? (
               <PrimaryButton
                 onClick={async () => {
-                  const bindings = parseIDs(automationBindingsRaw);
-                  await api.policy.saveDossierProfile(detail.dossier.id, {
-                    preferredStrategies: parseCSV(preferredStrategiesRaw),
-                    preferredAdapters: parseCSV(preferredAdaptersRaw),
-                    approvalPresetId: approvalPresetId.trim() || undefined,
-                    retrievalDefaults: { mode: retrievalMode },
-                    highValueFiles: parseCSV(highValueRaw),
-                    noisyFiles: parseCSV(noisyRaw),
-                    routingNotes,
-                    automationBindings: bindings,
-                  });
-                  setStatus(`Dossier profile saved for ${detail.dossier.id}.`);
+                  await api.dossiers.generateBrief(
+                    detail.dossier.id,
+                    "Regenerated from dossier view",
+                  );
+                  setStatus(
+                    `Brief regenerated for dossier ${detail.dossier.id}.`,
+                  );
                   await loadDetail(detail.dossier.id);
                 }}
               >
-                Save Profile
+                Generate Brief
               </PrimaryButton>
-              <GhostButton onClick={() => void loadDetail(detail.dossier.id)}>Reload Profile</GhostButton>
+            ) : null
+          }
+        >
+          {!detail ? (
+            <div className="text-sm text-forge-mist">
+              Select a dossier to inspect details.
             </div>
+          ) : (
+            <div className="forge-ops-board space-y-5">
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
+                <div className="text-sm font-semibold text-forge-ash">
+                  {detail.dossier.name}
+                </div>
+                <div className="mt-2">
+                  {detail.dossier.description || "No description"}
+                </div>
+                <div className="mt-2">
+                  Routing notes: {detail.dossier.routingNotes || "none"}
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
+                  <div className="text-xs font-semibold tracking-wide text-forge-mist">
+                    Linked Sources
+                  </div>
+                  {detail.sources.length === 0 ? (
+                    <div className="mt-2 text-xs text-forge-mist">
+                      No source links.
+                    </div>
+                  ) : (
+                    <div className="mt-2 space-y-1 text-xs text-forge-mist">
+                      {detail.sources.map((s) => (
+                        <div key={s.sourceId}>
+                          {s.sourceId} - {s.path}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
+                  <div className="text-xs font-semibold tracking-wide text-forge-mist">
+                    Recent Jobs
+                  </div>
+                  {detail.recentJobs.length === 0 ? (
+                    <div className="mt-2 text-xs text-forge-mist">
+                      No linked jobs.
+                    </div>
+                  ) : (
+                    <div className="mt-2 space-y-1 text-xs text-forge-mist">
+                      {detail.recentJobs.slice(0, 8).map((j) => (
+                        <div key={j.jobId}>
+                          {j.jobId} - {j.status} - {j.targetAdapter}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
+                <div className="text-xs font-semibold tracking-wide text-forge-mist">
+                  Brief History
+                </div>
+                {detail.briefs.length === 0 ? (
+                  <div className="mt-2 text-xs text-forge-mist">
+                    No brief snapshots yet.
+                  </div>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {detail.briefs.slice(0, 6).map((b) => (
+                      <div
+                        key={b.id}
+                        className="rounded border border-forge-platinum/10 bg-black/30 p-2"
+                      >
+                        <div className="text-[11px] text-forge-mist">
+                          brief #{b.id} - {formatTime(b.createdAtMs)}
+                        </div>
+                        <pre className="mt-1 max-h-44 overflow-auto whitespace-pre-wrap text-[11px] text-forge-ash">
+                          {b.summaryMarkdown}
+                        </pre>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            {profile ? (
-              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-[11px] text-forge-mist">Profile updated {formatTime(profile.updatedAtMs)}</div>
-            ) : (
-              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-[11px] text-forge-mist">No profile yet. Save to create one.</div>
-            )}
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
+                <div className="text-xs font-semibold tracking-wide text-forge-mist">
+                  Dossier Reviews
+                </div>
+                {dossierReviews.length === 0 ? (
+                  <div className="mt-2 text-xs text-forge-mist">
+                    No review records linked to this dossier.
+                  </div>
+                ) : (
+                  <div className="mt-2 space-y-1 text-xs text-forge-mist">
+                    {dossierReviews.slice(0, 10).map((r) => (
+                      <div key={r.id}>
+                        #{r.id} - {r.status} - {r.targetType}:{r.targetId}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            <div className="text-[11px] text-forge-mist">Known strategy ids: {strategyHint || "none"}</div>
-            <div className="text-[11px] text-forge-mist">Known automation rules: {rulesHint || "none"}</div>
-            {uiMode === "cognitive" ? <GhostButton onClick={() => setShowAdvancedProfile(false)}>Hide Advanced Controls</GhostButton> : null}
-          </div>
-        )}
-      </Panel>
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3">
+                <div className="text-xs font-semibold tracking-wide text-forge-mist">
+                  Memory View
+                </div>
+                {!memoryView ? (
+                  <div className="mt-2 text-xs text-forge-mist">
+                    No dossier memory view loaded.
+                  </div>
+                ) : (
+                  <div className="mt-2 space-y-2 text-xs text-forge-mist">
+                    <div>
+                      observations {memoryView.observationCount} · stale{" "}
+                      {memoryView.staleObservationCount} · signals{" "}
+                      {memoryView.recentSignals.length}
+                    </div>
+                    <div className="rounded border border-forge-platinum/10 bg-black/30 p-2">
+                      <div className="text-[11px] font-semibold text-forge-ash">
+                        VSA Coverage + Health
+                      </div>
+                      {!vsaSummary ? (
+                        <div className="mt-1 text-[11px]">
+                          No VSA summary available.
+                        </div>
+                      ) : (
+                        <div className="mt-1 space-y-1 text-[11px]">
+                          <div>
+                            health {vsaSummary.health || "unknown"} · coverage{" "}
+                            {(vsaSummary.coverageScore * 100).toFixed(1)}%
+                          </div>
+                          <div>
+                            pointers {vsaSummary.pointerCount} · bindings{" "}
+                            {vsaSummary.bindingCount} · associations{" "}
+                            {vsaSummary.associationCount}
+                          </div>
+                          <div>
+                            last reindex run{" "}
+                            {vsaSummary.lastReindexRunId ?? "none"} ·{" "}
+                            {vsaSummary.lastReindexAtMs
+                              ? formatTime(vsaSummary.lastReindexAtMs)
+                              : "never"}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded border border-forge-platinum/10 bg-black/30 p-2">
+                      <div className="text-[11px] font-semibold text-forge-ash">
+                        Recent observations
+                      </div>
+                      {memoryView.recentObservations.length === 0 ? (
+                        <div className="mt-1 text-[11px]">
+                          No observations yet.
+                        </div>
+                      ) : (
+                        <div className="mt-1 space-y-1">
+                          {memoryView.recentObservations
+                            .slice(0, 8)
+                            .map((o) => (
+                              <div key={o.id}>
+                                #{o.id} · {o.type} · useful {o.usefulnessCount}{" "}
+                                / noisy {o.noiseCount} · stale {String(o.stale)}
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="rounded border border-forge-platinum/10 bg-black/30 p-2">
+                      <div className="text-[11px] font-semibold text-forge-ash">
+                        Recent packet alignment notes
+                      </div>
+                      {memoryView.recentAlignmentNotes.length === 0 ? (
+                        <div className="mt-1 text-[11px]">
+                          No packet alignment notes yet.
+                        </div>
+                      ) : (
+                        <div className="mt-1 space-y-1">
+                          {memoryView.recentAlignmentNotes
+                            .slice(0, 6)
+                            .map((n) => (
+                              <div key={n.id}>
+                                packet {n.packetId} · result{" "}
+                                {n.retrievalResultId ?? "n/a"} · {n.note}
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </Panel>
+      ) : null}
+
+      {dossiersView === "all" || dossiersView === "policy" ? (
+        <Panel
+          title="Dossier Policy Profile"
+          subtitle="Dossier-specific strategy, adapter, retrieval, approval, and automation preferences."
+        >
+          {!detail ? (
+            <div className="text-sm text-forge-mist">
+              Select a dossier first.
+            </div>
+          ) : uiMode === "cognitive" && !showAdvancedProfile ? (
+            <div className="space-y-3">
+              <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs text-forge-mist">
+                Advanced policy profile controls are hidden in cognitive mode to
+                reduce noise.
+              </div>
+              <PrimaryButton onClick={() => setShowAdvancedProfile(true)}>
+                Show Advanced Controls
+              </PrimaryButton>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="text-xs text-forge-mist">
+                    Preferred strategies (ids, comma separated)
+                  </label>
+                  <input
+                    aria-label="Preferred strategies"
+                    className="forge-input mt-1"
+                    value={preferredStrategiesRaw}
+                    onChange={(e) => setPreferredStrategiesRaw(e.target.value)}
+                    placeholder="repo_analysis, codex_implementation_handoff"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-forge-mist">
+                    Preferred adapters (comma separated)
+                  </label>
+                  <input
+                    aria-label="Preferred adapters"
+                    className="forge-input mt-1"
+                    value={preferredAdaptersRaw}
+                    onChange={(e) => setPreferredAdaptersRaw(e.target.value)}
+                    placeholder="ollama, codex"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div>
+                  <label className="text-xs text-forge-mist">
+                    Approval preset override
+                  </label>
+                  <select
+                    aria-label="Approval preset override"
+                    className="forge-input mt-1"
+                    value={approvalPresetId}
+                    onChange={(e) => setApprovalPresetId(e.target.value)}
+                  >
+                    <option value="">(none)</option>
+                    {presets.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.id})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-forge-mist">
+                    Retrieval default mode
+                  </label>
+                  <select
+                    aria-label="Retrieval default mode"
+                    className="forge-input mt-1"
+                    value={retrievalMode}
+                    onChange={(e) => setRetrievalMode(e.target.value)}
+                  >
+                    <option value="keyword">keyword</option>
+                    <option value="semantic">semantic</option>
+                    <option value="hybrid">hybrid</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-forge-mist">
+                    Automation bindings (rule ids)
+                  </label>
+                  <input
+                    aria-label="Automation bindings"
+                    className="forge-input mt-1"
+                    value={automationBindingsRaw}
+                    onChange={(e) => setAutomationBindingsRaw(e.target.value)}
+                    placeholder="1, 4"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="text-xs text-forge-mist">
+                    High-value files (comma separated)
+                  </label>
+                  <textarea
+                    aria-label="High-value files"
+                    className="forge-input mt-1 min-h-[70px]"
+                    value={highValueRaw}
+                    onChange={(e) => setHighValueRaw(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-forge-mist">
+                    Noisy files (comma separated)
+                  </label>
+                  <textarea
+                    aria-label="Noisy files"
+                    className="forge-input mt-1 min-h-[70px]"
+                    value={noisyRaw}
+                    onChange={(e) => setNoisyRaw(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-forge-mist">Routing notes</label>
+                <textarea
+                  aria-label="Routing notes"
+                  className="forge-input mt-1 min-h-[70px]"
+                  value={routingNotes}
+                  onChange={(e) => setRoutingNotes(e.target.value)}
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <PrimaryButton
+                  onClick={async () => {
+                    const bindings = parseIDs(automationBindingsRaw);
+                    await api.policy.saveDossierProfile(detail.dossier.id, {
+                      preferredStrategies: parseCSV(preferredStrategiesRaw),
+                      preferredAdapters: parseCSV(preferredAdaptersRaw),
+                      approvalPresetId: approvalPresetId.trim() || undefined,
+                      retrievalDefaults: { mode: retrievalMode },
+                      highValueFiles: parseCSV(highValueRaw),
+                      noisyFiles: parseCSV(noisyRaw),
+                      routingNotes,
+                      automationBindings: bindings,
+                    });
+                    setStatus(
+                      `Dossier profile saved for ${detail.dossier.id}.`,
+                    );
+                    await loadDetail(detail.dossier.id);
+                  }}
+                >
+                  Save Profile
+                </PrimaryButton>
+                <GhostButton onClick={() => void loadDetail(detail.dossier.id)}>
+                  Reload Profile
+                </GhostButton>
+              </div>
+
+              {profile ? (
+                <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-[11px] text-forge-mist">
+                  Profile updated {formatTime(profile.updatedAtMs)}
+                </div>
+              ) : (
+                <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-[11px] text-forge-mist">
+                  No profile yet. Save to create one.
+                </div>
+              )}
+
+              <div className="text-[11px] text-forge-mist">
+                Known strategy ids: {strategyHint || "none"}
+              </div>
+              <div className="text-[11px] text-forge-mist">
+                Known automation rules: {rulesHint || "none"}
+              </div>
+              {uiMode === "cognitive" ? (
+                <GhostButton onClick={() => setShowAdvancedProfile(false)}>
+                  Hide Advanced Controls
+                </GhostButton>
+              ) : null}
+            </div>
+          )}
+        </Panel>
       ) : null}
     </div>
   );

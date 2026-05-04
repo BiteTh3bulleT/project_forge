@@ -28,14 +28,19 @@ function defaultSession(): WindowSession {
 }
 
 function load(): PersistedShellState {
-  if (typeof window === "undefined") return { currentWindowId: "main", sessions: { main: defaultSession() } };
+  if (typeof window === "undefined")
+    return { currentWindowId: "main", sessions: { main: defaultSession() } };
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { currentWindowId: "main", sessions: { main: defaultSession() } };
+    if (!raw)
+      return { currentWindowId: "main", sessions: { main: defaultSession() } };
     const parsed = JSON.parse(raw) as PersistedShellState;
     return {
       currentWindowId: parsed.currentWindowId || "main",
-      sessions: parsed.sessions && typeof parsed.sessions === "object" ? parsed.sessions : { main: defaultSession() },
+      sessions:
+        parsed.sessions && typeof parsed.sessions === "object"
+          ? parsed.sessions
+          : { main: defaultSession() },
     };
   } catch {
     return { currentWindowId: "main", sessions: { main: defaultSession() } };
@@ -67,19 +72,34 @@ export const useDesktopShellStore = create<DesktopShellState>((set, get) => ({
     };
     persist(next);
     const session = sessionFor(next, currentWindowId);
-    set({ currentWindowId, openRoutes: session.openRoutes, recentRoutes: session.recentRoutes });
+    set({
+      currentWindowId,
+      openRoutes: session.openRoutes,
+      recentRoutes: session.recentRoutes,
+    });
   },
   openRoute: (route) => {
     const currentWindowId = get().currentWindowId;
     const loaded = load();
     const session = sessionFor(loaded, currentWindowId);
     const nextSession: WindowSession = {
-      openRoutes: session.openRoutes.includes(route) ? session.openRoutes : [...session.openRoutes, route],
-      recentRoutes: [route, ...session.recentRoutes.filter((value) => value !== route)].slice(0, MAX_RECENT),
+      openRoutes: session.openRoutes.includes(route)
+        ? session.openRoutes
+        : [...session.openRoutes, route],
+      recentRoutes: [
+        route,
+        ...session.recentRoutes.filter((value) => value !== route),
+      ].slice(0, MAX_RECENT),
     };
-    const next = { currentWindowId, sessions: { ...loaded.sessions, [currentWindowId]: nextSession } };
+    const next = {
+      currentWindowId,
+      sessions: { ...loaded.sessions, [currentWindowId]: nextSession },
+    };
     persist(next);
-    set({ openRoutes: nextSession.openRoutes, recentRoutes: nextSession.recentRoutes });
+    set({
+      openRoutes: nextSession.openRoutes,
+      recentRoutes: nextSession.recentRoutes,
+    });
   },
   closeRoute: (route) => {
     const currentWindowId = get().currentWindowId;
@@ -90,9 +110,15 @@ export const useDesktopShellStore = create<DesktopShellState>((set, get) => ({
       openRoutes: openRoutes.length > 0 ? openRoutes : ["/chat"],
       recentRoutes: session.recentRoutes.filter((value) => value !== route),
     };
-    const next = { currentWindowId, sessions: { ...loaded.sessions, [currentWindowId]: nextSession } };
+    const next = {
+      currentWindowId,
+      sessions: { ...loaded.sessions, [currentWindowId]: nextSession },
+    };
     persist(next);
-    set({ openRoutes: nextSession.openRoutes, recentRoutes: nextSession.recentRoutes });
+    set({
+      openRoutes: nextSession.openRoutes,
+      recentRoutes: nextSession.recentRoutes,
+    });
   },
   touchRoute: (route) => {
     const currentWindowId = get().currentWindowId;
@@ -100,9 +126,15 @@ export const useDesktopShellStore = create<DesktopShellState>((set, get) => ({
     const session = sessionFor(loaded, currentWindowId);
     const nextSession: WindowSession = {
       openRoutes: session.openRoutes,
-      recentRoutes: [route, ...session.recentRoutes.filter((value) => value !== route)].slice(0, MAX_RECENT),
+      recentRoutes: [
+        route,
+        ...session.recentRoutes.filter((value) => value !== route),
+      ].slice(0, MAX_RECENT),
     };
-    const next = { currentWindowId, sessions: { ...loaded.sessions, [currentWindowId]: nextSession } };
+    const next = {
+      currentWindowId,
+      sessions: { ...loaded.sessions, [currentWindowId]: nextSession },
+    };
     persist(next);
     set({ recentRoutes: nextSession.recentRoutes });
   },

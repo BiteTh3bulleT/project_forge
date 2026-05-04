@@ -6,7 +6,9 @@ FORGE is a local-first AI workspace for inspectable, approval-gated engineering 
 
 FORGE-K is the deterministic cognitive microkernel architecture inside FORGE. It exists to keep canonical truth under Kernel authority while model runtimes, tools, adapters, and neurons operate as bounded proposal or driver surfaces.
 
-Current phase: Phase 5 - Semantic Algebra Minimal. Phase 5 adds SemanticObjects, SemanticOperations, SemanticTransformResults, deterministic operators, semantic operation syscalls, capability checks, and journaled provenance-preserving transforms.
+Current checkpoint: FORGE-K Phase 1-7 are implemented and tested in the simulator under `services/core/internal/forgek`. Phase 6 adds Context-Shape Snapshot models, lifecycle service, snapshot syscalls, deterministic shape hashing, diff support, restore-seed support, supersession behavior, capability checks, journaled lifecycle events, and shape-not-truth tests. Phase 7 adds the Context Compiler with ContextBlock, ContextBundle, PromptLayout, deterministic serialization, content and token input hashing, cache eligibility metadata, context syscalls, capability checks, journaled compile events, snapshot/restore-seed compilation by reference, and shape-not-truth tests.
+
+ADR 0005 defines the live-authority boundary: FORGE-K is the target architecture, but the live daemon still uses the existing AI-OS, gateway, permissions, lane, audit, model runtime, and API authority paths. Phases 6 and 7 are implemented as `SIMULATOR_ONLY`; snapshots and the Context Compiler are not wired into the live daemon and do not modify live AI-OS snapshot/restore or `COMPILE_CONTEXT` behavior. Phase 8 Deterministic KV is not started.
 
 Development principles:
 
@@ -41,6 +43,7 @@ FORGE-K ADRs and diagrams:
 - `docs/adr/0002-models-are-drivers-not-authority.md`
 - `docs/adr/0003-snapshots-are-shape-not-truth.md`
 - `docs/adr/0004-kv-cache-is-acceleration-not-memory.md`
+- `docs/adr/0005-forge-k-simulator-vs-live-authority.md`
 - `docs/diagrams/forge_k_master_flow.mmd`
 - `docs/diagrams/forge_k_layer_model.mmd`
 

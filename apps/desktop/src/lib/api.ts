@@ -520,7 +520,8 @@ export type AutonomyCharterRecord = {
   updatedAt?: number;
 };
 
-const base = () => import.meta.env.VITE_FORGE_API_URL ?? "http://127.0.0.1:18492";
+const base = () =>
+  import.meta.env.VITE_FORGE_API_URL ?? "http://127.0.0.1:18492";
 
 async function j<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${base()}${path}`, {
@@ -765,7 +766,8 @@ export type ForgeHealth = {
 
 export const api = {
   health: () => j<ForgeHealth>("/health"),
-  meta: () => j<{ dataDir: string; dbPath: string; workspaceDir: string }>("/api/meta"),
+  meta: () =>
+    j<{ dataDir: string; dbPath: string; workspaceDir: string }>("/api/meta"),
   settings: {
     get: () => j<SettingsRecord>("/api/settings"),
     patch: (body: Record<string, unknown>) =>
@@ -778,15 +780,29 @@ export const api = {
       const q = new URLSearchParams();
       if (baseUrl) q.set("baseUrl", baseUrl);
       const path = `/api/settings/ollama-models${q.toString() ? `?${q.toString()}` : ""}`;
-      return j<{ models: string[]; baseUrl: string; status: string; error?: string }>(path);
+      return j<{
+        models: string[];
+        baseUrl: string;
+        status: string;
+        error?: string;
+      }>(path);
     },
   },
   modelRuntime: {
-    list: () => j<{ models: ModelRuntimeModel[]; correlationId?: string; traceId?: string; workspaceId?: string }>("/forge/models"),
+    list: () =>
+      j<{
+        models: ModelRuntimeModel[];
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>("/forge/models"),
     get: (id: string) =>
-      j<{ model: ModelRuntimeModel; correlationId?: string; traceId?: string; workspaceId?: string }>(
-        `/forge/models/${encodeURIComponent(id)}`,
-      ),
+      j<{
+        model: ModelRuntimeModel;
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>(`/forge/models/${encodeURIComponent(id)}`),
     import: (body: {
       path: string;
       id?: string;
@@ -807,102 +823,147 @@ export const api = {
       dryRun?: boolean;
       metadata?: Record<string, unknown>;
     }) =>
-      j<{ result: ModelRuntimeImportResult; correlationId?: string; traceId?: string; workspaceId?: string }>("/forge/models/import", {
+      j<{
+        result: ModelRuntimeImportResult;
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>("/forge/models/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }),
     scan: (body?: ModelRuntimeManagementRequest) =>
-      j<{ models: ModelRuntimeModel[]; count: number; correlationId?: string; traceId?: string; workspaceId?: string }>("/forge/models/scan", {
+      j<{
+        models: ModelRuntimeModel[];
+        count: number;
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>("/forge/models/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body ?? {}),
       }),
     verify: (id: string, body?: ModelRuntimeManagementRequest) =>
-      j<{ model: ModelRuntimeModel; correlationId?: string; traceId?: string; workspaceId?: string }>(
-        `/forge/models/${encodeURIComponent(id)}/verify`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body ?? {}),
-        },
-      ),
+      j<{
+        model: ModelRuntimeModel;
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>(`/forge/models/${encodeURIComponent(id)}/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body ?? {}),
+      }),
     enable: (id: string, body?: ModelRuntimeManagementRequest) =>
-      j<{ model: ModelRuntimeModel; correlationId?: string; traceId?: string; workspaceId?: string }>(
-        `/forge/models/${encodeURIComponent(id)}/enable`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body ?? {}),
-        },
-      ),
+      j<{
+        model: ModelRuntimeModel;
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>(`/forge/models/${encodeURIComponent(id)}/enable`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body ?? {}),
+      }),
     disable: (id: string, body?: ModelRuntimeManagementRequest) =>
-      j<{ model: ModelRuntimeModel; correlationId?: string; traceId?: string; workspaceId?: string }>(
-        `/forge/models/${encodeURIComponent(id)}/disable`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body ?? {}),
-        },
-      ),
+      j<{
+        model: ModelRuntimeModel;
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>(`/forge/models/${encodeURIComponent(id)}/disable`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body ?? {}),
+      }),
     archive: (id: string, body?: ModelRuntimeManagementRequest) =>
-      j<{ model: ModelRuntimeModel; correlationId?: string; traceId?: string; workspaceId?: string }>(
-        `/forge/models/${encodeURIComponent(id)}/archive`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body ?? {}),
-        },
-      ),
+      j<{
+        model: ModelRuntimeModel;
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>(`/forge/models/${encodeURIComponent(id)}/archive`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body ?? {}),
+      }),
     remove: (id: string, body?: ModelRuntimeManagementRequest) =>
-      j<{ result: { modelId: string; removedPath?: string }; correlationId?: string; traceId?: string; workspaceId?: string }>(
-        `/forge/models/${encodeURIComponent(id)}/remove`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body ?? {}),
-        },
-      ),
+      j<{
+        result: { modelId: string; removedPath?: string };
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>(`/forge/models/${encodeURIComponent(id)}/remove`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body ?? {}),
+      }),
     load: (id: string, body?: ModelRuntimeManagementRequest) =>
-      j<{ result: ModelRuntimeLoadResult; correlationId?: string; traceId?: string; workspaceId?: string }>(
-        `/forge/models/${encodeURIComponent(id)}/load`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body ?? {}),
-        },
-      ),
+      j<{
+        result: ModelRuntimeLoadResult;
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>(`/forge/models/${encodeURIComponent(id)}/load`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body ?? {}),
+      }),
     unload: (id: string, body?: ModelRuntimeManagementRequest) =>
-      j<{ result: ModelRuntimeLoadResult; correlationId?: string; traceId?: string; workspaceId?: string }>(
-        `/forge/models/${encodeURIComponent(id)}/unload`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body ?? {}),
-        },
-      ),
+      j<{
+        result: ModelRuntimeLoadResult;
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>(`/forge/models/${encodeURIComponent(id)}/unload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body ?? {}),
+      }),
     compatibility: (id: string) =>
-      j<{ compatibility: ModelRuntimeCompatibility; correlationId?: string; traceId?: string; workspaceId?: string }>(
-        `/forge/models/${encodeURIComponent(id)}/compatibility`,
-      ),
+      j<{
+        compatibility: ModelRuntimeCompatibility;
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>(`/forge/models/${encodeURIComponent(id)}/compatibility`),
     health: () =>
-      j<{ health: ModelRuntimeHealth; correlationId?: string; traceId?: string; workspaceId?: string }>("/forge/model-runtime/health"),
+      j<{
+        health: ModelRuntimeHealth;
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>("/forge/model-runtime/health"),
     backends: () =>
-      j<{ backends: ModelRuntimeBackendStatus[]; correlationId?: string; traceId?: string; workspaceId?: string }>(
-        "/forge/model-runtime/backends",
-      ),
+      j<{
+        backends: ModelRuntimeBackendStatus[];
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>("/forge/model-runtime/backends"),
     usage: () =>
-      j<{ usage: ModelRuntimeUsageSummary; correlationId?: string; traceId?: string; workspaceId?: string }>(
-        "/forge/model-runtime/usage",
-      ),
+      j<{
+        usage: ModelRuntimeUsageSummary;
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>("/forge/model-runtime/usage"),
     queue: () =>
-      j<{ queue: ModelRuntimeQueueStatus; correlationId?: string; traceId?: string; workspaceId?: string }>(
-        "/forge/model-runtime/queue",
-      ),
+      j<{
+        queue: ModelRuntimeQueueStatus;
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>("/forge/model-runtime/queue"),
     loaded: () =>
-      j<{ loaded: ModelRuntimeLoadedStatus; correlationId?: string; traceId?: string; workspaceId?: string }>(
-        "/forge/model-runtime/loaded",
-      ),
+      j<{
+        loaded: ModelRuntimeLoadedStatus;
+        correlationId?: string;
+        traceId?: string;
+        workspaceId?: string;
+      }>("/forge/model-runtime/loaded"),
   },
   remote: {
     telegram: (body: RemoteTelegramPayload, token?: string) =>
@@ -941,13 +1002,23 @@ export const api = {
       }),
   },
   reindex: (sourceId?: number) => {
-    const q = sourceId != null ? `?sourceId=${encodeURIComponent(String(sourceId))}` : "";
-    return j<{ ok: boolean; scope: string }>(`/api/reindex${q}`, { method: "POST" });
+    const q =
+      sourceId != null
+        ? `?sourceId=${encodeURIComponent(String(sourceId))}`
+        : "";
+    return j<{ ok: boolean; scope: string }>(`/api/reindex${q}`, {
+      method: "POST",
+    });
   },
   search: (q: string, limit = 50) =>
-    j<{ hits: SearchHit[] }>(`/api/search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(limit))}`),
+    j<{ hits: SearchHit[] }>(
+      `/api/search?q=${encodeURIComponent(q)}&limit=${encodeURIComponent(String(limit))}`,
+    ),
   chunk: (id: number) => j<SearchHit>(`/api/chunks/${id}`),
-  events: (limit = 120) => j<{ events: ForgeEvent[] }>(`/api/events?limit=${encodeURIComponent(String(limit))}`),
+  events: (limit = 120) =>
+    j<{ events: ForgeEvent[] }>(
+      `/api/events?limit=${encodeURIComponent(String(limit))}`,
+    ),
   autonomy: {
     status: () => j<AutonomyStatusSnapshot>("/api/autonomy/status"),
     intents: (params?: { status?: string; limit?: number }) => {
@@ -955,16 +1026,28 @@ export const api = {
       if (params?.status) qs.set("status", params.status);
       if (params?.limit != null) qs.set("limit", String(params.limit));
       const q = qs.toString();
-      return j<{ intents: AutonomyIntentRecord[] }>(`/api/autonomy/intents${q ? `?${q}` : ""}`);
+      return j<{ intents: AutonomyIntentRecord[] }>(
+        `/api/autonomy/intents${q ? `?${q}` : ""}`,
+      );
     },
-    explainIntent: (id: string) => j<Record<string, unknown>>(`/api/autonomy/intents/${encodeURIComponent(id)}/explain`),
+    explainIntent: (id: string) =>
+      j<Record<string, unknown>>(
+        `/api/autonomy/intents/${encodeURIComponent(id)}/explain`,
+      ),
     decisions: (limit = 80) =>
-      j<{ decisions: AutonomyDecisionRecord[] }>(`/api/autonomy/decisions?limit=${encodeURIComponent(String(limit))}`),
-    budgets: () => j<{ budgets: AutonomyBudgetRecord[] }>("/api/autonomy/budgets"),
+      j<{ decisions: AutonomyDecisionRecord[] }>(
+        `/api/autonomy/decisions?limit=${encodeURIComponent(String(limit))}`,
+      ),
+    budgets: () =>
+      j<{ budgets: AutonomyBudgetRecord[] }>("/api/autonomy/budgets"),
     charters: (activeOnly = false) =>
-      j<{ charters: AutonomyCharterRecord[] }>(`/api/autonomy/charters?activeOnly=${encodeURIComponent(String(activeOnly))}`),
+      j<{ charters: AutonomyCharterRecord[] }>(
+        `/api/autonomy/charters?activeOnly=${encodeURIComponent(String(activeOnly))}`,
+      ),
     events: (limit = 120) =>
-      j<{ events: ForgeEvent[] }>(`/api/autonomy/events?limit=${encodeURIComponent(String(limit))}`),
+      j<{ events: ForgeEvent[] }>(
+        `/api/autonomy/events?limit=${encodeURIComponent(String(limit))}`,
+      ),
   },
   discord: {
     status: () => j<DiscordGatewayStatusResponse>("/api/discord/status"),
@@ -972,11 +1055,21 @@ export const api = {
   adapters: {
     list: () => j<{ adapters: AdapterInfo[] }>("/api/adapters"),
     invoke: async (id: string, body: AdapterInvokeRequest) => {
-      const scope = body.scope ?? { allowedPaths: [], forbiddenPaths: [], selectedPaths: [] };
-      const paths = [...scope.selectedPaths, ...scope.allowedPaths, ...scope.forbiddenPaths]
+      const scope = body.scope ?? {
+        allowedPaths: [],
+        forbiddenPaths: [],
+        selectedPaths: [],
+      };
+      const paths = [
+        ...scope.selectedPaths,
+        ...scope.allowedPaths,
+        ...scope.forbiddenPaths,
+      ]
         .map((value) => value.trim())
         .filter((value) => value.length > 0);
-      const correlationId = body.correlationId?.trim() || `legacy.adapter.invoke:${id}:${Date.now()}`;
+      const correlationId =
+        body.correlationId?.trim() ||
+        `legacy.adapter.invoke:${id}:${Date.now()}`;
       const gatewayResponse = await j<{
         result: {
           status?: string;
@@ -1004,7 +1097,9 @@ export const api = {
             dryRun: body.dryRun ?? false,
             correlationId,
             input: body.input ?? {},
-            ...(body.taskPacketRef != null ? { taskPacketRef: body.taskPacketRef } : {}),
+            ...(body.taskPacketRef != null
+              ? { taskPacketRef: body.taskPacketRef }
+              : {}),
           },
           metadata: {
             legacyAdapterCompatibilityWrapper: true,
@@ -1015,19 +1110,32 @@ export const api = {
 
       const gwResult = gatewayResponse.result ?? {};
       if ((gwResult.status ?? "").toLowerCase() !== "ok") {
-        throw new Error(gwResult.message?.trim() || gwResult.deniedReason?.trim() || "adapter invocation denied");
+        throw new Error(
+          gwResult.message?.trim() ||
+            gwResult.deniedReason?.trim() ||
+            "adapter invocation denied",
+        );
       }
 
-      const rawResult = (gwResult.data as { result?: unknown } | undefined)?.result;
+      const rawResult = (gwResult.data as { result?: unknown } | undefined)
+        ?.result;
       if (!rawResult || typeof rawResult !== "object") {
         throw new Error("gateway response missing adapter invocation result");
       }
       const typed = rawResult as Partial<InvokeResult>;
       return {
         ok: Boolean(typed.ok),
-        message: typeof typed.message === "string" ? typed.message : "adapter invocation completed",
-        ...(typeof typed.failureCode === "string" ? { failureCode: typed.failureCode } : {}),
-        data: typeof typed.data === "object" && typed.data != null ? typed.data : {},
+        message:
+          typeof typed.message === "string"
+            ? typed.message
+            : "adapter invocation completed",
+        ...(typeof typed.failureCode === "string"
+          ? { failureCode: typed.failureCode }
+          : {}),
+        data:
+          typeof typed.data === "object" && typed.data != null
+            ? typed.data
+            : {},
       };
     },
   },
@@ -1046,13 +1154,18 @@ export const api = {
         body: JSON.stringify(body),
       }),
     detail: (id: string, afterEventId = 0) =>
-      j<JobDetail>(`/api/jobs/${encodeURIComponent(id)}?afterEventId=${encodeURIComponent(String(afterEventId))}`),
+      j<JobDetail>(
+        `/api/jobs/${encodeURIComponent(id)}?afterEventId=${encodeURIComponent(String(afterEventId))}`,
+      ),
     cancel: (id: string, actor = "operator") =>
-      j<{ ok: boolean; jobId: string }>(`/api/jobs/${encodeURIComponent(id)}/cancel`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actor }),
-      }),
+      j<{ ok: boolean; jobId: string }>(
+        `/api/jobs/${encodeURIComponent(id)}/cancel`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ actor }),
+        },
+      ),
     retry: (id: string, body: Record<string, unknown>) =>
       j<{ job: JobRecord }>(`/api/jobs/${encodeURIComponent(id)}/retry`, {
         method: "POST",
@@ -1068,9 +1181,13 @@ export const api = {
   },
   approvals: {
     list: (status = "pending", limit = 100) =>
-      j<{ approvals: ApprovalRequest[] }>(`/api/approvals?status=${encodeURIComponent(status)}&limit=${encodeURIComponent(String(limit))}`),
+      j<{ approvals: ApprovalRequest[] }>(
+        `/api/approvals?status=${encodeURIComponent(status)}&limit=${encodeURIComponent(String(limit))}`,
+      ),
     get: (id: number) =>
-      j<{ approval: ApprovalRequest }>(`/api/approvals/${encodeURIComponent(String(id))}`),
+      j<{ approval: ApprovalRequest }>(
+        `/api/approvals/${encodeURIComponent(String(id))}`,
+      ),
     approve: (id: number, note = "") =>
       j<{ decision: unknown }>(`/api/approvals/${id}/approve`, {
         method: "POST",
@@ -1094,7 +1211,8 @@ export const api = {
     get: (id: number) => j<TaskPacket>(`/api/packets/${id}`),
   },
   projectContext: {
-    get: () => j<{ record: ProjectContextRecord | null }>("/api/project-context"),
+    get: () =>
+      j<{ record: ProjectContextRecord | null }>("/api/project-context"),
     import: (sourcePath = "", notes = "") =>
       j<{ record: ProjectContextRecord }>("/api/project-context/import", {
         method: "POST",
@@ -1112,7 +1230,9 @@ export const api = {
       if (provider) params.set("provider", provider);
       if (model) params.set("model", model);
       const q = params.toString();
-      return j<{ config: EmbeddingConfig; status: SourceEmbeddingStatus[] }>(`/api/embeddings/status${q ? `?${q}` : ""}`);
+      return j<{ config: EmbeddingConfig; status: SourceEmbeddingStatus[] }>(
+        `/api/embeddings/status${q ? `?${q}` : ""}`,
+      );
     },
     reembed: (body: Record<string, unknown>) =>
       j<{ result: ReembedResult }>("/api/embeddings/reembed", {
@@ -1128,34 +1248,56 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }),
-    listRuns: (params?: { limit?: number; dossierId?: number; jobId?: string }) => {
+    listRuns: (params?: {
+      limit?: number;
+      dossierId?: number;
+      jobId?: string;
+    }) => {
       const qs = new URLSearchParams();
       if (params?.limit != null) qs.set("limit", String(params.limit));
-      if (params?.dossierId != null) qs.set("dossierId", String(params.dossierId));
+      if (params?.dossierId != null)
+        qs.set("dossierId", String(params.dossierId));
       if (params?.jobId) qs.set("jobId", params.jobId);
       const q = qs.toString();
-      return j<{ runs: RetrievalRun[] }>(`/api/retrieval/runs${q ? `?${q}` : ""}`);
+      return j<{ runs: RetrievalRun[] }>(
+        `/api/retrieval/runs${q ? `?${q}` : ""}`,
+      );
     },
-    getRun: (id: number) => j<{ run: RetrievalRun }>(`/api/retrieval/runs/${id}`),
+    getRun: (id: number) =>
+      j<{ run: RetrievalRun }>(`/api/retrieval/runs/${id}`),
     getRunVSASignals: (runId: number) =>
-      j<{ signals: RetrievalResultVSASignal[] }>(`/api/retrieval/runs/${encodeURIComponent(String(runId))}/vsa-signals`),
+      j<{ signals: RetrievalResultVSASignal[] }>(
+        `/api/retrieval/runs/${encodeURIComponent(String(runId))}/vsa-signals`,
+      ),
     markUsefulness: (id: number, body: Record<string, unknown>) =>
-      j<{ ok: boolean; resultId: number }>(`/api/retrieval/results/${id}/usefulness`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
+      j<{ ok: boolean; resultId: number }>(
+        `/api/retrieval/results/${id}/usefulness`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      ),
   },
   memory: {
-    listObservations: (params?: { limit?: number; dossierId?: number; type?: string; originKind?: string; staleOnly?: boolean }) => {
+    listObservations: (params?: {
+      limit?: number;
+      dossierId?: number;
+      type?: string;
+      originKind?: string;
+      staleOnly?: boolean;
+    }) => {
       const qs = new URLSearchParams();
       if (params?.limit != null) qs.set("limit", String(params.limit));
-      if (params?.dossierId != null) qs.set("dossierId", String(params.dossierId));
+      if (params?.dossierId != null)
+        qs.set("dossierId", String(params.dossierId));
       if (params?.type) qs.set("type", params.type);
       if (params?.originKind) qs.set("originKind", params.originKind);
       if (params?.staleOnly) qs.set("staleOnly", "true");
       const q = qs.toString();
-      return j<{ observations: MemoryObservation[] }>(`/api/memory/observations${q ? `?${q}` : ""}`);
+      return j<{ observations: MemoryObservation[] }>(
+        `/api/memory/observations${q ? `?${q}` : ""}`,
+      );
     },
     createObservation: (body: Record<string, unknown>) =>
       j<{ observation: MemoryObservation }>("/api/memory/observations", {
@@ -1163,36 +1305,64 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }),
-    getObservation: (id: number) => j<{ observation: MemoryObservationDetail }>(`/api/memory/observations/${encodeURIComponent(String(id))}`),
+    getObservation: (id: number) =>
+      j<{ observation: MemoryObservationDetail }>(
+        `/api/memory/observations/${encodeURIComponent(String(id))}`,
+      ),
     patchObservation: (id: number, body: Record<string, unknown>) =>
-      j<{ observation: MemoryObservationDetail }>(`/api/memory/observations/${encodeURIComponent(String(id))}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
+      j<{ observation: MemoryObservationDetail }>(
+        `/api/memory/observations/${encodeURIComponent(String(id))}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      ),
     getObservationVSA: (id: number) =>
-      j<{ detail: ObservationVSADetail }>(`/api/memory/observations/${encodeURIComponent(String(id))}/vsa`),
+      j<{ detail: ObservationVSADetail }>(
+        `/api/memory/observations/${encodeURIComponent(String(id))}/vsa`,
+      ),
     markObservationUsefulness: (id: number, body: Record<string, unknown>) =>
-      j<{ ok: boolean; observationId: number }>(`/api/memory/observations/${encodeURIComponent(String(id))}/usefulness`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
+      j<{ ok: boolean; observationId: number }>(
+        `/api/memory/observations/${encodeURIComponent(String(id))}/usefulness`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      ),
     retrievalSelection: (runId: number) =>
-      j<{ selection: RetrievalSelectionReason[] }>(`/api/memory/retrieval-runs/${encodeURIComponent(String(runId))}/selection`),
+      j<{ selection: RetrievalSelectionReason[] }>(
+        `/api/memory/retrieval-runs/${encodeURIComponent(String(runId))}/selection`,
+      ),
     packetAlignment: (packetId: number, limit = 80) =>
-      j<{ notes: PacketAlignmentNote[] }>(`/api/memory/packets/${encodeURIComponent(String(packetId))}/alignment?limit=${encodeURIComponent(String(limit))}`),
+      j<{ notes: PacketAlignmentNote[] }>(
+        `/api/memory/packets/${encodeURIComponent(String(packetId))}/alignment?limit=${encodeURIComponent(String(limit))}`,
+      ),
     dossierView: (dossierId: number, limit = 40) =>
-      j<{ view: DossierMemoryView }>(`/api/memory/dossiers/${encodeURIComponent(String(dossierId))}?limit=${encodeURIComponent(String(limit))}`),
+      j<{ view: DossierMemoryView }>(
+        `/api/memory/dossiers/${encodeURIComponent(String(dossierId))}?limit=${encodeURIComponent(String(limit))}`,
+      ),
     listRepairRuns: (params?: { limit?: number; dossierId?: number }) => {
       const qs = new URLSearchParams();
       if (params?.limit != null) qs.set("limit", String(params.limit));
-      if (params?.dossierId != null) qs.set("dossierId", String(params.dossierId));
+      if (params?.dossierId != null)
+        qs.set("dossierId", String(params.dossierId));
       const q = qs.toString();
-      return j<{ runs: MemoryRepairRun[] }>(`/api/memory/repair-runs${q ? `?${q}` : ""}`);
+      return j<{ runs: MemoryRepairRun[] }>(
+        `/api/memory/repair-runs${q ? `?${q}` : ""}`,
+      );
     },
-    getRepairRun: (id: number) => j<{ detail: MemoryRepairRunDetail }>(`/api/memory/repair-runs/${encodeURIComponent(String(id))}`),
-    runRepair: (body: { dossierId?: number; maxAgeDays?: number; limit?: number; note?: string }) =>
+    getRepairRun: (id: number) =>
+      j<{ detail: MemoryRepairRunDetail }>(
+        `/api/memory/repair-runs/${encodeURIComponent(String(id))}`,
+      ),
+    runRepair: (body: {
+      dossierId?: number;
+      maxAgeDays?: number;
+      limit?: number;
+      note?: string;
+    }) =>
       j<{ detail: MemoryRepairRunDetail }>("/api/memory/repair/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1201,12 +1371,17 @@ export const api = {
     listVSAReindexRuns: (params?: { limit?: number; dossierId?: number }) => {
       const qs = new URLSearchParams();
       if (params?.limit != null) qs.set("limit", String(params.limit));
-      if (params?.dossierId != null) qs.set("dossierId", String(params.dossierId));
+      if (params?.dossierId != null)
+        qs.set("dossierId", String(params.dossierId));
       const q = qs.toString();
-      return j<{ runs: VSAReindexRun[] }>(`/api/memory/vsa/reindex-runs${q ? `?${q}` : ""}`);
+      return j<{ runs: VSAReindexRun[] }>(
+        `/api/memory/vsa/reindex-runs${q ? `?${q}` : ""}`,
+      );
     },
     getVSAReindexRun: (id: number) =>
-      j<{ detail: VSAReindexRunDetail }>(`/api/memory/vsa/reindex-runs/${encodeURIComponent(String(id))}`),
+      j<{ detail: VSAReindexRunDetail }>(
+        `/api/memory/vsa/reindex-runs/${encodeURIComponent(String(id))}`,
+      ),
     runVSAReindex: (body: {
       dossierId?: number;
       mode?: string;
@@ -1223,10 +1398,15 @@ export const api = {
         body: JSON.stringify(body),
       }),
     dossierVSASummary: (dossierId: number) =>
-      j<{ summary: DossierVSASummary }>(`/api/memory/dossiers/${encodeURIComponent(String(dossierId))}/vsa-summary`),
+      j<{ summary: DossierVSASummary }>(
+        `/api/memory/dossiers/${encodeURIComponent(String(dossierId))}/vsa-summary`,
+      ),
   },
   dossiers: {
-    list: (limit = 120) => j<{ dossiers: Dossier[] }>(`/api/dossiers?limit=${encodeURIComponent(String(limit))}`),
+    list: (limit = 120) =>
+      j<{ dossiers: Dossier[] }>(
+        `/api/dossiers?limit=${encodeURIComponent(String(limit))}`,
+      ),
     create: (body: Record<string, unknown>) =>
       j<{ dossier: Dossier }>("/api/dossiers", {
         method: "POST",
@@ -1258,22 +1438,30 @@ export const api = {
       const qs = new URLSearchParams();
       qs.set("limit", String(limit));
       if (dossierId != null) qs.set("dossierId", String(dossierId));
-      return j<{ evaluations: EvaluationRecord[] }>(`/api/evaluations?${qs.toString()}`);
+      return j<{ evaluations: EvaluationRecord[] }>(
+        `/api/evaluations?${qs.toString()}`,
+      );
     },
     metrics: (dossierId?: number) => {
-      const q = dossierId != null ? `?dossierId=${encodeURIComponent(String(dossierId))}` : "";
+      const q =
+        dossierId != null
+          ? `?dossierId=${encodeURIComponent(String(dossierId))}`
+          : "";
       return j<{ metrics: AdapterMetric[] }>(`/api/evaluations/metrics${q}`);
     },
   },
   lineage: {
-    byJob: (jobId: string) => j<JobLineage>(`/api/lineage/jobs/${encodeURIComponent(jobId)}`),
+    byJob: (jobId: string) =>
+      j<JobLineage>(`/api/lineage/jobs/${encodeURIComponent(jobId)}`),
   },
   imports: {
     list: (limit = 100, dossierId?: number) => {
       const qs = new URLSearchParams();
       qs.set("limit", String(limit));
       if (dossierId != null) qs.set("dossierId", String(dossierId));
-      return j<{ imports: ImportedExecution[] }>(`/api/imports/executions?${qs.toString()}`);
+      return j<{ imports: ImportedExecution[] }>(
+        `/api/imports/executions?${qs.toString()}`,
+      );
     },
     create: (body: Record<string, unknown>) =>
       j<{ importedExecution: ImportedExecution }>("/api/imports/executions", {
@@ -1287,7 +1475,9 @@ export const api = {
       const qs = new URLSearchParams();
       qs.set("limit", String(limit));
       if (dossierId != null) qs.set("dossierId", String(dossierId));
-      return j<{ insights: RoutingInsight[] }>(`/api/insights?${qs.toString()}`);
+      return j<{ insights: RoutingInsight[] }>(
+        `/api/insights?${qs.toString()}`,
+      );
     },
     generate: (dossierId?: number) =>
       j<{ insights: RoutingInsight[] }>("/api/insights/generate", {
@@ -1305,7 +1495,9 @@ export const api = {
       if (params?.enabled != null) qs.set("enabled", String(params.enabled));
       if (params?.limit != null) qs.set("limit", String(params.limit));
       const q = qs.toString();
-      return j<{ strategies: ExecutionStrategy[] }>(`/api/strategies${q ? `?${q}` : ""}`);
+      return j<{ strategies: ExecutionStrategy[] }>(
+        `/api/strategies${q ? `?${q}` : ""}`,
+      );
     },
     save: (body: Record<string, unknown>) =>
       j<{ strategy: ExecutionStrategy }>("/api/strategies", {
@@ -1315,7 +1507,10 @@ export const api = {
       }),
   },
   policy: {
-    listPresets: (limit = 60) => j<{ presets: ApprovalPreset[] }>(`/api/policy/presets?limit=${encodeURIComponent(String(limit))}`),
+    listPresets: (limit = 60) =>
+      j<{ presets: ApprovalPreset[] }>(
+        `/api/policy/presets?limit=${encodeURIComponent(String(limit))}`,
+      ),
     savePreset: (body: Record<string, unknown>) =>
       j<{ preset: ApprovalPreset }>("/api/policy/presets", {
         method: "POST",
@@ -1329,13 +1524,19 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ presetId }),
       }),
-    getDossierProfile: (id: number) => j<{ profile: DossierProfile | null }>(`/api/policy/dossiers/${encodeURIComponent(String(id))}`),
+    getDossierProfile: (id: number) =>
+      j<{ profile: DossierProfile | null }>(
+        `/api/policy/dossiers/${encodeURIComponent(String(id))}`,
+      ),
     saveDossierProfile: (id: number, body: Record<string, unknown>) =>
-      j<{ profile: DossierProfile }>(`/api/policy/dossiers/${encodeURIComponent(String(id))}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
+      j<{ profile: DossierProfile }>(
+        `/api/policy/dossiers/${encodeURIComponent(String(id))}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      ),
     recommend: (body: Record<string, unknown>) =>
       j<{ recommendation: PolicyRecommendation }>("/api/policy/recommend", {
         method: "POST",
@@ -1345,9 +1546,12 @@ export const api = {
     listRecommendations: (params?: { limit?: number; dossierId?: number }) => {
       const qs = new URLSearchParams();
       if (params?.limit != null) qs.set("limit", String(params.limit));
-      if (params?.dossierId != null) qs.set("dossierId", String(params.dossierId));
+      if (params?.dossierId != null)
+        qs.set("dossierId", String(params.dossierId));
       const q = qs.toString();
-      return j<{ recommendations: PolicyRecommendation[] }>(`/api/policy/recommendations${q ? `?${q}` : ""}`);
+      return j<{ recommendations: PolicyRecommendation[] }>(
+        `/api/policy/recommendations${q ? `?${q}` : ""}`,
+      );
     },
   },
   automation: {
@@ -1356,7 +1560,9 @@ export const api = {
       if (params?.enabled != null) qs.set("enabled", String(params.enabled));
       if (params?.limit != null) qs.set("limit", String(params.limit));
       const q = qs.toString();
-      return j<{ rules: AutomationRule[] }>(`/api/automation/rules${q ? `?${q}` : ""}`);
+      return j<{ rules: AutomationRule[] }>(
+        `/api/automation/rules${q ? `?${q}` : ""}`,
+      );
     },
     saveRule: (body: Record<string, unknown>) =>
       j<{ rule: AutomationRule }>("/api/automation/rules", {
@@ -1365,7 +1571,9 @@ export const api = {
         body: JSON.stringify(body),
       }),
     history: (limit = 120) =>
-      j<{ history: AutomationHistory[] }>(`/api/automation/history?limit=${encodeURIComponent(String(limit))}`),
+      j<{ history: AutomationHistory[] }>(
+        `/api/automation/history?limit=${encodeURIComponent(String(limit))}`,
+      ),
     runRule: (body: Record<string, unknown>) =>
       j<{
         result: {
@@ -1389,7 +1597,9 @@ export const api = {
       if (params?.limit != null) qs.set("limit", String(params.limit));
       if (params?.packetId != null) qs.set("packetId", String(params.packetId));
       const q = qs.toString();
-      return j<{ guidance: PacketGuidance[] }>(`/api/packet-guidance${q ? `?${q}` : ""}`);
+      return j<{ guidance: PacketGuidance[] }>(
+        `/api/packet-guidance${q ? `?${q}` : ""}`,
+      );
     },
     analyze: (body: Record<string, unknown>) =>
       j<{ guidance: PacketGuidance }>("/api/packet-guidance/analyze", {
@@ -1400,19 +1610,26 @@ export const api = {
   },
   reconciliation: {
     getByImport: (importId: number) =>
-      j<{ reconciliation: ImportReconciliation }>(`/api/reconciliation/imports/${encodeURIComponent(String(importId))}`),
+      j<{ reconciliation: ImportReconciliation }>(
+        `/api/reconciliation/imports/${encodeURIComponent(String(importId))}`,
+      ),
     saveByImport: (importId: number, body: Record<string, unknown>) =>
-      j<{ reconciliation: ImportReconciliation }>(`/api/reconciliation/imports/${encodeURIComponent(String(importId))}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
+      j<{ reconciliation: ImportReconciliation }>(
+        `/api/reconciliation/imports/${encodeURIComponent(String(importId))}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      ),
     list: (params?: { limit?: number; reviewStatus?: string }) => {
       const qs = new URLSearchParams();
       if (params?.limit != null) qs.set("limit", String(params.limit));
       if (params?.reviewStatus) qs.set("reviewStatus", params.reviewStatus);
       const q = qs.toString();
-      return j<{ reconciliations: ImportReconciliation[] }>(`/api/reconciliation${q ? `?${q}` : ""}`);
+      return j<{ reconciliations: ImportReconciliation[] }>(
+        `/api/reconciliation${q ? `?${q}` : ""}`,
+      );
     },
   },
   reviews: {
@@ -1430,19 +1647,25 @@ export const api = {
         body: JSON.stringify(body),
       }),
     update: (id: number, body: Record<string, unknown>) =>
-      j<{ review: ReviewRecord }>(`/api/reviews/${encodeURIComponent(String(id))}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
+      j<{ review: ReviewRecord }>(
+        `/api/reviews/${encodeURIComponent(String(id))}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      ),
   },
   failurePatterns: {
     list: (params?: { limit?: number; dossierId?: number }) => {
       const qs = new URLSearchParams();
       if (params?.limit != null) qs.set("limit", String(params.limit));
-      if (params?.dossierId != null) qs.set("dossierId", String(params.dossierId));
+      if (params?.dossierId != null)
+        qs.set("dossierId", String(params.dossierId));
       const q = qs.toString();
-      return j<{ patterns: FailurePattern[] }>(`/api/failure-patterns${q ? `?${q}` : ""}`);
+      return j<{ patterns: FailurePattern[] }>(
+        `/api/failure-patterns${q ? `?${q}` : ""}`,
+      );
     },
     analyze: (body: Record<string, unknown>) =>
       j<{ patterns: FailurePattern[] }>("/api/failure-patterns/analyze", {
@@ -1453,11 +1676,14 @@ export const api = {
   },
   commands: {
     execute: (name: string, args?: Record<string, unknown>) =>
-      j<{ ok: boolean; note?: string; jobId?: string }>("/api/commands/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, args: args ?? {} }),
-      }),
+      j<{ ok: boolean; note?: string; jobId?: string }>(
+        "/api/commands/execute",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, args: args ?? {} }),
+        },
+      ),
   },
   gateway: {
     tools: () =>
@@ -1481,7 +1707,8 @@ export const api = {
           allowedInDryRun?: boolean;
         }>;
       }>("/api/gateway/tools"),
-    capabilities: () => j<{ capabilities: ToolCapability[] }>("/api/gateway/capabilities"),
+    capabilities: () =>
+      j<{ capabilities: ToolCapability[] }>("/api/gateway/capabilities"),
     updateCapabilityStatus: (
       id: string,
       body: {
@@ -1509,14 +1736,11 @@ export const api = {
         correlationId?: string;
         traceId?: string;
         auditCategory?: string;
-      }>(
-        `/api/gateway/capabilities/${encodeURIComponent(id)}/status`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-      ),
+      }>(`/api/gateway/capabilities/${encodeURIComponent(id)}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
     invoke: (body: Record<string, unknown>) =>
       j<{ result: Record<string, unknown> }>("/api/gateway/invoke", {
         method: "POST",
@@ -1572,7 +1796,11 @@ export const api = {
   },
   executionPermissions: {
     profiles: () =>
-      j<{ profiles: unknown[]; active: unknown | null; summary: Record<string, unknown> }>("/api/permissions/profiles"),
+      j<{
+        profiles: unknown[];
+        active: unknown | null;
+        summary: Record<string, unknown>;
+      }>("/api/permissions/profiles"),
     saveProfile: (body: Record<string, unknown>) =>
       j<{ profile: unknown }>("/api/permissions/profiles", {
         method: "POST",
@@ -1580,16 +1808,25 @@ export const api = {
         body: JSON.stringify(body),
       }),
     activateProfile: (id: string) =>
-      j<{ profile: unknown }>(`/api/permissions/profiles/${encodeURIComponent(id)}/activate`, {
-        method: "POST",
-      }),
+      j<{ profile: unknown }>(
+        `/api/permissions/profiles/${encodeURIComponent(id)}/activate`,
+        {
+          method: "POST",
+        },
+      ),
     deleteProfile: (id: string) =>
       j<void>(`/api/permissions/profiles/${encodeURIComponent(id)}`, {
         method: "DELETE",
       }),
   },
   audit: {
-    list: (params?: { limit?: number; category?: string; correlationId?: string; jobId?: string; outcome?: string }) => {
+    list: (params?: {
+      limit?: number;
+      category?: string;
+      correlationId?: string;
+      jobId?: string;
+      outcome?: string;
+    }) => {
       const qs = new URLSearchParams();
       if (params?.limit != null) qs.set("limit", String(params.limit));
       if (params?.category) qs.set("category", params.category);
@@ -1600,9 +1837,11 @@ export const api = {
       return j<{ records: unknown[] }>(`/api/audit${q ? `?${q}` : ""}`);
     },
     trace: (correlationId: string) =>
-      j<{ correlationId: string; records: unknown[]; report?: Record<string, unknown> }>(
-        `/api/audit/trace/${encodeURIComponent(correlationId)}`,
-      ),
+      j<{
+        correlationId: string;
+        records: unknown[];
+        report?: Record<string, unknown>;
+      }>(`/api/audit/trace/${encodeURIComponent(correlationId)}`),
     lookup: (params: { correlationId?: string; traceId?: string }) => {
       const qs = new URLSearchParams();
       if (params.correlationId) qs.set("correlationId", params.correlationId);
@@ -1616,7 +1855,9 @@ export const api = {
     if (params.correlationId) qs.set("correlationId", params.correlationId);
     if (params.traceId) qs.set("traceId", params.traceId);
     const q = qs.toString();
-    return j<ProcessHealthTraceResponse>(`/api/process/health${q ? `?${q}` : ""}`);
+    return j<ProcessHealthTraceResponse>(
+      `/api/process/health${q ? `?${q}` : ""}`,
+    );
   },
   contextInspector: {
     listSnapshots: (params?: {
@@ -1635,9 +1876,14 @@ export const api = {
       if (params?.snapshotKind) qs.set("snapshotKind", params.snapshotKind);
       if (params?.query) qs.set("query", params.query);
       const q = qs.toString();
-      return j<{ snapshots: ContextSnapshotInspectorSummary[] }>(`/api/context-inspector/snapshots${q ? `?${q}` : ""}`);
+      return j<{ snapshots: ContextSnapshotInspectorSummary[] }>(
+        `/api/context-inspector/snapshots${q ? `?${q}` : ""}`,
+      );
     },
-    getSnapshot: (id: string, params?: { workspaceId?: string; laneId?: string }) => {
+    getSnapshot: (
+      id: string,
+      params?: { workspaceId?: string; laneId?: string },
+    ) => {
       const qs = new URLSearchParams();
       if (params?.workspaceId) qs.set("workspaceId", params.workspaceId);
       if (params?.laneId) qs.set("laneId", params.laneId);
@@ -1646,16 +1892,26 @@ export const api = {
         `/api/context-inspector/snapshots/${encodeURIComponent(id)}${q ? `?${q}` : ""}`,
       );
     },
-    restoreRecent: (params: { workspaceId: string; laneId?: string; limit?: number; snapshotKind?: string }) => {
+    restoreRecent: (params: {
+      workspaceId: string;
+      laneId?: string;
+      limit?: number;
+      snapshotKind?: string;
+    }) => {
       const qs = new URLSearchParams();
       qs.set("workspaceId", params.workspaceId);
       if (params.laneId) qs.set("laneId", params.laneId);
       if (params.limit != null) qs.set("limit", String(params.limit));
       if (params.snapshotKind) qs.set("snapshotKind", params.snapshotKind);
       const q = qs.toString();
-      return j<{ snapshots: ContextSnapshotInspectorSummary[] }>(`/api/context/restore/recent?${q}`);
+      return j<{ snapshots: ContextSnapshotInspectorSummary[] }>(
+        `/api/context/restore/recent?${q}`,
+      );
     },
-    restoreGet: (id: string, params: { workspaceId: string; laneId?: string }) => {
+    restoreGet: (
+      id: string,
+      params: { workspaceId: string; laneId?: string },
+    ) => {
       const qs = new URLSearchParams();
       qs.set("workspaceId", params.workspaceId);
       if (params.laneId) qs.set("laneId", params.laneId);
@@ -1666,63 +1922,108 @@ export const api = {
         canonicalWriteCommitted: boolean;
       }>(`/api/context/restore/${encodeURIComponent(id)}?${qs.toString()}`);
     },
-    restoreCandidates: (id: string, params: { workspaceId: string; laneId?: string }) => {
+    restoreCandidates: (
+      id: string,
+      params: { workspaceId: string; laneId?: string },
+    ) => {
       const qs = new URLSearchParams();
       qs.set("workspaceId", params.workspaceId);
       if (params.laneId) qs.set("laneId", params.laneId);
-      return j<RestoreInspectorCandidatesResponse>(`/api/context/restore/${encodeURIComponent(id)}/candidates?${qs.toString()}`);
+      return j<RestoreInspectorCandidatesResponse>(
+        `/api/context/restore/${encodeURIComponent(id)}/candidates?${qs.toString()}`,
+      );
     },
-    restoreScore: (id: string, params: { workspaceId: string; laneId?: string }) => {
+    restoreScore: (
+      id: string,
+      params: { workspaceId: string; laneId?: string },
+    ) => {
       const qs = new URLSearchParams();
       qs.set("workspaceId", params.workspaceId);
       if (params.laneId) qs.set("laneId", params.laneId);
-      return j<RestoreInspectorScoreResponse>(`/api/context/restore/${encodeURIComponent(id)}/score?${qs.toString()}`);
+      return j<RestoreInspectorScoreResponse>(
+        `/api/context/restore/${encodeURIComponent(id)}/score?${qs.toString()}`,
+      );
     },
-    restoreResumeHints: (id: string, params: { workspaceId: string; laneId?: string }) => {
+    restoreResumeHints: (
+      id: string,
+      params: { workspaceId: string; laneId?: string },
+    ) => {
       const qs = new URLSearchParams();
       qs.set("workspaceId", params.workspaceId);
       if (params.laneId) qs.set("laneId", params.laneId);
-      return j<RestoreInspectorResumeHintsResponse>(`/api/context/restore/${encodeURIComponent(id)}/resume-hints?${qs.toString()}`);
+      return j<RestoreInspectorResumeHintsResponse>(
+        `/api/context/restore/${encodeURIComponent(id)}/resume-hints?${qs.toString()}`,
+      );
     },
   },
   dreamReports: {
-    list: (params: { workspaceId: string; laneId?: string; mode?: string; limit?: number }) => {
+    list: (params: {
+      workspaceId: string;
+      laneId?: string;
+      mode?: string;
+      limit?: number;
+    }) => {
       const qs = new URLSearchParams();
       qs.set("workspaceId", params.workspaceId);
       if (params.laneId) qs.set("laneId", params.laneId);
       if (params.mode) qs.set("mode", params.mode);
       if (params.limit != null) qs.set("limit", String(params.limit));
-      return j<{ reports: DreamReportSummary[] }>(`/api/dream/reports?${qs.toString()}`);
+      return j<{ reports: DreamReportSummary[] }>(
+        `/api/dream/reports?${qs.toString()}`,
+      );
     },
     get: (id: string, params: { workspaceId: string; laneId?: string }) => {
       const qs = new URLSearchParams();
       qs.set("workspaceId", params.workspaceId);
       if (params.laneId) qs.set("laneId", params.laneId);
-      return j<DreamReportDetail>(`/api/dream/reports/${encodeURIComponent(id)}?${qs.toString()}`);
+      return j<DreamReportDetail>(
+        `/api/dream/reports/${encodeURIComponent(id)}?${qs.toString()}`,
+      );
     },
-    candidates: (id: string, params: { workspaceId: string; laneId?: string }) => {
+    candidates: (
+      id: string,
+      params: { workspaceId: string; laneId?: string },
+    ) => {
       const qs = new URLSearchParams();
       qs.set("workspaceId", params.workspaceId);
       if (params.laneId) qs.set("laneId", params.laneId);
-      return j<DreamReportCandidatesResponse>(`/api/dream/reports/${encodeURIComponent(id)}/candidates?${qs.toString()}`);
+      return j<DreamReportCandidatesResponse>(
+        `/api/dream/reports/${encodeURIComponent(id)}/candidates?${qs.toString()}`,
+      );
     },
-    proposals: (id: string, params: { workspaceId: string; laneId?: string }) => {
+    proposals: (
+      id: string,
+      params: { workspaceId: string; laneId?: string },
+    ) => {
       const qs = new URLSearchParams();
       qs.set("workspaceId", params.workspaceId);
       if (params.laneId) qs.set("laneId", params.laneId);
-      return j<DreamReportProposalsResponse>(`/api/dream/reports/${encodeURIComponent(id)}/proposals?${qs.toString()}`);
+      return j<DreamReportProposalsResponse>(
+        `/api/dream/reports/${encodeURIComponent(id)}/proposals?${qs.toString()}`,
+      );
     },
-    warnings: (id: string, params: { workspaceId: string; laneId?: string }) => {
+    warnings: (
+      id: string,
+      params: { workspaceId: string; laneId?: string },
+    ) => {
       const qs = new URLSearchParams();
       qs.set("workspaceId", params.workspaceId);
       if (params.laneId) qs.set("laneId", params.laneId);
-      return j<DreamReportWarningsResponse>(`/api/dream/reports/${encodeURIComponent(id)}/warnings?${qs.toString()}`);
+      return j<DreamReportWarningsResponse>(
+        `/api/dream/reports/${encodeURIComponent(id)}/warnings?${qs.toString()}`,
+      );
     },
   },
   backup: {
     bundles: (limit?: number) => {
-      const q = limit != null ? `?limit=${encodeURIComponent(String(limit))}` : "";
-      return j<{ bundles: unknown[]; backupDir: string; exportDir: string; knownKinds: string[] }>(`/api/backup/bundles${q}`);
+      const q =
+        limit != null ? `?limit=${encodeURIComponent(String(limit))}` : "";
+      return j<{
+        bundles: unknown[];
+        backupDir: string;
+        exportDir: string;
+        knownKinds: string[];
+      }>(`/api/backup/bundles${q}`);
     },
     createBundle: (body: Record<string, unknown>) =>
       j<{ bundle: unknown }>("/api/backup/bundles", {
@@ -1744,22 +2045,32 @@ export const api = {
   chat: {
     threads: {
       list: (limit = 80) =>
-        j<{ threads: ChatThreadSummary[] }>(`/api/chat/threads?limit=${encodeURIComponent(String(limit))}`),
+        j<{ threads: ChatThreadSummary[] }>(
+          `/api/chat/threads?limit=${encodeURIComponent(String(limit))}`,
+        ),
       create: (body: { title?: string; dossierId?: number }) =>
         j<{ thread: ChatThreadSummary }>("/api/chat/threads", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         }),
-      get: (id: number) => j<ChatThreadDetail>(`/api/chat/threads/${encodeURIComponent(String(id))}`),
+      get: (id: number) =>
+        j<ChatThreadDetail>(
+          `/api/chat/threads/${encodeURIComponent(String(id))}`,
+        ),
       update: (id: number, body: { title: string }) =>
-        j<{ thread: ChatThreadSummary }>(`/api/chat/threads/${encodeURIComponent(String(id))}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
+        j<{ thread: ChatThreadSummary }>(
+          `/api/chat/threads/${encodeURIComponent(String(id))}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          },
+        ),
       delete: (id: number) =>
-        j<void>(`/api/chat/threads/${encodeURIComponent(String(id))}`, { method: "DELETE" }),
+        j<void>(`/api/chat/threads/${encodeURIComponent(String(id))}`, {
+          method: "DELETE",
+        }),
       postMessage: (
         id: number,
         body: {
@@ -1792,10 +2103,13 @@ export const api = {
         const fd = new FormData();
         fd.append("file", file);
         if (title && title.trim()) fd.append("title", title.trim());
-        const res = await fetch(`${base()}/api/chat/threads/${encodeURIComponent(String(id))}/attachments`, {
-          method: "POST",
-          body: fd,
-        });
+        const res = await fetch(
+          `${base()}/api/chat/threads/${encodeURIComponent(String(id))}/attachments`,
+          {
+            method: "POST",
+            body: fd,
+          },
+        );
         if (!res.ok) {
           const t = await res.text().catch(() => "");
           throw new Error(t || `${res.status} ${res.statusText}`);
@@ -1810,36 +2124,60 @@ export const api = {
       assistantStreamUrl: (threadId: number, userMessageId: number) =>
         `${base()}/api/chat/threads/${encodeURIComponent(String(threadId))}/assistant-stream?userMessageId=${encodeURIComponent(String(userMessageId))}`,
       queueJob: (id: number, body: Record<string, unknown>) =>
-        j<{ job: JobRecord }>(`/api/chat/threads/${encodeURIComponent(String(id))}/jobs`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
+        j<{ job: JobRecord }>(
+          `/api/chat/threads/${encodeURIComponent(String(id))}/jobs`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          },
+        ),
     },
   },
   canvas: {
     boards: {
       list: (limit = 60) =>
-        j<{ boards: CanvasBoard[] }>(`/api/canvas/boards?limit=${encodeURIComponent(String(limit))}`),
+        j<{ boards: CanvasBoard[] }>(
+          `/api/canvas/boards?limit=${encodeURIComponent(String(limit))}`,
+        ),
       create: (body: { title?: string; dossierId?: number }) =>
         j<{ board: CanvasBoard }>("/api/canvas/boards", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         }),
-      get: (id: number) => j<CanvasBoardDetail>(`/api/canvas/boards/${encodeURIComponent(String(id))}`),
+      get: (id: number) =>
+        j<CanvasBoardDetail>(
+          `/api/canvas/boards/${encodeURIComponent(String(id))}`,
+        ),
       delete: (id: number) =>
-        j<void>(`/api/canvas/boards/${encodeURIComponent(String(id))}`, { method: "DELETE" }),
+        j<void>(`/api/canvas/boards/${encodeURIComponent(String(id))}`, {
+          method: "DELETE",
+        }),
       createNote: (
         boardId: number,
-        body: { title?: string; body?: string; x?: number; y?: number; width?: number; height?: number },
+        body: {
+          title?: string;
+          body?: string;
+          x?: number;
+          y?: number;
+          width?: number;
+          height?: number;
+        },
       ) =>
-        j<{ note: CanvasNote }>(`/api/canvas/boards/${encodeURIComponent(String(boardId))}/notes`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-      patchNote: (boardId: number, noteId: number, body: Record<string, unknown>) =>
+        j<{ note: CanvasNote }>(
+          `/api/canvas/boards/${encodeURIComponent(String(boardId))}/notes`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          },
+        ),
+      patchNote: (
+        boardId: number,
+        noteId: number,
+        body: Record<string, unknown>,
+      ) =>
         j<{ note: CanvasNote }>(
           `/api/canvas/boards/${encodeURIComponent(String(boardId))}/notes/${encodeURIComponent(String(noteId))}`,
           {
@@ -1861,9 +2199,12 @@ export const api = {
       if (params?.limit != null) qs.set("limit", String(params.limit));
       if (params?.jobId) qs.set("jobId", params.jobId);
       const q = qs.toString();
-      return j<{ artifacts: ForgeArtifact[] }>(`/api/artifacts${q ? `?${q}` : ""}`);
+      return j<{ artifacts: ForgeArtifact[] }>(
+        `/api/artifacts${q ? `?${q}` : ""}`,
+      );
     },
-    get: (id: number) => j<ForgeArtifact>(`/api/artifacts/${encodeURIComponent(String(id))}`),
+    get: (id: number) =>
+      j<ForgeArtifact>(`/api/artifacts/${encodeURIComponent(String(id))}`),
     content: (id: number) =>
       j<{
         artifact: ForgeArtifact;
@@ -1873,9 +2214,11 @@ export const api = {
       }>(`/api/artifacts/${encodeURIComponent(String(id))}/content`),
   },
   release: {
-    readiness: () => j<{ checklist: Record<string, unknown> }>("/api/release/readiness"),
+    readiness: () =>
+      j<{ checklist: Record<string, unknown> }>("/api/release/readiness"),
     artifacts: (limit?: number) => {
-      const q = limit != null ? `?limit=${encodeURIComponent(String(limit))}` : "";
+      const q =
+        limit != null ? `?limit=${encodeURIComponent(String(limit))}` : "";
       return j<{ artifacts: unknown[] }>(`/api/release/artifacts${q}`);
     },
     recordArtifact: (body: Record<string, unknown>) =>
@@ -1884,6 +2227,7 @@ export const api = {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }),
-    firstRun: () => j<{ firstRun: Record<string, unknown> }>("/api/release/first-run"),
+    firstRun: () =>
+      j<{ firstRun: Record<string, unknown> }>("/api/release/first-run"),
   },
 };

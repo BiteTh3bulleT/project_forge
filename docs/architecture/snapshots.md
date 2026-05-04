@@ -1,50 +1,125 @@
 # Context-Shape Snapshots
 
-Status: Phase 0 architecture baseline.
+Status: Phase 6 implemented in the FORGE-K simulator only.
 
-Snapshots preserve shape, not truth. A snapshot records restorable semantic structure, source references, hashes, operation records, and summaries. It may seed restoration, replay, context compilation, review, or cache eligibility, but it does not become canonical truth by existing.
+Snapshots preserve semantic shape, not canonical truth. A snapshot records restorable structure through source references, hashes, operation records, summaries, and provenance links. It may seed future restoration or review, but it does not admit evidence, create canonical truth, compile context, execute restoration, or authorize runtime behavior.
 
-Snapshots cite source objects. Snapshots may be superseded. Snapshots should store references, hashes, operation records, and summaries rather than duplicating large canonical content.
+ADR 0005 defines the authority boundary: the Phase 6 implementation lives under `services/core/internal/forgek` and is not wired into the live daemon. Live AI-OS snapshot/restore behavior remains separate.
+
+## Implemented Scope
+
+Phase 6 adds an in-memory simulator package:
+
+- `services/core/internal/forgek/snapshots`: snapshot models, lifecycle status, service, diff, restore seed, validation, and deterministic hashing.
+- `services/core/internal/forgek/snapshot_syscalls.go`: simulator syscalls for snapshot create/read/list/seal/supersede/expire/diff/restore-seed creation.
+- `services/core/internal/forgek/snapshot_syscalls_test.go` and `services/core/internal/forgek/snapshots/*_test.go`: shape-not-truth, provenance, capability, journal, diff, restore-seed, and by-reference integration tests.
+
+No API routes, gateway paths, model runtime paths, live memory mutation paths, server wiring, Context Compiler, token hashing, or KV cache implementation are part of Phase 6.
 
 ## Snapshot Types
 
-### SemanticSnapshot
+The model supports these snapshot types:
 
-Records semantic object shape for a set of claims, evidence, decisions, links, and lifecycle states. It cites the source object ids and operation that produced the shape.
+- `SEMANTIC_SNAPSHOT`
+- `CASE_SNAPSHOT`
+- `CONTEXT_RESTORE_SNAPSHOT`
+- `PALACE_ROUTE_SNAPSHOT`
+- `WORKSPACE_SNAPSHOT`
+- `DECISION_SNAPSHOT`
+- `KV_SHAPE_SNAPSHOT`
+- `RUNTIME_SNAPSHOT`
 
-### CaseSnapshot
+Phase 6 implements shared model behavior for all types and focused tests for semantic, case, context-restore, palace-route, and KV-shape snapshots.
 
-Records the shape of a case: claims, exhibits, validations, admission decisions, rulings, and unresolved questions.
+## Snapshot Model
 
-### ContextRestoreSnapshot
+A snapshot stores identifiers and references, not full canonical content. Important fields include:
 
-Records a prior context compilation or restore selection shape. It may include selected ContextBlocks, restore scores, resume hints, and source references.
+- `snapshot_id`, `snapshot_type`, `workspace_id`, optional `case_id`
+- `status`
+- source, palace route, submitted, admitted, rejected, semantic operation, contradiction, supersession, derived, context block, token hash, and KV manifest refs
+- `summary`
+- `shape_hash` and `source_hash`
+- creator and lifecycle timestamps
+- supersession links
+- journal refs
+- metadata
 
-### PalaceRouteSnapshot
+The model rejects missing workspaces, invalid snapshot types, duplicate refs in normalized output, large raw content metadata keys, and empty reference sets except for explicitly allowed workspace snapshots.
 
-Records Memory Palace route shape: rooms, anchors, route ids, candidate ids, ranking metadata, and retrieval reasons.
+## Lifecycle
 
-### WorkspaceSnapshot
+Snapshot statuses are:
 
-Records scoped workspace shape: active goals, constraints, major artifacts, current open loops, and key references. It must cite canonical objects instead of copying them wholesale.
+- `DRAFT`
+- `SEALED`
+- `SUPERSEDED`
+- `EXPIRED`
+- `RESTORE_SEED_CREATED`
 
-### DecisionSnapshot
+New snapshots may be created as `DRAFT` or `SEALED`. Sealed snapshots are immutable through public service APIs. Superseded and expired snapshots remain inspectable. Restore-seed creation records a proposal artifact for future context restoration and does not mutate canonical truth.
 
-Records the shape of a decision and its evidence chain. It is useful for review and replay but does not replace the canonical Decision or Journal records.
+Canonical simulator lifecycle changes happen through snapshot syscalls. The service owns deterministic in-memory storage, but mutating canonical operations are exposed through Kernel dispatch.
 
-### KVShapeSnapshot
+## Syscalls
 
-Records deterministic token-shape data used for cache eligibility. It may cite ContextBlocks, token hashes, prompt layout version, and KVCacheManifest ids. It is never memory.
+Phase 6 registers these simulator syscalls:
 
-### RuntimeSnapshot
+- `snapshot.create`
+- `snapshot.get`
+- `snapshot.list`
+- `snapshot.seal`
+- `snapshot.supersede`
+- `snapshot.expire`
+- `snapshot.diff`
+- `snapshot.restore_seed`
 
-Records runtime-driver configuration shape, such as model id, model revision, tokenizer revision, chat template, backend assumptions, and policy schema version. It may support replay or cache validation but does not authorize runtime behavior.
+Mutating syscalls require matching snapshot capabilities and workspace scope. Read-only syscalls return snapshots or diffs without mutation capability. Mutating syscalls journal lifecycle events:
 
-## Snapshot Rules
+- `SNAPSHOT_CREATED`
+- `SNAPSHOT_SEALED`
+- `SNAPSHOT_SUPERSEDED`
+- `SNAPSHOT_EXPIRED`
+- `SNAPSHOT_RESTORE_SEED_CREATED`
 
-- A snapshot is admissible evidence only after Courthouse admission.
-- A snapshot cannot override canonical state.
-- A snapshot cannot hide supersession, contradiction, or rejection history.
-- A snapshot cannot promote raw conversation into memory.
-- A snapshot may seed restoration only when its source references and hashes remain valid.
-- A snapshot may be compacted by Lymphatic Lane work, with compaction records preserved.
+`snapshot.diff` is read-only in Phase 6 and does not mutate or journal.
+
+## SnapshotDiff
+
+`SnapshotDiff` compares two snapshots by shape, reference sets, selected fields, status, and metadata. It returns deterministic added, removed, and unchanged refs plus changed field names. Diff creation does not mutate either snapshot.
+
+## RestoreSeed
+
+`RestoreSeed` cites the source snapshot id and source shape hash. It carries recommended source refs, operation refs, case refs, summary, and metadata.
+
+A restore seed is not canonical truth, not a `ContextBlock`, and not compiled context. It is a future input proposal for Phase 7 Context Compiler work and does not execute restoration.
+
+## Hash Rules
+
+`shape_hash` is deterministic for stable semantic shape:
+
+- reference lists are normalized, deduplicated, and sorted
+- unstable fields such as snapshot id and timestamps are excluded
+- shape-affecting refs, summary, source hash, and metadata are included
+- `created_at` changes do not alter `shape_hash`
+- semantic shape changes alter `shape_hash`
+
+Token hashing and KV cache identity validation are intentionally deferred to later phases.
+
+## Reference Integrations
+
+Snapshots integrate with FORGE-K systems by reference only:
+
+- Courthouse: snapshots can cite case ids, submitted exhibit refs, admitted exhibit refs, rejected exhibit refs, rulings, contradictions, and supersessions. Snapshot creation does not admit or reject evidence.
+- Memory Palace: snapshots can cite route, room, anchor, and candidate refs. Candidate objects remain candidates until Courthouse admission.
+- Semantic Algebra: snapshots can cite semantic object refs, operation refs, and derived object refs. Derived objects keep their existing authority and provenance.
+
+Snapshots do not execute syscall requests produced by semantic transforms, do not promote proposals to truth, and do not change CasePacket, Courthouse, Palace, or Semantic Algebra state.
+
+## Current Limitations
+
+- Storage is in-memory and simulator-only.
+- No live daemon integration exists.
+- No live AI-OS snapshot/restore behavior was modified.
+- No Context Compiler, ContextBlock, token hashing, deterministic KV cache, or runtime driver integration is implemented.
+- Snapshot metadata is intentionally small and should not carry large canonical content blobs.
