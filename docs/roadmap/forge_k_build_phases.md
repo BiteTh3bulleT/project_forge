@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 9 runtime driver boundary simulator implementation baseline.
+Status: Phase 10 Lymphatic Lane simulator implementation baseline.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -157,13 +157,15 @@ Implementation status: implemented and tested in `services/core/internal/forgek/
 
 Scope: `SIMULATOR_ONLY`.
 
-Goal: implement deferred maintenance for cleanup, contradictions, stale loops, cache eviction, and compaction.
+Goal: implement deferred simulator maintenance for cleanup review, contradictions, stale loops, cache hygiene, snapshot hygiene, runtime result hygiene, and compaction proposals.
 
-Deliverables: Lymphatic scheduler, maintenance envelopes, sweep reports, syscall-backed cleanup proposals.
+Deliverables: Lymphatic scheduler, Lymphatic Sweep contracts, Maintenance Reports, Cleanup Proposals, policy envelopes, hygiene findings, and syscall-backed cleanup proposal paths.
 
-Validation criteria: maintenance work is deferable; cleanup mutations use semantic syscalls; audit evidence exists.
+Validation criteria: maintenance work is deferable and deterministic; reports/proposals are evidence only; cleanup mutations require semantic syscalls; audit/provenance evidence exists; no source object is silently mutated.
 
-What not to do: run full maintenance on every turn or delete provenance.
+What not to do: run full maintenance on every turn, delete provenance, mutate canonical truth directly, wire into live daemon cleanup, change live dream/autonomy behavior, add routes, change gateway/modelruntime behavior, or modify live AI-OS controllane behavior.
+
+Implementation status: implemented and tested in `services/core/internal/forgek/lymphatic`, `services/core/internal/forgek/lymphatic_syscalls.go`, and related tests. Scope is simulator-only; maintenance reports and cleanup proposals are proposal/evidence surfaces only, and the implementation is not wired into the live daemon.
 
 ## Phase 11 - Rust Kernel Core
 

@@ -1,6 +1,6 @@
 # FORGE-K Architecture Overview
 
-Status: Phase 9 runtime driver boundary implemented; Phase 1-9 simulator implementation baseline.
+Status: Phase 10 Lymphatic Lane implemented/tested in the simulator only; Phase 1-10 simulator implementation baseline.
 
 FORGE-K is a deterministic cognitive microkernel for governed semantic work. It owns canonical truth through semantic syscalls, deterministic validation, journaled commits, and replayable evidence. Model runtimes are drivers attached to the operating system; they may propose interpretations, actions, or text, but they do not own truth authority.
 
@@ -30,6 +30,12 @@ Models are runtime drivers. A model may classify, summarize, draft, rank, or pro
 Phase 9 implements the Runtime Driver Boundary as `SIMULATOR_ONLY / DRIVER_BOUNDARY_ONLY`. The boundary covers `RuntimeDriver`, driver and capability manifests, generate request/result envelopes, registry/service behavior, syscalls, capability gates, journaled events, and deterministic mock-driver testing. Runtime drivers may receive ContextBundle refs, canonical prompt text, and KV metadata refs, but their output is proposal evidence only.
 
 Phase 9 does not wire FORGE-K into the live daemon, replace live `modelruntime`, call real model backends, change public APIs or gateway behavior, or perform live KV reuse. Real backend integration requires a later explicit `LIVE_INTEGRATION` phase.
+
+## Lymphatic Lane
+
+Phase 10 implements the Lymphatic Lane as `SIMULATOR_ONLY`. The simulator surface lives under `services/core/internal/forgek/lymphatic` plus `services/core/internal/forgek/lymphatic_syscalls.go` and associated tests.
+
+The Lymphatic Lane is the maintenance lane for deterministic hygiene: Lymphatic Sweeps, Maintenance Reports, Cleanup Proposals, Cache Hygiene, Snapshot Hygiene, Runtime Result Hygiene, and Contradiction Sweeps. Reports and proposals are evidence only. The lane must not silently mutate canonical truth, delete provenance, change live dream/autonomy cleanup behavior, add routes, change gateway/modelruntime behavior, or wire itself into the live daemon.
 
 ## Three-Domain Control Model
 
@@ -64,7 +70,7 @@ FORGE-K uses three operating lanes.
 
 - Neural Lane: proposal generation, interpretation, classification, and model-driver outputs.
 - Arterial Lane: semantic syscalls, validations, admissions, commits, journal writes, and response shaping.
-- Lymphatic Lane: cleanup, contradiction sweeps, stale-loop detection, cache eviction, snapshot compaction, and maintenance reports.
+- Lymphatic Lane: deferred cleanup review, contradiction sweeps, stale-loop detection, cache hygiene, snapshot hygiene, runtime result hygiene, maintenance reports, and cleanup proposals. In Phase 10, these are simulator-only responsibilities and not live daemon behavior.
 
 The hot path stays small. The full architecture does not run on every turn.
 

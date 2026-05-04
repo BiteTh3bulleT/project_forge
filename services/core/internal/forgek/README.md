@@ -23,13 +23,16 @@ go test ./internal/forgek/...
 - Phase 7 Context Compiler: `contextcompiler`, `context_syscalls.go`
 - Phase 8 Deterministic KV System: `kv`, `kv_syscalls.go`
 - Phase 9 Runtime Driver Boundary: `runtime`, `runtime_syscalls.go`
+- Phase 10 Lymphatic Lane: `lymphatic`, `lymphatic_syscalls.go`
 
 ## Authority Boundary
 
-FORGE-K owns truth in the simulator model. In the current repository, FORGE-K is not live daemon authority. The simulator tests prove the target authority contracts for phases 1-9, while live daemon authority remains outside this package until a future scoped integration phase.
+FORGE-K owns truth in the simulator model. In the current repository, FORGE-K is not live daemon authority. The simulator tests prove the target authority contracts for phases 1-10, while live daemon authority remains outside this package until a future scoped integration phase.
 
 Phase 7 compiles ContextBlocks and ContextBundles as deterministic shape only. It does not call models, use KV cache, execute restore seeds, alter live AI-OS `COMPILE_CONTEXT`, or route live daemon state through FORGE-K.
 
 Phase 8 registers deterministic KV manifests and validates identity gates as acceleration metadata only. It does not store real KV tensors, call model runtimes, perform live backend cache reuse, mutate ContextBundles or Snapshots, alter live AI-OS `COMPILE_CONTEXT`, or route live daemon state through FORGE-K.
 
 Phase 9 is implemented as `SIMULATOR_ONLY / DRIVER_BOUNDARY_ONLY`. Runtime drivers are governed driver surfaces that may return proposal output with manifests, capability metadata, context refs, and KV metadata refs. The active implementation is a deterministic mock driver only. It must not call real model backends, mutate Kernel objects except through runtime syscalls, admit evidence, write snapshots or ContextBundles, register KV manifests, perform live KV reuse, alter live `modelruntime`, change gateway behavior, add routes, or route live daemon state through FORGE-K.
+
+Phase 10 is implemented as `SIMULATOR_ONLY`. The Lymphatic Lane produces deterministic Maintenance Reports and Cleanup Proposals only. It must not silently mutate source objects, delete provenance, wire into live daemon cleanup, change live dream/autonomy behavior, alter live `modelruntime`, change gateway behavior, add routes, or route live daemon state through FORGE-K.

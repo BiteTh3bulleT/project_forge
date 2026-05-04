@@ -46,6 +46,7 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 - [x] **M** Update `docs/roadmap/forge_k_build_phases.md` with the Phase 6 scope decision.
 - [x] **M** Add `services/core/internal/forgek/README.md`.
 - [x] **M** Document Phase 9 Runtime Driver Boundary as `SIMULATOR_ONLY / DRIVER_BOUNDARY_ONLY`.
+- [x] **M** Document Phase 10 Lymphatic Lane as `SIMULATOR_ONLY`, maintenance reports/proposals only, with no live daemon, dream/autonomy, cleanup, route, gateway, modelruntime, or controllane wiring.
 - [ ] **M** Add comments or docs that `internal/api/phase*.go` names refer to legacy FORGE feature phases, not FORGE-K phases.
 - [ ] **L** Document Windows smoke limitations or add a PowerShell smoke path.
 
@@ -71,7 +72,7 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 - [x] FORGE-K Phase 7 Context Compiler. Scope is recorded as `SIMULATOR_ONLY`.
 - [x] FORGE-K Phase 8 Deterministic KV System. Scope is recorded as `SIMULATOR_ONLY`.
 - [x] FORGE-K Phase 9 Runtime Driver Integration implementation. Boundary scope is recorded as `SIMULATOR_ONLY / DRIVER_BOUNDARY_ONLY`.
-- [ ] FORGE-K Phase 10 Lymphatic Lane.
+- [x] FORGE-K Phase 10 Lymphatic Lane simulator implementation. Scope is recorded as `SIMULATOR_ONLY`.
 - [ ] FORGE-K Phase 11 Rust Kernel Core.
 - [ ] FORGE-K Phase 12 FORGE Daemon.
 - [ ] FORGE-1 phases 13-14.
@@ -93,3 +94,5 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 - [x] Phase 8 Deterministic KV simulator tests pass under `go test ./internal/forgek/...`.
 - [x] Phase 9 Runtime Driver Boundary scope is recorded before implementation.
 - [x] Phase 9 Runtime Driver Boundary simulator tests pass under `go test ./internal/forgek/...`.
+- [x] Phase 10 Lymphatic Lane scope is recorded as `SIMULATOR_ONLY`.
+- [x] Phase 10 Lymphatic Lane simulator tests pass under `go test ./internal/forgek/...`.

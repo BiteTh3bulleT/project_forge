@@ -27,6 +27,8 @@ const (
 	ObjectTypeKVCacheManifest   = "KVCacheManifest"
 	ObjectTypeRuntimeDriver     = "RuntimeDriverManifest"
 	ObjectTypeRuntimeResult     = "RuntimeGenerateResult"
+	ObjectTypeMaintenanceReport = "MaintenanceReport"
+	ObjectTypeCleanupProposal   = "CleanupProposal"
 )
 
 const (
@@ -133,6 +135,13 @@ const (
 	SyscallRuntimeGenerate               = "runtime.generate"
 	SyscallRuntimeHealth                 = "runtime.health"
 	SyscallRuntimeRead                   = "runtime.read"
+	SyscallLymphRunSweep                 = "lymph.run_sweep"
+	SyscallLymphGetReport                = "lymph.get_report"
+	SyscallLymphListReports              = "lymph.list_reports"
+	SyscallLymphGetProposal              = "lymph.get_proposal"
+	SyscallLymphListProposals            = "lymph.list_proposals"
+	SyscallLymphCreateProposal           = "lymph.create_proposal"
+	SyscallLymphRead                     = "lymph.read"
 )
 
 const (
@@ -184,6 +193,8 @@ const (
 	JournalEventRuntimeGenerationRequested     = "RUNTIME_GENERATION_REQUESTED"
 	JournalEventRuntimeGenerationCompleted     = "RUNTIME_GENERATION_COMPLETED"
 	JournalEventRuntimeGenerationFailed        = "RUNTIME_GENERATION_FAILED"
+	JournalEventLymphaticSweepCompleted        = "LYMPHATIC_SWEEP_COMPLETED"
+	JournalEventLymphaticProposalCreated       = "LYMPHATIC_PROPOSAL_CREATED"
 )
 
 const (

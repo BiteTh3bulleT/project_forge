@@ -6,6 +6,7 @@ import (
 	"forge/projectforge/services/core/internal/forgek/contextcompiler"
 	"forge/projectforge/services/core/internal/forgek/court"
 	"forge/projectforge/services/core/internal/forgek/kv"
+	"forge/projectforge/services/core/internal/forgek/lymphatic"
 	"forge/projectforge/services/core/internal/forgek/palace"
 	forgekRuntime "forge/projectforge/services/core/internal/forgek/runtime"
 	"forge/projectforge/services/core/internal/forgek/semantic"
@@ -29,6 +30,7 @@ type Kernel struct {
 	context      *contextcompiler.Service
 	kv           *kv.Service
 	runtime      *forgekRuntime.Service
+	lymphatic    *lymphatic.Service
 	ids          IDProvider
 	clock        Clock
 }
@@ -55,6 +57,7 @@ func NewKernel(options KernelOptions) *Kernel {
 		context:      contextcompiler.NewService(),
 		kv:           kv.NewService(),
 		runtime:      forgekRuntime.NewService(),
+		lymphatic:    lymphatic.NewService(),
 		ids:          ids,
 		clock:        clock,
 	}
@@ -104,6 +107,10 @@ func (k *Kernel) KV() *kv.Service {
 
 func (k *Kernel) Runtime() *forgekRuntime.Service {
 	return k.runtime
+}
+
+func (k *Kernel) Lymphatic() *lymphatic.Service {
+	return k.lymphatic
 }
 
 func (k *Kernel) DispatchSyscall(request SyscallRequest) SyscallResult {
@@ -208,4 +215,5 @@ func (k *Kernel) registerCoreSyscalls() {
 	k.registerContextSyscalls(mustRegister)
 	k.registerKVSyscalls(mustRegister)
 	k.registerRuntimeSyscalls(mustRegister)
+	k.registerLymphaticSyscalls(mustRegister)
 }

@@ -1,6 +1,6 @@
 # FORGE-K Lane Model
 
-Status: Phase 0 architecture baseline.
+Status: Phase 10 simulator baseline. The Lymphatic Lane is implemented/tested in `services/core/internal/forgek` as `SIMULATOR_ONLY`.
 
 FORGE-K uses a tri-lane system with a Hyperlane overlay. Lanes describe scheduling and authority boundaries. They do not grant bypass rights.
 
@@ -61,12 +61,15 @@ Authority limit: Arterial Lane is the governed commit path, but only Kernel sysc
 
 Responsibilities:
 
-- cleanup
+- deterministic maintenance sweeps
 - contradiction sweeps
 - stale-loop detection
-- cache eviction
-- snapshot compaction
-- maintenance reports
+- KV hygiene proposals
+- snapshot hygiene proposals
+- runtime result hygiene proposals
+- orphan reference findings
+- Maintenance Reports
+- Cleanup Proposals
 - stale route analysis
 
 Synchronous work:
@@ -75,9 +78,9 @@ Synchronous work:
 
 Deferred work:
 
-- almost all cleanup, compaction, cache eviction, contradiction sweep, and stale-loop work
+- almost all cleanup review, compaction review, cache hygiene, contradiction sweep, and stale-loop work
 
-Authority limit: Lymphatic work may propose maintenance mutations, but canonical mutation still requires semantic syscalls.
+Authority limit: Lymphatic work may produce dry-run reports and cleanup proposals, but it must not silently mutate source objects, delete provenance, resolve contradictions, expire snapshots, evict KV manifests, submit evidence, admit evidence, or call model runtimes. Any canonical mutation still requires explicit semantic syscalls, capability checks, Kernel commit boundaries, and journal evidence.
 
 ## Hyperlane
 

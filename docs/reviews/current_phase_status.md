@@ -2,7 +2,7 @@
 
 Companion to `docs/reviews/full_project_review.md` (2026-05-03).
 
-This is a concise status read of FORGE-K phases against the current repository. The key distinction is that Phase 1-9 are implemented in the simulator package `services/core/internal/forgek`, while the live daemon still uses the existing AI-OS/gateway/permissions/lane/audit authority paths. ADR 0005 records that FORGE-K is target architecture, not live daemon authority yet.
+This is a concise status read of FORGE-K phases against the current repository. The key distinction is that Phase 1-10 are implemented in the simulator package `services/core/internal/forgek`, while the live daemon still uses the existing AI-OS/gateway/permissions/lane/audit authority paths. ADR 0005 records that FORGE-K is target architecture, not live daemon authority yet.
 
 | Phase | Title | Status | Where It Lives | Tests / Evidence | Open Work |
 | --- | --- | --- | --- | --- | --- |
@@ -16,7 +16,7 @@ This is a concise status read of FORGE-K phases against the current repository. 
 | 7 | Context Compiler | IMPLEMENTED + TESTED | `services/core/internal/forgek/contextcompiler/*`, `context_syscalls.go`, `docs/architecture/context_compiler_and_kv_cache.md`. Scope recorded as `SIMULATOR_ONLY`; live `aios/controllane/compile_context_*` is a separate legacy path. | ContextBlock, ContextBundle, PromptLayout, deterministic serialization, hashing, compile service, snapshot/restore-seed integration, syscall, capability, journal, and shape-not-truth tests pass under `go test ./internal/forgek/...`. | Live daemon integration, live COMPILE_CONTEXT replacement, runtime drivers, and tokenizer-specific token IDs remain deferred. |
 | 8 | Deterministic KV System | IMPLEMENTED + TESTED | `services/core/internal/forgek/kv/*`, `kv_syscalls.go`, `docs/architecture/context_compiler_and_kv_cache.md`. Scope recorded as `SIMULATOR_ONLY`; no real KV tensors or runtime backend cache reuse are implemented. | KVCacheManifest, lookup request/result, nine-gate validation, tiers, invalidation/eviction, service, context integration, syscall, capability, journal, and acceleration-not-memory tests pass under `go test ./internal/forgek/...`. | Live KV reuse, runtime drivers, tokenizer-specific final token IDs, and live daemon integration remain deferred. |
 | 9 | Runtime Driver Integration | IMPLEMENTED + TESTED | `services/core/internal/forgek/runtime/*`, `runtime_syscalls.go`, `docs/architecture/runtime_driver_boundary.md`. Scope recorded as `SIMULATOR_ONLY / DRIVER_BOUNDARY_ONLY`; live `modelruntime`, gateway, routes, APIs, and live KV reuse are unchanged. | Runtime manifest, capability manifest, deterministic mock driver, registry/service, syscall, capability, journal, context-ref, KV-metadata, and model-as-driver tests pass under `go test ./internal/forgek/...`. | Real backend drivers, streaming, tool calling, live daemon integration, and live KV reuse remain deferred. |
-| 10 | Lymphatic Lane | PARTIAL OUTSIDE FORGE-K | Live dream/autonomy cleanup-style paths. | Live dream tests exist. | Implement FORGE-K lymphatic scheduler later. |
+| 10 | Lymphatic Lane | IMPLEMENTED + TESTED | `services/core/internal/forgek/lymphatic/*`, `lymphatic_syscalls.go`, `lymphatic_syscalls_test.go`, `docs/architecture/lymphatic_lane.md`. Scope recorded as `SIMULATOR_ONLY`; live dream/autonomy cleanup paths remain separate. | `go test ./internal/forgek/...` passes, including lymphatic package and syscall tests. | No live daemon wiring. Broader domain-specific hygiene expansion remains future simulator work. |
 | 11 | Rust Kernel Core | NOT STARTED | None. | None. | Future work. |
 | 12 | FORGE Daemon | PARTIAL OUTSIDE FORGE-K | Existing `services/core/main.go` daemon. | Live daemon tests exist indirectly. | Not FORGE-K-governed yet. |
 | 13 | FORGE-1 Simulator | NOT STARTED | Concept doc only. | None. | Future research. |
@@ -29,7 +29,7 @@ This is a concise status read of FORGE-K phases against the current repository. 
 - `npm run build:core`, `npm run lint`, and `npm test` pass in this Phase 9 pass.
 - Desktop typecheck/build is blocked by local Node workspace package resolution.
 - FORGE-K remains simulator authority only; the live daemon still uses AI-OS/gateway/permissions/lane/audit authority paths.
-- The safest next path is Phase 10 planning under an explicit scope marker; do not wire Phase 7, Phase 8, or Phase 9 into the live daemon without a `LIVE_INTEGRATION` design and tests.
+- The safest next path is Phase 11 Rust Kernel Core research/planning or Phase 10 simulator hardening under the recorded `SIMULATOR_ONLY` marker; do not wire Phase 7, Phase 8, Phase 9, or Phase 10 into the live daemon without a `LIVE_INTEGRATION` design and tests.
 
 ## Phase 6 Validation
 
@@ -59,3 +59,11 @@ This is a concise status read of FORGE-K phases against the current repository. 
 - Phase 9 implements RuntimeDriver, RuntimeDriverManifest, RuntimeCapabilityManifest, RuntimeGenerateRequest, RuntimeGenerateResult, RuntimeDriverRegistry, RuntimeService, deterministic MockRuntimeDriver, runtime syscalls, capability checks, and journaled generation events.
 - Tests cover model-as-driver doctrine, ContextBundle refs only, KV metadata only, no case/admission mutation, no ContextBundle mutation, no KV manifest mutation, and proposal-only runtime results.
 - Phase 9 does not wire FORGE-K into the live daemon, replace live `modelruntime`, call real model backends, change routes/public APIs/gateway behavior, alter live AI-OS controllane behavior, or perform live KV reuse.
+
+## Phase 10 Validation
+
+- Phase 10 is recorded as `SIMULATOR_ONLY`.
+- `cd services/core && go test ./internal/forgek/...` passes after Phase 10 simulator implementation.
+- The implemented output surface is Maintenance Reports and Cleanup Proposals only.
+- Phase 10 must not wire into the live daemon, live dream/autonomy behavior, live cleanup jobs, public APIs, routes, gateway, modelruntime, or AI-OS controllane behavior.
+- Phase 10 must not silently mutate canonical truth or destroy provenance; any meaningful mutation remains a semantic syscall/Kernel responsibility.
