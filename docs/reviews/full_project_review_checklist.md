@@ -75,7 +75,7 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 - [x] FORGE-K Phase 9 Runtime Driver Integration implementation. Boundary scope is recorded as `SIMULATOR_ONLY / DRIVER_BOUNDARY_ONLY`.
 - [x] FORGE-K Phase 10 Lymphatic Lane simulator implementation. Scope is recorded as `SIMULATOR_ONLY`.
 - [x] FORGE-K Phase 11A Rust Kernel Core research/planning. Scope is `RESEARCH_ONLY / DOCS_ONLY`.
-- [ ] FORGE-K Phase 11B Rust deterministic validation crate.
+- [x] FORGE-K Phase 11B Rust deterministic validation crate.
 - [ ] FORGE-K Phase 12 FORGE Daemon.
 - [ ] FORGE-1 phases 13-14.
 - [ ] Gateway service decomposition.

@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11 implementation is not started.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -185,13 +185,19 @@ What not to do: implement Rust, add `Cargo.toml`, add a Rust crate, wire FORGE-K
 
 Scope: `RESEARCH_ONLY / SIMULATOR_ONLY` unless a later prompt explicitly records a different safe scope.
 
-Goal: optionally create a standalone Rust crate and CLI test harness for deterministic validation primitives.
+Goal: implement the simulator-only boundary for a standalone Rust crate and CLI test harness for deterministic validation primitives.
 
-Recommended deliverables: canonical serialization validation, hash validation, capability predicate validation, journal hash-chain verification, manifest validation, KV nine-gate validation, and shared fixture/golden-file parity with the Go simulator.
+Allowed deliverables in this research/simulator pass: fixture family selection, canonical serialization requirements, validation result vocabulary, CLI input/output contract, explicit non-integration guardrails, standalone Rust validation crate, shared fixtures, and root helper scripts that do not affect `npm test`.
 
-Validation criteria: Rust and Go agree on shared fixtures; no live daemon integration; no cgo; no public API, route, gateway, modelruntime, or live controllane behavior changes.
+Implemented deliverables: canonical JSON normalization, hash validation over stable projections, first-pass capability-like fixture validation, manifest validation, shared fixture/golden-file checks, and CLI commands `validate`, `canonicalize`, `hash`, and `validate-fixtures`.
 
-What not to do: replace the Go simulator, call model runtimes, mutate state, add live authority, or add Rust dependencies to CI without explicit Phase 11B approval.
+Validation criteria for this research pass: Rust crate tests pass, fixture validation passes, Go simulator tests still pass, and docs record that no cgo bridge, live daemon integration, Go production call, public API, route, gateway, modelruntime, or live controllane behavior changes were introduced. Do not claim Go or Rust test success unless the command was run and recorded for the specific pass.
+
+Validation criteria for a future implementation pass: Rust and Go agree on shared fixtures; no live daemon integration; no cgo; no public API, route, gateway, modelruntime, or live controllane behavior changes.
+
+What not to do: replace the Go simulator, call model runtimes, mutate state, add live authority, add cgo, add routes, call Rust from Go production code, or add Rust dependencies to CI without explicit approval.
+
+Implementation status: standalone crate implemented in `crates/forgek-validate`; fixtures implemented in `fixtures/forgek`; helper scripts added as `test:rust:forgek` and `validate:forgek-fixtures`; CI wiring is not implemented.
 
 ## Phase 11C - Go/Rust Test Corpus Alignment
 

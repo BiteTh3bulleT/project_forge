@@ -25,6 +25,7 @@ go test ./internal/forgek/...
 - Phase 9 Runtime Driver Boundary: `runtime`, `runtime_syscalls.go`
 - Phase 10 Lymphatic Lane: `lymphatic`, `lymphatic_syscalls.go`
 - Phase 11A Rust Kernel Core Research / Planning: docs only, no Rust code
+- Phase 11B Rust Deterministic Validation Boundary: standalone crate outside this package at `crates/forgek-validate`
 
 ## Authority Boundary
 
@@ -40,6 +41,8 @@ Phase 10 is implemented as `SIMULATOR_ONLY`. The Lymphatic Lane produces determi
 
 Phase 11A is `RESEARCH_ONLY / DOCS_ONLY`. It records the possible Rust boundary for deterministic validation primitives only. The simulator remains Go-owned, live daemon authority remains outside FORGE-K, and no Rust crate or Rust integration exists yet.
 
+Phase 11B is `RESEARCH_ONLY / SIMULATOR_ONLY`. It adds a standalone Rust crate at `crates/forgek-validate` for deterministic fixture validation and shared fixtures under `fixtures/forgek`. It must not add Rust code to this Go package, import Rust from Go, use cgo, add live daemon wiring, change routes, change gateway behavior, alter `modelruntime`, or change live AI-OS controllane behavior.
+
 ## Future Rust Boundary
 
 What remains Go for now:
@@ -54,7 +57,7 @@ What remains Go for now:
 - Lymphatic sweep policy and cleanup proposal generation
 - all live daemon, gateway, route, controllane, and modelruntime behavior
 
-What may later become Rust after Phase 11B approval:
+What Phase 11B begins validating in Rust:
 
 - canonical serialization validation
 - deterministic hashing
@@ -63,3 +66,10 @@ What may later become Rust after Phase 11B approval:
 - journal hash-chain verification
 - Snapshot, ContextBlock, ContextBundle, KVCacheManifest, and RuntimeDriverManifest validation
 - KV nine-gate validation
+
+Phase 11B validation:
+
+- Go simulator tests remain in this package: `cd services/core && go test ./internal/forgek/...`
+- Rust crate tests run outside this package: `cd crates/forgek-validate && cargo test`
+- Fixture validation runs through the standalone CLI: `npm run validate:forgek-fixtures`
+- current package state: no Rust code, Cargo metadata, cgo, or Go production calls exist here
