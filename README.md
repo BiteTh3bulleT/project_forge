@@ -2,6 +2,48 @@
 
 FORGE is a local-first AI workspace for inspectable, approval-gated engineering work.
 
+## FORGE-K Architecture Baseline
+
+FORGE-K is the deterministic cognitive microkernel architecture inside FORGE. It exists to keep canonical truth under Kernel authority while model runtimes, tools, adapters, and neurons operate as bounded proposal or driver surfaces.
+
+Current phase: Phase 5 - Semantic Algebra Minimal. Phase 5 adds SemanticObjects, SemanticOperations, SemanticTransformResults, deterministic operators, semantic operation syscalls, capability checks, and journaled provenance-preserving transforms.
+
+Development principles:
+
+- models are drivers, not authority
+- neural neurons propose; rule neurons validate
+- Memory Palace retrieves candidate references; Courthouse controls admissibility
+- Semantic Algebra transforms admitted meaning without bypassing Kernel authority
+- Courthouse admits evidence; Kernel commits through semantic syscalls
+- snapshots preserve context shape, not truth
+- deterministic KV cache is acceleration, not memory
+- provenance, journal evidence, and approval boundaries are required for meaningful state transitions
+
+FORGE-K architecture links:
+
+- `docs/architecture/forge_k_overview.md`
+- `docs/architecture/core_doctrine.md`
+- `docs/architecture/neuron_fabric.md`
+- `docs/architecture/lane_model.md`
+- `docs/architecture/memory_palace_and_courthouse.md`
+- `docs/architecture/semantic_algebra.md`
+- `docs/architecture/snapshots.md`
+- `docs/architecture/context_compiler_and_kv_cache.md`
+- `docs/architecture/kernel_simulator.md`
+- `docs/architecture/forge_1_cpu_concept.md`
+- `docs/roadmap/forge_k_build_phases.md`
+- `docs/glossary.md`
+- `docs/testing/definition_of_done.md`
+
+FORGE-K ADRs and diagrams:
+
+- `docs/adr/0001-forge-k-is-a-cognitive-microkernel.md`
+- `docs/adr/0002-models-are-drivers-not-authority.md`
+- `docs/adr/0003-snapshots-are-shape-not-truth.md`
+- `docs/adr/0004-kv-cache-is-acceleration-not-memory.md`
+- `docs/diagrams/forge_k_master_flow.mmd`
+- `docs/diagrams/forge_k_layer_model.mmd`
+
 ## CPU/RAM Kernel + GPU Accelerator Split
 
 FORGE core authority is CPU/RAM-only by design.
@@ -27,7 +69,7 @@ The desktop client now supports a **monitor-aware desktop shell**:
 - scheduled + manual memory repair runs with persisted before/after traces
 - governed full tool layer with typed actions, lane/profile policy checks, approvals, and audit traceability
 - deterministic context restore scoring with header-first restore packages
-- Dream Mode v0 dry-run replay/consolidation reports
+- CPU-only dry-run maintenance replay and consolidation reports
 - optional NVIDIA DCGM / Intel Level Zero GPU telemetry and Hugging Face TEI embedding provider diagnostics
 
 This is a real desktop feature. FORGE does not simulate monitors or invent off-screen window state.
@@ -120,16 +162,6 @@ Default endpoints:
 - Desktop dev server: `http://localhost:1420`
 - Default shell route: `#/chat`
 
-Dry-run maintenance endpoints:
-
-```bash
-curl -sS http://127.0.0.1:18492/api/dream/run \
-  -H 'Content-Type: application/json' \
-  -d '{"workspaceId":"default","laneId":"control.semantic","mode":"microdream"}'
-```
-
-Dream Mode v0 is CPU-only and proposal-only. It does not require GPU/modelruntime and does not commit canonical memory.
-
 ## Daily Flow
 
 1. Start the main FORGE shell window.
@@ -155,9 +187,7 @@ Dream Mode v0 is CPU-only and proposal-only. It does not require GPU/modelruntim
 - `docs/POLICY_AND_APPROVALS.md`
 - `docs/AUDIT_AND_TRACE.md`
 - `docs/architecture/context_restore_scoring.md`
-- `docs/architecture/dream_mode.md`
 - `docs/operations/restore_scoring.md`
-- `docs/operations/dream_mode.md`
 - `docs/operations/nvidia_dcgm.md`
 - `docs/operations/intel_level_zero.md`
 - `docs/operations/huggingface_tei.md`

@@ -7,6 +7,24 @@ Last convergence sweep update: 2026-04-22 (branch-local status alignment).
 - Execute bounded work with explicit scope and observable outcomes.
 - Respect approval gates for write intent or command execution.
 
+## FORGE-K Phase 0 Agent Doctrine
+- FORGE-K is kernel-first: architecture, runtime behavior, and feature work must preserve the deterministic cognitive microkernel boundary.
+- The model is not the operating system. LLMs, model runtimes, adapters, and runtime drivers are external drivers or bounded workers.
+- Do not let LLM/model output mutate canonical state directly.
+- All canonical truth mutation must go through semantic syscalls, deterministic validation, journaled commit boundaries, and audit/provenance capture.
+- Preserve provenance on every semantic object, derived object, artifact, ruling, snapshot, and journal transition.
+- Prefer deterministic rule cells/neurons over model calls whenever deterministic policy, routing, validation, or classification is sufficient.
+- Model-driven neural neurons produce proposals only. Rule neurons validate. The Courthouse admits evidence. Only the Kernel commits.
+- Keep runtime drivers isolated from truth authority, journal authority, capability authority, and admission authority.
+- Keep the hot path small. Do not run the full architecture on every turn.
+- Keep docs current with architecture changes. Major behavior changes must update the relevant architecture doc, ADR, glossary entry, and testing expectation.
+- Every major feature needs tests. Docs-only phases must include documentation validation evidence.
+- Do not create monolithic architecture. Extend lane, neuron, syscall, gateway, journal, and admission boundaries with narrow contracts.
+- Do not bypass the journal. Meaningful state transitions must be journaled or explicitly marked non-canonical evidence.
+- Do not store raw chat as the main memory system. Raw conversation may be evidence, but canonical memory must be structured, governed, and provenance-linked.
+- Do not treat snapshots as truth. Snapshots preserve semantic shape for restoration and inspection.
+- Do not treat KV cache as memory. KV cache is deterministic acceleration only and must pass identity validation before reuse.
+
 ## Project Priorities
 - **2026-04-15**: Phase 2 execution/approval/packet/context systems landed.
 - **2026-04-22**: Legacy adapter invoke ingress is removed from API routing; tool execution authority is gateway-only.

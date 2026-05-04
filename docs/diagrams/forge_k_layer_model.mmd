@@ -1,0 +1,37 @@
+flowchart TB
+    subgraph Outside[Outside Authority Boundary]
+        R[Model and Runtime Drivers]
+        T[External Tools and Adapters]
+    end
+
+    subgraph Boundary[Kernel Boundary]
+        subgraph Truth[Truth Domain]
+            K[Kernel]
+            S[Semantic Syscalls]
+            C[Courthouse Rulings]
+            J[Journal]
+        end
+
+        subgraph Shape[Shape Domain]
+            P[Memory Palace Routes]
+            B[ContextBlocks]
+            H[Context-Shape Snapshots]
+        end
+
+        subgraph Accel[Acceleration Domain]
+            M[KVCacheManifest]
+            V[Deterministic KV Cache]
+            X[Token Hashes]
+        end
+    end
+
+    R -->|proposals only| S
+    T -->|governed requests only| S
+    S --> K
+    K --> J
+    P --> C
+    C --> B
+    B --> X
+    X --> M
+    M --> V
+    V -. acceleration only .-> R

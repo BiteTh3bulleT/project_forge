@@ -28,6 +28,16 @@ type chatPostResponse struct {
 	AsyncAssistant   bool                      `json:"asyncAssistant"`
 }
 
+func setFakeHomeEnv(t *testing.T, homeDir string) {
+	t.Helper()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	if volume := filepath.VolumeName(homeDir); volume != "" {
+		t.Setenv("HOMEDRIVE", volume)
+		t.Setenv("HOMEPATH", strings.TrimPrefix(homeDir, volume))
+	}
+}
+
 func TestChatPostSyncFallsBackToModelRuntimeWhenOllamaModelMissing(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	fakeRuntime := newFakeModelRuntime()
@@ -826,7 +836,7 @@ func TestChatPostSyncRoutesDownloadSorterThroughGateway(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(homeDir, "Downloads"), 0o755); err != nil {
 		t.Fatalf("mkdir fake home: %v", err)
 	}
-	t.Setenv("HOME", homeDir)
+	setFakeHomeEnv(t, homeDir)
 
 	st, err := store.Open(dataDir)
 	if err != nil {
@@ -883,7 +893,7 @@ func TestChatPostSyncMultiSVGUsesDeterministicGatewayShortcut(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(homeDir, "Downloads"), 0o755); err != nil {
 		t.Fatalf("mkdir fake home: %v", err)
 	}
-	t.Setenv("HOME", homeDir)
+	setFakeHomeEnv(t, homeDir)
 
 	st, err := store.Open(dataDir)
 	if err != nil {
@@ -957,7 +967,7 @@ func TestChatPostSyncSameDirectoryWebpageUsesPriorGatewayDirectory(t *testing.T)
 	if err := os.MkdirAll(priorDir, 0o755); err != nil {
 		t.Fatalf("mkdir fake prior dir: %v", err)
 	}
-	t.Setenv("HOME", homeDir)
+	setFakeHomeEnv(t, homeDir)
 
 	st, err := store.Open(dataDir)
 	if err != nil {
