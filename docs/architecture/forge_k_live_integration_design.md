@@ -1,14 +1,14 @@
 # FORGE-K Live Integration Design
 
-Status: Phase 12A implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
+Status: Phase 12A implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12D implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 
-Phase 12B implements the first disabled-by-default read-only live touchpoint. Phase 12C hardens that implementation. Neither phase authorizes live authority migration.
+Phase 12B implements the first disabled-by-default read-only live touchpoint. Phase 12C hardens that implementation. Phase 12D selects route envelope metadata as the recommended next controlled expansion for a future Phase 12E. These phases do not authorize live authority migration.
 
 ## Executive Summary
 
 FORGE-K Phase 1-11G is implemented and tested in simulator, research, tooling, governance, integration-prep, and shadow-design layers. The live daemon still uses the existing AI-OS, gateway, permissions, lane, audit, modelruntime, retrieval, embeddings, memory, search, and API authority paths.
 
-Phase 12A designed the first live integration path. Phase 12B implements the smallest read-only shadow harness: `/health` request metadata can be copied into a bounded in-memory diagnostic sink when `FORGE_K_SHADOW_MODE_ENABLED=true`. The design preserves live authority by allowing only passive observation of already-executing live paths, diagnostic report generation, and disabled-by-default activation. It does not wire FORGE-K into live authority.
+Phase 12A designed the first live integration path. Phase 12B implements the smallest read-only shadow harness: `/health` request metadata can be copied into a bounded in-memory diagnostic sink when `FORGE_K_SHADOW_MODE_ENABLED=true`. Phase 12C hardens that observer. Phase 12D is design-only and selects route envelope metadata as the recommended next candidate for a future Phase 12E. The design preserves live authority by allowing only passive observation of already-executing live paths, diagnostic report generation, and disabled-by-default activation. It does not wire FORGE-K into live authority.
 
 ## Current Simulator / Live Split
 
@@ -78,6 +78,22 @@ Hardening completed:
 - Phase 12C review record in `docs/reviews/phase_12c_shadow_diagnostics_review.md`
 
 Phase 12C adds no live touchpoints, routes, public APIs, persistence, gateway behavior, modelruntime behavior, retrieval/search/embedding behavior, memory writes, controllane mutations, or user-visible output changes.
+
+## Phase 12D Controlled Expansion Design
+
+Phase 12D is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. It selects exactly one recommended next touchpoint and records the test plan required before implementation.
+
+Recommended future Phase 12E candidate: route envelope metadata.
+
+Route envelope metadata is selected because it can provide route-level diagnostics without approaching prompt text, response bodies, tool payloads, retrieval result content, model output, or memory content. The future allowed surface is method, matched route template or route class, route owner classification, timing summary, workspace/correlation ids when already available, status class after response completion, and no-effect validation.
+
+Deferred touchpoints:
+
+- chat message submission metadata
+- existing retrieval-result metadata
+- existing gateway trace metadata
+
+Phase 12D adds no code, route observation, public APIs, diagnostics routes, persistent storage, feature flags, adapters, gateway behavior, modelruntime behavior, retrieval/search/embedding behavior, memory writes, controllane mutations, route changes, response changes, or live authority migration. After Phase 12D, `/health` remains the only implemented live touchpoint.
 
 ## Phase 12A Non-Goals
 
@@ -266,8 +282,10 @@ Phase 12B must be bounded:
 1. Phase 12A: design only.
 2. Phase 12B: disabled-by-default read-only shadow harness implementation.
 3. Phase 12C: shadow diagnostics review and hardening.
-4. Phase 12D: limited advisory mode if no-effect evidence is acceptable.
-5. Later phases: scoped authority migration only with separate approval, tests, and rollback.
+4. Phase 12D: controlled shadow expansion design only; select one next candidate and record tests.
+5. Phase 12E: possible route envelope metadata implementation if separately approved.
+6. Phase 12F: route-envelope diagnostics review and hardening before wider observation.
+7. Later phases: scoped authority migration only with separate approval, tests, and rollback.
 
 ## What Not To Do
 

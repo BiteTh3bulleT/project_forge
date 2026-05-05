@@ -1,8 +1,8 @@
 # FORGE-K Shadow Mode
 
-Status: Phase 11F policy/contracts, Phase 11G simulator-only harness design, Phase 12A live integration design, Phase 12B disabled-by-default `/health` observer, and Phase 12C diagnostics hardening.
+Status: Phase 11F policy/contracts, Phase 11G simulator-only harness design, Phase 12A live integration design, Phase 12B disabled-by-default `/health` observer, Phase 12C diagnostics hardening, and Phase 12D controlled expansion design.
 
-Phase 11F defines integration readiness contracts, read-only adapters, and shadow policy. Phase 11G defines the simulator-only harness and report model design in `docs/architecture/shadow_mode_harness.md`. Phase 12A designs the first live shadow implementation path in `docs/architecture/forge_k_live_integration_design.md`. Phase 12B implements one disabled-by-default read-only `/health` metadata observer. Phase 12C hardens that observer. None of these phases authorizes live mutation.
+Phase 11F defines integration readiness contracts, read-only adapters, and shadow policy. Phase 11G defines the simulator-only harness and report model design in `docs/architecture/shadow_mode_harness.md`. Phase 12A designs the first live shadow implementation path in `docs/architecture/forge_k_live_integration_design.md`. Phase 12B implements one disabled-by-default read-only `/health` metadata observer. Phase 12C hardens that observer. Phase 12D designs a controlled next expansion and recommends route envelope metadata for a future Phase 12E. None of these phases authorizes live mutation.
 
 ## Definition
 
@@ -21,7 +21,7 @@ Shadow mode means:
 - FORGE-K does not alter user-visible output
 - all shadow outputs are diagnostics only
 
-Phase 11G adds the harness/report design. Phase 12B adds the first live observation point: `/health` metadata only.
+Phase 11G adds the harness/report design. Phase 12B adds the first live observation point: `/health` metadata only. Phase 12D adds design only; it does not add a new observation point.
 
 ## Phase Split
 
@@ -30,7 +30,8 @@ Phase 11G adds the harness/report design. Phase 12B adds the first live observat
 - Phase 12A: docs-only live integration design; does not authorize implementation.
 - Phase 12B: disabled-by-default read-only live shadow harness implementation for `/health` metadata only.
 - Phase 12C: observability-only hardening of Phase 12B diagnostics with no new touchpoints.
-- Phase 12 authority migration is not authorized by Phase 11F, Phase 11G, Phase 12A, Phase 12B, or Phase 12C.
+- Phase 12D: docs-only controlled expansion design; route envelope metadata is the recommended future Phase 12E candidate, but no new touchpoint is implemented.
+- Phase 12 authority migration is not authorized by Phase 11F, Phase 11G, Phase 12A, Phase 12B, Phase 12C, or Phase 12D.
 
 `services/core/internal/forgek/integrationready` remains the Phase 11F readiness package. It does not implement the Phase 11G harness.
 

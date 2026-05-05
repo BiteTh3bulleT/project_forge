@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12B Read-only Shadow Harness Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12C Shadow Diagnostics Review and Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12B Read-only Shadow Harness Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12C Shadow Diagnostics Review and Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12D Controlled Shadow Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -315,17 +315,55 @@ Implementation status: implemented and tested without adding live touchpoints. `
 
 What not to do: migrate authority, alter responses, execute tools, call modelruntime, run retrieval, write memory, add public diagnostics routes, add new live touchpoints, or treat diagnostics as truth.
 
-## Phase 12D - Limited FORGE-K Advisory Mode
+## Phase 12D - Controlled Shadow Expansion Design
 
-Scope: `LIVE_INTEGRATION / ADVISORY_ONLY`.
+Scope: `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 
-Goal: design and, if separately approved, implement limited advisory diagnostics that may be operator-visible but still cannot mutate live state or alter responses automatically.
+Goal: compare possible shadow-mode expansion touchpoints, select exactly one recommended future Phase 12E candidate, and record the tests required before implementation.
 
-Deliverables: advisory-mode design, explicit operator controls, no-auto-mutation tests, rollback plan, and authority-owner matrix.
+Implemented deliverables: controlled expansion design, touchpoint selection review, Phase 12E route-envelope test plan, and status/roadmap updates.
 
-Validation criteria: advisory output remains non-authoritative; live responses and live mutation paths remain under existing owners unless a later migration phase explicitly changes them.
+Selected future Phase 12E candidate: route envelope metadata.
 
-What not to do: commit truth, write memory, execute tools, call modelruntime, run live RAG, bypass gateway, bypass controllane, or change public APIs without separate approval.
+Deferred candidates: chat message submission metadata, existing retrieval-result metadata, and existing gateway trace metadata.
+
+Validation criteria: docs exist; route envelope is selected as the next candidate only; Phase 12E is not started; existing FORGE-K, shadow, API route inventory, core build, lint, aggregate tests, parity tests, and diff checks pass; no code behavior changes are introduced.
+
+Implementation status: docs-only. `/health` remains the only implemented live shadow touchpoint. No route-envelope observation, public API, diagnostics route, persistence, feature flag, adapter, gateway/modelruntime/retrieval/memory/controllane behavior change, response change, or authority migration was added.
+
+What not to do: implement Phase 12E, add route-envelope observer code, observe all routes, capture request or response bodies, add public diagnostics APIs, change route behavior, modify API response shape, call modelruntime, execute tools, query retrieval/search/embeddings, write memory, call controllane mutations, or make FORGE-K live authority.
+
+## Phase 12E - Route Envelope Shadow Metadata
+
+Scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+
+Status: not started.
+
+Goal: if separately approved, implement route envelope metadata shadowing as the next controlled live observation surface.
+
+Expected deliverables: disabled-by-default route-envelope observation, metadata-only report construction, bounded in-memory sink reuse, redaction and no-effect validation, route inventory stability tests, response equivalence tests, SSE stability tests, timeout stability tests, and forbidden execution tests.
+
+Allowed future data: HTTP method, matched route template or route class, route owner classification, workspace/correlation ids when already available, bounded timing summary, status class after response completion, and no-effect validation result.
+
+Forbidden future data: request bodies, response bodies, raw headers except allowlisted non-secret correlation ids, raw query strings, prompts, model output, tool payloads, retrieval content, embedding vectors, search chunks, memory content, secrets, credentials, cookies, authorization headers, and session values.
+
+Validation criteria: route inventory unchanged; no public diagnostics route; status, headers, bodies, route selection, SSE behavior, and timeout behavior unchanged; shadow failure cannot fail live requests; no modelruntime, retrieval/search/embedding, gateway/tool, memory, controllane, permission, lane, approval, or audit authority behavior changes.
+
+What not to do: migrate authority, broaden to chat/retrieval/gateway traces, capture content, persist diagnostics, add public APIs, alter responses, execute tools, call modelruntime, run retrieval, write memory, or treat reports as truth.
+
+## Phase 12F - Shadow Diagnostics Review for Route Envelope
+
+Scope: `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
+
+Status: not started.
+
+Goal: review and harden any future Phase 12E route-envelope diagnostics before wider observation is considered.
+
+Expected deliverables: diagnostic review record, redaction review, retention review, route coverage review, failure isolation review, performance review, route drift review, and a go/no-go recommendation for any later metadata surface.
+
+Validation criteria: route-envelope observation remains disabled by default, bounded, metadata-only, non-authoritative, and proven to have no effect on live responses or live authority paths.
+
+What not to do: add new touchpoints, observe chat content, observe retrieval content, observe gateway payloads, persist reports, add public diagnostics routes, execute tools, call modelruntime, run retrieval/search/embeddings, write memory, mutate controllane, or start authority migration.
 
 ## Phase 12 - FORGE Daemon
 

@@ -1,6 +1,6 @@
 # Phase 12B Shadow Harness Specification
 
-Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
+Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12D controlled expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 
 ## Scope
 
@@ -177,6 +177,25 @@ Adapters observe existing live traces only. They cannot call gateway execution m
 Implemented Phase 12B tests cover the default flag, enabled flag parsing, route inventory key set stability, `/health` response status/body/header equivalence, diagnostic report generation behind the flag, sink failure isolation, bounded report retention, secret-looking metadata rejection, no-effect policy rejection, and forbidden imports.
 
 Implemented Phase 12C tests additionally cover disabled sink behavior, `authorization`/`cookie`/`session` metadata rejection, raw body/content/prompt metadata rejection, oversized metadata rejection, all represented side-effect policy flags, no public diagnostics route, disabled `/health` equivalence, and non-`/health` no-observation behavior.
+
+## Phase 12D Handoff
+
+Phase 12D is a docs-only controlled expansion design. It does not add code, route observation, public APIs, route-envelope hooks, adapters, feature flags, persistent storage, or live authority migration.
+
+The recommended future Phase 12E touchpoint is route envelope metadata. The future route-envelope scope is method, matched route template or route class, owner classification, timing summary, workspace/correlation ids when already available, and no-effect validation only.
+
+After Phase 12D:
+
+- `/health` remains the only implemented live touchpoint.
+- Phase 12E has not started.
+- no chat content capture is approved.
+- no request or response body capture is approved.
+- no retrieval/search/embedding execution is approved.
+- no modelruntime calls are approved.
+- no gateway/tool execution is approved.
+- no memory write or controllane mutation is approved.
+
+The Phase 12D design is in `docs/architecture/phase_12d_controlled_shadow_expansion_design.md`; the touchpoint decision is in `docs/reviews/phase_12d_touchpoint_selection.md`; the required future Phase 12E test plan is in `docs/testing/phase_12e_shadow_route_envelope_tests.md`.
 
 ## What Not To Do
 

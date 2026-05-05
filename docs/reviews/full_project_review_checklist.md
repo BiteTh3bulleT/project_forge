@@ -49,6 +49,7 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 - [x] **M** Document Phase 10 Lymphatic Lane as `SIMULATOR_ONLY`, maintenance reports/proposals only, with no live daemon, dream/autonomy, cleanup, route, gateway, modelruntime, or controllane wiring.
 - [x] **M** Complete Phase 11A Rust Kernel Core research/planning docs and ADR 0006 without Rust implementation.
 - [x] **M** Document Phase 11C Go/Rust test corpus alignment as `RESEARCH_ONLY / SIMULATOR_ONLY`.
+- [x] **M** Document Phase 12D Controlled Shadow Expansion Design as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 - [ ] **M** Add comments or docs that `internal/api/phase*.go` names refer to legacy FORGE feature phases, not FORGE-K phases.
 - [ ] **L** Document Windows smoke limitations or add a PowerShell smoke path.
 
@@ -78,6 +79,7 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 - [x] FORGE-K Phase 11A Rust Kernel Core research/planning. Scope is `RESEARCH_ONLY / DOCS_ONLY`.
 - [x] FORGE-K Phase 11B Rust deterministic validation crate.
 - [x] FORGE-K Phase 11C Go/Rust test corpus alignment.
+- [x] FORGE-K Phase 12D Controlled Shadow Expansion Design. Scope is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 - [x] FORGE-K Phase 12A Live Integration Design. Scope is recorded as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; no live implementation started.
 - [x] FORGE-K Phase 12B Read-only Shadow Harness Implementation. Scope is recorded as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; `/health` metadata only, disabled by default, diagnostic-only.
 - [x] FORGE-K Phase 12C Shadow Diagnostics Review and Hardening. Scope is recorded as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; no new live touchpoints or diagnostics APIs added.
