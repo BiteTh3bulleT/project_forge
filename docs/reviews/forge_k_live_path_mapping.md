@@ -1,6 +1,6 @@
-# FORGE-K Phase 11F Live Path Mapping
+# FORGE-K Live Path Mapping
 
-Status: Phase 11F `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`.
+Status: Phase 11F `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY` plus Phase 12A `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 
 This mapping identifies current live daemon authority paths and their FORGE-K target components. It is diagnostic only. Live mutation allowed is `NO` for every row in this phase.
 
@@ -35,3 +35,26 @@ The live system currently has distinct authority classes:
 ## Phase 11F Boundary
 
 FORGE-K may only define read-only mappings and future adapter contracts in this phase. It must not import these live packages from `services/core/internal/forgek/integrationready`, execute live behavior, query retrieval or embeddings, write memory, affect user-visible output, or create a second authority path.
+
+## Phase 12A Design Notes
+
+Phase 12A selects a future Phase 12B read-only shadow harness as the first live integration candidate. Phase 12A does not implement that harness, add feature flags, observe live requests, change routes, or wire adapters.
+
+| Live system | Phase 12B candidate? | Required Phase 12B adapter | In first harness? | Explicitly out of scope | Risk | Required Phase 12B tests |
+|---|---|---|---|---|---|---|
+| api routes | Yes | LiveRequestObservationAdapter / LiveRouteTraceAdapter | Yes | Route changes, public API shape changes | High | Route inventory unchanged; response equivalence. |
+| aios/controllane | Limited | LiveContextCompileTraceAdapter | Metadata refs only | Syscall execution, semantic mutation, commit path changes | High | No controllane writes; no prompt mutation. |
+| gateway | Yes | LiveGatewayTraceAdapter | Existing trace refs only | Tool execution, approval decisions | High | No gateway invocation creation; no approval mutation. |
+| permissions | Yes | LiveRouteTraceAdapter | Decision refs only | Policy changes or bypasses | Medium | Permission decision unchanged; risk class mirrored only. |
+| lanes | Yes | LiveRouteTraceAdapter | Lane refs only | Lane selection changes | Medium | Lane unchanged; no write-intent escalation. |
+| audit | Yes | LiveAuditTraceAdapter | Existing audit refs only | Authoritative audit writes unless separately approved | Medium | No authoritative audit mutation; provenance preserved. |
+| modelruntime | Yes | LiveModelRuntimeTraceAdapter | Existing trace metadata only | Model calls, scheduler changes, load/unload | High | No modelruntime request creation. |
+| memory | Yes | LiveMemoryEvidenceTraceAdapter | Existing refs only | Memory writes, usefulness/repair mutation, truth promotion | High | No memory table writes. |
+| retrieval | Yes | LiveRetrievalTraceAdapter | Existing run/result refs only | Retrieval execution, selection mutation | High | No retrieval calls from shadow mode. |
+| search | Yes | LiveRetrievalTraceAdapter | Existing search/chunk refs only | Search query execution from FORGE-K | Medium | No search calls from shadow mode. |
+| embeddings | Yes | LiveRetrievalTraceAdapter | Existing embedding record refs only | Embedding provider calls | High | No embedding calls from shadow mode. |
+| dream/autonomy | Deferred | LiveRequestObservationAdapter | No | Cleanup execution, autonomy action changes | Medium | Deferred until shadow stability evidence. |
+| backup/release | Deferred | LiveRouteTraceAdapter | No | Restore, release, export mutation | Medium | Deferred until explicit design. |
+| settings/config | Limited | LiveRouteTraceAdapter | Flag/config read only after approval | Runtime config mutation | Medium | Disabled default and kill-switch tests. |
+
+First harness scope is route/request metadata, existing trace refs, and diagnostic reports. It excludes live mutation, live RAG, retrieval/search/embedding execution, modelruntime calls, tool execution, memory writes, controllane mutation, public API changes, and user-visible output changes.

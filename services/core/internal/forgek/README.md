@@ -31,6 +31,7 @@ go test ./internal/forgek/...
 - Phase 11E Consensus Mesh: `consensus`, `consensus_syscalls.go`
 - Phase 11F Integration Readiness Contracts: `integrationready`
 - Phase 11G Shadow Mode Harness Design: `shadowharness`
+- Phase 12A Live Integration Design: docs only, no package code
 
 ## Authority Boundary
 
@@ -57,6 +58,8 @@ Phase 11E is `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. The Consensus Mesh govern
 Phase 11F is `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. The `integrationready` package defines diagnostic readiness reports, live path mappings, read-only adapter contracts, read-only RAG/retrieval boundaries, and shadow-mode policy. It has no syscalls, no Kernel ownership, no live daemon imports, no API routes, no gateway/modelruntime/controllane behavior, no live retrieval or embedding calls, no live RAG, and no live memory mutation.
 
 Phase 11G is `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. The `shadowharness` package defines simulator-only observation, comparison report, subreport, policy, and no-effect validation contracts for a future read-only shadow harness. It has no syscalls, no Kernel ownership, no live daemon imports, no API routes, no live observation, no gateway/modelruntime/controllane behavior, no live retrieval or embedding calls, no live RAG, no live memory mutation, and no user-visible output authority.
+
+Phase 12A is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. It records the future Phase 12B read-only shadow harness design in architecture/review/testing docs. It adds no Go code, no syscalls, no Kernel ownership, no live daemon imports, no route/API changes, no live observation, no gateway/modelruntime/controllane behavior, no live retrieval or embedding calls, no live RAG, no memory writes, and no user-visible output authority.
 
 ## Future Rust Boundary
 

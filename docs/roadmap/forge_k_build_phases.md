@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12B is not started.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -275,19 +275,21 @@ What not to do: implement Phase 12, observe live daemon requests, wire live path
 
 ## Phase 12A - Live Integration Design
 
-Scope: `LIVE_INTEGRATION / DESIGN_ONLY`.
+Scope: `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 
 Goal: produce the explicit live integration design required by ADR 0005 before any FORGE-K live authority migration.
 
-Deliverables: authority migration plan, route inventory, adapter implementation plan, rollback plan, test plan, live authority owner matrix, and staged cutover criteria.
+Implemented deliverables: live integration design, Phase 12A readiness review, Phase 12B shadow harness specification, Phase 12B adapter interface design, Phase 12B test plan, live path mapping updates, shadow mode handoff updates, rollback/kill-switch strategy, and no-effect test requirements.
 
-Validation criteria: design proves gateway remains tool authority until migration, memory writes remain live authority until migration, retrieval/RAG remains evidence-only until migration, and no shadow output affects user-visible behavior.
+Validation criteria: design proves gateway remains tool authority until migration, memory writes remain live authority until migration, retrieval/RAG remains evidence-only until migration, modelruntime remains live driver authority, controllane remains semantic mutation authority, and no shadow output affects user-visible behavior.
 
-What not to do: implement live integration or alter daemon behavior.
+Implementation status: docs-only. No live daemon integration, public API route, gateway/modelruntime/controllane behavior change, live observation, live retrieval, live RAG, embedding call, tool execution, memory write, user-visible output change, or second authority path was added.
+
+What not to do: implement Phase 12B, add code-level feature flags, wire adapters, observe live requests, implement live integration, or alter daemon behavior.
 
 ## Phase 12B - Read-only Shadow Harness Implementation
 
-Scope: `LIVE_INTEGRATION`.
+Scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
 Goal: implement a read-only shadow harness that observes selected live paths and emits diagnostics without influencing live behavior.
 
@@ -297,17 +299,29 @@ Validation criteria: live request/response behavior is unchanged; no live mutati
 
 What not to do: migrate authority, commit FORGE-K truth, execute tools, call models, run live RAG, or alter responses.
 
-## Phase 12C - Limited Live Authority Migration
+## Phase 12C - Shadow Diagnostics Review and Hardening
 
-Scope: `LIVE_INTEGRATION`.
+Scope: `LIVE_INTEGRATION / OBSERVABILITY_ONLY`.
 
-Goal: migrate one explicitly scoped authority surface only after Phase 12A design and Phase 12B shadow evidence support the cutover.
+Goal: review Phase 12B diagnostics, harden redaction/retention/no-effect guarantees, and decide whether any advisory behavior is safe to design later.
 
-Deliverables: limited authority adapter, migration tests, rollback plan, audit/journal evidence, operator controls, and post-cutover validation.
+Deliverables: diagnostic review report, no-effect evidence, performance/security review, retention policy hardening, and updated go/no-go checklist.
 
-Validation criteria: the migrated surface has one owner, one rollback path, full tests, no duplicate authority, and preserved gateway/permissions/audit boundaries.
+Validation criteria: shadow mode remains observability-only; live behavior remains unchanged; diagnostics are bounded, redacted, and non-authoritative.
 
-What not to do: broad cutover, duplicate Kernel authority, bypass gateway, bypass controllane, or treat simulator readiness as production authority.
+What not to do: migrate authority, alter responses, execute tools, call modelruntime, run retrieval, write memory, or treat diagnostics as truth.
+
+## Phase 12D - Limited FORGE-K Advisory Mode
+
+Scope: `LIVE_INTEGRATION / ADVISORY_ONLY`.
+
+Goal: design and, if separately approved, implement limited advisory diagnostics that may be operator-visible but still cannot mutate live state or alter responses automatically.
+
+Deliverables: advisory-mode design, explicit operator controls, no-auto-mutation tests, rollback plan, and authority-owner matrix.
+
+Validation criteria: advisory output remains non-authoritative; live responses and live mutation paths remain under existing owners unless a later migration phase explicitly changes them.
+
+What not to do: commit truth, write memory, execute tools, call modelruntime, run live RAG, bypass gateway, bypass controllane, or change public APIs without separate approval.
 
 ## Phase 12 - FORGE Daemon
 

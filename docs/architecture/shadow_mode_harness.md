@@ -1,6 +1,6 @@
 # FORGE-K Shadow Mode Harness
 
-Status: Phase 11G simulator-only shadow harness design. Scope is `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`.
+Status: Phase 11G simulator-only shadow harness design plus Phase 12A live integration design handoff. Phase 11G scope is `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`; Phase 12A scope is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 
 Phase 11G does not implement live shadow mode and does not authorize Phase 12 live integration. Actual live observation is deferred to Phase 12B.
 
@@ -270,6 +270,34 @@ Before implementing a read-only live shadow harness:
 - gateway remains live tool authority
 - memory writes remain live authority until migration
 - retrieval/RAG remains evidence-only until migration
+
+## Phase 12A Design Handoff
+
+Phase 12A maps this simulator harness model to a future live shadow harness:
+
+- `ShadowObservation` maps to a read-only live request observation built from route/request metadata and stable refs.
+- `ShadowComparisonReport` maps to a diagnostic report generated after live owner paths retain control.
+- RAG, context, runtime, KV, consensus, and lymphatic subreports remain diagnostic only.
+- The no-effect validator maps to live tests proving no response changes, no route changes, no mutation, and no forbidden execution.
+
+The following remain simulator-only or design-only until Phase 12B is separately approved:
+
+- live request observation
+- live adapter wiring
+- diagnostic sink implementation
+- code-level feature flag
+- operator-visible shadow status
+
+The following cannot be wired in Phase 12B:
+
+- live FORGE-K response composition
+- live RAG or retrieval execution
+- embedding provider calls
+- modelruntime calls
+- tool execution
+- memory writes
+- controllane semantic mutation
+- public API or route changes unless separately approved
 
 ## What Not To Do
 
