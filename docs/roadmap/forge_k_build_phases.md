@@ -415,6 +415,44 @@ Implementation status: completed as hardening only. Phase 12I strengthens dual-f
 
 What not to do: add new touchpoints, broaden chat capture, persist diagnostics, add public diagnostics APIs, execute tools, call modelruntime, run retrieval/search/embeddings, write memory, mutate controllane, or start authority migration.
 
+## Phase 12J - Retrieval Metadata Expansion Design
+
+Scope: `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
+
+Status: implemented.
+
+Goal: design a possible future retrieval metadata shadow expansion without implementing retrieval metadata observation.
+
+Deliverables: retrieval metadata expansion design, retrieval metadata risk review, future Phase 12K test plan, status updates, and roadmap updates.
+
+Allowed future metadata: retrieval run/result refs, workspace/request/correlation refs, source type/ref, existing source fingerprint, result count, selected count, bounded score summaries, ranking position, retrieval strategy, index name/type, safe embedding model id, freshness/staleness flags, timing/status metadata, diagnostic markers, and bounded warnings.
+
+Forbidden future metadata: source text, chunk text, document content, file content, raw user query, search snippets, embeddings, vectors, RAG output, prompts, model outputs, memory content, request/response bodies, auth headers, cookies, tokens, API keys, secrets, and large raw content blobs.
+
+What not to do: implement Phase 12K, add retrieval metadata observer code, execute retrieval/search/embedding calls, implement live RAG, capture source/chunk/query/vector content, add public diagnostics APIs, change route behavior, call modelruntime, execute tools, write memory, mutate controllane, or start authority migration.
+
+## Phase 12K - Retrieval Metadata Shadow Implementation
+
+Scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+
+Status: not started.
+
+Goal: implement bounded retrieval metadata diagnostics only if separately approved.
+
+Validation criteria: all tests in `docs/testing/phase_12k_retrieval_metadata_shadow_tests.md` pass before completion.
+
+What not to do: capture source text, chunks, embeddings/vectors, raw queries, prompts, model outputs, request/response bodies, memory content, secrets, or user-visible output.
+
+## Phase 12L - Retrieval Metadata Shadow Hardening
+
+Scope: `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
+
+Status: not started.
+
+Goal: review and harden any future Phase 12K implementation before broader metadata surfaces are considered.
+
+What not to do: add new touchpoints, broaden retrieval capture, persist diagnostics, add public diagnostics APIs, execute tools, call modelruntime, run retrieval/search/embeddings, write memory, mutate controllane, or start authority migration.
+
 ## Phase 12 - FORGE Daemon
 
 Scope: `LIVE_INTEGRATION`.

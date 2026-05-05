@@ -1,8 +1,8 @@
 # FORGE-K Shadow Mode
 
-Status: Phase 11F policy/contracts, Phase 11G simulator-only harness design, Phase 12A live integration design, Phase 12B disabled-by-default `/health` observer, Phase 12C diagnostics hardening, Phase 12D controlled expansion design, Phase 12E disabled-by-default route-envelope metadata observer, Phase 12F route-envelope hardening, Phase 12G chat metadata expansion design, Phase 12H disabled-by-default chat metadata shadowing, and Phase 12I chat metadata hardening.
+Status: Phase 11F policy/contracts, Phase 11G simulator-only harness design, Phase 12A live integration design, Phase 12B disabled-by-default `/health` observer, Phase 12C diagnostics hardening, Phase 12D controlled expansion design, Phase 12E disabled-by-default route-envelope metadata observer, Phase 12F route-envelope hardening, Phase 12G chat metadata expansion design, Phase 12H disabled-by-default chat metadata shadowing, Phase 12I chat metadata hardening, and Phase 12J retrieval metadata expansion design.
 
-Phase 11F defines integration readiness contracts, read-only adapters, and shadow policy. Phase 11G defines the simulator-only harness and report model design in `docs/architecture/shadow_mode_harness.md`. Phase 12A designs the first live shadow implementation path in `docs/architecture/forge_k_live_integration_design.md`. Phase 12B implements one disabled-by-default read-only `/health` metadata observer. Phase 12C hardens that observer. Phase 12D designs a controlled next expansion. Phase 12E implements disabled-by-default route-envelope metadata shadowing. Phase 12F hardens that route-envelope shadowing without adding observation scope. Phase 12G designs chat metadata. Phase 12H implements chat metadata diagnostics only when both the global shadow flag and chat-specific flag are enabled. Phase 12I hardens that chat metadata path without adding touchpoints or expanding capture scope. None of these phases authorizes live mutation.
+Phase 11F defines integration readiness contracts, read-only adapters, and shadow policy. Phase 11G defines the simulator-only harness and report model design in `docs/architecture/shadow_mode_harness.md`. Phase 12A designs the first live shadow implementation path in `docs/architecture/forge_k_live_integration_design.md`. Phase 12B implements one disabled-by-default read-only `/health` metadata observer. Phase 12C hardens that observer. Phase 12D designs a controlled next expansion. Phase 12E implements disabled-by-default route-envelope metadata shadowing. Phase 12F hardens that route-envelope shadowing without adding observation scope. Phase 12G designs chat metadata. Phase 12H implements chat metadata diagnostics only when both the global shadow flag and chat-specific flag are enabled. Phase 12I hardens that chat metadata path without adding touchpoints or expanding capture scope. Phase 12J designs a future retrieval metadata boundary only. None of these phases authorizes live mutation.
 
 ## Definition
 
@@ -21,7 +21,7 @@ Shadow mode means:
 - FORGE-K does not alter user-visible output
 - all shadow outputs are diagnostics only
 
-Phase 11G adds the harness/report design. Phase 12B adds the first live observation point: `/health` metadata only. Phase 12E adds route-envelope metadata observation behind the same disabled-by-default flag. Phase 12F hardens route-envelope safety, redaction, sink isolation, and no-effect tests without adding routes, persistence, or new live touchpoints. Phase 12G designs the chat metadata boundary. Phase 12H adds the chat message POST metadata observer behind an additional disabled-by-default chat flag. Phase 12I hardens the Phase 12H observer and tests while preserving the same touchpoint and metadata boundary.
+Phase 11G adds the harness/report design. Phase 12B adds the first live observation point: `/health` metadata only. Phase 12E adds route-envelope metadata observation behind the same disabled-by-default flag. Phase 12F hardens route-envelope safety, redaction, sink isolation, and no-effect tests without adding routes, persistence, or new live touchpoints. Phase 12G designs the chat metadata boundary. Phase 12H adds the chat message POST metadata observer behind an additional disabled-by-default chat flag. Phase 12I hardens the Phase 12H observer and tests while preserving the same touchpoint and metadata boundary. Phase 12J designs retrieval metadata only and adds no observation.
 
 ## Phase Split
 
@@ -36,7 +36,8 @@ Phase 11G adds the harness/report design. Phase 12B adds the first live observat
 - Phase 12G: docs-only chat metadata expansion design; no chat observation, no message content capture, no prompt capture, no output capture, and no route/API behavior change.
 - Phase 12H: disabled-by-default chat metadata observer for bounded ids/classes/counts/timing only; no message content, prompt, completion, tool payload, retrieval content, memory content, request/response body, route/API behavior, or user-visible output change.
 - Phase 12I: observability-only chat metadata hardening with no new touchpoints, no broader capture, no persistence, and no route/API/user-visible behavior change.
-- Phase 12 authority migration is not authorized by Phase 11F, Phase 11G, Phase 12A, Phase 12B, Phase 12C, Phase 12D, Phase 12E, Phase 12F, Phase 12G, Phase 12H, or Phase 12I.
+- Phase 12J: docs-only retrieval metadata expansion design; no retrieval observation, no retrieval/search/embedding execution, no source/chunk/vector/query/RAG output capture, and no route/API behavior change.
+- Phase 12 authority migration is not authorized by Phase 11F, Phase 11G, Phase 12A, Phase 12B, Phase 12C, Phase 12D, Phase 12E, Phase 12F, Phase 12G, Phase 12H, Phase 12I, or Phase 12J.
 
 `services/core/internal/forgek/integrationready` remains the Phase 11F readiness package. It does not implement the Phase 11G harness.
 
@@ -132,9 +133,9 @@ Stop Phase 11G or any future shadow harness implementation if an adapter or shad
 
 Every shadow output is diagnostics only. No shadow result can authorize live integration, canonical mutation, tool execution, memory writes, model runtime calls, retrieval execution, or user-visible output changes.
 
-## Phase 12B - 12H Current Scope
+## Phase 12B - 12J Current Scope
 
-Phase 12B through 12H currently allow only:
+Phase 12B through 12J currently allow only:
 
 - disabled-by-default feature flag: `FORGE_K_SHADOW_MODE_ENABLED=false`
 - disabled-by-default chat metadata feature flag: `FORGE_K_SHADOW_CHAT_METADATA_ENABLED=false`
@@ -148,5 +149,7 @@ Phase 12B through 12H currently allow only:
 - no request body, response body, prompt, model output, tool payload, retrieval content, or memory content capture
 - no raw query strings, raw request URI values, raw headers, cookies, authorization values, secrets, session values, embedding vectors, or search chunk content capture
 - no chat content, prompt, completion, assistant response text, system prompt, request body, response body, tool payload, retrieval content, or memory content capture
+- docs-only retrieval metadata design; no retrieval metadata observation exists
+- no source text, chunk text, document content, embedding, vector, raw query, or RAG output capture
 
 Any expansion beyond chat metadata requires a separately approved phase and must prove no-effect behavior with route inventory, response equivalence, forbidden execution, and no-mutation tests.

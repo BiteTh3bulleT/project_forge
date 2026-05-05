@@ -1,6 +1,6 @@
 # Phase 12B Shadow Harness Specification
 
-Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12D controlled expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E route-envelope metadata implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12F route-envelope hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12G chat metadata expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12H chat metadata shadowing implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12I chat metadata hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
+Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12D controlled expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E route-envelope metadata implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12F route-envelope hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12G chat metadata expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12H chat metadata shadowing implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12I chat metadata hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12J retrieval metadata expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 
 ## Scope
 
@@ -220,8 +220,11 @@ After Phase 12I:
 - no modelruntime calls are approved.
 - no gateway/tool execution is approved.
 - no memory write or controllane mutation is approved.
+- retrieval metadata remains design-only after Phase 12J.
+- no retrieval content observation exists.
+- no retrieval/search/embedding execution from FORGE-K is approved.
 
-The Phase 12D design is in `docs/architecture/phase_12d_controlled_shadow_expansion_design.md`; the touchpoint decision is in `docs/reviews/phase_12d_touchpoint_selection.md`; the Phase 12E and Phase 12F test coverage is recorded in `docs/testing/phase_12e_shadow_route_envelope_tests.md`; the Phase 12F hardening review is recorded in `docs/reviews/phase_12f_route_envelope_shadow_hardening.md`; the Phase 12G chat metadata design is recorded in `docs/architecture/phase_12g_chat_metadata_expansion_design.md`; the Phase 12I chat metadata hardening review is recorded in `docs/reviews/phase_12i_chat_metadata_shadow_hardening.md`.
+The Phase 12D design is in `docs/architecture/phase_12d_controlled_shadow_expansion_design.md`; the touchpoint decision is in `docs/reviews/phase_12d_touchpoint_selection.md`; the Phase 12E and Phase 12F test coverage is recorded in `docs/testing/phase_12e_shadow_route_envelope_tests.md`; the Phase 12F hardening review is recorded in `docs/reviews/phase_12f_route_envelope_shadow_hardening.md`; the Phase 12G chat metadata design is recorded in `docs/architecture/phase_12g_chat_metadata_expansion_design.md`; the Phase 12I chat metadata hardening review is recorded in `docs/reviews/phase_12i_chat_metadata_shadow_hardening.md`; the Phase 12J retrieval metadata design is recorded in `docs/architecture/phase_12j_retrieval_metadata_expansion_design.md`.
 
 ## What Not To Do
 
