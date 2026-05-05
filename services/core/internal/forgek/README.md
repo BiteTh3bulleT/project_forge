@@ -27,6 +27,8 @@ go test ./internal/forgek/...
 - Phase 11A Rust Kernel Core Research / Planning: docs only, no Rust code
 - Phase 11B Rust Deterministic Validation Boundary: standalone crate outside this package at `crates/forgek-validate`
 - Phase 11C Go/Rust Test Corpus Alignment: test-only parity in `fixture_parity_test.go`, shared fixtures outside this package at `fixtures/forgek`
+- Phase 11D Rust Validation CI and Tooling Integration: root/CI tooling only, no package runtime dependency
+- Phase 11E Consensus Mesh: `consensus`, `consensus_syscalls.go`
 
 ## Authority Boundary
 
@@ -46,6 +48,10 @@ Phase 11B is `RESEARCH_ONLY / SIMULATOR_ONLY`. It adds a standalone Rust crate a
 
 Phase 11C is `RESEARCH_ONLY / SIMULATOR_ONLY`. It adds Go test-only parity checks for the shared fixture corpus in `fixture_parity_test.go`. The tests load fixtures and golden files directly; they do not invoke Rust, add cgo, alter production Go code, or make Rust required for normal Go runtime execution.
 
+Phase 11D is `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. It wires Rust validation commands into CI and root helper scripts only. It does not add Rust to this Go package or make root `npm test` depend on Rust.
+
+Phase 11E is `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. The Consensus Mesh governs claim acceptance for response/action proposal shaping. It does not become truth, admit Courthouse evidence, write memory, execute actions, call runtime/model drivers, create ContextBlocks, or route live daemon state through FORGE-K.
+
 ## Future Rust Boundary
 
 What remains Go for now:
@@ -58,6 +64,7 @@ What remains Go for now:
 - Context Compiler block selection policy
 - Runtime driver invocation and backend integration
 - Lymphatic sweep policy and cleanup proposal generation
+- Consensus fixture validation in Rust until the Go consensus model stabilizes
 - all live daemon, gateway, route, controllane, and modelruntime behavior
 
 What Phase 11B begins validating in Rust and Phase 11C aligns with Go tests:

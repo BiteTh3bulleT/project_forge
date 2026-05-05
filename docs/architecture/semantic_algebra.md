@@ -24,10 +24,13 @@ Phase 5 implements the minimal Semantic Algebra package in `services/core/intern
 | CasePacket | A scoped packet containing claims, exhibits, validation records, and requested ruling |
 | Ruling | A Courthouse decision on admission, rejection, contradiction, or supersession |
 | Precedent | A prior ruling or policy interpretation used as guidance for future cases |
+| ConsensusReport | A response/action governance report over proposed claims; not canonical truth |
 
 Phase 5 `SemanticObject` records include workspace scope, object type, source object refs, source refs, content summary, normalized content, confidence, authority level, optional admissibility status, provenance refs, supersession refs, contradiction refs, timestamps, journal refs, and metadata.
 
 SemanticObjects may wrap or reference existing KernelObjects, Exhibits, CandidateObjects, PalaceRoutes, Rulings, NeuronEnvelopes, artifacts, or future memory objects. They prefer references over duplicated content. A SemanticObject is not canonical truth by construction; canonical mutation still requires Kernel-dispatched semantic syscalls.
+
+Consensus aggregation is not `MERGE`, not Courthouse admission, and not canonical mutation. Consensus reports may be referenced by SemanticObjects later, but Semantic Algebra must not treat consensus acceptance as truth without the normal Courthouse and Kernel paths.
 
 ## Operators
 

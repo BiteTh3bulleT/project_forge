@@ -2,7 +2,7 @@
 
 Companion to `docs/reviews/full_project_review.md` (2026-05-03).
 
-This is a concise status read of FORGE-K phases against the current repository. The key distinction is that Phase 1-10 are implemented in the simulator package `services/core/internal/forgek`, while the live daemon still uses the existing AI-OS/gateway/permissions/lane/audit authority paths. ADR 0005 records that FORGE-K is target architecture, not live daemon authority yet. Phase 11A is research/docs only. Phase 11B and Phase 11C are `RESEARCH_ONLY / SIMULATOR_ONLY` and add standalone Rust validation plus shared Go/Rust fixture parity. Phase 11D is `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY` and adds CI/tooling checks for that Rust validation lane. They are not live authority.
+This is a concise status read of FORGE-K phases against the current repository. The key distinction is that Phase 1-11E are implemented in the simulator package `services/core/internal/forgek`, while the live daemon still uses the existing AI-OS/gateway/permissions/lane/audit authority paths. ADR 0005 records that FORGE-K is target architecture, not live daemon authority yet. Phase 11A is research/docs only. Phase 11B and Phase 11C are `RESEARCH_ONLY / SIMULATOR_ONLY` and add standalone Rust validation plus shared Go/Rust fixture parity. Phase 11D is `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY` and adds CI/tooling checks for that Rust validation lane. Phase 11E is `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY` and adds Consensus Mesh claim governance. They are not live authority.
 
 | Phase | Title | Status | Where It Lives | Tests / Evidence | Open Work |
 | --- | --- | --- | --- | --- | --- |
@@ -21,19 +21,19 @@ This is a concise status read of FORGE-K phases against the current repository. 
 | 11B | Rust Deterministic Validation Boundary | IMPLEMENTED + TESTED; RESEARCH/SIMULATOR ONLY | `crates/forgek-validate`, `fixtures/forgek`, `docs/architecture/rust_kernel_core_plan.md`, `docs/reviews/phase_11_readiness.md`, roadmap/README scope notes. | Rust crate, fixture CLI, Go simulator, core build, vet, and aggregate core tests pass; commands are recorded below. | No live daemon integration, cgo, Go production call, CI dependency, public API, route, gateway, modelruntime, or live controllane behavior change. |
 | 11C | Go/Rust Test Corpus Alignment | IMPLEMENTED + TESTED; RESEARCH/SIMULATOR ONLY | `services/core/internal/forgek/fixture_parity_test.go`, `crates/forgek-validate`, `fixtures/forgek`, `scripts/forgek-parity.mjs`, roadmap/README scope notes. | Go fixture parity, Rust fixture validation, canonical golden JSON, golden hashes, and parity script validation pass; commands are recorded below. | No live daemon integration, cgo, Go production call, CI dependency, public API, route, gateway, modelruntime, or live controllane behavior change. |
 | 11D | Rust Validation CI and Tooling Integration | IMPLEMENTED + TESTED; RESEARCH/SIMULATOR/TOOLING ONLY | `.github/workflows/ci.yml`, `package.json`, `docs/testing/rust_validation.md`, `crates/forgek-validate/README.md`, roadmap/README/status docs. | CI installs stable Rust and runs separate Rust validator, fixture validation, and Go/Rust parity steps; local validation commands are recorded below. | No live daemon integration, cgo, Go production Rust call, root `npm test` Rust dependency, public API, route, gateway, modelruntime, or live controllane behavior change. |
+| 11E | Consensus Mesh | IMPLEMENTED + TESTED; SIMULATOR/GOVERNANCE ONLY | `services/core/internal/forgek/consensus/*`, `consensus_syscalls.go`, `consensus_syscalls_test.go`, `docs/architecture/consensus_mesh.md`. | Claim model, EvidenceRef, canonicalization, conflict detection, scoring, quorum, ledger, service, ComposerGuard, syscall, capability, journal, and no-second-authority tests pass under `go test ./internal/forgek/...`. | No live daemon integration, public API, route, gateway, modelruntime, controllane, tool execution, real model call, live memory write, or second Kernel authority path. |
 | 12 | FORGE Daemon | PARTIAL OUTSIDE FORGE-K | Existing `services/core/main.go` daemon. | Live daemon tests exist indirectly. | Not FORGE-K-governed yet. |
 | 13 | FORGE-1 Simulator | NOT STARTED | Concept doc only. | None. | Future research. |
 | 14 | FORGE-1 Prototype Research | DOCUMENTED CONCEPT ONLY | `docs/architecture/forge_1_cpu_concept.md`. | None. | Future research. |
 
 ## Readiness Notes
 
-- `go test ./internal/forgek/...` passes, including Phase 6 snapshot tests, Phase 7 Context Compiler tests, Phase 8 deterministic KV tests, Phase 9 runtime boundary tests, Phase 10 Lymphatic Lane tests, and Phase 11C Go fixture parity tests.
+- `go test ./internal/forgek/...` passes, including Phase 6 snapshot tests, Phase 7 Context Compiler tests, Phase 8 deterministic KV tests, Phase 9 runtime boundary tests, Phase 10 Lymphatic Lane tests, Phase 11C Go fixture parity tests, and Phase 11E Consensus Mesh tests.
 - Representative API route inventory tests pass.
-- `npm run test:rust:forgek`, `npm run validate:forgek-fixtures`, `npm run test:forgek:parity`, `cd crates/forgek-validate && cargo test`, and `cd services/core && go test ./internal/forgek/...` pass in this Phase 11D pass.
-- `npm run build:core`, `npm run lint`, and `npm test` pass in this Phase 11D pass.
+- `cd services/core && go test ./internal/forgek/...`, `npm run build:core`, `npm run lint`, `npm test`, and `npm run test:forgek:parity` pass in this Phase 11E pass.
 - Desktop typecheck/build is blocked by local Node workspace package resolution.
 - FORGE-K remains simulator authority only; the live daemon still uses AI-OS/gateway/permissions/lane/audit authority paths.
-- Phase 11B adds a standalone Rust fixture validator under `RESEARCH_ONLY / SIMULATOR_ONLY`; Phase 11C adds shared Go/Rust fixture parity under the same boundary; Phase 11D adds CI/tooling integration only. Do not wire Phase 7, Phase 8, Phase 9, Phase 10, Phase 11B, Phase 11C, Phase 11D, or future Rust code into the live daemon without a `LIVE_INTEGRATION` design and tests.
+- Phase 11B adds a standalone Rust fixture validator under `RESEARCH_ONLY / SIMULATOR_ONLY`; Phase 11C adds shared Go/Rust fixture parity under the same boundary; Phase 11D adds CI/tooling integration only; Phase 11E adds simulator-only claim governance. Do not wire Phase 7, Phase 8, Phase 9, Phase 10, Phase 11B, Phase 11C, Phase 11D, Phase 11E, or future Rust code into the live daemon without a `LIVE_INTEGRATION` design and tests.
 
 ## Phase 6 Validation
 
@@ -105,3 +105,13 @@ This is a concise status read of FORGE-K phases against the current repository. 
 - `docs/testing/rust_validation.md` records local commands, CI behavior, failure interpretation, fixture update workflow, and the no-live-authority boundary.
 - Phase 11D has no cgo bridge, live daemon integration, public API, route, gateway, modelruntime, live controllane, Go production Rust call, or Go runtime behavior change.
 - Validation commands passed for this pass: `npm run test:rust:forgek`, `npm run validate:forgek-fixtures`, `npm run test:forgek:parity`, `cd crates/forgek-validate && cargo test`, `cd services/core && go test ./internal/forgek/...`, `npm run build:core`, `npm run lint`, `npm test`, and `git diff --check`.
+
+## Phase 11E Validation
+
+- Phase 11E is recorded as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`.
+- `services/core/internal/forgek/consensus` implements Claim, EvidenceRef, AgentRun, ClaimLedger, canonicalization, conflict detection, ConsensusPolicy, weighted scoring, quorum, ConsensusDecision, ConsensusReport, ComposerGuard, and ConsensusService.
+- `services/core/internal/forgek/consensus_syscalls.go` registers `consensus.open`, `consensus.submit_claim`, `consensus.submit_evidence`, `consensus.evaluate`, `consensus.get_report`, `consensus.list_reports`, `consensus.build_composer_input`, and `consensus.read`.
+- Tests cover invalid claims/evidence, evidence tiers, Tier 3 factual limits, deterministic claim keys, conflicts, weighted scoring, quorum/risk policy, ledger determinism, service evaluation, accepted-claims-only composer payloads, capability gates, journal events, workspace scope, and no-second-authority invariants.
+- Consensus accepted does not mutate Kernel truth, admit Courthouse evidence, create ContextBlocks, call runtime/model drivers, execute actions, or write memory.
+- Phase 11E does not modify `crates/forgek-validate`; consensus fixtures may be added there later after the Go model stabilizes.
+- Validation commands passed for this pass: `cd services/core && go test ./internal/forgek/...`, `npm run build:core`, `npm run lint`, `npm test`, `npm run test:forgek:parity`, and `git diff --check`.

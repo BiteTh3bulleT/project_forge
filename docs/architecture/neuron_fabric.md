@@ -36,6 +36,7 @@ Phase 2 does not implement real model drivers, agent loops, Memory Palace retrie
 | Runtime neuron | Runtime-driver adapter around model or accelerator surfaces | Runtime outputs as proposals |
 | Motor neuron | Governed action proposal or gateway request wrapper | Proposed action only |
 | Lymphatic neuron | Maintenance worker for cleanup, contradiction sweeps, stale-loop detection, cache eviction, and compaction | Maintenance proposals or bounded non-truth cleanup |
+| Consensus neuron | Claim governance participant that can produce support, opposition, uncertainty, or validation inputs for Consensus Mesh | Consensus recommendations or quorum evidence only |
 
 ## Neuron Lifecycle
 
@@ -96,6 +97,7 @@ Neuron outputs are typed envelopes. Neural outputs are proposals. Rule outputs a
 - Cache neurons cannot promote KV cache into memory.
 - Runtime neurons cannot decide capability, approval, or truth.
 - Motor neurons cannot execute outside gateway and approval paths.
+- Consensus neurons cannot admit evidence, approve tools, mutate state, override deterministic validators, or make majority output canonical truth.
 
 ## Scheduling Expectations
 

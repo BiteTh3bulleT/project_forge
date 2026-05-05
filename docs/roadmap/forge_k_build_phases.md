@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -228,6 +228,22 @@ Validation criteria: CI failure surfaces stay separate; root `npm test` remains 
 Implementation status: implemented in `package.json`, `.github/workflows/ci.yml`, `docs/testing/rust_validation.md`, README/status docs, and the Rust crate README. No live daemon integration, cgo, Go production Rust call, public API, route, gateway, modelruntime, controllane, or runtime behavior change was added.
 
 What not to do: treat Rust CI checks as live integration, make root `npm test` depend on Rust, call Rust from Go production code, or use validator results as canonical mutation authority.
+
+## Phase 11E - Consensus Mesh
+
+Scope: `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`.
+
+Goal: implement governed claim acceptance for response/action proposal shaping without creating a second Kernel authority path.
+
+Implemented deliverables: Claim, EvidenceRef, AgentRun, ClaimLedger, claim canonicalization, conflict detection, ConsensusPolicy, weighted support scoring, quorum checks, ConsensusDecision, ConsensusReport, ComposerGuard, ConsensusService, consensus syscalls, capability gates, journal events, and accepted-claims-only tests.
+
+Validation criteria: unsupported factual claims are rejected or marked needs-more-evidence; Tier 3 inference cannot sole-support facts; conflicts block acceptance; composer payloads exclude rejected/raw proposed claims; accepted consensus claims do not mutate Kernel truth, Courthouse admissibility, ContextBlocks, runtime output, actions, or memory.
+
+Implementation status: implemented in `services/core/internal/forgek/consensus` and `services/core/internal/forgek/consensus_syscalls.go`, with architecture docs in `docs/architecture/consensus_mesh.md`. No live daemon integration, public API, route, gateway, modelruntime, controllane, tool execution, real model call, or live memory write was added.
+
+Rust validator note: Phase 11E consensus fixtures may be added to Rust validation later after the Go consensus model stabilizes. Phase 11E does not modify `crates/forgek-validate`.
+
+What not to do: treat consensus as truth, auto-admit claims into Courthouse, auto-write memory, execute actions, call model runtimes, run the full mesh for every simple request, or bypass Kernel semantic syscalls.
 
 ## Phase 12 - FORGE Daemon
 

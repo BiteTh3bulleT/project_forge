@@ -29,6 +29,11 @@ const (
 	ObjectTypeRuntimeResult     = "RuntimeGenerateResult"
 	ObjectTypeMaintenanceReport = "MaintenanceReport"
 	ObjectTypeCleanupProposal   = "CleanupProposal"
+	ObjectTypeConsensusRequest  = "ConsensusRequest"
+	ObjectTypeConsensusClaim    = "ConsensusClaim"
+	ObjectTypeConsensusEvidence = "ConsensusEvidenceRef"
+	ObjectTypeConsensusReport   = "ConsensusReport"
+	ObjectTypeComposerInput     = "ResponseCompositionInput"
 )
 
 const (
@@ -142,6 +147,14 @@ const (
 	SyscallLymphListProposals            = "lymph.list_proposals"
 	SyscallLymphCreateProposal           = "lymph.create_proposal"
 	SyscallLymphRead                     = "lymph.read"
+	SyscallConsensusOpen                 = "consensus.open"
+	SyscallConsensusSubmitClaim          = "consensus.submit_claim"
+	SyscallConsensusSubmitEvidence       = "consensus.submit_evidence"
+	SyscallConsensusEvaluate             = "consensus.evaluate"
+	SyscallConsensusGetReport            = "consensus.get_report"
+	SyscallConsensusListReports          = "consensus.list_reports"
+	SyscallConsensusBuildComposerInput   = "consensus.build_composer_input"
+	SyscallConsensusRead                 = "consensus.read"
 )
 
 const (
@@ -195,6 +208,10 @@ const (
 	JournalEventRuntimeGenerationFailed        = "RUNTIME_GENERATION_FAILED"
 	JournalEventLymphaticSweepCompleted        = "LYMPHATIC_SWEEP_COMPLETED"
 	JournalEventLymphaticProposalCreated       = "LYMPHATIC_PROPOSAL_CREATED"
+	JournalEventConsensusOpened                = "CONSENSUS_OPENED"
+	JournalEventConsensusClaimSubmitted        = "CONSENSUS_CLAIM_SUBMITTED"
+	JournalEventConsensusEvidenceSubmitted     = "CONSENSUS_EVIDENCE_SUBMITTED"
+	JournalEventConsensusEvaluated             = "CONSENSUS_EVALUATED"
 )
 
 const (

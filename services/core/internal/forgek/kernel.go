@@ -3,6 +3,7 @@ package forgek
 import (
 	"fmt"
 
+	"forge/projectforge/services/core/internal/forgek/consensus"
 	"forge/projectforge/services/core/internal/forgek/contextcompiler"
 	"forge/projectforge/services/core/internal/forgek/court"
 	"forge/projectforge/services/core/internal/forgek/kv"
@@ -31,6 +32,7 @@ type Kernel struct {
 	kv           *kv.Service
 	runtime      *forgekRuntime.Service
 	lymphatic    *lymphatic.Service
+	consensus    *consensus.Service
 	ids          IDProvider
 	clock        Clock
 }
@@ -58,6 +60,7 @@ func NewKernel(options KernelOptions) *Kernel {
 		kv:           kv.NewService(),
 		runtime:      forgekRuntime.NewService(),
 		lymphatic:    lymphatic.NewService(),
+		consensus:    consensus.NewService(),
 		ids:          ids,
 		clock:        clock,
 	}
@@ -111,6 +114,10 @@ func (k *Kernel) Runtime() *forgekRuntime.Service {
 
 func (k *Kernel) Lymphatic() *lymphatic.Service {
 	return k.lymphatic
+}
+
+func (k *Kernel) Consensus() *consensus.Service {
+	return k.consensus
 }
 
 func (k *Kernel) DispatchSyscall(request SyscallRequest) SyscallResult {
@@ -216,4 +223,5 @@ func (k *Kernel) registerCoreSyscalls() {
 	k.registerKVSyscalls(mustRegister)
 	k.registerRuntimeSyscalls(mustRegister)
 	k.registerLymphaticSyscalls(mustRegister)
+	k.registerConsensusSyscalls(mustRegister)
 }

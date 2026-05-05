@@ -4,6 +4,8 @@ Status: Phase 7 Context Compiler and Phase 8 Deterministic KV System are impleme
 
 The Context Compiler turns admitted semantic shape, snapshot refs, and restore seeds into deterministic, token-addressable ContextBlocks and ContextBundles. The KV cache accelerates exact reusable token shapes in a later phase. Neither context shape nor KV reuse is canonical memory.
 
+Phase 11E ConsensusReport refs may become future context inputs by reference. Context compilation must not treat a consensus report as admitted truth unless Courthouse admission exists; consensus is response/action governance, not canonical memory.
+
 Phase 7 scope is `SIMULATOR_ONLY` under `services/core/internal/forgek/contextcompiler` and `services/core/internal/forgek/context_syscalls.go`. Phase 8 scope is `SIMULATOR_ONLY` under `services/core/internal/forgek/kv` and `services/core/internal/forgek/kv_syscalls.go`. Neither phase is wired into the live daemon, and neither modifies the live AI-OS `COMPILE_CONTEXT`, gateway, model runtime, route, or public API paths.
 
 ## ContextBlock

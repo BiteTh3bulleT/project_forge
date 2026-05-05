@@ -134,6 +134,12 @@ Phase 5 Semantic Algebra may consume CandidateObject, Exhibit, Ruling, Contradic
 
 Semantic operations do not admit evidence, reject evidence, or mutate Courthouse admissibility state directly. Contradiction and supersession operations may produce Courthouse syscall requests, but the Kernel and Courthouse must authorize and execute those requests.
 
+## Consensus Mesh Boundary
+
+Phase 11E Consensus Mesh may cite CandidateObjects, Exhibits, Rulings, Contradictions, PalaceRoutes, SemanticOperations, RuntimeGenerateResults, and other FORGE-K objects by reference. A consensus report may later be submitted as an exhibit or used as ruling input, but only through Courthouse syscalls such as `court.submit` or `court.rule`.
+
+Consensus accepted does not mean admitted evidence. Courthouse remains the admission authority, and rejected evidence cannot become admitted merely because consensus supported a related claim.
+
 ## Courthouse
 
 Courthouse is the evidence governance layer. It decides which candidates become admitted context or eligible commit evidence.
