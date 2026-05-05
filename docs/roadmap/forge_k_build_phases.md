@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -195,9 +195,9 @@ Validation criteria for this research pass: Rust crate tests pass, fixture valid
 
 Validation criteria for a future implementation pass: Rust and Go agree on shared fixtures; no live daemon integration; no cgo; no public API, route, gateway, modelruntime, or live controllane behavior changes.
 
-What not to do: replace the Go simulator, call model runtimes, mutate state, add live authority, add cgo, add routes, call Rust from Go production code, or add Rust dependencies to CI without explicit approval.
+What not to do: replace the Go simulator, call model runtimes, mutate state, add live authority, add cgo, add routes, call Rust from Go production code, or add Rust dependencies to CI without an explicit tooling phase.
 
-Implementation status: standalone crate implemented in `crates/forgek-validate`; fixtures implemented in `fixtures/forgek`; helper scripts added as `test:rust:forgek` and `validate:forgek-fixtures`; CI wiring is not implemented.
+Implementation status: standalone crate implemented in `crates/forgek-validate`; fixtures implemented in `fixtures/forgek`; helper scripts added as `test:rust:forgek` and `validate:forgek-fixtures`. CI wiring is implemented later in Phase 11D.
 
 ## Phase 11C - Go/Rust Test Corpus Alignment
 
@@ -214,6 +214,20 @@ Validation criteria: fixture corpus is versioned, language-neutral, deterministi
 Implementation status: implemented in `services/core/internal/forgek/fixture_parity_test.go`, `crates/forgek-validate`, `fixtures/forgek`, and `scripts/forgek-parity.mjs`. No live daemon integration, cgo, Go production Rust call, public API, route, gateway, modelruntime, controllane, or CI dependency was added.
 
 What not to do: treat fixture parity as live integration, call Rust from Go production code, make Rust required for normal Go runtime execution, or bypass ADR 0005.
+
+## Phase 11D - Rust Validation CI and Tooling Integration
+
+Scope: `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`.
+
+Goal: make the Phase 11B Rust validator and Phase 11C Go/Rust parity corpus visible in local tooling and CI without creating a live Rust authority path.
+
+Implemented deliverables: stable Rust setup in `.github/workflows/ci.yml`, separate CI steps for `npm run test:rust:forgek`, `npm run validate:forgek-fixtures`, and `npm run test:forgek:parity`, plus the optional grouped helper `npm run validate:forgek`.
+
+Validation criteria: CI failure surfaces stay separate; root `npm test` remains Go/core-only and does not depend on Rust; Rust validation remains fixture/parity tooling only; existing Go tests, lint, desktop typecheck/build, and smoke CI steps remain preserved.
+
+Implementation status: implemented in `package.json`, `.github/workflows/ci.yml`, `docs/testing/rust_validation.md`, README/status docs, and the Rust crate README. No live daemon integration, cgo, Go production Rust call, public API, route, gateway, modelruntime, controllane, or runtime behavior change was added.
+
+What not to do: treat Rust CI checks as live integration, make root `npm test` depend on Rust, call Rust from Go production code, or use validator results as canonical mutation authority.
 
 ## Phase 12 - FORGE Daemon
 

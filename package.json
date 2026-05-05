@@ -17,6 +17,7 @@
     "test:rust:forgek": "cd crates/forgek-validate && cargo test",
     "validate:forgek-fixtures": "cd crates/forgek-validate && cargo run -- validate-fixtures ../../fixtures/forgek",
     "test:forgek:parity": "node ./scripts/forgek-parity.mjs",
+    "validate:forgek": "npm run test:rust:forgek && npm run validate:forgek-fixtures && npm run test:forgek:parity",
     "test:core": "node ./scripts/check-vsa-files.mjs --require-tracked && cd services/core && go test ./...",
     "vet:core": "node ./scripts/check-vsa-files.mjs --require-tracked && cd services/core && go vet ./...",
     "test": "npm run test:core",

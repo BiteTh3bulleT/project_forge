@@ -24,6 +24,9 @@ jobs:
           node-version: "22"
           cache: npm
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Install system desktop deps
         run: |
           sudo apt-get update
@@ -36,6 +39,15 @@ jobs:
 
       - name: Install workspace deps
         run: npm ci
+
+      - name: Rust FORGE-K validator tests
+        run: npm run test:rust:forgek
+
+      - name: Rust FORGE-K fixture validation
+        run: npm run validate:forgek-fixtures
+
+      - name: Go/Rust FORGE-K parity
+        run: npm run test:forgek:parity
 
       - name: Go tests
         run: npm test

@@ -18,6 +18,7 @@ FORGE-K work is done only when the implementation, documentation, tests, and evi
 - Superseded objects remain inspectable.
 - Contradictions are recorded instead of silently merged.
 - Runtime drivers remain isolated from Kernel authority.
+- Research/tooling phases remain isolated from live daemon authority.
 
 ## Phase Evidence
 
@@ -25,6 +26,8 @@ Every phase report should include:
 
 - commands run
 - validation results
+- fixture and golden corpus drift evidence when shared validation fixtures change
+- CI/workflow evidence when tooling integration changes
 - files changed
 - unresolved blockers
 - known risks

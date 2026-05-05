@@ -23,7 +23,11 @@ Root helper scripts:
 ```bash
 npm run test:rust:forgek
 npm run validate:forgek-fixtures
+npm run test:forgek:parity
+npm run validate:forgek
 ```
+
+`npm run validate:forgek` is a grouped convenience command for local and ad hoc validation. CI intentionally runs the validator tests, fixture validation, and Go/Rust parity as separate steps so their failures remain easy to interpret.
 
 ## Implemented Boundary
 
@@ -49,3 +53,13 @@ npm run validate:forgek-fixtures
 - no live KV reuse
 - no gateway behavior changes
 - no canonical state mutation
+
+## CI And Tooling Boundary
+
+Phase 11D allows CI to install stable Rust and run the root helper commands for this crate and the shared fixture corpus:
+
+- `npm run test:rust:forgek`
+- `npm run validate:forgek-fixtures`
+- `npm run test:forgek:parity`
+
+These checks validate deterministic fixture contracts only. They do not make Rust part of the live daemon, do not make Rust an authority path, do not call model runtimes, and do not change root `npm test`.
