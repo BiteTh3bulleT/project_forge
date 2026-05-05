@@ -34,6 +34,7 @@ import (
 	"forge/projectforge/services/core/internal/evaluations"
 	"forge/projectforge/services/core/internal/events"
 	"forge/projectforge/services/core/internal/failurepatterns"
+	"forge/projectforge/services/core/internal/forgekshadow"
 	"forge/projectforge/services/core/internal/gateway"
 	"forge/projectforge/services/core/internal/gpu"
 	"forge/projectforge/services/core/internal/imports"
@@ -108,6 +109,7 @@ type Server struct {
 	discordMu       sync.RWMutex
 	discordGateway  *DiscordGateway
 	discordErr      string
+	forgeKShadow    *forgekshadow.Observer
 
 	// chatAssistInflight tracks assistant generation (async job or SSE) per thread/user-message key.
 	chatAssistInflight sync.Map
@@ -229,6 +231,10 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	if autonomyLoop != nil {
 		go autonomyLoop.Run(ctx)
 	}
+	var shadowObserver *forgekshadow.Observer
+	if cfg.ForgeKShadowModeEnabled {
+		shadowObserver = forgekshadow.NewObserver(forgekshadow.Config{Enabled: true})
+	}
 	srv := &Server{
 		st:             st,
 		cfg:            cfg,
@@ -272,6 +278,7 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		watch:          wm,
 		watchStop:      cancel,
 		autonomy:       autonomyLoop,
+		forgeKShadow:   shadowObserver,
 	}
 	srv.telegramGateway = srv.tryStartTelegramGateway(ctx, cfg)
 	srv.discordGateway = srv.tryStartDiscordGateway(ctx, cfg)
@@ -394,6 +401,21 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, payload)
+	if s.forgeKShadow != nil && s.forgeKShadow.Enabled() {
+		s.forgeKShadow.ObserveBestEffort(r.Context(), forgekshadow.ObservationInput{
+			WorkspaceID:    s.cfg.WorkspaceDir,
+			RequestID:      r.Header.Get("X-Request-ID"),
+			LivePath:       "GET /health",
+			Method:         r.Method,
+			Path:           r.URL.Path,
+			RequestSummary: "health route metadata only",
+			Metadata: map[string]any{
+				"route":      "/health",
+				"method":     r.Method,
+				"touchpoint": "health",
+			},
+		})
+	}
 }
 
 func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {

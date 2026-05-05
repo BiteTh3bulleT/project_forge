@@ -1,8 +1,8 @@
 # Phase 12B Shadow Harness Test Plan
 
-Status: Phase 12A planning artifact. Phase 12B is not started.
+Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
-These tests must exist before or during any future Phase 12B read-only shadow harness implementation.
+These tests define the required no-effect threshold for the read-only shadow harness.
 
 ## Required Tests
 
@@ -39,8 +39,33 @@ Phase 12B cannot be considered complete unless:
 - forbidden execution tests pass
 - rollback and kill-switch tests pass
 
+## Implemented Test Coverage
+
+Current Phase 12B tests cover:
+
+- `FORGE_K_SHADOW_MODE_ENABLED` defaults to disabled and parses explicit enable/invalid values.
+- Disabled shadow observer stores no reports.
+- Enabled shadow observer stores diagnostic reports only.
+- `/health` response status, body, and content type are unchanged with shadow mode enabled.
+- Route inventory key set is unchanged with shadow mode enabled.
+- Shadow report sink failure does not fail the live `/health` request.
+- Diagnostic sink retention is bounded and drops oldest reports.
+- Secret-looking metadata is rejected.
+- No-effect policy failures are rejected.
+- `forgekshadow` forbidden import tests prevent gateway, modelruntime, retrieval/search/embedding, memory, AI-OS, and controllane imports.
+
+Current validation commands:
+
+- `cd services/core && go test ./internal/forgekshadow/...`
+- `cd services/core && go test ./internal/api -run "TestServerRouteInventory|TestServerRouteInventoryHealthAndMiddlewareSmoke" -count=1`
+- `cd services/core && go test ./internal/forgek/...`
+- `npm run build:core`
+- `npm run lint`
+- `npm test`
+- `npm run test:forgek:parity`
+- `git diff --check`
+
 ## What Not To Do
 
-- Do not treat this test plan as permission to implement Phase 12B.
 - Do not add tests by changing public API behavior.
 - Do not validate shadow mode by executing real tools, models, retrieval, embeddings, or memory writes.

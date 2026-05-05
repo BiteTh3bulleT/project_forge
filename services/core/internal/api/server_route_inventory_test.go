@@ -1,13 +1,17 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
 
 	"forge/projectforge/services/core/internal/config"
+	"forge/projectforge/services/core/internal/forgekshadow"
 )
 
 func TestServerRouteInventoryRepresentativeCoverage(t *testing.T) {
@@ -132,6 +136,65 @@ func TestServerRouteInventoryHealthAndMiddlewareSmoke(t *testing.T) {
 	}
 }
 
+func TestServerRouteInventoryUnchangedWithForgeKShadowEnabled(t *testing.T) {
+	disabled := collectServerRoutes(t, (&Server{}).Handler())
+	enabled := collectServerRoutes(t, (&Server{
+		cfg:          config.Config{ForgeKShadowModeEnabled: true},
+		forgeKShadow: forgekshadow.NewObserver(forgekshadow.Config{Enabled: true}),
+	}).Handler())
+	if !sameRouteSet(disabled, enabled) {
+		t.Fatalf("shadow mode changed route inventory\ndisabled=%#v\nenabled=%#v", routeKeys(disabled), routeKeys(enabled))
+	}
+}
+
+func TestHealthResponseUnchangedWithForgeKShadowEnabled(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req.Header.Set("X-Request-ID", "request-health-shadow")
+
+	disabledRR := httptest.NewRecorder()
+	(&Server{}).Handler().ServeHTTP(disabledRR, req.Clone(context.Background()))
+
+	observer := forgekshadow.NewObserver(forgekshadow.Config{Enabled: true})
+	enabledRR := httptest.NewRecorder()
+	(&Server{
+		cfg:          config.Config{ForgeKShadowModeEnabled: true},
+		forgeKShadow: observer,
+	}).Handler().ServeHTTP(enabledRR, req.Clone(context.Background()))
+
+	if disabledRR.Code != enabledRR.Code {
+		t.Fatalf("shadow changed /health status disabled=%d enabled=%d", disabledRR.Code, enabledRR.Code)
+	}
+	if disabledRR.Body.String() != enabledRR.Body.String() {
+		t.Fatalf("shadow changed /health body disabled=%q enabled=%q", disabledRR.Body.String(), enabledRR.Body.String())
+	}
+	if disabledRR.Header().Get("Content-Type") != enabledRR.Header().Get("Content-Type") {
+		t.Fatalf("shadow changed content type disabled=%q enabled=%q", disabledRR.Header().Get("Content-Type"), enabledRR.Header().Get("Content-Type"))
+	}
+	reports := observer.Reports()
+	if len(reports) != 1 {
+		t.Fatalf("expected one diagnostic report, got %d", len(reports))
+	}
+	if reports[0].Observation.Metadata["route"] != "/health" {
+		t.Fatalf("expected health metadata only, got %#v", reports[0].Observation.Metadata)
+	}
+	if _, ok := reports[0].Observation.Metadata["body"]; ok {
+		t.Fatalf("shadow report must not capture request/response bodies: %#v", reports[0].Observation.Metadata)
+	}
+}
+
+func TestHealthResponseUnchangedWhenForgeKShadowSinkFails(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	observer := forgekshadow.NewObserverWithSink(forgekshadow.Config{Enabled: true}, failingShadowSink{}, nil)
+	rr := httptest.NewRecorder()
+	(&Server{
+		cfg:          config.Config{ForgeKShadowModeEnabled: true},
+		forgeKShadow: observer,
+	}).Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/health status=%d, want %d", rr.Code, http.StatusOK)
+	}
+}
+
 func TestServerRouteInventoryAssistantStreamOrderGuardrail(t *testing.T) {
 	routes := collectServerRoutes(t, (&Server{}).Handler())
 	streamIndex := routeIndex(routes, http.MethodGet, "/api/chat/threads/{id}/assistant-stream")
@@ -190,3 +253,32 @@ func routeIndex(routes routeInventory, method, path string) int {
 	}
 	return -1
 }
+
+func sameRouteSet(left, right routeInventory) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for key := range left {
+		if _, ok := right[key]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func routeKeys(routes routeInventory) []string {
+	out := make([]string, 0, len(routes))
+	for key := range routes {
+		out = append(out, key)
+	}
+	sort.Strings(out)
+	return out
+}
+
+type failingShadowSink struct{}
+
+func (failingShadowSink) Store(context.Context, forgekshadow.DiagnosticReport) error {
+	return errors.New("sink failed")
+}
+
+func (failingShadowSink) List() []forgekshadow.DiagnosticReport { return nil }

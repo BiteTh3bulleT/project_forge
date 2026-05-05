@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12B is not started.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12B Read-only Shadow Harness Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -293,9 +293,11 @@ Scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
 Goal: implement a read-only shadow harness that observes selected live paths and emits diagnostics without influencing live behavior.
 
-Deliverables: scoped live adapters, diagnostic persistence, route inventory tests, shadow comparison tests, rollback controls, and operator visibility.
+Implemented deliverables: core config flag `FORGE_K_SHADOW_MODE_ENABLED` with default `false`, `services/core/internal/forgekshadow` read-only observer, bounded in-memory diagnostic sink, secret-looking metadata rejection, no-effect policy validation, forbidden import tests, `/health` request-metadata-only observation after response writing, route inventory tests, health response equivalence tests, and sink failure isolation tests.
 
 Validation criteria: live request/response behavior is unchanged; no live mutation is performed by FORGE-K; no tools, retrieval, embeddings, modelruntime calls, memory writes, or user-visible output changes originate from shadow mode.
+
+Implementation status: implemented and tested in `services/core/internal/forgekshadow`, `services/core/internal/config`, and the `/health` handler. The selected live touchpoint is `/health` metadata only. The diagnostic sink is in-memory only and has no public API. Route inventory and `/health` response behavior are unchanged with the flag enabled. No live authority migration was added.
 
 What not to do: migrate authority, commit FORGE-K truth, execute tools, call models, run live RAG, or alter responses.
 

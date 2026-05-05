@@ -32,6 +32,7 @@ go test ./internal/forgek/...
 - Phase 11F Integration Readiness Contracts: `integrationready`
 - Phase 11G Shadow Mode Harness Design: `shadowharness`
 - Phase 12A Live Integration Design: docs only, no package code
+- Phase 12B Read-only Shadow Harness Implementation: live-adjacent package outside this simulator at `services/core/internal/forgekshadow`
 
 ## Authority Boundary
 
@@ -60,6 +61,8 @@ Phase 11F is `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. The `integrationready` pa
 Phase 11G is `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. The `shadowharness` package defines simulator-only observation, comparison report, subreport, policy, and no-effect validation contracts for a future read-only shadow harness. It has no syscalls, no Kernel ownership, no live daemon imports, no API routes, no live observation, no gateway/modelruntime/controllane behavior, no live retrieval or embedding calls, no live RAG, no live memory mutation, and no user-visible output authority.
 
 Phase 12A is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. It records the future Phase 12B read-only shadow harness design in architecture/review/testing docs. It adds no Go code, no syscalls, no Kernel ownership, no live daemon imports, no route/API changes, no live observation, no gateway/modelruntime/controllane behavior, no live retrieval or embedding calls, no live RAG, no memory writes, and no user-visible output authority.
+
+Phase 12B is `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT` and lives outside this simulator package in `services/core/internal/forgekshadow`. It observes `/health` request metadata only when `FORGE_K_SHADOW_MODE_ENABLED=true`, writes bounded in-memory diagnostic reports only, and reuses `shadowharness` for no-effect validation. It does not add syscalls, Kernel ownership, public routes, public APIs, live retrieval, embedding calls, live RAG, modelruntime calls, tool execution, memory writes, controllane mutation, gateway behavior changes, or user-visible output authority.
 
 ## Future Rust Boundary
 

@@ -1,14 +1,14 @@
 # FORGE-K Live Integration Design
 
-Status: Phase 12A implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
+Status: Phase 12A implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
-Phase 12A does not authorize implementation. Phase 12B must be separately approved before any live code changes.
+Phase 12B implements the first disabled-by-default read-only live touchpoint. It does not authorize live authority migration.
 
 ## Executive Summary
 
 FORGE-K Phase 1-11G is implemented and tested in simulator, research, tooling, governance, integration-prep, and shadow-design layers. The live daemon still uses the existing AI-OS, gateway, permissions, lane, audit, modelruntime, retrieval, embeddings, memory, search, and API authority paths.
 
-Phase 12A designs the first live integration path: a future Phase 12B read-only shadow harness. The design preserves live authority by allowing only passive observation of already-executing live paths, diagnostic report generation, and disabled-by-default activation. It does not wire FORGE-K into the live daemon.
+Phase 12A designed the first live integration path. Phase 12B implements the smallest read-only shadow harness: `/health` request metadata can be copied into a bounded in-memory diagnostic sink when `FORGE_K_SHADOW_MODE_ENABLED=true`. The design preserves live authority by allowing only passive observation of already-executing live paths, diagnostic report generation, and disabled-by-default activation. It does not wire FORGE-K into live authority.
 
 ## Current Simulator / Live Split
 
@@ -32,7 +32,7 @@ Phase 12A does not add feature flags in code, routes, adapters, syscalls, import
 
 ## Phase 12B Proposed Scope
 
-Phase 12B may implement a read-only shadow harness only if separately approved. Its proposed scope is `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+Phase 12B scope is `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
 The first Phase 12B candidate may observe:
 
@@ -47,12 +47,26 @@ The first Phase 12B candidate may observe:
 
 Phase 12B must not affect live responses, routes, public API response shapes, approvals, gateway execution, modelruntime behavior, retrieval execution, embeddings, memory writes, or controllane mutation.
 
-## Non-Goals
+## Phase 12B Implementation Record
+
+The implemented Phase 12B scope is intentionally narrower than the candidate map:
+
+- package: `services/core/internal/forgekshadow`
+- feature flag: `FORGE_K_SHADOW_MODE_ENABLED`, default `false`
+- selected touchpoint: `/health` request metadata only
+- captured data: workspace id, request id if provided, method, route, touchpoint label, and diagnostic summary
+- sink: bounded in-memory diagnostic reports only, with no public API
+- failure handling: best-effort observer; sink, redaction, or policy failures do not fail the live request
+- simulator contract reuse: imports `services/core/internal/forgek/shadowharness` for no-effect validation only
+
+Phase 12B does not capture request or response bodies, add public routes, change route inventory, change response status/body/header shape, execute tools, call modelruntime, execute retrieval/search/embeddings, write memory, mutate controllane state, or alter gateway/permission/lane/audit authority.
+
+## Phase 12A Non-Goals
 
 - Do not implement Phase 12B in Phase 12A.
 - Do not wire FORGE-K into the live daemon.
-- Do not observe live requests yet.
-- Do not add code-level feature flags yet.
+- Do not observe live requests during Phase 12A.
+- Do not add code-level feature flags during Phase 12A.
 - Do not modify live APIs or routes.
 - Do not call live retrieval, search, embeddings, modelruntime, or tools.
 - Do not compile live context through FORGE-K.
@@ -63,7 +77,7 @@ Phase 12B must not affect live responses, routes, public API response shapes, ap
 
 ## Live Authority Preservation
 
-The future shadow harness is not an authority path. It must run after, beside, or outside the live owner, never before the live owner and never as a replacement.
+The shadow harness is not an authority path. It must run after, beside, or outside the live owner, never before the live owner and never as a replacement.
 
 Authority preservation rules:
 
@@ -78,7 +92,7 @@ Authority preservation rules:
 
 ## Read-Only Shadow Integration Concept
 
-Future Phase 12B shadow mode means:
+Phase 12B shadow mode means:
 
 1. A live request continues through the existing live path.
 2. A disabled-by-default observer may receive stable metadata and refs.
@@ -112,7 +126,7 @@ The Phase 12B adapter set is designed in `docs/architecture/phase_12b_adapter_in
 
 ## Data Flow
 
-The future read-only data flow is:
+The read-only data flow is:
 
 1. Live daemon handles request through existing code.
 2. Live owner emits or exposes read-only metadata.
@@ -151,7 +165,7 @@ Reports must include workspace, correlation, live path, observed refs, warnings,
 
 ## Feature Flag / Kill Switch Strategy
 
-Suggested future flag: `FORGE_K_SHADOW_MODE_ENABLED=false`.
+Implemented flag: `FORGE_K_SHADOW_MODE_ENABLED=false`.
 
 Hard defaults:
 
@@ -161,7 +175,7 @@ Hard defaults:
 - one restart-free runtime setting may be considered later only if it cannot alter route/API behavior
 - an emergency kill switch must stop observation and report generation without affecting the live daemon
 
-Phase 12A does not add this flag in code.
+Phase 12B adds this flag to core config. Disabling the flag stops report generation. Current reports are in-memory only, so process restart clears them.
 
 ## Failure Handling
 
@@ -186,11 +200,11 @@ Rollback for Phase 12B must include:
 - confirm no live authority owner depends on shadow output
 - revert the Phase 12B commit if any no-effect guarantee fails
 
-Because Phase 12A is docs-only, rollback is a documentation revert only.
+Because the Phase 12B sink is in-memory only and disabled by default, rollback is primarily disabling `FORGE_K_SHADOW_MODE_ENABLED` or reverting the Phase 12B commit if no-effect evidence regresses.
 
 ## Test Strategy
 
-The future Phase 12B test set must include:
+The Phase 12B test set must include:
 
 - feature flag disabled tests
 - route inventory unchanged tests
@@ -239,10 +253,7 @@ Phase 12B must be bounded:
 
 ## What Not To Do
 
-- Do not implement Phase 12B in this phase.
 - Do not wire FORGE-K into the live daemon.
-- Do not observe live requests yet.
-- Do not add feature flags in code yet.
 - Do not modify live APIs.
 - Do not add routes.
 - Do not call live retrieval or embeddings.

@@ -69,6 +69,7 @@ type Config struct {
 	ModelChatModelCooldownMs                    int
 	ModelChatCheckpointLimit                    int
 	EnableOpenAICompatAPI                       bool
+	ForgeKShadowModeEnabled                     bool
 }
 
 func Load() Config {
@@ -171,6 +172,7 @@ func Load() Config {
 		ModelChatModelCooldownMs:            envInt("FORGE_MODEL_CHAT_MODEL_COOLDOWN_MS", 5000, 0),
 		ModelChatCheckpointLimit:            envInt("FORGE_MODEL_CHAT_CHECKPOINT_LIMIT", 128, 1),
 		EnableOpenAICompatAPI:               envBool("FORGE_ENABLE_OPENAI_COMPAT_API", false),
+		ForgeKShadowModeEnabled:             envBool("FORGE_K_SHADOW_MODE_ENABLED", false),
 	}
 }
 

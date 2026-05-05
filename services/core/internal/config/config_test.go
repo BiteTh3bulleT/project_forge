@@ -83,6 +83,7 @@ func TestLoadModelRuntimeDefaultsSafe(t *testing.T) {
 	t.Setenv("FORGE_EMBEDDING_PROVIDER", "")
 	t.Setenv("FORGE_EMBEDDING_MODEL", "")
 	t.Setenv("FORGE_EMBEDDING_DIMS", "")
+	t.Setenv("FORGE_K_SHADOW_MODE_ENABLED", "")
 
 	cfg := Load()
 	expectedModelHome, err := filepath.Abs(filepath.Join(cfg.DataDir, "models"))
@@ -128,6 +129,9 @@ func TestLoadModelRuntimeDefaultsSafe(t *testing.T) {
 	}
 	if cfg.DreamModeAllowGPUSubjobs {
 		t.Fatalf("expected dream mode GPU subjobs disabled by default")
+	}
+	if cfg.ForgeKShadowModeEnabled {
+		t.Fatalf("expected FORGE-K shadow mode disabled by default")
 	}
 	if !cfg.DreamModeGPUOnlyInDeepIdle {
 		t.Fatalf("expected dream mode GPU to be deep-idle-only by default")
@@ -287,6 +291,7 @@ func TestLoadModelRuntimeOverrides(t *testing.T) {
 	t.Setenv("FORGE_EMBEDDING_PROVIDER", "tei")
 	t.Setenv("FORGE_EMBEDDING_MODEL", "bge-large")
 	t.Setenv("FORGE_EMBEDDING_DIMS", "1024")
+	t.Setenv("FORGE_K_SHADOW_MODE_ENABLED", "true")
 
 	cfg := Load()
 	expectedModelHome, err := filepath.Abs("./test-models")
@@ -436,6 +441,9 @@ func TestLoadModelRuntimeOverrides(t *testing.T) {
 	if cfg.EmbeddingProvider != "tei" || cfg.EmbeddingModel != "bge-large" || cfg.EmbeddingDims != 1024 {
 		t.Fatalf("expected embedding overrides, got provider=%q model=%q dims=%d", cfg.EmbeddingProvider, cfg.EmbeddingModel, cfg.EmbeddingDims)
 	}
+	if !cfg.ForgeKShadowModeEnabled {
+		t.Fatalf("expected FORGE-K shadow mode enabled from env")
+	}
 }
 
 func TestLoadModelRuntimeInvalidValuesFallbackToDefaults(t *testing.T) {
@@ -473,11 +481,15 @@ func TestLoadModelRuntimeInvalidValuesFallbackToDefaults(t *testing.T) {
 	t.Setenv("FORGE_MODEL_CHAT_PROVIDER_COOLDOWN_MS", "bad")
 	t.Setenv("FORGE_MODEL_CHAT_MODEL_COOLDOWN_MS", "none")
 	t.Setenv("FORGE_MODEL_CHAT_CHECKPOINT_LIMIT", "x")
+	t.Setenv("FORGE_K_SHADOW_MODE_ENABLED", "shadow?")
 
 	cfg := Load()
 
 	if cfg.EnableModelRuntime {
 		t.Fatalf("expected invalid bool to fall back to false")
+	}
+	if cfg.ForgeKShadowModeEnabled {
+		t.Fatalf("expected invalid FORGE-K shadow mode bool to fall back to false")
 	}
 	if cfg.GPUEnabled {
 		t.Fatalf("expected invalid GPU enabled bool to fall back to false")

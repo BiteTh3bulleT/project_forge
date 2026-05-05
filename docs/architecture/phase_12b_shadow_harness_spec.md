@@ -1,16 +1,16 @@
 # Phase 12B Shadow Harness Specification
 
-Status: Phase 12A design artifact only. Phase 12B is not started.
+Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
 ## Scope
 
-Future Phase 12B scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+Phase 12B scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
-Phase 12B may implement a read-only shadow harness that observes selected live metadata and generates diagnostic reports. It must not mutate live state, affect live responses, execute tools, call modelruntime, perform retrieval, call embeddings, write memory, compile live context, or create a second authority path.
+Phase 12B implements a read-only shadow harness that observes selected live metadata and generates diagnostic reports. It must not mutate live state, affect live responses, execute tools, call modelruntime, perform retrieval, call embeddings, write memory, compile live context, or create a second authority path.
 
 ## Feature Flag
 
-Suggested flag: `FORGE_K_SHADOW_MODE_ENABLED=false`.
+Implemented flag: `FORGE_K_SHADOW_MODE_ENABLED=false`.
 
 Config defaults:
 
@@ -30,9 +30,20 @@ When disabled:
 - no diagnostic sink is written
 - no response, status code, header, or public API shape changes
 
-## Observed Live Request Types
+## Implemented Touchpoint
 
-First Phase 12B candidates:
+The Phase 12B implementation intentionally observes one low-risk live touchpoint:
+
+- `/health` request metadata only
+- observation runs after the health response is written
+- captured metadata is bounded to route, method, touchpoint, workspace id, optional request id, and a short diagnostic summary
+- reports are stored only in a bounded in-memory sink with no public API
+- report failures are best-effort and cannot fail the live request
+- no request body, response body, prompt, model output, tool payload, retrieval result content, or memory content is captured
+
+## Future Candidate Live Request Types
+
+Later phases may consider:
 
 - chat message submission metadata
 - assistant completion metadata
@@ -78,7 +89,7 @@ Forbidden metadata:
 
 ## Mirrored Evidence Refs
 
-Phase 12B may mirror refs for:
+Later shadow phases may mirror refs for:
 
 - memory notes
 - memory observations
@@ -94,26 +105,24 @@ Mirroring a ref does not admit evidence, write memory, create truth, or affect r
 
 ## Shadow Report
 
-A future report should include:
+The implemented diagnostic report includes:
 
 - report_id
 - generated_at
 - workspace_id
 - correlation_id
 - live_path
-- adapters_used
-- mirrored_refs
-- subreport_refs or embedded diagnostic summaries
+- observed refs when provided
+- no-effect validation result
+- diagnostic-only comparison report
 - no_effect_verified
 - warnings
-- dropped_fields
-- retention_expires_at
 
 Reports are diagnostics only.
 
 ## Storage Location
 
-Recommended first implementation: in-memory diagnostic sink unless operator-visible persistence is explicitly approved.
+Implemented first storage: in-memory diagnostic sink with bounded retention.
 
 If persistence is approved, use a dedicated diagnostic table or artifact record clearly marked non-authoritative. Do not store reports in canonical memory tables.
 
@@ -164,9 +173,10 @@ Adapters observe existing live traces only. They cannot call gateway execution m
 - redaction/rejection of secret-looking metadata
 - kill switch stops report generation
 
+Implemented Phase 12B tests cover the default flag, enabled flag parsing, route inventory key set stability, `/health` response status/body/header equivalence, diagnostic report generation behind the flag, sink failure isolation, bounded report retention, secret-looking metadata rejection, no-effect policy rejection, and forbidden imports.
+
 ## What Not To Do
 
-- Do not implement Phase 12B during Phase 12A.
 - Do not add public routes unless separately approved.
 - Do not use shadow output in live response composition.
 - Do not treat reports as truth.
