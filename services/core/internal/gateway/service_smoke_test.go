@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -226,6 +227,36 @@ INSERT INTO jobs(
 	}
 	if res.Status != StatusOK {
 		t.Fatalf("expected status ok, got %s (%s)", res.Status, res.DeniedReason)
+	}
+}
+
+func TestGatewayHeldMultiActionApprovalScope(t *testing.T) {
+	t.Parallel()
+	scope := map[string]any{
+		"approvalHoldOpen":          true,
+		"approvalHoldKind":          "multi_action_request",
+		"approvalHoldCorrelationId": "corr-held",
+		"approvalHoldJobId":         "job-held",
+		"approvalHoldMaxRiskRank":   gatewayApprovalRiskRank("high"),
+	}
+	raw, err := json.Marshal(scope)
+	if err != nil {
+		t.Fatalf("marshal scope: %v", err)
+	}
+	jobID := "job-held"
+	req := Request{CorrelationID: "corr-held", JobID: &jobID}
+	if !approvalScopeHoldsForRequest(raw, req, "medium") {
+		t.Fatalf("expected held approval to cover same-correlation lower-risk follow-on")
+	}
+	if approvalScopeHoldsForRequest(raw, Request{CorrelationID: "corr-other"}, "medium") {
+		t.Fatalf("held approval must not cover a different correlation")
+	}
+	otherJobID := "job-other"
+	if approvalScopeHoldsForRequest(raw, Request{CorrelationID: "corr-held", JobID: &otherJobID}, "medium") {
+		t.Fatalf("held approval must not cover a different job")
+	}
+	if approvalScopeHoldsForRequest(raw, req, "critical") {
+		t.Fatalf("held approval must not cover higher-risk follow-on")
 	}
 }
 

@@ -80,6 +80,22 @@ func TestDesktopSplitAppAndCommand(t *testing.T) {
 	}
 }
 
+func TestDesktopSplitAppAndCommandGenericTerminalRun(t *testing.T) {
+	app, cmd := desktopSplitAppAndCommand("Open terminal and run sudo zypper refresh")
+	if app != "terminal" {
+		t.Fatalf("expected app terminal, got %q", app)
+	}
+	want := []string{"sudo", "zypper", "refresh"}
+	if len(cmd) != len(want) {
+		t.Fatalf("command length = %d, want %d: %v", len(cmd), len(want), cmd)
+	}
+	for i := range want {
+		if cmd[i] != want[i] {
+			t.Fatalf("cmd[%d] = %q, want %q (full %v)", i, cmd[i], want[i], cmd)
+		}
+	}
+}
+
 func TestDesktopTerminalLaunchArgs(t *testing.T) {
 	args, ok := desktopTerminalLaunchArgs("konsole", []string{"ping", "10.100.1.5"})
 	if !ok {
@@ -106,5 +122,21 @@ func TestDesktopInlineCommandFromInput(t *testing.T) {
 	})
 	if len(cmd) != 2 || cmd[0] != "ping" || cmd[1] != "10.100.1.5" {
 		t.Fatalf("expected ping command from query fallback, got %v", cmd)
+	}
+}
+
+func TestDesktopInlineCommandFromInputGenericTerminalRun(t *testing.T) {
+	cmd := desktopInlineCommandFromInput(map[string]any{
+		"application": "terminal",
+		"query":       "Open terminal and run sudo zypper refresh",
+	})
+	want := []string{"sudo", "zypper", "refresh"}
+	if len(cmd) != len(want) {
+		t.Fatalf("command length = %d, want %d: %v", len(cmd), len(want), cmd)
+	}
+	for i := range want {
+		if cmd[i] != want[i] {
+			t.Fatalf("cmd[%d] = %q, want %q (full %v)", i, cmd[i], want[i], cmd)
+		}
 	}
 }

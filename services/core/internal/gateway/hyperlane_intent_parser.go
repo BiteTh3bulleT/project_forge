@@ -173,6 +173,8 @@ func gatewayToolRouteHint(s string) (route string, confidence float64, matchedRu
 		return hyperlane.RouteGatewayWebSearch, 0.72, "gateway_web_search"
 	case wantsURLFetch(s):
 		return hyperlane.RouteGatewayNetFetch, 0.72, "gateway_url_fetch"
+	case wantsTerminalOpen(s):
+		return hyperlane.RouteGatewayDesktopOpen, 0.74, "gateway_terminal_open"
 	case wantsBrowserOpen(s):
 		return hyperlane.RouteGatewayDesktopOpen, 0.72, "gateway_browser_open"
 	case wantsGitStatus(s):

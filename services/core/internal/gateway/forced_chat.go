@@ -236,6 +236,20 @@ func wantsShellRun(user string) bool {
 	return false
 }
 
+func wantsTerminalOpen(user string) bool {
+	s := strings.TrimSpace(strings.ToLower(user))
+	if s == "" {
+		return false
+	}
+	if !(strings.Contains(s, "terminal") || strings.Contains(s, "konsole")) {
+		return false
+	}
+	if !(strings.Contains(s, "open") || strings.Contains(s, "launch") || strings.Contains(s, "start")) {
+		return false
+	}
+	return true
+}
+
 func wantsWebSearch(user string) bool {
 	s := strings.TrimSpace(strings.ToLower(user))
 	if s == "" {

@@ -1149,6 +1149,9 @@ func (g *Gateway) recordNeedsApproval(ctx context.Context, req Request, lane *la
 			"approvalFingerprintHash":    fingerprintHash,
 			"approvalFingerprintFields":  fingerprintFields,
 		}
+		for k, v := range g.multiActionApprovalScope(req, tool, risk, effectiveJobID) {
+			scopeSnapshot[k] = v
+		}
 		ar, err := g.approvals.OpenRequestForJob(ctx, effectiveJobID, approvals.CreateRequestInput{
 			JobID:            effectiveJobID,
 			RequestedAction:  fmt.Sprintf("%s.%s", tool.Domain(), tool.Action()),
@@ -1301,6 +1304,60 @@ INSERT INTO jobs(
 		return "", fmt.Errorf("insert chat gateway job: %w", err)
 	}
 	return id, nil
+}
+
+func (g *Gateway) multiActionApprovalScope(req Request, tool Tool, risk, jobID string) map[string]any {
+	if tool == nil {
+		return nil
+	}
+	userRequest := strings.TrimSpace(metadataString(req.Metadata, "chatUserRequest"))
+	if userRequest == "" {
+		userRequest = strings.TrimSpace(metadataString(req.Metadata, "userRequest"))
+	}
+	if userRequest == "" {
+		return nil
+	}
+	if !looksLikeMultiActionApprovalRequest(userRequest, tool.ID()) {
+		return nil
+	}
+	return map[string]any{
+		"approvalHoldOpen":          true,
+		"approvalHoldKind":          "multi_action_request",
+		"approvalHoldReason":        "operator request contains multiple requested actions; approval remains scoped to this job and correlation",
+		"approvalHoldCorrelationId": req.CorrelationID,
+		"approvalHoldJobId":         strings.TrimSpace(jobID),
+		"approvalHoldMaxRiskRank":   gatewayApprovalRiskRank(risk),
+		"approvalHoldToolId":        tool.ID(),
+		"approvalHoldUserRequest":   trimForApprovalScope(userRequest, 500),
+	}
+}
+
+func looksLikeMultiActionApprovalRequest(userRequest, toolID string) bool {
+	s := strings.TrimSpace(strings.ToLower(userRequest))
+	if s == "" {
+		return false
+	}
+	if toolID == "desktop.open" {
+		if _, _, ok := desktopGenericInlineCommand(userRequest); ok {
+			return true
+		}
+	}
+	actionWords := 0
+	for _, word := range []string{" open ", " launch ", " start ", " run ", " execute ", " create ", " write ", " install ", " refresh ", " build ", " test ", " fetch "} {
+		if strings.Contains(" "+s+" ", word) {
+			actionWords++
+		}
+	}
+	return actionWords >= 2 && (strings.Contains(s, " and ") || strings.Contains(s, " then ") || strings.Contains(s, ", then ") || strings.Contains(s, ", run "))
+}
+
+func trimForApprovalScope(s string, max int) string {
+	s = strings.Join(strings.Fields(strings.TrimSpace(s)), " ")
+	if max <= 0 || len([]rune(s)) <= max {
+		return s
+	}
+	runes := []rune(s)
+	return string(runes[:max]) + "..."
 }
 
 func gatewayApprovalRequestInput(tool Tool, req Request) map[string]any {
@@ -2599,6 +2656,9 @@ func desktopLooksLikePath(v string) bool {
 }
 
 func desktopSplitAppAndCommand(raw string) (appHint string, command []string) {
+	if app, cmd, ok := desktopGenericInlineCommand(raw); ok {
+		return app, cmd
+	}
 	normalized := desktopNormalizeAppHint(raw)
 	if normalized == "" {
 		return "", nil
@@ -2633,6 +2693,66 @@ func desktopSplitAppAndCommand(raw string) (appHint string, command []string) {
 		return app, []string{"ping", target}
 	}
 	return normalized, nil
+}
+
+func desktopGenericInlineCommand(raw string) (appHint string, command []string, ok bool) {
+	text := strings.TrimSpace(raw)
+	if text == "" {
+		return "", nil, false
+	}
+	lower := strings.ToLower(text)
+	delims := []string{
+		" and run ",
+		" then run ",
+		" to run ",
+		", run ",
+		" and execute ",
+		" then execute ",
+		" to execute ",
+		", execute ",
+	}
+	for _, delim := range delims {
+		idx := strings.Index(lower, delim)
+		if idx <= 0 {
+			continue
+		}
+		app := desktopNormalizeAppHint(text[:idx])
+		if !desktopHintSupportsInlineCommand(app) {
+			continue
+		}
+		cmd, cmdOK := desktopParseInlineCommand(text[idx+len(delim):])
+		if !cmdOK {
+			continue
+		}
+		return app, cmd, true
+	}
+	return "", nil, false
+}
+
+func desktopHintSupportsInlineCommand(appHint string) bool {
+	hint := strings.TrimSpace(strings.ToLower(appHint))
+	return hint == "terminal" ||
+		strings.Contains(hint, "terminal") ||
+		strings.Contains(hint, "konsole") ||
+		strings.Contains(hint, "xterm") ||
+		strings.Contains(hint, "kitty") ||
+		strings.Contains(hint, "alacritty")
+}
+
+func desktopParseInlineCommand(raw string) ([]string, bool) {
+	cmd := strings.TrimSpace(raw)
+	cmd = strings.TrimPrefix(cmd, "the command ")
+	cmd = strings.TrimSpace(strings.Trim(cmd, " :"))
+	cmd = strings.Trim(cmd, `"'`)
+	cmd = strings.TrimSpace(strings.TrimRight(cmd, "."))
+	if cmd == "" || strings.ContainsAny(cmd, "\x00\r\n") {
+		return nil, false
+	}
+	fields := strings.Fields(cmd)
+	if len(fields) == 0 {
+		return nil, false
+	}
+	return fields, true
 }
 
 func desktopExtractPingTarget(raw string) string {
@@ -3605,9 +3725,77 @@ LIMIT 1`, jobID)
 	}
 	actualHash, _ := g.approvalFingerprintForRequestID(req, lane, tool, risk, level, resolvedPaths, requestID)
 	if actualHash != expectedHash {
+		if approvalScopeHoldsForRequest(json.RawMessage(scope), req, risk) {
+			return true, nil
+		}
 		return false, fmt.Errorf("approval request %d fingerprint mismatch", requestID)
 	}
 	return true, nil
+}
+
+func approvalScopeHoldsForRequest(raw json.RawMessage, req Request, risk string) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var scope map[string]any
+	if err := json.Unmarshal(raw, &scope); err != nil {
+		return false
+	}
+	holdOpen, _ := scope["approvalHoldOpen"].(bool)
+	if !holdOpen {
+		return false
+	}
+	approvedCorr := strings.TrimSpace(fmt.Sprintf("%v", scope["approvalHoldCorrelationId"]))
+	if approvedCorr != "" && strings.TrimSpace(req.CorrelationID) != "" && approvedCorr != strings.TrimSpace(req.CorrelationID) {
+		return false
+	}
+	approvedJobID := strings.TrimSpace(fmt.Sprintf("%v", scope["approvalHoldJobId"]))
+	if approvedJobID != "" {
+		if req.JobID == nil || strings.TrimSpace(*req.JobID) != approvedJobID {
+			return false
+		}
+	}
+	maxRank := intFromApprovalScope(scope["approvalHoldMaxRiskRank"])
+	if maxRank > 0 && gatewayApprovalRiskRank(risk) > maxRank {
+		return false
+	}
+	return true
+}
+
+func intFromApprovalScope(v any) int {
+	switch typed := v.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	case json.Number:
+		n, _ := typed.Int64()
+		return int(n)
+	case string:
+		n, _ := strconv.Atoi(strings.TrimSpace(typed))
+		return n
+	default:
+		return 0
+	}
+}
+
+func gatewayApprovalRiskRank(risk string) int {
+	switch strings.ToLower(strings.TrimSpace(risk)) {
+	case "critical":
+		return 5
+	case "high":
+		return 4
+	case "medium", "safe_write":
+		return 3
+	case "low", "read":
+		return 2
+	case "none", "":
+		return 1
+	default:
+		return 3
+	}
 }
 
 func toolDomainFromID(id string) string {
