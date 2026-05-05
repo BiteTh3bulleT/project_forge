@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12B Read-only Shadow Harness Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12C Shadow Diagnostics Review and Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12D Controlled Shadow Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12E Route Envelope Shadow Metadata is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12B Read-only Shadow Harness Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12C Shadow Diagnostics Review and Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12D Controlled Shadow Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12E Route Envelope Shadow Metadata is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12F Route Envelope Shadow Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -353,17 +353,21 @@ Implementation status: implemented in `services/core/internal/forgekshadow` and 
 
 What not to do: migrate authority, broaden to chat/retrieval/gateway traces, capture content, persist diagnostics, add public APIs, alter responses, execute tools, call modelruntime, run retrieval, write memory, or treat reports as truth.
 
-## Phase 12F - Shadow Diagnostics Review for Route Envelope
+## Phase 12F - Route Envelope Shadow Hardening
 
 Scope: `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
 
-Status: not started.
+Status: implemented and tested.
 
-Goal: review and harden any future Phase 12E route-envelope diagnostics before wider observation is considered.
+Goal: harden the existing Phase 12E route-envelope diagnostics before any wider observation is considered.
 
-Expected deliverables: diagnostic review record, redaction review, retention review, route coverage review, failure isolation review, performance review, route drift review, and a go/no-go recommendation for any later metadata surface.
+Implemented deliverables: diagnostic review record, matched route-pattern safety, route class normalization, query/header/body/secret leakage prevention, reserved metadata key rejection, deterministic metadata value enforcement, bounded in-memory retention, sink failure isolation, disabled/enabled response equivalence tests, SSE mount/order and timeout stability tests, no public diagnostics route checks, and forbidden live authority import checks.
 
-Validation criteria: route-envelope observation remains disabled by default, bounded, metadata-only, non-authoritative, and proven to have no effect on live responses or live authority paths.
+Allowed data remains: HTTP method, matched route template, normalized route class, safe request id when available, bounded timing summary, and no-effect validation result.
+
+Forbidden data remains: request bodies, response bodies, raw headers except allowlisted non-secret correlation ids, raw query strings, prompts, model output, tool payloads, retrieval content, embedding vectors, search chunks, memory content, secrets, credentials, cookies, authorization headers, and session values.
+
+Validation criteria: route-envelope observation remains disabled by default, bounded, metadata-only, non-authoritative, and proven to have no effect on live responses or live authority paths. Route inventory, response status/body/header equivalence, SSE mount/order, timeout middleware behavior, sink failure isolation, redaction failure behavior, and forbidden imports must pass.
 
 What not to do: add new touchpoints, observe chat content, observe retrieval content, observe gateway payloads, persist reports, add public diagnostics routes, execute tools, call modelruntime, run retrieval/search/embeddings, write memory, mutate controllane, or start authority migration.
 

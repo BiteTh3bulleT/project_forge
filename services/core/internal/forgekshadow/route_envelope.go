@@ -3,8 +3,10 @@ package forgekshadow
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 const (
@@ -57,10 +59,7 @@ func normalizeRouteEnvelopeInput(input RouteEnvelopeInput, now time.Time, observ
 		method = http.MethodGet
 	}
 	routePattern := safeRoutePattern(input.RoutePattern)
-	routeClass := strings.TrimSpace(input.RouteClass)
-	if routeClass == "" {
-		routeClass = NormalizeRouteClass(input.Path, routePattern)
-	}
+	routeClass := normalizeProvidedRouteClass(input.RouteClass, input.Path, routePattern)
 	pathValue := routePattern
 	if pathValue == "" && routeClass == RouteClassHealth {
 		pathValue = "/health"
@@ -101,10 +100,14 @@ func normalizeRouteEnvelopeInput(input RouteEnvelopeInput, now time.Time, observ
 		metadata["warning_count"] = len(warnings)
 	}
 	for key, value := range input.Metadata {
-		if _, exists := metadata[key]; exists {
+		trimmedKey := strings.TrimSpace(key)
+		if isReservedRouteEnvelopeMetadataKey(trimmedKey) {
 			continue
 		}
-		metadata[key] = value
+		if _, exists := metadata[trimmedKey]; exists {
+			continue
+		}
+		metadata[trimmedKey] = value
 	}
 	safe, err := safeMetadata(metadata)
 	if err != nil {
@@ -133,6 +136,10 @@ func safeRoutePattern(value string) string {
 		return ""
 	}
 	value = strings.Split(value, "?")[0]
+	value = strings.TrimRight(value, "/")
+	if value == "" {
+		value = "/"
+	}
 	if containsUnsafeTerm(value) {
 		return ""
 	}
@@ -142,7 +149,84 @@ func safeRoutePattern(value string) string {
 	if !strings.HasPrefix(value, "/") {
 		return ""
 	}
+	if hasRawDynamicRouteSegment(value) {
+		return ""
+	}
 	return value
+}
+
+func normalizeProvidedRouteClass(routeClass, pathValue, routePattern string) string {
+	switch strings.TrimSpace(routeClass) {
+	case RouteClassHealth:
+		return RouteClassHealth
+	case RouteClassAPI:
+		return RouteClassAPI
+	case RouteClassForge:
+		return RouteClassForge
+	case RouteClassOpenAICompat:
+		return RouteClassOpenAICompat
+	case RouteClassStaticOrUnknown:
+		return RouteClassStaticOrUnknown
+	case RouteClassOther:
+		return RouteClassOther
+	default:
+		return NormalizeRouteClass(pathValue, routePattern)
+	}
+}
+
+func isReservedRouteEnvelopeMetadataKey(key string) bool {
+	switch normalizeMetadataToken(key) {
+	case "observation_type", "method", "route_class", "duration_ms", "path", "route_pattern",
+		"request_id", "workspace_id", "correlation_id", "status_code", "warning_count":
+		return true
+	default:
+		return false
+	}
+}
+
+func hasRawDynamicRouteSegment(routePattern string) bool {
+	for _, segment := range strings.Split(routePattern, "/") {
+		segment = strings.TrimSpace(segment)
+		if segment == "" || strings.HasPrefix(segment, "{") && strings.HasSuffix(segment, "}") {
+			continue
+		}
+		if isNumericSegment(segment) || looksLikeUUID(segment) {
+			return true
+		}
+	}
+	return false
+}
+
+func isNumericSegment(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func looksLikeUUID(value string) bool {
+	if len(value) != 36 {
+		return false
+	}
+	parts := strings.Split(value, "-")
+	if len(parts) != 5 {
+		return false
+	}
+	widths := []int{8, 4, 4, 4, 12}
+	for i, part := range parts {
+		if len(part) != widths[i] {
+			return false
+		}
+		if _, err := strconv.ParseUint(part, 16, 64); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 func safeRouteEnvelopeWarnings(in []string) ([]string, error) {

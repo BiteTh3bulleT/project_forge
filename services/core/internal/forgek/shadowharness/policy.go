@@ -24,8 +24,9 @@ func ValidateShadowHarnessPolicy(policy ShadowHarnessPolicy) error {
 		return fmt.Errorf("%w: shadow harness policy", ErrMissingRequiredField)
 	}
 	if policy.AllowLiveMutation || policy.AllowToolExecution || policy.AllowModelRuntimeCalls ||
-		policy.AllowRetrievalExecution || policy.AllowEmbeddingCalls || policy.AllowMemoryWrites ||
-		policy.AllowUserVisibleOutput || policy.AllowPublicAPIChanges {
+		policy.AllowRetrievalExecution || policy.AllowSearchExecution || policy.AllowEmbeddingCalls ||
+		policy.AllowMemoryWrites || policy.AllowControllaneMutations || policy.AllowUserVisibleOutput ||
+		policy.AllowPublicAPIChanges {
 		return fmt.Errorf("%w: shadow harness policy", ErrSideEffectAllowed)
 	}
 	if hasSecretMetadata(policy.Metadata) {

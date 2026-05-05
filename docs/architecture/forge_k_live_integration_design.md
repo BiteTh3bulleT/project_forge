@@ -283,7 +283,7 @@ Phase 12B must be bounded:
 2. Phase 12B: disabled-by-default read-only shadow harness implementation.
 3. Phase 12C: shadow diagnostics review and hardening.
 4. Phase 12D: controlled shadow expansion design only; select one next candidate and record tests.
-5. Phase 12E: possible route envelope metadata implementation if separately approved.
+5. Phase 12E: route-envelope metadata implementation behind the disabled-by-default shadow flag.
 6. Phase 12F: route-envelope diagnostics review and hardening before wider observation.
 7. Later phases: scoped authority migration only with separate approval, tests, and rollback.
 

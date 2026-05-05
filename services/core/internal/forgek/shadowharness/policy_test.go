@@ -8,7 +8,8 @@ func TestDefaultShadowHarnessPolicyForbidsAllSideEffects(t *testing.T) {
 		t.Fatal(err)
 	}
 	if policy.AllowLiveMutation || policy.AllowToolExecution || policy.AllowModelRuntimeCalls ||
-		policy.AllowRetrievalExecution || policy.AllowEmbeddingCalls || policy.AllowMemoryWrites ||
+		policy.AllowRetrievalExecution || policy.AllowSearchExecution || policy.AllowEmbeddingCalls || policy.AllowMemoryWrites ||
+		policy.AllowControllaneMutations ||
 		policy.AllowUserVisibleOutput || policy.AllowPublicAPIChanges {
 		t.Fatalf("default policy has side effects enabled: %#v", policy)
 	}
@@ -27,8 +28,10 @@ func TestShadowHarnessPolicyRejectsSideEffects(t *testing.T) {
 		{"tool execution", func(p *ShadowHarnessPolicy) { p.AllowToolExecution = true }},
 		{"modelruntime call", func(p *ShadowHarnessPolicy) { p.AllowModelRuntimeCalls = true }},
 		{"retrieval execution", func(p *ShadowHarnessPolicy) { p.AllowRetrievalExecution = true }},
+		{"search execution", func(p *ShadowHarnessPolicy) { p.AllowSearchExecution = true }},
 		{"embedding call", func(p *ShadowHarnessPolicy) { p.AllowEmbeddingCalls = true }},
 		{"memory write", func(p *ShadowHarnessPolicy) { p.AllowMemoryWrites = true }},
+		{"controllane mutation", func(p *ShadowHarnessPolicy) { p.AllowControllaneMutations = true }},
 		{"user-visible output", func(p *ShadowHarnessPolicy) { p.AllowUserVisibleOutput = true }},
 		{"public API change", func(p *ShadowHarnessPolicy) { p.AllowPublicAPIChanges = true }},
 	}

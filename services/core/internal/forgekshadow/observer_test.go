@@ -3,6 +3,7 @@ package forgekshadow
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -110,9 +111,16 @@ func TestObserverRejectsUnsafeMetadataWithoutStoringReport(t *testing.T) {
 		{"authorization", map[string]any{"authorization": "redacted"}},
 		{"cookie", map[string]any{"cookie": "redacted"}},
 		{"session", map[string]any{"session": "redacted"}},
+		{"set cookie", map[string]any{"set_cookie": "redacted"}},
+		{"x api key", map[string]any{"x_api_key": "redacted"}},
+		{"auth", map[string]any{"auth": "redacted"}},
+		{"jwt", map[string]any{"jwt": "redacted"}},
+		{"refresh token", map[string]any{"refresh_token": "redacted"}},
+		{"access token", map[string]any{"access_token": "redacted"}},
 		{"request body", map[string]any{"body": "raw request"}},
 		{"response body", map[string]any{"response_body": "raw response"}},
 		{"prompt", map[string]any{"prompt": "raw prompt"}},
+		{"raw content", map[string]any{"raw_content": "raw content"}},
 		{"large content", map[string]any{"summary": strings.Repeat("x", maxMetadataStringLength+1)}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -142,8 +150,10 @@ func TestObserverRefusesAnySideEffectPolicy(t *testing.T) {
 		{"tool execution", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowToolExecution = true }},
 		{"modelruntime call", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowModelRuntimeCalls = true }},
 		{"retrieval execution", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowRetrievalExecution = true }},
+		{"search execution", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowSearchExecution = true }},
 		{"embedding call", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowEmbeddingCalls = true }},
 		{"memory write", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowMemoryWrites = true }},
+		{"controllane mutation", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowControllaneMutations = true }},
 		{"user-visible output", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowUserVisibleOutput = true }},
 		{"public API change", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowPublicAPIChanges = true }},
 	}
@@ -254,9 +264,10 @@ func TestRouteEnvelopeNormalizesRouteClass(t *testing.T) {
 		want         string
 	}{
 		{"health", "/health", "/health", RouteClassHealth},
-		{"api", "/api/meta", "/api/meta", RouteClassAPI},
-		{"forge", "/forge/models", "/forge/models", RouteClassForge},
-		{"openai", "/v1/models", "/v1/models", RouteClassOpenAICompat},
+		{"api", "/api/meta?token=ignored", "/api/meta", RouteClassAPI},
+		{"api query without pattern", "/api/meta?token=ignored", "", RouteClassAPI},
+		{"forge", "/forge/models?api_key=ignored", "/forge/models", RouteClassForge},
+		{"openai", "/v1/models?secret=ignored", "/v1/models", RouteClassOpenAICompat},
 		{"unknown", "/favicon.ico", "", RouteClassStaticOrUnknown},
 		{"other", "/custom", "/custom", RouteClassOther},
 	}
@@ -309,8 +320,179 @@ func TestRouteEnvelopeDoesNotStoreBodyOrSecretFields(t *testing.T) {
 	}
 }
 
+func TestRouteEnvelopePrefersPatternAndRejectsUnsafePattern(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true}, nil, fixedNow)
+	if err := observer.ObserveRouteEnvelope(context.Background(), RouteEnvelopeInput{
+		WorkspaceID:  "workspace-a",
+		RequestID:    "request-a",
+		Method:       "GET",
+		Path:         "/api/chat/threads/123/assistant-stream?token=should-not-store",
+		RoutePattern: "/api/chat/threads/{id}/assistant-stream?token=should-not-store",
+		Duration:     15 * time.Millisecond,
+	}); err != nil {
+		t.Fatalf("observe route envelope: %v", err)
+	}
+	reports := observer.Reports()
+	if len(reports) != 1 {
+		t.Fatalf("expected one report, got %d", len(reports))
+	}
+	envelope := reports[0].RouteEnvelope
+	if envelope == nil {
+		t.Fatalf("expected route envelope")
+	}
+	if envelope.Path != "/api/chat/threads/{id}/assistant-stream" || envelope.RoutePattern != "/api/chat/threads/{id}/assistant-stream" {
+		t.Fatalf("expected sanitized route pattern, got %#v", envelope)
+	}
+	serialized := strings.ToLower(toTestString(reports[0].Observation.Metadata) + " " + reports[0].Observation.LivePath)
+	for _, forbidden := range []string{"123", "token", "should-not-store"} {
+		if strings.Contains(serialized, forbidden) {
+			t.Fatalf("route envelope leaked %q in %q", forbidden, serialized)
+		}
+	}
+}
+
+func TestRouteEnvelopeNormalizesProvidedRouteClassToKnownClasses(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true}, nil, fixedNow)
+	if err := observer.ObserveRouteEnvelope(context.Background(), RouteEnvelopeInput{
+		WorkspaceID:  "workspace-a",
+		RequestID:    "request-a",
+		Method:       "GET",
+		Path:         "/api/meta",
+		RoutePattern: "/api/meta",
+		RouteClass:   "custom-or-secret-class",
+	}); err != nil {
+		t.Fatalf("observe route envelope: %v", err)
+	}
+	report := observer.Reports()[0]
+	if report.RouteEnvelope == nil || report.RouteEnvelope.RouteClass != RouteClassAPI {
+		t.Fatalf("expected canonical api route class, got %#v", report.RouteEnvelope)
+	}
+}
+
+func TestRouteEnvelopeDropsRawDynamicRoutePatternWhenPatternUnavailable(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true}, nil, fixedNow)
+	if err := observer.ObserveRouteEnvelope(context.Background(), RouteEnvelopeInput{
+		WorkspaceID:  "workspace-a",
+		RequestID:    "request-a",
+		Method:       "GET",
+		Path:         "/api/chat/threads/123456789/assistant-stream",
+		RoutePattern: "/api/chat/threads/123456789/assistant-stream",
+	}); err != nil {
+		t.Fatalf("observe route envelope: %v", err)
+	}
+	report := observer.Reports()[0]
+	if report.RouteEnvelope == nil {
+		t.Fatalf("expected route envelope")
+	}
+	if report.RouteEnvelope.Path != "" || report.RouteEnvelope.RoutePattern != "" {
+		t.Fatalf("raw dynamic route pattern should be dropped, got %#v", report.RouteEnvelope)
+	}
+	serialized := strings.ToLower(toTestString(report.Observation.Metadata) + " " + report.Observation.LivePath)
+	if strings.Contains(serialized, "123456789") {
+		t.Fatalf("raw dynamic route pattern leaked: %q", serialized)
+	}
+}
+
+func TestRouteEnvelopeRejectsQueryAndRequestURIMetadata(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true}, nil, fixedNow)
+	for _, key := range []string{"query", "raw_query", "query_string", "request_uri", "url"} {
+		t.Run(key, func(t *testing.T) {
+			err := observer.ObserveRouteEnvelope(context.Background(), RouteEnvelopeInput{
+				WorkspaceID:  "workspace-a",
+				RequestID:    "request-" + key,
+				Method:       "GET",
+				RoutePattern: "/api/meta",
+				RouteClass:   RouteClassAPI,
+				Metadata: map[string]any{
+					key: "token=should-not-store",
+				},
+			})
+			if !errors.Is(err, ErrUnsafeMetadata) {
+				t.Fatalf("expected unsafe metadata for %q, got %v", key, err)
+			}
+		})
+	}
+}
+
+func TestRouteEnvelopeMetadataCannotReintroducePathOrRoutePattern(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true}, nil, fixedNow)
+	if err := observer.ObserveRouteEnvelope(context.Background(), RouteEnvelopeInput{
+		WorkspaceID: "workspace-a",
+		RequestID:   "request-a",
+		Method:      "GET",
+		Path:        "/api/chat/threads/123456789/assistant-stream",
+		Metadata: map[string]any{
+			"path":          "/api/chat/threads/123456789/assistant-stream",
+			"route_pattern": "/api/chat/threads/123456789/assistant-stream",
+		},
+	}); err != nil {
+		t.Fatalf("observe route envelope: %v", err)
+	}
+	report := observer.Reports()[0]
+	if _, ok := report.Observation.Metadata["path"]; ok {
+		t.Fatalf("caller metadata reintroduced path: %#v", report.Observation.Metadata)
+	}
+	if _, ok := report.Observation.Metadata["route_pattern"]; ok {
+		t.Fatalf("caller metadata reintroduced route pattern: %#v", report.Observation.Metadata)
+	}
+}
+
+func TestRouteEnvelopeRejectsNonDeterministicMetadataValues(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true}, nil, fixedNow)
+	err := observer.ObserveRouteEnvelope(context.Background(), RouteEnvelopeInput{
+		WorkspaceID:  "workspace-a",
+		RequestID:    "request-a",
+		Method:       "GET",
+		RoutePattern: "/api/meta",
+		RouteClass:   RouteClassAPI,
+		Metadata: map[string]any{
+			"compound": map[string]any{"a": "b"},
+		},
+	})
+	if !errors.Is(err, ErrUnsafeMetadata) {
+		t.Fatalf("expected non-deterministic metadata rejection, got %v", err)
+	}
+}
+
+func TestRouteEnvelopeBoundedRetentionDropsOldest(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true, MaxReports: 2}, nil, fixedNow)
+	for _, id := range []string{"request-a", "request-b", "request-c"} {
+		if err := observer.ObserveRouteEnvelope(context.Background(), RouteEnvelopeInput{
+			WorkspaceID:  "workspace-a",
+			RequestID:    id,
+			Method:       "GET",
+			RoutePattern: "/api/meta",
+			RouteClass:   RouteClassAPI,
+		}); err != nil {
+			t.Fatalf("observe route envelope %s: %v", id, err)
+		}
+	}
+	reports := observer.Reports()
+	if len(reports) != 2 {
+		t.Fatalf("expected bounded route envelope report count 2, got %d", len(reports))
+	}
+	if reports[0].Comparison.RequestID != "request-b" || reports[1].Comparison.RequestID != "request-c" {
+		t.Fatalf("expected oldest route envelope report dropped, got %#v", reports)
+	}
+}
+
+func TestObserveRouteEnvelopeBestEffortIgnoresSinkFailure(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true}, failingSink{}, fixedNow)
+	observer.ObserveRouteEnvelopeBestEffort(context.Background(), RouteEnvelopeInput{
+		WorkspaceID:  "workspace-a",
+		RequestID:    "request-a",
+		Method:       "GET",
+		RoutePattern: "/api/meta",
+		RouteClass:   RouteClassAPI,
+	})
+}
+
 func fixedNow() time.Time {
 	return time.Unix(1700000000, 0).UTC()
+}
+
+func toTestString(value any) string {
+	return strings.TrimSpace(fmt.Sprint(value))
 }
 
 type failingSink struct{}

@@ -1,16 +1,16 @@
 # Phase 12D Controlled Shadow Expansion Design
 
-Status: implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E later implemented the selected route-envelope touchpoint as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+Status: implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E later implemented the selected route-envelope touchpoint as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12F later hardened that route-envelope touchpoint as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
 
 ## Executive Summary
 
 Phase 12D designed the next controlled shadow-mode expansion. It did not implement the expansion.
 
-Phase 12B added the first disabled-by-default read-only observer for `/health` metadata only. Phase 12C hardened that observer. Phase 12D selected route envelope metadata for Phase 12E. Phase 12E now implements that selected touchpoint behind `FORGE_K_SHADOW_MODE_ENABLED`.
+Phase 12B added the first disabled-by-default read-only observer for `/health` metadata only. Phase 12C hardened that observer. Phase 12D selected route envelope metadata for Phase 12E. Phase 12E implements that selected touchpoint behind `FORGE_K_SHADOW_MODE_ENABLED`. Phase 12F hardens the implemented route-envelope observer without expanding observation scope.
 
 Route envelope metadata is selected because it provides useful route-level diagnostics with the lowest semantic and authority risk. It can be designed around method, matched route, route class, timing, workspace/correlation ids, and diagnostic status only. It must not capture request bodies, response bodies, prompts, tool payloads, retrieval content, memory content, or model output.
 
-## Current Phase 12B - 12E State
+## Current Phase 12B - 12F State
 
 Current implemented shadow scope:
 
@@ -30,7 +30,7 @@ Phase 12C hardened:
 - route inventory and response equivalence tests
 - forbidden live import tests
 
-After Phase 12E, route-envelope metadata is implemented and `/health` remains supported.
+After Phase 12F, route-envelope metadata is implemented and hardened, `/health` remains supported, and no further touchpoint is approved.
 
 ## Candidate Touchpoints
 
@@ -160,7 +160,7 @@ Rollback must be disabling the flag or reverting the Phase 12E implementation. N
 
 ## Phase 12E Tests
 
-The Phase 12E route-envelope test plan and implemented coverage are recorded in `docs/testing/phase_12e_shadow_route_envelope_tests.md`.
+The Phase 12E route-envelope test plan and Phase 12F hardening coverage are recorded in `docs/testing/phase_12e_shadow_route_envelope_tests.md`.
 
 Minimum test groups:
 

@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestForgeKShadowDoesNotImportLiveExecutionPackages(t *testing.T) {
+func TestForgeKShadowDoesNotImportLiveAuthorityPackages(t *testing.T) {
 	forbidden := []string{
 		"forge/projectforge/services/core/internal/gateway",
 		"forge/projectforge/services/core/internal/modelruntime",
@@ -34,7 +34,7 @@ func TestForgeKShadowDoesNotImportLiveExecutionPackages(t *testing.T) {
 			importPath := strings.Trim(imp.Path.Value, `"`)
 			for _, blocked := range forbidden {
 				if importPath == blocked || strings.HasPrefix(importPath, blocked+"/") {
-					t.Fatalf("%s imports forbidden live execution package %s", path, importPath)
+					t.Fatalf("%s imports forbidden live authority package %s", path, importPath)
 				}
 			}
 		}

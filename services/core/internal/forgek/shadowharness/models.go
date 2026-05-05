@@ -21,23 +21,25 @@ type ShadowObservation struct {
 }
 
 type ShadowHarnessPolicy struct {
-	PolicyID                string         `json:"policy_id"`
-	Mode                    string         `json:"mode"`
-	AllowLiveMutation       bool           `json:"allow_live_mutation"`
-	AllowToolExecution      bool           `json:"allow_tool_execution"`
-	AllowModelRuntimeCalls  bool           `json:"allow_modelruntime_calls"`
-	AllowRetrievalExecution bool           `json:"allow_retrieval_execution"`
-	AllowEmbeddingCalls     bool           `json:"allow_embedding_calls"`
-	AllowMemoryWrites       bool           `json:"allow_memory_writes"`
-	AllowUserVisibleOutput  bool           `json:"allow_user_visible_output"`
-	AllowPublicAPIChanges   bool           `json:"allow_public_api_changes"`
-	ProduceConsensusReport  bool           `json:"produce_consensus_report"`
-	ProduceContextReport    bool           `json:"produce_context_report"`
-	ProduceRAGReport        bool           `json:"produce_rag_report"`
-	ProduceRuntimeReport    bool           `json:"produce_runtime_report"`
-	ProduceKVReport         bool           `json:"produce_kv_report"`
-	ProduceLymphaticReport  bool           `json:"produce_lymphatic_report"`
-	Metadata                map[string]any `json:"metadata,omitempty"`
+	PolicyID                  string         `json:"policy_id"`
+	Mode                      string         `json:"mode"`
+	AllowLiveMutation         bool           `json:"allow_live_mutation"`
+	AllowToolExecution        bool           `json:"allow_tool_execution"`
+	AllowModelRuntimeCalls    bool           `json:"allow_modelruntime_calls"`
+	AllowRetrievalExecution   bool           `json:"allow_retrieval_execution"`
+	AllowSearchExecution      bool           `json:"allow_search_execution"`
+	AllowEmbeddingCalls       bool           `json:"allow_embedding_calls"`
+	AllowMemoryWrites         bool           `json:"allow_memory_writes"`
+	AllowControllaneMutations bool           `json:"allow_controllane_mutations"`
+	AllowUserVisibleOutput    bool           `json:"allow_user_visible_output"`
+	AllowPublicAPIChanges     bool           `json:"allow_public_api_changes"`
+	ProduceConsensusReport    bool           `json:"produce_consensus_report"`
+	ProduceContextReport      bool           `json:"produce_context_report"`
+	ProduceRAGReport          bool           `json:"produce_rag_report"`
+	ProduceRuntimeReport      bool           `json:"produce_runtime_report"`
+	ProduceKVReport           bool           `json:"produce_kv_report"`
+	ProduceLymphaticReport    bool           `json:"produce_lymphatic_report"`
+	Metadata                  map[string]any `json:"metadata,omitempty"`
 }
 
 type ShadowComparisonReport struct {

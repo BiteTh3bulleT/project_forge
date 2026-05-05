@@ -17,18 +17,30 @@ var unsafeMetadataTerms = []string{
 	"plaintext",
 	"credential",
 	"authorization",
+	"auth",
 	"cookie",
+	"set_cookie",
 	"session",
+	"x_api_key",
+	"jwt",
+	"refresh_token",
+	"access_token",
 }
 
 var rawContentMetadataKeys = []string{
 	"body",
 	"request_body",
 	"response_body",
+	"raw_content",
 	"prompt",
 	"completion",
 	"model_output",
 	"content",
+	"query",
+	"raw_query",
+	"query_string",
+	"request_uri",
+	"url",
 }
 
 func safeMetadata(in map[string]any) (map[string]any, error) {
@@ -62,8 +74,10 @@ func safeMetadata(in map[string]any) (map[string]any, error) {
 			out[trimmedKey] = text
 		case nil:
 			continue
-		default:
+		case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
 			out[trimmedKey] = v
+		default:
+			return nil, fmt.Errorf("%w: non-deterministic value for %q", ErrUnsafeMetadata, trimmedKey)
 		}
 	}
 	if len(out) == 0 {
@@ -73,7 +87,7 @@ func safeMetadata(in map[string]any) (map[string]any, error) {
 }
 
 func containsUnsafeTerm(value string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(value))
+	normalized := normalizeMetadataToken(value)
 	if normalized == "" {
 		return false
 	}
@@ -86,11 +100,18 @@ func containsUnsafeTerm(value string) bool {
 }
 
 func isRawContentKey(value string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(value))
+	normalized := normalizeMetadataToken(value)
 	for _, key := range rawContentMetadataKeys {
 		if normalized == key {
 			return true
 		}
 	}
 	return false
+}
+
+func normalizeMetadataToken(value string) string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	normalized = strings.ReplaceAll(normalized, "-", "_")
+	normalized = strings.ReplaceAll(normalized, " ", "_")
+	return normalized
 }

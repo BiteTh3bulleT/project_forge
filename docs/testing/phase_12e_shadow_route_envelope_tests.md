@@ -1,6 +1,6 @@
 # Phase 12E Shadow Route Envelope Test Plan
 
-Status: implemented test plan and validation record. Phase 12E is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+Status: implemented test plan and validation record. Phase 12E is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12F extends this record as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY` and hardens the route-envelope observer without adding touchpoints.
 
 ## Scope
 
@@ -9,6 +9,8 @@ This document defines the tests for route envelope metadata shadowing in Phase 1
 Scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
 Phase 12E adds disabled-by-default route-envelope observation only. It does not add routes, public APIs, gateway calls, modelruntime calls, retrieval/search/embedding calls, memory writes, controllane mutations, persistent diagnostics, response changes, or authority migration.
+
+Phase 12F hardens the same route-envelope observation surface only. It does not add touchpoints, public diagnostics routes, persistence, body/query/header/secret capture, route behavior changes, gateway calls, modelruntime calls, retrieval/search/embedding calls, memory writes, controllane mutations, response changes, or authority migration.
 
 ## Required Test Groups
 
@@ -95,3 +97,10 @@ Phase 12E is complete only if route-envelope diagnostics remain disabled by defa
 - `services/core/internal/forgekshadow/observer_test.go` covers disabled route-envelope no-op behavior, enabled diagnostic report creation, typed `RouteEnvelopeObservation` fields, route class normalization, unsafe metadata rejection, best-effort unsafe report dropping, bounded sink reuse, sink failure isolation, and no-effect policy enforcement.
 - `services/core/internal/api/server_route_inventory_test.go` covers route inventory stability, no public diagnostics route, `/health` response equivalence, `/api/meta` disabled/enabled response equivalence, route-envelope report creation for `/api/meta`, invalid POST body non-capture on `/api/commands/execute`, `/forge` route inventory, conditional `/v1` route inventory, and SSE mount/order guard.
 - Status code capture is intentionally omitted in Phase 12E to avoid response writer wrapping. Response status, headers, and bodies are tested for equivalence instead.
+
+## Phase 12F Hardening Coverage
+
+- `services/core/internal/forgekshadow/observer_test.go` covers matched route-pattern preference over raw paths, unsafe raw dynamic route-pattern rejection when no template is available, provided route class normalization to known classes, rejection of raw query/request URI metadata, rejection of metadata that tries to reintroduce path or route pattern values, expanded secret/header/content key rejection, deterministic scalar metadata enforcement, bounded retention drop-oldest behavior, and best-effort sink-failure isolation.
+- `services/core/internal/forgekshadow/forbidden_imports_test.go` guards the route-envelope observer package against imports from gateway, modelruntime, retrieval, search, embeddings, memory, and AI-OS controllane packages.
+- `services/core/internal/forgek/shadowharness/policy_test.go` covers search execution and controllane mutation side-effect policy rejection.
+- `services/core/internal/api/server_route_inventory_test.go` covers matched-pattern preference over raw paths/query strings for `/api/meta`, unmatched-route response equivalence with no report, `/forge/model-runtime/health` response equivalence, conditional `/v1/models` response equivalence, sink-failure response equivalence, route inventory stability, no public diagnostics route, SSE mount/order preservation, and timeout middleware preservation.

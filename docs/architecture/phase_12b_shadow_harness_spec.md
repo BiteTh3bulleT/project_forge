@@ -1,6 +1,6 @@
 # Phase 12B Shadow Harness Specification
 
-Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12D controlled expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E route-envelope metadata implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12D controlled expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E route-envelope metadata implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12F route-envelope hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
 
 ## Scope
 
@@ -50,6 +50,7 @@ Phase 12E adds one more disabled-by-default touchpoint:
 - `/health` keeps the Phase 12B per-handler observer and is skipped by route-envelope middleware
 - no raw query strings, request bodies, response bodies, prompts, model outputs, tool payloads, retrieval content, memory content, auth headers, cookies, or secrets are captured
 - reports stay in the same bounded in-memory sink with no public API
+- Phase 12F hardens route-envelope observation without adding touchpoints: matched route-pattern safety, route class normalization, reserved metadata key rejection, raw query/request URI rejection, expanded header/secret/content redaction, deterministic scalar metadata enforcement, bounded retention tests, sink failure isolation, response equivalence tests, SSE mount/order stability, and timeout stability.
 
 ## Future Candidate Live Request Types
 
@@ -189,24 +190,28 @@ Implemented Phase 12C tests additionally cover disabled sink behavior, `authoriz
 
 Implemented Phase 12E tests cover route-envelope disabled/enabled behavior, typed route-envelope reports, route class normalization, metadata redaction, no body capture, `/api/meta` response equivalence, invalid POST body non-capture, route inventory stability, no public diagnostics route, and the existing SSE mount/order guard.
 
+Implemented Phase 12F tests additionally cover matched-pattern preference over raw paths, unsafe raw dynamic route-pattern rejection when no template is available, provided route class normalization to known classes, rejection of query/request URI metadata, rejection of metadata that reintroduces path or route pattern values, rejection of non-deterministic metadata values, bounded retention drop-oldest behavior, sink-failure isolation, `/forge` and conditional `/v1` response equivalence, timeout middleware stability, and search/controllane side-effect policy rejection.
+
 ## Phase 12D Handoff
 
 Phase 12D is a docs-only controlled expansion design. It does not add code, route observation, public APIs, route-envelope hooks, adapters, feature flags, persistent storage, or live authority migration.
 
 The Phase 12E touchpoint is route envelope metadata. The route-envelope scope is method, matched route template, route class, timing summary, safe request ids when available, and no-effect validation only.
 
-After Phase 12E:
+After Phase 12F:
 
 - `/health` remains supported.
 - route-envelope metadata is implemented behind `FORGE_K_SHADOW_MODE_ENABLED`.
+- route-envelope hardening is complete without adding new live touchpoints.
 - no chat content capture is approved.
 - no request or response body capture is approved.
+- no raw query, raw header, cookie, authorization, secret, prompt, model output, retrieval content, embedding vector, search chunk, or memory content capture is approved.
 - no retrieval/search/embedding execution is approved.
 - no modelruntime calls are approved.
 - no gateway/tool execution is approved.
 - no memory write or controllane mutation is approved.
 
-The Phase 12D design is in `docs/architecture/phase_12d_controlled_shadow_expansion_design.md`; the touchpoint decision is in `docs/reviews/phase_12d_touchpoint_selection.md`; the Phase 12E test coverage is recorded in `docs/testing/phase_12e_shadow_route_envelope_tests.md`.
+The Phase 12D design is in `docs/architecture/phase_12d_controlled_shadow_expansion_design.md`; the touchpoint decision is in `docs/reviews/phase_12d_touchpoint_selection.md`; the Phase 12E and Phase 12F test coverage is recorded in `docs/testing/phase_12e_shadow_route_envelope_tests.md`; the Phase 12F hardening review is recorded in `docs/reviews/phase_12f_route_envelope_shadow_hardening.md`.
 
 ## What Not To Do
 

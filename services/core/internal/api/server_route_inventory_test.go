@@ -157,10 +157,15 @@ func TestServerRouteInventoryHasNoForgeKShadowDiagnosticRoute(t *testing.T) {
 	}).Handler())
 	for _, route := range routeKeys(routes) {
 		normalized := strings.ToLower(route)
-		if strings.Contains(normalized, "forgek-shadow") || strings.Contains(normalized, "shadow-diagnostic") {
-			t.Fatalf("phase 12C must not expose public diagnostics route: %s", route)
+		for _, forbidden := range []string{"forgek-shadow", "shadow-diagnostic", "/api/shadow", "/forge/shadow"} {
+			if strings.Contains(normalized, forbidden) {
+				t.Fatalf("shadow mode must not expose public diagnostics route: %s", route)
+			}
 		}
 	}
+	assertRouteNotMounted(t, routes, http.MethodGet, "/api/forgek-shadow")
+	assertRouteNotMounted(t, routes, http.MethodGet, "/api/shadow")
+	assertRouteNotMounted(t, routes, http.MethodGet, "/forge/shadow")
 }
 
 func TestHealthResponseUnchangedWithForgeKShadowDisabled(t *testing.T) {
@@ -338,6 +343,133 @@ func TestForgeKShadowRouteEnvelopeDoesNotCaptureAuthHeadersOrCookies(t *testing.
 			t.Fatalf("route envelope captured auth/cookie material in %q=%v", key, value)
 		}
 	}
+}
+
+func TestForgeKShadowRouteEnvelopePrefersPatternOverRawPathAndQuery(t *testing.T) {
+	observer := forgekshadow.NewObserver(forgekshadow.Config{Enabled: true})
+	req := httptest.NewRequest(http.MethodGet, "/api/chat/threads/123/assistant-stream?userMessageId=abc&token=should-not-appear", nil)
+
+	disabledRR := httptest.NewRecorder()
+	(&Server{}).Handler().ServeHTTP(disabledRR, req.Clone(context.Background()))
+
+	enabledRR := httptest.NewRecorder()
+	(&Server{
+		cfg:          config.Config{ForgeKShadowModeEnabled: true},
+		forgeKShadow: observer,
+	}).Handler().ServeHTTP(enabledRR, req.Clone(context.Background()))
+
+	assertSameResponse(t, disabledRR, enabledRR, "assistant stream invalid query enabled shadow")
+	reports := observer.Reports()
+	if len(reports) != 1 {
+		t.Fatalf("expected one route envelope report, got %d", len(reports))
+	}
+	envelope := reports[0].RouteEnvelope
+	if envelope == nil {
+		t.Fatalf("expected route envelope report")
+	}
+	if envelope.RoutePattern != "/api/chat/threads/{id}/assistant-stream" || envelope.Path != "/api/chat/threads/{id}/assistant-stream" {
+		t.Fatalf("expected matched route pattern, got %#v", envelope)
+	}
+	serialized := strings.ToLower(toString(reports[0].Observation.Metadata) + " " + reports[0].Observation.LivePath)
+	for _, forbidden := range []string{"123", "usermessageid", "abc", "token", "should-not-appear"} {
+		if strings.Contains(serialized, forbidden) {
+			t.Fatalf("route envelope leaked raw path/query fragment %q in %q", forbidden, serialized)
+		}
+	}
+}
+
+func TestForgeKShadowRouteEnvelopeUnmatchedRouteResponseUnchangedAndNoReport(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/missing/123?token=should-not-appear", nil)
+	disabledRR := httptest.NewRecorder()
+	(&Server{}).Handler().ServeHTTP(disabledRR, req.Clone(context.Background()))
+
+	observer := forgekshadow.NewObserver(forgekshadow.Config{Enabled: true})
+	enabledRR := httptest.NewRecorder()
+	(&Server{
+		cfg:          config.Config{ForgeKShadowModeEnabled: true},
+		forgeKShadow: observer,
+	}).Handler().ServeHTTP(enabledRR, req.Clone(context.Background()))
+
+	assertSameResponse(t, disabledRR, enabledRR, "unmatched route enabled shadow")
+	if reports := observer.Reports(); len(reports) != 0 {
+		t.Fatalf("unmatched route should not store raw path diagnostics, got %d reports", len(reports))
+	}
+}
+
+func TestForgeKShadowRouteEnvelopeForgeRouteResponseUnchanged(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/forge/model-runtime/health", nil)
+	req.Header.Set("X-Request-ID", "request-forge-runtime-health")
+	disabledRR := httptest.NewRecorder()
+	(&Server{}).Handler().ServeHTTP(disabledRR, req.Clone(context.Background()))
+
+	observer := forgekshadow.NewObserver(forgekshadow.Config{Enabled: true})
+	enabledRR := httptest.NewRecorder()
+	(&Server{
+		cfg:          config.Config{ForgeKShadowModeEnabled: true},
+		forgeKShadow: observer,
+	}).Handler().ServeHTTP(enabledRR, req.Clone(context.Background()))
+
+	assertSameResponse(t, disabledRR, enabledRR, "/forge/model-runtime/health enabled shadow")
+	reports := observer.Reports()
+	if len(reports) != 1 {
+		t.Fatalf("expected one route envelope report, got %d", len(reports))
+	}
+	if reports[0].RouteEnvelope == nil || reports[0].RouteEnvelope.RouteClass != forgekshadow.RouteClassForge {
+		t.Fatalf("expected forge route class, got %#v", reports[0].RouteEnvelope)
+	}
+}
+
+func TestForgeKShadowRouteEnvelopeOpenAICompatConditionalBehaviorUnchanged(t *testing.T) {
+	disabledRouteReq := httptest.NewRequest(http.MethodGet, "/v1/models?token=should-not-appear", nil)
+	disabledRouteReq.Header.Set("X-Request-ID", "request-v1-disabled")
+	disabledRouteRR := httptest.NewRecorder()
+	(&Server{}).Handler().ServeHTTP(disabledRouteRR, disabledRouteReq.Clone(context.Background()))
+
+	disabledObserver := forgekshadow.NewObserver(forgekshadow.Config{Enabled: true})
+	disabledEnabledRR := httptest.NewRecorder()
+	(&Server{
+		cfg:          config.Config{ForgeKShadowModeEnabled: true},
+		forgeKShadow: disabledObserver,
+	}).Handler().ServeHTTP(disabledEnabledRR, disabledRouteReq.Clone(context.Background()))
+	assertSameResponse(t, disabledRouteRR, disabledEnabledRR, "/v1/models compat disabled shadow")
+	if reports := disabledObserver.Reports(); len(reports) != 0 {
+		t.Fatalf("unmounted /v1 route should not store diagnostics, got %d reports", len(reports))
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/models?api_key=should-not-appear", nil)
+	req.Header.Set("X-Request-ID", "request-v1-enabled")
+	compatDisabledRR := httptest.NewRecorder()
+	(&Server{cfg: config.Config{EnableOpenAICompatAPI: true}}).Handler().ServeHTTP(compatDisabledRR, req.Clone(context.Background()))
+
+	observer := forgekshadow.NewObserver(forgekshadow.Config{Enabled: true})
+	compatEnabledRR := httptest.NewRecorder()
+	(&Server{
+		cfg:          config.Config{EnableOpenAICompatAPI: true, ForgeKShadowModeEnabled: true},
+		forgeKShadow: observer,
+	}).Handler().ServeHTTP(compatEnabledRR, req.Clone(context.Background()))
+
+	assertSameResponse(t, compatDisabledRR, compatEnabledRR, "/v1/models compat enabled shadow")
+	reports := observer.Reports()
+	if len(reports) != 1 {
+		t.Fatalf("expected one /v1 route envelope report, got %d", len(reports))
+	}
+	if reports[0].RouteEnvelope == nil || reports[0].RouteEnvelope.RouteClass != forgekshadow.RouteClassOpenAICompat {
+		t.Fatalf("expected openai_compat route class, got %#v", reports[0].RouteEnvelope)
+	}
+}
+
+func TestForgeKShadowRouteEnvelopeSinkFailureDoesNotChangeAPIRoute(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/meta", nil)
+	disabledRR := httptest.NewRecorder()
+	(&Server{}).Handler().ServeHTTP(disabledRR, req.Clone(context.Background()))
+
+	enabledRR := httptest.NewRecorder()
+	(&Server{
+		cfg:          config.Config{ForgeKShadowModeEnabled: true},
+		forgeKShadow: forgekshadow.NewObserverWithSink(forgekshadow.Config{Enabled: true}, failingShadowSink{}, nil),
+	}).Handler().ServeHTTP(enabledRR, req.Clone(context.Background()))
+
+	assertSameResponse(t, disabledRR, enabledRR, "/api/meta shadow sink failure")
 }
 
 func TestHealthResponseUnchangedWhenForgeKShadowSinkFails(t *testing.T) {
