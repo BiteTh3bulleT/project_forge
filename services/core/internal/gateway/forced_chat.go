@@ -250,6 +250,16 @@ func wantsTerminalOpen(user string) bool {
 	return true
 }
 
+func wantsRemoteTerminalWorkflow(user string) bool {
+	s := strings.TrimSpace(strings.ToLower(user))
+	if s == "" || !wantsTerminalOpen(user) {
+		return false
+	}
+	return strings.Contains(s, "ssh ") ||
+		strings.Contains(s, "ssh into") ||
+		strings.Contains(s, " ssh") && strings.Contains(s, "@")
+}
+
 func wantsWebSearch(user string) bool {
 	s := strings.TrimSpace(strings.ToLower(user))
 	if s == "" {

@@ -894,6 +894,84 @@ func TestChatPostForcedToolOmissionUsesForgeGatewayNotModelCapabilityClaim(t *te
 	assertGatewayInvocationCount(t, st, 1)
 }
 
+func TestChatPostForcedToolMismatchUsesDeterministicFallback(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
+	var sawOllama bool
+	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/chat" {
+			t.Fatalf("unexpected ollama path %s", r.URL.Path)
+		}
+		sawOllama = true
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"message":{"role":"assistant","tool_calls":[{"id":"call-wrong-tool","type":"function","function":{"name":"forge_net_connectivity","arguments":{"input":{"target":"10.150.1.9:22"}}}}]},"done":true}`))
+	}))
+	defer ollama.Close()
+
+	ctx := context.Background()
+	if err := upsertSetting(ctx, st.DB, "ollama_base_url", ollama.URL); err != nil {
+		t.Fatalf("set ollama base url: %v", err)
+	}
+	if err := upsertSetting(ctx, st.DB, "ollama_model", "tool-mismatch-model"); err != nil {
+		t.Fatalf("set ollama model: %v", err)
+	}
+
+	thread, err := srv.chat.CreateThread(ctx, "tool mismatch authority", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	raw := []byte(`{"content":"search the web for FORGE docs","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	if !sawOllama {
+		t.Fatalf("expected ollama request")
+	}
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message")
+	}
+	if !strings.Contains(payload.AssistantMessage.Content, "FORGE (deterministic web search):") {
+		t.Fatalf("expected deterministic web search fallback, got %q", payload.AssistantMessage.Content)
+	}
+	activity := metadataMap(payload.AssistantMessage.Metadata, "toolGatewayActivity")
+	if activity["modelToolCallsDiscarded"] != true {
+		t.Fatalf("expected modelToolCallsDiscarded=true activity=%#v", activity)
+	}
+	if got := strings.TrimSpace(asString(activity["toolSelected"])); got != "web.search" {
+		t.Fatalf("toolSelected=%q activity=%#v", got, activity)
+	}
+	if got := gatewayInvocationTools(t, st); strings.Join(got, ",") != "web.search" {
+		t.Fatalf("expected only web.search gateway invocation, got %v", got)
+	}
+}
+
+func gatewayInvocationTools(t *testing.T, st *store.Store) []string {
+	t.Helper()
+	rows, err := st.DB.Query(`SELECT tool_id FROM gateway_invocations ORDER BY id`)
+	if err != nil {
+		t.Fatalf("query gateway invocation tools: %v", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var toolID string
+		if err := rows.Scan(&toolID); err != nil {
+			t.Fatalf("scan gateway invocation tool: %v", err)
+		}
+		out = append(out, toolID)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate gateway invocation tools: %v", err)
+	}
+	return out
+}
+
 func TestChatPostSyncRestoreInspectorDoesNotLeakOtherThreadMetadata(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	fakeRuntime := newFakeModelRuntime()

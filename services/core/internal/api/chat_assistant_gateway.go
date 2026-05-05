@@ -181,6 +181,44 @@ func assembleBoundedSystemPrompt(base string, sections []string, max int) string
 	return strings.TrimSpace(base + separator + suffix)
 }
 
+func (s *Server) forcedToolCallMismatch(forcedModel string, toolCalls []map[string]any) (bool, []string) {
+	forcedModel = strings.TrimSpace(forcedModel)
+	if forcedModel == "" || len(toolCalls) == 0 || s.gateway == nil {
+		return false, nil
+	}
+	selected := make([]string, 0, len(toolCalls))
+	for _, call := range toolCalls {
+		fn, _ := call["function"].(map[string]any)
+		name := strings.TrimSpace(asString(fn["name"]))
+		if name == "" {
+			selected = append(selected, "")
+			return true, selected
+		}
+		toolID, _, resolved := s.gateway.ResolveChatFunctionName(name)
+		if !resolved {
+			selected = append(selected, name)
+			return true, selected
+		}
+		resolvedModel := gateway.ChatModelName(toolID)
+		selected = append(selected, resolvedModel)
+		if resolvedModel != forcedModel {
+			return true, selected
+		}
+	}
+	return false, selected
+}
+
+func chatActivityState(activity map[string]any, fallback string) string {
+	if activity == nil {
+		return fallback
+	}
+	state := strings.TrimSpace(asString(activity["executionState"]))
+	if state == "" {
+		return fallback
+	}
+	return state
+}
+
 func modelRuntimePromptBudgetMap(b modelRuntimePromptBudget) map[string]any {
 	return map[string]any{
 		"threadMessages":         b.ThreadMessages,
@@ -576,6 +614,37 @@ func (s *Server) completeAssistantWithGatewayTools(
 		}
 		pushStage("tool_call_check", map[string]any{"turn": turn, "emitted": toolEmitted, "count": len(toolCalls)})
 
+		if forcedModel != "" && toolEmitted {
+			if mismatch, selected := s.forcedToolCallMismatch(forcedModel, toolCalls); mismatch {
+				pushStage("forced_tool_mismatch_discarded", map[string]any{
+					"turn":     turn,
+					"forced":   forcedModel,
+					"selected": selected,
+				})
+				gwActivity["modelToolCallsDiscarded"] = true
+				gwActivity["discardedToolCalls"] = selected
+				fallbackOnly := strings.Builder{}
+				fallbackRan = s.runChatFSDeterministicFallback(ctx, corr, lastUserContent, forcedModel, pushStage, gwActivity, &fallbackOnly)
+				if fallbackRan {
+					if strings.TrimSpace(content) != "" {
+						pushStage("model_prose_discarded", map[string]any{
+							"reason": "forced tool mismatch discarded; retaining verified gateway output only",
+						})
+					}
+					final.Reset()
+					final.WriteString(fallbackOnly.String())
+					terminalState = chatActivityState(gwActivity, "ok")
+					stopLoop = true
+					break
+				}
+				final.WriteString(forgeAuthorityToolOmissionMessage(forcedModel))
+				terminalState = "model_tool_mismatch"
+				gwActivity["failureReason"] = "Ollama returned a different tool than the FORGE-forced gateway route; model tool call discarded because FORGE owns capability and availability decisions."
+				stopLoop = true
+				break
+			}
+		}
+
 		assistantMsg := map[string]any{"role": "assistant"}
 		if content != "" {
 			assistantMsg["content"] = content
@@ -599,7 +668,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 					}
 					final.Reset()
 					final.WriteString(fallbackOnly.String())
-					terminalState = "ok"
+					terminalState = chatActivityState(gwActivity, "ok")
 					stopLoop = true
 					break
 				}

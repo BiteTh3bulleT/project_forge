@@ -61,6 +61,10 @@ func ParseHyperlaneIntentWithDirectoryHint(user, dirHint string) hyperlane.Inten
 		}
 	}
 
+	if wantsRemoteTerminalWorkflow(raw) {
+		return routeIntent(id, hyperlane.IntentGatewayToolRequest, 0.78, "kernel", hyperlane.RouteGatewayDesktopOpen, true, false, true, "high", "gateway_terminal_ssh_workflow", nil, nil)
+	}
+
 	fallback := ParseFallbackIntent(raw)
 	switch fallback.Type {
 	case FallbackIntentMkdir:

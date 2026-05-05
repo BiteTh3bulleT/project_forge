@@ -97,6 +97,7 @@ func TestForcedChatModelNameWebAndBrowser(t *testing.T) {
 		{name: "fetch url", in: "fetch https://example.com", want: ChatModelName("net.fetch")},
 		{name: "open browser", in: "open browser https://example.com", want: ChatModelName("desktop.open")},
 		{name: "open terminal and run", in: "Open terminal and run sudo zypper refresh", want: ChatModelName("desktop.open")},
+		{name: "open terminal ssh workflow", in: "Open terminal, ssh into robert@10.150.1.9 password test-pass. Create a directory labled SSH-AI-TEST", want: ChatModelName("desktop.open")},
 	}
 	for _, tc := range cases {
 		tc := tc
