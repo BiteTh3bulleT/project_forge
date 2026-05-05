@@ -71,7 +71,8 @@ func (s *Server) buildChatLLMMessages(ctx context.Context, th *chat.ThreadDetail
 
 func (s *Server) buildModelRuntimePlainChatMessages(ctx context.Context, th *chat.ThreadDetail) ([]ModelRuntimeChatMessage, modelRuntimePromptBudget) {
 	budget := modelRuntimePromptBudget{ThreadMessages: len(th.Messages)}
-	system := trimSummary(s.chatOperatorSystemPrompt(), modelRuntimePlainChatSystemMax)
+	systemBase := s.chatOperatorSystemPrompt()
+	systemSections := []string{}
 
 	start := 0
 	if len(th.Messages) > modelRuntimePlainChatMessages {
@@ -80,24 +81,24 @@ func (s *Server) buildModelRuntimePlainChatMessages(ctx context.Context, th *cha
 	}
 
 	if title := strings.TrimSpace(th.Title); title != "" {
-		system = strings.TrimSpace(system) + "\n\nThread title: " + trimSummary(title, 160)
+		systemSections = append(systemSections, "Thread title: "+trimSummary(title, 160))
 	}
 	if memoryContext := buildPersistedThreadMemoryContext(th.Messages, modelRuntimePlainChatMessages, 6, modelRuntimePlainChatMemoryMax); memoryContext != "" {
 		budget.MemoryChars = len(memoryContext)
-		system = strings.TrimSpace(system) + "\n\nEarlier thread memory:\n" + memoryContext
+		systemSections = append(systemSections, "Earlier thread memory:\n"+memoryContext)
 	}
 	if crossThreadMemory := s.buildCrossThreadChatContext(ctx, th.ID, 4, 800); crossThreadMemory != "" {
 		budget.CrossThreadMemoryChars = len(crossThreadMemory)
-		system = strings.TrimSpace(system) + "\n\nRelated chat memory:\n" + crossThreadMemory
+		systemSections = append(systemSections, "Related chat memory:\n"+crossThreadMemory)
 	}
 	if observationMemory := s.buildMemoryObservationContext(ctx, th.DossierID, 4, 800); observationMemory != "" {
 		budget.ObservationMemoryChars = len(observationMemory)
-		system = strings.TrimSpace(system) + "\n\nMemory observations:\n" + observationMemory
+		systemSections = append(systemSections, "Memory observations:\n"+observationMemory)
 	}
 	if budget.Compacted {
-		system = strings.TrimSpace(system) + "\n\nRecent chat context was compacted for local model runtime latency. Answer only the latest operator turn."
+		systemSections = append(systemSections, "Recent chat context was compacted for local model runtime latency. Answer only the latest operator turn.")
 	}
-	system = trimSummary(system, modelRuntimePlainChatSystemMax)
+	system := assembleBoundedSystemPrompt(systemBase, systemSections, modelRuntimePlainChatSystemMax)
 	budget.SystemChars = len(system)
 
 	messages := []ModelRuntimeChatMessage{{Role: "system", Content: system}}
@@ -149,6 +150,35 @@ func (s *Server) buildModelRuntimePlainChatMessages(ctx context.Context, th *cha
 	budget.TotalChars = budget.SystemChars + budget.UserChars
 
 	return messages, budget
+}
+
+func assembleBoundedSystemPrompt(base string, sections []string, max int) string {
+	base = strings.TrimSpace(base)
+	cleanSections := make([]string, 0, len(sections))
+	for _, section := range sections {
+		section = strings.TrimSpace(section)
+		if section != "" {
+			cleanSections = append(cleanSections, section)
+		}
+	}
+	if len(cleanSections) == 0 {
+		return trimSummary(base, max)
+	}
+	suffix := strings.Join(cleanSections, "\n\n")
+	if max <= 0 {
+		return strings.TrimSpace(base + "\n\n" + suffix)
+	}
+	separator := "\n\n"
+	suffixBudget := len(separator) + len(suffix)
+	if suffixBudget >= max {
+		return trimSummary(suffix, max)
+	}
+	baseBudget := max - suffixBudget - len("…")
+	if baseBudget < 0 {
+		baseBudget = 0
+	}
+	base = trimSummary(base, baseBudget)
+	return strings.TrimSpace(base + separator + suffix)
 }
 
 func modelRuntimePromptBudgetMap(b modelRuntimePromptBudget) map[string]any {

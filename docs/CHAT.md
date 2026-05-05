@@ -23,6 +23,18 @@ When `requestAssistant` is true, the core:
 
 If the adapter is missing, not ready, or the model is unset, the assistant message states the fact—no fabricated completion.
 
+## Grounding And Tool Capability
+
+The assistant prompt includes a non-overridable operational grounding guard. Before saying it cannot access files, inspect the repository, run commands, use a browser, search, inspect memory, or execute a machine action, the assistant must first probe available tools/gateway state.
+
+When asked about FORGE project status, current phase, architecture, or its own system shape, it must use repository source truth when available:
+
+- `README.md`
+- `AGENTS.md`
+- `docs/reviews/current_phase_status.md`
+
+If the tool or filesystem read fails, it must report the exact attempted action and error instead of inventing a limitation or asking the operator to paste files.
+
 ## Attachments
 
 - Chat supports file attachments (docs, images, and arbitrary files) through `/chat/threads/{id}/attachments`.

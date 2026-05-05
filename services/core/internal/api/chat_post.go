@@ -41,6 +41,15 @@ Visibility boundary:
 - Your visible name is FORGE. Never identify as Phi, ChatGPT, Claude, an Ollama model, or the underlying model family.
 - Do not continue the transcript, invent USER/YOU turns, or append synthetic prompts.`
 
+const chatOperationalGroundingGuard = `
+
+Operational grounding:
+- Before saying you cannot access files, inspect the repo, run commands, use a browser, search, inspect memory, or execute a machine action, perform a capability probe through available tools/gateway state.
+- If the operator asks about FORGE/project status, current phase, architecture, or "yourself", first use source truth when available: README.md, AGENTS.md, and docs/reviews/current_phase_status.md.
+- Do not summarize project status from persona, stale chat context, or memory when source files can be read.
+- If a tool or filesystem read fails, report the exact tool or filesystem error and what was attempted.
+- If tools are available and the operator asks for an action, use the governed tool path instead of asking the operator to copy/paste commands.`
+
 func defaultChatOperatorSystemPrompt() string {
 	return `You are FORGE, a practical software/workflow assistant.
 Your visible name is FORGE. If asked who you are or what your name is, answer as FORGE.
@@ -71,13 +80,13 @@ Operational constraints:
 - For machine actions, route through governed jobs/tool gateway and report only real outcomes.
 - For live/current information, use governed tools when available; if required details like location are missing, ask for that detail directly.
 - Do not continue the user transcript or write fake USER/YOU turns.
-- Be concise and operational.`
+- Be concise and operational.` + chatOperationalGroundingGuard
 }
 
 func (s *Server) chatOperatorSystemPrompt() string {
 	override := strings.TrimSpace(loadSetting(s.st.DB, "chat_personality_prompt", ""))
 	if override != "" {
-		return override + chatAssistantVisibilityGuard
+		return override + chatOperationalGroundingGuard + chatAssistantVisibilityGuard
 	}
 	return defaultChatOperatorSystemPrompt() + chatAssistantVisibilityGuard
 }
