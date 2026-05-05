@@ -118,6 +118,31 @@ func TestDesktopSplitAppAndCommandSSHRemoteMkdir(t *testing.T) {
 	}
 }
 
+func TestDesktopSplitAppAndCommandSSHRemotePythonBanner(t *testing.T) {
+	app, cmd := desktopSplitAppAndCommand(`Open terminall, ssh into robert@10.150.1.2 password redacted-secret. Create a directory labled Auto_Banner. Inside that directory create a python program called hello_world.py. I want it to be a scrolling flashing banner with the words "HELLO WORLD".`)
+	if app != "terminal" {
+		t.Fatalf("expected app terminal, got %q", app)
+	}
+	joined := strings.Join(cmd, " ")
+	required := []string{
+		"ssh robert@10.150.1.2",
+		"mkdir -p 'Auto_Banner'",
+		"cat > 'Auto_Banner/hello_world.py'",
+		"HELLO WORLD",
+		"python3 'Auto_Banner/hello_world.py'",
+	}
+	for _, want := range required {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("command missing %q: %v", want, cmd)
+		}
+	}
+	for _, arg := range cmd {
+		if strings.Contains(arg, "redacted-secret") {
+			t.Fatalf("password must not be placed into terminal command args: %v", cmd)
+		}
+	}
+}
+
 func TestDesktopTerminalLaunchArgs(t *testing.T) {
 	args, ok := desktopTerminalLaunchArgs("konsole", []string{"ping", "10.100.1.5"})
 	if !ok {

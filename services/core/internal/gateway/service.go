@@ -2713,6 +2713,14 @@ func desktopSSHRemoteMkdirCommand(raw string) ([]string, bool) {
 	if !desktopSafeSSHUserHost(userHost) {
 		return nil, false
 	}
+	if writePath, contents, ok := ParsePythonBannerScriptIntent(text); ok {
+		dir := filepath.ToSlash(filepath.Dir(writePath))
+		if dir == "." || dir == "" || hasTraversalSegment(dir) || strings.HasPrefix(dir, "/") || strings.HasPrefix(dir, "~") {
+			return nil, false
+		}
+		remoteScript := fmt.Sprintf("mkdir -p %s && cat > %s <<'PY'\n%s\nPY\npython3 %s", shellQuoteArg(dir), shellQuoteArg(writePath), contents, shellQuoteArg(writePath))
+		return []string{"ssh", userHost, remoteScript}, true
+	}
 	dir, ok := parseDirectoryLabeled(text)
 	if !ok {
 		dir, ok = ParseDirectoryCalled(text)
@@ -2752,6 +2760,14 @@ func desktopSafeSSHUserHost(userHost string) bool {
 		}
 	}
 	return true
+}
+
+func shellQuoteArg(arg string) string {
+	arg = strings.TrimSpace(arg)
+	if arg == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
 }
 
 func desktopGenericInlineCommand(raw string) (appHint string, command []string, ok bool) {

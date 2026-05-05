@@ -338,6 +338,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 
 	loadToolCatalog()
 	pushStage("tools_attached", map[string]any{"tools": toolNames, "count": len(toolNames)})
+	forcedModel := gateway.ForcedChatModelName(lastUserContent)
 
 	if dryRun {
 		pushStage("dry_run", map[string]any{"note": "no_model_no_gateway"})
@@ -405,8 +406,37 @@ func (s *Server) completeAssistantWithGatewayTools(
 		_ = s.log.Emit(ctx, "chat.message.assistant", map[string]any{"threadId": threadID, "messageId": am.ID, "ok": true, "tools": true, "deterministicShortcut": true})
 		return am
 	}
-	if _, _, ok := gateway.ParsePythonBannerScriptIntent(lastUserContent); ok {
-		pushStage("deterministic_python_banner_shortcut", map[string]any{"reason": "explicit script creation intent"})
+	if forcedModel != gateway.ChatModelName("desktop.open") {
+		if _, _, ok := gateway.ParsePythonBannerScriptIntent(lastUserContent); ok {
+			pushStage("deterministic_python_banner_shortcut", map[string]any{"reason": "explicit script creation intent"})
+			gwActivity := map[string]any{
+				"userRequestSummary": trimSummary(lastUserContent, 500),
+				"toolManifest":       manifests,
+				"stages":             stages,
+				"toolCallEmitted":    false,
+			}
+			trackedActivity = gwActivity
+			var final strings.Builder
+			s.runChatFSDeterministicFallback(ctx, corr, lastUserContent, "", pushStage, gwActivity, &final)
+			if final.Len() == 0 {
+				final.WriteString("(no deterministic output)")
+			}
+			am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", final.String(), map[string]any{
+				"replyToUserMessageId": userMessageID,
+				"correlationId":        corr,
+				"ollamaSkipped":        true,
+				"toolManifest":         manifests,
+				"toolPipeline":         map[string]any{"stages": stages},
+				"toolGatewayActivity":  gwActivity,
+			})
+			_ = s.log.Emit(ctx, "chat.message.assistant", map[string]any{"threadId": threadID, "messageId": am.ID, "ok": true, "tools": true, "deterministicShortcut": true})
+			return am
+		}
+	} else if _, _, ok := gateway.ParsePythonBannerScriptIntent(lastUserContent); ok {
+		pushStage("deterministic_python_banner_shortcut_skipped", map[string]any{"reason": "remote terminal workflow uses desktop.open"})
+	}
+	if forcedModel == gateway.ChatModelName("desktop.open") {
+		pushStage("deterministic_desktop_shortcut", map[string]any{"reason": "explicit desktop or terminal intent"})
 		gwActivity := map[string]any{
 			"userRequestSummary": trimSummary(lastUserContent, 500),
 			"toolManifest":       manifests,
@@ -415,7 +445,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 		}
 		trackedActivity = gwActivity
 		var final strings.Builder
-		s.runChatFSDeterministicFallback(ctx, corr, lastUserContent, "", pushStage, gwActivity, &final)
+		s.runChatFSDeterministicFallback(ctx, corr, lastUserContent, forcedModel, pushStage, gwActivity, &final)
 		if final.Len() == 0 {
 			final.WriteString("(no deterministic output)")
 		}
@@ -531,7 +561,6 @@ func (s *Server) completeAssistantWithGatewayTools(
 		{"role": "user", "content": userBody},
 	}
 
-	forcedModel := gateway.ForcedChatModelName(lastUserContent)
 	var toolChoice any
 	if forcedModel != "" {
 		toolChoice = map[string]any{

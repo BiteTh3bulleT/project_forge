@@ -77,6 +77,9 @@ var smallTalkTurns = map[string]struct{}{
 
 // ForcedChatModelName returns a forge_* function name when the user text clearly maps to one gateway tool.
 func ForcedChatModelName(user string) string {
+	if wantsRemoteTerminalWorkflow(user) {
+		return ChatModelName("desktop.open")
+	}
 	if wantsCompositeFilesystemWorkflow(user) {
 		return ""
 	}

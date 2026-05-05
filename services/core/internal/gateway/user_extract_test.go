@@ -286,6 +286,13 @@ func TestParsePythonBannerScriptIntent(t *testing.T) {
 			ok:       true,
 		},
 		{
+			name:     "program called with words phrasing",
+			user:     `Create a directory labled Auto_Banner. Inside that directory create a python program called hello_world.py. I want it to be a scrolling flashing banner with the words "HELLO WORLD".`,
+			wantPath: "Auto_Banner/hello_world.py",
+			mustHave: []string{`TEXT = "HELLO WORLD"`},
+			ok:       true,
+		},
+		{
 			name:     "create directory then inside directory",
 			user:     `Create scratch/Python directory. Inside the directory create a simple scrolling banner python script that says "FORGE LIVES!" in vegas lights font.`,
 			wantPath: "scratch/Python/banner.py",

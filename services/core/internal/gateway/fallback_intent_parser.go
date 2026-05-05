@@ -51,7 +51,9 @@ var (
 	reListDirPath      = regexp.MustCompile(`(?i)\blist(?:\s+the)?\s+(?:directory|files)(?:\s+(?:in|at|under))?\s+['"]?([^\s'"]+(?:/[^\s'"]*)?)`)
 	reInDirectoryPath  = regexp.MustCompile(`(?i)\bin\s+(?:the\s+)?['"]?([a-z0-9_.\-\/~]+)['"]?\s+directory\b`)
 	rePyFilePath       = regexp.MustCompile(`(?i)\b([a-z0-9_\-./~]+\.py)\b`)
+	rePyFileCalled     = regexp.MustCompile(`(?i)\b(?:program|script|file)\s+(?:called|named|labeled|labelled|labled|labeld)\s+['"]?([a-z0-9_\-./~]+\.py)['"]?`)
 	reSaysQuoted       = regexp.MustCompile(`(?i)\bsays?\s+['"]([^'"]+)['"]`)
+	reWordsQuoted      = regexp.MustCompile(`(?i)\bwords?\s+['"]([^'"]+)['"]`)
 	reSVGObject        = regexp.MustCompile(`(?i)(?:svg\s+file\s+of|svg\s+of|one\s+of)\s+(?:a\s+|an\s+)?([a-z][a-z0-9_-]*)`)
 )
 
@@ -445,7 +447,14 @@ func ParsePythonBannerScriptIntent(user string) (writePath string, contents stri
 	}
 
 	fileName := "banner.py"
-	if m := rePyFilePath.FindStringSubmatch(raw); len(m) >= 2 {
+	if m := rePyFileCalled.FindStringSubmatch(raw); len(m) >= 2 {
+		candidate := strings.TrimSpace(m[1])
+		if normalized, ok := normalizeFallbackPath(candidate, fallbackPathOptions{FileNameOnly: true}); ok {
+			fileName = normalized
+		} else if normalized, ok := normalizeFallbackPath(filepath.Base(filepath.ToSlash(candidate)), fallbackPathOptions{FileNameOnly: true}); ok {
+			fileName = normalized
+		}
+	} else if m := rePyFilePath.FindStringSubmatch(raw); len(m) >= 2 {
 		candidate := strings.TrimSpace(m[1])
 		if normalized, ok := normalizeFallbackPath(candidate, fallbackPathOptions{FileNameOnly: true}); ok {
 			fileName = normalized
@@ -465,6 +474,10 @@ func ParsePythonBannerScriptIntent(user string) (writePath string, contents stri
 
 	bannerText := "FORGE LIVES!"
 	if m := reSaysQuoted.FindStringSubmatch(raw); len(m) >= 2 {
+		if quoted := strings.TrimSpace(m[1]); quoted != "" {
+			bannerText = quoted
+		}
+	} else if m := reWordsQuoted.FindStringSubmatch(raw); len(m) >= 2 {
 		if quoted := strings.TrimSpace(m[1]); quoted != "" {
 			bannerText = quoted
 		}

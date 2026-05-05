@@ -20,6 +20,72 @@ func (s *Server) runChatFSDeterministicFallback(
 	gwActivity map[string]any,
 	final *strings.Builder,
 ) bool {
+	if forcedModel == gateway.ChatModelName("desktop.open") {
+		rawURL, ok := gateway.ParseURLFromText(lastUserContent)
+		if ok {
+			pushStage("deterministic_browser_open_dispatch", map[string]any{"url": rawURL})
+			res, err := s.gwChatExec(ctx, corr, "desktop.open", nil, map[string]any{"url": rawURL})
+			if err != nil {
+				if final.Len() > 0 {
+					final.WriteString("\n\n")
+				}
+				final.WriteString("FORGE (deterministic browser): " + err.Error())
+				gwActivity["executionState"] = "error"
+				gwActivity["failureReason"] = err.Error()
+				gwActivity["toolSelected"] = "desktop.open"
+				gwActivity["toolArgs"] = map[string]any{"url": rawURL}
+				gwActivity["syntheticToolExecution"] = true
+				return true
+			}
+			if final.Len() > 0 {
+				final.WriteString("\n\n")
+			}
+			final.WriteString("FORGE (deterministic browser): " + formatToolResult("desktop.open", res))
+			gwActivity["toolSelected"] = "desktop.open"
+			gwActivity["toolArgs"] = map[string]any{"url": rawURL}
+			gwActivity["executionState"] = res.Status
+			gwActivity["executionResult"] = res.Data
+			gwActivity["syntheticToolExecution"] = true
+			return true
+		}
+		pushStage("deterministic_desktop_open_dispatch", map[string]any{"query": lastUserContent})
+		res, err := s.gwChatExec(ctx, corr, "desktop.open", nil, map[string]any{"query": lastUserContent})
+		if err != nil {
+			if final.Len() > 0 {
+				final.WriteString("\n\n")
+			}
+			final.WriteString("FORGE (deterministic desktop): " + err.Error())
+			gwActivity["executionState"] = "error"
+			gwActivity["failureReason"] = err.Error()
+			gwActivity["toolSelected"] = "desktop.open"
+			gwActivity["toolArgs"] = map[string]any{"query": lastUserContent}
+			gwActivity["syntheticToolExecution"] = true
+			return true
+		}
+		if res.Status != gateway.StatusOK {
+			if final.Len() > 0 {
+				final.WriteString("\n\n")
+			}
+			final.WriteString(fmt.Sprintf("FORGE (deterministic desktop): gateway %s — %s", res.Status, strings.TrimSpace(coalesceReason(res))))
+			gwActivity["executionState"] = res.Status
+			gwActivity["failureReason"] = coalesceReason(res)
+			gwActivity["toolSelected"] = "desktop.open"
+			gwActivity["toolArgs"] = map[string]any{"query": lastUserContent}
+			gwActivity["executionResult"] = res.Data
+			gwActivity["syntheticToolExecution"] = true
+			return true
+		}
+		if final.Len() > 0 {
+			final.WriteString("\n\n")
+		}
+		final.WriteString("FORGE (deterministic desktop): " + formatToolResult("desktop.open", res))
+		gwActivity["toolSelected"] = "desktop.open"
+		gwActivity["toolArgs"] = map[string]any{"query": lastUserContent}
+		gwActivity["executionState"] = "ok"
+		gwActivity["executionResult"] = res.Data
+		gwActivity["syntheticToolExecution"] = true
+		return true
+	}
 	_, _, _, combined := gateway.ParseCombinedMkdirAndWrite(lastUserContent)
 	if combined {
 		return s.runDeterministicMkdirThenWrite(ctx, corr, lastUserContent, pushStage, gwActivity, final)

@@ -951,6 +951,41 @@ func TestChatPostForcedToolMismatchUsesDeterministicFallback(t *testing.T) {
 	}
 }
 
+func TestChatPostRemoteSSHBannerUsesDesktopOpenNotLocalWrite(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
+	thread, err := srv.chat.CreateThread(context.Background(), "remote ssh banner", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+
+	raw := []byte(`{"content":"I pre approve this plan. Open terminall, ssh into robert@10.150.1.2 password redacted-secret. Create a directory labled Auto_Banner. Inside that directory create a python program called hello_world.py. I want it to be a scrolling flashing banner with the words \"HELLO WORLD\".","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message")
+	}
+	activity := metadataMap(payload.AssistantMessage.Metadata, "toolGatewayActivity")
+	if got := strings.TrimSpace(asString(activity["toolSelected"])); got != "desktop.open" {
+		t.Fatalf("toolSelected=%q activity=%#v content=%q", got, activity, payload.AssistantMessage.Content)
+	}
+	tools := gatewayInvocationTools(t, st)
+	if strings.Join(tools, ",") != "desktop.open" {
+		t.Fatalf("expected only desktop.open gateway invocation, got %v", tools)
+	}
+	if strings.Contains(payload.AssistantMessage.Content, "FORGE (deterministic python):") {
+		t.Fatalf("expected remote desktop path, got local python response %q", payload.AssistantMessage.Content)
+	}
+}
+
 func gatewayInvocationTools(t *testing.T, st *store.Store) []string {
 	t.Helper()
 	rows, err := st.DB.Query(`SELECT tool_id FROM gateway_invocations ORDER BY id`)
