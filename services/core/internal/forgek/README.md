@@ -29,6 +29,7 @@ go test ./internal/forgek/...
 - Phase 11C Go/Rust Test Corpus Alignment: test-only parity in `fixture_parity_test.go`, shared fixtures outside this package at `fixtures/forgek`
 - Phase 11D Rust Validation CI and Tooling Integration: root/CI tooling only, no package runtime dependency
 - Phase 11E Consensus Mesh: `consensus`, `consensus_syscalls.go`
+- Phase 11F Integration Readiness Contracts: `integrationready`
 
 ## Authority Boundary
 
@@ -51,6 +52,8 @@ Phase 11C is `RESEARCH_ONLY / SIMULATOR_ONLY`. It adds Go test-only parity check
 Phase 11D is `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. It wires Rust validation commands into CI and root helper scripts only. It does not add Rust to this Go package or make root `npm test` depend on Rust.
 
 Phase 11E is `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. The Consensus Mesh governs claim acceptance for response/action proposal shaping. It does not become truth, admit Courthouse evidence, write memory, execute actions, call runtime/model drivers, create ContextBlocks, or route live daemon state through FORGE-K.
+
+Phase 11F is `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. The `integrationready` package defines diagnostic readiness reports, live path mappings, read-only adapter contracts, read-only RAG/retrieval boundaries, and shadow-mode policy. It has no syscalls, no Kernel ownership, no live daemon imports, no API routes, no gateway/modelruntime/controllane behavior, no live retrieval or embedding calls, no live RAG, and no live memory mutation.
 
 ## Future Rust Boundary
 
