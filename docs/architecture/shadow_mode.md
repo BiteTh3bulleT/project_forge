@@ -1,6 +1,8 @@
 # FORGE-K Shadow Mode
 
-Status: Phase 11F design contract only. Scope is `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`.
+Status: Phase 11F policy/contracts plus Phase 11G simulator-only harness design.
+
+Phase 11F defines integration readiness contracts, read-only adapters, and shadow policy. Phase 11G defines the simulator-only harness and report model design in `docs/architecture/shadow_mode_harness.md`. Neither phase implements live shadow mode or authorizes Phase 12 live integration.
 
 ## Definition
 
@@ -19,7 +21,16 @@ Shadow mode means:
 - FORGE-K does not alter user-visible output
 - all shadow outputs are diagnostics only
 
-Phase 11F defines the policy and contracts. It does not implement a live shadow harness.
+Phase 11G adds the harness/report design. Actual live observation is deferred to Phase 12B.
+
+## Phase Split
+
+- Phase 11F: integration readiness contracts, read-only adapter contracts, ReadOnlyRAGAdapter boundary, and shadow policy.
+- Phase 11G: simulator-only shadow harness/report model design in `docs/architecture/shadow_mode_harness.md` and `services/core/internal/forgek/shadowharness`.
+- Phase 12B: future read-only live shadow harness implementation after Phase 12A live integration design.
+- Phase 12 live integration is not authorized by Phase 11F or Phase 11G.
+
+`services/core/internal/forgek/integrationready` remains the Phase 11F readiness package. It does not implement the Phase 11G harness.
 
 ## Allowed Operations
 
@@ -28,6 +39,9 @@ Shadow mode may support these diagnostic operations in a future scoped phase:
 - request mirroring
 - evidence mirroring
 - retrieval/RAG shadow reports
+- runtime shadow reports
+- KV shadow reports
+- lymphatic shadow reports
 - response comparison
 - context comparison
 - consensus comparison
@@ -72,6 +86,9 @@ Shadow reports may compare:
 - live response shape against Consensus Mesh diagnostics
 - live context metadata against Context Compiler diagnostics
 - retrieval provenance against Memory Palace route shape
+- runtime traces against Runtime Boundary proposal-only rules
+- KV metadata against acceleration-not-memory rules
+- maintenance reports against Lymphatic no-silent-mutation rules
 - risk flags against policy expectations
 
 Consensus accepted does not mean canonical truth. ContextBlocks are compiled shape, not truth. Models are drivers, not authority.
@@ -90,9 +107,10 @@ No report can approve live behavior, mutate state, admit evidence, execute actio
 
 ## Hard Stops
 
-Stop Phase 11F or any future shadow implementation if an adapter or shadow path:
+Stop Phase 11G or any future shadow harness implementation if an adapter or shadow path:
 
 - imports live daemon packages into `services/core/internal/forgek/integrationready`
+- imports live daemon packages into `services/core/internal/forgek/shadowharness`
 - mutates live state
 - calls modelruntime
 - executes tools

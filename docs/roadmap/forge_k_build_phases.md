@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -261,15 +261,17 @@ What not to do: wire FORGE-K into the live daemon, create live mutation adapters
 
 ## Phase 11G - Shadow Mode Harness Design
 
-Scope: `DOCS_ONLY / INTEGRATION_PREP_ONLY`.
+Scope: `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`.
 
-Goal: design the future read-only shadow harness before any daemon wiring.
+Goal: design the future read-only shadow harness and simulator-only report contracts before any daemon wiring.
 
-Deliverables: route inventory plan, shadow mirror event schema, diagnostic report schema, rollback plan, operator visibility plan, and no-user-visible-output acceptance tests.
+Implemented deliverables: shadow harness architecture doc, Phase 12B harness plan, `shadowharness` simulator package, ShadowObservation, ShadowHarnessPolicy, ShadowComparisonReport, RAG/Consensus/Context/Runtime/KV/Lymphatic shadow report contracts, no-effect validator, and forbidden import tests.
 
-Validation criteria: design identifies live authority owners, entrypoints, rollback steps, diagnostic storage, and hard-stop conditions; no runtime behavior changes.
+Validation criteria: default policy forbids live mutation, tool execution, modelruntime calls, retrieval execution, embedding calls, memory writes, user-visible output, and public API changes; reporting flags can be enabled without side effects; observations/reports serialize deterministically and reject secret-looking metadata; no live daemon packages are imported by `shadowharness`; FORGE-K simulator tests pass.
 
-What not to do: implement the harness, wire live paths, execute tools, run retrieval, call modelruntime, write memory, or affect responses.
+Implementation status: implemented in `services/core/internal/forgek/shadowharness`, `docs/architecture/shadow_mode_harness.md`, and `docs/reviews/shadow_mode_harness_plan.md`. No live daemon integration, request observation, API route, gateway/modelruntime/controllane behavior change, live retrieval, live RAG, embedding call, tool execution, memory write, user-visible output change, or second authority path was added.
+
+What not to do: implement Phase 12, observe live daemon requests, wire live paths, execute tools, run retrieval, call embeddings, call modelruntime, write memory, alter responses, or change public APIs/routes.
 
 ## Phase 12A - Live Integration Design
 
@@ -283,7 +285,7 @@ Validation criteria: design proves gateway remains tool authority until migratio
 
 What not to do: implement live integration or alter daemon behavior.
 
-## Phase 12B - Read-only Shadow Harness
+## Phase 12B - Read-only Shadow Harness Implementation
 
 Scope: `LIVE_INTEGRATION`.
 
