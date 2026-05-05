@@ -1,8 +1,8 @@
 # FORGE-K Shadow Mode
 
-Status: Phase 11F policy/contracts, Phase 11G simulator-only harness design, Phase 12A live integration design, Phase 12B disabled-by-default `/health` observer, Phase 12C diagnostics hardening, and Phase 12D controlled expansion design.
+Status: Phase 11F policy/contracts, Phase 11G simulator-only harness design, Phase 12A live integration design, Phase 12B disabled-by-default `/health` observer, Phase 12C diagnostics hardening, Phase 12D controlled expansion design, and Phase 12E disabled-by-default route-envelope metadata observer.
 
-Phase 11F defines integration readiness contracts, read-only adapters, and shadow policy. Phase 11G defines the simulator-only harness and report model design in `docs/architecture/shadow_mode_harness.md`. Phase 12A designs the first live shadow implementation path in `docs/architecture/forge_k_live_integration_design.md`. Phase 12B implements one disabled-by-default read-only `/health` metadata observer. Phase 12C hardens that observer. Phase 12D designs a controlled next expansion and recommends route envelope metadata for a future Phase 12E. None of these phases authorizes live mutation.
+Phase 11F defines integration readiness contracts, read-only adapters, and shadow policy. Phase 11G defines the simulator-only harness and report model design in `docs/architecture/shadow_mode_harness.md`. Phase 12A designs the first live shadow implementation path in `docs/architecture/forge_k_live_integration_design.md`. Phase 12B implements one disabled-by-default read-only `/health` metadata observer. Phase 12C hardens that observer. Phase 12D designs a controlled next expansion. Phase 12E implements disabled-by-default route-envelope metadata shadowing. None of these phases authorizes live mutation.
 
 ## Definition
 
@@ -21,7 +21,7 @@ Shadow mode means:
 - FORGE-K does not alter user-visible output
 - all shadow outputs are diagnostics only
 
-Phase 11G adds the harness/report design. Phase 12B adds the first live observation point: `/health` metadata only. Phase 12D adds design only; it does not add a new observation point.
+Phase 11G adds the harness/report design. Phase 12B adds the first live observation point: `/health` metadata only. Phase 12E adds route-envelope metadata observation behind the same disabled-by-default flag.
 
 ## Phase Split
 
@@ -30,8 +30,9 @@ Phase 11G adds the harness/report design. Phase 12B adds the first live observat
 - Phase 12A: docs-only live integration design; does not authorize implementation.
 - Phase 12B: disabled-by-default read-only live shadow harness implementation for `/health` metadata only.
 - Phase 12C: observability-only hardening of Phase 12B diagnostics with no new touchpoints.
-- Phase 12D: docs-only controlled expansion design; route envelope metadata is the recommended future Phase 12E candidate, but no new touchpoint is implemented.
-- Phase 12 authority migration is not authorized by Phase 11F, Phase 11G, Phase 12A, Phase 12B, Phase 12C, or Phase 12D.
+- Phase 12D: docs-only controlled expansion design; route envelope metadata selected as the next candidate.
+- Phase 12E: disabled-by-default route-envelope metadata observer for matched route patterns, route classes, method, timing, and safe request ids only.
+- Phase 12 authority migration is not authorized by Phase 11F, Phase 11G, Phase 12A, Phase 12B, Phase 12C, Phase 12D, or Phase 12E.
 
 `services/core/internal/forgek/integrationready` remains the Phase 11F readiness package. It does not implement the Phase 11G harness.
 
@@ -127,16 +128,17 @@ Stop Phase 11G or any future shadow harness implementation if an adapter or shad
 
 Every shadow output is diagnostics only. No shadow result can authorize live integration, canonical mutation, tool execution, memory writes, model runtime calls, retrieval execution, or user-visible output changes.
 
-## Phase 12B / 12C Current Scope
+## Phase 12B - 12E Current Scope
 
-Phase 12B and 12C currently allow only:
+Phase 12B through 12E currently allow only:
 
 - disabled-by-default feature flag: `FORGE_K_SHADOW_MODE_ENABLED=false`
-- read-only observation of `/health` request metadata only
+- read-only observation of `/health` request metadata
+- read-only route-envelope metadata: method, matched route pattern, normalized route class, duration, and safe request id when available
 - bounded in-memory diagnostic reports only
 - no public API or route changes
 - no user-visible effect
 - no tool, modelruntime, retrieval, embedding, memory, or controllane execution from FORGE-K
 - no request body, response body, prompt, model output, tool payload, retrieval content, or memory content capture
 
-Any expansion beyond `/health` requires a separately approved phase and must prove no-effect behavior with route inventory, response equivalence, forbidden execution, and no-mutation tests.
+Any expansion beyond route-envelope metadata requires a separately approved phase and must prove no-effect behavior with route inventory, response equivalence, forbidden execution, and no-mutation tests.

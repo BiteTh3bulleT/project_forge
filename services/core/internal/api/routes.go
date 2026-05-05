@@ -8,6 +8,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+
+	"forge/projectforge/services/core/internal/forgekshadow"
 )
 
 func (s *Server) mountMiddleware(r chi.Router) {
@@ -33,6 +35,36 @@ func (s *Server) mountMiddleware(r chi.Router) {
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "X-Forge-Remote-Token", "X-Telegram-Bot-Api-Secret-Token"},
 		AllowCredentials: false,
 	}))
+	r.Use(s.routeEnvelopeShadowMiddleware)
+}
+
+func (s *Server) routeEnvelopeShadowMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s == nil || s.forgeKShadow == nil || !s.forgeKShadow.Enabled() {
+			next.ServeHTTP(w, r)
+			return
+		}
+		started := time.Now()
+		next.ServeHTTP(w, r)
+		if r == nil || r.URL == nil || strings.TrimSpace(r.URL.Path) == "/health" {
+			return
+		}
+		routePattern := strings.TrimSpace(chi.RouteContext(r.Context()).RoutePattern())
+		if routePattern == "" {
+			return
+		}
+		s.forgeKShadow.ObserveRouteEnvelopeBestEffort(r.Context(), forgekshadow.RouteEnvelopeInput{
+			RequestID:    middleware.GetReqID(r.Context()),
+			Method:       r.Method,
+			Path:         r.URL.Path,
+			RoutePattern: routePattern,
+			RouteClass:   forgekshadow.NormalizeRouteClass(r.URL.Path, routePattern),
+			Duration:     time.Since(started),
+			Metadata: map[string]any{
+				"touchpoint": "route_envelope",
+			},
+		})
+	})
 }
 
 func (s *Server) mountHealthRoutes(r chi.Router) {

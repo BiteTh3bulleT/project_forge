@@ -1,21 +1,21 @@
 # Phase 12E Shadow Route Envelope Test Plan
 
-Status: future test plan only. Phase 12E is not started.
+Status: implemented test plan and validation record. Phase 12E is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
 ## Scope
 
-This document defines the minimum tests required before implementing route envelope metadata shadowing in a future Phase 12E.
+This document defines the tests for route envelope metadata shadowing in Phase 12E.
 
-Expected future scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+Scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
-Phase 12E must not start until separately approved. This test plan does not add code, routes, public APIs, live observation, gateway calls, modelruntime calls, retrieval/search/embedding calls, memory writes, controllane mutations, or authority migration.
+Phase 12E adds disabled-by-default route-envelope observation only. It does not add routes, public APIs, gateway calls, modelruntime calls, retrieval/search/embedding calls, memory writes, controllane mutations, persistent diagnostics, response changes, or authority migration.
 
 ## Required Test Groups
 
 ### Disabled Default
 
 - `FORGE_K_SHADOW_MODE_ENABLED` defaults to disabled.
-- Disabled mode preserves the current `/health`-only observation behavior if Phase 12B/12C remains the baseline.
+- Disabled mode stores no route-envelope diagnostics.
 - Disabled mode does not generate route-envelope diagnostics.
 - Disabled mode does not allocate or require a route-envelope sink for request success.
 
@@ -75,7 +75,7 @@ Phase 12E must not start until separately approved. This test plan does not add 
 
 ## Required Commands
 
-A future Phase 12E implementation must run at least:
+Phase 12E validation must run at least:
 
 - `cd services/core && go test ./internal/forgek/...`
 - `cd services/core && go test ./internal/forgekshadow/...`
@@ -89,3 +89,9 @@ A future Phase 12E implementation must run at least:
 ## Exit Criteria
 
 Phase 12E is complete only if route-envelope diagnostics remain disabled by default, read-only, bounded, metadata-only, non-authoritative, and proven to have no effect on live responses or live authority paths.
+
+## Implemented Coverage
+
+- `services/core/internal/forgekshadow/observer_test.go` covers disabled route-envelope no-op behavior, enabled diagnostic report creation, typed `RouteEnvelopeObservation` fields, route class normalization, unsafe metadata rejection, best-effort unsafe report dropping, bounded sink reuse, sink failure isolation, and no-effect policy enforcement.
+- `services/core/internal/api/server_route_inventory_test.go` covers route inventory stability, no public diagnostics route, `/health` response equivalence, `/api/meta` disabled/enabled response equivalence, route-envelope report creation for `/api/meta`, invalid POST body non-capture on `/api/commands/execute`, `/forge` route inventory, conditional `/v1` route inventory, and SSE mount/order guard.
+- Status code capture is intentionally omitted in Phase 12E to avoid response writer wrapping. Response status, headers, and bodies are tested for equivalence instead.

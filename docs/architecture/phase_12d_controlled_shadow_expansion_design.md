@@ -1,21 +1,21 @@
 # Phase 12D Controlled Shadow Expansion Design
 
-Status: implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
+Status: implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E later implemented the selected route-envelope touchpoint as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
 ## Executive Summary
 
-Phase 12D designs the next controlled shadow-mode expansion. It does not implement the expansion.
+Phase 12D designed the next controlled shadow-mode expansion. It did not implement the expansion.
 
-Phase 12B added the first disabled-by-default read-only observer for `/health` metadata only. Phase 12C hardened that observer. Phase 12D selects the recommended next candidate for a future Phase 12E implementation: route envelope metadata.
+Phase 12B added the first disabled-by-default read-only observer for `/health` metadata only. Phase 12C hardened that observer. Phase 12D selected route envelope metadata for Phase 12E. Phase 12E now implements that selected touchpoint behind `FORGE_K_SHADOW_MODE_ENABLED`.
 
 Route envelope metadata is selected because it provides useful route-level diagnostics with the lowest semantic and authority risk. It can be designed around method, matched route, route class, timing, workspace/correlation ids, and diagnostic status only. It must not capture request bodies, response bodies, prompts, tool payloads, retrieval content, memory content, or model output.
 
-## Current Phase 12B / 12C State
+## Current Phase 12B - 12E State
 
 Current implemented shadow scope:
 
 - feature flag: `FORGE_K_SHADOW_MODE_ENABLED=false`
-- implemented touchpoint: `/health` request metadata only
+- implemented touchpoints: `/health` request metadata and route-envelope metadata
 - sink: bounded in-memory diagnostic reports only
 - public diagnostics API: none
 - persistence: none
@@ -30,7 +30,7 @@ Phase 12C hardened:
 - route inventory and response equivalence tests
 - forbidden live import tests
 
-After Phase 12D, `/health` remains the only implemented live touchpoint.
+After Phase 12E, route-envelope metadata is implemented and `/health` remains supported.
 
 ## Candidate Touchpoints
 
@@ -50,23 +50,20 @@ After Phase 12D, `/health` remains the only implemented live touchpoint.
 | Existing retrieval-result metadata | Medium-High | Medium-High | High | High | Medium | Medium-High | Medium | Defer |
 | Existing gateway trace metadata | Medium-High | High | Medium-High | High | Medium | Medium | High | Defer |
 
-## Selected Recommended Touchpoint For Phase 12E
+## Selected Touchpoint For Phase 12E
 
-Phase 12E should design and implement route envelope metadata shadowing if separately approved.
+Phase 12E implements route envelope metadata shadowing.
 
-Allowed future Phase 12E data:
+Allowed Phase 12E data:
 
 - HTTP method
 - matched route pattern or route class
 - path template, not raw query content
-- workspace id
-- correlation id / request id
-- start/end timing or duration
-- status class, if captured after response without modifying it
-- route owner component classification
+- request id when safely available
+- duration
 - no-effect validation result
 
-Forbidden future Phase 12E data:
+Forbidden Phase 12E data:
 
 - request body
 - response body
@@ -90,7 +87,7 @@ Existing gateway trace metadata is excluded because it is adjacent to tool execu
 
 ## No-Effect Guarantees
 
-Future Phase 12E must prove:
+Phase 12E must prove:
 
 - feature flag defaults disabled
 - route inventory unchanged
@@ -118,7 +115,7 @@ Reports must remain diagnostic-only and non-authoritative. They must not become 
 
 ## Redaction Policy
 
-Future Phase 12E must reuse or strengthen the Phase 12C metadata safety rules:
+Phase 12E must reuse or strengthen the Phase 12C metadata safety rules:
 
 - reject secret-looking keys or values
 - reject authorization, cookie, session, token, password, credential, bearer, secret, api key, private key, and plaintext indicators
@@ -151,7 +148,7 @@ No failure may change response status, headers, body, route selection, timeout h
 
 ## Rollback / Kill Switch
 
-Future Phase 12E must keep:
+Phase 12E must keep:
 
 - `FORGE_K_SHADOW_MODE_ENABLED=false` default
 - a single environment/config kill switch
@@ -161,11 +158,11 @@ Future Phase 12E must keep:
 
 Rollback must be disabling the flag or reverting the Phase 12E implementation. No live data migration should be required.
 
-## Required Tests Before Implementation
+## Phase 12E Tests
 
-The Phase 12E route-envelope test plan is recorded in `docs/testing/phase_12e_shadow_route_envelope_tests.md`.
+The Phase 12E route-envelope test plan and implemented coverage are recorded in `docs/testing/phase_12e_shadow_route_envelope_tests.md`.
 
-Minimum future test groups:
+Minimum test groups:
 
 - disabled default behavior
 - enabled no-effect behavior
@@ -179,9 +176,8 @@ Minimum future test groups:
 
 ## What Not To Do
 
-- Do not implement Phase 12E.
-- Do not add route-envelope observer code yet.
-- Do not observe all routes yet.
+- Do not broaden beyond route-envelope metadata.
+- Do not add route-envelope body, query, header, prompt, model output, retrieval content, or memory content capture.
 - Do not capture request bodies.
 - Do not capture response bodies.
 - Do not add public diagnostics APIs.

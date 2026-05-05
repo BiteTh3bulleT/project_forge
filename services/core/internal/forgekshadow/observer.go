@@ -70,13 +70,55 @@ func (o *Observer) ObserveBestEffort(ctx context.Context, input ObservationInput
 }
 
 func (o *Observer) Observe(ctx context.Context, input ObservationInput) error {
+	return o.observe(ctx, input, nil)
+}
+
+func (o *Observer) ObserveRouteEnvelopeBestEffort(ctx context.Context, input RouteEnvelopeInput) {
+	defer func() {
+		_ = recover()
+	}()
+	_ = o.ObserveRouteEnvelope(ctx, input)
+}
+
+func (o *Observer) ObserveRouteEnvelope(ctx context.Context, input RouteEnvelopeInput) error {
+	if o == nil || !o.cfg.Enabled {
+		return nil
+	}
+	now := o.now()
+	observationID := fmt.Sprintf("shadow-route-envelope-%d", o.counter.Add(1))
+	envelope, metadata, err := normalizeRouteEnvelopeInput(input, now, observationID)
+	if err != nil {
+		return err
+	}
+	routePath := envelope.RoutePattern
+	if routePath == "" {
+		routePath = envelope.Path
+	}
+	return o.observeAt(ctx, ObservationInput{
+		WorkspaceID:    input.WorkspaceID,
+		RequestID:      input.RequestID,
+		LivePath:       strings.TrimSpace(envelope.Method + " " + routePath),
+		Method:         envelope.Method,
+		Path:           routePath,
+		RequestSummary: "read-only route envelope metadata",
+		Metadata:       metadata,
+	}, now, observationID, &envelope)
+}
+
+func (o *Observer) observe(ctx context.Context, input ObservationInput, routeEnvelope *RouteEnvelopeObservation) error {
+	if o == nil || !o.cfg.Enabled {
+		return nil
+	}
+	return o.observeAt(ctx, input, o.now(), "", routeEnvelope)
+}
+
+func (o *Observer) observeAt(ctx context.Context, input ObservationInput, now time.Time, observationID string, routeEnvelope *RouteEnvelopeObservation) error {
 	if o == nil || !o.cfg.Enabled {
 		return nil
 	}
 	if err := shadowharness.ValidateShadowHarnessPolicy(o.policy); err != nil {
 		return fmt.Errorf("%w: %v", ErrPolicyRejected, err)
 	}
-	now := o.now()
 	metadata, err := safeMetadata(input.Metadata)
 	if err != nil {
 		return err
@@ -97,9 +139,12 @@ func (o *Observer) Observe(ctx context.Context, input ObservationInput) error {
 	if summary == "" {
 		summary = "read-only live request metadata"
 	}
+	if strings.TrimSpace(observationID) == "" {
+		observationID = fmt.Sprintf("shadow-observation-%d", o.counter.Add(1))
+	}
 
 	obs, err := shadowharness.NewShadowObservation(shadowharness.ShadowObservation{
-		ObservationID:  fmt.Sprintf("shadow-observation-%d", o.counter.Add(1)),
+		ObservationID:  observationID,
 		WorkspaceID:    workspaceID,
 		RequestID:      requestID,
 		ObservedAt:     now,
@@ -158,8 +203,9 @@ func (o *Observer) Observe(ctx context.Context, input ObservationInput) error {
 		return err
 	}
 	return o.sink.Store(ctx, DiagnosticReport{
-		Observation: obs,
-		Comparison:  report,
-		StoredAt:    now,
+		Observation:   obs,
+		Comparison:    report,
+		RouteEnvelope: routeEnvelope,
+		StoredAt:      now,
 	})
 }

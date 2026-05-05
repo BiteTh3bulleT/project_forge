@@ -35,6 +35,7 @@ go test ./internal/forgek/...
 - Phase 12B Read-only Shadow Harness Implementation: live-adjacent package outside this simulator at `services/core/internal/forgekshadow`
 - Phase 12C Shadow Diagnostics Review and Hardening: live-adjacent hardening outside this simulator; root forbidden import guard added here
 - Phase 12D Controlled Shadow Expansion Design: docs only, no package code
+- Phase 12E Route Envelope Shadow Metadata: live-adjacent route-envelope observer outside this simulator at `services/core/internal/forgekshadow`
 
 ## Authority Boundary
 
@@ -68,7 +69,9 @@ Phase 12B is `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT` and lives outs
 
 Phase 12C is `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. It hardens `forgekshadow` diagnostics without adding touchpoints. `/health` remains the only observed live route, diagnostics remain in-memory only, and this simulator package still must not import live daemon authority packages.
 
-Phase 12D is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. It recommends route envelope metadata as the next future Phase 12E candidate and records the required test plan. It adds no code to this package, no new live observation, no route/API changes, no public diagnostics routes, no gateway/modelruntime/retrieval/memory/controllane behavior, no live RAG, no feature flag changes, and no authority migration. `/health` remains the only implemented live shadow touchpoint.
+Phase 12D is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. It recommended route envelope metadata as the next Phase 12E candidate and recorded the required test plan. It added no code to this package, no new live observation, no route/API changes, no public diagnostics routes, no gateway/modelruntime/retrieval/memory/controllane behavior, no live RAG, no feature flag changes, and no authority migration.
+
+Phase 12E is `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT` and lives outside this simulator package in `services/core/internal/forgekshadow`. It observes route-envelope metadata only when `FORGE_K_SHADOW_MODE_ENABLED=true`: method, matched route pattern, normalized route class, duration, and safe request identifiers. It does not capture request bodies, response bodies, prompts, model outputs, retrieval content, headers, cookies, secrets, or raw query strings; it does not add syscalls, Kernel ownership, public routes, public APIs, live retrieval, embedding calls, live RAG, modelruntime calls, tool execution, memory writes, controllane mutation, gateway behavior changes, or user-visible output authority.
 
 ## Future Rust Boundary
 

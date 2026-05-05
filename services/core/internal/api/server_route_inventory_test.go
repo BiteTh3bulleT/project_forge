@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -223,16 +225,118 @@ func TestHealthResponseUnchangedWithForgeKShadowEnabled(t *testing.T) {
 	}
 }
 
-func TestForgeKShadowDoesNotObserveNonHealthRoute(t *testing.T) {
+func TestAPIResponseUnchangedWithForgeKShadowDisabled(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/meta", nil)
+
+	baselineRR := httptest.NewRecorder()
+	(&Server{}).Handler().ServeHTTP(baselineRR, req.Clone(context.Background()))
+
+	observer := forgekshadow.NewObserver(forgekshadow.Config{Enabled: false})
+	disabledRR := httptest.NewRecorder()
+	(&Server{
+		cfg:          config.Config{ForgeKShadowModeEnabled: false},
+		forgeKShadow: observer,
+	}).Handler().ServeHTTP(disabledRR, req.Clone(context.Background()))
+
+	assertSameResponse(t, baselineRR, disabledRR, "/api/meta disabled shadow")
+	if reports := observer.Reports(); len(reports) != 0 {
+		t.Fatalf("disabled shadow observer stored %d reports for /api/meta", len(reports))
+	}
+}
+
+func TestForgeKShadowObservesRouteEnvelopeForAPIRouteWithoutChangingResponse(t *testing.T) {
 	observer := forgekshadow.NewObserver(forgekshadow.Config{Enabled: true})
 	req := httptest.NewRequest(http.MethodGet, "/api/meta", nil)
+	req.Header.Set("X-Request-ID", "request-api-meta")
+
+	disabledRR := httptest.NewRecorder()
+	(&Server{}).Handler().ServeHTTP(disabledRR, req.Clone(context.Background()))
+
+	enabledRR := httptest.NewRecorder()
+	(&Server{
+		cfg:          config.Config{ForgeKShadowModeEnabled: true},
+		forgeKShadow: observer,
+	}).Handler().ServeHTTP(enabledRR, req.Clone(context.Background()))
+
+	assertSameResponse(t, disabledRR, enabledRR, "/api/meta enabled shadow")
+	reports := observer.Reports()
+	if len(reports) != 1 {
+		t.Fatalf("expected one route envelope report for /api/meta, got %d", len(reports))
+	}
+	envelope := reports[0].RouteEnvelope
+	if envelope == nil {
+		t.Fatalf("expected typed route envelope report")
+	}
+	if envelope.Method != http.MethodGet || envelope.RoutePattern != "/api/meta" || envelope.RouteClass != forgekshadow.RouteClassAPI {
+		t.Fatalf("unexpected route envelope: %#v", envelope)
+	}
+	if envelope.Path != "/api/meta" {
+		t.Fatalf("route envelope should store safe route pattern as path, got %q", envelope.Path)
+	}
+	if _, ok := reports[0].Observation.Metadata["body"]; ok {
+		t.Fatalf("route envelope captured body metadata: %#v", reports[0].Observation.Metadata)
+	}
+	if _, ok := reports[0].Observation.Metadata["response_body"]; ok {
+		t.Fatalf("route envelope captured response body metadata: %#v", reports[0].Observation.Metadata)
+	}
+}
+
+func TestForgeKShadowRouteEnvelopeDoesNotCapturePOSTBody(t *testing.T) {
+	body := []byte(`{"prompt":"do not capture this"`)
+	req := func() *http.Request {
+		return httptest.NewRequest(http.MethodPost, "/api/commands/execute", bytes.NewReader(body))
+	}
+	disabledRR := httptest.NewRecorder()
+	(&Server{}).Handler().ServeHTTP(disabledRR, req())
+
+	observer := forgekshadow.NewObserver(forgekshadow.Config{Enabled: true})
+	enabledRR := httptest.NewRecorder()
+	(&Server{
+		cfg:          config.Config{ForgeKShadowModeEnabled: true},
+		forgeKShadow: observer,
+	}).Handler().ServeHTTP(enabledRR, req())
+
+	assertSameResponse(t, disabledRR, enabledRR, "POST /api/commands/execute enabled shadow")
+	reports := observer.Reports()
+	if len(reports) != 1 {
+		t.Fatalf("expected one route envelope report for POST route, got %d", len(reports))
+	}
+	metadata := reports[0].Observation.Metadata
+	for _, forbidden := range []string{"body", "request_body", "response_body", "prompt", "content", "authorization", "cookie"} {
+		if _, ok := metadata[forbidden]; ok {
+			t.Fatalf("route envelope captured forbidden %q metadata: %#v", forbidden, metadata)
+		}
+	}
+	if strings.Contains(strings.ToLower(reports[0].Observation.RequestSummary), "do not capture") {
+		t.Fatalf("route envelope summary captured request body: %q", reports[0].Observation.RequestSummary)
+	}
+}
+
+func TestForgeKShadowRouteEnvelopeDoesNotCaptureAuthHeadersOrCookies(t *testing.T) {
+	observer := forgekshadow.NewObserver(forgekshadow.Config{Enabled: true})
+	req := httptest.NewRequest(http.MethodGet, "/api/meta", nil)
+	req.Header.Set("Authorization", "Bearer should-not-appear")
+	req.Header.Set("Cookie", "session=should-not-appear")
+
 	rr := httptest.NewRecorder()
 	(&Server{
 		cfg:          config.Config{ForgeKShadowModeEnabled: true},
 		forgeKShadow: observer,
 	}).Handler().ServeHTTP(rr, req)
-	if reports := observer.Reports(); len(reports) != 0 {
-		t.Fatalf("shadow observer must remain /health-only, got %d reports for /api/meta", len(reports))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/api/meta status=%d, want %d", rr.Code, http.StatusOK)
+	}
+	reports := observer.Reports()
+	if len(reports) != 1 {
+		t.Fatalf("expected one route envelope report, got %d", len(reports))
+	}
+	for key, value := range reports[0].Observation.Metadata {
+		normalizedKey := strings.ToLower(key)
+		normalizedValue := strings.ToLower(toString(value))
+		if strings.Contains(normalizedKey, "authorization") || strings.Contains(normalizedKey, "cookie") ||
+			strings.Contains(normalizedValue, "should-not-appear") || strings.Contains(normalizedValue, "bearer") {
+			t.Fatalf("route envelope captured auth/cookie material in %q=%v", key, value)
+		}
 	}
 }
 
@@ -265,6 +369,26 @@ func TestServerRouteInventoryAssistantStreamOrderGuardrail(t *testing.T) {
 	if streamIndex > metaIndex {
 		t.Fatalf("assistant stream route index=%d should stay before timed /api group index=%d", streamIndex, metaIndex)
 	}
+}
+
+func assertSameResponse(t *testing.T, left, right *httptest.ResponseRecorder, label string) {
+	t.Helper()
+	if left.Code != right.Code {
+		t.Fatalf("%s changed status left=%d right=%d", label, left.Code, right.Code)
+	}
+	if left.Body.String() != right.Body.String() {
+		t.Fatalf("%s changed body left=%q right=%q", label, left.Body.String(), right.Body.String())
+	}
+	if left.Header().Get("Content-Type") != right.Header().Get("Content-Type") {
+		t.Fatalf("%s changed content type left=%q right=%q", label, left.Header().Get("Content-Type"), right.Header().Get("Content-Type"))
+	}
+}
+
+func toString(value any) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
 }
 
 type routeInventory map[string]int

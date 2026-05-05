@@ -1,6 +1,6 @@
 # Phase 12B Shadow Harness Specification
 
-Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12D controlled expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
+Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12D controlled expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E route-envelope metadata implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
 ## Scope
 
@@ -30,7 +30,7 @@ When disabled:
 - no diagnostic sink is written
 - no response, status code, header, or public API shape changes
 
-## Implemented Touchpoint
+## Implemented Touchpoints
 
 The Phase 12B implementation intentionally observes one low-risk live touchpoint:
 
@@ -41,6 +41,15 @@ The Phase 12B implementation intentionally observes one low-risk live touchpoint
 - report failures are best-effort and cannot fail the live request
 - no request body, response body, prompt, model output, tool payload, retrieval result content, or memory content is captured
 - Phase 12C adds explicit disabled sink support, expanded unsafe metadata rejection, raw content key rejection, max metadata string length enforcement, and additional no-effect tests.
+
+Phase 12E adds one more disabled-by-default touchpoint:
+
+- route-envelope metadata from matched API routes after the live handler returns
+- captured metadata is bounded to method, matched route pattern, normalized route class, duration, safe request id, and diagnostic markers
+- status code capture is intentionally skipped because this phase avoids response writer wrapping
+- `/health` keeps the Phase 12B per-handler observer and is skipped by route-envelope middleware
+- no raw query strings, request bodies, response bodies, prompts, model outputs, tool payloads, retrieval content, memory content, auth headers, cookies, or secrets are captured
+- reports stay in the same bounded in-memory sink with no public API
 
 ## Future Candidate Live Request Types
 
@@ -178,16 +187,18 @@ Implemented Phase 12B tests cover the default flag, enabled flag parsing, route 
 
 Implemented Phase 12C tests additionally cover disabled sink behavior, `authorization`/`cookie`/`session` metadata rejection, raw body/content/prompt metadata rejection, oversized metadata rejection, all represented side-effect policy flags, no public diagnostics route, disabled `/health` equivalence, and non-`/health` no-observation behavior.
 
+Implemented Phase 12E tests cover route-envelope disabled/enabled behavior, typed route-envelope reports, route class normalization, metadata redaction, no body capture, `/api/meta` response equivalence, invalid POST body non-capture, route inventory stability, no public diagnostics route, and the existing SSE mount/order guard.
+
 ## Phase 12D Handoff
 
 Phase 12D is a docs-only controlled expansion design. It does not add code, route observation, public APIs, route-envelope hooks, adapters, feature flags, persistent storage, or live authority migration.
 
-The recommended future Phase 12E touchpoint is route envelope metadata. The future route-envelope scope is method, matched route template or route class, owner classification, timing summary, workspace/correlation ids when already available, and no-effect validation only.
+The Phase 12E touchpoint is route envelope metadata. The route-envelope scope is method, matched route template, route class, timing summary, safe request ids when available, and no-effect validation only.
 
-After Phase 12D:
+After Phase 12E:
 
-- `/health` remains the only implemented live touchpoint.
-- Phase 12E has not started.
+- `/health` remains supported.
+- route-envelope metadata is implemented behind `FORGE_K_SHADOW_MODE_ENABLED`.
 - no chat content capture is approved.
 - no request or response body capture is approved.
 - no retrieval/search/embedding execution is approved.
@@ -195,7 +206,7 @@ After Phase 12D:
 - no gateway/tool execution is approved.
 - no memory write or controllane mutation is approved.
 
-The Phase 12D design is in `docs/architecture/phase_12d_controlled_shadow_expansion_design.md`; the touchpoint decision is in `docs/reviews/phase_12d_touchpoint_selection.md`; the required future Phase 12E test plan is in `docs/testing/phase_12e_shadow_route_envelope_tests.md`.
+The Phase 12D design is in `docs/architecture/phase_12d_controlled_shadow_expansion_design.md`; the touchpoint decision is in `docs/reviews/phase_12d_touchpoint_selection.md`; the Phase 12E test coverage is recorded in `docs/testing/phase_12e_shadow_route_envelope_tests.md`.
 
 ## What Not To Do
 
