@@ -1,6 +1,6 @@
 # Phase 12B Shadow Harness Specification
 
-Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
 
 ## Scope
 
@@ -40,6 +40,7 @@ The Phase 12B implementation intentionally observes one low-risk live touchpoint
 - reports are stored only in a bounded in-memory sink with no public API
 - report failures are best-effort and cannot fail the live request
 - no request body, response body, prompt, model output, tool payload, retrieval result content, or memory content is captured
+- Phase 12C adds explicit disabled sink support, expanded unsafe metadata rejection, raw content key rejection, max metadata string length enforcement, and additional no-effect tests.
 
 ## Future Candidate Live Request Types
 
@@ -174,6 +175,8 @@ Adapters observe existing live traces only. They cannot call gateway execution m
 - kill switch stops report generation
 
 Implemented Phase 12B tests cover the default flag, enabled flag parsing, route inventory key set stability, `/health` response status/body/header equivalence, diagnostic report generation behind the flag, sink failure isolation, bounded report retention, secret-looking metadata rejection, no-effect policy rejection, and forbidden imports.
+
+Implemented Phase 12C tests additionally cover disabled sink behavior, `authorization`/`cookie`/`session` metadata rejection, raw body/content/prompt metadata rejection, oversized metadata rejection, all represented side-effect policy flags, no public diagnostics route, disabled `/health` equivalence, and non-`/health` no-observation behavior.
 
 ## What Not To Do
 

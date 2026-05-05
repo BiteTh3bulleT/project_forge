@@ -3,6 +3,7 @@ package forgekshadow
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,36 +75,95 @@ func TestMemorySinkBoundedRetentionDropsOldest(t *testing.T) {
 	}
 }
 
-func TestObserverRejectsUnsafeMetadataWithoutStoringReport(t *testing.T) {
-	observer := NewObserverWithSink(Config{Enabled: true}, nil, fixedNow)
-	err := observer.Observe(context.Background(), ObservationInput{
+func TestObserverEnabledWithDisabledSinkStoresNoReports(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true, DisableSink: true}, nil, fixedNow)
+	if err := observer.Observe(context.Background(), ObservationInput{
 		WorkspaceID:    "workspace-a",
 		RequestID:      "request-a",
 		LivePath:       "GET /health",
 		RequestSummary: "health metadata",
 		Metadata: map[string]any{
-			"api_key": "redacted",
+			"route": "/health",
 		},
-	})
-	if !errors.Is(err, ErrUnsafeMetadata) {
-		t.Fatalf("expected unsafe metadata error, got %v", err)
+	}); err != nil {
+		t.Fatalf("observe with disabled sink: %v", err)
+	}
+	if reports := observer.Reports(); len(reports) != 0 {
+		t.Fatalf("disabled sink stored %d reports", len(reports))
+	}
+}
+
+func TestObserverRejectsUnsafeMetadataWithoutStoringReport(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true}, nil, fixedNow)
+	for _, tc := range []struct {
+		name     string
+		metadata map[string]any
+	}{
+		{"api key", map[string]any{"api_key": "redacted"}},
+		{"secret", map[string]any{"x_secret": "redacted"}},
+		{"token", map[string]any{"trace": "token value"}},
+		{"password", map[string]any{"password": "redacted"}},
+		{"private key", map[string]any{"private_key": "redacted"}},
+		{"bearer", map[string]any{"trace": "Bearer value"}},
+		{"plaintext", map[string]any{"plaintext": "redacted"}},
+		{"credential", map[string]any{"credential": "redacted"}},
+		{"authorization", map[string]any{"authorization": "redacted"}},
+		{"cookie", map[string]any{"cookie": "redacted"}},
+		{"session", map[string]any{"session": "redacted"}},
+		{"request body", map[string]any{"body": "raw request"}},
+		{"response body", map[string]any{"response_body": "raw response"}},
+		{"prompt", map[string]any{"prompt": "raw prompt"}},
+		{"large content", map[string]any{"summary": strings.Repeat("x", maxMetadataStringLength+1)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := observer.Observe(context.Background(), ObservationInput{
+				WorkspaceID:    "workspace-a",
+				RequestID:      "request-" + tc.name,
+				LivePath:       "GET /health",
+				RequestSummary: "health metadata",
+				Metadata:       tc.metadata,
+			})
+			if !errors.Is(err, ErrUnsafeMetadata) {
+				t.Fatalf("expected unsafe metadata error, got %v", err)
+			}
+		})
 	}
 	if reports := observer.Reports(); len(reports) != 0 {
 		t.Fatalf("unsafe metadata stored %d reports", len(reports))
 	}
 }
 
-func TestObserverRefusesSideEffectPolicy(t *testing.T) {
-	observer := NewObserverWithSink(Config{Enabled: true}, nil, fixedNow)
-	observer.policy.AllowToolExecution = true
-	err := observer.Observe(context.Background(), ObservationInput{
-		WorkspaceID:    "workspace-a",
-		RequestID:      "request-a",
-		LivePath:       "GET /health",
-		RequestSummary: "health metadata",
-	})
-	if !errors.Is(err, ErrPolicyRejected) {
-		t.Fatalf("expected policy rejection, got %v", err)
+func TestObserverRefusesAnySideEffectPolicy(t *testing.T) {
+	cases := []struct {
+		name string
+		mut  func(*shadowharness.ShadowHarnessPolicy)
+	}{
+		{"live mutation", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowLiveMutation = true }},
+		{"tool execution", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowToolExecution = true }},
+		{"modelruntime call", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowModelRuntimeCalls = true }},
+		{"retrieval execution", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowRetrievalExecution = true }},
+		{"embedding call", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowEmbeddingCalls = true }},
+		{"memory write", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowMemoryWrites = true }},
+		{"user-visible output", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowUserVisibleOutput = true }},
+		{"public API change", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowPublicAPIChanges = true }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			observer := NewObserverWithSink(Config{Enabled: true}, nil, fixedNow)
+			tc.mut(&observer.policy)
+			err := observer.Observe(context.Background(), ObservationInput{
+				WorkspaceID:    "workspace-a",
+				RequestID:      "request-a",
+				LivePath:       "GET /health",
+				RequestSummary: "health metadata",
+			})
+			if !errors.Is(err, ErrPolicyRejected) {
+				t.Fatalf("expected policy rejection, got %v", err)
+			}
+			if reports := observer.Reports(); len(reports) != 0 {
+				t.Fatalf("side-effectful policy stored %d reports", len(reports))
+			}
+		})
 	}
 }
 

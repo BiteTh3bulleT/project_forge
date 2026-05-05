@@ -3,8 +3,9 @@ package forgekshadow
 const DefaultMaxReports = 50
 
 type Config struct {
-	Enabled    bool
-	MaxReports int
+	Enabled     bool
+	MaxReports  int
+	DisableSink bool
 }
 
 func (c Config) normalized() Config {

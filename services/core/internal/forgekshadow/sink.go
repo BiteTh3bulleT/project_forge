@@ -10,6 +10,11 @@ type Sink interface {
 	List() []DiagnosticReport
 }
 
+type disabledSink struct{}
+
+func (disabledSink) Store(context.Context, DiagnosticReport) error { return nil }
+func (disabledSink) List() []DiagnosticReport                      { return nil }
+
 type MemorySink struct {
 	mu         sync.Mutex
 	maxReports int

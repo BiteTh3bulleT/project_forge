@@ -38,7 +38,7 @@ FORGE-K may only define read-only mappings and future adapter contracts in this 
 
 ## Phase 12A Design Notes
 
-Phase 12A selects a future Phase 12B read-only shadow harness as the first live integration candidate. Phase 12A does not implement that harness, add feature flags, observe live requests, change routes, or wire adapters.
+Phase 12A selected the Phase 12B read-only shadow harness as the first live integration candidate. Phase 12B implemented one disabled-by-default `/health` metadata observer, and Phase 12C hardened that implementation. No phase has added live authority migration, public diagnostics APIs, broader route observation, retrieval/modelruntime/tool execution, memory writes, or controllane mutation.
 
 | Live system | Phase 12B candidate? | Required Phase 12B adapter | In first harness? | Explicitly out of scope | Risk | Required Phase 12B tests |
 |---|---|---|---|---|---|---|

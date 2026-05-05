@@ -2,7 +2,7 @@
 
 Status: Phase 11G simulator-only shadow harness design plus Phase 12A live integration design handoff. Phase 11G scope is `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`; Phase 12A scope is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 
-Phase 11G does not implement live shadow mode and does not authorize Phase 12 live integration. Actual live observation is deferred to Phase 12B.
+Phase 11G does not implement live shadow mode and does not authorize Phase 12 live authority migration. Phase 12B later implemented one disabled-by-default `/health` metadata observer, and Phase 12C hardened it without adding touchpoints.
 
 ## Executive Summary
 
@@ -12,7 +12,7 @@ Shadow reports are diagnostics only. They cannot authorize canonical mutation, l
 
 ## Purpose
 
-Phase 11F defined integration readiness contracts, live path mappings, read-only adapter contracts, read-only RAG/retrieval mirror boundaries, and shadow-mode policy. Phase 11G defines the simulator-only harness shape a future Phase 12B could implement against live systems after Phase 12A design.
+Phase 11F defined integration readiness contracts, live path mappings, read-only adapter contracts, read-only RAG/retrieval mirror boundaries, and shadow-mode policy. Phase 11G defines the simulator-only harness shape. Phase 12B implements the first narrow live-adjacent observer against that shape, and Phase 12C hardens the diagnostics boundary.
 
 The design establishes:
 

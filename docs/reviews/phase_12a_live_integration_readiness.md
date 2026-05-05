@@ -2,7 +2,7 @@
 
 Status: Phase 12A implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 
-Phase 12A does not implement live integration. It records the design gates for a future Phase 12B read-only shadow harness.
+Phase 12A did not implement live integration. It recorded the design gates for what became the Phase 12B read-only `/health` metadata observer. Phase 12C later hardened that observer without adding touchpoints.
 
 ## Readiness Summary
 

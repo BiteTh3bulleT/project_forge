@@ -80,6 +80,7 @@ Severity legend: **B** = blocker, **H** = high, **M** = medium, **L** = low.
 - [x] FORGE-K Phase 11C Go/Rust test corpus alignment.
 - [x] FORGE-K Phase 12A Live Integration Design. Scope is recorded as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; no live implementation started.
 - [x] FORGE-K Phase 12B Read-only Shadow Harness Implementation. Scope is recorded as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; `/health` metadata only, disabled by default, diagnostic-only.
+- [x] FORGE-K Phase 12C Shadow Diagnostics Review and Hardening. Scope is recorded as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; no new live touchpoints or diagnostics APIs added.
 - [ ] FORGE-K Phase 12 FORGE Daemon.
 - [ ] FORGE-1 phases 13-14.
 - [ ] Gateway service decomposition.

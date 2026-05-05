@@ -1,8 +1,8 @@
 # FORGE-K Shadow Mode
 
-Status: Phase 11F policy/contracts, Phase 11G simulator-only harness design, and Phase 12A live integration design.
+Status: Phase 11F policy/contracts, Phase 11G simulator-only harness design, Phase 12A live integration design, Phase 12B disabled-by-default `/health` observer, and Phase 12C diagnostics hardening.
 
-Phase 11F defines integration readiness contracts, read-only adapters, and shadow policy. Phase 11G defines the simulator-only harness and report model design in `docs/architecture/shadow_mode_harness.md`. Phase 12A designs the first live shadow implementation path in `docs/architecture/forge_k_live_integration_design.md`. None of these phases implements live shadow mode or authorizes live mutation.
+Phase 11F defines integration readiness contracts, read-only adapters, and shadow policy. Phase 11G defines the simulator-only harness and report model design in `docs/architecture/shadow_mode_harness.md`. Phase 12A designs the first live shadow implementation path in `docs/architecture/forge_k_live_integration_design.md`. Phase 12B implements one disabled-by-default read-only `/health` metadata observer. Phase 12C hardens that observer. None of these phases authorizes live mutation.
 
 ## Definition
 
@@ -21,15 +21,16 @@ Shadow mode means:
 - FORGE-K does not alter user-visible output
 - all shadow outputs are diagnostics only
 
-Phase 11G adds the harness/report design. Actual live observation is deferred to Phase 12B.
+Phase 11G adds the harness/report design. Phase 12B adds the first live observation point: `/health` metadata only.
 
 ## Phase Split
 
 - Phase 11F: integration readiness contracts, read-only adapter contracts, ReadOnlyRAGAdapter boundary, and shadow policy.
 - Phase 11G: simulator-only shadow harness/report model design in `docs/architecture/shadow_mode_harness.md` and `services/core/internal/forgek/shadowharness`.
 - Phase 12A: docs-only live integration design; does not authorize implementation.
-- Phase 12B: future read-only live shadow harness implementation only if separately approved.
-- Phase 12 live integration is not authorized by Phase 11F or Phase 11G. Phase 12A authorizes design only.
+- Phase 12B: disabled-by-default read-only live shadow harness implementation for `/health` metadata only.
+- Phase 12C: observability-only hardening of Phase 12B diagnostics with no new touchpoints.
+- Phase 12 authority migration is not authorized by Phase 11F, Phase 11G, Phase 12A, Phase 12B, or Phase 12C.
 
 `services/core/internal/forgek/integrationready` remains the Phase 11F readiness package. It does not implement the Phase 11G harness.
 
@@ -125,16 +126,16 @@ Stop Phase 11G or any future shadow harness implementation if an adapter or shad
 
 Every shadow output is diagnostics only. No shadow result can authorize live integration, canonical mutation, tool execution, memory writes, model runtime calls, retrieval execution, or user-visible output changes.
 
-## Phase 12A Handoff
+## Phase 12B / 12C Current Scope
 
-Phase 12A records the first proposed live shadow path:
+Phase 12B and 12C currently allow only:
 
-- disabled-by-default feature flag design: `FORGE_K_SHADOW_MODE_ENABLED=false`
-- read-only observation of selected live metadata only
-- no live request observation until Phase 12B is separately approved
-- no code-level feature flag added in Phase 12A
+- disabled-by-default feature flag: `FORGE_K_SHADOW_MODE_ENABLED=false`
+- read-only observation of `/health` request metadata only
+- bounded in-memory diagnostic reports only
 - no public API or route changes
 - no user-visible effect
 - no tool, modelruntime, retrieval, embedding, memory, or controllane execution from FORGE-K
+- no request body, response body, prompt, model output, tool payload, retrieval content, or memory content capture
 
-Phase 12B, if approved later, must implement only read-only diagnostics and must prove no-effect behavior with route inventory, response equivalence, forbidden execution, and no-mutation tests.
+Any expansion beyond `/health` requires a separately approved phase and must prove no-effect behavior with route inventory, response equivalence, forbidden execution, and no-mutation tests.

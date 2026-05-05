@@ -20,9 +20,13 @@ type Observer struct {
 
 func NewObserver(cfg Config) *Observer {
 	cfg = cfg.normalized()
+	sink := Sink(NewMemorySink(cfg.MaxReports))
+	if cfg.DisableSink {
+		sink = disabledSink{}
+	}
 	return &Observer{
 		cfg:    cfg,
-		sink:   NewMemorySink(cfg.MaxReports),
+		sink:   sink,
 		policy: shadowharness.DefaultShadowHarnessPolicy(),
 		now:    time.Now,
 	}
@@ -30,6 +34,9 @@ func NewObserver(cfg Config) *Observer {
 
 func NewObserverWithSink(cfg Config, sink Sink, now func() time.Time) *Observer {
 	cfg = cfg.normalized()
+	if cfg.DisableSink {
+		sink = disabledSink{}
+	}
 	if sink == nil {
 		sink = NewMemorySink(cfg.MaxReports)
 	}

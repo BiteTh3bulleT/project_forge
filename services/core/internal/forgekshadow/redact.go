@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const maxMetadataStringLength = 512
+
 var unsafeMetadataTerms = []string{
 	"api_key",
 	"secret",
@@ -14,6 +16,19 @@ var unsafeMetadataTerms = []string{
 	"bearer",
 	"plaintext",
 	"credential",
+	"authorization",
+	"cookie",
+	"session",
+}
+
+var rawContentMetadataKeys = []string{
+	"body",
+	"request_body",
+	"response_body",
+	"prompt",
+	"completion",
+	"model_output",
+	"content",
 }
 
 func safeMetadata(in map[string]any) (map[string]any, error) {
@@ -29,18 +44,22 @@ func safeMetadata(in map[string]any) (map[string]any, error) {
 		if containsUnsafeTerm(trimmedKey) {
 			return nil, fmt.Errorf("%w: key %q", ErrUnsafeMetadata, trimmedKey)
 		}
+		if isRawContentKey(trimmedKey) {
+			return nil, fmt.Errorf("%w: raw content key %q", ErrUnsafeMetadata, trimmedKey)
+		}
 		switch v := value.(type) {
 		case string:
-			if containsUnsafeTerm(v) {
+			text := strings.TrimSpace(v)
+			if containsUnsafeTerm(text) || len(text) > maxMetadataStringLength {
 				return nil, fmt.Errorf("%w: value for %q", ErrUnsafeMetadata, trimmedKey)
 			}
-			out[trimmedKey] = strings.TrimSpace(v)
+			out[trimmedKey] = text
 		case fmt.Stringer:
-			text := v.String()
-			if containsUnsafeTerm(text) {
+			text := strings.TrimSpace(v.String())
+			if containsUnsafeTerm(text) || len(text) > maxMetadataStringLength {
 				return nil, fmt.Errorf("%w: value for %q", ErrUnsafeMetadata, trimmedKey)
 			}
-			out[trimmedKey] = strings.TrimSpace(text)
+			out[trimmedKey] = text
 		case nil:
 			continue
 		default:
@@ -60,6 +79,16 @@ func containsUnsafeTerm(value string) bool {
 	}
 	for _, term := range unsafeMetadataTerms {
 		if strings.Contains(normalized, term) {
+			return true
+		}
+	}
+	return false
+}
+
+func isRawContentKey(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	for _, key := range rawContentMetadataKeys {
+		if normalized == key {
 			return true
 		}
 	}

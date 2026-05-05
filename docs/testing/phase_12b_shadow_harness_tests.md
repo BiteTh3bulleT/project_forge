@@ -1,6 +1,6 @@
 # Phase 12B Shadow Harness Test Plan
 
-Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
 
 These tests define the required no-effect threshold for the read-only shadow harness.
 
@@ -53,6 +53,19 @@ Current Phase 12B tests cover:
 - Secret-looking metadata is rejected.
 - No-effect policy failures are rejected.
 - `forgekshadow` forbidden import tests prevent gateway, modelruntime, retrieval/search/embedding, memory, AI-OS, and controllane imports.
+
+Phase 12C hardening tests add coverage for:
+
+- disabled sink stores no reports
+- unsafe metadata terms include authorization, cookie, and session
+- raw content metadata keys are rejected
+- oversized metadata strings are rejected
+- every represented side-effect policy flag is rejected
+- no public diagnostics route exists
+- disabled `/health` response equivalence
+- enabled `/health` response equivalence
+- non-`/health` route requests are not observed
+- root `services/core/internal/forgek` forbidden live import guard
 
 Current validation commands:
 

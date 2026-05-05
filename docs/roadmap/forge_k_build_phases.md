@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12B Read-only Shadow Harness Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12B Read-only Shadow Harness Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12C Shadow Diagnostics Review and Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -303,15 +303,17 @@ What not to do: migrate authority, commit FORGE-K truth, execute tools, call mod
 
 ## Phase 12C - Shadow Diagnostics Review and Hardening
 
-Scope: `LIVE_INTEGRATION / OBSERVABILITY_ONLY`.
+Scope: `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
 
 Goal: review Phase 12B diagnostics, harden redaction/retention/no-effect guarantees, and decide whether any advisory behavior is safe to design later.
 
-Deliverables: diagnostic review report, no-effect evidence, performance/security review, retention policy hardening, and updated go/no-go checklist.
+Implemented deliverables: Phase 12C diagnostic review report, explicit disabled sink support, expanded metadata safety rules, raw content and oversized metadata rejection, additional no-effect tests, no public diagnostics route test, non-`/health` no-observation test, root FORGE-K forbidden live import guard, and updated status docs.
 
 Validation criteria: shadow mode remains observability-only; live behavior remains unchanged; diagnostics are bounded, redacted, and non-authoritative.
 
-What not to do: migrate authority, alter responses, execute tools, call modelruntime, run retrieval, write memory, or treat diagnostics as truth.
+Implementation status: implemented and tested without adding live touchpoints. `/health` remains the only observed route, diagnostics remain in-memory only, and no public diagnostics API exists.
+
+What not to do: migrate authority, alter responses, execute tools, call modelruntime, run retrieval, write memory, add public diagnostics routes, add new live touchpoints, or treat diagnostics as truth.
 
 ## Phase 12D - Limited FORGE-K Advisory Mode
 

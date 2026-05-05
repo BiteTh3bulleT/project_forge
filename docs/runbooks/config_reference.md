@@ -12,7 +12,7 @@ boot or runtime. Observed 2026-04-21._
 | `FORGE_DATA_DIR` | [config.go:16](services/core/internal/config/config.go#L16) | `${XDG_CONFIG_HOME}/forge` (typically `~/.config/forge`); falls back to CWD if `UserConfigDir` errors | Location of `forge.sqlite`, `backups/`, `exports/` |
 | `FORGE_CORE_PORT` | [config.go:25](services/core/internal/config/config.go#L25) | `18492` | HTTP listen port |
 | `FORGE_WORKSPACE_DIR` | [config.go:30](services/core/internal/config/config.go#L30) | `/` | Workspace root for file-sensitive operations |
-| `FORGE_K_SHADOW_MODE_ENABLED` | [config.go:175](services/core/internal/config/config.go#L175) | `false` | Enables Phase 12B read-only `/health` metadata shadow diagnostics. Disabled by default; no public API, route, response, memory, retrieval, gateway, or modelruntime behavior changes. |
+| `FORGE_K_SHADOW_MODE_ENABLED` | [config.go:175](services/core/internal/config/config.go#L175) | `false` | Enables Phase 12B/12C read-only `/health` metadata shadow diagnostics. Disabled by default; no public API, route, response, memory, retrieval, gateway, controllane, or modelruntime behavior changes. |
 | `FORGE_TELEGRAM_GATEWAY_ENABLED` | telegram wire | `true` | Gateway feature flag; token absence still disables |
 | `FORGE_TELEGRAM_BOT_TOKEN` | telegram wire | unset (= disabled) | Enables Telegram gateway |
 | `FORGE_TELEGRAM_API_BASE`, `FORGE_TELEGRAM_POLL_TIMEOUT_S`, `FORGE_TELEGRAM_ALLOWED_CHATS` | telegram wire | standard telegram defaults | Optional tuning |

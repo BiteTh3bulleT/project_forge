@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -147,6 +148,46 @@ func TestServerRouteInventoryUnchangedWithForgeKShadowEnabled(t *testing.T) {
 	}
 }
 
+func TestServerRouteInventoryHasNoForgeKShadowDiagnosticRoute(t *testing.T) {
+	routes := collectServerRoutes(t, (&Server{
+		cfg:          config.Config{ForgeKShadowModeEnabled: true},
+		forgeKShadow: forgekshadow.NewObserver(forgekshadow.Config{Enabled: true}),
+	}).Handler())
+	for _, route := range routeKeys(routes) {
+		normalized := strings.ToLower(route)
+		if strings.Contains(normalized, "forgek-shadow") || strings.Contains(normalized, "shadow-diagnostic") {
+			t.Fatalf("phase 12C must not expose public diagnostics route: %s", route)
+		}
+	}
+}
+
+func TestHealthResponseUnchangedWithForgeKShadowDisabled(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+
+	disabledRR := httptest.NewRecorder()
+	(&Server{}).Handler().ServeHTTP(disabledRR, req.Clone(context.Background()))
+
+	observer := forgekshadow.NewObserver(forgekshadow.Config{Enabled: false})
+	shadowDisabledRR := httptest.NewRecorder()
+	(&Server{
+		cfg:          config.Config{ForgeKShadowModeEnabled: false},
+		forgeKShadow: observer,
+	}).Handler().ServeHTTP(shadowDisabledRR, req.Clone(context.Background()))
+
+	if disabledRR.Code != shadowDisabledRR.Code {
+		t.Fatalf("disabled shadow changed /health status baseline=%d disabled=%d", disabledRR.Code, shadowDisabledRR.Code)
+	}
+	if disabledRR.Body.String() != shadowDisabledRR.Body.String() {
+		t.Fatalf("disabled shadow changed /health body baseline=%q disabled=%q", disabledRR.Body.String(), shadowDisabledRR.Body.String())
+	}
+	if disabledRR.Header().Get("Content-Type") != shadowDisabledRR.Header().Get("Content-Type") {
+		t.Fatalf("disabled shadow changed content type baseline=%q disabled=%q", disabledRR.Header().Get("Content-Type"), shadowDisabledRR.Header().Get("Content-Type"))
+	}
+	if reports := observer.Reports(); len(reports) != 0 {
+		t.Fatalf("disabled shadow observer stored %d reports", len(reports))
+	}
+}
+
 func TestHealthResponseUnchangedWithForgeKShadowEnabled(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	req.Header.Set("X-Request-ID", "request-health-shadow")
@@ -179,6 +220,19 @@ func TestHealthResponseUnchangedWithForgeKShadowEnabled(t *testing.T) {
 	}
 	if _, ok := reports[0].Observation.Metadata["body"]; ok {
 		t.Fatalf("shadow report must not capture request/response bodies: %#v", reports[0].Observation.Metadata)
+	}
+}
+
+func TestForgeKShadowDoesNotObserveNonHealthRoute(t *testing.T) {
+	observer := forgekshadow.NewObserver(forgekshadow.Config{Enabled: true})
+	req := httptest.NewRequest(http.MethodGet, "/api/meta", nil)
+	rr := httptest.NewRecorder()
+	(&Server{
+		cfg:          config.Config{ForgeKShadowModeEnabled: true},
+		forgeKShadow: observer,
+	}).Handler().ServeHTTP(rr, req)
+	if reports := observer.Reports(); len(reports) != 0 {
+		t.Fatalf("shadow observer must remain /health-only, got %d reports for /api/meta", len(reports))
 	}
 }
 

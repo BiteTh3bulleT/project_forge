@@ -1,8 +1,8 @@
 # FORGE-K Live Integration Design
 
-Status: Phase 12A implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+Status: Phase 12A implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
 
-Phase 12B implements the first disabled-by-default read-only live touchpoint. It does not authorize live authority migration.
+Phase 12B implements the first disabled-by-default read-only live touchpoint. Phase 12C hardens that implementation. Neither phase authorizes live authority migration.
 
 ## Executive Summary
 
@@ -60,6 +60,24 @@ The implemented Phase 12B scope is intentionally narrower than the candidate map
 - simulator contract reuse: imports `services/core/internal/forgek/shadowharness` for no-effect validation only
 
 Phase 12B does not capture request or response bodies, add public routes, change route inventory, change response status/body/header shape, execute tools, call modelruntime, execute retrieval/search/embeddings, write memory, mutate controllane state, or alter gateway/permission/lane/audit authority.
+
+## Phase 12C Hardening Record
+
+Phase 12C keeps the Phase 12B live scope unchanged. `/health` request metadata remains the only live touchpoint.
+
+Hardening completed:
+
+- explicit disabled diagnostic sink support
+- expanded unsafe metadata rejection for authorization, cookie, and session terms
+- raw content key rejection for body, prompt, completion, model output, and content fields
+- maximum metadata string length enforcement
+- no public diagnostics route regression test
+- disabled and enabled `/health` response equivalence tests
+- non-`/health` no-observation test
+- root FORGE-K forbidden live import test
+- Phase 12C review record in `docs/reviews/phase_12c_shadow_diagnostics_review.md`
+
+Phase 12C adds no live touchpoints, routes, public APIs, persistence, gateway behavior, modelruntime behavior, retrieval/search/embedding behavior, memory writes, controllane mutations, or user-visible output changes.
 
 ## Phase 12A Non-Goals
 
