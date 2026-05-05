@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -92,6 +93,27 @@ func TestDesktopSplitAppAndCommandGenericTerminalRun(t *testing.T) {
 	for i := range want {
 		if cmd[i] != want[i] {
 			t.Fatalf("cmd[%d] = %q, want %q (full %v)", i, cmd[i], want[i], cmd)
+		}
+	}
+}
+
+func TestDesktopSplitAppAndCommandSSHRemoteMkdir(t *testing.T) {
+	app, cmd := desktopSplitAppAndCommand("Open terminall, ssh into robert@10.150.1.9 password redacted-secret. Create a directory labled SSH-AI-TEST")
+	if app != "terminal" {
+		t.Fatalf("expected app terminal, got %q", app)
+	}
+	want := []string{"ssh", "robert@10.150.1.9", "mkdir", "-p", "SSH-AI-TEST"}
+	if len(cmd) != len(want) {
+		t.Fatalf("command length = %d, want %d: %v", len(cmd), len(want), cmd)
+	}
+	for i := range want {
+		if cmd[i] != want[i] {
+			t.Fatalf("cmd[%d] = %q, want %q (full %v)", i, cmd[i], want[i], cmd)
+		}
+	}
+	for _, arg := range cmd {
+		if strings.Contains(arg, "redacted-secret") {
+			t.Fatalf("password must not be placed into terminal command args: %v", cmd)
 		}
 	}
 }

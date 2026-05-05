@@ -2656,6 +2656,9 @@ func desktopLooksLikePath(v string) bool {
 }
 
 func desktopSplitAppAndCommand(raw string) (appHint string, command []string) {
+	if cmd, ok := desktopSSHRemoteMkdirCommand(raw); ok {
+		return "terminal", cmd
+	}
 	if app, cmd, ok := desktopGenericInlineCommand(raw); ok {
 		return app, cmd
 	}
@@ -2693,6 +2696,62 @@ func desktopSplitAppAndCommand(raw string) (appHint string, command []string) {
 		return app, []string{"ping", target}
 	}
 	return normalized, nil
+}
+
+var reDesktopSSHUserHost = regexp.MustCompile(`(?i)\bssh\s+(?:into|to)?\s*([a-z0-9._-]+@[a-z0-9.-]+)\b`)
+
+func desktopSSHRemoteMkdirCommand(raw string) ([]string, bool) {
+	text := strings.TrimSpace(raw)
+	if text == "" {
+		return nil, false
+	}
+	m := reDesktopSSHUserHost.FindStringSubmatch(text)
+	if len(m) < 2 {
+		return nil, false
+	}
+	userHost := strings.TrimSpace(m[1])
+	if !desktopSafeSSHUserHost(userHost) {
+		return nil, false
+	}
+	dir, ok := parseDirectoryLabeled(text)
+	if !ok {
+		dir, ok = ParseDirectoryCalled(text)
+	}
+	if !ok {
+		dir, ok = ParseMkdirShellPath(text)
+	}
+	if !ok || dir == "" {
+		return []string{"ssh", userHost}, true
+	}
+	return []string{"ssh", userHost, "mkdir", "-p", dir}, true
+}
+
+func desktopSafeSSHUserHost(userHost string) bool {
+	user, host, ok := strings.Cut(strings.TrimSpace(userHost), "@")
+	if !ok || user == "" || host == "" {
+		return false
+	}
+	for _, r := range user {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '.', r == '_', r == '-':
+		default:
+			return false
+		}
+	}
+	for _, r := range host {
+		switch {
+		case r >= 'a' && r <= 'z':
+		case r >= 'A' && r <= 'Z':
+		case r >= '0' && r <= '9':
+		case r == '.', r == '-':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func desktopGenericInlineCommand(raw string) (appHint string, command []string, ok bool) {
