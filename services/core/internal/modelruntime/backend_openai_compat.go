@@ -1,6 +1,7 @@
 package modelruntime
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -126,19 +127,7 @@ func (b *OpenAICompatBackend) Generate(ctx context.Context, req GenerateRequest)
 	if !ok {
 		return GenerateResult{}, ErrModelNotLoaded
 	}
-	payloadMessages := make([]map[string]any, 0, len(req.Messages))
-	if len(req.Messages) > 0 {
-		for _, msg := range req.Messages {
-			payloadMessages = append(payloadMessages, map[string]any{"role": msg.Role, "content": msg.Content})
-		}
-	} else {
-		payloadMessages = append(payloadMessages, map[string]any{"role": "user", "content": req.Prompt})
-	}
-	payload := map[string]any{"model": req.ModelID, "messages": payloadMessages, "stream": false}
-	if maxTokens := EffectiveMaxOutputTokens(req, b.maxOutputTokens); maxTokens > 0 {
-		payload["max_tokens"] = maxTokens
-	}
-	mergeParameters(payload, req.Parameters, map[string]struct{}{"model": {}, "messages": {}, "stream": {}, "max_tokens": {}})
+	payload := b.chatPayload(req, false)
 	callCtx, cancel := context.WithTimeout(ctx, EffectiveTimeout(req, b.requestTimeout))
 	defer cancel()
 	body, err := b.postJSON(callCtx, b.chatPath, payload)
@@ -173,6 +162,179 @@ func (b *OpenAICompatBackend) Generate(ctx context.Context, req GenerateRequest)
 		result.CompletionTokens = len(strings.Fields(result.Content))
 	}
 	return result, nil
+}
+
+func (b *OpenAICompatBackend) GenerateStream(ctx context.Context, req GenerateRequest, onToken func(TokenEvent) error) (GenerateResult, error) {
+	if err := ValidateGenerateRequest(req); err != nil {
+		return GenerateResult{}, err
+	}
+	if strings.TrimSpace(b.endpoint) == "" {
+		return GenerateResult{}, fmt.Errorf("%w: endpoint is empty", ErrBackendUnavailable)
+	}
+	b.mu.RLock()
+	_, ok := b.loaded[req.ModelID]
+	b.mu.RUnlock()
+	if !ok {
+		return GenerateResult{}, ErrModelNotLoaded
+	}
+
+	payload := b.chatPayload(req, true)
+	callCtx, cancel := context.WithTimeout(ctx, EffectiveTimeout(req, b.requestTimeout))
+	defer cancel()
+	resp, err := b.postStream(callCtx, b.chatPath, payload)
+	if err != nil {
+		return GenerateResult{}, err
+	}
+	defer resp.Body.Close()
+
+	var full strings.Builder
+	finishReason := ""
+	warnings := []string(nil)
+	index := 0
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, ":") {
+			continue
+		}
+		if strings.HasPrefix(line, "data:") {
+			line = strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		}
+		if line == "" {
+			continue
+		}
+		if line == "[DONE]" {
+			break
+		}
+		var raw map[string]any
+		if err := json.Unmarshal([]byte(line), &raw); err != nil {
+			return GenerateResult{}, fmt.Errorf("decode openai-compatible stream chunk: %w", err)
+		}
+		chunk, chunkFinish, chunkWarnings := extractOpenAICompatStreamChunk(raw)
+		if chunkFinish != "" {
+			finishReason = chunkFinish
+		}
+		warnings = append(warnings, chunkWarnings...)
+		if chunk == "" {
+			continue
+		}
+		full.WriteString(chunk)
+		if onToken != nil {
+			if err := onToken(TokenEvent{
+				Token:         chunk,
+				Index:         index,
+				Done:          false,
+				Backend:       b.kind,
+				ModelID:       req.ModelID,
+				CorrelationID: req.CorrelationID,
+				TraceID:       req.TraceID,
+			}); err != nil {
+				return GenerateResult{}, err
+			}
+		}
+		index++
+	}
+	if err := scanner.Err(); err != nil {
+		return GenerateResult{}, fmt.Errorf("read openai-compatible stream: %w", err)
+	}
+	content := full.String()
+	if strings.TrimSpace(content) == "" {
+		return GenerateResult{}, errors.New("openai-compatible stream response missing content")
+	}
+	if onToken != nil {
+		if err := onToken(TokenEvent{
+			Index:         index,
+			Done:          true,
+			Backend:       b.kind,
+			ModelID:       req.ModelID,
+			CorrelationID: req.CorrelationID,
+			TraceID:       req.TraceID,
+		}); err != nil {
+			return GenerateResult{}, err
+		}
+	}
+	if finishReason == "" {
+		finishReason = "stop"
+	}
+	return GenerateResult{
+		Content:          content,
+		FinishReason:     finishReason,
+		PromptTokens:     tokenCountApprox(req),
+		CompletionTokens: len(strings.Fields(content)),
+		Backend:          b.kind,
+		ModelID:          req.ModelID,
+		Warnings:         warnings,
+	}, nil
+}
+
+func (b *OpenAICompatBackend) chatPayload(req GenerateRequest, stream bool) map[string]any {
+	payloadMessages := make([]map[string]any, 0, len(req.Messages))
+	if len(req.Messages) > 0 {
+		for _, msg := range req.Messages {
+			payloadMessages = append(payloadMessages, map[string]any{"role": msg.Role, "content": msg.Content})
+		}
+	} else {
+		payloadMessages = append(payloadMessages, map[string]any{"role": "user", "content": req.Prompt})
+	}
+	payload := map[string]any{"model": req.ModelID, "messages": payloadMessages, "stream": stream}
+	if maxTokens := EffectiveMaxOutputTokens(req, b.maxOutputTokens); maxTokens > 0 {
+		payload["max_tokens"] = maxTokens
+	}
+	mergeParameters(payload, req.Parameters, map[string]struct{}{"model": {}, "messages": {}, "stream": {}, "max_tokens": {}})
+	return payload
+}
+
+func extractOpenAICompatStreamChunk(raw map[string]any) (string, string, []string) {
+	warnings := []string(nil)
+	finishReason := ""
+	if choices, ok := raw["choices"].([]any); ok && len(choices) > 0 {
+		if first, ok := choices[0].(map[string]any); ok {
+			finishReason, _ = first["finish_reason"].(string)
+			if content := openAICompatStreamContentFromChoice(first); strings.TrimSpace(content) != "" {
+				return content, finishReason, warnings
+			}
+			if content := openAICompatContentFromChoice(first, false); strings.TrimSpace(content) != "" {
+				return content, finishReason, warnings
+			}
+			if content := openAICompatStreamReasoningFromChoice(first); strings.TrimSpace(content) != "" {
+				warnings = append(warnings, "openai-compatible stream skipped reasoning-only chunk")
+			}
+		}
+	}
+	return "", finishReason, warnings
+}
+
+func openAICompatStreamContentFromChoice(choice map[string]any) string {
+	for _, key := range []string{"delta", "message"} {
+		if rec, ok := choice[key].(map[string]any); ok {
+			if content := openAICompatTextFromValue(rec["content"], false); strings.TrimSpace(content) != "" {
+				return content
+			}
+			if content := openAICompatTextFromValue(rec["text"], false); strings.TrimSpace(content) != "" {
+				return content
+			}
+		}
+	}
+	for _, key := range []string{"text", "content", "output_text"} {
+		if content := openAICompatTextFromValue(choice[key], false); strings.TrimSpace(content) != "" {
+			return content
+		}
+	}
+	return ""
+}
+
+func openAICompatStreamReasoningFromChoice(choice map[string]any) string {
+	for _, container := range []string{"delta", "message"} {
+		if rec, ok := choice[container].(map[string]any); ok {
+			for _, key := range []string{"reasoning_content", "reasoning", "thinking"} {
+				if content := openAICompatTextFromValue(rec[key], true); strings.TrimSpace(content) != "" {
+					return content
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func extractOpenAICompatGeneration(raw map[string]any) (string, string, []string) {
@@ -342,4 +504,33 @@ func (b *OpenAICompatBackend) postJSON(ctx context.Context, path string, payload
 		return nil, fmt.Errorf("%w: %s returned %s: %s", ErrBackendUnavailable, b.name, resp.Status, strings.TrimSpace(string(respBody)))
 	}
 	return respBody, nil
+}
+
+func (b *OpenAICompatBackend) postStream(ctx context.Context, path string, payload map[string]any) (*http.Response, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("encode request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, b.endpoint+path, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "text/event-stream")
+	if b.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+b.apiKey)
+	}
+	resp, err := b.client.Do(req)
+	if err != nil {
+		return nil, WrapBackendUnavailable(err, b.name)
+	}
+	if resp.StatusCode >= 300 {
+		defer resp.Body.Close()
+		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+		if readErr != nil {
+			return nil, fmt.Errorf("read error response: %w", readErr)
+		}
+		return nil, fmt.Errorf("%w: %s returned %s: %s", ErrBackendUnavailable, b.name, resp.Status, strings.TrimSpace(string(respBody)))
+	}
+	return resp, nil
 }

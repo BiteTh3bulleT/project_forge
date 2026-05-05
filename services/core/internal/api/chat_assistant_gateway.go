@@ -1423,6 +1423,205 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 	return am
 }
 
+func (s *Server) completeAssistantWithModelRuntimeStream(
+	ctx context.Context,
+	threadID, userMessageID int64,
+	th *chat.ThreadDetail,
+	lastUserContent, corr string,
+	manifests []map[string]any,
+	stages []map[string]any,
+	requestedModelID string,
+	requestStart time.Time,
+	perf chatPerformanceDecision,
+	emit func(event string, payload map[string]any),
+) (*chat.Message, string) {
+	streamRuntime, ok := s.modelRuntime.(modelRuntimeStreamingService)
+	if !ok {
+		return nil, "model runtime streaming is unavailable"
+	}
+	if emit == nil {
+		return nil, "stream emitter is unavailable"
+	}
+
+	workspaceID := strings.TrimSpace(s.cfg.WorkspaceDir)
+	meta := ModelRuntimeRequestMeta{
+		CorrelationID: strings.TrimSpace(corr),
+		WorkspaceID:   workspaceID,
+	}
+
+	modelID, resolveReason := s.resolveChatModelRuntimeModel(ctx, meta, requestedModelID)
+	if strings.TrimSpace(modelID) == "" {
+		return nil, resolveReason
+	}
+
+	messages, promptBudget := s.buildModelRuntimePlainChatMessages(ctx, th)
+	preflightTrace, preflightReason := s.modelRuntimeChatPreflight(ctx, meta)
+	if strings.TrimSpace(preflightReason) != "" {
+		return nil, preflightReason
+	}
+	stages = append(stages, map[string]any{
+		"stage":  "model_runtime_stream_prompt_budget",
+		"atMs":   time.Now().UnixMilli(),
+		"budget": modelRuntimePromptBudgetMap(promptBudget),
+	})
+	emit("agent_stage", map[string]any{
+		"stage":  "model_runtime_stream_start",
+		"atMs":   time.Now().UnixMilli(),
+		"model":  modelID,
+		"budget": modelRuntimePromptBudgetMap(promptBudget),
+	})
+
+	var rawStream strings.Builder
+	lastFlush := time.Time{}
+	emittedFirst := false
+	emittedChars := 0
+	streamCut := false
+	firstTokenMs := int64(0)
+	flushVisible := func(force bool) {
+		visible, cut := stripSyntheticTranscriptContinuation(rawStream.String())
+		if cut {
+			streamCut = true
+		}
+		emitLimit := len(visible)
+		if !force && !streamCut {
+			const markerLookbehind = 16
+			if emitLimit > markerLookbehind {
+				emitLimit -= markerLookbehind
+			} else if emittedFirst {
+				emitLimit = emittedChars
+			}
+		}
+		if emitLimit <= emittedChars {
+			return
+		}
+		now := time.Now()
+		if !force && emittedFirst && emitLimit-emittedChars < assistantStreamFlushChars && now.Sub(lastFlush) < time.Duration(assistantStreamFlushIntervalMs)*time.Millisecond {
+			return
+		}
+		chunk := visible[emittedChars:emitLimit]
+		emit("token", map[string]any{"text": chunk})
+		emittedChars = emitLimit
+		emittedFirst = true
+		lastFlush = now
+	}
+
+	modelStart := time.Now()
+	result, err := streamRuntime.StreamChat(ctx, ModelRuntimeChatRequest{
+		ModelID:       modelID,
+		WorkloadClass: "INTERACTIVE_INFERENCE",
+		Messages:      messages,
+		MaxTokens:     chatOutputModeMaxTokens(perf.OutputMode),
+		TimeoutMs:     modelRuntimePlainChatTimeoutMs,
+		MaxAttempts:   modelRuntimePlainChatMaxAttempts,
+		Actor:         "chat",
+		Source:        "chat_assistant_stream",
+		Meta:          meta,
+		Metadata: map[string]any{
+			"entrypoint":   "api.chat.stream",
+			"fallback":     "model_runtime_stream",
+			"promptBudget": modelRuntimePromptBudgetMap(promptBudget),
+			"outputMode":   perf.OutputMode,
+			"budgetClass":  perf.ContextBudgetClass,
+		},
+	}, func(token ModelRuntimeChatStreamToken) error {
+		if token.Done {
+			return nil
+		}
+		if strings.TrimSpace(token.Text) == "" {
+			return nil
+		}
+		if firstTokenMs == 0 {
+			firstTokenMs = time.Since(modelStart).Milliseconds()
+		}
+		rawStream.WriteString(token.Text)
+		flushVisible(false)
+		return nil
+	})
+	flushVisible(true)
+	modelRuntimeMs := time.Since(modelStart).Milliseconds()
+	if err != nil {
+		_, code, message := mapModelRuntimeError(err)
+		if strings.TrimSpace(code) != "" {
+			return nil, message + " (" + code + ")"
+		}
+		return nil, message
+	}
+	if streamCut {
+		emit("agent_stage", map[string]any{"stage": "model_runtime_stream_truncated", "atMs": time.Now().UnixMilli(), "reason": "synthetic transcript continuation"})
+	}
+
+	content, contentWarnings := sanitizeAssistantVisibleContent(result.Content)
+	if content == "" {
+		stripped, _ := stripSyntheticTranscriptContinuation(rawStream.String())
+		content = strings.TrimSpace(stripped)
+	}
+	if content == "" {
+		content = assistantContentFallback
+	}
+	traceExtras := map[string]any{
+		"modelruntime_ms":             modelRuntimeMs,
+		"modelruntime_first_token_ms": firstTokenMs,
+		"gateway_execution_ms":        int64(0),
+		"model_calls_avoided":         0,
+		"output_max_tokens":           chatOutputModeMaxTokens(perf.OutputMode),
+	}
+	for k, v := range preflightTrace {
+		traceExtras[k] = v
+	}
+	trace := chatLatencyTraceWithPrompt(requestStart, perf, promptBudget, traceExtras)
+	activity := map[string]any{
+		"userRequestSummary": trimSummary(lastUserContent, 500),
+		"toolManifest":       manifests,
+		"stages":             stages,
+		"toolPipeline":       map[string]any{"stages": stages},
+		"toolCallEmitted":    false,
+		"executionState":     "skipped",
+		"fallback":           "model_runtime_stream",
+		"modelId":            nonEmpty(strings.TrimSpace(result.ModelID), modelID),
+		"backend":            strings.TrimSpace(result.Backend),
+		"promptBudget":       modelRuntimePromptBudgetMap(promptBudget),
+		"latencyTrace":       trace,
+		"contextBudgetClass": perf.ContextBudgetClass,
+		"outputMode":         perf.OutputMode,
+	}
+	if requested := strings.TrimSpace(requestedModelID); requested != "" {
+		activity["requestedModelId"] = requested
+	}
+
+	metadata := map[string]any{
+		"replyToUserMessageId": userMessageID,
+		"correlationId":        corr,
+		"modelRuntimeOk":       true,
+		"modelRuntimeStream":   true,
+		"modelRuntimeModelId":  nonEmpty(strings.TrimSpace(result.ModelID), modelID),
+		"modelRuntimeBackend":  strings.TrimSpace(result.Backend),
+		"modelRuntimePrompt":   modelRuntimePromptBudgetMap(promptBudget),
+		"chatLatencyTrace":     trace,
+		"toolManifest":         manifests,
+		"toolPipeline":         map[string]any{"stages": stages},
+		"toolGatewayActivity":  activity,
+	}
+	if requested := strings.TrimSpace(requestedModelID); requested != "" {
+		metadata["modelRuntimeRequestedModelId"] = requested
+	}
+	if trimmed := strings.TrimSpace(result.AuditID); trimmed != "" {
+		metadata["modelRuntimeAuditId"] = trimmed
+	}
+	if len(result.Warnings) > 0 {
+		metadata["modelRuntimeWarnings"] = append([]string(nil), result.Warnings...)
+	}
+	if len(contentWarnings) > 0 {
+		metadata["assistantContentWarnings"] = contentWarnings
+	}
+
+	am, err := s.chat.AppendMessage(ctx, threadID, "assistant", content, metadata)
+	if err != nil {
+		return nil, "assistant reply could not be saved"
+	}
+	emit("agent_stage", map[string]any{"stage": "model_runtime_stream_done", "atMs": time.Now().UnixMilli(), "messageId": am.ID})
+	return am, ""
+}
+
 func (s *Server) completeAssistantWithModelRuntime(
 	ctx context.Context,
 	threadID, userMessageID int64,

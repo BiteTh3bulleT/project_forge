@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -109,6 +110,65 @@ func TestOpenAICompatBackendGenerateExtractsReasoningFallbackWithWarning(t *test
 	}
 	if len(result.Warnings) != 1 || result.Warnings[0] != "openai-compatible response used reasoning-content fallback" {
 		t.Fatalf("unexpected warnings: %v", result.Warnings)
+	}
+}
+
+func TestOpenAICompatBackendGenerateStreamEmitsContentDeltas(t *testing.T) {
+	var sawStream bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			sawStream, _ = payload["stream"].(bool)
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"cloud \"}}]}\n\n"))
+			_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"stream\"},\"finish_reason\":\"stop\"}]}\n\n"))
+			_, _ = w.Write([]byte("data: [DONE]\n\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	backend := NewOpenAICompatBackend(OpenAICompatOptions{
+		Endpoint:       server.URL,
+		Kind:           BackendOpenAICompat,
+		RequestTimeout: 2000000000,
+	})
+	_, err := backend.Load(context.Background(), ModelManifest{
+		ID:           "remote-model",
+		Backend:      BackendOpenAICompat,
+		Format:       ModelFormatUnknown,
+		Capabilities: []ModelCapability{CapabilityChat},
+	})
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	tokens := []string{}
+	result, err := backend.GenerateStream(context.Background(), GenerateRequest{
+		ModelID:  "remote-model",
+		Messages: []GenerateMessage{{Role: "user", Content: "hello"}},
+	}, func(event TokenEvent) error {
+		if event.Token != "" {
+			tokens = append(tokens, event.Token)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("stream generate: %v", err)
+	}
+	if !sawStream {
+		t.Fatalf("expected stream=true request")
+	}
+	if got := strings.Join(tokens, ""); got != "cloud stream" {
+		t.Fatalf("unexpected streamed tokens %q from %#v", got, tokens)
+	}
+	if result.Content != "cloud stream" || result.FinishReason != "stop" {
+		t.Fatalf("unexpected result: %+v", result)
 	}
 }
 

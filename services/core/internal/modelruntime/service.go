@@ -888,7 +888,37 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (result Gen
 	callCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	result, err = backend.Generate(callCtx, req)
+	if req.Stream {
+		streamingBackend, ok := backend.(StreamingModelBackend)
+		if !ok {
+			err = ErrStreamingUnsupported
+			durationMs := s.clock().Sub(started).Milliseconds()
+			s.recordAudit(ctx, ModelRuntimeAuditRecord{
+				Operation:     "generate",
+				RequestID:     reqRecord.RequestID,
+				ModelID:       req.ModelID,
+				Backend:       manifest.Backend,
+				WorkspaceID:   req.WorkspaceID,
+				Actor:         req.Actor,
+				Source:        req.Source,
+				CorrelationID: req.CorrelationID,
+				TraceID:       req.TraceID,
+				TimeoutMs:     req.TimeoutMs,
+				MaxTokens:     req.MaxTokens,
+				QueueWaitMs:   reqRecord.QueueWaitMs,
+				QueueDepth:    reqRecord.QueueDepthAtEnqueue,
+				RunningCount:  reqRecord.RunningAtAdmission,
+				DurationMs:    durationMs,
+				Outcome:       "error",
+				Error:         err.Error(),
+				Metadata:      req.Metadata,
+			})
+			return GenerateResult{}, err
+		}
+		result, err = streamingBackend.GenerateStream(callCtx, req, req.StreamHandler)
+	} else {
+		result, err = backend.Generate(callCtx, req)
+	}
 	durationMs := s.clock().Sub(started).Milliseconds()
 	if err != nil {
 		s.recordAudit(ctx, ModelRuntimeAuditRecord{
@@ -1104,7 +1134,7 @@ func (s *Service) inspectLocked(modelID string) ModelInfo {
 }
 
 func (s *Service) validateRequestContext(ctx context.Context, req GenerateRequest) error {
-	if req.Stream {
+	if req.Stream && req.StreamHandler == nil {
 		return ErrStreamingUnsupported
 	}
 	if strings.TrimSpace(req.Actor) == "" {

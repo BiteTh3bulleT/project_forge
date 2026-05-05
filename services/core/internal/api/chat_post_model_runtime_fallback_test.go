@@ -1266,6 +1266,80 @@ func TestChatAssistantStreamFallsBackToModelRuntimeWhenOllamaStreamUnavailable(t
 	}
 }
 
+type fakeStreamingModelRuntime struct {
+	*fakeModelRuntime
+	streamCalls int
+}
+
+func (f *fakeStreamingModelRuntime) StreamChat(_ context.Context, req ModelRuntimeChatRequest, onToken func(ModelRuntimeChatStreamToken) error) (ModelRuntimeChatResult, error) {
+	f.mu.Lock()
+	f.streamCalls++
+	f.lastMeta = req.Meta
+	f.lastChat = req
+	f.mu.Unlock()
+	for i, token := range []string{"cloud ", "stream"} {
+		if err := onToken(ModelRuntimeChatStreamToken{Text: token, Index: i}); err != nil {
+			return ModelRuntimeChatResult{}, err
+		}
+	}
+	return ModelRuntimeChatResult{
+		Content:      "cloud stream",
+		FinishReason: "stop",
+		Usage: ModelRuntimeUsage{
+			PromptTokens:     4,
+			CompletionTokens: 2,
+			TotalTokens:      6,
+		},
+		DurationMs: 25,
+		Backend:    "openai_compat",
+		ModelID:    req.ModelID,
+		AuditID:    "audit-stream",
+	}, nil
+}
+
+func TestChatAssistantStreamUsesModelRuntimeStreamingWhenOllamaUnavailable(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := &fakeStreamingModelRuntime{fakeModelRuntime: newFakeModelRuntime()}
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "runtime stream", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	um, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "hello via runtime stream", map[string]any{"source": "operator"})
+	if err != nil {
+		t.Fatalf("append user message: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/assistant-stream?userMessageId="+strconv.FormatInt(um.ID, 10),
+		nil,
+	)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "event: token") || !strings.Contains(body, "cloud ") || !strings.Contains(body, "stream") {
+		t.Fatalf("expected streamed runtime token events, got body=%s", body)
+	}
+	if strings.Contains(body, "stream_downgrade") {
+		t.Fatalf("did not expect stream downgrade when model runtime streaming is available, got body=%s", body)
+	}
+	if !strings.Contains(body, `"modelRuntimeStream":true`) {
+		t.Fatalf("expected modelRuntimeStream metadata, got body=%s", body)
+	}
+	if fakeRuntime.streamCalls != 1 {
+		t.Fatalf("expected one runtime stream call, got %d", fakeRuntime.streamCalls)
+	}
+	if fakeRuntime.chatCalls != 0 {
+		t.Fatalf("expected streaming path to avoid sync chat call, got %d", fakeRuntime.chatCalls)
+	}
+}
+
 func TestChatAssistantStreamRoutesStatusWithoutModel(t *testing.T) {
 	srv, st := newBackupAuditHarness(t)
 	fakeRuntime := newFakeModelRuntime()

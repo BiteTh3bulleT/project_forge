@@ -828,6 +828,114 @@ func (b *modelRuntimeBridge) Chat(ctx context.Context, req ModelRuntimeChatReque
 	}, nil
 }
 
+func (b *modelRuntimeBridge) StreamChat(ctx context.Context, req ModelRuntimeChatRequest, onToken func(ModelRuntimeChatStreamToken) error) (ModelRuntimeChatResult, error) {
+	if req.ModelID == "" {
+		return ModelRuntimeChatResult{}, &modelRuntimeError{
+			status:  400,
+			code:    "MODEL_REQUIRED",
+			message: "model is required",
+		}
+	}
+	if onToken == nil {
+		return ModelRuntimeChatResult{}, &modelRuntimeError{
+			status:  http.StatusNotImplemented,
+			code:    "STREAM_UNSUPPORTED",
+			message: "streaming requires a token handler",
+		}
+	}
+	if b.maxPromptTokens > 0 {
+		promptTokens := approxPromptTokens(req)
+		if promptTokens > b.maxPromptTokens {
+			return ModelRuntimeChatResult{}, &modelRuntimeError{
+				status:  400,
+				code:    "PROMPT_TOKENS_EXCEEDED",
+				message: fmt.Sprintf("prompt token estimate %d exceeds max %d", promptTokens, b.maxPromptTokens),
+			}
+		}
+	}
+
+	messages := make([]modelruntime.GenerateMessage, 0, len(req.Messages))
+	for _, msg := range req.Messages {
+		messages = append(messages, modelruntime.GenerateMessage{
+			Role:    strings.TrimSpace(msg.Role),
+			Content: strings.TrimSpace(msg.Content),
+		})
+	}
+
+	result, err := b.runtime.ExecuteChatRole(ctx, modelruntime.ChatExecutionRequest{
+		Role:        resolveModelRuntimeChatRole(req.Role),
+		MaxAttempts: req.MaxAttempts,
+		GenerateRequest: modelruntime.GenerateRequest{
+			ModelID:       strings.TrimSpace(req.ModelID),
+			Backend:       modelruntime.ParseModelBackendKind(req.Backend),
+			WorkspaceID:   strings.TrimSpace(req.Meta.WorkspaceID),
+			Scope:         strings.TrimSpace(req.Meta.WorkspaceID),
+			Actor:         firstNonEmptyTrimmed(req.Actor, "api"),
+			Source:        firstNonEmptyTrimmed(req.Source, "forge_api"),
+			WorkloadClass: modelruntime.ParseGPUWorkloadClass(req.WorkloadClass),
+			Messages:      messages,
+			Prompt:        strings.TrimSpace(req.Prompt),
+			Parameters:    cloneAnyMap(req.Parameters),
+			MaxTokens:     req.MaxTokens,
+			TimeoutMs:     req.TimeoutMs,
+			Stream:        true,
+			StreamHandler: func(event modelruntime.TokenEvent) error {
+				return onToken(ModelRuntimeChatStreamToken{
+					Text:    event.Token,
+					Index:   event.Index,
+					Done:    event.Done,
+					Backend: string(event.Backend),
+					ModelID: event.ModelID,
+				})
+			},
+			CorrelationID: strings.TrimSpace(req.Meta.CorrelationID),
+			TraceID:       strings.TrimSpace(req.Meta.TraceID),
+			Provenance:    cloneAnyMap(req.Provenance),
+			Metadata:      cloneAnyMap(req.Metadata),
+		},
+	})
+	if err != nil {
+		return ModelRuntimeChatResult{}, mapModelRuntimeBridgeError(err)
+	}
+
+	checkpoint := result.Checkpoint
+	if checkpoint.ExecutionID == "" {
+		checkpoint = buildModelRuntimeChatCheckpoint(req, result)
+	}
+	attemptCount := result.AttemptCount
+	if attemptCount < 1 {
+		attemptCount = checkpoint.AttemptCount
+	}
+	executionID := strings.TrimSpace(result.ExecutionID)
+	if executionID == "" {
+		executionID = strings.TrimSpace(checkpoint.ExecutionID)
+	}
+	role := strings.TrimSpace(string(result.Role))
+	if role == "" {
+		role = strings.TrimSpace(string(resolveModelRuntimeChatRole(req.Role)))
+	}
+
+	return ModelRuntimeChatResult{
+		Content:      result.Content,
+		FinishReason: result.FinishReason,
+		Usage: ModelRuntimeUsage{
+			PromptTokens:     result.PromptTokens,
+			CompletionTokens: result.CompletionTokens,
+			TotalTokens:      result.PromptTokens + result.CompletionTokens,
+		},
+		DurationMs:   result.DurationMs,
+		Backend:      string(result.Backend),
+		ModelID:      result.ModelID,
+		AuditID:      result.AuditID,
+		ExecutionID:  executionID,
+		AttemptCount: attemptCount,
+		Role:         role,
+		Checkpoint:   &checkpoint,
+		Artifacts:    toArtifactIDs(result.Artifacts),
+		Warnings:     append([]string(nil), result.Warnings...),
+	}, nil
+}
+
 func resolveModelRuntimeChatRole(raw string) modelruntime.ChatExecutionRole {
 	return modelruntime.ChatExecutionRole(strings.TrimSpace(raw))
 }

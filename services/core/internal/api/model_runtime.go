@@ -41,6 +41,10 @@ type modelRuntimeService interface {
 	Backends(ctx context.Context, req ModelRuntimeRequestMeta) ([]ModelRuntimeBackendStatus, error)
 }
 
+type modelRuntimeStreamingService interface {
+	StreamChat(ctx context.Context, req ModelRuntimeChatRequest, onToken func(ModelRuntimeChatStreamToken) error) (ModelRuntimeChatResult, error)
+}
+
 type ModelRuntimeRequestMeta struct {
 	CorrelationID string            `json:"correlationId,omitempty"`
 	TraceID       string            `json:"traceId,omitempty"`
@@ -129,6 +133,14 @@ type ModelRuntimeChatResult struct {
 	AuditID      string                                `json:"auditId,omitempty"`
 	Artifacts    []string                              `json:"artifacts,omitempty"`
 	Warnings     []string                              `json:"warnings,omitempty"`
+}
+
+type ModelRuntimeChatStreamToken struct {
+	Text    string `json:"text,omitempty"`
+	Index   int    `json:"index,omitempty"`
+	Done    bool   `json:"done,omitempty"`
+	Backend string `json:"backend,omitempty"`
+	ModelID string `json:"modelId,omitempty"`
 }
 
 type ModelRuntimeHealth struct {

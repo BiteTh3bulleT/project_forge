@@ -77,6 +77,13 @@ type ModelBackend interface {
 	Inspect(ctx context.Context, modelID string) (BackendInspectResult, error)
 }
 
+// StreamingModelBackend is implemented by backends that can return generation
+// deltas before the final response. The service layer still owns governance,
+// queueing, audit, and output bounding.
+type StreamingModelBackend interface {
+	GenerateStream(ctx context.Context, req GenerateRequest, onToken func(TokenEvent) error) (GenerateResult, error)
+}
+
 var (
 	ErrBackendUnavailable          = errors.New("model backend unavailable")
 	ErrUnsupportedSpawn            = errors.New("backend spawn mode unsupported in m1")
