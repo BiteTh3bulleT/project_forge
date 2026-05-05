@@ -379,7 +379,7 @@ Status: implemented.
 
 Goal: design a possible future chat metadata shadow expansion without implementing chat metadata observation.
 
-Deliverables: chat metadata expansion design, chat metadata risk review, future Phase 12H test plan, status updates, and roadmap updates.
+Deliverables: chat metadata expansion design, chat metadata risk review, Phase 12H test plan, status updates, and roadmap updates.
 
 Allowed future metadata: route class, matched chat route pattern, safe/stable thread id, safe/stable message id, workspace id, request/correlation id, role class, bounded count summary, timing/status metadata, safe model/provider id when already exposed, diagnostic markers, and warnings.
 
@@ -393,11 +393,13 @@ What not to do: implement Phase 12H, add chat metadata observer code, observe ch
 
 Scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
-Status: not started.
+Status: implemented and tested.
 
-Goal: implement bounded chat metadata shadow diagnostics only if separately approved.
+Goal: implement bounded chat metadata shadow diagnostics behind both `FORGE_K_SHADOW_MODE_ENABLED=false` and `FORGE_K_SHADOW_CHAT_METADATA_ENABLED=false` defaults.
 
-Validation criteria: all tests in `docs/testing/phase_12h_chat_metadata_shadow_tests.md` pass before completion.
+Implementation status: implemented in `services/core/internal/forgekshadow` and the existing chat message POST handler. The observer records metadata only after live handler ownership is established and only when both flags are enabled. Reports remain bounded in-memory diagnostics only. No public API, route, response, gateway/modelruntime/retrieval/search/embeddings/memory/controllane behavior change, or authority migration was added.
+
+Validation criteria: `docs/testing/phase_12h_chat_metadata_shadow_tests.md` records the test coverage and required commands.
 
 What not to do: capture content, prompts, completions, request bodies, response bodies, tool payloads, retrieval content, memory content, secrets, or user-visible output.
 

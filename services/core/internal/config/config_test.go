@@ -84,6 +84,7 @@ func TestLoadModelRuntimeDefaultsSafe(t *testing.T) {
 	t.Setenv("FORGE_EMBEDDING_MODEL", "")
 	t.Setenv("FORGE_EMBEDDING_DIMS", "")
 	t.Setenv("FORGE_K_SHADOW_MODE_ENABLED", "")
+	t.Setenv("FORGE_K_SHADOW_CHAT_METADATA_ENABLED", "")
 
 	cfg := Load()
 	expectedModelHome, err := filepath.Abs(filepath.Join(cfg.DataDir, "models"))
@@ -132,6 +133,9 @@ func TestLoadModelRuntimeDefaultsSafe(t *testing.T) {
 	}
 	if cfg.ForgeKShadowModeEnabled {
 		t.Fatalf("expected FORGE-K shadow mode disabled by default")
+	}
+	if cfg.ForgeKShadowChatMetadataEnabled {
+		t.Fatalf("expected FORGE-K chat metadata shadow disabled by default")
 	}
 	if !cfg.DreamModeGPUOnlyInDeepIdle {
 		t.Fatalf("expected dream mode GPU to be deep-idle-only by default")
@@ -292,6 +296,7 @@ func TestLoadModelRuntimeOverrides(t *testing.T) {
 	t.Setenv("FORGE_EMBEDDING_MODEL", "bge-large")
 	t.Setenv("FORGE_EMBEDDING_DIMS", "1024")
 	t.Setenv("FORGE_K_SHADOW_MODE_ENABLED", "true")
+	t.Setenv("FORGE_K_SHADOW_CHAT_METADATA_ENABLED", "true")
 
 	cfg := Load()
 	expectedModelHome, err := filepath.Abs("./test-models")
@@ -444,6 +449,9 @@ func TestLoadModelRuntimeOverrides(t *testing.T) {
 	if !cfg.ForgeKShadowModeEnabled {
 		t.Fatalf("expected FORGE-K shadow mode enabled from env")
 	}
+	if !cfg.ForgeKShadowChatMetadataEnabled {
+		t.Fatalf("expected FORGE-K chat metadata shadow enabled from env")
+	}
 }
 
 func TestLoadModelRuntimeInvalidValuesFallbackToDefaults(t *testing.T) {
@@ -482,6 +490,7 @@ func TestLoadModelRuntimeInvalidValuesFallbackToDefaults(t *testing.T) {
 	t.Setenv("FORGE_MODEL_CHAT_MODEL_COOLDOWN_MS", "none")
 	t.Setenv("FORGE_MODEL_CHAT_CHECKPOINT_LIMIT", "x")
 	t.Setenv("FORGE_K_SHADOW_MODE_ENABLED", "shadow?")
+	t.Setenv("FORGE_K_SHADOW_CHAT_METADATA_ENABLED", "chat?")
 
 	cfg := Load()
 
@@ -490,6 +499,9 @@ func TestLoadModelRuntimeInvalidValuesFallbackToDefaults(t *testing.T) {
 	}
 	if cfg.ForgeKShadowModeEnabled {
 		t.Fatalf("expected invalid FORGE-K shadow mode bool to fall back to false")
+	}
+	if cfg.ForgeKShadowChatMetadataEnabled {
+		t.Fatalf("expected invalid FORGE-K chat metadata shadow bool to fall back to false")
 	}
 	if cfg.GPUEnabled {
 		t.Fatalf("expected invalid GPU enabled bool to fall back to false")

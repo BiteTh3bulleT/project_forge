@@ -487,6 +487,171 @@ func TestObserveRouteEnvelopeBestEffortIgnoresSinkFailure(t *testing.T) {
 	})
 }
 
+func TestChatMetadataRequiresGlobalAndChatFlags(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  Config
+	}{
+		{"global disabled", Config{Enabled: false, ChatMetadataEnabled: true}},
+		{"chat disabled", Config{Enabled: true, ChatMetadataEnabled: false}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			observer := NewObserverWithSink(tc.cfg, nil, fixedNow)
+			if err := observer.ObserveChatMetadata(context.Background(), ChatMetadataInput{
+				WorkspaceID:   "workspace-a",
+				RequestID:     "request-a",
+				OperationKind: ChatOperationMessagePost,
+				ThreadID:      "thread-1",
+				MessageID:     "message-1",
+				RoleClass:     "user",
+			}); err != nil {
+				t.Fatalf("disabled chat metadata observe should not fail: %v", err)
+			}
+			if reports := observer.Reports(); len(reports) != 0 {
+				t.Fatalf("disabled chat metadata observer stored %d reports", len(reports))
+			}
+		})
+	}
+}
+
+func TestChatMetadataEnabledStoresDiagnosticReportWithoutContent(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true, ChatMetadataEnabled: true, MaxReports: 2}, nil, fixedNow)
+	if err := observer.ObserveChatMetadata(context.Background(), ChatMetadataInput{
+		WorkspaceID:   "workspace-a",
+		RequestID:     "request-a",
+		CorrelationID: "correlation-a",
+		OperationKind: ChatOperationMessagePost,
+		ThreadID:      "42",
+		MessageID:     "101",
+		RoleClass:     "user",
+		StreamClass:   "async",
+		ModelID:       "local-model-a",
+		MessageCount:  1,
+		Duration:      12 * time.Millisecond,
+		Warnings:      []string{"diagnostic only"},
+		Metadata: map[string]any{
+			"request_assistant": true,
+		},
+	}); err != nil {
+		t.Fatalf("observe chat metadata: %v", err)
+	}
+	reports := observer.Reports()
+	if len(reports) != 1 {
+		t.Fatalf("expected one chat metadata report, got %d", len(reports))
+	}
+	report := reports[0]
+	if report.ChatMetadata == nil {
+		t.Fatalf("expected typed chat metadata observation")
+	}
+	chat := report.ChatMetadata
+	if chat.OperationKind != ChatOperationMessagePost || chat.ThreadID != "42" || chat.MessageID != "101" || chat.RoleClass != "user" || chat.StreamClass != "async" {
+		t.Fatalf("unexpected chat metadata observation: %#v", chat)
+	}
+	if chat.DurationMS != 12 || chat.MessageCount != 1 {
+		t.Fatalf("unexpected chat metadata timing/count: %#v", chat)
+	}
+	if report.Observation.Metadata["observation_type"] != chatMetadataObservationType {
+		t.Fatalf("expected chat metadata marker, got %#v", report.Observation.Metadata)
+	}
+	serialized := strings.ToLower(toTestString(report.Observation.Metadata) + " " + report.Observation.RequestSummary)
+	for _, forbidden := range []string{"prompt", "completion", "body", "tool_output", "retrieval_content", "memory_content"} {
+		if strings.Contains(serialized, forbidden) {
+			t.Fatalf("chat metadata leaked forbidden content marker %q in %q", forbidden, serialized)
+		}
+	}
+	if !report.Observation.IsDiagnosticOnly() || !report.Comparison.NoEffectVerified {
+		t.Fatalf("chat metadata report must remain diagnostic-only: %#v", report)
+	}
+}
+
+func TestChatMetadataRejectsUnsafeMetadataWithoutStoringReport(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true, ChatMetadataEnabled: true}, nil, fixedNow)
+	for _, key := range []string{"body", "prompt", "completion", "tool_output", "tool_payload", "retrieval_content", "memory_content", "source_chunk", "file_contents", "request_payload"} {
+		t.Run(key, func(t *testing.T) {
+			err := observer.ObserveChatMetadata(context.Background(), ChatMetadataInput{
+				WorkspaceID:   "workspace-a",
+				RequestID:     "request-" + key,
+				OperationKind: ChatOperationMessagePost,
+				ThreadID:      "thread-1",
+				MessageID:     "message-1",
+				RoleClass:     "user",
+				Metadata: map[string]any{
+					key: "should not store",
+				},
+			})
+			if !errors.Is(err, ErrUnsafeMetadata) {
+				t.Fatalf("expected unsafe metadata for %q, got %v", key, err)
+			}
+		})
+	}
+	if reports := observer.Reports(); len(reports) != 0 {
+		t.Fatalf("unsafe chat metadata stored %d reports", len(reports))
+	}
+}
+
+func TestChatMetadataRejectsUnsafeRefsAndWarnings(t *testing.T) {
+	cases := []struct {
+		name  string
+		input ChatMetadataInput
+	}{
+		{"thread secret", ChatMetadataInput{ThreadID: "secret-thread"}},
+		{"message token", ChatMetadataInput{MessageID: "token-message"}},
+		{"model secret", ChatMetadataInput{ModelID: "secret-model"}},
+		{"unsafe warning", ChatMetadataInput{Warnings: []string{"Bearer value"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			observer := NewObserverWithSink(Config{Enabled: true, ChatMetadataEnabled: true}, nil, fixedNow)
+			tc.input.WorkspaceID = "workspace-a"
+			tc.input.RequestID = "request-a"
+			tc.input.OperationKind = ChatOperationMessagePost
+			err := observer.ObserveChatMetadata(context.Background(), tc.input)
+			if !errors.Is(err, ErrUnsafeMetadata) {
+				t.Fatalf("expected unsafe metadata error, got %v", err)
+			}
+			if reports := observer.Reports(); len(reports) != 0 {
+				t.Fatalf("unsafe chat metadata stored %d reports", len(reports))
+			}
+		})
+	}
+}
+
+func TestChatMetadataBoundedRetentionDropsOldest(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true, ChatMetadataEnabled: true, MaxReports: 2}, nil, fixedNow)
+	for _, id := range []string{"request-a", "request-b", "request-c"} {
+		if err := observer.ObserveChatMetadata(context.Background(), ChatMetadataInput{
+			WorkspaceID:   "workspace-a",
+			RequestID:     id,
+			OperationKind: ChatOperationMessagePost,
+			ThreadID:      "thread-1",
+			MessageID:     id,
+			RoleClass:     "user",
+		}); err != nil {
+			t.Fatalf("observe chat metadata %s: %v", id, err)
+		}
+	}
+	reports := observer.Reports()
+	if len(reports) != 2 {
+		t.Fatalf("expected bounded chat metadata report count 2, got %d", len(reports))
+	}
+	if reports[0].Comparison.RequestID != "request-b" || reports[1].Comparison.RequestID != "request-c" {
+		t.Fatalf("expected oldest chat metadata report dropped, got %#v", reports)
+	}
+}
+
+func TestObserveChatMetadataBestEffortIgnoresSinkFailure(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true, ChatMetadataEnabled: true}, failingSink{}, fixedNow)
+	observer.ObserveChatMetadataBestEffort(context.Background(), ChatMetadataInput{
+		WorkspaceID:   "workspace-a",
+		RequestID:     "request-a",
+		OperationKind: ChatOperationMessagePost,
+		ThreadID:      "thread-1",
+		MessageID:     "message-1",
+		RoleClass:     "user",
+	})
+}
+
 func fixedNow() time.Time {
 	return time.Unix(1700000000, 0).UTC()
 }

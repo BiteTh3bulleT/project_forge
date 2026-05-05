@@ -70,7 +70,7 @@ func (o *Observer) ObserveBestEffort(ctx context.Context, input ObservationInput
 }
 
 func (o *Observer) Observe(ctx context.Context, input ObservationInput) error {
-	return o.observe(ctx, input, nil)
+	return o.observe(ctx, input, nil, nil)
 }
 
 func (o *Observer) ObserveRouteEnvelopeBestEffort(ctx context.Context, input RouteEnvelopeInput) {
@@ -102,17 +102,45 @@ func (o *Observer) ObserveRouteEnvelope(ctx context.Context, input RouteEnvelope
 		Path:           routePath,
 		RequestSummary: "read-only route envelope metadata",
 		Metadata:       metadata,
-	}, now, observationID, &envelope)
+	}, now, observationID, &envelope, nil)
 }
 
-func (o *Observer) observe(ctx context.Context, input ObservationInput, routeEnvelope *RouteEnvelopeObservation) error {
+func (o *Observer) ObserveChatMetadataBestEffort(ctx context.Context, input ChatMetadataInput) {
+	defer func() {
+		_ = recover()
+	}()
+	_ = o.ObserveChatMetadata(ctx, input)
+}
+
+func (o *Observer) ObserveChatMetadata(ctx context.Context, input ChatMetadataInput) error {
+	if o == nil || !o.cfg.Enabled || !o.cfg.ChatMetadataEnabled {
+		return nil
+	}
+	now := o.now()
+	observationID := fmt.Sprintf("shadow-chat-metadata-%d", o.counter.Add(1))
+	chatMetadata, metadata, err := normalizeChatMetadataInput(input, now, observationID)
+	if err != nil {
+		return err
+	}
+	return o.observeAt(ctx, ObservationInput{
+		WorkspaceID:    input.WorkspaceID,
+		RequestID:      input.RequestID,
+		LivePath:       "POST /api/chat/threads/{id}/messages",
+		Method:         "POST",
+		Path:           "/api/chat/threads/{id}/messages",
+		RequestSummary: "read-only chat metadata",
+		Metadata:       metadata,
+	}, now, observationID, nil, &chatMetadata)
+}
+
+func (o *Observer) observe(ctx context.Context, input ObservationInput, routeEnvelope *RouteEnvelopeObservation, chatMetadata *ChatMetadataObservation) error {
 	if o == nil || !o.cfg.Enabled {
 		return nil
 	}
-	return o.observeAt(ctx, input, o.now(), "", routeEnvelope)
+	return o.observeAt(ctx, input, o.now(), "", routeEnvelope, chatMetadata)
 }
 
-func (o *Observer) observeAt(ctx context.Context, input ObservationInput, now time.Time, observationID string, routeEnvelope *RouteEnvelopeObservation) error {
+func (o *Observer) observeAt(ctx context.Context, input ObservationInput, now time.Time, observationID string, routeEnvelope *RouteEnvelopeObservation, chatMetadata *ChatMetadataObservation) error {
 	if o == nil || !o.cfg.Enabled {
 		return nil
 	}
@@ -206,6 +234,7 @@ func (o *Observer) observeAt(ctx context.Context, input ObservationInput, now ti
 		Observation:   obs,
 		Comparison:    report,
 		RouteEnvelope: routeEnvelope,
+		ChatMetadata:  chatMetadata,
 		StoredAt:      now,
 	})
 }

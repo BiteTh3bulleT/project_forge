@@ -4,7 +4,7 @@ Status: implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 
 ## Executive Summary
 
-Phase 12G designs a possible future chat metadata shadow expansion. It does not implement chat metadata observation, add live touchpoints, observe chat routes, add routes, change public APIs, or change live daemon behavior.
+Phase 12G designed the chat metadata shadow expansion. Phase 12H later implemented the bounded metadata-only observer behind disabled-by-default flags. Phase 12G itself did not implement chat metadata observation, add live touchpoints, observe chat routes, add routes, change public APIs, or change live daemon behavior.
 
 The current implemented shadow scope remains:
 
@@ -25,7 +25,7 @@ Implemented live-adjacent shadow behavior remains narrow:
 - persistence: none
 - live authority: none
 
-Phase 12G adds no code and no observation path. After Phase 12G, chat metadata remains design-only.
+Phase 12G added no code and no observation path. Phase 12H is the implementation phase for the selected metadata-only boundary.
 
 ## Why Chat Metadata Is Higher Risk
 
@@ -43,7 +43,7 @@ Because of that adjacency, a future chat metadata observer must fail closed and 
 
 ## Proposed Future Phase 12H Scope
 
-Future Phase 12H may be considered only if separately approved.
+Phase 12H implements this scope after separate approval.
 
 Candidate scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 

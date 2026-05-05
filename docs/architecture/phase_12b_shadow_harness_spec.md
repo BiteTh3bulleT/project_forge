@@ -1,6 +1,6 @@
 # Phase 12B Shadow Harness Specification
 
-Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12D controlled expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E route-envelope metadata implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12F route-envelope hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12G chat metadata expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
+Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12D controlled expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E route-envelope metadata implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12F route-envelope hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12G chat metadata expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12H chat metadata shadowing implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
 ## Scope
 
@@ -52,13 +52,13 @@ Phase 12E adds one more disabled-by-default touchpoint:
 - reports stay in the same bounded in-memory sink with no public API
 - Phase 12F hardens route-envelope observation without adding touchpoints: matched route-pattern safety, route class normalization, reserved metadata key rejection, raw query/request URI rejection, expanded header/secret/content redaction, deterministic scalar metadata enforcement, bounded retention tests, sink failure isolation, response equivalence tests, SSE mount/order stability, and timeout stability.
 
-Phase 12G adds no touchpoint. Chat metadata remains design-only:
+Phase 12H adds one chat metadata touchpoint:
 
-- no chat route observation exists
-- no chat metadata observer exists
-- no chat content capture is approved
-- no prompt, completion, model output, request body, response body, tool payload, retrieval content, or memory content capture is approved
-- a future Phase 12H must be separately approved and must pass the tests in `docs/testing/phase_12h_chat_metadata_shadow_tests.md`
+- chat metadata observation requires both `FORGE_K_SHADOW_MODE_ENABLED=true` and `FORGE_K_SHADOW_CHAT_METADATA_ENABLED=true`
+- the touchpoint is the existing chat message POST handler after live handler ownership is established
+- reports capture bounded metadata only: operation kind, safe ids/refs, role class, stream class, safe model id, request/workspace ids, counts, and diagnostic markers
+- no chat content, prompt, completion, model output, request body, response body, tool payload, retrieval content, or memory content capture is approved
+- Phase 12H coverage is recorded in `docs/testing/phase_12h_chat_metadata_shadow_tests.md`
 
 ## Future Candidate Live Request Types
 
@@ -206,12 +206,12 @@ Phase 12D is a docs-only controlled expansion design. It does not add code, rout
 
 The Phase 12E touchpoint is route envelope metadata. The route-envelope scope is method, matched route template, route class, timing summary, safe request ids when available, and no-effect validation only.
 
-After Phase 12G:
+After Phase 12H:
 
 - `/health` remains supported.
 - route-envelope metadata is implemented behind `FORGE_K_SHADOW_MODE_ENABLED`.
 - route-envelope hardening is complete without adding new live touchpoints.
-- chat metadata remains design-only.
+- chat metadata is implemented behind `FORGE_K_SHADOW_MODE_ENABLED` and `FORGE_K_SHADOW_CHAT_METADATA_ENABLED`.
 - no chat content capture is approved.
 - no request or response body capture is approved.
 - no raw query, raw header, cookie, authorization, secret, prompt, model output, retrieval content, embedding vector, search chunk, or memory content capture is approved.

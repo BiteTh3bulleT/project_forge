@@ -285,8 +285,8 @@ Phase 12B must be bounded:
 4. Phase 12D: controlled shadow expansion design only; select one next candidate and record tests.
 5. Phase 12E: route-envelope metadata implementation behind the disabled-by-default shadow flag.
 6. Phase 12F: route-envelope diagnostics review and hardening before wider observation.
-7. Phase 12G: chat metadata expansion design only; no chat observation implementation.
-8. Phase 12H: possible chat metadata shadow implementation only if separately approved.
+7. Phase 12G: chat metadata expansion design only; no chat observation implementation in that phase.
+8. Phase 12H: disabled-by-default chat metadata shadow implementation with no content capture and no response behavior change.
 9. Phase 12I: possible chat metadata hardening only after a Phase 12H implementation.
 10. Later phases: scoped authority migration only with separate approval, tests, and rollback.
 

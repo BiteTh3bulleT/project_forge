@@ -1,12 +1,12 @@
 # Phase 12D Controlled Shadow Expansion Design
 
-Status: implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E later implemented the selected route-envelope touchpoint as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12F later hardened that route-envelope touchpoint as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12G later designed chat metadata expansion as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
+Status: implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E later implemented the selected route-envelope touchpoint as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12F later hardened that route-envelope touchpoint as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12G later designed chat metadata expansion as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12H later implemented bounded chat metadata shadowing as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
 ## Executive Summary
 
 Phase 12D designed the next controlled shadow-mode expansion. It did not implement the expansion.
 
-Phase 12B added the first disabled-by-default read-only observer for `/health` metadata only. Phase 12C hardened that observer. Phase 12D selected route envelope metadata for Phase 12E. Phase 12E implements that selected touchpoint behind `FORGE_K_SHADOW_MODE_ENABLED`. Phase 12F hardens the implemented route-envelope observer without expanding observation scope. Phase 12G designs chat metadata only and does not implement chat observation.
+Phase 12B added the first disabled-by-default read-only observer for `/health` metadata only. Phase 12C hardened that observer. Phase 12D selected route envelope metadata for Phase 12E. Phase 12E implements that selected touchpoint behind `FORGE_K_SHADOW_MODE_ENABLED`. Phase 12F hardens the implemented route-envelope observer without expanding observation scope. Phase 12G designs chat metadata. Phase 12H implements bounded chat metadata only behind the global shadow flag plus `FORGE_K_SHADOW_CHAT_METADATA_ENABLED`.
 
 Route envelope metadata is selected because it provides useful route-level diagnostics with the lowest semantic and authority risk. It can be designed around method, matched route, route class, timing, workspace/correlation ids, and diagnostic status only. It must not capture request bodies, response bodies, prompts, tool payloads, retrieval content, memory content, or model output.
 
@@ -30,7 +30,7 @@ Phase 12C hardened:
 - route inventory and response equivalence tests
 - forbidden live import tests
 
-After Phase 12G, route-envelope metadata is implemented and hardened, `/health` remains supported, chat metadata remains design-only, and no further touchpoint is approved.
+After Phase 12H, route-envelope metadata is implemented and hardened, `/health` remains supported, chat metadata is implemented as metadata-only diagnostics, and no broader touchpoint is approved.
 
 ## Candidate Touchpoints
 
@@ -181,14 +181,14 @@ Phase 12G is docs-only. It records that:
 - Phase 12E implemented route-envelope metadata.
 - Phase 12F hardened route-envelope metadata.
 - Phase 12G designs chat metadata only.
-- Phase 12H may implement chat metadata only if separately approved.
+- Phase 12H implements chat metadata only after separate approval.
 - no chat content capture is approved.
 - no prompt capture is approved.
 - no completion/model output capture is approved.
 - no request or response body capture is approved.
 - no tool payload, retrieval content, memory content, public diagnostics API, route behavior change, or authority migration is approved.
 
-The Phase 12G design is in `docs/architecture/phase_12g_chat_metadata_expansion_design.md`; the risk review is in `docs/reviews/phase_12g_chat_metadata_risk_review.md`; the future Phase 12H test plan is in `docs/testing/phase_12h_chat_metadata_shadow_tests.md`.
+The Phase 12G design is in `docs/architecture/phase_12g_chat_metadata_expansion_design.md`; the risk review is in `docs/reviews/phase_12g_chat_metadata_risk_review.md`; the Phase 12H test coverage is in `docs/testing/phase_12h_chat_metadata_shadow_tests.md`.
 
 ## What Not To Do
 

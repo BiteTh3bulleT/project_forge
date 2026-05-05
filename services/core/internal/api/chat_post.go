@@ -533,11 +533,15 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 		"stream":           false,
 		"asyncAssistant":   false,
 	}
+	writeChatMessagePostJSON := func() {
+		s.observeChatMessagePostMetadata(ctx, threadID, um.ID, body.ModelID, body.RequestAssistant, boolMapValue(out, "assistantPending"), boolMapValue(out, "stream"), boolMapValue(out, "asyncAssistant"))
+		writeJSON(w, http.StatusOK, out)
+	}
 
 	if decision, ok := parseChatApprovalDirective(body.Content); ok {
 		am := s.handleChatApprovalDirective(ctx, threadID, um.ID, decision)
 		out["assistantMessage"] = am
-		writeJSON(w, http.StatusOK, out)
+		writeChatMessagePostJSON()
 		return
 	}
 
@@ -548,7 +552,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 			"replyToUserMessageId": um.ID,
 		})
 		out["assistantMessage"] = am
-		writeJSON(w, http.StatusOK, out)
+		writeChatMessagePostJSON()
 		return
 	} else if cmd != nil {
 		if s.jobs == nil {
@@ -557,7 +561,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 				"replyToUserMessageId": um.ID,
 			})
 			out["assistantMessage"] = am
-			writeJSON(w, http.StatusOK, out)
+			writeChatMessagePostJSON()
 			return
 		}
 		corr := strings.TrimSpace(cmd.CorrelationID)
@@ -596,7 +600,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 				"replyToUserMessageId": um.ID,
 			})
 			out["assistantMessage"] = am
-			writeJSON(w, http.StatusOK, out)
+			writeChatMessagePostJSON()
 			return
 		}
 		am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", fmt.Sprintf("Queued governed tool action `%s` as job `%s` via lane `%s`.", cmd.ToolID, j.ID, nonEmpty(cmd.LaneID, cmd.ToolID)), map[string]any{
@@ -608,12 +612,12 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 			"replyToUserMessageId": um.ID,
 		})
 		out["assistantMessage"] = am
-		writeJSON(w, http.StatusOK, out)
+		writeChatMessagePostJSON()
 		return
 	}
 
 	if !body.RequestAssistant {
-		writeJSON(w, http.StatusOK, out)
+		writeChatMessagePostJSON()
 		return
 	}
 
@@ -624,7 +628,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 	}
 	if am, handled := s.maybeRespondHyperlaneNoModel(ctx, threadID, um.ID, um.Content); handled {
 		out["assistantMessage"] = am
-		writeJSON(w, http.StatusOK, out)
+		writeChatMessagePostJSON()
 		return
 	}
 
@@ -637,7 +641,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 	if body.AssistantDryRun {
 		am := s.completeAssistantSync(ctx, threadID, um.ID, th, um.Content, ollamaAdapter, body.AssistantDryRun, body.ModelID)
 		out["assistantMessage"] = am
-		writeJSON(w, http.StatusOK, out)
+		writeChatMessagePostJSON()
 		return
 	}
 
@@ -652,7 +656,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 	if body.Stream && !body.SyncAssistant {
 		out["assistantPending"] = true
 		out["stream"] = true
-		writeJSON(w, http.StatusOK, out)
+		writeChatMessagePostJSON()
 		return
 	}
 
@@ -665,13 +669,13 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 		go s.runChatAssistantAsync(key, threadID, um.ID, th, um.Content, ollamaAdapter, body.ModelID)
 		out["assistantPending"] = true
 		out["asyncAssistant"] = true
-		writeJSON(w, http.StatusOK, out)
+		writeChatMessagePostJSON()
 		return
 	}
 
 	am := s.completeAssistantSync(ctx, threadID, um.ID, th, um.Content, ollamaAdapter, false, body.ModelID)
 	out["assistantMessage"] = am
-	writeJSON(w, http.StatusOK, out)
+	writeChatMessagePostJSON()
 }
 
 type chatGatewayCommand struct {

@@ -1,12 +1,12 @@
 # Phase 12H Chat Metadata Shadow Test Plan
 
-Status: future test plan only. Phase 12H is not started.
+Status: implemented test plan. Phase 12H is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
 ## Scope
 
-Future Phase 12H scope, if approved: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+Phase 12H scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
-This document defines the tests required before any chat metadata shadow implementation can be accepted. It does not authorize implementation.
+This document records the tests required for the chat metadata shadow implementation and the validation commands that must pass before the phase is accepted.
 
 ## Required Test Groups
 
@@ -79,9 +79,16 @@ This document defines the tests required before any chat metadata shadow impleme
 - Reports remain diagnostic-only and non-authoritative.
 - Reports are not treated as memory, evidence, ContextBlocks, KV metadata, runtime input, or Kernel truth.
 
+## Implemented Coverage
+
+- `services/core/internal/forgekshadow/observer_test.go` covers disabled/global/chat flag behavior, bounded retention, unsafe metadata rejection, content-like key rejection, diagnostic-only reports, and sink failure isolation for chat metadata observations.
+- `services/core/internal/config/config_test.go` covers the `FORGE_K_SHADOW_CHAT_METADATA_ENABLED=false` default, explicit enable, and invalid value fallback.
+- `services/core/internal/api/chat_shadow_metadata_test.go` covers the existing chat message POST touchpoint, response-shape stability, no public diagnostic routes, metadata-only capture, no message body retention, stream metadata class, and the requirement that global plus chat-specific flags are both enabled.
+- Existing route inventory, route-envelope, forbidden import, and no-effect tests continue to apply to the shared shadow observer.
+
 ## Required Commands
 
-Future Phase 12H validation must run at least:
+Phase 12H validation must run at least:
 
 - `cd services/core && go test ./internal/forgek/...`
 - `cd services/core && go test ./internal/forgekshadow/...`

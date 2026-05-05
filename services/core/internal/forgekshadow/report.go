@@ -20,6 +20,7 @@ type DiagnosticReport struct {
 	Observation   shadowharness.ShadowObservation
 	Comparison    shadowharness.ShadowComparisonReport
 	RouteEnvelope *RouteEnvelopeObservation
+	ChatMetadata  *ChatMetadataObservation
 	StoredAt      time.Time
 }
 
@@ -45,6 +46,42 @@ type RouteEnvelopeObservation struct {
 	RoutePattern  string         `json:"route_pattern,omitempty"`
 	RouteClass    string         `json:"route_class"`
 	StatusCode    int            `json:"status_code,omitempty"`
+	DurationMS    int64          `json:"duration_ms"`
+	RequestID     string         `json:"request_id,omitempty"`
+	WorkspaceID   string         `json:"workspace_id,omitempty"`
+	CorrelationID string         `json:"correlation_id,omitempty"`
+	Warnings      []string       `json:"warnings,omitempty"`
+	Metadata      map[string]any `json:"metadata,omitempty"`
+}
+
+type ChatMetadataInput struct {
+	WorkspaceID   string
+	RequestID     string
+	CorrelationID string
+	OperationKind string
+	ThreadID      string
+	MessageID     string
+	RoleClass     string
+	StreamClass   string
+	ModelID       string
+	ProviderID    string
+	MessageCount  int
+	Duration      time.Duration
+	Warnings      []string
+	Metadata      map[string]any
+}
+
+type ChatMetadataObservation struct {
+	ObservationID string         `json:"observation_id"`
+	ObservedAt    time.Time      `json:"observed_at"`
+	OperationKind string         `json:"operation_kind"`
+	ThreadID      string         `json:"thread_id,omitempty"`
+	MessageID     string         `json:"message_id,omitempty"`
+	RoleClass     string         `json:"role_class,omitempty"`
+	StreamClass   string         `json:"stream_class,omitempty"`
+	ModelID       string         `json:"model_id,omitempty"`
+	ProviderID    string         `json:"provider_id,omitempty"`
+	MessageCount  int            `json:"message_count,omitempty"`
 	DurationMS    int64          `json:"duration_ms"`
 	RequestID     string         `json:"request_id,omitempty"`
 	WorkspaceID   string         `json:"workspace_id,omitempty"`
