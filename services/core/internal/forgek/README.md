@@ -37,6 +37,7 @@ go test ./internal/forgek/...
 - Phase 12D Controlled Shadow Expansion Design: docs only, no package code
 - Phase 12E Route Envelope Shadow Metadata: live-adjacent route-envelope observer outside this simulator at `services/core/internal/forgekshadow`
 - Phase 12F Route Envelope Shadow Hardening: live-adjacent hardening outside this simulator; no new live touchpoint or simulator authority path
+- Phase 12G Chat Metadata Expansion Design: docs only, no package code
 
 ## Authority Boundary
 
@@ -75,6 +76,8 @@ Phase 12D is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. It recommended route en
 Phase 12E is `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT` and lives outside this simulator package in `services/core/internal/forgekshadow`. It observes route-envelope metadata only when `FORGE_K_SHADOW_MODE_ENABLED=true`: method, matched route pattern, normalized route class, duration, and safe request identifiers. It does not capture request bodies, response bodies, prompts, model outputs, retrieval content, headers, cookies, secrets, or raw query strings; it does not add syscalls, Kernel ownership, public routes, public APIs, live retrieval, embedding calls, live RAG, modelruntime calls, tool execution, memory writes, controllane mutation, gateway behavior changes, or user-visible output authority.
 
 Phase 12F is `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY` and lives outside this simulator package in `services/core/internal/forgekshadow`. It hardens the Phase 12E route-envelope observer by preferring matched route patterns, rejecting unsafe raw dynamic route patterns, normalizing provided route classes, rejecting raw query/request URI metadata, preventing metadata from reintroducing path or route pattern values, expanding secret/header/content redaction, enforcing deterministic scalar metadata, preserving bounded retention, and isolating sink failure. It adds no new live touchpoints, syscalls, Kernel ownership, public routes, public APIs, persistence, live retrieval, embedding calls, live RAG, modelruntime calls, tool execution, memory writes, controllane mutation, gateway behavior changes, route behavior changes, or user-visible output authority.
+
+Phase 12G is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. It designs a possible future chat metadata shadow expansion and adds no Go code to this package or to `forgekshadow`. It does not observe chat routes, capture message content, capture prompts, capture completions, capture request or response bodies, add routes, add feature flags, call modelruntime, execute tools, query retrieval/search/embeddings, write memory, call controllane mutations, or route live daemon state through FORGE-K.
 
 ## Future Rust Boundary
 

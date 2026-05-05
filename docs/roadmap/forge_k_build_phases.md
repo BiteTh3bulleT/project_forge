@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12B Read-only Shadow Harness Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12C Shadow Diagnostics Review and Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12D Controlled Shadow Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12E Route Envelope Shadow Metadata is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12F Route Envelope Shadow Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12B Read-only Shadow Harness Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12C Shadow Diagnostics Review and Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12D Controlled Shadow Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12E Route Envelope Shadow Metadata is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12F Route Envelope Shadow Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12G Chat Metadata Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -370,6 +370,46 @@ Forbidden data remains: request bodies, response bodies, raw headers except allo
 Validation criteria: route-envelope observation remains disabled by default, bounded, metadata-only, non-authoritative, and proven to have no effect on live responses or live authority paths. Route inventory, response status/body/header equivalence, SSE mount/order, timeout middleware behavior, sink failure isolation, redaction failure behavior, and forbidden imports must pass.
 
 What not to do: add new touchpoints, observe chat content, observe retrieval content, observe gateway payloads, persist reports, add public diagnostics routes, execute tools, call modelruntime, run retrieval/search/embeddings, write memory, mutate controllane, or start authority migration.
+
+## Phase 12G - Chat Metadata Expansion Design
+
+Scope: `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
+
+Status: implemented.
+
+Goal: design a possible future chat metadata shadow expansion without implementing chat metadata observation.
+
+Deliverables: chat metadata expansion design, chat metadata risk review, future Phase 12H test plan, status updates, and roadmap updates.
+
+Allowed future metadata: route class, matched chat route pattern, safe/stable thread id, safe/stable message id, workspace id, request/correlation id, role class, bounded count summary, timing/status metadata, safe model/provider id when already exposed, diagnostic markers, and warnings.
+
+Forbidden future metadata: message content, prompts, completions, assistant response text, system prompts, request bodies, response bodies, tool payloads, tool outputs, retrieval content, search chunks, embedding vectors, memory content, auth headers, cookies, tokens, API keys, secrets, and large raw content blobs.
+
+Validation criteria: docs exist, future tests are explicit, no live code changes, no new touchpoints, no chat observation, no public diagnostics APIs, and existing FORGE-K/shadow/API route inventory/build/lint/test/parity checks pass.
+
+What not to do: implement Phase 12H, add chat metadata observer code, observe chat routes, capture message content, capture prompts, capture completions, capture request/response bodies, observe tool payloads, observe retrieval content, add public diagnostics APIs, change route behavior, modify API response shape, call modelruntime, execute tools, query retrieval/search/embeddings, write memory, call controllane mutations, or make FORGE-K live authority.
+
+## Phase 12H - Chat Metadata Shadow Implementation
+
+Scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+
+Status: not started.
+
+Goal: implement bounded chat metadata shadow diagnostics only if separately approved.
+
+Validation criteria: all tests in `docs/testing/phase_12h_chat_metadata_shadow_tests.md` pass before completion.
+
+What not to do: capture content, prompts, completions, request bodies, response bodies, tool payloads, retrieval content, memory content, secrets, or user-visible output.
+
+## Phase 12I - Chat Metadata Shadow Hardening
+
+Scope: `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
+
+Status: not started.
+
+Goal: review and harden any future Phase 12H implementation before broader metadata surfaces are considered.
+
+What not to do: add new touchpoints, broaden chat capture, persist diagnostics, add public diagnostics APIs, execute tools, call modelruntime, run retrieval/search/embeddings, write memory, mutate controllane, or start authority migration.
 
 ## Phase 12 - FORGE Daemon
 
