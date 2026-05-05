@@ -407,9 +407,11 @@ What not to do: capture content, prompts, completions, request bodies, response 
 
 Scope: `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
 
-Status: not started.
+Status: implemented and tested.
 
-Goal: review and harden any future Phase 12H implementation before broader metadata surfaces are considered.
+Goal: review and harden the Phase 12H chat metadata implementation before broader metadata surfaces are considered.
+
+Implementation status: completed as hardening only. Phase 12I strengthens dual-flag tests, bounded enum/ref normalization, forbidden content-key rejection, deterministic serialization coverage, invalid-body/header/query no-capture tests, assistant-stream safety tests, sink behavior tests, no-effect validation coverage, and documentation. It adds no new live touchpoints and does not expand beyond chat metadata.
 
 What not to do: add new touchpoints, broaden chat capture, persist diagnostics, add public diagnostics APIs, execute tools, call modelruntime, run retrieval/search/embeddings, write memory, mutate controllane, or start authority migration.
 

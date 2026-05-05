@@ -1,12 +1,12 @@
 # Phase 12D Controlled Shadow Expansion Design
 
-Status: implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E later implemented the selected route-envelope touchpoint as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12F later hardened that route-envelope touchpoint as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12G later designed chat metadata expansion as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12H later implemented bounded chat metadata shadowing as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+Status: implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E later implemented the selected route-envelope touchpoint as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12F later hardened that route-envelope touchpoint as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12G later designed chat metadata expansion as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12H later implemented bounded chat metadata shadowing as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12I later hardened chat metadata shadowing as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
 
 ## Executive Summary
 
 Phase 12D designed the next controlled shadow-mode expansion. It did not implement the expansion.
 
-Phase 12B added the first disabled-by-default read-only observer for `/health` metadata only. Phase 12C hardened that observer. Phase 12D selected route envelope metadata for Phase 12E. Phase 12E implements that selected touchpoint behind `FORGE_K_SHADOW_MODE_ENABLED`. Phase 12F hardens the implemented route-envelope observer without expanding observation scope. Phase 12G designs chat metadata. Phase 12H implements bounded chat metadata only behind the global shadow flag plus `FORGE_K_SHADOW_CHAT_METADATA_ENABLED`.
+Phase 12B added the first disabled-by-default read-only observer for `/health` metadata only. Phase 12C hardened that observer. Phase 12D selected route envelope metadata for Phase 12E. Phase 12E implements that selected touchpoint behind `FORGE_K_SHADOW_MODE_ENABLED`. Phase 12F hardens the implemented route-envelope observer without expanding observation scope. Phase 12G designs chat metadata. Phase 12H implements bounded chat metadata only behind the global shadow flag plus `FORGE_K_SHADOW_CHAT_METADATA_ENABLED`. Phase 12I hardens that chat metadata path without adding touchpoints or capture scope.
 
 Route envelope metadata is selected because it provides useful route-level diagnostics with the lowest semantic and authority risk. It can be designed around method, matched route, route class, timing, workspace/correlation ids, and diagnostic status only. It must not capture request bodies, response bodies, prompts, tool payloads, retrieval content, memory content, or model output.
 

@@ -37,6 +37,8 @@ var rawContentMetadataKeys = []string{
 	"assistant_response",
 	"system_prompt",
 	"model_output",
+	"message",
+	"message_body",
 	"tool_output",
 	"tool_payload",
 	"retrieval_content",

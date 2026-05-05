@@ -38,6 +38,47 @@ func TestForgeKShadowChatMetadataRequiresBothFlagsAtChatRoute(t *testing.T) {
 	}
 }
 
+func TestForgeKShadowChatMetadataFlagMatrixAtChatRoute(t *testing.T) {
+	cases := []struct {
+		name        string
+		globalFlag  bool
+		chatFlag    bool
+		wantReports int
+	}{
+		{"both disabled", false, false, 0},
+		{"global disabled chat enabled", false, true, 0},
+		{"global enabled chat disabled", true, false, 0},
+		{"both enabled", true, true, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, _ := newBackupAuditHarness(t)
+			thread, err := srv.chat.CreateThread(context.Background(), "chat metadata flags", nil)
+			if err != nil {
+				t.Fatalf("create thread: %v", err)
+			}
+			observer := forgekshadow.NewObserver(forgekshadow.Config{Enabled: tc.globalFlag, ChatMetadataEnabled: tc.chatFlag})
+			srv.cfg.ForgeKShadowModeEnabled = tc.globalFlag
+			srv.cfg.ForgeKShadowChatMetadataEnabled = tc.chatFlag
+			srv.forgeKShadow = observer
+
+			rr := postChatMessageForShadow(t, srv, thread.ID, `{"content":"flag matrix content must not be captured","requestAssistant":false}`)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("chat post status=%d body=%s", rr.Code, rr.Body.String())
+			}
+			chatReports := 0
+			for _, report := range observer.Reports() {
+				if report.ChatMetadata != nil {
+					chatReports++
+				}
+			}
+			if chatReports != tc.wantReports {
+				t.Fatalf("chat metadata reports=%d, want %d; reports=%#v", chatReports, tc.wantReports, observer.Reports())
+			}
+		})
+	}
+}
+
 func TestForgeKShadowChatMetadataObservedWithoutChangingResponseShape(t *testing.T) {
 	body := `{"content":"DO-NOT-CAPTURE-CHAT-CONTENT","requestAssistant":false,"modelId":"local-model-a"}`
 
@@ -85,6 +126,39 @@ func TestForgeKShadowChatMetadataObservedWithoutChangingResponseShape(t *testing
 	}
 }
 
+func TestForgeKShadowChatMetadataDoesNotCaptureInvalidBodyAuthCookieOrQuery(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	thread, err := srv.chat.CreateThread(context.Background(), "invalid body shadow", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	observer := forgekshadow.NewObserver(forgekshadow.Config{Enabled: true, ChatMetadataEnabled: true})
+	srv.cfg.ForgeKShadowModeEnabled = true
+	srv.cfg.ForgeKShadowChatMetadataEnabled = true
+	srv.forgeKShadow = observer
+
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages?token=should-not-appear", strings.NewReader(`{"content":"INVALID-BODY-MUST-NOT-APPEAR"`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer should-not-appear")
+	req.Header.Set("Cookie", "session=should-not-appear")
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("invalid chat post status=%d, want %d body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+	for _, report := range observer.Reports() {
+		if report.ChatMetadata != nil {
+			t.Fatalf("invalid body should not create chat metadata report: %#v", report)
+		}
+		serialized := strings.ToLower(fmt.Sprint(report))
+		for _, forbidden := range []string{"invalid-body-must-not-appear", "should-not-appear", "bearer", "cookie", "session", "token"} {
+			if strings.Contains(serialized, forbidden) {
+				t.Fatalf("shadow report leaked forbidden invalid-body/header/query fragment %q in %q", forbidden, serialized)
+			}
+		}
+	}
+}
+
 func TestForgeKShadowChatMetadataNoPublicDiagnosticRoutes(t *testing.T) {
 	disabled := collectServerRoutes(t, (&Server{}).Handler())
 	enabled := collectServerRoutes(t, (&Server{
@@ -102,6 +176,38 @@ func TestForgeKShadowChatMetadataNoPublicDiagnosticRoutes(t *testing.T) {
 		for _, forbidden := range []string{"chat-shadow", "chat-metadata", "forgek-shadow", "shadow-diagnostic", "/api/shadow", "/forge/shadow"} {
 			if strings.Contains(normalized, forbidden) {
 				t.Fatalf("chat metadata shadow must not expose public diagnostics route: %s", route)
+			}
+		}
+	}
+}
+
+func TestForgeKShadowChatMetadataDoesNotObserveAssistantStreamRoute(t *testing.T) {
+	observer := forgekshadow.NewObserver(forgekshadow.Config{Enabled: true, ChatMetadataEnabled: true})
+	req := httptest.NewRequest(http.MethodGet, "/api/chat/threads/123/assistant-stream?userMessageId=abc&token=should-not-appear", nil)
+	req.Header.Set("Authorization", "Bearer should-not-appear")
+	req.Header.Set("Cookie", "session=should-not-appear")
+
+	disabledRR := httptest.NewRecorder()
+	(&Server{}).Handler().ServeHTTP(disabledRR, req.Clone(context.Background()))
+
+	enabledRR := httptest.NewRecorder()
+	(&Server{
+		cfg: config.Config{
+			ForgeKShadowModeEnabled:         true,
+			ForgeKShadowChatMetadataEnabled: true,
+		},
+		forgeKShadow: observer,
+	}).Handler().ServeHTTP(enabledRR, req.Clone(context.Background()))
+
+	assertSameResponse(t, disabledRR, enabledRR, "assistant stream with chat metadata enabled")
+	for _, report := range observer.Reports() {
+		if report.ChatMetadata != nil {
+			t.Fatalf("assistant stream route should not create chat metadata report: %#v", report)
+		}
+		serialized := strings.ToLower(fmt.Sprint(report))
+		for _, forbidden := range []string{"123", "usermessageid", "abc", "token", "should-not-appear", "bearer", "cookie", "session"} {
+			if strings.Contains(serialized, forbidden) {
+				t.Fatalf("assistant stream shadow report leaked forbidden fragment %q in %q", forbidden, serialized)
 			}
 		}
 	}
@@ -130,6 +236,30 @@ func TestForgeKShadowChatMetadataStreamRequestCapturesOnlyMetadata(t *testing.T)
 	if strings.Contains(serializedReport, "stream-body-must-not-appear") {
 		t.Fatalf("stream chat metadata report captured message body: %q", serializedReport)
 	}
+}
+
+func TestForgeKShadowChatMetadataSinkFailureDoesNotChangeChatPostResponse(t *testing.T) {
+	body := `{"content":"sink failure content must not be captured","requestAssistant":false}`
+	baselineSrv, _ := newBackupAuditHarness(t)
+	baselineThread, err := baselineSrv.chat.CreateThread(context.Background(), "sink baseline", nil)
+	if err != nil {
+		t.Fatalf("create baseline thread: %v", err)
+	}
+	baselineRR := postChatMessageForShadow(t, baselineSrv, baselineThread.ID, body)
+	if baselineRR.Code != http.StatusOK {
+		t.Fatalf("baseline chat post status=%d body=%s", baselineRR.Code, baselineRR.Body.String())
+	}
+
+	enabledSrv, _ := newBackupAuditHarness(t)
+	enabledThread, err := enabledSrv.chat.CreateThread(context.Background(), "sink enabled", nil)
+	if err != nil {
+		t.Fatalf("create enabled thread: %v", err)
+	}
+	enabledSrv.cfg.ForgeKShadowModeEnabled = true
+	enabledSrv.cfg.ForgeKShadowChatMetadataEnabled = true
+	enabledSrv.forgeKShadow = forgekshadow.NewObserverWithSink(forgekshadow.Config{Enabled: true, ChatMetadataEnabled: true}, failingShadowSink{}, nil)
+	enabledRR := postChatMessageForShadow(t, enabledSrv, enabledThread.ID, body)
+	assertChatPostResponseShape(t, baselineRR, enabledRR)
 }
 
 func postChatMessageForShadow(t *testing.T, srv *Server, threadID int64, body string) *httptest.ResponseRecorder {

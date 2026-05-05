@@ -2,6 +2,7 @@ package forgekshadow
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -491,9 +492,12 @@ func TestChatMetadataRequiresGlobalAndChatFlags(t *testing.T) {
 	cases := []struct {
 		name string
 		cfg  Config
+		want int
 	}{
-		{"global disabled", Config{Enabled: false, ChatMetadataEnabled: true}},
-		{"chat disabled", Config{Enabled: true, ChatMetadataEnabled: false}},
+		{"global disabled chat disabled", Config{Enabled: false, ChatMetadataEnabled: false}, 0},
+		{"global disabled chat enabled", Config{Enabled: false, ChatMetadataEnabled: true}, 0},
+		{"global enabled chat disabled", Config{Enabled: true, ChatMetadataEnabled: false}, 0},
+		{"global enabled chat enabled", Config{Enabled: true, ChatMetadataEnabled: true}, 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -508,8 +512,8 @@ func TestChatMetadataRequiresGlobalAndChatFlags(t *testing.T) {
 			}); err != nil {
 				t.Fatalf("disabled chat metadata observe should not fail: %v", err)
 			}
-			if reports := observer.Reports(); len(reports) != 0 {
-				t.Fatalf("disabled chat metadata observer stored %d reports", len(reports))
+			if reports := observer.Reports(); len(reports) != tc.want {
+				t.Fatalf("chat metadata observer stored %d reports, want %d", len(reports), tc.want)
 			}
 		})
 	}
@@ -567,7 +571,14 @@ func TestChatMetadataEnabledStoresDiagnosticReportWithoutContent(t *testing.T) {
 
 func TestChatMetadataRejectsUnsafeMetadataWithoutStoringReport(t *testing.T) {
 	observer := NewObserverWithSink(Config{Enabled: true, ChatMetadataEnabled: true}, nil, fixedNow)
-	for _, key := range []string{"body", "prompt", "completion", "tool_output", "tool_payload", "retrieval_content", "memory_content", "source_chunk", "file_contents", "request_payload"} {
+	for _, key := range []string{
+		"api_key", "secret", "token", "password", "private_key", "bearer", "plaintext",
+		"credential", "authorization", "cookie", "session", "set_cookie", "x_api_key",
+		"auth", "jwt", "refresh_token", "access_token", "body", "request_body",
+		"response_body", "raw_content", "content", "message", "message_body", "prompt",
+		"completion", "assistant_response", "system_prompt", "tool_output", "tool_payload",
+		"retrieval_content", "memory_content", "source_chunk", "file_contents", "request_payload",
+	} {
 		t.Run(key, func(t *testing.T) {
 			err := observer.ObserveChatMetadata(context.Background(), ChatMetadataInput{
 				WorkspaceID:   "workspace-a",
@@ -590,6 +601,42 @@ func TestChatMetadataRejectsUnsafeMetadataWithoutStoringReport(t *testing.T) {
 	}
 }
 
+func TestChatMetadataNormalizesAllowedEnumsAndRefs(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true, ChatMetadataEnabled: true}, nil, fixedNow)
+	if err := observer.ObserveChatMetadata(context.Background(), ChatMetadataInput{
+		WorkspaceID:   "workspace-a",
+		RequestID:     "request-a",
+		OperationKind: "unknown-operation",
+		ThreadID:      "42",
+		MessageID:     "101",
+		RoleClass:     "owner",
+		StreamClass:   "websocket",
+		Metadata: map[string]any{
+			"message_count": 999,
+			"role_class":    "owner",
+			"stream_class":  "websocket",
+		},
+	}); err != nil {
+		t.Fatalf("observe chat metadata: %v", err)
+	}
+	report := observer.Reports()[0]
+	if report.ChatMetadata.OperationKind != ChatOperationMessagePost {
+		t.Fatalf("unknown operation should normalize to bounded default, got %#v", report.ChatMetadata)
+	}
+	if report.ChatMetadata.RoleClass != "" || report.ChatMetadata.StreamClass != "" {
+		t.Fatalf("unknown role/stream classes should be omitted, got %#v", report.ChatMetadata)
+	}
+	if _, ok := report.Observation.Metadata["role_class"]; ok {
+		t.Fatalf("caller metadata reintroduced invalid role class: %#v", report.Observation.Metadata)
+	}
+	if _, ok := report.Observation.Metadata["stream_class"]; ok {
+		t.Fatalf("caller metadata reintroduced invalid stream class: %#v", report.Observation.Metadata)
+	}
+	if report.Observation.Metadata["message_count"] != nil {
+		t.Fatalf("caller metadata reintroduced reserved message count: %#v", report.Observation.Metadata)
+	}
+}
+
 func TestChatMetadataRejectsUnsafeRefsAndWarnings(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -598,6 +645,8 @@ func TestChatMetadataRejectsUnsafeRefsAndWarnings(t *testing.T) {
 		{"thread secret", ChatMetadataInput{ThreadID: "secret-thread"}},
 		{"message token", ChatMetadataInput{MessageID: "token-message"}},
 		{"model secret", ChatMetadataInput{ModelID: "secret-model"}},
+		{"provider bearer", ChatMetadataInput{ProviderID: "bearer-provider"}},
+		{"long thread", ChatMetadataInput{ThreadID: strings.Repeat("x", maxMetadataStringLength+1)}},
 		{"unsafe warning", ChatMetadataInput{Warnings: []string{"Bearer value"}}},
 	}
 	for _, tc := range cases {
@@ -614,6 +663,52 @@ func TestChatMetadataRejectsUnsafeRefsAndWarnings(t *testing.T) {
 				t.Fatalf("unsafe chat metadata stored %d reports", len(reports))
 			}
 		})
+	}
+}
+
+func TestChatMetadataDeterministicSerializationForStableShape(t *testing.T) {
+	left, _, err := normalizeChatMetadataInput(ChatMetadataInput{
+		WorkspaceID:   "workspace-a",
+		RequestID:     "request-a",
+		OperationKind: ChatOperationMessagePost,
+		ThreadID:      "42",
+		MessageID:     "101",
+		RoleClass:     "user",
+		StreamClass:   "none",
+		Metadata: map[string]any{
+			"b": "two",
+			"a": "one",
+		},
+	}, fixedNow(), "chat-meta-1")
+	if err != nil {
+		t.Fatalf("normalize left: %v", err)
+	}
+	right, _, err := normalizeChatMetadataInput(ChatMetadataInput{
+		WorkspaceID:   "workspace-a",
+		RequestID:     "request-a",
+		OperationKind: ChatOperationMessagePost,
+		ThreadID:      "42",
+		MessageID:     "101",
+		RoleClass:     "user",
+		StreamClass:   "none",
+		Metadata: map[string]any{
+			"a": "one",
+			"b": "two",
+		},
+	}, fixedNow(), "chat-meta-1")
+	if err != nil {
+		t.Fatalf("normalize right: %v", err)
+	}
+	leftJSON, err := json.Marshal(left)
+	if err != nil {
+		t.Fatalf("marshal left: %v", err)
+	}
+	rightJSON, err := json.Marshal(right)
+	if err != nil {
+		t.Fatalf("marshal right: %v", err)
+	}
+	if string(leftJSON) != string(rightJSON) {
+		t.Fatalf("chat metadata serialization should be deterministic\nleft=%s\nright=%s", leftJSON, rightJSON)
 	}
 }
 
@@ -637,6 +732,61 @@ func TestChatMetadataBoundedRetentionDropsOldest(t *testing.T) {
 	}
 	if reports[0].Comparison.RequestID != "request-b" || reports[1].Comparison.RequestID != "request-c" {
 		t.Fatalf("expected oldest chat metadata report dropped, got %#v", reports)
+	}
+}
+
+func TestChatMetadataEnabledWithDisabledSinkStoresNoReports(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true, ChatMetadataEnabled: true, DisableSink: true}, nil, fixedNow)
+	if err := observer.ObserveChatMetadata(context.Background(), ChatMetadataInput{
+		WorkspaceID:   "workspace-a",
+		RequestID:     "request-a",
+		OperationKind: ChatOperationMessagePost,
+		ThreadID:      "thread-1",
+		MessageID:     "101",
+		RoleClass:     "user",
+	}); err != nil {
+		t.Fatalf("observe with disabled sink: %v", err)
+	}
+	if reports := observer.Reports(); len(reports) != 0 {
+		t.Fatalf("disabled sink stored %d chat metadata reports", len(reports))
+	}
+}
+
+func TestChatMetadataRefusesAnySideEffectPolicy(t *testing.T) {
+	cases := []struct {
+		name string
+		mut  func(*shadowharness.ShadowHarnessPolicy)
+	}{
+		{"live mutation", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowLiveMutation = true }},
+		{"tool execution", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowToolExecution = true }},
+		{"modelruntime call", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowModelRuntimeCalls = true }},
+		{"retrieval execution", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowRetrievalExecution = true }},
+		{"search execution", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowSearchExecution = true }},
+		{"embedding call", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowEmbeddingCalls = true }},
+		{"memory write", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowMemoryWrites = true }},
+		{"controllane mutation", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowControllaneMutations = true }},
+		{"user-visible output", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowUserVisibleOutput = true }},
+		{"public API change", func(p *shadowharness.ShadowHarnessPolicy) { p.AllowPublicAPIChanges = true }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			observer := NewObserverWithSink(Config{Enabled: true, ChatMetadataEnabled: true}, nil, fixedNow)
+			tc.mut(&observer.policy)
+			err := observer.ObserveChatMetadata(context.Background(), ChatMetadataInput{
+				WorkspaceID:   "workspace-a",
+				RequestID:     "request-a",
+				OperationKind: ChatOperationMessagePost,
+				ThreadID:      "42",
+				MessageID:     "101",
+				RoleClass:     "user",
+			})
+			if !errors.Is(err, ErrPolicyRejected) {
+				t.Fatalf("expected policy rejection, got %v", err)
+			}
+			if reports := observer.Reports(); len(reports) != 0 {
+				t.Fatalf("side-effectful policy stored %d chat metadata reports", len(reports))
+			}
+		})
 	}
 }
 

@@ -2,11 +2,13 @@
 
 Status: implemented as part of `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 
+Update: Phase 12H later implemented the approved chat metadata boundary, and Phase 12I later hardened it without expanding scope.
+
 ## Summary
 
 Phase 12G compares possible shadow metadata surfaces after Phase 12F route-envelope hardening. The conclusion is that chat metadata may be a valid next expansion only if it captures identifiers, classes, bounded counts, timing, and diagnostic markers. It must never capture message content, prompts, completions, model outputs, tool payloads, retrieval content, memory content, request bodies, or response bodies.
 
-No implementation is authorized by this review.
+No implementation was authorized by this review alone; Phase 12H separately authorized the implementation.
 
 ## Candidate Comparison
 
@@ -36,7 +38,7 @@ Chat metadata has higher diagnostic value, but it is adjacent to sensitive and a
 - tool payloads and tool outputs
 - durable chat message writes
 
-Recommended constraints for future Phase 12H:
+Recommended constraints for Phase 12H, now implemented and hardened:
 
 - capture route class and matched route pattern only
 - capture thread id and message id only when already safe/stable
@@ -85,4 +87,4 @@ Any future metadata surface must keep these constraints:
 
 ## Recommendation
 
-Use Phase 12H only for chat metadata if separately approved. Keep the first chat metadata implementation narrower than route-envelope observation in practice: identifiers, classes, counts, timing, and warnings only. Defer retrieval and gateway trace metadata until the chat metadata boundary has passing no-effect and no-content tests.
+Use Phase 12H/12I only for chat metadata. Keep chat metadata narrower than route-envelope observation in practice: identifiers, classes, counts, timing, and warnings only. Defer retrieval and gateway trace metadata until a separate phase designs and proves no-effect/no-content behavior.

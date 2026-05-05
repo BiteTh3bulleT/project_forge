@@ -1,6 +1,6 @@
 # Phase 12H Chat Metadata Shadow Test Plan
 
-Status: implemented test plan. Phase 12H is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+Status: implemented test plan. Phase 12H is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12I hardens the same observer as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
 
 ## Scope
 
@@ -85,6 +85,19 @@ This document records the tests required for the chat metadata shadow implementa
 - `services/core/internal/config/config_test.go` covers the `FORGE_K_SHADOW_CHAT_METADATA_ENABLED=false` default, explicit enable, and invalid value fallback.
 - `services/core/internal/api/chat_shadow_metadata_test.go` covers the existing chat message POST touchpoint, response-shape stability, no public diagnostic routes, metadata-only capture, no message body retention, stream metadata class, and the requirement that global plus chat-specific flags are both enabled.
 - Existing route inventory, route-envelope, forbidden import, and no-effect tests continue to apply to the shared shadow observer.
+
+Phase 12I adds hardening coverage for:
+
+- all global/chat flag combinations
+- bounded operation, role, and stream enum normalization
+- safe ref length and secret-looking ref rejection
+- deterministic metadata serialization for stable shape
+- reserved metadata override protection
+- invalid chat body no-capture behavior
+- auth, cookie, and query no-capture behavior
+- assistant-stream no chat metadata behavior
+- sink failure response isolation
+- side-effect policy rejection for chat metadata observations
 
 ## Required Commands
 

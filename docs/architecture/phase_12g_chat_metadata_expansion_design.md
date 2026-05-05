@@ -39,11 +39,11 @@ Route-envelope metadata can be limited to method, matched route pattern, route c
 - chat routes may include retrieval, memory, attachment, or artifact refs
 - chat routes may write durable messages or metadata
 
-Because of that adjacency, a future chat metadata observer must fail closed and must never inspect, copy, summarize, hash, or persist content.
+Because of that adjacency, the chat metadata observer must fail closed and must never inspect, copy, summarize, hash, or persist content.
 
-## Proposed Future Phase 12H Scope
+## Phase 12H Implemented Scope
 
-Phase 12H implements this scope after separate approval.
+Phase 12H implements this scope after separate approval. Phase 12I later hardens the same scope without adding touchpoints.
 
 Candidate scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
@@ -55,7 +55,7 @@ Phase 12H must stay metadata-only. It must not observe chat content, prompt text
 
 ## Allowed Metadata
 
-Future Phase 12H may capture only bounded, stable metadata that is already available without reading bodies or outputs:
+Phase 12H may capture only bounded, stable metadata that is already available without reading bodies or outputs:
 
 - route class: `chat`
 - matched chat route pattern
@@ -74,7 +74,7 @@ All identifiers must pass the same secret-looking and dynamic-path safety expect
 
 ## Forbidden Metadata
 
-Future Phase 12H must not capture:
+Phase 12H and Phase 12I must not capture:
 
 - message body
 - prompt text
@@ -105,7 +105,7 @@ Metadata that cannot be proven safe must be dropped.
 
 ## No-Effect Guarantees
 
-Future Phase 12H must prove:
+Phase 12H and Phase 12I must prove:
 
 - feature flag defaults disabled
 - disabled mode observes no chat metadata
@@ -137,11 +137,11 @@ Allowed records should prefer:
 - timing summaries over execution traces with content
 - diagnostic warnings over raw error payloads
 
-No future chat metadata observer may parse request bodies to find metadata unless a separate phase explicitly approves a parser, redaction model, and tests proving no content retention. Phase 12G does not approve that work.
+No chat metadata observer may parse request bodies to find metadata unless a separate phase explicitly approves a parser, redaction model, and tests proving no content retention. Phase 12G did not approve that work, and Phase 12H/12I do not add it.
 
 ## Redaction Policy
 
-Future Phase 12H must reuse or strengthen Phase 12F redaction:
+Phase 12H/12I must reuse or strengthen Phase 12F redaction:
 
 - reject secret-looking keys or values
 - reject raw content keys such as body, prompt, completion, model output, content, message text, system prompt, and stream token
@@ -153,7 +153,7 @@ Future Phase 12H must reuse or strengthen Phase 12F redaction:
 
 ## Performance Budget
 
-Future Phase 12H must remain cheap:
+Phase 12H/12I must remain cheap:
 
 - disabled path near zero overhead
 - no blocking modelruntime, retrieval, gateway, memory, or controllane calls
@@ -165,7 +165,7 @@ Future Phase 12H must remain cheap:
 
 ## Failure Isolation
 
-Future chat metadata shadowing must fail closed:
+Chat metadata shadowing must fail closed:
 
 - redaction failure drops the report
 - sink failure drops the report
@@ -177,7 +177,7 @@ No shadow failure may change status, headers, body, route selection, timeout beh
 
 ## Rollback And Kill Switch
 
-Future Phase 12H must keep:
+Phase 12H/12I must keep:
 
 - `FORGE_K_SHADOW_MODE_ENABLED=false` default
 - one config/environment kill switch
@@ -187,9 +187,9 @@ Future Phase 12H must keep:
 
 Rollback must be disabling the flag or reverting the implementation. No live data migration should be required.
 
-## Required Tests Before Implementation
+## Required Tests
 
-Future Phase 12H cannot start without tests for:
+Phase 12H/12I require tests for:
 
 - disabled-by-default behavior
 - enabled metadata-only behavior
@@ -202,13 +202,13 @@ Future Phase 12H cannot start without tests for:
 - bounded sink retention
 - no public diagnostics route
 
-The detailed future test plan is `docs/testing/phase_12h_chat_metadata_shadow_tests.md`.
+The detailed test plan is `docs/testing/phase_12h_chat_metadata_shadow_tests.md`; the Phase 12I hardening review is `docs/reviews/phase_12i_chat_metadata_shadow_hardening.md`.
 
 ## What Not To Do
 
-- Do not implement Phase 12H.
-- Do not add chat metadata observer code yet.
-- Do not observe chat routes.
+- Do not expand beyond the approved Phase 12H chat metadata observer.
+- Do not add additional chat metadata observer code outside the approved touchpoint.
+- Do not observe additional chat routes.
 - Do not capture message content.
 - Do not capture prompts.
 - Do not capture completions.
