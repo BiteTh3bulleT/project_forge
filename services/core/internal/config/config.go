@@ -17,6 +17,9 @@ type Config struct {
 	StoreBackend                                string
 	PostgresDSN                                 string
 	RedisAddr                                   string
+	RedisEnabled                                bool
+	RedisKeyPrefix                              string
+	RedisTimeoutMs                              int
 	QdrantURL                                   string
 	QdrantShadowIndexEnabled                    bool
 	QdrantCollection                            string
@@ -94,6 +97,8 @@ var (
 	ErrShadowDiagnosticInvalidConfig    = errors.New("invalid shadow diagnostic persistence configuration")
 	ErrQdrantShadowIndexURLRequired     = errors.New("qdrant shadow index requires qdrant url")
 	ErrQdrantShadowIndexInvalidConfig   = errors.New("invalid qdrant shadow index configuration")
+	ErrRedisAddrRequired                = errors.New("redis enabled requires redis addr")
+	ErrRedisInvalidConfig               = errors.New("invalid redis ephemeral configuration")
 )
 
 func Load() Config {
@@ -141,6 +146,9 @@ func Load() Config {
 		StoreBackend:               envStringDefault("FORGE_STORE_BACKEND", "sqlite"),
 		PostgresDSN:                strings.TrimSpace(os.Getenv("FORGE_POSTGRES_DSN")),
 		RedisAddr:                  strings.TrimSpace(os.Getenv("FORGE_REDIS_ADDR")),
+		RedisEnabled:               envBool("FORGE_REDIS_ENABLED", false),
+		RedisKeyPrefix:             envStringDefault("FORGE_REDIS_KEY_PREFIX", "forge"),
+		RedisTimeoutMs:             envInt("FORGE_REDIS_TIMEOUT_MS", 1000, 1),
 		QdrantURL:                  strings.TrimSpace(os.Getenv("FORGE_QDRANT_URL")),
 		QdrantShadowIndexEnabled:   envBool("FORGE_QDRANT_SHADOW_INDEX_ENABLED", false),
 		QdrantCollection:           envStringDefault("FORGE_QDRANT_COLLECTION", "forge_shadow_embeddings"),
@@ -245,6 +253,19 @@ func (c Config) ValidateQdrantShadowIndex() error {
 	}
 	if strings.TrimSpace(c.QdrantCollection) == "" || c.QdrantTimeoutMs <= 0 || c.QdrantVectorSize < 0 {
 		return ErrQdrantShadowIndexInvalidConfig
+	}
+	return nil
+}
+
+func (c Config) ValidateRedisEphemeral() error {
+	if !c.RedisEnabled {
+		return nil
+	}
+	if strings.TrimSpace(c.RedisAddr) == "" {
+		return ErrRedisAddrRequired
+	}
+	if strings.TrimSpace(c.RedisKeyPrefix) == "" || c.RedisTimeoutMs <= 0 {
+		return ErrRedisInvalidConfig
 	}
 	return nil
 }

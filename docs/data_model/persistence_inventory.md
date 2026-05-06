@@ -57,6 +57,17 @@ Phase 13F-G adds Qdrant shadow vector infrastructure:
 
 Phase 13F-G does not make Qdrant the live retrieval backend, execute retrieval through Qdrant, generate embeddings, switch reads, change result ordering, write canonical memory, or make vector hits admissible evidence.
 
+Phase 13H adds Redis ephemeral coordination infrastructure:
+
+- `FORGE_REDIS_ENABLED=false` by default.
+- `FORGE_REDIS_KEY_PREFIX=forge` and `FORGE_REDIS_TIMEOUT_MS=1000` define safe namespace and connection defaults.
+- `services/core/internal/ephemeral` defines Redis roles, safe key policy, TTL requirements, fake adapter tests, and a stdlib Redis client scaffold.
+- Redis keys must be prefixed, bounded, workspace-safe, and free of raw prompt/content/query/auth/secret/token material.
+- Cache, lock, and progress entries require TTLs.
+- Optional Redis integration tests are gated by `FORGE_REDIS_TEST_ADDR`.
+
+Phase 13H does not switch live job queues to Redis, make Redis required, store canonical truth, durable memory, evidence admission, provenance authority, settings authority, or sole job records, or change gateway/modelruntime/retrieval/memory behavior.
+
 ## Backend migration stages
 
 Group A: non-authoritative diagnostics.
@@ -101,6 +112,8 @@ Redis candidates are ephemeral only:
 - pub/sub notifications
 
 Redis must not store canonical truth, durable memory, evidence admission, provenance, or source-of-record state. Redis loss must be recoverable from SQLite/Postgres records.
+
+Phase 13H implements the boundary only. Redis remains disabled by default and may not become a live queue/cache authority without a later explicit wiring and parity phase.
 
 ## Qdrant candidates
 

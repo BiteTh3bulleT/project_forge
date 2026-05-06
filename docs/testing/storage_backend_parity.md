@@ -45,6 +45,19 @@ Phase 13F-G adds Qdrant shadow vector adapter and shadow index tests without cha
 
 This remains vector shadow infrastructure only. It does not switch retrieval reads, call Qdrant from live retrieval, generate embeddings, write canonical memory, admit evidence, persist content in Qdrant, wire Redis, or add public APIs.
 
+## Phase 13H Status
+
+Phase 13H adds Redis ephemeral coordination boundary tests without changing live jobs, queues, caches, retrieval, gateway, modelruntime, or memory behavior:
+
+- config tests prove `FORGE_REDIS_ENABLED` defaults disabled and requires Redis addr configuration when enabled,
+- capability tests prove Redis roles are ephemeral only and forbidden canonical/durable/admission/provenance roles are rejected,
+- key policy tests prove safe namespaced keys are accepted while raw content, prompt, query, token, secret, auth, and unsafe path-like keys are rejected,
+- TTL tests prove cache, lock, and progress keys require expiration,
+- fake adapter tests prove cache set/get, queue push/pop, lock acquire/release, progress append/read, unsafe-key rejection, and health behavior,
+- optional Redis integration tests are gated by `FORGE_REDIS_TEST_ADDR`.
+
+This remains ephemeral coordination infrastructure only. It does not switch live job queues to Redis, make Redis required, store canonical memory, store evidence admission, store provenance authority, add routes, or change public APIs.
+
 ## Required Parity Test Areas
 
 Schema parity:
@@ -99,6 +112,16 @@ Phase 13F-G Qdrant shadow parity:
 - unsafe content-bearing payloads are rejected before upsert,
 - disabled mode performs no Qdrant writes,
 - optional Qdrant integration is gated by `FORGE_QDRANT_TEST_URL`.
+
+Phase 13H Redis ephemeral parity:
+- redis config defaults disabled,
+- enabled redis requires explicit addr,
+- redis env does not switch storage backend or SQLite default,
+- allowed redis roles are ephemeral only,
+- forbidden redis roles cannot be canonical truth, durable memory, evidence admission, provenance authority, sole job record, canonical audit, canonical settings, or vector truth,
+- safe key namespace and TTL policy are enforced,
+- fake adapter behavior is deterministic,
+- optional Redis integration is gated by `FORGE_REDIS_TEST_ADDR`.
 
 Dual-write parity:
 - SQLite/Postgres write comparison.

@@ -23,6 +23,8 @@ In this containerization pass, the Go core still reads and writes SQLite. The ne
 
 Phase 13A adds application-side backend config and capability contracts. `FORGE_STORE_BACKEND=postgres` is parsed for future migration scaffolding, but SQLite remains the live default and no live data is dual-written or read-switched in this phase.
 
+Phase 13H adds Redis boundary flags for future ephemeral coordination. `FORGE_REDIS_ENABLED=false` is the default; enabling it does not switch live job queues, caches, retrieval, gateway, modelruntime, memory, or public API behavior. Redis remains disposable and non-canonical.
+
 The Docker core enables the governed model runtime surface by default and points Ollama discovery at host Ollama through `http://host.docker.internal:11434`. If Ollama is not running or has no local models, FORGE remains healthy and the model runtime reports degraded backend health instead of disappearing from the API surface.
 
 Optional providers such as Ollama and Hugging Face TEI can be started as sidecars, but they do not replace FORGE authority paths.
@@ -104,6 +106,17 @@ docker compose exec postgres pg_isready -U forge -d forge
 docker compose exec redis redis-cli ping
 curl -fsS http://127.0.0.1:6333/readyz
 ```
+
+Redis ephemeral boundary flags:
+
+```bash
+FORGE_REDIS_ENABLED=false
+FORGE_REDIS_ADDR=redis:6379
+FORGE_REDIS_KEY_PREFIX=forge
+FORGE_REDIS_TIMEOUT_MS=1000
+```
+
+Optional Redis integration tests use `FORGE_REDIS_TEST_ADDR=127.0.0.1:6379`. Default repository tests do not require Redis.
 
 If default ports are busy, override the published ports:
 
@@ -216,7 +229,7 @@ npm test
 - Docker does not change live FORGE-K authority.
 - SQLite remains the current database.
 - Postgres is infrastructure-ready, not yet the live application store.
-- Redis is infrastructure-ready and must remain cache/queue/stream metadata, not truth.
+- Redis is infrastructure-ready and must remain disabled-by-default cache/queue/stream/lock metadata, not truth.
 - Qdrant is infrastructure-ready and must remain vector retrieval acceleration, not truth.
 - Optional provider containers do not execute unless their profiles are selected.
 - Optional model/embedding providers do not create truth.

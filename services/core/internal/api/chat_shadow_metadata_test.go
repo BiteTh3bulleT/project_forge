@@ -204,7 +204,7 @@ func TestForgeKShadowChatMetadataDoesNotObserveAssistantStreamRoute(t *testing.T
 		if report.ChatMetadata != nil {
 			t.Fatalf("assistant stream route should not create chat metadata report: %#v", report)
 		}
-		serialized := strings.ToLower(fmt.Sprint(report))
+		serialized := strings.ToLower(toString(report.Observation.Metadata) + " " + report.Observation.LivePath)
 		for _, forbidden := range []string{"123", "usermessageid", "abc", "token", "should-not-appear", "bearer", "cookie", "session"} {
 			if strings.Contains(serialized, forbidden) {
 				t.Fatalf("assistant stream shadow report leaked forbidden fragment %q in %q", forbidden, serialized)

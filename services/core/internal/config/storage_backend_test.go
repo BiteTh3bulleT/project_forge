@@ -11,6 +11,9 @@ func TestLoadStorageBackendDefaultsToSQLite(t *testing.T) {
 	t.Setenv("FORGE_STORE_BACKEND", "")
 	t.Setenv("FORGE_POSTGRES_DSN", "")
 	t.Setenv("FORGE_REDIS_ADDR", "")
+	t.Setenv("FORGE_REDIS_ENABLED", "")
+	t.Setenv("FORGE_REDIS_KEY_PREFIX", "")
+	t.Setenv("FORGE_REDIS_TIMEOUT_MS", "")
 	t.Setenv("FORGE_QDRANT_URL", "")
 
 	cfg := Load()
@@ -19,6 +22,15 @@ func TestLoadStorageBackendDefaultsToSQLite(t *testing.T) {
 	}
 	if cfg.PostgresDSN != "" || cfg.RedisAddr != "" || cfg.QdrantURL != "" {
 		t.Fatalf("expected storage service endpoints unset by default, got postgres=%q redis=%q qdrant=%q", cfg.PostgresDSN, cfg.RedisAddr, cfg.QdrantURL)
+	}
+	if cfg.RedisEnabled {
+		t.Fatalf("expected redis ephemeral coordination disabled by default")
+	}
+	if cfg.RedisKeyPrefix != "forge" {
+		t.Fatalf("unexpected redis key prefix default %q", cfg.RedisKeyPrefix)
+	}
+	if cfg.RedisTimeoutMs <= 0 {
+		t.Fatalf("expected positive redis timeout default")
 	}
 	backendCfg, err := cfg.StorageBackendConfig()
 	if err != nil {
@@ -199,5 +211,88 @@ func TestQdrantShadowIndexDoesNotSwitchRetrievalBackend(t *testing.T) {
 	}
 	if backendCfg.Kind != storagebackend.BackendSQLite {
 		t.Fatalf("qdrant shadow index must not switch retrieval/storage backend, got %q", backendCfg.Kind)
+	}
+}
+
+func TestRedisEphemeralDefaultsDisabled(t *testing.T) {
+	t.Setenv("FORGE_REDIS_ENABLED", "")
+	t.Setenv("FORGE_REDIS_ADDR", "")
+	t.Setenv("FORGE_REDIS_KEY_PREFIX", "")
+	t.Setenv("FORGE_REDIS_TIMEOUT_MS", "")
+	t.Setenv("FORGE_STORE_BACKEND", "sqlite")
+
+	cfg := Load()
+	if cfg.RedisEnabled {
+		t.Fatalf("expected redis disabled by default")
+	}
+	if cfg.RedisKeyPrefix != "forge" {
+		t.Fatalf("unexpected default redis key prefix %q", cfg.RedisKeyPrefix)
+	}
+	if cfg.RedisTimeoutMs <= 0 {
+		t.Fatalf("expected positive redis timeout default")
+	}
+	if err := cfg.ValidateRedisEphemeral(); err != nil {
+		t.Fatalf("disabled redis should validate without addr: %v", err)
+	}
+}
+
+func TestRedisEphemeralRequiresAddrWhenEnabled(t *testing.T) {
+	cfg := Config{
+		StoreBackend:    "sqlite",
+		RedisEnabled:    true,
+		RedisKeyPrefix:  "forge",
+		RedisTimeoutMs:  1000,
+		QdrantTimeoutMs: 3000,
+	}
+	if err := cfg.ValidateRedisEphemeral(); err == nil {
+		t.Fatalf("expected enabled redis without addr to fail closed")
+	}
+
+	cfg.RedisAddr = "redis:6379"
+	if err := cfg.ValidateRedisEphemeral(); err != nil {
+		t.Fatalf("expected explicit redis addr to allow ephemeral redis: %v", err)
+	}
+	if cfg.StoreBackend != "sqlite" {
+		t.Fatalf("enabling redis must not switch live backend")
+	}
+}
+
+func TestRedisEphemeralInvalidConfigFailsSafe(t *testing.T) {
+	cfg := Config{
+		RedisEnabled:   true,
+		RedisAddr:      "redis:6379",
+		RedisKeyPrefix: "",
+		RedisTimeoutMs: 1000,
+	}
+	if err := cfg.ValidateRedisEphemeral(); err == nil {
+		t.Fatalf("expected empty key prefix to fail safe")
+	}
+
+	cfg.RedisKeyPrefix = "forge"
+	cfg.RedisTimeoutMs = 0
+	if err := cfg.ValidateRedisEphemeral(); err == nil {
+		t.Fatalf("expected invalid timeout to fail safe")
+	}
+}
+
+func TestRedisEphemeralDoesNotSwitchStorageBackend(t *testing.T) {
+	t.Setenv("FORGE_STORE_BACKEND", "sqlite")
+	t.Setenv("FORGE_REDIS_ENABLED", "true")
+	t.Setenv("FORGE_REDIS_ADDR", "redis:6379")
+	t.Setenv("FORGE_REDIS_KEY_PREFIX", "forge-test")
+
+	cfg := Load()
+	if cfg.StoreBackend != "sqlite" {
+		t.Fatalf("redis ephemeral config must not change store backend, got %q", cfg.StoreBackend)
+	}
+	backendCfg, err := cfg.StorageBackendConfig()
+	if err != nil {
+		t.Fatalf("StorageBackendConfig failed: %v", err)
+	}
+	if backendCfg.Kind != storagebackend.BackendSQLite {
+		t.Fatalf("redis ephemeral config must not switch backend, got %q", backendCfg.Kind)
+	}
+	if backendCfg.RedisAddr != "redis:6379" {
+		t.Fatalf("expected redis addr preserved as infrastructure config")
 	}
 }

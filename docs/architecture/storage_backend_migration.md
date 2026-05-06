@@ -1,6 +1,6 @@
 # Storage Backend Migration
 
-Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds the first Postgres schema foundation and parity tests for storage metadata plus disabled shadow diagnostic schema only. Phase 13D-E adds an opt-in diagnostic persistence repository and retrieval metadata relational adapter scaffold. Phase 13F-G adds a disabled-by-default Qdrant shadow vector adapter and shadow index scaffold. These phases do not migrate live data.
+Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds the first Postgres schema foundation and parity tests for storage metadata plus disabled shadow diagnostic schema only. Phase 13D-E adds an opt-in diagnostic persistence repository and retrieval metadata relational adapter scaffold. Phase 13F-G adds a disabled-by-default Qdrant shadow vector adapter and shadow index scaffold. Phase 13H adds a disabled-by-default Redis ephemeral coordination boundary. These phases do not migrate live data.
 
 ## Current Live State
 
@@ -10,6 +10,7 @@ Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds t
 - Shadow diagnostics remain bounded in memory by default. Postgres diagnostic persistence exists only behind `FORGE_SHADOW_DIAGNOSTIC_PERSISTENCE_ENABLED=false` and requires explicit Postgres configuration.
 - Docker-managed Postgres, Redis, and Qdrant are infrastructure-ready but not live authority.
 - Qdrant shadow indexing defaults disabled and is not part of live retrieval.
+- Redis ephemeral coordination defaults disabled and is not part of live jobs, gateway, modelruntime, retrieval, memory, or public API behavior.
 
 ## Backend Selection
 
@@ -72,6 +73,29 @@ The shadow index accepts only already-produced vectors plus safe relational refs
 
 Qdrant indexes remain rebuildable from relational embedding records. A future rebuild command may validate dimensions/model identity and explicitly recreate an index, but no automatic destructive rebuild is added in Phase 13F-G.
 
+## Phase 13H Redis Ephemeral Boundary
+
+Phase 13H adds `services/core/internal/ephemeral`:
+
+- Redis role contracts for cache, queue, lock, pub/sub, progress stream, rate-limit window, and ephemeral coordination,
+- forbidden role checks for canonical truth, durable memory, evidence admission, provenance authority, sole job record, canonical audit, canonical settings, and vector truth,
+- safe key namespace policy with deterministic prefixing,
+- TTL requirements for cache, lock, and progress entries,
+- fake in-memory adapter tests,
+- stdlib Redis client scaffold,
+- optional Redis integration tests gated by `FORGE_REDIS_TEST_ADDR`.
+
+Configuration:
+
+- `FORGE_REDIS_ENABLED=false`
+- `FORGE_REDIS_ADDR`
+- `FORGE_REDIS_KEY_PREFIX=forge`
+- `FORGE_REDIS_TIMEOUT_MS=1000`
+
+Redis is ephemeral infrastructure only. It may mirror bounded status, coordinate short-lived locks, or hold recoverable queue/cache/progress metadata in future phases. It must not store canonical truth, durable memory, evidence admission state, provenance authority, audit authority, settings authority, raw prompts, raw content, secrets, or sole job records.
+
+Phase 13H does not switch live job queues to Redis, make Redis required, add public routes, change gateway/modelruntime/retrieval behavior, write live memory, or alter SQLite/Postgres authority.
+
 The Postgres runner executes migrations in deterministic version order, skips already-applied versions, records applied versions with checksums, and runs inside a transaction. A separate migration lock is not taken in Phase 13B-C; live Postgres migration execution is not part of the default daemon path yet. A future live migration phase must add explicit lock policy before concurrent operator execution is allowed.
 
 ## Target Roles
@@ -84,6 +108,7 @@ Redis:
 - Ephemeral coordination only: cache, queue, pub/sub, locks, streams, and progress metadata.
 - Must be recoverable from durable records.
 - Must not become canonical truth, memory, admissibility, or provenance authority.
+- Phase 13H Redis support is disabled by default and non-canonical.
 
 Qdrant:
 - Vector retrieval acceleration only.
@@ -100,7 +125,7 @@ Qdrant:
 5. Phase 13E: retrieval metadata relational adapter scaffold.
 6. Phase 13F: Qdrant vector adapter design and scaffold.
 7. Phase 13G: Qdrant shadow vector index, rebuildable, disabled by default, and non-authoritative.
-8. Phase 13H: Redis queue/cache boundary with loss-safe behavior.
+8. Phase 13H: Redis queue/cache boundary with loss-safe behavior, disabled by default and non-canonical.
 9. Phase 13I: store cutover readiness review.
 
 ## Parity Strategy
@@ -155,10 +180,10 @@ Group D:
 
 ## Forbidden Authority Changes
 
-- Do not make Postgres the default backend in Phase 13A through Phase 13F-G.
-- Do not dual-write live data in Phase 13A through Phase 13F-G.
-- Do not wire Redis into live queues or caches in Phase 13A through Phase 13F-G.
-- Do not wire Qdrant into live retrieval in Phase 13A through Phase 13F-G.
+- Do not make Postgres the default backend in Phase 13A through Phase 13H.
+- Do not dual-write live data in Phase 13A through Phase 13H.
+- Do not wire Redis into live queues or caches in Phase 13A through Phase 13H.
+- Do not wire Qdrant into live retrieval in Phase 13A through Phase 13H.
 - Do not make Redis or Qdrant canonical truth.
 - Do not make vector hits admissible evidence.
 - Do not change public APIs, routes, gateway behavior, modelruntime behavior, retrieval behavior, or memory semantics.
