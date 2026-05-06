@@ -157,6 +157,12 @@ func TestInitModelRuntimeServiceDiscoversLocalOllamaModels(t *testing.T) {
 	}
 }
 
+func TestDockerHostGatewayIsTreatedAsLocalOllamaProvider(t *testing.T) {
+	if !isLocalHTTPProvider("http://host.docker.internal:11434") {
+		t.Fatalf("expected Docker host gateway endpoint to be treated as local Ollama")
+	}
+}
+
 func TestInitModelRuntimeServiceCanExposeOllamaCloudModelsWhenEnabled(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/tags" {

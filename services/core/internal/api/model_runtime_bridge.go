@@ -371,6 +371,9 @@ func isLocalHTTPProvider(endpoint string) bool {
 	if strings.EqualFold(host, "localhost") {
 		return true
 	}
+	if strings.EqualFold(host, "host.docker.internal") {
+		return true
+	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
 }

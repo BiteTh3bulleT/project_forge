@@ -23,6 +23,8 @@ In this containerization pass, the Go core still reads and writes SQLite. The ne
 
 Phase 13A adds application-side backend config and capability contracts. `FORGE_STORE_BACKEND=postgres` is parsed for future migration scaffolding, but SQLite remains the live default and no live data is dual-written or read-switched in this phase.
 
+The Docker core enables the governed model runtime surface by default and points Ollama discovery at host Ollama through `http://host.docker.internal:11434`. If Ollama is not running or has no local models, FORGE remains healthy and the model runtime reports degraded backend health instead of disappearing from the API surface.
+
 Optional providers such as Ollama and Hugging Face TEI can be started as sidecars, but they do not replace FORGE authority paths.
 
 ## Start Core And Web UI
@@ -43,6 +45,7 @@ Open:
 
 - Core: `http://127.0.0.1:18492`
 - Web UI build: `http://127.0.0.1:1420`
+- Model runtime health: `http://127.0.0.1:18492/forge/model-runtime/health`
 - Postgres: `127.0.0.1:5432`
 - Redis: `127.0.0.1:6379`
 - Qdrant HTTP: `http://127.0.0.1:6333`
@@ -124,7 +127,7 @@ Set these values in `.env.docker` if you want the core to talk to the Ollama ser
 
 ```dotenv
 FORGE_ENABLE_MODEL_RUNTIME=true
-FORGE_MODEL_OPENAI_COMPAT_ENDPOINT=http://ollama:11434/v1
+FORGE_MODEL_OPENAI_COMPAT_ENDPOINT=http://ollama:11434
 FORGE_MODEL_DEFAULT_BACKEND=openai_compat
 ```
 

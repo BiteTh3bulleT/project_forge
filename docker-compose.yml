@@ -12,11 +12,12 @@ services:
       FORGE_MODEL_HOME: "${FORGE_MODEL_HOME:-/models}"
       FORGE_WORKSPACE_DIR: "${FORGE_WORKSPACE_DIR:-/workspace}"
       FORGE_STORE_BACKEND: "${FORGE_STORE_BACKEND:-sqlite}"
-      FORGE_ENABLE_MODEL_RUNTIME: "${FORGE_ENABLE_MODEL_RUNTIME:-false}"
+      FORGE_ENABLE_MODEL_RUNTIME: "${FORGE_ENABLE_MODEL_RUNTIME:-true}"
       FORGE_ENABLE_OPENAI_COMPAT_API: "${FORGE_ENABLE_OPENAI_COMPAT_API:-false}"
       FORGE_MODEL_OPENAI_COMPAT_ENDPOINT: "${FORGE_MODEL_OPENAI_COMPAT_ENDPOINT:-}"
       FORGE_MODEL_DEFAULT_BACKEND: "${FORGE_MODEL_DEFAULT_BACKEND:-}"
       FORGE_MODEL_DEFAULT_ID: "${FORGE_MODEL_DEFAULT_ID:-}"
+      OLLAMA_BASE_URL: "${OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
       FORGE_EMBEDDING_PROVIDER: "${FORGE_EMBEDDING_PROVIDER:-}"
       FORGE_EMBEDDING_MODEL: "${FORGE_EMBEDDING_MODEL:-}"
       FORGE_EMBEDDING_DIMS: "${FORGE_EMBEDDING_DIMS:-128}"
@@ -34,6 +35,8 @@ services:
       - forge-data:/data
       - forge-models:/models
       - forge-workspace:/workspace
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${FORGE_CORE_PORT:-18492}/health >/dev/null"]
       interval: 10s
