@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12B Read-only Shadow Harness Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12C Shadow Diagnostics Review and Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12D Controlled Shadow Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12E Route Envelope Shadow Metadata is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12F Route Envelope Shadow Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12G Chat Metadata Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12H Chat Metadata Shadow Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12I Chat Metadata Shadow Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12J Retrieval Metadata Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12K Retrieval Metadata Shadow Implementation and Phase 12L Retrieval Metadata Shadow Hardening are implemented/tested as a combined `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / HARDENED_IN_PASS` metadata-only pass. Phase 12M-Q Shadow Advisory Pipeline is implemented/tested as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / ADVISORY_DIAGNOSTIC_ONLY`. Phase 13A Storage Backend Foundation is implemented/tested as `LIVE_INFRA / STORAGE_FOUNDATION / DEFAULT_SQLITE`. Phase 13B-C Postgres Schema Foundation and SQLite/Postgres Parity is implemented/tested as `LIVE_INFRA / STORAGE_PARITY / DEFAULT_SQLITE`.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12B Read-only Shadow Harness Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12C Shadow Diagnostics Review and Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12D Controlled Shadow Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12E Route Envelope Shadow Metadata is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12F Route Envelope Shadow Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12G Chat Metadata Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12H Chat Metadata Shadow Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12I Chat Metadata Shadow Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12J Retrieval Metadata Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12K Retrieval Metadata Shadow Implementation and Phase 12L Retrieval Metadata Shadow Hardening are implemented/tested as a combined `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / HARDENED_IN_PASS` metadata-only pass. Phase 12M-Q Shadow Advisory Pipeline is implemented/tested as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / ADVISORY_DIAGNOSTIC_ONLY`. Phase 13A Storage Backend Foundation is implemented/tested as `LIVE_INFRA / STORAGE_FOUNDATION / DEFAULT_SQLITE`. Phase 13B-C Postgres Schema Foundation and SQLite/Postgres Parity is implemented/tested as `LIVE_INFRA / STORAGE_PARITY / DEFAULT_SQLITE`. Phase 13D-E Diagnostic Persistence and Retrieval Metadata Relational Adapter is implemented/tested as `LIVE_INFRA / DIAGNOSTIC_STORAGE / DEFAULT_SQLITE / DISABLED_BY_DEFAULT`.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -513,21 +513,27 @@ Validation criteria: foundation schema, deterministic migration ordering, applie
 
 ## Phase 13D - Diagnostic Store Persistence
 
-Scope: `LIVE_INFRA / STORAGE_FOUNDATION / DEFAULT_SQLITE`.
+Scope: `LIVE_INFRA / DIAGNOSTIC_STORAGE / DEFAULT_SQLITE / DISABLED_BY_DEFAULT`.
 
-Status: not started.
+Status: implemented and tested as part of Phase 13D-E.
 
 Goal: persist approved non-authoritative diagnostics after parity gates, without creating public diagnostics APIs or authority.
 
+Implemented deliverables: disabled-by-default `FORGE_SHADOW_DIAGNOSTIC_PERSISTENCE_ENABLED`, retention and payload-limit config, Postgres diagnostic repository, persistence sink wrapper that preserves the in-memory sink, safe diagnostic summary builder, retention expiry, no-effect verification, schema version, unsafe metadata rejection, payload-size rejection, repository-failure isolation, and optional Postgres integration tests gated by `FORGE_POSTGRES_TEST_DSN`.
+
+Validation criteria: disabled mode does not write repository rows; enabled mode requires explicit Postgres DSN; persisted rows are non-authoritative summaries only; raw prompts/completions/message bodies/source chunks/raw queries/vectors/embeddings/tool payloads/memory content/secrets are rejected or omitted; SQLite remains default.
+
 ## Phase 13E - Retrieval Metadata Postgres Adapter
 
-Scope: `LIVE_INFRA / STORAGE_FOUNDATION / DEFAULT_SQLITE`.
+Scope: `LIVE_INFRA / DIAGNOSTIC_STORAGE / DEFAULT_SQLITE / DISABLED_BY_DEFAULT`.
 
-Status: not started.
+Status: implemented and tested as part of Phase 13D-E.
 
-Goal: add a Postgres adapter for retrieval metadata after parity tests exist.
+Goal: add a relational-safe retrieval metadata adapter after parity tests exist.
 
-What not to do: change live retrieval behavior or make retrieval scores admissible evidence.
+Implemented deliverables: retrieval metadata relational DTO, deterministic canonical serialization, safe mapping for run/result/source refs, counts, classes, score summaries, strategy, index type, freshness, and duration.
+
+What not to do: change live retrieval behavior, execute retrieval/search/embedding calls, persist source/chunk text, persist raw queries, persist vectors/embeddings, wire Qdrant, implement live RAG, or make retrieval scores admissible evidence.
 
 ## Phase 13F - Qdrant Vector Adapter Design
 

@@ -92,6 +92,43 @@ func TestForgeKShadowRetrievalMetadataNewServerWiresConfigFlag(t *testing.T) {
 	}
 }
 
+func TestForgeKShadowDiagnosticPersistenceInvalidConfigDoesNotDisableMemorySink(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	srv := NewServer(st, config.Config{
+		DataDir:                                     dataDir,
+		WorkspaceDir:                                workspaceDir,
+		ForgeKShadowModeEnabled:                     true,
+		ForgeKShadowRetrievalMetadataEnabled:        true,
+		ShadowDiagnosticPersistenceEnabled:          true,
+		ShadowDiagnosticRetentionDays:               30,
+		ShadowDiagnosticMaxPayloadBytes:             4096,
+		EnableOpenAICompatAPI:                       false,
+		ModelRuntimeAllowOllamaCloudModels:          false,
+		ModelPolicyRequireExplicitLoad:              true,
+		ModelPolicyRequireWorkspaceScope:            true,
+		ModelRuntimeDegradedOnUnavailableGPU:        true,
+		SchedulingInteractivePriorityOverBackground: true,
+	})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+	if srv.shadowDB != nil {
+		t.Fatalf("invalid diagnostic persistence config must not open postgres")
+	}
+	seedRetrievalShadowContent(t, st, "phase13de memory fallback content")
+	rr := postRetrievalRunForShadow(t, srv, `{"query":"phase13de memory","mode":"keyword","limit":5,"selectForPacket":1}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("retrieval run status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if srv.forgeKShadow == nil || len(srv.forgeKShadow.Reports()) == 0 {
+		t.Fatalf("in-memory shadow sink should still work when diagnostic persistence cannot start")
+	}
+}
+
 func TestForgeKShadowRetrievalMetadataFlagMatrixAtRetrievalRoute(t *testing.T) {
 	cases := []struct {
 		name        string

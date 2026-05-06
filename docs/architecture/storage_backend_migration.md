@@ -1,12 +1,13 @@
 # Storage Backend Migration
 
-Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds the first Postgres schema foundation and parity tests for storage metadata plus disabled shadow diagnostic schema only. Neither phase migrates live data.
+Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds the first Postgres schema foundation and parity tests for storage metadata plus disabled shadow diagnostic schema only. Phase 13D-E adds an opt-in diagnostic persistence repository and retrieval metadata relational adapter scaffold. These phases do not migrate live data.
 
 ## Current Live State
 
 - Live storage remains SQLite at `${FORGE_DATA_DIR}/forge.sqlite`.
 - `services/core/internal/store.Open` is still the live entry point.
-- Existing memory, retrieval, jobs, approvals, audit-adjacent records, settings, and shadow diagnostics continue to use the existing SQLite-backed service paths.
+- Existing memory, retrieval, jobs, approvals, audit-adjacent records, and settings continue to use the existing SQLite-backed service paths.
+- Shadow diagnostics remain bounded in memory by default. Postgres diagnostic persistence exists only behind `FORGE_SHADOW_DIAGNOSTIC_PERSISTENCE_ENABLED=false` and requires explicit Postgres configuration.
 - Docker-managed Postgres, Redis, and Qdrant are infrastructure-ready but not live authority.
 
 ## Backend Selection
@@ -18,7 +19,7 @@ Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds t
 
 Unset `FORGE_STORE_BACKEND` means `sqlite`. Redis and Qdrant endpoint variables do not imply a backend switch.
 
-Phase 13B-C intentionally keeps the live runtime on SQLite. A later cutover phase must add explicit adapter tests, migration tests, rollback tests, and operator runbooks before Postgres can become live.
+Phase 13D-E intentionally keeps the live runtime on SQLite. A later cutover phase must add explicit adapter tests, migration tests, rollback tests, and operator runbooks before Postgres can become live.
 
 ## Phase 13B-C Foundation Schema
 
@@ -31,7 +32,21 @@ The first Postgres schema target is foundation-only:
 - `shadow_diagnostic_report_events`: disabled diagnostic event persistence shape.
 - `shadow_diagnostic_redactions`: disabled diagnostic redaction persistence shape.
 
-The shadow diagnostic tables are schema-only in Phase 13B-C. Live shadow reports remain bounded in-memory diagnostics and are not persisted into Postgres by default or through any live path.
+The shadow diagnostic tables were schema-only in Phase 13B-C. Phase 13D-E extends the schema with retention expiry, no-effect verification, and schema-version metadata used by the opt-in diagnostic repository.
+
+## Phase 13D-E Diagnostic Persistence
+
+Phase 13D-E adds `services/core/internal/forgekshadow` diagnostic persistence primitives:
+
+- `FORGE_SHADOW_DIAGNOSTIC_PERSISTENCE_ENABLED` defaults to `false`.
+- `FORGE_SHADOW_DIAGNOSTIC_RETENTION_DAYS` defaults to `30`.
+- `FORGE_SHADOW_DIAGNOSTIC_MAX_PAYLOAD_BYTES` defaults to `65536`.
+- Enabling persistence validates that a Postgres DSN is configured and does not switch `FORGE_STORE_BACKEND`.
+- The persistence sink is best-effort: the existing in-memory sink still stores reports, and repository failures do not fail live diagnostic handling.
+- Persisted rows contain only safe report identity, workspace/request/correlation refs, route/chat/retrieval/advisory summary counts and classes, warning summaries, retention expiry, no-effect verification, and schema version.
+- Persisted rows reject unsafe metadata and size overrun. They do not contain request or response bodies, prompts, completions, message bodies, source/chunk text, raw queries, snippets, embeddings, vectors, tool payloads, memory content, auth headers, cookies, tokens, or secrets.
+
+Phase 13D-E also adds a retrieval metadata relational adapter scaffold. It maps existing retrieval metadata observations into relational-safe DTOs and deterministic canonical JSON. It cannot execute retrieval, call embedding/search providers, compile context, admit evidence, write memory, call Qdrant, or implement live RAG.
 
 The Postgres runner executes migrations in deterministic version order, skips already-applied versions, records applied versions with checksums, and runs inside a transaction. A separate migration lock is not taken in Phase 13B-C; live Postgres migration execution is not part of the default daemon path yet. A future live migration phase must add explicit lock policy before concurrent operator execution is allowed.
 
@@ -57,7 +72,7 @@ Qdrant:
 2. Phase 13B: Postgres schema foundation for storage metadata and disabled shadow diagnostic schema.
 3. Phase 13C: SQLite/Postgres foundation parity tests for migration shape, ordering, idempotence, JSONB fields, and timestamps.
 4. Phase 13D: diagnostic store persistence after explicit approval.
-5. Phase 13E: retrieval metadata Postgres adapter.
+5. Phase 13E: retrieval metadata relational adapter scaffold.
 6. Phase 13F: Qdrant vector adapter design.
 7. Phase 13G: Qdrant shadow vector index, rebuildable and non-authoritative.
 8. Phase 13H: Redis queue/cache boundary with loss-safe behavior.
@@ -96,7 +111,7 @@ No read switch happens until:
 ## Table Migration Priority
 
 Group A:
-- Future shadow diagnostic report persistence, only if persistence is approved later.
+- Shadow diagnostic report persistence, opt-in and disabled by default.
 - Non-authoritative diagnostics only.
 
 Group B:
@@ -115,10 +130,10 @@ Group D:
 
 ## Forbidden Authority Changes
 
-- Do not make Postgres the default backend in Phase 13A or Phase 13B-C.
-- Do not dual-write live data in Phase 13A or Phase 13B-C.
-- Do not wire Redis into live queues or caches in Phase 13A or Phase 13B-C.
-- Do not wire Qdrant into live retrieval in Phase 13A or Phase 13B-C.
+- Do not make Postgres the default backend in Phase 13A through Phase 13D-E.
+- Do not dual-write live data in Phase 13A through Phase 13D-E.
+- Do not wire Redis into live queues or caches in Phase 13A through Phase 13D-E.
+- Do not wire Qdrant into live retrieval in Phase 13A through Phase 13D-E.
 - Do not make Redis or Qdrant canonical truth.
 - Do not make vector hits admissible evidence.
 - Do not change public APIs, routes, gateway behavior, modelruntime behavior, retrieval behavior, or memory semantics.

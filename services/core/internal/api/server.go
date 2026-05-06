@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"forge/projectforge/services/core/internal/adapters"
 	"forge/projectforge/services/core/internal/aios/dream"
@@ -110,6 +111,7 @@ type Server struct {
 	discordGateway  *DiscordGateway
 	discordErr      string
 	forgeKShadow    *forgekshadow.Observer
+	shadowDB        *sql.DB
 
 	// chatAssistInflight tracks assistant generation (async job or SSE) per thread/user-message key.
 	chatAssistInflight sync.Map
@@ -232,13 +234,33 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		go autonomyLoop.Run(ctx)
 	}
 	var shadowObserver *forgekshadow.Observer
+	var shadowDB *sql.DB
 	if cfg.ForgeKShadowModeEnabled {
-		shadowObserver = forgekshadow.NewObserver(forgekshadow.Config{
+		shadowConfig := forgekshadow.Config{
 			Enabled:                  true,
 			ChatMetadataEnabled:      cfg.ForgeKShadowChatMetadataEnabled,
 			RetrievalMetadataEnabled: cfg.ForgeKShadowRetrievalMetadataEnabled,
 			AdvisoryEnabled:          cfg.ForgeKShadowAdvisoryEnabled,
-		})
+		}
+		var shadowSink forgekshadow.Sink = forgekshadow.NewMemorySink(forgekshadow.DefaultMaxReports)
+		if cfg.ShadowDiagnosticPersistenceEnabled {
+			if err := cfg.ValidateShadowDiagnosticPersistence(); err != nil {
+				log.Printf("forge-k shadow diagnostic persistence disabled: %v", err)
+			} else if db, err := sql.Open("pgx", cfg.PostgresDSN); err != nil {
+				log.Printf("forge-k shadow diagnostic postgres open failed: %v", err)
+			} else if err := store.NewPostgresMigrationRunner(store.PostgresMigrations()).Run(context.Background(), db); err != nil {
+				_ = db.Close()
+				log.Printf("forge-k shadow diagnostic postgres migrations failed: %v", err)
+			} else {
+				shadowDB = db
+				shadowSink = forgekshadow.NewDiagnosticPersistenceSink(shadowSink, forgekshadow.NewPostgresDiagnosticRepository(db), forgekshadow.DiagnosticPersistenceOptions{
+					Enabled:         true,
+					RetentionDays:   cfg.ShadowDiagnosticRetentionDays,
+					MaxPayloadBytes: cfg.ShadowDiagnosticMaxPayloadBytes,
+				})
+			}
+		}
+		shadowObserver = forgekshadow.NewObserverWithSink(shadowConfig, shadowSink, nil)
 	}
 	srv := &Server{
 		st:             st,
@@ -284,6 +306,7 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		watchStop:      cancel,
 		autonomy:       autonomyLoop,
 		forgeKShadow:   shadowObserver,
+		shadowDB:       shadowDB,
 	}
 	srv.telegramGateway = srv.tryStartTelegramGateway(ctx, cfg)
 	srv.discordGateway = srv.tryStartDiscordGateway(ctx, cfg)
@@ -344,6 +367,9 @@ func (s *Server) ShutdownWatch() {
 		}
 		if s.watch != nil {
 			_ = s.watch.Close()
+		}
+		if s.shadowDB != nil {
+			_ = s.shadowDB.Close()
 		}
 	})
 }

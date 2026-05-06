@@ -21,6 +21,18 @@ This is foundation parity, not data parity. The live SQLite schema does not writ
 
 Default tests do not require Docker or Postgres. The optional integration test runs only when `FORGE_POSTGRES_TEST_DSN` is set.
 
+## Phase 13D-E Status
+
+Phase 13D-E adds diagnostic persistence and retrieval metadata relational adapter tests without changing the live default backend:
+
+- config tests prove `FORGE_SHADOW_DIAGNOSTIC_PERSISTENCE_ENABLED` defaults disabled and requires Postgres configuration when enabled,
+- persistence tests prove disabled mode writes no repository rows while keeping in-memory diagnostics,
+- persistence tests prove safe row construction, retention expiry, schema version, unsafe metadata rejection, payload-size rejection, and repository failure isolation,
+- optional Postgres tests migrate the schema, insert/get/list diagnostic reports, and query retention expiry only when `FORGE_POSTGRES_TEST_DSN` is set,
+- retrieval relational tests prove safe ref/count/class mapping, deterministic serialization, raw query/source/chunk/vector/embedding/memory-content rejection, and no retrieval execution.
+
+This remains diagnostic storage parity only. It does not switch reads, dual-write canonical records, migrate memory/retrieval tables, wire Qdrant, wire Redis, or add public diagnostics APIs.
+
 ## Required Parity Test Areas
 
 Schema parity:
@@ -58,6 +70,15 @@ Phase 13B-C migration parity:
 - applied versions are recorded,
 - SQL registry entries match `services/core/migrations/postgres/*.sql`,
 - optional Postgres integration validates real table creation and idempotent rerun when `FORGE_POSTGRES_TEST_DSN` is provided.
+
+Phase 13D-E diagnostic repository parity:
+- diagnostic persistence config defaults disabled,
+- enabled diagnostic persistence requires explicit Postgres configuration,
+- disabled mode does not write repository rows,
+- safe diagnostic rows contain only summaries, refs, counts, classes, warnings, retention metadata, and no-effect verification,
+- unsafe or oversized payloads are rejected before persistence,
+- repository failure is isolated from the in-memory diagnostic sink,
+- optional Postgres integration is gated by `FORGE_POSTGRES_TEST_DSN`.
 
 Dual-write parity:
 - SQLite/Postgres write comparison.

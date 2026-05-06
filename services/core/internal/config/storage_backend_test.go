@@ -64,3 +64,60 @@ func TestStorageBackendConfigRejectsInvalidBackend(t *testing.T) {
 		t.Fatalf("expected ErrInvalidBackend, got %v", err)
 	}
 }
+
+func TestShadowDiagnosticPersistenceDefaultsDisabled(t *testing.T) {
+	t.Setenv("FORGE_SHADOW_DIAGNOSTIC_PERSISTENCE_ENABLED", "")
+	t.Setenv("FORGE_SHADOW_DIAGNOSTIC_RETENTION_DAYS", "")
+	t.Setenv("FORGE_SHADOW_DIAGNOSTIC_MAX_PAYLOAD_BYTES", "")
+
+	cfg := Load()
+	if cfg.ShadowDiagnosticPersistenceEnabled {
+		t.Fatalf("expected shadow diagnostic persistence disabled by default")
+	}
+	if cfg.ShadowDiagnosticRetentionDays <= 0 {
+		t.Fatalf("expected positive default retention days")
+	}
+	if cfg.ShadowDiagnosticMaxPayloadBytes <= 0 {
+		t.Fatalf("expected positive default max payload bytes")
+	}
+	if err := cfg.ValidateShadowDiagnosticPersistence(); err != nil {
+		t.Fatalf("disabled persistence should validate without postgres config: %v", err)
+	}
+}
+
+func TestShadowDiagnosticPersistenceRequiresPostgresConfigWhenEnabled(t *testing.T) {
+	cfg := Config{
+		StoreBackend:                       "sqlite",
+		ShadowDiagnosticPersistenceEnabled: true,
+		ShadowDiagnosticRetentionDays:      30,
+		ShadowDiagnosticMaxPayloadBytes:    1024,
+	}
+	if err := cfg.ValidateShadowDiagnosticPersistence(); err == nil {
+		t.Fatalf("expected enabled persistence without postgres DSN to fail closed")
+	}
+
+	cfg.PostgresDSN = "postgres://forge:forge@localhost:5432/forge?sslmode=disable"
+	if err := cfg.ValidateShadowDiagnosticPersistence(); err != nil {
+		t.Fatalf("expected explicit postgres DSN to allow diagnostic persistence: %v", err)
+	}
+	if cfg.StoreBackend != "sqlite" {
+		t.Fatalf("enabling diagnostic persistence must not switch main backend, got %q", cfg.StoreBackend)
+	}
+}
+
+func TestShadowDiagnosticPersistenceInvalidConfigFailsSafe(t *testing.T) {
+	cfg := Config{
+		PostgresDSN:                        "postgres://forge:forge@localhost:5432/forge?sslmode=disable",
+		ShadowDiagnosticPersistenceEnabled: true,
+		ShadowDiagnosticRetentionDays:      0,
+		ShadowDiagnosticMaxPayloadBytes:    1024,
+	}
+	if err := cfg.ValidateShadowDiagnosticPersistence(); err == nil {
+		t.Fatalf("expected invalid retention to fail safe")
+	}
+	cfg.ShadowDiagnosticRetentionDays = 30
+	cfg.ShadowDiagnosticMaxPayloadBytes = 0
+	if err := cfg.ValidateShadowDiagnosticPersistence(); err == nil {
+		t.Fatalf("expected invalid payload limit to fail safe")
+	}
+}

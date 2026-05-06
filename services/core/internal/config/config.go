@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -79,7 +80,15 @@ type Config struct {
 	ForgeKShadowChatMetadataEnabled             bool
 	ForgeKShadowRetrievalMetadataEnabled        bool
 	ForgeKShadowAdvisoryEnabled                 bool
+	ShadowDiagnosticPersistenceEnabled          bool
+	ShadowDiagnosticRetentionDays               int
+	ShadowDiagnosticMaxPayloadBytes             int
 }
+
+var (
+	ErrShadowDiagnosticPostgresRequired = errors.New("shadow diagnostic persistence requires postgres configuration")
+	ErrShadowDiagnosticInvalidConfig    = errors.New("invalid shadow diagnostic persistence configuration")
+)
 
 func Load() Config {
 	dataDir := os.Getenv("FORGE_DATA_DIR")
@@ -189,6 +198,9 @@ func Load() Config {
 		ForgeKShadowChatMetadataEnabled:      envBool("FORGE_K_SHADOW_CHAT_METADATA_ENABLED", false),
 		ForgeKShadowRetrievalMetadataEnabled: envBool("FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED", false),
 		ForgeKShadowAdvisoryEnabled:          envBool("FORGE_K_SHADOW_ADVISORY_ENABLED", false),
+		ShadowDiagnosticPersistenceEnabled:   envBool("FORGE_SHADOW_DIAGNOSTIC_PERSISTENCE_ENABLED", false),
+		ShadowDiagnosticRetentionDays:        envInt("FORGE_SHADOW_DIAGNOSTIC_RETENTION_DAYS", 30, 1),
+		ShadowDiagnosticMaxPayloadBytes:      envInt("FORGE_SHADOW_DIAGNOSTIC_MAX_PAYLOAD_BYTES", 65536, 1024),
 	}
 }
 
@@ -199,6 +211,19 @@ func (c Config) StorageBackendConfig() (storagebackend.Config, error) {
 		RedisAddr:   c.RedisAddr,
 		QdrantURL:   c.QdrantURL,
 	})
+}
+
+func (c Config) ValidateShadowDiagnosticPersistence() error {
+	if !c.ShadowDiagnosticPersistenceEnabled {
+		return nil
+	}
+	if strings.TrimSpace(c.PostgresDSN) == "" {
+		return ErrShadowDiagnosticPostgresRequired
+	}
+	if c.ShadowDiagnosticRetentionDays <= 0 || c.ShadowDiagnosticMaxPayloadBytes <= 0 {
+		return ErrShadowDiagnosticInvalidConfig
+	}
+	return nil
 }
 
 func envStringDefault(key, defaultValue string) string {

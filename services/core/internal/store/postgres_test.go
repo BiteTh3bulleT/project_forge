@@ -33,16 +33,16 @@ func TestNewPostgresConnectorValidatesDSN(t *testing.T) {
 
 func TestPostgresMigrationRegistryHasFoundationSchemaOnly(t *testing.T) {
 	migrations := PostgresMigrations()
-	if got, want := len(migrations), 3; got != want {
+	if got, want := len(migrations), 4; got != want {
 		t.Fatalf("expected %d foundation migrations, got %d", want, got)
 	}
-	names := []string{migrations[0].Name, migrations[1].Name, migrations[2].Name}
-	wantNames := []string{"create_schema_migration_table", "storage_metadata_foundation", "shadow_diagnostics_schema"}
+	names := []string{migrations[0].Name, migrations[1].Name, migrations[2].Name, migrations[3].Name}
+	wantNames := []string{"create_schema_migration_table", "storage_metadata_foundation", "shadow_diagnostics_schema", "shadow_diagnostic_persistence_metadata"}
 	if !reflect.DeepEqual(names, wantNames) {
 		t.Fatalf("unexpected migration names: got %v want %v", names, wantNames)
 	}
 
-	combined := strings.ToLower(migrations[0].SQL + migrations[1].SQL + migrations[2].SQL)
+	combined := strings.ToLower(migrations[0].SQL + migrations[1].SQL + migrations[2].SQL + migrations[3].SQL)
 	required := []string{
 		"forge_schema_migrations",
 		"storage_backend_metadata",
@@ -50,6 +50,9 @@ func TestPostgresMigrationRegistryHasFoundationSchemaOnly(t *testing.T) {
 		"shadow_diagnostic_reports",
 		"shadow_diagnostic_report_events",
 		"shadow_diagnostic_redactions",
+		"expires_at",
+		"no_effect_verified",
+		"schema_version",
 		"jsonb",
 		"timestamptz",
 		"create index if not exists",
@@ -72,6 +75,7 @@ func TestPostgresMigrationRegistryMatchesSQLFiles(t *testing.T) {
 		1: "0001_create_schema_migration_table.sql",
 		2: "0002_storage_metadata_foundation.sql",
 		3: "0003_shadow_diagnostics_schema.sql",
+		4: "0004_shadow_diagnostic_persistence_metadata.sql",
 	}
 	for _, migration := range PostgresMigrations() {
 		name, ok := files[migration.Version]

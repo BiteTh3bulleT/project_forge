@@ -37,14 +37,24 @@ Phase 13B-C adds the first Postgres schema foundation and parity tests:
 
 Phase 13B-C does not persist live shadow diagnostics, migrate live memory or retrieval tables, dual-write data, switch reads, make Postgres the default, or wire Redis/Qdrant into live behavior.
 
+Phase 13D-E adds the first safe diagnostic persistence primitives:
+
+- `FORGE_SHADOW_DIAGNOSTIC_PERSISTENCE_ENABLED=false` by default.
+- Postgres diagnostic repository for safe shadow diagnostic summaries only.
+- retention expiry, no-effect verification, and schema-version metadata on `shadow_diagnostic_reports`.
+- retrieval metadata relational adapter scaffold for refs/counts/classes/summaries only.
+- optional Postgres integration tests gated by `FORGE_POSTGRES_TEST_DSN`.
+
+Phase 13D-E does not switch the live store, dual-write canonical records, migrate memory or retrieval tables, persist raw diagnostic content, create a public diagnostics API, execute retrieval/search/embeddings, wire Qdrant, or wire Redis.
+
 ## Backend migration stages
 
-Group A: non-authoritative diagnostics, only if persistence is approved later.
+Group A: non-authoritative diagnostics.
 
 - shadow diagnostic reports
 - route/chat/retrieval/advisory diagnostic summaries
 
-Phase 13B-C defines the Postgres table shape for Group A diagnostics but does not connect live diagnostic sinks to it.
+Phase 13B-C defines the Postgres table shape for Group A diagnostics. Phase 13D-E adds the opt-in repository and persistence sink wrapper. The flag remains disabled by default, rows are non-authoritative diagnostics, and canonical memory remains SQLite-backed.
 
 Group B: operational relational records after parity exists.
 
