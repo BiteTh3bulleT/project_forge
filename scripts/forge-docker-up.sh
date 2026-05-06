@@ -43,6 +43,43 @@ if [[ ${#services[@]} -eq 0 ]]; then
   services=(postgres redis qdrant core desktop-web)
 fi
 
+has_service() {
+  local wanted="$1"
+  local service
+  for service in "${services[@]}"; do
+    if [[ "$service" == "$wanted" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+open_url_best_effort() {
+  local url="$1"
+  if [[ "${FORGE_DOCKER_OPEN:-1}" == "0" || "${FORGE_DOCKER_OPEN:-1}" == "false" ]]; then
+    echo "Auto-open disabled. Open $url manually."
+    return 0
+  fi
+
+  if command -v xdg-open >/dev/null 2>&1; then
+    nohup xdg-open "$url" >/dev/null 2>&1 &
+    echo "Opening Docker desktop web surface: $url"
+    return 0
+  fi
+  if command -v gio >/dev/null 2>&1; then
+    nohup gio open "$url" >/dev/null 2>&1 &
+    echo "Opening Docker desktop web surface: $url"
+    return 0
+  fi
+  if command -v open >/dev/null 2>&1; then
+    open "$url" >/dev/null 2>&1 &
+    echo "Opening Docker desktop web surface: $url"
+    return 0
+  fi
+
+  echo "Docker desktop web surface is available at $url"
+}
+
 echo "Starting FORGE Docker stack without deleting volumes..."
 echo "Env file: $([[ -f "$ENV_FILE" ]] && echo "$ENV_FILE" || echo "(none)")"
 echo "Services: ${services[*]}"
@@ -54,4 +91,8 @@ echo
 docker compose "${compose_args[@]}" "${args[@]}" ps
 echo
 echo "FORGE Docker stack started."
+if has_service desktop-web; then
+  desktop_port="${FORGE_DESKTOP_PORT:-1420}"
+  open_url_best_effort "http://127.0.0.1:${desktop_port}/#/dashboard"
+fi
 echo "Use './scripts/forge-docker-down.sh' or 'npm run docker:stop' to stop containers without deleting databases."

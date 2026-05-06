@@ -35,7 +35,13 @@ On hosts with `/dev/dri/renderD128`, `npm run docker:start` automatically layers
 npm run docker:start
 ```
 
-`npm run docker:start` runs `scripts/forge-docker-up.sh`, starts Postgres, Redis, Qdrant, core, and desktop-web, and preserves existing named volumes.
+`npm run docker:start` runs `scripts/forge-docker-up.sh`, starts Postgres, Redis, Qdrant, core, and desktop-web, preserves existing named volumes, and best-effort opens the browser-served desktop at `http://127.0.0.1:1420/#/dashboard`.
+
+To start the stack without opening a browser window:
+
+```bash
+FORGE_DOCKER_OPEN=0 npm run docker:start
+```
 
 If the native dev core or desktop is already using the default ports, choose alternate published ports:
 
@@ -52,7 +58,7 @@ Open:
 - Redis: `127.0.0.1:6379`
 - Qdrant HTTP: `http://127.0.0.1:6333`
 
-The Tauri desktop shell still runs through the native desktop workflow. The `desktop-web` container serves the same Vite app as a browser surface for containerized inspection.
+The Tauri desktop shell still runs through the native desktop workflow. Docker cannot launch the native Tauri window by itself because that shell depends on the host display session, window manager, WebKit/Tauri runtime integration, and local desktop permissions. The `desktop-web` container serves the same Vite app as a browser surface for containerized inspection.
 
 ## Native Desktop Shell With Docker Backend
 
