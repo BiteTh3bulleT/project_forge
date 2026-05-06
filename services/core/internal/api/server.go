@@ -470,6 +470,7 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	dreamModeRequireOperatorReviewForLongTerm := parseRemoteBool(loadSetting(s.st.DB, "dream_mode_require_operator_review_for_long_term", "true"))
 	dreamModeAllowCommits := parseRemoteBool(loadSetting(s.st.DB, "dream_mode_allow_commits", "false"))
 	runtimeControls := runtimeControlsFromSettings(s.st.DB, s.cfg)
+	shadowMode := shadowModeFromSettings(s.st.DB, s.cfg)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"extensionsCsv":                 ext,
 		"theme":                         theme,
@@ -521,6 +522,7 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 			"allowCommits":                     dreamModeAllowCommits,
 		},
 		"runtimeControls": runtimeControls,
+		"shadowMode":      shadowMode,
 	})
 }
 
@@ -845,6 +847,10 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+	}
+	if err := s.patchShadowMode(ctx, body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 	if discordConfigChanged {
 		s.reloadDiscordGateway(ctx)
@@ -1226,10 +1232,13 @@ type requestAuditMeta struct {
 }
 
 const (
-	runtimeGPUEnabledKey             = "runtime_gpu_enabled"
-	runtimeNVIDIADCGMEnabledKey      = "runtime_nvidia_dcgm_enabled"
-	runtimeIntelLevelZeroEnabledKey  = "runtime_intel_level_zero_enabled"
-	runtimeAllowOllamaCloudModelsKey = "modelruntime_allow_ollama_cloud_models"
+	runtimeGPUEnabledKey              = "runtime_gpu_enabled"
+	runtimeNVIDIADCGMEnabledKey       = "runtime_nvidia_dcgm_enabled"
+	runtimeIntelLevelZeroEnabledKey   = "runtime_intel_level_zero_enabled"
+	runtimeAllowOllamaCloudModelsKey  = "modelruntime_allow_ollama_cloud_models"
+	shadowModeEnabledKey              = "forge_k_shadow_mode_enabled"
+	shadowChatMetadataEnabledKey      = "forge_k_shadow_chat_metadata_enabled"
+	shadowRetrievalMetadataEnabledKey = "forge_k_shadow_retrieval_metadata_enabled"
 )
 
 func runtimeConfigFromSettings(db *sql.DB, cfg config.Config) config.Config {
@@ -1237,6 +1246,9 @@ func runtimeConfigFromSettings(db *sql.DB, cfg config.Config) config.Config {
 	cfg.NVIDIADCGMEnabled = parseRemoteBool(loadSetting(db, runtimeNVIDIADCGMEnabledKey, strconv.FormatBool(cfg.NVIDIADCGMEnabled)))
 	cfg.IntelLevelZeroEnabled = parseRemoteBool(loadSetting(db, runtimeIntelLevelZeroEnabledKey, strconv.FormatBool(cfg.IntelLevelZeroEnabled)))
 	cfg.ModelRuntimeAllowOllamaCloudModels = parseRemoteBool(loadSetting(db, runtimeAllowOllamaCloudModelsKey, strconv.FormatBool(cfg.ModelRuntimeAllowOllamaCloudModels)))
+	cfg.ForgeKShadowModeEnabled = parseRemoteBool(loadSetting(db, shadowModeEnabledKey, strconv.FormatBool(cfg.ForgeKShadowModeEnabled)))
+	cfg.ForgeKShadowChatMetadataEnabled = parseRemoteBool(loadSetting(db, shadowChatMetadataEnabledKey, strconv.FormatBool(cfg.ForgeKShadowChatMetadataEnabled)))
+	cfg.ForgeKShadowRetrievalMetadataEnabled = parseRemoteBool(loadSetting(db, shadowRetrievalMetadataEnabledKey, strconv.FormatBool(cfg.ForgeKShadowRetrievalMetadataEnabled)))
 	return cfg
 }
 
@@ -1251,6 +1263,64 @@ func runtimeControlsFromSettings(db *sql.DB, cfg config.Config) map[string]any {
 		"effectiveGpuEnabled":     effective.GPUEnabled && !effective.SafeModeForceCPUOnly,
 		"cloudModelsDefaultState": map[bool]string{true: "enabled", false: "disabled"}[effective.ModelRuntimeAllowOllamaCloudModels],
 	}
+}
+
+func shadowModeFromSettings(db *sql.DB, cfg config.Config) map[string]any {
+	effective := runtimeConfigFromSettings(db, cfg)
+	return map[string]any{
+		"enabled":                  effective.ForgeKShadowModeEnabled,
+		"chatMetadataEnabled":      effective.ForgeKShadowChatMetadataEnabled,
+		"retrievalMetadataEnabled": effective.ForgeKShadowRetrievalMetadataEnabled,
+	}
+}
+
+func (s *Server) patchShadowMode(ctx context.Context, body map[string]any) error {
+	raw, ok := body["shadowMode"]
+	if !ok {
+		return nil
+	}
+	shadowMode, ok := raw.(map[string]any)
+	if !ok {
+		return fmt.Errorf("shadowMode must be an object")
+	}
+	changed := false
+	for _, item := range []struct {
+		bodyKey    string
+		settingKey string
+	}{
+		{bodyKey: "enabled", settingKey: shadowModeEnabledKey},
+		{bodyKey: "chatMetadataEnabled", settingKey: shadowChatMetadataEnabledKey},
+		{bodyKey: "retrievalMetadataEnabled", settingKey: shadowRetrievalMetadataEnabledKey},
+	} {
+		if v, exists := shadowMode[item.bodyKey]; exists {
+			if err := upsertSetting(ctx, s.st.DB, item.settingKey, parseRemoteBoolValue(v)); err != nil {
+				return err
+			}
+			changed = true
+		}
+	}
+	if changed {
+		s.reloadShadowMode(ctx)
+	}
+	return nil
+}
+
+func (s *Server) reloadShadowMode(ctx context.Context) {
+	s.cfg = runtimeConfigFromSettings(s.st.DB, s.cfg)
+	if s.cfg.ForgeKShadowModeEnabled {
+		s.forgeKShadow = forgekshadow.NewObserver(forgekshadow.Config{
+			Enabled:                  true,
+			ChatMetadataEnabled:      s.cfg.ForgeKShadowChatMetadataEnabled,
+			RetrievalMetadataEnabled: s.cfg.ForgeKShadowRetrievalMetadataEnabled,
+		})
+	} else {
+		s.forgeKShadow = nil
+	}
+	_ = s.log.Emit(ctx, "shadow.controls.reloaded", map[string]any{
+		"enabled":                  s.cfg.ForgeKShadowModeEnabled,
+		"chatMetadataEnabled":      s.cfg.ForgeKShadowChatMetadataEnabled,
+		"retrievalMetadataEnabled": s.cfg.ForgeKShadowRetrievalMetadataEnabled,
+	})
 }
 
 func (s *Server) patchRuntimeControls(ctx context.Context, body map[string]any) error {

@@ -12,8 +12,9 @@ boot or runtime. Observed 2026-04-21._
 | `FORGE_DATA_DIR` | [config.go:16](services/core/internal/config/config.go#L16) | `${XDG_CONFIG_HOME}/forge` (typically `~/.config/forge`); falls back to CWD if `UserConfigDir` errors | Location of `forge.sqlite`, `backups/`, `exports/` |
 | `FORGE_CORE_PORT` | [config.go:25](services/core/internal/config/config.go#L25) | `18492` | HTTP listen port |
 | `FORGE_WORKSPACE_DIR` | [config.go:30](services/core/internal/config/config.go#L30) | `/` | Workspace root for file-sensitive operations |
-| `FORGE_K_SHADOW_MODE_ENABLED` | [config.go:176](services/core/internal/config/config.go#L176) | `false` | Enables disabled-by-default FORGE-K shadow diagnostics. Phase 12B observes `/health` metadata, Phase 12E observes route-envelope metadata, and Phase 12H can observe chat metadata only when its separate chat flag is also enabled. No public API, route, response, memory, retrieval, gateway, controllane, or modelruntime behavior changes. |
-| `FORGE_K_SHADOW_CHAT_METADATA_ENABLED` | [config.go:177](services/core/internal/config/config.go#L177) | `false` | Enables Phase 12H chat metadata diagnostics only when `FORGE_K_SHADOW_MODE_ENABLED=true`. Captures bounded metadata only, never chat content, prompts, completions, request/response bodies, tool payloads, retrieval content, memory content, auth headers, cookies, or secrets. |
+| `FORGE_K_SHADOW_MODE_ENABLED` | [config.go](services/core/internal/config/config.go) | `false` | Enables disabled-by-default FORGE-K shadow diagnostics. Can also be toggled at runtime by the dashboard through the durable `forge_k_shadow_mode_enabled` setting. |
+| `FORGE_K_SHADOW_CHAT_METADATA_ENABLED` | [config.go](services/core/internal/config/config.go) | `false` | Enables Phase 12H chat metadata diagnostics only when `FORGE_K_SHADOW_MODE_ENABLED=true`. Captures bounded metadata only, never chat content, prompts, completions, request/response bodies, tool payloads, retrieval content, memory content, auth headers, cookies, or secrets. |
+| `FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED` | [config.go](services/core/internal/config/config.go) | `false` | Enables Phase 12K-L retrieval metadata diagnostics only when `FORGE_K_SHADOW_MODE_ENABLED=true`. Captures bounded refs/counts/classes/summaries only. |
 | `FORGE_TELEGRAM_GATEWAY_ENABLED` | telegram wire | `true` | Gateway feature flag; token absence still disables |
 | `FORGE_TELEGRAM_BOT_TOKEN` | telegram wire | unset (= disabled) | Enables Telegram gateway |
 | `FORGE_TELEGRAM_API_BASE`, `FORGE_TELEGRAM_POLL_TIMEOUT_S`, `FORGE_TELEGRAM_ALLOWED_CHATS` | telegram wire | standard telegram defaults | Optional tuning |
@@ -117,6 +118,9 @@ Full list in [server.go handleGetSettings / handleUpdateSettings](services/core/
 | `dream_mode_allow_long_term_promotion` | `false` | Allows long-term promotion proposals in dry-run reports |
 | `dream_mode_require_operator_review_for_long_term` | `true` | Keeps long-term proposals review-routed unless explicitly relaxed |
 | `dream_mode_allow_commits` | `false` | Reserved; Dream Mode v0 ignores commit requests and remains dry-run only |
+| `forge_k_shadow_mode_enabled` | env/default `false` | Runtime dashboard toggle for global FORGE-K shadow diagnostics; updates the running observer without restarting |
+| `forge_k_shadow_chat_metadata_enabled` | env/default `false` | Durable override for chat metadata diagnostics; still requires global shadow mode |
+| `forge_k_shadow_retrieval_metadata_enabled` | env/default `false` | Durable override for retrieval metadata diagnostics; still requires global shadow mode |
 | `extensions_csv` | (ingest defaults) | File types the watch/ingest pipeline considers |
 | `theme` | `dark` | Desktop theme |
 | `ollama_base_url` | `http://127.0.0.1:11434` | Local LLM endpoint |

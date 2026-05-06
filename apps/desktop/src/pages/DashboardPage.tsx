@@ -39,6 +39,8 @@ export function DashboardPage() {
   const [capabilities, setCapabilities] = useState<CapabilityRecord[]>([]);
   const [invocations, setInvocations] = useState<InvocationRecord[]>([]);
   const [observations, setObservations] = useState<MemoryObservation[]>([]);
+  const [shadowModeEnabled, setShadowModeEnabled] = useState(false);
+  const [shadowModeSaving, setShadowModeSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(Date.now());
@@ -46,7 +48,7 @@ export function DashboardPage() {
   async function load() {
     setLoading(true);
     try {
-      const [dash, coreHealth, gatewayCaps, gatewayInvs, memoryObs] =
+      const [dash, coreHealth, gatewayCaps, gatewayInvs, memoryObs, settings] =
         await Promise.all([
           api.dashboard.summary(),
           api.health().catch(() => null),
@@ -59,6 +61,7 @@ export function DashboardPage() {
           api.memory
             .listObservations({ limit: 48 })
             .catch(() => ({ observations: [] as MemoryObservation[] })),
+          api.settings.get().catch(() => null),
         ]);
       const runtimeAvailable = coreHealth?.modelRuntime?.available === true;
       const [healthRes, queueRes, usageRes] = runtimeAvailable
@@ -105,6 +108,7 @@ export function DashboardPage() {
       setObservations(
         Array.isArray(memoryObs.observations) ? memoryObs.observations : [],
       );
+      setShadowModeEnabled(Boolean(settings?.shadowMode?.enabled));
       setLastUpdatedAt(Date.now());
       setErr(null);
     } catch (e) {
@@ -119,6 +123,25 @@ export function DashboardPage() {
     const id = window.setInterval(() => void load(), 5000);
     return () => window.clearInterval(id);
   }, []);
+
+  async function toggleShadowMode() {
+    const next = !shadowModeEnabled;
+    setShadowModeSaving(true);
+    try {
+      const updated = await api.settings.patch({
+        shadowMode: { enabled: next },
+      });
+      setShadowModeEnabled(Boolean(updated.shadowMode?.enabled));
+      setStatus(
+        `Shadow mode ${updated.shadowMode?.enabled ? "enabled" : "disabled"}.`,
+      );
+      setErr(null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setShadowModeSaving(false);
+    }
+  }
 
   const activeJobs = Array.isArray(summary?.activeJobs)
     ? summary.activeJobs
@@ -239,6 +262,51 @@ export function DashboardPage() {
             >
               {attentionCount > 0 ? `${attentionCount} attention` : "Clear"}
             </span>
+            <button
+              type="button"
+              aria-pressed={shadowModeEnabled}
+              aria-label={
+                shadowModeEnabled ? "Disable shadow mode" : "Enable shadow mode"
+              }
+              className={[
+                "flex w-full items-center justify-between gap-3 rounded border px-3 py-2 text-left text-xs font-semibold transition sm:w-auto sm:min-w-[11.5rem]",
+                shadowModeEnabled
+                  ? "border-forge-mint/35 bg-forge-mint/10 text-forge-ash"
+                  : "border-forge-platinum/10 bg-black/25 text-forge-mist/75 hover:border-forge-ember/35 hover:text-forge-ash",
+              ].join(" ")}
+              onClick={() => void toggleShadowMode()}
+              disabled={shadowModeSaving}
+            >
+              <span className="min-w-0">
+                <span className="block text-[10px] uppercase tracking-wide text-forge-mist/60">
+                  Shadow mode
+                </span>
+                <span className="block">
+                  {shadowModeSaving
+                    ? "Updating"
+                    : shadowModeEnabled
+                      ? "On"
+                      : "Off"}
+                </span>
+              </span>
+              <span
+                className={[
+                  "relative h-5 w-9 shrink-0 rounded-full border transition",
+                  shadowModeEnabled
+                    ? "border-forge-mint/50 bg-forge-mint/30"
+                    : "border-forge-platinum/15 bg-black/40",
+                ].join(" ")}
+              >
+                <span
+                  className={[
+                    "absolute top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full transition",
+                    shadowModeEnabled
+                      ? "left-[1.15rem] bg-forge-mint"
+                      : "left-1 bg-forge-mist/70",
+                  ].join(" ")}
+                />
+              </span>
+            </button>
             <GhostButton
               className="w-full sm:w-auto"
               onClick={() => void load()}

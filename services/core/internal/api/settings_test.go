@@ -98,3 +98,55 @@ func TestPatchSettingsPersistsRuntimeControls(t *testing.T) {
 		t.Fatalf("runtime controls were not applied to server config: %#v", srv.cfg)
 	}
 }
+
+func TestPatchSettingsPersistsAndAppliesShadowMode(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+	if srv.forgeKShadow != nil {
+		t.Fatalf("shadow observer should be disabled by default")
+	}
+
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/settings", bytes.NewReader([]byte(`{"shadowMode":{"enabled":true}}`)))
+	patchRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(patchRR, patchReq)
+	if patchRR.Code != http.StatusOK {
+		t.Fatalf("patch shadow settings status=%d body=%s", patchRR.Code, patchRR.Body.String())
+	}
+	if !srv.cfg.ForgeKShadowModeEnabled || srv.forgeKShadow == nil || !srv.forgeKShadow.Enabled() {
+		t.Fatalf("shadow mode was not applied to running server: cfg=%#v observer=%#v", srv.cfg, srv.forgeKShadow)
+	}
+
+	var enabledPayload struct {
+		ShadowMode map[string]any `json:"shadowMode"`
+	}
+	if err := json.NewDecoder(patchRR.Body).Decode(&enabledPayload); err != nil {
+		t.Fatalf("decode enabled settings: %v", err)
+	}
+	if enabledPayload.ShadowMode["enabled"] != true {
+		t.Fatalf("expected enabled shadow setting, got %#v", enabledPayload.ShadowMode)
+	}
+
+	restarted := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { restarted.ShutdownWatch() })
+	if !restarted.cfg.ForgeKShadowModeEnabled || restarted.forgeKShadow == nil || !restarted.forgeKShadow.Enabled() {
+		t.Fatalf("persisted shadow mode was not applied at server startup")
+	}
+
+	disableReq := httptest.NewRequest(http.MethodPatch, "/api/settings", bytes.NewReader([]byte(`{"shadowMode":{"enabled":false}}`)))
+	disableRR := httptest.NewRecorder()
+	restarted.Handler().ServeHTTP(disableRR, disableReq)
+	if disableRR.Code != http.StatusOK {
+		t.Fatalf("disable shadow settings status=%d body=%s", disableRR.Code, disableRR.Body.String())
+	}
+	if restarted.cfg.ForgeKShadowModeEnabled || restarted.forgeKShadow != nil {
+		t.Fatalf("shadow mode was not disabled on running server: cfg=%#v observer=%#v", restarted.cfg, restarted.forgeKShadow)
+	}
+}

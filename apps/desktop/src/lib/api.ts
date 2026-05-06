@@ -590,6 +590,11 @@ export type SettingsRecord = {
     effectiveGpuEnabled?: boolean;
     cloudModelsDefaultState?: string;
   };
+  shadowMode?: {
+    enabled: boolean;
+    chatMetadataEnabled?: boolean;
+    retrievalMetadataEnabled?: boolean;
+  };
 };
 
 export type TelegramStatusResponse = {
