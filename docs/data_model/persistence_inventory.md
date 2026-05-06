@@ -7,6 +7,16 @@
 - Migration pattern: single schema string executed via `internal/store/migrate.go` (`CREATE TABLE IF NOT EXISTS ...` + indexes/triggers).
 - Connection mode: WAL with foreign keys enabled, single open connection (`SetMaxOpenConns(1)`).
 
+## Managed service direction
+
+The Docker stack includes Postgres, Redis, and Qdrant as infrastructure for the next storage phase.
+
+- Postgres is the intended durable relational backend after adapter and migration work.
+- Redis is intended for ephemeral cache/queue/stream/lock workloads only.
+- Qdrant is intended for vector retrieval acceleration only.
+
+As of this inventory, the application still uses SQLite for live persistence. The managed services do not replace SQLite until explicit storage adapters, migrations, dual-write or migration tooling, backup/restore policy, and tests exist.
+
 ## Current entity/table pattern
 
 - Service-level SQL repositories in `services/core/internal/*` (`jobs`, `approvals`, `audit`, `gateway`, `artifacts`, `memory`, `retrieval`, `policy`, etc.).

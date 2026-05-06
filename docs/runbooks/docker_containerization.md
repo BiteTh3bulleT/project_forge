@@ -1,6 +1,6 @@
 # Docker Containerization
 
-FORGE can run in Docker with the Go core service, a persisted SQLite data volume, and an optional web-served desktop build.
+FORGE can run in Docker with the Go core service, managed data services, a persisted SQLite data volume, and an optional web-served desktop build.
 
 ## Current Data Model
 
@@ -10,7 +10,15 @@ The current primary database is SQLite:
 - container path: `/data/forge.sqlite`
 - Docker volume: `forge-data`
 
-The current retrieval, memory, VSA, settings, audit-adjacent records, jobs, approvals, and embeddings metadata are stored through the core SQLite path. There is no active Postgres, Redis, Qdrant, Chroma, Milvus, or Weaviate dependency in the current repository runtime.
+The current retrieval, memory, VSA, settings, audit-adjacent records, jobs, approvals, and embeddings metadata are stored through the core SQLite path.
+
+Postgres, Redis, and Qdrant are included as managed containers for the next storage phase:
+
+- Postgres: future durable relational store for canonical memory, jobs, approvals, audit-adjacent records, and settings.
+- Redis: future ephemeral cache, queue, job progress stream, locks, and pub/sub surface. Redis must not become truth.
+- Qdrant: future vector index for embedding retrieval acceleration. Qdrant vectors must not become truth or admissibility.
+
+In this containerization pass, the Go core still reads and writes SQLite. The new service containers are up and health-checked, but not yet used by the live memory code.
 
 Optional providers such as Ollama and Hugging Face TEI can be started as sidecars, but they do not replace FORGE authority paths.
 
@@ -30,8 +38,39 @@ Open:
 
 - Core: `http://127.0.0.1:18492`
 - Web UI build: `http://127.0.0.1:1420`
+- Postgres: `127.0.0.1:5432`
+- Redis: `127.0.0.1:6379`
+- Qdrant HTTP: `http://127.0.0.1:6333`
 
 The Tauri desktop shell still runs through the native desktop workflow. The `desktop-web` container serves the same Vite app as a browser surface for containerized inspection.
+
+## Managed Data Services
+
+The default Compose stack starts:
+
+- `postgres`
+- `redis`
+- `qdrant`
+- `core`
+- `desktop-web`
+
+Useful probes:
+
+```bash
+docker compose exec postgres pg_isready -U forge -d forge
+docker compose exec redis redis-cli ping
+curl -fsS http://127.0.0.1:6333/readyz
+```
+
+If default ports are busy, override the published ports:
+
+```bash
+FORGE_POSTGRES_PORT=15432 \
+FORGE_REDIS_PORT=16379 \
+FORGE_QDRANT_HTTP_PORT=16333 \
+FORGE_QDRANT_GRPC_PORT=16334 \
+docker compose up -d postgres redis qdrant
+```
 
 ## Start Optional Ollama Sidecar
 
@@ -78,7 +117,7 @@ To reset local container state:
 docker compose down -v
 ```
 
-This deletes the named volumes, including `/data/forge.sqlite`.
+This deletes the named volumes, including `/data/forge.sqlite`, Postgres data, Redis data, Qdrant indexes, model artifacts, and the workspace volume.
 
 ## Validation
 
@@ -89,6 +128,9 @@ docker compose config
 docker compose build core
 docker compose up -d core
 docker compose exec core wget -qO- http://127.0.0.1:18492/health
+docker compose exec postgres pg_isready -U forge -d forge
+docker compose exec redis redis-cli ping
+curl -fsS http://127.0.0.1:6333/readyz
 ```
 
 The root repository validation remains:
@@ -103,6 +145,9 @@ npm test
 
 - Docker does not change live FORGE-K authority.
 - SQLite remains the current database.
+- Postgres is infrastructure-ready, not yet the live application store.
+- Redis is infrastructure-ready and must remain cache/queue/stream metadata, not truth.
+- Qdrant is infrastructure-ready and must remain vector retrieval acceleration, not truth.
 - Optional provider containers do not execute unless their profiles are selected.
 - Optional model/embedding providers do not create truth.
 - No public API or route behavior is changed by containerization.

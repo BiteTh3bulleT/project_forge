@@ -9,6 +9,17 @@ Provide inspectable retrieval behavior for packet and job preparation using:
 - hybrid fusion (weighted)
 - optional VSA additive scoring (shadow/active)
 
+## Vector Store Direction
+
+The current live retrieval path stores embedding metadata and vectors in SQLite-backed `embedding_records`, with deterministic local hash embeddings available as the default provider.
+
+The Docker stack now includes Qdrant as a managed vector-store service for the next storage phase. Qdrant is not yet wired into the live retrieval service. When it is wired, it must remain retrieval acceleration only:
+
+- vectors are not truth
+- vector hits are not admitted evidence
+- Qdrant scores cannot bypass Courthouse, memory usefulness evidence, policy, or Kernel authority
+- SQLite/Postgres records remain the provenance and inspectability source of record
+
 ## Embedding Pipeline
 
 Module: `services/core/internal/embeddings`

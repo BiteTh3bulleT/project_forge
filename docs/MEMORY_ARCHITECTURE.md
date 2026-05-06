@@ -2,6 +2,18 @@
 
 FORGE memory is observation-based. It does not use a single merged memory blob.
 
+## Storage Backend Direction
+
+Current live storage remains SQLite through `${FORGE_DATA_DIR}/forge.sqlite`.
+
+The Docker stack now includes Postgres, Redis, and Qdrant as managed infrastructure for the next storage phase:
+
+- Postgres is the intended durable relational backend for canonical memory, jobs, approvals, settings, audit-adjacent records, and retrieval metadata after explicit migration work.
+- Redis is intended for ephemeral coordination: caches, queues, locks, pub/sub, and job progress streams. Redis must not become canonical truth.
+- Qdrant is intended for vector retrieval acceleration. Qdrant vectors and scores must remain retrieval signals, not admissibility or truth.
+
+Until storage adapters and migration tests are implemented, the live memory system still reads and writes SQLite.
+
 ## Memory Layers
 
 1. `Cold memory`
