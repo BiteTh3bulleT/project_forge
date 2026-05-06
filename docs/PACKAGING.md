@@ -17,6 +17,24 @@ cd services/core
 go build -trimpath -ldflags "-s -w" -o ../../dist/forge-core .
 ```
 
+## Docker
+
+From the repository root:
+
+```bash
+npm run docker:config
+npm run docker:build
+npm run docker:up
+```
+
+The Compose stack builds:
+
+- `core`: Go daemon with `/data/forge.sqlite` stored in the `forge-data` volume.
+- `desktop-web`: browser-served Vite build of the desktop UI.
+- optional `ollama` and `tei` sidecars behind Compose profiles.
+
+See `docs/runbooks/docker_containerization.md`.
+
 ## Configuration
 
 - `FORGE_DATA_DIR` — SQLite and local bundles (`forge.sqlite`, `backups/`, `exports/`).

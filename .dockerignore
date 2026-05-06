@@ -1,0 +1,14 @@
+.git
+.github
+.forge
+.claude
+.cursor
+node_modules
+apps/desktop/node_modules
+apps/desktop/dist
+apps/desktop/src-tauri/target
+crates/**/target
+services/core/forge-core
+**/*.log
+**/.DS_Store
+Phase*.txt

@@ -1,0 +1,78 @@
+name: forge
+
+services:
+  core:
+    build:
+      context: .
+      dockerfile: services/core/Dockerfile
+    image: forge/core:local
+    environment:
+      FORGE_CORE_PORT: "${FORGE_CORE_PORT:-18492}"
+      FORGE_DATA_DIR: "${FORGE_DATA_DIR:-/data}"
+      FORGE_MODEL_HOME: "${FORGE_MODEL_HOME:-/models}"
+      FORGE_WORKSPACE_DIR: "${FORGE_WORKSPACE_DIR:-/workspace}"
+      FORGE_ENABLE_MODEL_RUNTIME: "${FORGE_ENABLE_MODEL_RUNTIME:-false}"
+      FORGE_ENABLE_OPENAI_COMPAT_API: "${FORGE_ENABLE_OPENAI_COMPAT_API:-false}"
+      FORGE_MODEL_OPENAI_COMPAT_ENDPOINT: "${FORGE_MODEL_OPENAI_COMPAT_ENDPOINT:-}"
+      FORGE_MODEL_DEFAULT_BACKEND: "${FORGE_MODEL_DEFAULT_BACKEND:-}"
+      FORGE_MODEL_DEFAULT_ID: "${FORGE_MODEL_DEFAULT_ID:-}"
+      FORGE_EMBEDDING_PROVIDER: "${FORGE_EMBEDDING_PROVIDER:-}"
+      FORGE_EMBEDDING_MODEL: "${FORGE_EMBEDDING_MODEL:-}"
+      FORGE_EMBEDDING_DIMS: "${FORGE_EMBEDDING_DIMS:-128}"
+      FORGE_EMBEDDING_TEI_ENDPOINT: "${FORGE_EMBEDDING_TEI_ENDPOINT:-}"
+      FORGE_K_SHADOW_MODE_ENABLED: "${FORGE_K_SHADOW_MODE_ENABLED:-false}"
+      FORGE_K_SHADOW_CHAT_METADATA_ENABLED: "${FORGE_K_SHADOW_CHAT_METADATA_ENABLED:-false}"
+      FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED: "${FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED:-false}"
+      FORGE_K_SHADOW_ADVISORY_ENABLED: "${FORGE_K_SHADOW_ADVISORY_ENABLED:-false}"
+    ports:
+      - "${FORGE_CORE_PORT:-18492}:${FORGE_CORE_PORT:-18492}"
+    volumes:
+      - forge-data:/data
+      - forge-models:/models
+      - forge-workspace:/workspace
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:${FORGE_CORE_PORT:-18492}/health >/dev/null"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  desktop-web:
+    build:
+      context: .
+      dockerfile: apps/desktop/Dockerfile
+      args:
+        VITE_FORGE_API_URL: "http://127.0.0.1:${FORGE_CORE_PORT:-18492}"
+    image: forge/desktop-web:local
+    ports:
+      - "${FORGE_DESKTOP_PORT:-1420}:80"
+    depends_on:
+      core:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - forge-ollama:/root/.ollama
+    restart: unless-stopped
+
+  tei:
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+    profiles: ["tei"]
+    ports:
+      - "8082:80"
+    volumes:
+      - forge-tei:/data
+    restart: unless-stopped
+
+volumes:
+  forge-data:
+  forge-models:
+  forge-workspace:
+  forge-ollama:
+  forge-tei:

@@ -181,6 +181,16 @@ npm run build:desktop
 npm run build:core
 ```
 
+Container commands:
+
+```bash
+npm run docker:config
+npm run docker:build
+npm run docker:up
+```
+
+The Docker stack runs the core service with a persisted SQLite volume and can serve the desktop Vite app as a browser surface. See `docs/runbooks/docker_containerization.md`.
+
 Default endpoints:
 
 - Core API: `http://127.0.0.1:18492`
