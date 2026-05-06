@@ -121,3 +121,83 @@ func TestShadowDiagnosticPersistenceInvalidConfigFailsSafe(t *testing.T) {
 		t.Fatalf("expected invalid payload limit to fail safe")
 	}
 }
+
+func TestQdrantShadowIndexDefaultsDisabled(t *testing.T) {
+	t.Setenv("FORGE_QDRANT_SHADOW_INDEX_ENABLED", "")
+	t.Setenv("FORGE_QDRANT_COLLECTION", "")
+	t.Setenv("FORGE_QDRANT_VECTOR_SIZE", "")
+	t.Setenv("FORGE_QDRANT_TIMEOUT_MS", "")
+	t.Setenv("FORGE_QDRANT_URL", "")
+	t.Setenv("FORGE_STORE_BACKEND", "sqlite")
+
+	cfg := Load()
+	if cfg.QdrantShadowIndexEnabled {
+		t.Fatalf("expected qdrant shadow index disabled by default")
+	}
+	if cfg.QdrantCollection != "forge_shadow_embeddings" {
+		t.Fatalf("unexpected default collection %q", cfg.QdrantCollection)
+	}
+	if cfg.QdrantTimeoutMs <= 0 {
+		t.Fatalf("expected positive qdrant timeout default")
+	}
+	if err := cfg.ValidateQdrantShadowIndex(); err != nil {
+		t.Fatalf("disabled qdrant shadow index should validate without url: %v", err)
+	}
+}
+
+func TestQdrantShadowIndexRequiresURLWhenEnabled(t *testing.T) {
+	cfg := Config{
+		StoreBackend:                    "sqlite",
+		QdrantShadowIndexEnabled:        true,
+		QdrantCollection:                "forge_shadow_embeddings",
+		QdrantVectorSize:                128,
+		QdrantTimeoutMs:                 3000,
+		ShadowDiagnosticMaxPayloadBytes: 1024,
+	}
+	if err := cfg.ValidateQdrantShadowIndex(); err == nil {
+		t.Fatalf("expected enabled qdrant shadow index without URL to fail closed")
+	}
+
+	cfg.QdrantURL = "http://qdrant:6333"
+	if err := cfg.ValidateQdrantShadowIndex(); err != nil {
+		t.Fatalf("expected explicit qdrant URL to allow shadow index: %v", err)
+	}
+	if cfg.StoreBackend != "sqlite" {
+		t.Fatalf("enabling qdrant shadow index must not switch live backend")
+	}
+}
+
+func TestQdrantShadowIndexInvalidConfigFailsSafe(t *testing.T) {
+	cfg := Config{
+		QdrantURL:                "http://qdrant:6333",
+		QdrantShadowIndexEnabled: true,
+		QdrantCollection:         "",
+		QdrantTimeoutMs:          3000,
+	}
+	if err := cfg.ValidateQdrantShadowIndex(); err == nil {
+		t.Fatalf("expected empty collection to fail safe")
+	}
+	cfg.QdrantCollection = "forge_shadow_embeddings"
+	cfg.QdrantTimeoutMs = 0
+	if err := cfg.ValidateQdrantShadowIndex(); err == nil {
+		t.Fatalf("expected invalid timeout to fail safe")
+	}
+}
+
+func TestQdrantShadowIndexDoesNotSwitchRetrievalBackend(t *testing.T) {
+	t.Setenv("FORGE_STORE_BACKEND", "sqlite")
+	t.Setenv("FORGE_QDRANT_URL", "http://qdrant:6333")
+	t.Setenv("FORGE_QDRANT_SHADOW_INDEX_ENABLED", "true")
+
+	cfg := Load()
+	if cfg.StoreBackend != "sqlite" {
+		t.Fatalf("qdrant shadow index must not change store backend, got %q", cfg.StoreBackend)
+	}
+	backendCfg, err := cfg.StorageBackendConfig()
+	if err != nil {
+		t.Fatalf("StorageBackendConfig failed: %v", err)
+	}
+	if backendCfg.Kind != storagebackend.BackendSQLite {
+		t.Fatalf("qdrant shadow index must not switch retrieval/storage backend, got %q", backendCfg.Kind)
+	}
+}

@@ -33,6 +33,18 @@ Phase 13D-E adds diagnostic persistence and retrieval metadata relational adapte
 
 This remains diagnostic storage parity only. It does not switch reads, dual-write canonical records, migrate memory/retrieval tables, wire Qdrant, wire Redis, or add public diagnostics APIs.
 
+## Phase 13F-G Status
+
+Phase 13F-G adds Qdrant shadow vector adapter and shadow index tests without changing live retrieval:
+
+- config tests prove `FORGE_QDRANT_SHADOW_INDEX_ENABLED` defaults disabled and requires Qdrant URL configuration when enabled,
+- payload safety tests prove safe ref/provenance payloads are accepted and source/chunk/prompt/completion/message/memory/raw-query/auth/secret metadata is rejected,
+- adapter tests prove collection creation and upsert payload shape without requiring Qdrant,
+- shadow index tests prove disabled mode skips writes, enabled mode upserts only precomputed vectors, vector dimensions are validated, Qdrant/search errors are isolated, and the service cannot execute retrieval or create embeddings,
+- optional Qdrant integration tests are gated by `FORGE_QDRANT_TEST_URL`.
+
+This remains vector shadow infrastructure only. It does not switch retrieval reads, call Qdrant from live retrieval, generate embeddings, write canonical memory, admit evidence, persist content in Qdrant, wire Redis, or add public APIs.
+
 ## Required Parity Test Areas
 
 Schema parity:
@@ -80,6 +92,14 @@ Phase 13D-E diagnostic repository parity:
 - repository failure is isolated from the in-memory diagnostic sink,
 - optional Postgres integration is gated by `FORGE_POSTGRES_TEST_DSN`.
 
+Phase 13F-G Qdrant shadow parity:
+- qdrant shadow index config defaults disabled,
+- enabled qdrant shadow index requires explicit Qdrant URL,
+- safe vector payloads preserve object/source/embedding/provenance refs,
+- unsafe content-bearing payloads are rejected before upsert,
+- disabled mode performs no Qdrant writes,
+- optional Qdrant integration is gated by `FORGE_QDRANT_TEST_URL`.
+
 Dual-write parity:
 - SQLite/Postgres write comparison.
 - Read-after-write comparison.
@@ -112,6 +132,7 @@ Qdrant:
 - Vector acceleration only.
 - Must not be truth or admissibility.
 - Indexes must be rebuildable from relational provenance records.
+- Shadow vector indexing remains disabled by default and non-authoritative.
 
 ## Failure Injection Requirements
 

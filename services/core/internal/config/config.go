@@ -18,6 +18,10 @@ type Config struct {
 	PostgresDSN                                 string
 	RedisAddr                                   string
 	QdrantURL                                   string
+	QdrantShadowIndexEnabled                    bool
+	QdrantCollection                            string
+	QdrantVectorSize                            int
+	QdrantTimeoutMs                             int
 	EnableModelRuntime                          bool
 	GPUEnabled                                  bool
 	NVIDIADCGMEnabled                           bool
@@ -88,6 +92,8 @@ type Config struct {
 var (
 	ErrShadowDiagnosticPostgresRequired = errors.New("shadow diagnostic persistence requires postgres configuration")
 	ErrShadowDiagnosticInvalidConfig    = errors.New("invalid shadow diagnostic persistence configuration")
+	ErrQdrantShadowIndexURLRequired     = errors.New("qdrant shadow index requires qdrant url")
+	ErrQdrantShadowIndexInvalidConfig   = errors.New("invalid qdrant shadow index configuration")
 )
 
 func Load() Config {
@@ -136,6 +142,10 @@ func Load() Config {
 		PostgresDSN:                strings.TrimSpace(os.Getenv("FORGE_POSTGRES_DSN")),
 		RedisAddr:                  strings.TrimSpace(os.Getenv("FORGE_REDIS_ADDR")),
 		QdrantURL:                  strings.TrimSpace(os.Getenv("FORGE_QDRANT_URL")),
+		QdrantShadowIndexEnabled:   envBool("FORGE_QDRANT_SHADOW_INDEX_ENABLED", false),
+		QdrantCollection:           envStringDefault("FORGE_QDRANT_COLLECTION", "forge_shadow_embeddings"),
+		QdrantVectorSize:           envInt("FORGE_QDRANT_VECTOR_SIZE", 0, 0),
+		QdrantTimeoutMs:            envInt("FORGE_QDRANT_TIMEOUT_MS", 3000, 1),
 		EnableModelRuntime:         envBool("FORGE_ENABLE_MODEL_RUNTIME", false),
 		GPUEnabled:                 envBool("FORGE_GPU_ENABLED", false),
 		NVIDIADCGMEnabled:          envBool("FORGE_NVIDIA_DCGM_ENABLED", false),
@@ -222,6 +232,19 @@ func (c Config) ValidateShadowDiagnosticPersistence() error {
 	}
 	if c.ShadowDiagnosticRetentionDays <= 0 || c.ShadowDiagnosticMaxPayloadBytes <= 0 {
 		return ErrShadowDiagnosticInvalidConfig
+	}
+	return nil
+}
+
+func (c Config) ValidateQdrantShadowIndex() error {
+	if !c.QdrantShadowIndexEnabled {
+		return nil
+	}
+	if strings.TrimSpace(c.QdrantURL) == "" {
+		return ErrQdrantShadowIndexURLRequired
+	}
+	if strings.TrimSpace(c.QdrantCollection) == "" || c.QdrantTimeoutMs <= 0 || c.QdrantVectorSize < 0 {
+		return ErrQdrantShadowIndexInvalidConfig
 	}
 	return nil
 }

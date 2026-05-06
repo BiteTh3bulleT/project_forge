@@ -23,6 +23,20 @@ The Docker stack now includes Qdrant as a managed vector-store service for the n
 
 Phase 13A does not wire Qdrant into live retrieval. `FORGE_QDRANT_URL` is infrastructure config only, and vector hits remain non-authoritative retrieval acceleration.
 
+Phase 13F-G adds a Qdrant shadow vector adapter and disabled-by-default shadow index scaffold under `services/core/internal/vectorstore`. It accepts already-produced embedding vectors plus safe relational refs only. It does not create embeddings, execute retrieval, change live result ordering, admit evidence, write memory, or make Qdrant the source of record.
+
+Qdrant shadow indexing is controlled by:
+
+- `FORGE_QDRANT_SHADOW_INDEX_ENABLED=false`
+- `FORGE_QDRANT_URL`
+- `FORGE_QDRANT_COLLECTION=forge_shadow_embeddings`
+- `FORGE_QDRANT_VECTOR_SIZE`
+- `FORGE_QDRANT_TIMEOUT_MS=3000`
+
+Allowed Qdrant payload metadata is limited to object/source/workspace refs, embedding record/model/dims, source hash or fingerprint, retrieval strategy or index class, creation time, schema version, and provenance refs. Forbidden payload metadata includes source text, chunk text, document content, prompts, completions, message bodies, tool payloads or outputs, memory content, raw queries, auth data, cookies, tokens, secrets, vectors as payload fields, and large raw blobs.
+
+The Qdrant index must be rebuildable from relational embedding records. Any future destructive rebuild command must be explicit, validate collection dimensions and model identity, and remain separate from live retrieval execution.
+
 ## Embedding Pipeline
 
 Module: `services/core/internal/embeddings`

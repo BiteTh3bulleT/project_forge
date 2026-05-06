@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12B Read-only Shadow Harness Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12C Shadow Diagnostics Review and Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12D Controlled Shadow Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12E Route Envelope Shadow Metadata is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12F Route Envelope Shadow Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12G Chat Metadata Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12H Chat Metadata Shadow Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12I Chat Metadata Shadow Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12J Retrieval Metadata Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12K Retrieval Metadata Shadow Implementation and Phase 12L Retrieval Metadata Shadow Hardening are implemented/tested as a combined `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / HARDENED_IN_PASS` metadata-only pass. Phase 12M-Q Shadow Advisory Pipeline is implemented/tested as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / ADVISORY_DIAGNOSTIC_ONLY`. Phase 13A Storage Backend Foundation is implemented/tested as `LIVE_INFRA / STORAGE_FOUNDATION / DEFAULT_SQLITE`. Phase 13B-C Postgres Schema Foundation and SQLite/Postgres Parity is implemented/tested as `LIVE_INFRA / STORAGE_PARITY / DEFAULT_SQLITE`. Phase 13D-E Diagnostic Persistence and Retrieval Metadata Relational Adapter is implemented/tested as `LIVE_INFRA / DIAGNOSTIC_STORAGE / DEFAULT_SQLITE / DISABLED_BY_DEFAULT`.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12B Read-only Shadow Harness Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12C Shadow Diagnostics Review and Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12D Controlled Shadow Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12E Route Envelope Shadow Metadata is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12F Route Envelope Shadow Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12G Chat Metadata Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12H Chat Metadata Shadow Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12I Chat Metadata Shadow Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12J Retrieval Metadata Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12K Retrieval Metadata Shadow Implementation and Phase 12L Retrieval Metadata Shadow Hardening are implemented/tested as a combined `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / HARDENED_IN_PASS` metadata-only pass. Phase 12M-Q Shadow Advisory Pipeline is implemented/tested as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / ADVISORY_DIAGNOSTIC_ONLY`. Phase 13A Storage Backend Foundation is implemented/tested as `LIVE_INFRA / STORAGE_FOUNDATION / DEFAULT_SQLITE`. Phase 13B-C Postgres Schema Foundation and SQLite/Postgres Parity is implemented/tested as `LIVE_INFRA / STORAGE_PARITY / DEFAULT_SQLITE`. Phase 13D-E Diagnostic Persistence and Retrieval Metadata Relational Adapter is implemented/tested as `LIVE_INFRA / DIAGNOSTIC_STORAGE / DEFAULT_SQLITE / DISABLED_BY_DEFAULT`. Phase 13F-G Qdrant Shadow Vector Adapter is implemented/tested as `LIVE_INFRA / VECTOR_SHADOW / DISABLED_BY_DEFAULT / NON_AUTHORITATIVE`.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -537,21 +537,25 @@ What not to do: change live retrieval behavior, execute retrieval/search/embeddi
 
 ## Phase 13F - Qdrant Vector Adapter Design
 
-Scope: `DOCS_ONLY / LIVE_INFRA_DESIGN`.
+Scope: `LIVE_INFRA / VECTOR_SHADOW / DISABLED_BY_DEFAULT / NON_AUTHORITATIVE`.
 
-Status: not started.
+Status: implemented and tested as part of Phase 13F-G.
 
-Goal: design the Qdrant adapter boundary, rebuild strategy, provenance model, and non-authority rules.
+Goal: design and scaffold the Qdrant adapter boundary, rebuild strategy, provenance model, and non-authority rules.
+
+Implemented deliverables: generic `VectorStore` interface, Qdrant HTTP adapter, safe payload schema, deterministic point IDs, config flags, env docs, payload safety tests, and optional Qdrant integration test gating.
 
 ## Phase 13G - Qdrant Shadow Vector Index
 
-Scope: `LIVE_INFRA / READ_ONLY / SHADOW_INDEX`.
+Scope: `LIVE_INFRA / VECTOR_SHADOW / DISABLED_BY_DEFAULT / NON_AUTHORITATIVE`.
 
-Status: not started.
+Status: implemented and tested as part of Phase 13F-G.
 
 Goal: build a rebuildable, non-authoritative Qdrant shadow index after adapter design and tests.
 
-What not to do: switch live retrieval to Qdrant or treat vector hits as truth.
+Implemented deliverables: disabled-by-default `ShadowIndexService`, precomputed-vector-only upsert path, safe ref/provenance payload validation, vector dimension checks, no retrieval/embedding execution contract, and no live retrieval wiring.
+
+What not to do: switch live retrieval to Qdrant, generate embeddings from the vector adapter, store source/chunk content in Qdrant, or treat vector hits as truth or evidence.
 
 ## Phase 13H - Redis Queue/Cache Boundary
 

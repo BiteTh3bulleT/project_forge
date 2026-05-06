@@ -1,6 +1,6 @@
 # Storage Backend Migration
 
-Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds the first Postgres schema foundation and parity tests for storage metadata plus disabled shadow diagnostic schema only. Phase 13D-E adds an opt-in diagnostic persistence repository and retrieval metadata relational adapter scaffold. These phases do not migrate live data.
+Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds the first Postgres schema foundation and parity tests for storage metadata plus disabled shadow diagnostic schema only. Phase 13D-E adds an opt-in diagnostic persistence repository and retrieval metadata relational adapter scaffold. Phase 13F-G adds a disabled-by-default Qdrant shadow vector adapter and shadow index scaffold. These phases do not migrate live data.
 
 ## Current Live State
 
@@ -9,6 +9,7 @@ Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds t
 - Existing memory, retrieval, jobs, approvals, audit-adjacent records, and settings continue to use the existing SQLite-backed service paths.
 - Shadow diagnostics remain bounded in memory by default. Postgres diagnostic persistence exists only behind `FORGE_SHADOW_DIAGNOSTIC_PERSISTENCE_ENABLED=false` and requires explicit Postgres configuration.
 - Docker-managed Postgres, Redis, and Qdrant are infrastructure-ready but not live authority.
+- Qdrant shadow indexing defaults disabled and is not part of live retrieval.
 
 ## Backend Selection
 
@@ -48,6 +49,29 @@ Phase 13D-E adds `services/core/internal/forgekshadow` diagnostic persistence pr
 
 Phase 13D-E also adds a retrieval metadata relational adapter scaffold. It maps existing retrieval metadata observations into relational-safe DTOs and deterministic canonical JSON. It cannot execute retrieval, call embedding/search providers, compile context, admit evidence, write memory, call Qdrant, or implement live RAG.
 
+## Phase 13F-G Qdrant Shadow Vector Adapter
+
+Phase 13F-G adds `services/core/internal/vectorstore`:
+
+- a generic `VectorStore` interface,
+- a Qdrant HTTP adapter,
+- safe vector payload validation,
+- deterministic point ID generation,
+- a disabled-by-default `ShadowIndexService`,
+- optional Qdrant integration tests gated by `FORGE_QDRANT_TEST_URL`.
+
+Configuration:
+
+- `FORGE_QDRANT_SHADOW_INDEX_ENABLED=false`
+- `FORGE_QDRANT_URL`
+- `FORGE_QDRANT_COLLECTION=forge_shadow_embeddings`
+- `FORGE_QDRANT_VECTOR_SIZE`
+- `FORGE_QDRANT_TIMEOUT_MS=3000`
+
+The shadow index accepts only already-produced vectors plus safe relational refs. It never creates embeddings, executes retrieval, calls live search, changes retrieval ranking, admits evidence, writes canonical memory, or changes the live store backend. Qdrant payloads are ref-only and must not contain source text, chunk text, document content, prompts, completions, message bodies, raw queries, memory content, tool payloads, auth values, secrets, or large raw content.
+
+Qdrant indexes remain rebuildable from relational embedding records. A future rebuild command may validate dimensions/model identity and explicitly recreate an index, but no automatic destructive rebuild is added in Phase 13F-G.
+
 The Postgres runner executes migrations in deterministic version order, skips already-applied versions, records applied versions with checksums, and runs inside a transaction. A separate migration lock is not taken in Phase 13B-C; live Postgres migration execution is not part of the default daemon path yet. A future live migration phase must add explicit lock policy before concurrent operator execution is allowed.
 
 ## Target Roles
@@ -65,6 +89,7 @@ Qdrant:
 - Vector retrieval acceleration only.
 - Vectors, nearest-neighbor hits, and scores are retrieval signals, not evidence admission or truth.
 - Qdrant indexes must be rebuildable from relational records.
+- Phase 13F-G Qdrant shadow indexing is disabled by default and non-authoritative.
 
 ## Migration Phases
 
@@ -73,8 +98,8 @@ Qdrant:
 3. Phase 13C: SQLite/Postgres foundation parity tests for migration shape, ordering, idempotence, JSONB fields, and timestamps.
 4. Phase 13D: diagnostic store persistence after explicit approval.
 5. Phase 13E: retrieval metadata relational adapter scaffold.
-6. Phase 13F: Qdrant vector adapter design.
-7. Phase 13G: Qdrant shadow vector index, rebuildable and non-authoritative.
+6. Phase 13F: Qdrant vector adapter design and scaffold.
+7. Phase 13G: Qdrant shadow vector index, rebuildable, disabled by default, and non-authoritative.
 8. Phase 13H: Redis queue/cache boundary with loss-safe behavior.
 9. Phase 13I: store cutover readiness review.
 
@@ -130,10 +155,10 @@ Group D:
 
 ## Forbidden Authority Changes
 
-- Do not make Postgres the default backend in Phase 13A through Phase 13D-E.
-- Do not dual-write live data in Phase 13A through Phase 13D-E.
-- Do not wire Redis into live queues or caches in Phase 13A through Phase 13D-E.
-- Do not wire Qdrant into live retrieval in Phase 13A through Phase 13D-E.
+- Do not make Postgres the default backend in Phase 13A through Phase 13F-G.
+- Do not dual-write live data in Phase 13A through Phase 13F-G.
+- Do not wire Redis into live queues or caches in Phase 13A through Phase 13F-G.
+- Do not wire Qdrant into live retrieval in Phase 13A through Phase 13F-G.
 - Do not make Redis or Qdrant canonical truth.
 - Do not make vector hits admissible evidence.
 - Do not change public APIs, routes, gateway behavior, modelruntime behavior, retrieval behavior, or memory semantics.

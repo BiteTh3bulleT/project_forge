@@ -47,6 +47,16 @@ Phase 13D-E adds the first safe diagnostic persistence primitives:
 
 Phase 13D-E does not switch the live store, dual-write canonical records, migrate memory or retrieval tables, persist raw diagnostic content, create a public diagnostics API, execute retrieval/search/embeddings, wire Qdrant, or wire Redis.
 
+Phase 13F-G adds Qdrant shadow vector infrastructure:
+
+- `FORGE_QDRANT_SHADOW_INDEX_ENABLED=false` by default.
+- `services/core/internal/vectorstore` defines the vector-store interface, Qdrant adapter, safe payload schema, and disabled shadow index service.
+- Qdrant payloads may contain safe object/source/workspace/embedding/provenance refs, embedding model/dims, source hash, retrieval strategy/index class, schema version, and timestamps only.
+- Qdrant payloads must not contain source text, chunk text, document content, prompts, completions, message bodies, raw queries, memory content, tool payloads, auth values, secrets, or large raw blobs.
+- Optional Qdrant integration tests are gated by `FORGE_QDRANT_TEST_URL`.
+
+Phase 13F-G does not make Qdrant the live retrieval backend, execute retrieval through Qdrant, generate embeddings, switch reads, change result ordering, write canonical memory, or make vector hits admissible evidence.
+
 ## Backend migration stages
 
 Group A: non-authoritative diagnostics.
@@ -101,6 +111,8 @@ Qdrant candidates are vector acceleration only:
 - future shadow vector indexes
 
 Qdrant must not store canonical truth, admissibility, provenance authority, or memory source of record. Qdrant indexes must be rebuildable from relational records.
+
+Phase 13F-G shadow vector indexes are rebuildable from relational embedding records and remain disabled by default.
 
 ## Current entity/table pattern
 
