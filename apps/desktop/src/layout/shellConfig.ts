@@ -14,7 +14,24 @@ export type ShellToolId =
   | "dashboard"
   | "command"
   | "memory"
+  | "project-context"
   | "models"
+  | "gateway"
+  | "inspectors"
+  | "audit"
+  | "policy"
+  | "strategies"
+  | "automation"
+  | "sources"
+  | "adapters"
+  | "insights"
+  | "lineage"
+  | "retrieval-runs"
+  | "evaluations"
+  | "action-lanes"
+  | "execution-permissions"
+  | "backup"
+  | "release"
   | "job-detail"
   | "other";
 
@@ -34,13 +51,13 @@ export const primaryShellTools: readonly ShellToolDefinition[] = [
     shortLabel: "CH",
     route: "/chat",
     description:
-      "Persistent operator threads and job launch from conversation context.",
+      "Operator threads and job launch from persisted conversation context.",
     primary: true,
   },
   {
     id: "workbench",
-    label: "Workbench",
-    shortLabel: "WB",
+    label: "Artifacts",
+    shortLabel: "AR",
     route: "/workbench",
     description:
       "Artifact inspection, file previews, and job-linked output review.",
@@ -59,8 +76,7 @@ export const primaryShellTools: readonly ShellToolDefinition[] = [
     label: "Dossiers",
     shortLabel: "DS",
     route: "/dossiers",
-    description:
-      "Project memory profiles, policy bias, and linked execution history.",
+    description: "Project dossiers, policy bias, and linked execution history.",
     primary: true,
   },
   {
@@ -69,7 +85,7 @@ export const primaryShellTools: readonly ShellToolDefinition[] = [
     shortLabel: "JB",
     route: "/jobs",
     description:
-      "Execution queue, lifecycle projections, and append-only event streams.",
+      "Execution projections, approval state, artifacts, and append-only events.",
     primary: true,
   },
   {
@@ -104,7 +120,7 @@ export const primaryShellTools: readonly ShellToolDefinition[] = [
     shortLabel: "MD",
     route: "/models",
     description:
-      "FORGE-native model runtime inventory, lifecycle controls, and runtime inspection.",
+      "Bounded model runtime inventory, lifecycle controls, and inspection.",
     primary: true,
   },
   {
@@ -124,16 +140,16 @@ const secondaryShellTools: readonly ShellToolDefinition[] = [
     label: "Start",
     shortLabel: "ST",
     route: "/start",
-    description: "Legacy guided launch surface.",
+    description: "Guided boot, source connection, and recovery surface.",
     primary: false,
   },
   {
     id: "dashboard",
-    label: "Dashboard",
-    shortLabel: "DB",
+    label: "Command Deck",
+    shortLabel: "KD",
     route: "/dashboard",
     description:
-      "Main command dashboard for autonomy, gateway, and correlation telemetry.",
+      "Kernel status, active work, autonomy, gateway, and correlation telemetry.",
     primary: false,
   },
   {
@@ -146,18 +162,157 @@ const secondaryShellTools: readonly ShellToolDefinition[] = [
   },
   {
     id: "memory",
-    label: "Memory",
-    shortLabel: "MM",
+    label: "Episodes",
+    shortLabel: "ME",
     route: "/memory",
-    description: "Indexed project memory search.",
+    description: "Indexed cognitive filesystem evidence search.",
+    primary: false,
+  },
+  {
+    id: "project-context",
+    label: "Context Compile",
+    shortLabel: "CC",
+    route: "/project-context",
+    description:
+      "Context normalization into durable guidance and briefing files.",
+    primary: false,
+  },
+  {
+    id: "insights",
+    label: "Insights",
+    shortLabel: "IS",
+    route: "/insights",
+    description: "Routing advisories and cognitive filesystem signals.",
+    primary: false,
+  },
+  {
+    id: "lineage",
+    label: "Lineage",
+    shortLabel: "LN",
+    route: "/lineage",
+    description: "Retry, replay, and loop comparison surfaces.",
+    primary: false,
+  },
+  {
+    id: "retrieval-runs",
+    label: "Retrieval Runs",
+    shortLabel: "RR",
+    route: "/retrieval-runs",
+    description: "Keyword and semantic retrieval run evidence.",
+    primary: false,
+  },
+  {
+    id: "evaluations",
+    label: "Evaluations",
+    shortLabel: "EV",
+    route: "/evaluations",
+    description: "Operator and scoring records for outcome quality.",
+    primary: false,
+  },
+  {
+    id: "gateway",
+    label: "Gateway",
+    shortLabel: "GW",
+    route: "/gateway",
+    description: "Bounded tool execution authority and invocation evidence.",
+    primary: false,
+  },
+  {
+    id: "action-lanes",
+    label: "Action Lanes",
+    shortLabel: "AL",
+    route: "/action-lanes",
+    description: "Operational lane state for bounded execution.",
+    primary: false,
+  },
+  {
+    id: "execution-permissions",
+    label: "Permissions",
+    shortLabel: "PX",
+    route: "/execution-permissions",
+    description:
+      "Permission profile tuning and execution capability boundaries.",
+    primary: false,
+  },
+  {
+    id: "inspectors",
+    label: "Inspectors",
+    shortLabel: "IN",
+    route: "/inspectors",
+    description: "Read-only packet, snapshot, and trace evidence surfaces.",
+    primary: false,
+  },
+  {
+    id: "audit",
+    label: "Audit",
+    shortLabel: "AU",
+    route: "/audit",
+    description: "Audit trail inspection for committed transitions.",
+    primary: false,
+  },
+  {
+    id: "policy",
+    label: "Policy",
+    shortLabel: "PL",
+    route: "/policy",
+    description:
+      "Approval profiles, policy advisories, and recommendation evidence.",
+    primary: false,
+  },
+  {
+    id: "strategies",
+    label: "Strategies",
+    shortLabel: "ST",
+    route: "/strategies",
+    description: "Reusable execution playbooks and success criteria.",
+    primary: false,
+  },
+  {
+    id: "automation",
+    label: "Automation",
+    shortLabel: "AM",
+    route: "/automation",
+    description: "Rule-governed automation with previews and history.",
+    primary: false,
+  },
+  {
+    id: "sources",
+    label: "Sources",
+    shortLabel: "SC",
+    route: "/sources",
+    description: "Indexed source folders and ingestion scope.",
+    primary: false,
+  },
+  {
+    id: "adapters",
+    label: "Adapters",
+    shortLabel: "AD",
+    route: "/adapters",
+    description: "Bounded worker status and adapter diagnostics.",
     primary: false,
   },
   {
     id: "logs",
-    label: "Logs",
-    shortLabel: "LG",
+    label: "Events",
+    shortLabel: "EV",
     route: "/events",
     description: "Global event and log stream.",
+    primary: false,
+  },
+  {
+    id: "backup",
+    label: "Backup",
+    shortLabel: "BK",
+    route: "/backup",
+    description: "Portable export and restore bundles.",
+    primary: false,
+  },
+  {
+    id: "release",
+    label: "Release",
+    shortLabel: "RL",
+    route: "/release",
+    description: "Release readiness and status records.",
     primary: false,
   },
   {

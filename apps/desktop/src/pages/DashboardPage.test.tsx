@@ -69,4 +69,21 @@ describe("DashboardPage shadow mode toggle", () => {
     });
     expect(await screen.findByText("On")).toBeTruthy();
   });
+
+  it("renders the cognition console cockpit sections", async () => {
+    render(
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Cognition Console" }))
+      .toBeTruthy();
+    expect(screen.getAllByText("Active Goals").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Workspace").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Decisions").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Open Loops").length).toBeGreaterThan(0);
+    expect(screen.getByText("Runtime Monitor")).toBeTruthy();
+    expect(screen.getByText("Cognitive Surfaces")).toBeTruthy();
+  });
 });

@@ -11,6 +11,7 @@ import {
 } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
+import { useWorkspaceStore } from "../stores/workspaceStore";
 
 type CapabilityRecord = Awaited<
   ReturnType<typeof api.gateway.capabilities>
@@ -31,6 +32,8 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const uiMode = useUiStore((s) => s.uiMode);
   const setStatus = useUiStore((s) => s.setStatusLine);
+  const coreState = useWorkspaceStore((s) => s.core);
+  const workspaceMeta = useWorkspaceStore((s) => s.meta);
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [health, setHealth] = useState<ModelRuntimeHealth | null>(null);
@@ -152,6 +155,9 @@ export function DashboardPage() {
   const recentImports = Array.isArray(summary?.recentImports)
     ? summary.recentImports
     : [];
+  const dossierHealth = Array.isArray(summary?.dossierHealth)
+    ? summary.dossierHealth
+    : [];
   const automation = Array.isArray(summary?.automationActivity)
     ? summary.automationActivity
     : [];
@@ -193,6 +199,95 @@ export function DashboardPage() {
     ...activeJobs.map((job) => ({ ...job, kind: "active" as const })),
     ...recentFailures.map((job) => ({ ...job, kind: "failed" as const })),
   ].slice(0, 8);
+  const staleObservations = observations.filter((item) => item.stale).length;
+  const verifiedObservations = observations.filter((item) =>
+    String(item.verificationState || "")
+      .toLowerCase()
+      .includes("verified"),
+  ).length;
+  const workspaceLabel = workspaceMeta?.workspaceDir
+    ? shortPathLabel(workspaceMeta.workspaceDir)
+    : "Workspace unknown";
+  const workspaceRows: Array<[string, string]> = [
+    ["Core", coreState],
+    ["Workspace", workspaceLabel],
+    [
+      "Data",
+      workspaceMeta?.dataDir ? shortPathLabel(workspaceMeta.dataDir) : "-",
+    ],
+    [
+      "Database",
+      workspaceMeta?.dbPath ? shortPathLabel(workspaceMeta.dbPath) : "-",
+    ],
+  ];
+  const activeGoalRows = buildActiveGoals(activeJobs, recommendations);
+  const decisionRows = [
+    {
+      label: "Approvals",
+      value: summary?.approvalsPending ?? 0,
+      route: "/approvals",
+      tone: (summary?.approvalsPending ?? 0) > 0 ? "warn" : "ok",
+    },
+    {
+      label: "Reviews",
+      value: summary?.reviewsPending ?? 0,
+      route: "/reviews",
+      tone: (summary?.reviewsPending ?? 0) > 0 ? "warn" : "ok",
+    },
+    {
+      label: "Failures",
+      value: recentFailures.length + failedInvocations,
+      route: "/events",
+      tone: recentFailures.length + failedInvocations > 0 ? "bad" : "ok",
+    },
+  ];
+  const openLoopRows = [
+    ["Active jobs", String(activeJobs.length)],
+    ["Runtime queue", String(queue?.depth ?? 0)],
+    ["Gateway failures", String(failedInvocations)],
+    ["Stale memory", String(staleObservations)],
+  ] satisfies Array<[string, string]>;
+  const stateRows = [
+    ["Mode", uiMode],
+    ["Attention", attentionCount > 0 ? `${attentionCount} item(s)` : "clear"],
+    ["Runtime", health?.status || "unknown"],
+    ["Backend", health?.backend || "not configured"],
+    ["Capabilities", String(capabilities.length)],
+    ["Observations", String(observations.length)],
+  ] satisfies Array<[string, string]>;
+  const contextCards = [
+    {
+      title: "Memory graph",
+      value: String(observations.length),
+      detail: `${verifiedObservations} verified / ${staleObservations} stale`,
+      route: "/memory",
+      tone: staleObservations > 0 ? "warn" : "ok",
+    },
+    {
+      title: "Context",
+      value: String(dossierHealth.length),
+      detail:
+        dossierHealth.length > 0
+          ? "dossier health records visible"
+          : "no dossier health rows",
+      route: "/dossiers",
+      tone: dossierHealth.length > 0 ? "ok" : "muted",
+    },
+    {
+      title: "Workspaces",
+      value: workspaceLabel,
+      detail: workspaceMeta?.workspaceDir || "core metadata unavailable",
+      route: "/layouts",
+      tone: coreState === "online" ? "ok" : "warn",
+    },
+    {
+      title: "Artifacts",
+      value: String(recentImports.length + automation.length),
+      detail: `${recentImports.length} imports / ${automation.length} automation`,
+      route: "/workbench",
+      tone: recentImports.length + automation.length > 0 ? "ok" : "muted",
+    },
+  ];
   const healthSegments = [
     {
       label: "Healthy",
@@ -236,12 +331,16 @@ export function DashboardPage() {
           <div className="min-w-0">
             <div className="forge-ops-label">
               {uiMode === "metrics"
-                ? "Metrics Overview"
-                : "Operations Overview"}
+                ? "Telemetry Dense View"
+                : "Kernel Cockpit"}
             </div>
             <h1 className="mt-2 text-2xl font-semibold tracking-normal text-forge-ash sm:text-3xl">
-              FORGE dashboard
+              Cognition Console
             </h1>
+            <p className="mt-2 max-w-3xl text-sm text-forge-mist/70">
+              Goals, workspace truth, decision gates, runtime pressure, and
+              memory context.
+            </p>
             <div className="mt-3 flex max-w-full flex-wrap gap-2">
               {summarySignals.map((item) => (
                 <span
@@ -345,9 +444,118 @@ export function DashboardPage() {
         </div>
       ) : null}
 
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(21rem,0.8fr)_minmax(22rem,0.85fr)]">
+        <div className="forge-ops-panel">
+          <div className="forge-ops-panel__head">
+            <div>
+              <div className="forge-ops-title">Active Goals</div>
+              <div className="mt-1 text-xs text-forge-mist/65">
+                Current objectives assembled from running jobs and route hints.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="forge-inline-link text-xs"
+              onClick={() => navigate("/jobs")}
+            >
+              Jobs
+            </button>
+          </div>
+          <div className="forge-ops-panel__body space-y-2">
+            {activeGoalRows.map((goal) => (
+              <button
+                key={goal.key}
+                type="button"
+                onClick={() => navigate(goal.route)}
+                className="forge-ops-card flex w-full items-start justify-between gap-3 p-3 text-left"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-forge-ash">
+                    {goal.title}
+                  </span>
+                  <span className="mt-1 block truncate text-xs text-forge-mist/65">
+                    {goal.detail}
+                  </span>
+                </span>
+                <span className={statusPillClass(goal.tone)}>{goal.status}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="forge-ops-panel">
+          <div className="forge-ops-panel__head">
+            <div>
+              <div className="forge-ops-title">Workspace</div>
+              <div className="mt-1 text-xs text-forge-mist/65">
+                Current local boundary and daemon connection state.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="forge-inline-link text-xs"
+              onClick={() => navigate("/settings")}
+            >
+              Settings
+            </button>
+          </div>
+          <div className="forge-ops-panel__body">
+            <SectionRows rows={workspaceRows} />
+          </div>
+        </div>
+
+        <div className="grid gap-4">
+          <div className="forge-ops-panel">
+            <div className="forge-ops-panel__head">
+              <div>
+                <div className="forge-ops-title">Decisions</div>
+                <div className="mt-1 text-xs text-forge-mist/65">
+                  Gates and review pressure before state changes.
+                </div>
+              </div>
+            </div>
+            <div className="forge-ops-panel__body grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
+              {decisionRows.map((row) => (
+                <button
+                  key={row.label}
+                  type="button"
+                  onClick={() => navigate(row.route)}
+                  className="flex min-h-12 items-center justify-between gap-3 rounded-md border border-forge-platinum/10 bg-black/20 px-3 py-2 text-left text-xs hover:border-forge-ember/35"
+                >
+                  <span className="text-forge-mist/65">{row.label}</span>
+                  <span className={statusPillClass(row.tone)}>
+                    {row.value}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="forge-ops-panel">
+            <div className="forge-ops-panel__head">
+              <div>
+                <div className="forge-ops-title">Open Loops</div>
+                <div className="mt-1 text-xs text-forge-mist/65">
+                  Outstanding work that still needs closure.
+                </div>
+              </div>
+            </div>
+            <div className="forge-ops-panel__body">
+              <SectionRows rows={openLoopRows} />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard
-          label="Active Runs"
+          label="State"
+          value={attentionCount > 0 ? "watch" : "clear"}
+          detail={`${attentionCount} decision/open-loop signal(s)`}
+          tone={attentionCount > 0 ? "warn" : "ok"}
+        />
+        <MetricCard
+          label="Active Goals"
           value={String(activeJobs.length)}
           detail={`${queue?.depth ?? 0} queued`}
           tone={activeJobs.length > 0 ? "warn" : "ok"}
@@ -573,7 +781,7 @@ export function DashboardPage() {
         <div className="forge-ops-panel">
           <div className="forge-ops-panel__head">
             <div>
-              <div className="forge-ops-title">Runtime Queue</div>
+              <div className="forge-ops-title">Runtime Monitor</div>
               <div className="mt-1 text-xs text-forge-mist/65">
                 Modelruntime state for local inference paths.
               </div>
@@ -603,7 +811,7 @@ export function DashboardPage() {
         <div className="forge-ops-panel">
           <div className="forge-ops-panel__head">
             <div>
-              <div className="forge-ops-title">System Fields</div>
+              <div className="forge-ops-title">State Fields</div>
               <div className="mt-1 text-xs text-forge-mist/65">
                 Core status fields exposed by diagnostics.
               </div>
@@ -618,13 +826,50 @@ export function DashboardPage() {
           </div>
           <div className="forge-ops-panel__body">
             <SectionRows
-              rows={
-                systemStatusRows.length > 0
-                  ? systemStatusRows.slice(0, 8)
-                  : [["Status", "No system status fields available"]]
-              }
+              rows={[
+                ...stateRows,
+                ...(systemStatusRows.length > 0
+                  ? systemStatusRows.slice(0, 4)
+                  : ([
+                      ["Diagnostics", "No system status fields available"],
+                    ] satisfies Array<[string, string]>)),
+              ]}
             />
           </div>
+        </div>
+      </section>
+
+      <section className="forge-ops-panel">
+        <div className="forge-ops-panel__head">
+          <div>
+            <div className="forge-ops-title">Cognitive Surfaces</div>
+            <div className="mt-1 text-xs text-forge-mist/65">
+              Memory, context, workspace, and artifact state.
+            </div>
+          </div>
+        </div>
+        <div className="forge-ops-panel__body grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {contextCards.map((card) => (
+            <button
+              key={card.title}
+              type="button"
+              onClick={() => navigate(card.route)}
+              className="forge-ops-card min-h-[8.5rem] p-4 text-left"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="forge-ops-label">{card.title}</div>
+                  <div className="mt-2 truncate text-xl font-semibold text-forge-ash">
+                    {card.value}
+                  </div>
+                </div>
+                <span className={statusPillClass(card.tone)}>{card.tone}</span>
+              </div>
+              <div className="mt-3 line-clamp-2 text-xs text-forge-mist/65">
+                {card.detail}
+              </div>
+            </button>
+          ))}
         </div>
       </section>
 
@@ -880,9 +1125,48 @@ function activityRows(
       title: item.summary || item.type || "Memory observation",
       detail: item.sourcePath || item.originKind || "Observation",
       createdAtMs: item.observedAtMs || item.createdAtMs,
-      route: `/memory/${item.id}`,
+      route: `/memory/chunk/${item.id}`,
     })),
   ].sort((a, b) => b.createdAtMs - a.createdAtMs);
+}
+
+function buildActiveGoals(
+  activeJobs: DashboardSummary["activeJobs"],
+  recommendations: DashboardSummary["routingRecommendations"],
+) {
+  const goals = [
+    ...activeJobs.slice(0, 4).map((job) => ({
+      key: `job-${job.id}`,
+      title: job.title || `Job ${job.id}`,
+      detail: `${job.targetAdapter || "system"} | ${formatTime(job.createdAtMs)}`,
+      status: job.status || "active",
+      tone: job.status || "active",
+      route: `/jobs/${job.id}`,
+    })),
+    ...recommendations.slice(0, Math.max(0, 4 - activeJobs.length)).map(
+      (item) => ({
+        key: `rec-${item.id}`,
+        title: item.taskType || "Routing recommendation",
+        detail: `${item.adapter} | ${Math.round(item.confidence * 100)}% confidence`,
+        status: "route",
+        tone: item.confidence >= 0.75 ? "ok" : "warn",
+        route: "/strategies",
+      }),
+    ),
+  ];
+
+  if (goals.length > 0) return goals;
+
+  return [
+    {
+      key: "idle-console",
+      title: "Console idle",
+      detail: "No active job or routing goal is visible.",
+      status: "clear",
+      tone: "ok",
+      route: "/chat",
+    },
+  ];
 }
 
 function getNextAction(
@@ -1000,6 +1284,12 @@ function humanizeKey(key: string) {
     .replace(/\s+/g, " ")
     .trim()
     .replace(/^\w/, (c) => c.toUpperCase());
+}
+
+function shortPathLabel(path: string) {
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  if (parts.length <= 2) return path || "-";
+  return `.../${parts.slice(-2).join("/")}`;
 }
 
 function countBy<T>(rows: T[], fn: (row: T) => string) {

@@ -43,87 +43,124 @@ type NavItem = {
 
 const navGroups: Array<{ label: string; items: NavItem[] }> = [
   {
-    label: "Core",
+    label: "Kernel",
     items: [
       {
-        label: "Dashboard",
+        label: "Command Deck",
         route: "/dashboard",
-        short: "DB",
+        short: "KD",
         mode: "cognitive",
       },
       {
-        label: "Context",
+        label: "Context Compile",
         route: "/project-context",
-        short: "CX",
+        short: "CC",
         mode: "cognitive",
       },
-      { label: "Tasks", route: "/jobs", short: "TS", mode: "cognitive" },
+      { label: "Jobs", route: "/jobs", short: "JB", mode: "cognitive" },
     ],
   },
   {
-    label: "Memory",
+    label: "Cognitive FS",
     items: [
-      { label: "Episodes", route: "/memory", short: "EP", mode: "cognitive" },
-      { label: "Insights", route: "/insights", short: "IN", mode: "cognitive" },
-      { label: "Loops", route: "/lineage", short: "LP", mode: "cognitive" },
+      { label: "Episodes", route: "/memory", short: "ME", mode: "cognitive" },
+      { label: "Dossiers", route: "/dossiers", short: "DS", mode: "cognitive" },
+      { label: "Lineage", route: "/lineage", short: "LN", mode: "cognitive" },
     ],
   },
   {
-    label: "Models",
+    label: "Runtime",
     items: [
-      { label: "Runtime", route: "/models", short: "RT", mode: "cognitive" },
+      { label: "Models", route: "/models", short: "MD", mode: "cognitive" },
       {
         label: "Registry",
         route: "/models?view=registry",
         short: "RG",
         mode: "cognitive",
       },
+      { label: "Adapters", route: "/adapters", short: "AD", mode: "metrics" },
     ],
   },
   {
-    label: "System",
+    label: "Execution",
+    items: [
+      { label: "Approvals", route: "/approvals", short: "AP", mode: "metrics" },
+      { label: "Gateway", route: "/gateway", short: "GW", mode: "metrics" },
+      {
+        label: "Action Lanes",
+        route: "/action-lanes",
+        short: "AL",
+        mode: "metrics",
+      },
+      {
+        label: "Permissions",
+        route: "/execution-permissions",
+        short: "PX",
+        mode: "metrics",
+      },
+    ],
+  },
+  {
+    label: "Operator",
+    items: [
+      { label: "Chat", route: "/chat", short: "CH", mode: "cognitive" },
+      { label: "Canvas", route: "/canvas", short: "CV", mode: "cognitive" },
+      {
+        label: "Artifacts",
+        route: "/workbench",
+        short: "AR",
+        mode: "cognitive",
+      },
+      { label: "Layouts", route: "/layouts", short: "LY", mode: "cognitive" },
+    ],
+  },
+  {
+    label: "Evidence",
     items: [
       { label: "Metrics", route: "/dashboard", short: "MX", mode: "metrics" },
       {
-        label: "Diagnostics",
+        label: "Inspectors",
         route: "/inspectors",
-        short: "DG",
+        short: "IN",
         mode: "metrics",
       },
-      { label: "Logs", route: "/events", short: "LG", mode: "metrics" },
-    ],
-  },
-  {
-    label: "Workspace",
-    items: [
-      { label: "Files", route: "/workbench", short: "FL", mode: "cognitive" },
-      { label: "Layouts", route: "/layouts", short: "LY", mode: "cognitive" },
+      { label: "Audit", route: "/audit", short: "AU", mode: "metrics" },
+      { label: "Events", route: "/events", short: "EV", mode: "metrics" },
     ],
   },
 ];
 
 const surfaceDirectory: NavItem[] = [
-  { label: "Chat", route: "/chat", short: "CH" },
-  { label: "Canvas", route: "/canvas", short: "CV" },
-  { label: "Approvals", route: "/approvals", short: "AP" },
-  { label: "Reviews", route: "/reviews", short: "RV" },
-  { label: "Gateway", route: "/gateway", short: "GW" },
-  { label: "Action Lanes", route: "/action-lanes", short: "AL" },
-  { label: "Permissions", route: "/execution-permissions", short: "PR" },
-  { label: "Audit", route: "/audit", short: "AU" },
+  { label: "Start", route: "/start", short: "ST" },
+  { label: "Command", route: "/command", short: "CM" },
   { label: "Policy", route: "/policy", short: "PL" },
   { label: "Strategies", route: "/strategies", short: "ST" },
   { label: "Automation", route: "/automation", short: "AM" },
   { label: "Autonomy", route: "/autonomy", short: "AY" },
-  { label: "Dossiers", route: "/dossiers", short: "DS" },
+  { label: "Reviews", route: "/reviews", short: "RV" },
+  { label: "Insights", route: "/insights", short: "IS" },
   { label: "Retrieval Runs", route: "/retrieval-runs", short: "RR" },
   { label: "Evaluations", route: "/evaluations", short: "EV" },
   { label: "Sources", route: "/sources", short: "SC" },
-  { label: "Adapters", route: "/adapters", short: "AD" },
   { label: "Backup", route: "/backup", short: "BK" },
   { label: "Release", route: "/release", short: "RL" },
   { label: "Settings", route: "/settings", short: "SE" },
-  { label: "Command", route: "/command", short: "CM" },
+];
+
+const consoleDockItem: NavItem = {
+  label: "Console",
+  route: "/dashboard",
+  short: "FG",
+  mode: "cognitive",
+};
+
+const dockItems: NavItem[] = [
+  { label: "Chat", route: "/chat", short: "CH", mode: "cognitive" },
+  { label: "Jobs", route: "/jobs", short: "JB", mode: "cognitive" },
+  { label: "Memory", route: "/memory", short: "ME", mode: "cognitive" },
+  { label: "Models", route: "/models", short: "MD", mode: "cognitive" },
+  { label: "Gateway", route: "/gateway", short: "GW", mode: "metrics" },
+  { label: "Settings", route: "/settings", short: "SE", mode: "metrics" },
 ];
 
 function corePill(core: "online" | "offline" | "unknown") {
@@ -189,7 +226,7 @@ export function AppShell(props: AppShellProps) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [shellErr, setShellErr] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    () => new Set(["Core"]),
+    () => new Set(["Kernel"]),
   );
   const [windows, setWindows] = useState<FloatingWindow[]>([]);
   const [dragging, setDragging] = useState<{
@@ -202,6 +239,7 @@ export function AppShell(props: AppShellProps) {
     readStoredShellRailCollapsed(),
   );
   const [mobileRailOpen, setMobileRailOpen] = useState(false);
+  const [now, setNow] = useState(() => new Date());
   const isMainWindow = props.isMainWindow;
 
   useEffect(() => {
@@ -236,6 +274,12 @@ export function AppShell(props: AppShellProps) {
       // Cosmetic shell preference; ignore storage failures.
     }
   }, [railCollapsed]);
+
+  useEffect(() => {
+    if (!isMainWindow) return;
+    const id = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(id);
+  }, [isMainWindow]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -479,7 +523,7 @@ export function AppShell(props: AppShellProps) {
             {!showCollapsedRail ? (
               <div className="forge-rail-brand-card">
                 <div>
-                  <div className="forge-rail-brand-card__label">Command</div>
+                  <div className="forge-rail-brand-card__label">Operator</div>
                   <div className="forge-rail-brand-card__title">FORGE OS</div>
                 </div>
                 <span className="forge-rail-brand-card__light" />
@@ -504,6 +548,30 @@ export function AppShell(props: AppShellProps) {
               </span>
             </button>
             {!showCollapsedRail ? <CommandBar compact /> : null}
+            {!showCollapsedRail ? (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => openWindow("diagnostics", "Attention")}
+                  className="forge-context-row text-left text-[10px]"
+                >
+                  <span>Queue</span>
+                  <span className="font-semibold text-forge-ash">
+                    {level === "none" ? "clear" : attentionCount}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openWindow("inspector", "Surface Inspector")}
+                  className="forge-context-row text-left text-[10px]"
+                >
+                  <span>Surface</span>
+                  <span className="truncate font-semibold text-forge-ash">
+                    {currentTool.shortLabel}
+                  </span>
+                </button>
+              </div>
+            ) : null}
           </div>
           <nav className="forge-nav-scroll flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2 pb-3">
             {navGroups.map((group) => {
@@ -692,6 +760,63 @@ export function AppShell(props: AppShellProps) {
           </div>
         </div>
       </div>
+
+      {isMainWindow ? (
+        <footer className="forge-os-dockbar">
+          <button
+            type="button"
+            onClick={() => navigateToItem(consoleDockItem)}
+            className="forge-os-dockbar__brand"
+            aria-label="Open FORGE console"
+          >
+            <span className="forge-os-dockbar__sigil">FG</span>
+            <span>FORGE</span>
+          </button>
+          <div className="forge-os-dockbar__items">
+            {dockItems.map((item) => {
+              const active = isNavItemActive(item);
+              return (
+                <button
+                  key={item.route}
+                  type="button"
+                  onClick={() => navigateToItem(item)}
+                  className={cx(
+                    "forge-os-dockbar__item",
+                    active && "forge-os-dockbar__item--active",
+                  )}
+                  aria-current={active ? "page" : undefined}
+                  title={item.label}
+                >
+                  <span>{item.short}</span>
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={() => openWindow("surfaces", "Surface Directory")}
+            className="forge-os-dockbar__search"
+          >
+            <span className="text-forge-mist/45">Search FORGE</span>
+            <span className="font-mono text-forge-mist/55">Ctrl K</span>
+          </button>
+          <div className="forge-os-dockbar__system">
+            <span>
+              {now.toLocaleDateString([], {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}
+            </span>
+            <span>
+              {now.toLocaleTimeString([], {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </span>
+          </div>
+        </footer>
+      ) : null}
 
       {floatingWindows.map((item) => (
         <div

@@ -19,75 +19,75 @@ export type NavGroup = {
 export const navGroups: readonly NavGroup[] = [
   {
     id: "start",
-    label: "Start",
+    label: "Kernel",
     mode: "both",
     items: [
       {
         to: "/start",
-        label: "Start Here",
-        blurb: "Guided setup and next actions.",
+        label: "Start",
+        blurb: "Guided boot and recovery actions.",
         mode: "both",
       },
       {
         to: "/dashboard",
-        label: "Dashboard",
-        blurb: "Main command dashboard with autonomy and gateway telemetry.",
+        label: "Command Deck",
+        blurb: "Kernel status, active work, autonomy, and gateway telemetry.",
         mode: "both",
       },
     ],
   },
   {
     id: "daily",
-    label: "Daily Work",
+    label: "Operator",
     mode: "both",
     items: [
       {
         to: "/chat",
         label: "Chat",
-        blurb: "Ask and queue work.",
+        blurb: "Operator threads and job launch.",
         mode: "both",
       },
       {
         to: "/jobs",
         label: "Jobs",
-        blurb: "Track running and finished work.",
+        blurb: "Execution projections and event streams.",
         mode: "both",
       },
       {
         to: "/approvals",
         label: "Approvals",
-        blurb: "Allow or deny risky actions.",
+        blurb: "Risk gates with explicit decisions.",
         mode: "both",
       },
       {
         to: "/reviews",
         label: "Reviews",
-        blurb: "Review imported/generated output.",
+        blurb: "Admit or reject imported and generated evidence.",
         mode: "both",
       },
       {
         to: "/workbench",
         label: "Artifacts",
-        blurb: "Inspect generated files.",
+        blurb: "Inspect generated and job-linked files.",
         mode: "cognitive",
       },
     ],
   },
   {
     id: "context",
-    label: "Project Memory",
+    label: "Cognitive FS",
     mode: "both",
     items: [
       {
         to: "/memory",
-        label: "Search Memory",
-        blurb: "Find indexed context fast.",
+        label: "Episodes",
+        blurb: "Search indexed semantic evidence.",
         mode: "both",
       },
       {
         to: "/project-context",
-        label: "Project Context",
-        blurb: "Normalize and regenerate guidance.",
+        label: "Context Compile",
+        blurb: "Normalize guidance and briefing files.",
         mode: "both",
       },
       {
@@ -98,7 +98,7 @@ export const navGroups: readonly NavGroup[] = [
       },
       {
         to: "/dossiers",
-        label: "Projects",
+        label: "Dossiers",
         blurb: "Dossiers and project preferences.",
         mode: "both",
       },
@@ -110,8 +110,8 @@ export const navGroups: readonly NavGroup[] = [
       },
       {
         to: "/lineage",
-        label: "Retries & Lineage",
-        blurb: "Compare retries/replays.",
+        label: "Lineage",
+        blurb: "Compare retries, replays, and loops.",
         mode: "cognitive",
       },
       {
@@ -130,7 +130,7 @@ export const navGroups: readonly NavGroup[] = [
   },
   {
     id: "control",
-    label: "Control",
+    label: "Execution",
     mode: "both",
     items: [
       {
@@ -155,7 +155,7 @@ export const navGroups: readonly NavGroup[] = [
   },
   {
     id: "advanced",
-    label: "Advanced",
+    label: "Evidence",
     mode: "metrics",
     items: [
       {
@@ -172,7 +172,7 @@ export const navGroups: readonly NavGroup[] = [
       },
       {
         to: "/gateway",
-        label: "Tool Gateway",
+        label: "Gateway",
         blurb: "Bounded tool invocation.",
         mode: "metrics",
       },
@@ -184,7 +184,7 @@ export const navGroups: readonly NavGroup[] = [
       },
       {
         to: "/execution-permissions",
-        label: "Execution Permissions",
+        label: "Permissions",
         blurb: "Permission profile tuning.",
         mode: "metrics",
       },
@@ -216,12 +216,12 @@ export const navGroups: readonly NavGroup[] = [
   },
   {
     id: "system",
-    label: "System",
+    label: "Runtime",
     mode: "both",
     items: [
       {
         to: "/sources",
-        label: "Source Folders",
+        label: "Sources",
         blurb: "Manage indexed folders.",
         mode: "both",
       },
@@ -234,7 +234,7 @@ export const navGroups: readonly NavGroup[] = [
       {
         to: "/models",
         label: "Models",
-        blurb: "Manage FORGE model runtime assets.",
+        blurb: "Manage bounded runtime assets.",
         mode: "both",
       },
       {
@@ -250,11 +250,11 @@ export const navGroups: readonly NavGroup[] = [
 export const routeHelp: Record<string, { title: string; text: string }> = {
   "/start": {
     title: "Start",
-    text: "Use this page for the easiest path: connect sources, search memory, run jobs, and review results.",
+    text: "Use this boot surface to connect sources, search memory, run jobs, and review results.",
   },
   "/dashboard": {
-    title: "Dashboard",
-    text: "Main command dashboard: active work, autonomy pulse, capability status, and memory correlation graph.",
+    title: "Command Deck",
+    text: "Kernel dashboard for active work, autonomy pulse, capability status, and memory correlation.",
   },
   "/chat": {
     title: "Chat",
@@ -273,11 +273,11 @@ export const routeHelp: Record<string, { title: string; text: string }> = {
     text: "Approve, reject, or defer imported/generated outputs.",
   },
   "/memory": {
-    title: "Search Memory",
-    text: "Find indexed context and inspect the source snippets used to build packets.",
+    title: "Episodes",
+    text: "Find indexed cognitive filesystem evidence and inspect the snippets used to build packets.",
   },
   "/project-context": {
-    title: "Project Context",
+    title: "Context Compile",
     text: "Import and normalize context into durable guidance files and project briefing docs.",
   },
   "/inspectors": {
@@ -285,8 +285,24 @@ export const routeHelp: Record<string, { title: string; text: string }> = {
     text: "Read-only operator views for context snapshots, task packets, and execution trace evidence.",
   },
   "/dossiers": {
-    title: "Projects",
+    title: "Dossiers",
     text: "Manage project dossiers, profile preferences, and linked execution history.",
+  },
+  "/retrieval-runs": {
+    title: "Retrieval Runs",
+    text: "Inspect keyword and semantic retrieval runs as evidence.",
+  },
+  "/lineage": {
+    title: "Lineage",
+    text: "Compare retries, replays, loops, and linked execution history.",
+  },
+  "/evaluations": {
+    title: "Evaluations",
+    text: "Score outcomes and inspect quality records.",
+  },
+  "/insights": {
+    title: "Insights",
+    text: "Inspect routing advisories and cognitive filesystem signals.",
   },
   "/policy": {
     title: "Policy",
@@ -300,13 +316,57 @@ export const routeHelp: Record<string, { title: string; text: string }> = {
     title: "Automation",
     text: "Run bounded automation rules with dry-run previews and history.",
   },
+  "/canvas": {
+    title: "Canvas",
+    text: "Use the spatial planning board for persisted notes and working memory.",
+  },
+  "/command": {
+    title: "Command",
+    text: "Launch system command templates from an operator surface.",
+  },
+  "/gateway": {
+    title: "Gateway",
+    text: "Inspect bounded tool invocation and gateway authority evidence.",
+  },
+  "/action-lanes": {
+    title: "Action Lanes",
+    text: "Inspect operational lanes for bounded execution.",
+  },
+  "/execution-permissions": {
+    title: "Permissions",
+    text: "Tune permission profiles and execution capability boundaries.",
+  },
+  "/audit": {
+    title: "Audit",
+    text: "Inspect audit records for committed transitions.",
+  },
+  "/backup": {
+    title: "Backup / Export",
+    text: "Create and restore portable bundles.",
+  },
+  "/release": {
+    title: "Release",
+    text: "Inspect release readiness and status records.",
+  },
+  "/events": {
+    title: "Events",
+    text: "Inspect the global event stream.",
+  },
   "/workbench": {
     title: "Artifacts",
     text: "Open generated files and compare text artifacts quickly.",
   },
+  "/sources": {
+    title: "Sources",
+    text: "Manage indexed folders and ingestion scope.",
+  },
+  "/adapters": {
+    title: "Adapters",
+    text: "Inspect bounded worker status and adapter diagnostics.",
+  },
   "/models": {
     title: "Models",
-    text: "Import, verify, load, disable, archive, and inspect FORGE-managed model runtime assets.",
+    text: "Import, verify, load, disable, archive, and inspect bounded model runtime assets.",
   },
   "/settings": {
     title: "Settings",
