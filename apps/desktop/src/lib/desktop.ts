@@ -433,6 +433,93 @@ export async function listRuntimeWindows(): Promise<Window[]> {
   return getAllWindows();
 }
 
+// --- Real OS window control (Tauri only) ---------------------------------
+
+export async function focusTauriWindow(label: string): Promise<boolean> {
+  if (!isTauriDesktop()) return false;
+  try {
+    const w = await WebviewWindow.getByLabel(label);
+    if (!w) return false;
+    // Unminimize if minimized; then bring to front and focus.
+    try {
+      const minimized = await w.isMinimized();
+      if (minimized) await w.unminimize();
+    } catch {
+      /* ignore — older Tauri builds may not expose isMinimized */
+    }
+    await w.show();
+    await w.setFocus();
+    return true;
+  } catch (error) {
+    if (typeof console !== "undefined") {
+      console.error(`[FORGE] failed to focus window ${label}`, error);
+    }
+    return false;
+  }
+}
+
+export async function closeTauriWindow(label: string): Promise<boolean> {
+  if (!isTauriDesktop()) return false;
+  try {
+    const w = await WebviewWindow.getByLabel(label);
+    if (!w) return false;
+    await w.close();
+    return true;
+  } catch (error) {
+    if (typeof console !== "undefined") {
+      console.error(`[FORGE] failed to close window ${label}`, error);
+    }
+    return false;
+  }
+}
+
+export async function minimizeTauriWindow(label: string): Promise<boolean> {
+  if (!isTauriDesktop()) return false;
+  try {
+    const w = await WebviewWindow.getByLabel(label);
+    if (!w) return false;
+    await w.minimize();
+    return true;
+  } catch (error) {
+    if (typeof console !== "undefined") {
+      console.error(`[FORGE] failed to minimize window ${label}`, error);
+    }
+    return false;
+  }
+}
+
+export type ForgeWindowSnapshot = {
+  label: string;
+  title: string;
+  focused: boolean;
+  minimized: boolean;
+};
+
+// Returns a snapshot of every Tauri window currently alive. Includes the main
+// shell window so callers can filter as needed.
+export async function listForgeWindows(): Promise<ForgeWindowSnapshot[]> {
+  if (!isTauriDesktop()) return [];
+  try {
+    const all = await getAllWindows();
+    const snapshots = await Promise.all(
+      all.map(async (w) => {
+        const [title, focused, minimized] = await Promise.all([
+          w.title().catch(() => ""),
+          w.isFocused().catch(() => false),
+          w.isMinimized().catch(() => false),
+        ]);
+        return { label: w.label, title, focused, minimized };
+      }),
+    );
+    return snapshots;
+  } catch (error) {
+    if (typeof console !== "undefined") {
+      console.error("[FORGE] failed to list windows", error);
+    }
+    return [];
+  }
+}
+
 export async function emitWorkspaceSync(origin: string) {
   if (!isTauriDesktop()) return;
   await emit(WORKSPACE_LAYOUT_EVENT, { origin, atMs: Date.now() });

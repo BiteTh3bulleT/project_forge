@@ -1,14 +1,32 @@
 import type { DashboardSummary } from "@forge/shared";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { CommandBar } from "../components/CommandBar";
 import { api } from "../lib/api";
+import { isTauriDesktop, listForgeWindows } from "../lib/desktop";
 import { useUiStore } from "../stores/uiStore";
 import { useWorkspaceLayoutStore } from "../stores/workspaceLayoutStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
+import {
+  useDesktopWindowStore,
+  type DesktopWindow,
+} from "../stores/desktopWindowStore";
 
-import { getShellTool } from "./shellConfig";
+import {
+  allShellTools,
+  getShellTool,
+  type ShellToolDefinition,
+  type ShellToolId,
+} from "./shellConfig";
+import { getToolComponent } from "./toolRegistry";
 
 type AppShellProps = {
   children: ReactNode;
@@ -16,152 +34,10 @@ type AppShellProps = {
 };
 
 type AttentionLevel = "none" | "low" | "medium" | "high";
-type FloatingKind =
-  | "inspector"
-  | "snapshot"
-  | "graph"
-  | "memory"
-  | "model"
-  | "diagnostics"
-  | "surfaces";
 
-type FloatingWindow = {
-  id: number;
-  kind: FloatingKind;
-  title: string;
-  pinned: boolean;
-  x: number;
-  y: number;
-};
-
-type NavItem = {
-  label: string;
-  route: string;
-  short: string;
-  mode?: "cognitive" | "metrics";
-};
-
-const navGroups: Array<{ label: string; items: NavItem[] }> = [
-  {
-    label: "Kernel",
-    items: [
-      {
-        label: "Command Deck",
-        route: "/dashboard",
-        short: "KD",
-        mode: "cognitive",
-      },
-      {
-        label: "Context Compile",
-        route: "/project-context",
-        short: "CC",
-        mode: "cognitive",
-      },
-      { label: "Jobs", route: "/jobs", short: "JB", mode: "cognitive" },
-    ],
-  },
-  {
-    label: "Cognitive FS",
-    items: [
-      { label: "Episodes", route: "/memory", short: "ME", mode: "cognitive" },
-      { label: "Dossiers", route: "/dossiers", short: "DS", mode: "cognitive" },
-      { label: "Lineage", route: "/lineage", short: "LN", mode: "cognitive" },
-    ],
-  },
-  {
-    label: "Runtime",
-    items: [
-      { label: "Models", route: "/models", short: "MD", mode: "cognitive" },
-      {
-        label: "Registry",
-        route: "/models?view=registry",
-        short: "RG",
-        mode: "cognitive",
-      },
-      { label: "Adapters", route: "/adapters", short: "AD", mode: "metrics" },
-    ],
-  },
-  {
-    label: "Execution",
-    items: [
-      { label: "Approvals", route: "/approvals", short: "AP", mode: "metrics" },
-      { label: "Gateway", route: "/gateway", short: "GW", mode: "metrics" },
-      {
-        label: "Action Lanes",
-        route: "/action-lanes",
-        short: "AL",
-        mode: "metrics",
-      },
-      {
-        label: "Permissions",
-        route: "/execution-permissions",
-        short: "PX",
-        mode: "metrics",
-      },
-    ],
-  },
-  {
-    label: "Operator",
-    items: [
-      { label: "Chat", route: "/chat", short: "CH", mode: "cognitive" },
-      { label: "Canvas", route: "/canvas", short: "CV", mode: "cognitive" },
-      {
-        label: "Artifacts",
-        route: "/workbench",
-        short: "AR",
-        mode: "cognitive",
-      },
-      { label: "Layouts", route: "/layouts", short: "LY", mode: "cognitive" },
-    ],
-  },
-  {
-    label: "Evidence",
-    items: [
-      { label: "Metrics", route: "/dashboard", short: "MX", mode: "metrics" },
-      {
-        label: "Inspectors",
-        route: "/inspectors",
-        short: "IN",
-        mode: "metrics",
-      },
-      { label: "Audit", route: "/audit", short: "AU", mode: "metrics" },
-      { label: "Events", route: "/events", short: "EV", mode: "metrics" },
-    ],
-  },
-];
-
-const surfaceDirectory: NavItem[] = [
-  { label: "Start", route: "/start", short: "ST" },
-  { label: "Command", route: "/command", short: "CM" },
-  { label: "Policy", route: "/policy", short: "PL" },
-  { label: "Strategies", route: "/strategies", short: "ST" },
-  { label: "Automation", route: "/automation", short: "AM" },
-  { label: "Autonomy", route: "/autonomy", short: "AY" },
-  { label: "Reviews", route: "/reviews", short: "RV" },
-  { label: "Insights", route: "/insights", short: "IS" },
-  { label: "Retrieval Runs", route: "/retrieval-runs", short: "RR" },
-  { label: "Evaluations", route: "/evaluations", short: "EV" },
-  { label: "Sources", route: "/sources", short: "SC" },
-  { label: "Backup", route: "/backup", short: "BK" },
-  { label: "Release", route: "/release", short: "RL" },
-  { label: "Settings", route: "/settings", short: "SE" },
-];
-
-const consoleDockItem: NavItem = {
-  label: "Console",
-  route: "/dashboard",
-  short: "FG",
-  mode: "cognitive",
-};
-
-const dockItems: NavItem[] = [
-  { label: "Chat", route: "/chat", short: "CH", mode: "cognitive" },
-  { label: "Jobs", route: "/jobs", short: "JB", mode: "cognitive" },
-  { label: "Memory", route: "/memory", short: "ME", mode: "cognitive" },
-  { label: "Models", route: "/models", short: "MD", mode: "cognitive" },
-  { label: "Gateway", route: "/gateway", short: "GW", mode: "metrics" },
-  { label: "Settings", route: "/settings", short: "SE", mode: "metrics" },
-];
+const HOME_ROUTE = "/";
+const MIN_WINDOW_W = 360;
+const MIN_WINDOW_H = 280;
 
 function corePill(core: "online" | "offline" | "unknown") {
   if (core === "online") return "forge-chip--ok";
@@ -199,13 +75,6 @@ function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
-const SHELL_RAIL_COLLAPSED_KEY = "forge.shellRailCollapsed.v1";
-
-function readStoredShellRailCollapsed() {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(SHELL_RAIL_COLLAPSED_KEY) === "true";
-}
-
 export function AppShell(props: AppShellProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -215,32 +84,76 @@ export function AppShell(props: AppShellProps) {
   const core = useWorkspaceStore((s) => s.core);
   const meta = useWorkspaceStore((s) => s.meta);
   const lastErr = useWorkspaceStore((s) => s.lastCoreError);
-  const statusLine = useUiStore((s) => s.statusLine);
-  const uiMode = useUiStore((s) => s.uiMode);
-  const setUiMode = useUiStore((s) => s.setUiMode);
   const fallbackNotice = useWorkspaceLayoutStore((s) => s.fallbackNotice);
   const clearFallbackNotice = useWorkspaceLayoutStore(
     (s) => s.clearFallbackNotice,
   );
+  const uiMode = useUiStore((s) => s.uiMode);
+
+  const pinned = useDesktopWindowStore((s) => s.pinned);
+  const windows = useDesktopWindowStore((s) => s.windows);
+  const focusedId = useDesktopWindowStore((s) => s.focusedId);
+  const openWindow = useDesktopWindowStore((s) => s.openWindow);
+  const closeWindow = useDesktopWindowStore((s) => s.closeWindow);
+  const closeByTool = useDesktopWindowStore((s) => s.closeByTool);
+  const minimize = useDesktopWindowStore((s) => s.minimize);
+  const restore = useDesktopWindowStore((s) => s.restore);
+  const focus = useDesktopWindowStore((s) => s.focus);
+  const toggleMaximize = useDesktopWindowStore((s) => s.toggleMaximize);
+  const move = useDesktopWindowStore((s) => s.move);
+  const resize = useDesktopWindowStore((s) => s.resize);
+  const pin = useDesktopWindowStore((s) => s.pin);
+  const unpin = useDesktopWindowStore((s) => s.unpin);
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [shellErr, setShellErr] = useState<string | null>(null);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    () => new Set(["Kernel"]),
-  );
-  const [windows, setWindows] = useState<FloatingWindow[]>([]);
-  const [dragging, setDragging] = useState<{
-    id: number;
-    dx: number;
-    dy: number;
-  } | null>(null);
-  const [windowSeq, setWindowSeq] = useState(1);
-  const [railCollapsed, setRailCollapsed] = useState(() =>
-    readStoredShellRailCollapsed(),
-  );
-  const [mobileRailOpen, setMobileRailOpen] = useState(false);
+  const [startOpen, setStartOpen] = useState(false);
+  const [startQuery, setStartQuery] = useState("");
   const [now, setNow] = useState(() => new Date());
+  const [contextMenu, setContextMenu] = useState<DockContextMenu | null>(null);
   const isMainWindow = props.isMainWindow;
+
+  const isHome = pathname === HOME_ROUTE;
+
+  // Browser dev only: when the URL changes to a deep-linked surface, open an
+  // in-shell window for it. In Tauri mode the main window stays on "/" — each
+  // tool gets its own real OS window, so this effect is a no-op there.
+  useEffect(() => {
+    if (isTauriDesktop()) return;
+    if (isHome) return;
+    if (!isMainWindow) return;
+    const tool = currentTool;
+    if (tool.id === "other" || tool.id === "job-detail") return;
+    const existing = windows.find((w) => w.toolId === tool.id);
+    if (!existing) {
+      void openWindow(tool.id);
+    } else if (existing.minimized || focusedId !== existing.id) {
+      void restore(existing.id);
+    }
+    // intentionally omit windows / focusedId — we only react to URL changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname, isMainWindow, isHome]);
+
+  // Tauri only: reconcile the desktop window store against the real Tauri
+  // window list every second, so opening/closing windows from anywhere
+  // (including OS chrome) is reflected in the FORGE taskbar.
+  useEffect(() => {
+    if (!isTauriDesktop()) return;
+    if (!isMainWindow) return;
+    let cancelled = false;
+    const reconcile = useDesktopWindowStore.getState().reconcileFromTauri;
+    async function tick() {
+      const snapshots = await listForgeWindows();
+      if (cancelled) return;
+      reconcile(snapshots);
+    }
+    void tick();
+    const id = window.setInterval(() => void tick(), 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [isMainWindow]);
 
   useEffect(() => {
     if (!isMainWindow) return;
@@ -265,17 +178,6 @@ export function AppShell(props: AppShellProps) {
   }, [isMainWindow]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(
-        SHELL_RAIL_COLLAPSED_KEY,
-        String(railCollapsed),
-      );
-    } catch {
-      // Cosmetic shell preference; ignore storage failures.
-    }
-  }, [railCollapsed]);
-
-  useEffect(() => {
     if (!isMainWindow) return;
     const id = window.setInterval(() => setNow(new Date()), 30_000);
     return () => window.clearInterval(id);
@@ -285,120 +187,68 @@ export function AppShell(props: AppShellProps) {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
-      if (tag === "input" || tag === "textarea" || tag === "select") return;
-      if (event.ctrlKey && event.key.toLowerCase() === "m") {
-        event.preventDefault();
-        switchMode(uiMode === "cognitive" ? "metrics" : "cognitive");
-      }
-      if (event.ctrlKey && event.key.toLowerCase() === "b") {
-        event.preventDefault();
-        setRailCollapsed((value) => !value);
-      }
+      const editing =
+        tag === "input" || tag === "textarea" || tag === "select";
       if (event.key === "Escape") {
-        setMobileRailOpen(false);
-        setWindows((items) => items.filter((item) => item.pinned));
+        if (contextMenu) {
+          setContextMenu(null);
+          return;
+        }
+        if (startOpen) {
+          setStartOpen(false);
+          return;
+        }
+        // Minimize the focused window via Esc.
+        if (focusedId) {
+          void minimize(focusedId);
+        }
+        return;
+      }
+      if (editing) return;
+      if (event.key === "Meta" || (event.ctrlKey && event.code === "Space")) {
+        event.preventDefault();
+        setStartOpen((value) => !value);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [uiMode]);
+  }, [startOpen, focusedId, minimize, contextMenu]);
 
   useEffect(() => {
-    if (!dragging) return;
-    const onMove = (event: PointerEvent) => {
-      setWindows((items) =>
-        items.map((item) =>
-          item.id === dragging.id
-            ? {
-                ...item,
-                x: Math.max(
-                  96,
-                  Math.min(
-                    window.innerWidth - 380,
-                    event.clientX - dragging.dx,
-                  ),
-                ),
-                y: Math.max(
-                  72,
-                  Math.min(
-                    window.innerHeight - 180,
-                    event.clientY - dragging.dy,
-                  ),
-                ),
-              }
-            : item,
-        ),
-      );
-    };
-    const onUp = () => setDragging(null);
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp, { once: true });
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-  }, [dragging]);
+    setStartOpen(false);
+    setStartQuery("");
+  }, [pathname, location.search]);
 
-  function switchMode(nextMode: "cognitive" | "metrics") {
-    setUiMode(nextMode);
-    setMobileRailOpen(false);
-    navigate(nextMode === "metrics" ? "/dashboard" : "/chat");
+  useEffect(() => {
+    if (!contextMenu) return;
+    const onDown = () => setContextMenu(null);
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [contextMenu]);
+
+  function launchTool(tool: ShellToolDefinition) {
+    setStartOpen(false);
+    void openWindow(tool.id);
+    // In Tauri mode the spawned OS window owns its own URL; the shell stays
+    // at "/". In browser dev we navigate to keep the in-shell window driven
+    // by the route.
+    if (!isTauriDesktop()) {
+      navigate(tool.route);
+    }
   }
 
-  function isNavItemActive(item: NavItem) {
-    const [itemPath, itemSearch = ""] = item.route.split("?");
-    const searchMatches = !itemSearch || location.search === `?${itemSearch}`;
-    const pathMatches =
-      pathname === itemPath || pathname.startsWith(`${itemPath}/`);
-    if (!pathMatches || !searchMatches) return false;
-    if (item.route === "/dashboard" && item.mode) return uiMode === item.mode;
-    return true;
-  }
-
-  function navigateToItem(item: NavItem) {
-    if (item.mode) setUiMode(item.mode);
-    setMobileRailOpen(false);
-    navigate(item.route);
-  }
-
-  function toggleGroup(label: string) {
-    setExpandedGroups((current) => {
-      const next = new Set(current);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
-      return next;
-    });
-  }
-
-  function openWindow(kind: FloatingKind, title: string) {
-    setWindows((items) => {
-      const existing = items.find((item) => item.kind === kind);
-      if (existing) {
-        return [...items.filter((item) => item.id !== existing.id), existing];
-      }
-      const next: FloatingWindow = {
-        id: windowSeq,
-        kind,
-        title,
-        pinned: false,
-        x: 128 + (items.length % 3) * 34,
-        y: 112 + (items.length % 3) * 28,
-      };
-      setWindowSeq((value) => value + 1);
-      return [...items, next];
-    });
-  }
-
-  function closeWindow(id: number) {
-    setWindows((items) => items.filter((item) => item.id !== id));
-  }
-
-  function togglePinned(id: number) {
-    setWindows((items) =>
-      items.map((item) =>
-        item.id === id ? { ...item, pinned: !item.pinned } : item,
-      ),
-    );
+  function focusFromDock(window_: DesktopWindow) {
+    if (window_.minimized) {
+      void restore(window_.id);
+    } else if (focusedId === window_.id) {
+      void minimize(window_.id);
+    } else {
+      void focus(window_.id);
+    }
+    if (!isTauriDesktop()) {
+      const tool = allShellTools.find((t) => t.id === window_.toolId);
+      if (tool) navigate(tool.route);
+    }
   }
 
   const approvalsPending = summary?.approvalsPending ?? 0;
@@ -412,47 +262,68 @@ export function AppShell(props: AppShellProps) {
   const workspaceLabel = getWorkspaceLabel(meta?.workspaceDir);
   const runtimeState =
     core === "offline" ? "offline" : shellErr ? "degraded" : "online";
-  const pinnedWindows = windows.filter((item) => item.pinned);
-  const floatingWindows = windows.filter((item) => !item.pinned);
-  const isChatRoute = pathname === "/chat";
-  const showCollapsedRail = railCollapsed && !mobileRailOpen;
+
+  // Dock = pinned tools (in pinned order) + any open windows whose tool
+  // isn't pinned (in open order).
+  const dockTiles = useMemo<DockTile[]>(() => {
+    const toolMap = new Map<ShellToolId, ShellToolDefinition>(
+      allShellTools.map((t) => [t.id, t] as const),
+    );
+    const tiles: DockTile[] = [];
+    for (const toolId of pinned) {
+      const tool = toolMap.get(toolId);
+      if (!tool) continue;
+      const window_ = windows.find((w) => w.toolId === toolId) ?? null;
+      tiles.push({ kind: "tile", tool, window: window_, pinned: true });
+    }
+    const pinnedSet = new Set(pinned);
+    for (const window_ of windows) {
+      if (pinnedSet.has(window_.toolId)) continue;
+      const tool = toolMap.get(window_.toolId);
+      if (!tool) continue;
+      tiles.push({ kind: "tile", tool, window: window_, pinned: false });
+    }
+    return tiles;
+  }, [pinned, windows]);
+
+  // Active foreground tool (focused, non-minimized).
+  const focusedWindow = useMemo<DesktopWindow | null>(() => {
+    if (!focusedId) return null;
+    const w = windows.find((w_) => w_.id === focusedId);
+    if (!w || w.minimized) return null;
+    return w;
+  }, [focusedId, windows]);
+  const focusedTool = useMemo<ShellToolDefinition | null>(() => {
+    if (!focusedWindow) return null;
+    return allShellTools.find((t) => t.id === focusedWindow.toolId) ?? null;
+  }, [focusedWindow]);
+
+  // Sort windows so the focused one renders last (= on top via DOM order).
+  const sortedWindows = useMemo(
+    () => [...windows].sort((a, b) => a.z - b.z),
+    [windows],
+  );
 
   return (
     <div
       className={cx(
-        "forge-shell-frame flex h-full min-h-0 flex-col text-forge-ash",
-        mobileRailOpen && "forge-shell-frame--rail-open",
+        "forge-os-shell flex h-full min-h-0 flex-col text-forge-ash",
       )}
     >
+      <DesktopWallpaper />
+
       {isMainWindow ? (
-        <header className="forge-status-strip">
-          <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMobileRailOpen((value) => !value)}
-              className="forge-mobile-rail-toggle"
-              aria-label={
-                mobileRailOpen ? "Close navigation" : "Open navigation"
-              }
-              aria-expanded={mobileRailOpen}
-            >
-              <span className="forge-mobile-rail-toggle__mark" aria-hidden>
-                <span />
-                <span />
-                <span />
-              </span>
-            </button>
-            <div className="forge-shell-lockup">
-              <div className="forge-shell-brand h-9 w-9 text-[11px]">FG</div>
-              <div className="hidden min-w-0 sm:block">
-                <div className="forge-shell-product">FORGE</div>
-                <div className="truncate text-[10px] uppercase tracking-[0.12em] text-forge-mist/55">
-                  {workspaceLabel} / {currentTool.label}
-                </div>
-              </div>
-            </div>
+        <header className="forge-os-statusbar">
+          <div className="forge-os-statusbar__left">
+            <span className="forge-os-statusbar__crumb">{workspaceLabel}</span>
+            <span className="forge-os-statusbar__sep" aria-hidden>
+              ›
+            </span>
+            <span className="forge-os-statusbar__crumb forge-os-statusbar__crumb--active">
+              {focusedTool ? focusedTool.label : "Desktop"}
+            </span>
           </div>
-          <div className="flex min-w-0 flex-1 items-center justify-end gap-2 overflow-x-auto">
+          <div className="forge-os-statusbar__right">
             <span
               className={cx(
                 "forge-chip px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]",
@@ -476,9 +347,7 @@ export function AppShell(props: AppShellProps) {
             >
               Runtime: {runtimeState}
             </span>
-            <button
-              type="button"
-              onClick={() => openWindow("diagnostics", "Attention")}
+            <span
               className={cx(
                 "forge-chip px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]",
                 level === "none"
@@ -487,320 +356,159 @@ export function AppShell(props: AppShellProps) {
                     ? "forge-chip--warn"
                     : "forge-chip--info",
               )}
+              title={
+                level === "none"
+                  ? "Queue clear"
+                  : `Approvals ${approvalsPending} · Reviews ${reviewsPending} · Failures ${recentFailures.length}`
+              }
             >
               Queue:{" "}
               {level === "none" ? "clear" : `attention ${attentionCount}`}
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                switchMode(uiMode === "cognitive" ? "metrics" : "cognitive")
-              }
-              className="forge-chip forge-chip--accent px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
-              title="Ctrl+M"
-            >
+            </span>
+            <span className="forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
               Mode: {uiMode}
-            </button>
+            </span>
           </div>
         </header>
       ) : null}
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <button
-          type="button"
-          className="forge-mobile-rail-backdrop"
-          aria-label="Close navigation"
-          onClick={() => setMobileRailOpen(false)}
-        />
-        <aside
-          className={cx(
-            "forge-category-rail",
-            railCollapsed && "forge-category-rail--collapsed",
-            mobileRailOpen && "forge-category-rail--mobile-open",
-          )}
-        >
-          <div className="forge-category-rail__top">
-            {!showCollapsedRail ? (
-              <div className="forge-rail-brand-card">
-                <div>
-                  <div className="forge-rail-brand-card__label">Operator</div>
-                  <div className="forge-rail-brand-card__title">FORGE OS</div>
-                </div>
-                <span className="forge-rail-brand-card__light" />
-              </div>
-            ) : null}
+      <div className="forge-os-stage">
+        {fallbackNotice ? (
+          <div className="forge-os-banner">
+            <span>{fallbackNotice}</span>
             <button
               type="button"
-              onClick={() => setRailCollapsed((value) => !value)}
-              className="forge-rail-toggle"
-              aria-label={
-                railCollapsed ? "Open left toolbar" : "Collapse left toolbar"
-              }
-              title={
-                railCollapsed
-                  ? "Open toolbar (Ctrl+B)"
-                  : "Collapse toolbar (Ctrl+B)"
-              }
+              onClick={() => clearFallbackNotice()}
+              className="forge-inline-link"
             >
-              <span aria-hidden>{railCollapsed ? ">" : "<"}</span>
-              <span className={railCollapsed ? "sr-only" : ""}>
-                {railCollapsed ? "Open" : "Collapse"}
-              </span>
-            </button>
-            {!showCollapsedRail ? <CommandBar compact /> : null}
-            {!showCollapsedRail ? (
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => openWindow("diagnostics", "Attention")}
-                  className="forge-context-row text-left text-[10px]"
-                >
-                  <span>Queue</span>
-                  <span className="font-semibold text-forge-ash">
-                    {level === "none" ? "clear" : attentionCount}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openWindow("inspector", "Surface Inspector")}
-                  className="forge-context-row text-left text-[10px]"
-                >
-                  <span>Surface</span>
-                  <span className="truncate font-semibold text-forge-ash">
-                    {currentTool.shortLabel}
-                  </span>
-                </button>
-              </div>
-            ) : null}
-          </div>
-          <nav className="forge-nav-scroll flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2 pb-3">
-            {navGroups.map((group) => {
-              const expanded = expandedGroups.has(group.label);
-              const groupActive = group.items.some((item) =>
-                isNavItemActive(item),
-              );
-              return (
-                <section key={group.label} className="forge-nav-group">
-                  <button
-                    type="button"
-                    onClick={() => toggleGroup(group.label)}
-                    className={cx(
-                      "forge-nav-group__trigger",
-                      groupActive && "forge-nav-group__trigger--active",
-                    )}
-                    aria-expanded={expanded}
-                    title={showCollapsedRail ? group.label : undefined}
-                  >
-                    <span>
-                      {showCollapsedRail
-                        ? group.label.slice(0, 2).toUpperCase()
-                        : group.label}
-                    </span>
-                    {!showCollapsedRail ? (
-                      <span>{expanded ? "-" : "+"}</span>
-                    ) : null}
-                  </button>
-                  {expanded ? (
-                    <div className="mt-1 space-y-1">
-                      {group.items.map((item) => {
-                        const active = isNavItemActive(item);
-                        return (
-                          <button
-                            key={`${group.label}-${item.label}`}
-                            type="button"
-                            onClick={() => navigateToItem(item)}
-                            className={cx(
-                              "forge-nav-item",
-                              active && "forge-nav-item--active",
-                            )}
-                            aria-current={active ? "page" : undefined}
-                            title={showCollapsedRail ? item.label : undefined}
-                          >
-                            <span className="forge-nav-item__short">
-                              {item.short}
-                            </span>
-                            <span
-                              className={cx(
-                                "forge-nav-item__label min-w-0 truncate",
-                                showCollapsedRail && "sr-only",
-                              )}
-                            >
-                              {item.label}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : null}
-                </section>
-              );
-            })}
-          </nav>
-          <div className="border-t border-forge-platinum/10 p-2">
-            <button
-              type="button"
-              onClick={() => {
-                setMobileRailOpen(false);
-                openWindow("surfaces", "Surface Directory");
-              }}
-              className="forge-nav-item w-full"
-              title={showCollapsedRail ? "More" : undefined}
-            >
-              <span className="forge-nav-item__short">··</span>
-              <span
-                className={cx(
-                  "forge-nav-item__label",
-                  showCollapsedRail && "sr-only",
-                )}
-              >
-                More
-              </span>
+              Dismiss
             </button>
           </div>
-        </aside>
+        ) : null}
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          {fallbackNotice ? (
-            <div className="forge-chat-toolbar text-xs text-forge-mist">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span>{fallbackNotice}</span>
-                <button
-                  type="button"
-                  onClick={() => clearFallbackNotice()}
-                  className="forge-inline-link"
-                >
-                  Dismiss
-                </button>
-              </div>
+        <main className="forge-os-desktop">
+          {/* Wallpaper-only when no FORGE windows are present. In Tauri mode
+              the windows are real OS windows owned by the compositor — the
+              shell never paints them; the dock + Start are the only FORGE
+              UI here. */}
+          {windows.length === 0 ? <ForgeHero lastErr={lastErr} /> : null}
+
+          {/* Browser dev only: in-shell window manager. */}
+          {!isTauriDesktop()
+            ? sortedWindows.map((win) => (
+                <FloatingWindow
+                  key={win.id}
+                  window={win}
+                  focused={focusedId === win.id}
+                  onFocus={() => void focus(win.id)}
+                  onMinimize={() => void minimize(win.id)}
+                  onClose={() => void closeWindow(win.id)}
+                  onToggleMaximize={() => toggleMaximize(win.id)}
+                  onMove={(x, y) => move(win.id, x, y)}
+                  onResize={(w, h) => resize(win.id, w, h)}
+                />
+              ))
+            : null}
+
+          {/* Browser dev only: hidden router-driven children for deep-link
+              routes. Tauri spawns a separate webview per surface, so the
+              shell window doesn't need the router output mounted. */}
+          {!isTauriDesktop() ? (
+            <div className="forge-os-router-sink" aria-hidden>
+              {props.children}
             </div>
           ) : null}
-
-          <div className="forge-main-field flex min-h-0 min-w-0 flex-1 overflow-hidden">
-            <main
-              className={cx(
-                "forge-desktop-surface",
-                isChatRoute && "forge-desktop-surface--flush",
-              )}
-            >
-              <div
-                className={cx(
-                  "forge-window-frame forge-window-frame--focus",
-                  isChatRoute && "forge-window-frame--chat",
-                )}
-              >
-                {!isChatRoute ? (
-                  <div className="forge-focus-head">
-                    <div className="min-w-0">
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist/55">
-                        {uiMode === "metrics"
-                          ? "System Metrics"
-                          : "Cognitive State"}
-                      </div>
-                      <div className="mt-1 truncate text-sm font-semibold text-forge-ash">
-                        {currentTool.label}
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center justify-end gap-2">
-                      {level !== "none" ? (
-                        <button
-                          type="button"
-                          onClick={() => openWindow("diagnostics", "Attention")}
-                          className="forge-chip forge-chip--warn px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
-                        >
-                          Attention {attentionCount}
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => openWindow("inspector", "Inspector")}
-                        className="forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
-                      >
-                        Inspector
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          openWindow("snapshot", "Restore Snapshot")
-                        }
-                        className="forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
-                      >
-                        Snapshot
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-                <div
-                  className={
-                    isChatRoute
-                      ? "min-h-0 flex flex-1 overflow-hidden p-0"
-                      : "min-h-0 flex-1 overflow-auto px-4 py-4 sm:px-5 lg:px-6"
-                  }
-                >
-                  {props.children}
-                </div>
-              </div>
-            </main>
-
-            {pinnedWindows.length > 0 ? (
-              <aside className="forge-pinned-panel">
-                {pinnedWindows.map((item) => (
-                  <FloatingContent
-                    key={item.id}
-                    item={item}
-                    summary={summary}
-                    pathname={pathname}
-                    statusLine={statusLine}
-                    lastErr={lastErr}
-                    onClose={() => closeWindow(item.id)}
-                    onPin={() => togglePinned(item.id)}
-                  />
-                ))}
-              </aside>
-            ) : null}
-          </div>
-        </div>
+        </main>
       </div>
 
       {isMainWindow ? (
-        <footer className="forge-os-dockbar">
+        <footer className="forge-os-taskbar">
           <button
             type="button"
-            onClick={() => navigateToItem(consoleDockItem)}
-            className="forge-os-dockbar__brand"
-            aria-label="Open FORGE console"
+            onClick={() => setStartOpen((value) => !value)}
+            className={cx(
+              "forge-os-taskbar__start",
+              startOpen && "forge-os-taskbar__start--active",
+            )}
+            aria-label="Open Start menu"
+            aria-expanded={startOpen}
           >
-            <span className="forge-os-dockbar__sigil">FG</span>
-            <span>FORGE</span>
+            <ForgeAnvilIcon className="forge-os-taskbar__anvil" />
+            <span className="forge-os-taskbar__label">FORGE</span>
           </button>
-          <div className="forge-os-dockbar__items">
-            {dockItems.map((item) => {
-              const active = isNavItemActive(item);
+
+          <div className="forge-os-taskbar__items">
+            {dockTiles.map((tile) => {
+              const isActive =
+                tile.window != null &&
+                !tile.window.minimized &&
+                focusedId === tile.window.id;
+              const isOpen = tile.window != null;
+              const isMinimized = tile.window?.minimized ?? false;
               return (
                 <button
-                  key={item.route}
+                  key={tile.tool.id}
                   type="button"
-                  onClick={() => navigateToItem(item)}
+                  onClick={() => {
+                    if (tile.window) {
+                      focusFromDock(tile.window);
+                    } else {
+                      launchTool(tile.tool);
+                    }
+                  }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setContextMenu({
+                      x: event.clientX,
+                      y: event.clientY,
+                      tool: tile.tool,
+                      pinned: tile.pinned,
+                      open: isOpen,
+                    });
+                  }}
+                  onAuxClick={(event) => {
+                    if (event.button === 1 && tile.window) {
+                      event.preventDefault();
+                      void closeWindow(tile.window.id);
+                    }
+                  }}
                   className={cx(
-                    "forge-os-dockbar__item",
-                    active && "forge-os-dockbar__item--active",
+                    "forge-os-taskbar__item",
+                    isActive && "forge-os-taskbar__item--active",
+                    !isActive &&
+                      isOpen &&
+                      "forge-os-taskbar__item--open",
+                    isMinimized && "forge-os-taskbar__item--minimized",
                   )}
-                  aria-current={active ? "page" : undefined}
-                  title={item.label}
+                  aria-current={isActive ? "page" : undefined}
+                  title={
+                    isActive
+                      ? `${tile.tool.label} (click to minimize)`
+                      : isMinimized
+                        ? `${tile.tool.label} (minimized)`
+                        : isOpen
+                          ? `${tile.tool.label} (open)`
+                          : tile.tool.label
+                  }
                 >
-                  <span>{item.short}</span>
+                  <span className="forge-os-taskbar__short">
+                    {tile.tool.shortLabel}
+                  </span>
+                  <span className="forge-os-taskbar__name">
+                    {tile.tool.label}
+                  </span>
                 </button>
               );
             })}
           </div>
-          <button
-            type="button"
-            onClick={() => openWindow("surfaces", "Surface Directory")}
-            className="forge-os-dockbar__search"
-          >
-            <span className="text-forge-mist/45">Search FORGE</span>
-            <span className="font-mono text-forge-mist/55">Ctrl K</span>
-          </button>
-          <div className="forge-os-dockbar__system">
+
+          <div className="forge-os-taskbar__system">
+            <span>
+              {now.toLocaleTimeString([], {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </span>
             <span>
               {now.toLocaleDateString([], {
                 day: "numeric",
@@ -808,278 +516,545 @@ export function AppShell(props: AppShellProps) {
                 year: "numeric",
               })}
             </span>
-            <span>
-              {now.toLocaleTimeString([], {
-                hour: "numeric",
-                minute: "2-digit",
-              })}
-            </span>
           </div>
         </footer>
       ) : null}
 
-      {floatingWindows.map((item) => (
-        <div
-          key={item.id}
-          className="forge-floating-window"
-          style={{ left: item.x, top: item.y }}
-        >
-          <FloatingContent
-            item={item}
-            summary={summary}
-            pathname={pathname}
-            statusLine={statusLine}
-            lastErr={lastErr}
-            onClose={() => closeWindow(item.id)}
-            onPin={() => togglePinned(item.id)}
-            onDragStart={(clientX, clientY) =>
-              setDragging({
-                id: item.id,
-                dx: clientX - item.x,
-                dy: clientY - item.y,
-              })
+      {startOpen ? (
+        <StartMenu
+          query={startQuery}
+          onQueryChange={setStartQuery}
+          onClose={() => {
+            setStartOpen(false);
+            setStartQuery("");
+          }}
+          onLaunch={launchTool}
+          onContextMenu={(event, tool) => {
+            event.preventDefault();
+            const isPinned = pinned.includes(tool.id);
+            const isOpen = windows.some((w) => w.toolId === tool.id);
+            setStartOpen(false);
+            setContextMenu({
+              x: event.clientX,
+              y: event.clientY,
+              tool,
+              pinned: isPinned,
+              open: isOpen,
+            });
+          }}
+          activeTool={focusedTool}
+          workspaceLabel={workspaceLabel}
+          uiMode={uiMode}
+          pinnedIds={pinned}
+        />
+      ) : null}
+
+      {contextMenu ? (
+        <DockContextMenuView
+          menu={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onAction={(action) => {
+            const tool = contextMenu.tool;
+            if (action === "open") {
+              launchTool(tool);
+            } else if (action === "close") {
+              void closeByTool(tool.id);
+            } else if (action === "pin") {
+              pin(tool.id);
+            } else if (action === "unpin") {
+              unpin(tool.id);
             }
-          />
-        </div>
-      ))}
+            setContextMenu(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
-function FloatingContent(props: {
-  item: FloatingWindow;
-  summary: DashboardSummary | null;
-  pathname: string;
-  statusLine: string;
-  lastErr: string | null;
+type DockTile = {
+  kind: "tile";
+  tool: ShellToolDefinition;
+  window: DesktopWindow | null;
+  pinned: boolean;
+};
+
+type DockContextMenu = {
+  x: number;
+  y: number;
+  tool: ShellToolDefinition;
+  pinned: boolean;
+  open: boolean;
+};
+
+function DesktopWallpaper() {
+  return (
+    <div className="forge-os-wallpaper" aria-hidden>
+      <div className="forge-os-wallpaper__gradient" />
+      <div className="forge-os-wallpaper__grid" />
+      <div className="forge-os-wallpaper__glow" />
+    </div>
+  );
+}
+
+function ForgeHero(props: { lastErr: string | null }) {
+  return (
+    <div className="forge-os-hero">
+      <div className="forge-os-hero__panel">
+        <ForgeAnvilIcon className="forge-os-hero__anvil" decorative />
+        <div className="forge-os-hero__copy">
+          <div className="forge-os-hero__wordmark">F.O.R.G.E.</div>
+          <div className="forge-os-hero__tagline">
+            Foundry for Orchestrated Reasoning, Growth, and Execution.
+          </div>
+          {props.lastErr ? (
+            <div className="forge-os-hero__error">{props.lastErr}</div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FloatingWindow(props: {
+  window: DesktopWindow;
+  focused: boolean;
+  onFocus: () => void;
+  onMinimize: () => void;
   onClose: () => void;
-  onPin: () => void;
-  onDragStart?: (clientX: number, clientY: number) => void;
+  onToggleMaximize: () => void;
+  onMove: (x: number, y: number) => void;
+  onResize: (width: number, height: number) => void;
 }) {
-  const navigate = useNavigate();
-  const activeJobs = Array.isArray(props.summary?.activeJobs)
-    ? props.summary.activeJobs
-    : [];
-  const recentFailures = Array.isArray(props.summary?.recentFailures)
-    ? props.summary.recentFailures
-    : [];
-  const recentImports = Array.isArray(props.summary?.recentImports)
-    ? props.summary.recentImports
-    : [];
+  const tool = useMemo(
+    () => allShellTools.find((t) => t.id === props.window.toolId) ?? null,
+    [props.window.toolId],
+  );
+  const Component = tool ? getToolComponent(tool.id) : null;
+  const dragRef = useRef<{ dx: number; dy: number } | null>(null);
+  const resizeRef = useRef<{
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+  } | null>(null);
+
+  function startDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (props.window.maximized) return;
+    if (event.button !== 0) return;
+    event.preventDefault();
+    dragRef.current = {
+      dx: event.clientX - props.window.x,
+      dy: event.clientY - props.window.y,
+    };
+    props.onFocus();
+    const onMove = (e: PointerEvent) => {
+      if (!dragRef.current) return;
+      const x = Math.max(0, e.clientX - dragRef.current.dx);
+      const y = Math.max(0, e.clientY - dragRef.current.dy);
+      props.onMove(x, y);
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
+  function startResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (props.window.maximized) return;
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    resizeRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      startW: props.window.width,
+      startH: props.window.height,
+    };
+    props.onFocus();
+    const onMove = (e: PointerEvent) => {
+      if (!resizeRef.current) return;
+      const dx = e.clientX - resizeRef.current.startX;
+      const dy = e.clientY - resizeRef.current.startY;
+      const w = Math.max(MIN_WINDOW_W, resizeRef.current.startW + dx);
+      const h = Math.max(MIN_WINDOW_H, resizeRef.current.startH + dy);
+      props.onResize(w, h);
+    };
+    const onUp = () => {
+      resizeRef.current = null;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
+  if (props.window.minimized) return null;
+
+  const style = props.window.maximized
+    ? {
+        left: 0,
+        top: 0,
+        width: "100%",
+        height: "100%",
+        zIndex: props.window.z,
+      }
+    : {
+        left: props.window.x,
+        top: props.window.y,
+        width: props.window.width,
+        height: props.window.height,
+        zIndex: props.window.z,
+      };
 
   return (
     <section
-      className={
-        props.item.pinned
-          ? "forge-floating-card forge-floating-card--pinned"
-          : "forge-floating-card"
-      }
+      className={cx(
+        "forge-os-window",
+        props.focused && "forge-os-window--focused",
+        props.window.maximized && "forge-os-window--maximized",
+      )}
+      style={style}
+      onPointerDown={() => {
+        if (!props.focused) props.onFocus();
+      }}
     >
       <div
-        className="forge-floating-card__head"
-        onPointerDown={(event) => {
-          if (props.item.pinned || !props.onDragStart) return;
-          props.onDragStart(event.clientX, event.clientY);
-        }}
+        className="forge-os-window__chrome"
+        onPointerDown={startDrag}
+        onDoubleClick={props.onToggleMaximize}
       >
-        <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist/55">
-            {props.item.kind}
-          </div>
-          <div className="mt-0.5 text-sm font-semibold text-forge-ash">
-            {props.item.title}
+        <div className="forge-os-window__title">
+          <span className="forge-os-window__sigil">
+            {tool?.shortLabel ?? "??"}
+          </span>
+          <div className="min-w-0">
+            <div className="forge-os-window__name">
+              {tool?.label ?? "Unknown surface"}
+            </div>
+            <div className="forge-os-window__sub">
+              {tool?.description ?? ""}
+            </div>
           </div>
         </div>
-        <div className="flex gap-1">
+        <div className="forge-os-window__buttons">
           <button
             type="button"
-            className="forge-window-btn"
-            onClick={props.onPin}
+            className="forge-os-window__btn"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onMinimize();
+            }}
+            aria-label="Minimize"
+            title="Minimize"
           >
-            {props.item.pinned ? "Float" : "Pin"}
+            –
           </button>
           <button
             type="button"
-            className="forge-window-btn"
-            onClick={props.onClose}
+            className="forge-os-window__btn"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onToggleMaximize();
+            }}
+            aria-label={props.window.maximized ? "Restore" : "Maximize"}
+            title={props.window.maximized ? "Restore" : "Maximize"}
           >
-            Close
+            {props.window.maximized ? "❐" : "▢"}
+          </button>
+          <button
+            type="button"
+            className="forge-os-window__btn forge-os-window__btn--close"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              props.onClose();
+            }}
+            aria-label="Close"
+            title="Close"
+          >
+            ×
           </button>
         </div>
       </div>
-      <div className="space-y-3 p-3 text-sm text-forge-mist">
-        {props.item.kind === "surfaces" ? (
-          <div className="grid gap-2 sm:grid-cols-2">
-            {surfaceDirectory.map((item) => (
-              <button
-                key={item.route}
-                type="button"
-                onClick={() => navigate(item.route)}
-                className="forge-surface-link"
-              >
-                <span className="forge-nav-item__short">{item.short}</span>
-                <span className="truncate">{item.label}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-
-        {props.item.kind === "diagnostics" ? (
-          <>
-            <WindowMetric
-              label="Approvals pending"
-              value={String(props.summary?.approvalsPending ?? 0)}
-              onClick={() => navigate("/approvals")}
-            />
-            <WindowMetric
-              label="Reviews pending"
-              value={String(props.summary?.reviewsPending ?? 0)}
-              onClick={() => navigate("/reviews")}
-            />
-            <WindowMetric
-              label="Recent failures"
-              value={String(recentFailures.length)}
-              onClick={() => navigate("/events")}
-            />
-            {props.lastErr ? (
-              <div className="rounded-xl border border-forge-ember/30 bg-forge-ember/10 p-3 text-xs text-forge-emberSoft">
-                {props.lastErr}
-              </div>
-            ) : null}
-          </>
-        ) : null}
-
-        {props.item.kind === "inspector" ? (
-          <>
-            <div className="rounded-xl bg-black/20 p-3 text-xs leading-5">
-              <div className="font-semibold text-forge-ash">
-                {getShellTool(props.pathname).label}
-              </div>
-              <div className="mt-1">{getInspectorSummary(props.pathname)}</div>
-              <div className="mt-2 text-forge-mist/70">
-                {props.statusLine || "No operator note recorded."}
-              </div>
-            </div>
-            <WindowMetric
-              label="Active jobs"
-              value={String(activeJobs.length)}
-              onClick={() => navigate("/jobs")}
-            />
-            <WindowMetric
-              label="Recent imports"
-              value={String(recentImports.length)}
-              onClick={() => navigate("/workbench")}
-            />
-          </>
-        ) : null}
-
-        {props.item.kind === "snapshot" ? (
-          <>
-            <div className="rounded-xl bg-black/20 p-3 text-xs leading-5">
-              Restore scoring is header-first: the default view keeps full graph
-              expansion out of the focus path until requested.
-            </div>
-            <button
-              type="button"
-              className="forge-window-action"
-              onClick={() => navigate("/inspectors")}
-            >
-              Open snapshot inspector
-            </button>
-            <button
-              type="button"
-              className="forge-window-action"
-              onClick={() => navigate("/project-context")}
-            >
-              Open context compiler
-            </button>
-          </>
-        ) : null}
-
-        {props.item.kind === "graph" || props.item.kind === "memory" ? (
-          <>
-            <button
-              type="button"
-              className="forge-window-action"
-              onClick={() => navigate("/memory")}
-            >
-              Recent episodes
-            </button>
-            <button
-              type="button"
-              className="forge-window-action"
-              onClick={() => navigate("/insights")}
-            >
-              Important insights
-            </button>
-            <button
-              type="button"
-              className="forge-window-action"
-              onClick={() => navigate("/lineage")}
-            >
-              Active loops
-            </button>
-          </>
-        ) : null}
-
-        {props.item.kind === "model" ? (
-          <>
-            <button
-              type="button"
-              className="forge-window-action"
-              onClick={() => navigate("/models")}
-            >
-              Runtime status
-            </button>
-            <button
-              type="button"
-              className="forge-window-action"
-              onClick={() => navigate("/models?view=registry")}
-            >
-              Model registry
-            </button>
-          </>
-        ) : null}
+      <div className="forge-os-window__body">
+        {Component ? <Component /> : <UnsupportedToolNotice toolId={tool?.id} />}
       </div>
+      {!props.window.maximized ? (
+        <div
+          className="forge-os-window__resize"
+          onPointerDown={startResize}
+          aria-hidden
+        />
+      ) : null}
     </section>
   );
 }
 
-function WindowMetric(props: {
-  label: string;
-  value: string;
-  onClick: () => void;
-}) {
+function UnsupportedToolNotice(props: { toolId: string | undefined }) {
   return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      className="forge-context-row w-full"
-    >
-      <span>{props.label}</span>
-      <span className="font-semibold text-forge-ash">{props.value}</span>
-    </button>
+    <div className="forge-os-window__placeholder">
+      <div className="forge-os-window__placeholder-title">
+        Surface unavailable
+      </div>
+      <div className="forge-os-window__placeholder-body">
+        No window component is registered for {props.toolId ?? "this surface"}.
+      </div>
+    </div>
   );
 }
 
-function getInspectorSummary(pathname: string) {
-  if (pathname === "/chat")
-    return "Conversation thread, packet launch, and assistant status tied to persisted thread state.";
-  if (pathname === "/workbench")
-    return "Artifact selection and job-linked file inspection using recorded artifact metadata.";
-  if (pathname === "/canvas")
-    return "Board note layout and working memory pinned to persisted board coordinates.";
-  if (pathname === "/dossiers")
-    return "Project profile, recent job lineage, and routing/approval preferences.";
-  if (pathname === "/jobs" || pathname.startsWith("/jobs/"))
-    return "Execution truth from job projections, approval gates, events, and artifacts.";
-  if (pathname === "/reviews")
-    return "Explicit operator review records and import reconciliation status.";
-  if (pathname === "/approvals")
-    return "Pending risk gates and recorded decisions. No silent escalation.";
-  if (pathname === "/autonomy")
-    return "Dream-state telemetry, autonomy intents, policy decisions, budgets, and charter boundaries.";
-  if (pathname === "/settings")
-    return "Local model, retrieval, and workspace configuration persisted by the core.";
-  return "Focused FORGE surface. Details are available on demand instead of occupying permanent screen space.";
+function StartMenu(props: {
+  query: string;
+  onQueryChange: (value: string) => void;
+  onClose: () => void;
+  onLaunch: (tool: ShellToolDefinition) => void;
+  onContextMenu: (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    tool: ShellToolDefinition,
+  ) => void;
+  activeTool: ShellToolDefinition | null;
+  workspaceLabel: string;
+  uiMode: "cognitive" | "metrics";
+  pinnedIds: ShellToolId[];
+}) {
+  const query = props.query.trim().toLowerCase();
+  const filteredAll = useMemo(() => {
+    if (!query) return allShellTools;
+    return allShellTools.filter((tool) => {
+      const haystack = `${tool.label} ${tool.shortLabel} ${tool.description}`
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [query]);
+
+  const pinnedTools = useMemo(() => {
+    const map = new Map<ShellToolId, ShellToolDefinition>(
+      allShellTools.map((t) => [t.id, t] as const),
+    );
+    return props.pinnedIds
+      .map((id) => map.get(id))
+      .filter((t): t is ShellToolDefinition => Boolean(t));
+  }, [props.pinnedIds]);
+
+  return (
+    <>
+      <button
+        type="button"
+        className="forge-os-startmenu__backdrop"
+        aria-label="Close Start menu"
+        onClick={props.onClose}
+      />
+      <section
+        className="forge-os-startmenu"
+        role="dialog"
+        aria-label="FORGE Start"
+      >
+        <header className="forge-os-startmenu__head">
+          <div className="forge-os-startmenu__operator">
+            <div className="forge-os-startmenu__avatar">
+              <ForgeAnvilIcon className="h-7 w-7" decorative />
+            </div>
+            <div className="min-w-0">
+              <div className="forge-os-startmenu__operator-name">
+                Forge Operator
+              </div>
+              <div className="forge-os-startmenu__operator-meta">
+                {props.workspaceLabel} · Mode {props.uiMode}
+              </div>
+            </div>
+          </div>
+          <div className="forge-os-startmenu__search">
+            <input
+              type="text"
+              value={props.query}
+              onChange={(event) => props.onQueryChange(event.target.value)}
+              placeholder="Search FORGE surfaces"
+              className="forge-os-startmenu__input"
+              autoFocus
+            />
+          </div>
+        </header>
+
+        {!query && pinnedTools.length > 0 ? (
+          <div className="forge-os-startmenu__section">
+            <div className="forge-os-startmenu__section-label">Pinned</div>
+            <div className="forge-os-startmenu__grid">
+              {pinnedTools.map((tool) => (
+                <button
+                  key={tool.id}
+                  type="button"
+                  onClick={() => props.onLaunch(tool)}
+                  onContextMenu={(event) => props.onContextMenu(event, tool)}
+                  className={cx(
+                    "forge-os-startmenu__tile",
+                    props.activeTool?.id === tool.id &&
+                      "forge-os-startmenu__tile--active",
+                  )}
+                  title={`${tool.description} (right-click to unpin)`}
+                >
+                  <span className="forge-os-startmenu__tile-short">
+                    {tool.shortLabel}
+                  </span>
+                  <span className="forge-os-startmenu__tile-label">
+                    {tool.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="forge-os-startmenu__section">
+          <div className="forge-os-startmenu__section-label">
+            {query ? "Results" : "All apps"}
+          </div>
+          <div className="forge-os-startmenu__list">
+            {filteredAll.length === 0 ? (
+              <div className="forge-os-startmenu__empty">
+                No surfaces match "{props.query}".
+              </div>
+            ) : (
+              filteredAll.map((tool) => (
+                <button
+                  key={tool.id}
+                  type="button"
+                  onClick={() => props.onLaunch(tool)}
+                  onContextMenu={(event) => props.onContextMenu(event, tool)}
+                  className={cx(
+                    "forge-os-startmenu__row",
+                    props.activeTool?.id === tool.id &&
+                      "forge-os-startmenu__row--active",
+                  )}
+                >
+                  <span className="forge-os-startmenu__row-short">
+                    {tool.shortLabel}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="forge-os-startmenu__row-label">
+                      {tool.label}
+                    </span>
+                    <span className="forge-os-startmenu__row-desc">
+                      {tool.description}
+                    </span>
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function DockContextMenuView(props: {
+  menu: DockContextMenu;
+  onClose: () => void;
+  onAction: (action: "open" | "close" | "pin" | "unpin") => void;
+}) {
+  // Clamp position so the menu doesn't overflow the viewport.
+  const left = Math.min(
+    props.menu.x,
+    typeof window !== "undefined" ? window.innerWidth - 220 : props.menu.x,
+  );
+  const top = Math.max(
+    8,
+    typeof window !== "undefined"
+      ? Math.min(props.menu.y - 8, window.innerHeight - 220)
+      : props.menu.y - 8,
+  );
+  return (
+    <div
+      role="menu"
+      className="forge-os-context-menu"
+      style={{ left, top }}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <div className="forge-os-context-menu__title">{props.menu.tool.label}</div>
+      <button
+        type="button"
+        role="menuitem"
+        className="forge-os-context-menu__item"
+        onClick={() => props.onAction("open")}
+      >
+        {props.menu.open ? "Focus window" : "Open"}
+      </button>
+      {props.menu.open ? (
+        <button
+          type="button"
+          role="menuitem"
+          className="forge-os-context-menu__item"
+          onClick={() => props.onAction("close")}
+        >
+          Close window
+        </button>
+      ) : null}
+      {props.menu.pinned ? (
+        <button
+          type="button"
+          role="menuitem"
+          className="forge-os-context-menu__item"
+          onClick={() => props.onAction("unpin")}
+        >
+          Unpin from taskbar
+        </button>
+      ) : (
+        <button
+          type="button"
+          role="menuitem"
+          className="forge-os-context-menu__item"
+          onClick={() => props.onAction("pin")}
+        >
+          Pin to taskbar
+        </button>
+      )}
+      <button
+        type="button"
+        role="menuitem"
+        className="forge-os-context-menu__item forge-os-context-menu__item--muted"
+        onClick={props.onClose}
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+function ForgeAnvilIcon(props: { className?: string; decorative?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 64 64"
+      className={props.className}
+      aria-hidden="true"
+      role={props.decorative === false ? "img" : undefined}
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path
+        d="M10 22h44l-4 8H22a8 8 0 0 1-8-8h-4z"
+        fill="currentColor"
+        fillOpacity="0.18"
+        strokeWidth="1.5"
+      />
+      <path d="M22 30v6h20v-6" strokeWidth="1.5" />
+      <path
+        d="M18 36h28l-3 8H21l-3-8z"
+        fill="currentColor"
+        fillOpacity="0.12"
+        strokeWidth="1.5"
+      />
+      <path d="M16 44h32" strokeWidth="1.5" />
+      <path d="M14 50h36" strokeWidth="1.5" opacity="0.6" />
+      <path d="M52 22v-6" strokeWidth="1.5" opacity="0.7" />
+      <path d="M48 22v-4" strokeWidth="1.5" opacity="0.5" />
+    </svg>
+  );
 }

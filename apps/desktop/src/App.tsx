@@ -61,7 +61,9 @@ function RoutedViews() {
   return (
     <ForgeErrorBoundary resetKey={location.pathname + location.search}>
       <Routes>
-        <Route path="/" element={<Navigate to="/chat" replace />} />
+        {/* Root renders the FORGE desktop (wallpaper). The shell decides what
+            to show; route components only render when a tool is active. */}
+        <Route path="/" element={null} />
         <Route path="/start" element={<StartPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/chat" element={<ChatPage />} />
@@ -226,6 +228,12 @@ export default function App() {
     };
   }, [navigate, refreshEnvironment, isMainWindow, currentWindowLabel]);
 
+  // Non-main Tauri windows are real OS app windows — they render only their
+  // route, with no shell chrome. The shell (taskbar, Start, wallpaper) lives
+  // in the main window.
+  if (!isMainWindow) {
+    return <RoutedViews />;
+  }
   return (
     <AppShell isMainWindow={isMainWindow}>
       <RoutedViews />
