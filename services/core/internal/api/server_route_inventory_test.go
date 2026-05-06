@@ -168,6 +168,28 @@ func TestServerRouteInventoryHasNoForgeKShadowDiagnosticRoute(t *testing.T) {
 	assertRouteNotMounted(t, routes, http.MethodGet, "/forge/shadow")
 }
 
+func TestServerRouteInventoryUnchangedWithForgeKShadowAdvisoryEnabled(t *testing.T) {
+	disabled := collectServerRoutes(t, (&Server{}).Handler())
+	enabled := collectServerRoutes(t, (&Server{
+		cfg: config.Config{
+			ForgeKShadowModeEnabled:     true,
+			ForgeKShadowAdvisoryEnabled: true,
+		},
+		forgeKShadow: forgekshadow.NewObserver(forgekshadow.Config{Enabled: true, AdvisoryEnabled: true}),
+	}).Handler())
+	if !sameRouteSet(disabled, enabled) {
+		t.Fatalf("shadow advisory changed route inventory\ndisabled=%#v\nenabled=%#v", routeKeys(disabled), routeKeys(enabled))
+	}
+	for _, route := range routeKeys(enabled) {
+		normalized := strings.ToLower(route)
+		for _, forbidden := range []string{"shadow-advisory", "forgek-shadow", "shadow-diagnostic", "/api/shadow", "/forge/shadow"} {
+			if strings.Contains(normalized, forbidden) {
+				t.Fatalf("shadow advisory must not expose public diagnostics route: %s", route)
+			}
+		}
+	}
+}
+
 func TestHealthResponseUnchangedWithForgeKShadowDisabled(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 
@@ -227,6 +249,41 @@ func TestHealthResponseUnchangedWithForgeKShadowEnabled(t *testing.T) {
 	}
 	if _, ok := reports[0].Observation.Metadata["body"]; ok {
 		t.Fatalf("shadow report must not capture request/response bodies: %#v", reports[0].Observation.Metadata)
+	}
+}
+
+func TestHealthResponseUnchangedWithForgeKShadowAdvisoryEnabled(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	req.Header.Set("X-Request-ID", "request-health-advisory")
+
+	disabledRR := httptest.NewRecorder()
+	(&Server{}).Handler().ServeHTTP(disabledRR, req.Clone(context.Background()))
+
+	observer := forgekshadow.NewObserver(forgekshadow.Config{Enabled: true, AdvisoryEnabled: true})
+	enabledRR := httptest.NewRecorder()
+	(&Server{
+		cfg: config.Config{
+			ForgeKShadowModeEnabled:     true,
+			ForgeKShadowAdvisoryEnabled: true,
+		},
+		forgeKShadow: observer,
+	}).Handler().ServeHTTP(enabledRR, req.Clone(context.Background()))
+
+	if disabledRR.Code != enabledRR.Code {
+		t.Fatalf("shadow advisory changed /health status disabled=%d enabled=%d", disabledRR.Code, enabledRR.Code)
+	}
+	if disabledRR.Body.String() != enabledRR.Body.String() {
+		t.Fatalf("shadow advisory changed /health body disabled=%q enabled=%q", disabledRR.Body.String(), enabledRR.Body.String())
+	}
+	if disabledRR.Header().Get("Content-Type") != enabledRR.Header().Get("Content-Type") {
+		t.Fatalf("shadow advisory changed content type disabled=%q enabled=%q", disabledRR.Header().Get("Content-Type"), enabledRR.Header().Get("Content-Type"))
+	}
+	reports := observer.Reports()
+	if len(reports) != 1 || reports[0].Advisory == nil {
+		t.Fatalf("expected one advisory diagnostic report, got %#v", reports)
+	}
+	if !reports[0].Advisory.NoEffectVerified {
+		t.Fatalf("advisory must be no-effect verified: %#v", reports[0].Advisory)
 	}
 }
 

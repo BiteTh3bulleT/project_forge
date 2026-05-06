@@ -237,6 +237,7 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 			Enabled:                  true,
 			ChatMetadataEnabled:      cfg.ForgeKShadowChatMetadataEnabled,
 			RetrievalMetadataEnabled: cfg.ForgeKShadowRetrievalMetadataEnabled,
+			AdvisoryEnabled:          cfg.ForgeKShadowAdvisoryEnabled,
 		})
 	}
 	srv := &Server{
@@ -1312,6 +1313,7 @@ func (s *Server) reloadShadowMode(ctx context.Context) {
 			Enabled:                  true,
 			ChatMetadataEnabled:      s.cfg.ForgeKShadowChatMetadataEnabled,
 			RetrievalMetadataEnabled: s.cfg.ForgeKShadowRetrievalMetadataEnabled,
+			AdvisoryEnabled:          s.cfg.ForgeKShadowAdvisoryEnabled,
 		})
 	} else {
 		s.forgeKShadow = nil
@@ -1320,6 +1322,7 @@ func (s *Server) reloadShadowMode(ctx context.Context) {
 		"enabled":                  s.cfg.ForgeKShadowModeEnabled,
 		"chatMetadataEnabled":      s.cfg.ForgeKShadowChatMetadataEnabled,
 		"retrievalMetadataEnabled": s.cfg.ForgeKShadowRetrievalMetadataEnabled,
+		"advisoryEnabled":          s.cfg.ForgeKShadowAdvisoryEnabled,
 	})
 }
 

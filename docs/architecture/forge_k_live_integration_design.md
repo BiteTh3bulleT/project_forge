@@ -1,14 +1,14 @@
 # FORGE-K Live Integration Design
 
-Status: Phase 12A implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12D implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
+Status: Phase 12A implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12D implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12M-Q implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / ADVISORY_DIAGNOSTIC_ONLY`.
 
-Phase 12B implements the first disabled-by-default read-only live touchpoint. Phase 12C hardens that implementation. Phase 12D selects route envelope metadata as the recommended next controlled expansion for a future Phase 12E. These phases do not authorize live authority migration.
+Phase 12B implements the first disabled-by-default read-only live touchpoint. Phase 12C hardens that implementation. Phase 12D selects route envelope metadata as the recommended next controlled expansion for a future Phase 12E. Later Phase 12 metadata passes add route, chat, retrieval, and advisory diagnostics while preserving the same no-authority boundary. These phases do not authorize live authority migration.
 
 ## Executive Summary
 
 FORGE-K Phase 1-11G is implemented and tested in simulator, research, tooling, governance, integration-prep, and shadow-design layers. The live daemon still uses the existing AI-OS, gateway, permissions, lane, audit, modelruntime, retrieval, embeddings, memory, search, and API authority paths.
 
-Phase 12A designed the first live integration path. Phase 12B implements the smallest read-only shadow harness: `/health` request metadata can be copied into a bounded in-memory diagnostic sink when `FORGE_K_SHADOW_MODE_ENABLED=true`. Phase 12C hardens that observer. Phase 12D is design-only and selects route envelope metadata as the recommended next candidate for a future Phase 12E. The design preserves live authority by allowing only passive observation of already-executing live paths, diagnostic report generation, and disabled-by-default activation. It does not wire FORGE-K into live authority.
+Phase 12A designed the first live integration path. Phase 12B implements the smallest read-only shadow harness: `/health` request metadata can be copied into a bounded in-memory diagnostic sink when `FORGE_K_SHADOW_MODE_ENABLED=true`. Phase 12C hardens that observer. Phase 12D is design-only and selects route envelope metadata as the recommended next candidate for a future Phase 12E. Phase 12M-Q adds an internal advisory report that consumes only existing safe diagnostics when `FORGE_K_SHADOW_ADVISORY_ENABLED=true` and global shadow mode is also enabled. The design preserves live authority by allowing only passive observation of already-executing live paths, diagnostic report generation, advisory-only summaries, and disabled-by-default activation. It does not wire FORGE-K into live authority.
 
 ## Current Simulator / Live Split
 
@@ -197,9 +197,13 @@ Preferred Phase 12B storage is a diagnostic-only sink with bounded retention. Th
 
 Reports must include workspace, correlation, live path, observed refs, warnings, no-effect validation status, and retention metadata. Reports must not store large raw content blobs or secrets.
 
+Phase 12M-Q keeps reports in the same bounded in-memory sink. Advisory reports are attached to the existing diagnostic report object only; no public diagnostics API, persistent store, route, response field, or operator-visible live output is added.
+
 ## Feature Flag / Kill Switch Strategy
 
 Implemented flag: `FORGE_K_SHADOW_MODE_ENABLED=false`.
+
+Implemented advisory flag: `FORGE_K_SHADOW_ADVISORY_ENABLED=false`. Advisory reports require global shadow mode and do not force-enable chat or retrieval metadata observers.
 
 Hard defaults:
 

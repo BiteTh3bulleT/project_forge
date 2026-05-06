@@ -22,6 +22,7 @@ type DiagnosticReport struct {
 	RouteEnvelope     *RouteEnvelopeObservation
 	ChatMetadata      *ChatMetadataObservation
 	RetrievalMetadata *RetrievalMetadataObservation
+	Advisory          *ShadowAdvisoryReport
 	StoredAt          time.Time
 }
 
@@ -135,4 +136,57 @@ type RetrievalMetadataObservation struct {
 	DurationMS        int64          `json:"duration_ms"`
 	Warnings          []string       `json:"warnings,omitempty"`
 	Metadata          map[string]any `json:"metadata,omitempty"`
+}
+
+type ShadowAdvisoryReport struct {
+	ReportID                string                        `json:"report_id"`
+	GeneratedAt             time.Time                     `json:"generated_at"`
+	WorkspaceID             string                        `json:"workspace_id,omitempty"`
+	RequestID               string                        `json:"request_id,omitempty"`
+	CorrelationID           string                        `json:"correlation_id,omitempty"`
+	SourceShadowReportRefs  []string                      `json:"source_shadow_report_refs,omitempty"`
+	RouteMetadataRefs       []string                      `json:"route_metadata_refs,omitempty"`
+	ChatMetadataRefs        []string                      `json:"chat_metadata_refs,omitempty"`
+	RetrievalMetadataRefs   []string                      `json:"retrieval_metadata_refs,omitempty"`
+	EvidenceSummary         ShadowEvidenceSummary         `json:"evidence_summary"`
+	ConsensusAdvisory       ShadowConsensusAdvisory       `json:"consensus_advisory"`
+	ContextCompilerAdvisory ShadowContextCompilerAdvisory `json:"context_compiler_advisory"`
+	RiskSummary             ShadowRiskSummary             `json:"risk_summary"`
+	Warnings                []string                      `json:"warnings,omitempty"`
+	NoEffectVerified        bool                          `json:"no_effect_verified"`
+	Metadata                map[string]any                `json:"metadata,omitempty"`
+}
+
+type ShadowEvidenceSummary struct {
+	RouteMetadataCount     int      `json:"route_metadata_count"`
+	ChatMetadataCount      int      `json:"chat_metadata_count"`
+	RetrievalMetadataCount int      `json:"retrieval_metadata_count"`
+	SafeRefCount           int      `json:"safe_ref_count"`
+	MetadataOnly           bool     `json:"metadata_only"`
+	SafeRefs               []string `json:"safe_refs,omitempty"`
+}
+
+type ShadowConsensusAdvisory struct {
+	Status              string   `json:"status"`
+	ProposedClaimCount  int      `json:"proposed_claim_count"`
+	AcceptedClaimCount  int      `json:"accepted_claim_count"`
+	RejectedClaimCount  int      `json:"rejected_claim_count"`
+	UncertainClaimCount int      `json:"uncertain_claim_count"`
+	Summary             string   `json:"summary"`
+	Warnings            []string `json:"warnings,omitempty"`
+}
+
+type ShadowContextCompilerAdvisory struct {
+	Status                  string         `json:"status"`
+	BundleHash              string         `json:"bundle_hash,omitempty"`
+	BlockCount              int            `json:"block_count"`
+	CacheEligibilitySummary map[string]int `json:"cache_eligibility_summary,omitempty"`
+	Warnings                []string       `json:"warnings,omitempty"`
+}
+
+type ShadowRiskSummary struct {
+	RiskFlags            []string `json:"risk_flags,omitempty"`
+	WarningCount         int      `json:"warning_count"`
+	MetadataOnly         bool     `json:"metadata_only"`
+	NoRawContentVerified bool     `json:"no_raw_content_verified"`
 }

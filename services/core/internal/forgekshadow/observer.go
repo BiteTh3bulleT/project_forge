@@ -258,12 +258,20 @@ func (o *Observer) observeAt(ctx context.Context, input ObservationInput, now ti
 	if err := shadowharness.ValidateNoEffect(o.policy, report); err != nil {
 		return err
 	}
-	return o.sink.Store(ctx, DiagnosticReport{
+	diagnostic := DiagnosticReport{
 		Observation:       obs,
 		Comparison:        report,
 		RouteEnvelope:     routeEnvelope,
 		ChatMetadata:      chatMetadata,
 		RetrievalMetadata: retrievalMetadata,
 		StoredAt:          now,
-	})
+	}
+	if o.cfg.AdvisoryEnabled {
+		advisory, err := buildShadowAdvisory(diagnostic, now)
+		if err != nil {
+			return err
+		}
+		diagnostic.Advisory = &advisory
+	}
+	return o.sink.Store(ctx, diagnostic)
 }

@@ -8,6 +8,8 @@ Phase 11E ConsensusReport refs may become future context inputs by reference. Co
 
 Phase 7 scope is `SIMULATOR_ONLY` under `services/core/internal/forgek/contextcompiler` and `services/core/internal/forgek/context_syscalls.go`. Phase 8 scope is `SIMULATOR_ONLY` under `services/core/internal/forgek/kv` and `services/core/internal/forgek/kv_syscalls.go`. Neither phase is wired into the live daemon, and neither modifies the live AI-OS `COMPILE_CONTEXT`, gateway, model runtime, route, or public API paths.
 
+Phase 12M-Q adds a shadow advisory context summary in `services/core/internal/forgekshadow` only. That advisory consumes existing safe diagnostic refs and counts, may produce a deterministic summary hash, and may safely warn when metadata is insufficient. It is not a simulator `ContextBundle`, not a live prompt, not a replacement for live `COMPILE_CONTEXT`, not a KV manifest, and not user-visible output.
+
 ## ContextBlock
 
 A ContextBlock is a deterministic prompt unit emitted by the compiler. The implemented model includes:

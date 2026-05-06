@@ -72,6 +72,7 @@ type Config struct {
 	ForgeKShadowModeEnabled                     bool
 	ForgeKShadowChatMetadataEnabled             bool
 	ForgeKShadowRetrievalMetadataEnabled        bool
+	ForgeKShadowAdvisoryEnabled                 bool
 }
 
 func Load() Config {
@@ -177,6 +178,7 @@ func Load() Config {
 		ForgeKShadowModeEnabled:              envBool("FORGE_K_SHADOW_MODE_ENABLED", false),
 		ForgeKShadowChatMetadataEnabled:      envBool("FORGE_K_SHADOW_CHAT_METADATA_ENABLED", false),
 		ForgeKShadowRetrievalMetadataEnabled: envBool("FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED", false),
+		ForgeKShadowAdvisoryEnabled:          envBool("FORGE_K_SHADOW_ADVISORY_ENABLED", false),
 	}
 }
 

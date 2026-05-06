@@ -86,6 +86,7 @@ func TestLoadModelRuntimeDefaultsSafe(t *testing.T) {
 	t.Setenv("FORGE_K_SHADOW_MODE_ENABLED", "")
 	t.Setenv("FORGE_K_SHADOW_CHAT_METADATA_ENABLED", "")
 	t.Setenv("FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED", "")
+	t.Setenv("FORGE_K_SHADOW_ADVISORY_ENABLED", "")
 
 	cfg := Load()
 	expectedModelHome, err := filepath.Abs(filepath.Join(cfg.DataDir, "models"))
@@ -140,6 +141,9 @@ func TestLoadModelRuntimeDefaultsSafe(t *testing.T) {
 	}
 	if cfg.ForgeKShadowRetrievalMetadataEnabled {
 		t.Fatalf("expected FORGE-K retrieval metadata shadow disabled by default")
+	}
+	if cfg.ForgeKShadowAdvisoryEnabled {
+		t.Fatalf("expected FORGE-K shadow advisory disabled by default")
 	}
 	if !cfg.DreamModeGPUOnlyInDeepIdle {
 		t.Fatalf("expected dream mode GPU to be deep-idle-only by default")
@@ -302,6 +306,7 @@ func TestLoadModelRuntimeOverrides(t *testing.T) {
 	t.Setenv("FORGE_K_SHADOW_MODE_ENABLED", "true")
 	t.Setenv("FORGE_K_SHADOW_CHAT_METADATA_ENABLED", "true")
 	t.Setenv("FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED", "true")
+	t.Setenv("FORGE_K_SHADOW_ADVISORY_ENABLED", "true")
 
 	cfg := Load()
 	expectedModelHome, err := filepath.Abs("./test-models")
@@ -460,6 +465,9 @@ func TestLoadModelRuntimeOverrides(t *testing.T) {
 	if !cfg.ForgeKShadowRetrievalMetadataEnabled {
 		t.Fatalf("expected FORGE-K retrieval metadata shadow enabled from env")
 	}
+	if !cfg.ForgeKShadowAdvisoryEnabled {
+		t.Fatalf("expected FORGE-K shadow advisory enabled from env")
+	}
 }
 
 func TestLoadModelRuntimeInvalidValuesFallbackToDefaults(t *testing.T) {
@@ -500,6 +508,7 @@ func TestLoadModelRuntimeInvalidValuesFallbackToDefaults(t *testing.T) {
 	t.Setenv("FORGE_K_SHADOW_MODE_ENABLED", "shadow?")
 	t.Setenv("FORGE_K_SHADOW_CHAT_METADATA_ENABLED", "chat?")
 	t.Setenv("FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED", "retrieval?")
+	t.Setenv("FORGE_K_SHADOW_ADVISORY_ENABLED", "advisory?")
 
 	cfg := Load()
 
@@ -514,6 +523,9 @@ func TestLoadModelRuntimeInvalidValuesFallbackToDefaults(t *testing.T) {
 	}
 	if cfg.ForgeKShadowRetrievalMetadataEnabled {
 		t.Fatalf("expected invalid FORGE-K retrieval metadata shadow bool to fall back to false")
+	}
+	if cfg.ForgeKShadowAdvisoryEnabled {
+		t.Fatalf("expected invalid FORGE-K shadow advisory bool to fall back to false")
 	}
 	if cfg.GPUEnabled {
 		t.Fatalf("expected invalid GPU enabled bool to fall back to false")

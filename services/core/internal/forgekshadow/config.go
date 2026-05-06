@@ -6,6 +6,7 @@ type Config struct {
 	Enabled                  bool
 	ChatMetadataEnabled      bool
 	RetrievalMetadataEnabled bool
+	AdvisoryEnabled          bool
 	MaxReports               int
 	DisableSink              bool
 }

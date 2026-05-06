@@ -1,14 +1,16 @@
 # FORGE-K Shadow Mode Harness
 
-Status: Phase 11G simulator-only shadow harness design plus Phase 12A live integration design handoff. Phase 11G scope is `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`; Phase 12A scope is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
+Status: Phase 11G simulator-only shadow harness design plus Phase 12A live integration design handoff. Phase 11G scope is `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`; Phase 12A scope is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12M-Q adds disabled-by-default internal advisory diagnostics in the live shadow package without making the harness live authority.
 
-Phase 11G does not implement live shadow mode and does not authorize Phase 12 live authority migration. Phase 12B later implemented one disabled-by-default `/health` metadata observer, and Phase 12C hardened it without adding touchpoints.
+Phase 11G does not implement live shadow mode and does not authorize Phase 12 live authority migration. Phase 12B later implemented one disabled-by-default `/health` metadata observer, Phase 12C hardened it without adding touchpoints, Phase 12E/12H/12K-L added route/chat/retrieval metadata diagnostics, and Phase 12M-Q adds advisory summaries derived only from those existing safe diagnostics.
 
 ## Executive Summary
 
 The shadow mode harness is the future read-only observation and diagnostic layer for comparing existing live daemon behavior against FORGE-K simulator contracts. In Phase 11G, the harness is a design and pure contract model only. It does not observe live requests, wire adapters, call model runtimes, execute tools, run retrieval, call embedding providers, write memory, alter routes, change APIs, or affect user-visible output.
 
 Shadow reports are diagnostics only. They cannot authorize canonical mutation, live integration, tool execution, memory writes, retrieval, modelruntime calls, or response changes.
+
+Phase 12M-Q keeps that boundary: `services/core/internal/forgekshadow` may attach a `ShadowAdvisoryReport` to an existing in-memory diagnostic report when global shadow mode and advisory mode are both enabled. The advisory report contains safe refs, counts, warnings, metadata-only consensus uncertainty, and a deterministic context-summary hash. It is not a ContextBundle, not a live prompt, not a ConsensusReport with accepted truth, and not user-visible output.
 
 ## Purpose
 
@@ -38,6 +40,7 @@ A future live shadow harness may:
 - consume read-only adapter outputs
 - produce comparison reports
 - produce consensus, context, RAG, runtime, KV, and lymphatic shadow reports
+- produce metadata-only advisory summaries from existing safe diagnostic reports
 - flag divergence and risk for operator review
 
 It must remain read-only until a later `LIVE_INTEGRATION` phase explicitly authorizes more.
@@ -146,6 +149,27 @@ Accepted consensus claims are diagnostics only. They do not become truth and do 
 - metadata
 
 The report may compare simulator ContextBundle refs if provided. It does not compile live context and does not affect live `COMPILE_CONTEXT`.
+
+## Phase 12M-Q Advisory Report
+
+`ShadowAdvisoryReport` records:
+
+- report_id
+- request_id
+- workspace_id
+- source diagnostic report refs
+- route/chat/retrieval metadata refs
+- metadata-only evidence summary
+- metadata-only consensus advisory
+- context compiler advisory summary
+- risk summary
+- warnings
+- no-effect verification
+- safe metadata
+
+The context compiler advisory may create a deterministic summary hash from safe refs and counts, or safely warn that there is insufficient safe metadata. It does not call the simulator Context Compiler, does not compile live context, does not produce ContextBlocks for response use, and does not affect live `COMPILE_CONTEXT`.
+
+The consensus advisory is metadata-only. It can record uncertainty counts and warnings, but accepted claim count remains zero and no factual claim becomes truth. It does not run live Consensus Mesh authority and does not affect response composition.
 
 ## RAG / Retrieval Shadow Report
 

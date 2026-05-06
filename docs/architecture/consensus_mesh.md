@@ -1,10 +1,12 @@
 # Consensus Mesh
 
-Status: Phase 11E implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`.
+Status: Phase 11E implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 12M-Q may emit metadata-only shadow consensus advisories from safe diagnostics, but those advisories do not run live Consensus Mesh authority and do not accept factual claims as truth.
 
 The FORGE Consensus Mesh is a simulator-only claim governance layer inside FORGE-K. It is not an agent swarm and not a second Kernel. It decides which claims are allowed into a response or action proposal shape, while canonical truth still requires Courthouse admission and Kernel-dispatched semantic syscalls.
 
 Core rule: No Consensus, No Claim.
+
+Phase 12M-Q shadow advisory note: `services/core/internal/forgekshadow` can summarize existing safe diagnostic refs as uncertain metadata-only advisory material when enabled. Accepted claim count remains zero in the advisory path. The output is diagnostic only and cannot alter live response composition, Courthouse admissibility, memory, or Kernel truth.
 
 ## Purpose
 
