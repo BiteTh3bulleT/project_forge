@@ -25,13 +25,15 @@ Optional providers such as Ollama and Hugging Face TEI can be started as sidecar
 ## Start Core And Web UI
 
 ```bash
-docker compose up --build
+npm run docker:start
 ```
+
+`npm run docker:start` runs `scripts/forge-docker-up.sh`, starts Postgres, Redis, Qdrant, core, and desktop-web, and preserves existing named volumes.
 
 If the native dev core or desktop is already using the default ports, choose alternate published ports:
 
 ```bash
-FORGE_CORE_PORT=18493 FORGE_DESKTOP_PORT=1421 docker compose up -d --build
+FORGE_CORE_PORT=18493 FORGE_DESKTOP_PORT=1421 npm run docker:start
 ```
 
 Open:
@@ -71,6 +73,23 @@ FORGE_QDRANT_HTTP_PORT=16333 \
 FORGE_QDRANT_GRPC_PORT=16334 \
 docker compose up -d postgres redis qdrant
 ```
+
+## Stop Without Deleting Databases
+
+```bash
+npm run docker:stop
+```
+
+This runs `docker compose down --remove-orphans` without `-v`, so the named volumes are preserved:
+
+- `forge-data`
+- `forge-postgres`
+- `forge-redis`
+- `forge-qdrant`
+- `forge-models`
+- `forge-workspace`
+
+Use this for normal shutdowns.
 
 ## Start Optional Ollama Sidecar
 
@@ -118,6 +137,8 @@ docker compose down -v
 ```
 
 This deletes the named volumes, including `/data/forge.sqlite`, Postgres data, Redis data, Qdrant indexes, model artifacts, and the workspace volume.
+
+Do not use `-v` unless you explicitly want to erase the databases.
 
 ## Validation
 

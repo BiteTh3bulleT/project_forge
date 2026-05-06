@@ -28,6 +28,8 @@
     "docker:build": "docker compose build",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down",
+    "docker:start": "node ./scripts/forge-docker-up.mjs",
+    "docker:stop": "node ./scripts/forge-docker-down.mjs",
     "desktop:clean-port": "node ./scripts/desktop-clean-port.mjs 1420",
     "desktop:check": "node ./scripts/check-desktop-deps.mjs",
     "desktop": "npm run desktop:clean-port && npm run desktop:check && npm -w @forge/desktop run tauri -- dev",

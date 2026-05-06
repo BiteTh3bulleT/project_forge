@@ -186,7 +186,8 @@ Container commands:
 ```bash
 npm run docker:config
 npm run docker:build
-npm run docker:up
+npm run docker:start
+npm run docker:stop
 ```
 
 The Docker stack runs the core service with a persisted SQLite volume and can serve the desktop Vite app as a browser surface. See `docs/runbooks/docker_containerization.md`.
