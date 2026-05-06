@@ -1,0 +1,17 @@
+services:
+  core:
+    user: "0:0"
+    userns_mode: host
+    cap_add:
+      - PERFMON
+      - SYS_ADMIN
+    security_opt:
+      - seccomp=unconfined
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "${FORGE_RENDER_GROUP_ID:-485}"
+      - "${FORGE_VIDEO_GROUP_ID:-482}"
+    environment:
+      FORGE_INTEL_LEVEL_ZERO_ENABLED: "${FORGE_INTEL_LEVEL_ZERO_ENABLED:-true}"
+      FORGE_INTEL_GPU_TOP_PATH: "${FORGE_INTEL_GPU_TOP_PATH:-/usr/bin/intel_gpu_top}"

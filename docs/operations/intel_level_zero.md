@@ -1,6 +1,6 @@
 # Intel Level Zero Telemetry
 
-Status date: 2026-04-24.
+Status date: 2026-05-06.
 
 FORGE can optionally probe Intel GPU availability through Level Zero tooling. This is a local accelerator diagnostic path; it is not required for boot and it does not create truth authority.
 
@@ -11,10 +11,10 @@ On this machine, the pass found:
 - Intel Iris Xe Graphics present in `lspci`
 - `/dev/dri/renderD128` present
 - `ze_info` not on `PATH`
-- `intel_gpu_top` not on `PATH`
-- no Level Zero loader library was visible through `ldconfig -p`
+- `intel_gpu_top` can provide utilization sampling when installed
+- the Level Zero loader library can be present even when `ze_info` is not packaged
 
-That means FORGE can detect the Intel GPU render node, but Level Zero telemetry will report degraded until Level Zero tools are installed or explicitly configured.
+That means FORGE can detect the Intel GPU render node. Full Level Zero device details still require `ze_info`, but runtime utilization telemetry can be available through `intel_gpu_top`.
 
 ## Enable
 
@@ -30,7 +30,26 @@ export FORGE_INTEL_GPU_TOP_PATH=/usr/bin/intel_gpu_top
 export FORGE_INTEL_GPU_TELEMETRY_TIMEOUT_MS=1500
 ```
 
-`ze_info` is used for Level Zero device presence. `intel_gpu_top -J` is used opportunistically for engine utilization when available.
+`ze_info` is used for Level Zero device details. `intel_gpu_top -J` is used for engine utilization when available, and can keep Intel GPU telemetry available even when `ze_info` is missing.
+
+## Docker
+
+The Docker start helper auto-enables `docker-compose.igpu.yml` when `/dev/dri/renderD128` exists on the host:
+
+```bash
+npm run docker:start
+```
+
+To force the iGPU override or disable it explicitly:
+
+```bash
+FORGE_DOCKER_IGPU=1 npm run docker:start
+FORGE_DOCKER_IGPU=0 npm run docker:start
+```
+
+The override passes `/dev/dri` into the core container, adds the host render/video group IDs, enables Intel telemetry, and points the core at `/usr/bin/intel_gpu_top`. The core image includes `intel-gpu-tools` for this diagnostic path.
+
+Intel PMU sampling in Docker also requires the iGPU override to run the core container as root with `CAP_PERFMON`, `CAP_SYS_ADMIN`, `seccomp=unconfined`, and host user namespace mode on systems where Docker user namespace remapping is enabled. These settings are isolated to `docker-compose.igpu.yml`; the normal Compose stack does not use them.
 
 ## Diagnostics
 

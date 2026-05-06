@@ -58,46 +58,60 @@ func (s *IntelService) Snapshot(ctx context.Context) Telemetry {
 		return out
 	}
 	zePath, zeErr := resolveOptionalTool(s.zeInfoPath, "ze_info")
-	if zeErr != nil {
-		out.Healthy = false
-		out.State = "degraded"
-		out.Detail = "Level Zero ze_info unavailable: " + zeErr.Error()
+	if zeErr == nil {
+		zeOut, err := runTool(ctx, s.timeout, zePath)
+		if err != nil {
+			out.Warnings = append(out.Warnings, "Level Zero ze_info failed: "+err.Error())
+		} else {
+			devices := parseZEInfo(zeOut)
+			if len(devices) == 0 {
+				devices = out.Devices
+			}
+			out.Available = true
+			out.State = "available"
+			out.Detail = "Intel Level Zero device available"
+			out.Devices = devices
+		}
+	} else {
+		out.Warnings = append(out.Warnings, "Level Zero ze_info unavailable: "+zeErr.Error())
 		out.Warnings = append(out.Warnings, "install level-zero tools or set FORGE_INTEL_LEVEL_ZERO_ZE_INFO_PATH")
-		return out
 	}
-	zeOut, err := runTool(ctx, s.timeout, zePath)
-	if err != nil {
-		out.Healthy = false
-		out.State = "degraded"
-		out.Detail = "Level Zero ze_info failed: " + err.Error()
-		return out
-	}
-	devices := parseZEInfo(zeOut)
-	if len(devices) == 0 {
-		devices = out.Devices
-	}
-	out.Available = true
-	out.State = "available"
-	out.Detail = "Intel Level Zero device available"
-	out.Devices = devices
 
 	if topPath, err := resolveOptionalTool(s.gpuTopPath, "intel_gpu_top"); err == nil {
 		if sample, sampleErr := runIntelGPUTop(ctx, s.timeout, topPath); sampleErr == nil {
 			mergeIntelGPUTop(&out, sample)
+			out.Available = true
+			out.State = "available"
+			if out.Detail == "" {
+				out.Detail = "Intel GPU telemetry available through intel_gpu_top"
+			}
 		} else {
 			out.Warnings = append(out.Warnings, "intel_gpu_top unavailable: "+sampleErr.Error())
 		}
 	} else {
 		out.Warnings = append(out.Warnings, "intel_gpu_top unavailable: "+err.Error())
 	}
+	if !out.Available {
+		out.Healthy = false
+		out.State = "degraded"
+		out.Detail = "Intel GPU telemetry unavailable"
+	}
 	return out
 }
 
 func detectIntelRenderNodes() []DeviceTelemetry {
 	matches, _ := filepath.Glob("/dev/dri/renderD*")
+	sysMatches, _ := filepath.Glob("/sys/class/drm/renderD*")
+	matches = append(matches, sysMatches...)
 	out := make([]DeviceTelemetry, 0, len(matches))
+	seen := map[string]struct{}{}
 	for _, match := range matches {
-		out = append(out, DeviceTelemetry{Index: filepath.Base(match), UUID: match})
+		index := filepath.Base(match)
+		if _, ok := seen[index]; ok {
+			continue
+		}
+		seen[index] = struct{}{}
+		out = append(out, DeviceTelemetry{Index: index, UUID: match})
 	}
 	return out
 }
@@ -169,27 +183,43 @@ func valueAfterColon(raw string) string {
 }
 
 func runIntelGPUTop(ctx context.Context, timeout time.Duration, path string) (map[string]any, error) {
-	raw, err := runTool(ctx, timeout, path, "-J", "-s", "250", "-o", "-")
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(runCtx, path, "-J", "-s", "250", "-o", "-")
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err
 	}
-	decoder := json.NewDecoder(strings.NewReader(raw))
-	var last map[string]any
-	for decoder.More() {
-		var item map[string]any
-		if err := decoder.Decode(&item); err != nil {
-			break
-		}
-		last = item
-	}
-	if last != nil {
-		return last, nil
-	}
-	var one map[string]any
-	if err := json.Unmarshal([]byte(raw), &one); err != nil {
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	return one, nil
+
+	var sample map[string]any
+	decodeErr := json.NewDecoder(stdout).Decode(&sample)
+	if cmd.Process != nil {
+		_ = cmd.Process.Kill()
+	}
+	waitErr := cmd.Wait()
+	if decodeErr != nil {
+		if runCtx.Err() != nil {
+			return nil, runCtx.Err()
+		}
+		msg := strings.TrimSpace(stderr.String())
+		if msg != "" {
+			return nil, fmt.Errorf("%w: %s", decodeErr, msg)
+		}
+		return nil, decodeErr
+	}
+	if len(sample) == 0 {
+		return nil, fmt.Errorf("empty intel_gpu_top sample")
+	}
+	if waitErr != nil && runCtx.Err() != nil {
+		return nil, runCtx.Err()
+	}
+	return sample, nil
 }
 
 func mergeIntelGPUTop(out *Telemetry, sample map[string]any) {

@@ -27,6 +27,8 @@ The Docker core enables the governed model runtime surface by default and points
 
 Optional providers such as Ollama and Hugging Face TEI can be started as sidecars, but they do not replace FORGE authority paths.
 
+On hosts with `/dev/dri/renderD128`, `npm run docker:start` automatically layers `docker-compose.igpu.yml` into the Compose invocation. That passes the Intel iGPU render devices into the core container, adds the host render/video group IDs, enables Intel telemetry, and uses the container's `intel_gpu_top` binary for utilization sampling. Intel PMU access requires the override to run the core container as root and add telemetry-only container privileges (`CAP_PERFMON`, `CAP_SYS_ADMIN`, `seccomp=unconfined`, and host user namespace mode). Set `FORGE_DOCKER_IGPU=0` to disable this override or `FORGE_DOCKER_IGPU=1` to require it.
+
 ## Start Core And Web UI
 
 ```bash
@@ -178,6 +180,14 @@ docker compose exec core wget -qO- http://127.0.0.1:18492/health
 docker compose exec postgres pg_isready -U forge -d forge
 docker compose exec redis redis-cli ping
 curl -fsS http://127.0.0.1:6333/readyz
+```
+
+Intel iGPU telemetry checks:
+
+```bash
+npm run docker:start core
+docker compose -f docker-compose.yml -f docker-compose.igpu.yml exec core ls -l /dev/dri
+curl -fsS http://127.0.0.1:18492/health
 ```
 
 The root repository validation remains:

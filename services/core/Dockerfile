@@ -7,11 +7,14 @@ RUN go mod download
 COPY services/core/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/forge-core .
 
-FROM alpine:3.20
+FROM debian:bookworm-slim
 
-RUN apk add --no-cache ca-certificates wget \
-	&& addgroup -S forge \
-	&& adduser -S -G forge -u 10001 forge \
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends ca-certificates wget intel-gpu-tools libcap2-bin \
+	&& setcap cap_perfmon,cap_sys_admin+ep /usr/bin/intel_gpu_top \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& groupadd --system forge \
+	&& useradd --system --uid 10001 --gid forge --home-dir /app --shell /usr/sbin/nologin forge \
 	&& mkdir -p /data /models /workspace \
 	&& chown -R forge:forge /data /models /workspace
 
