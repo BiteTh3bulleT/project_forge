@@ -27,12 +27,24 @@ Phase 13A adds the storage backend foundation:
 
 Phase 13A does not migrate live tables, dual-write data, switch reads, wire Redis into queues/caches, or wire Qdrant into retrieval.
 
+Phase 13B-C adds the first Postgres schema foundation and parity tests:
+
+- idempotent Postgres migrations under `services/core/migrations/postgres`.
+- migration version records with checksums.
+- `storage_backend_metadata` and `storage_migration_audit`.
+- disabled shadow diagnostic report/event/redaction schema.
+- migration runner tests for deterministic ordering, applied-version skips, failure reporting, version recording, SQLite skip behavior, and optional Postgres integration through `FORGE_POSTGRES_TEST_DSN`.
+
+Phase 13B-C does not persist live shadow diagnostics, migrate live memory or retrieval tables, dual-write data, switch reads, make Postgres the default, or wire Redis/Qdrant into live behavior.
+
 ## Backend migration stages
 
 Group A: non-authoritative diagnostics, only if persistence is approved later.
 
 - shadow diagnostic reports
 - route/chat/retrieval/advisory diagnostic summaries
+
+Phase 13B-C defines the Postgres table shape for Group A diagnostics but does not connect live diagnostic sinks to it.
 
 Group B: operational relational records after parity exists.
 

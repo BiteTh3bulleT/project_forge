@@ -1,6 +1,6 @@
 # Storage Backend Migration
 
-Phase 13A adds the application-side storage backend boundary. It does not migrate live data.
+Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds the first Postgres schema foundation and parity tests for storage metadata plus disabled shadow diagnostic schema only. Neither phase migrates live data.
 
 ## Current Live State
 
@@ -18,7 +18,22 @@ Phase 13A adds the application-side storage backend boundary. It does not migrat
 
 Unset `FORGE_STORE_BACKEND` means `sqlite`. Redis and Qdrant endpoint variables do not imply a backend switch.
 
-Phase 13A intentionally keeps the live runtime on SQLite. A later cutover phase must add explicit adapter tests, migration tests, rollback tests, and operator runbooks before Postgres can become live.
+Phase 13B-C intentionally keeps the live runtime on SQLite. A later cutover phase must add explicit adapter tests, migration tests, rollback tests, and operator runbooks before Postgres can become live.
+
+## Phase 13B-C Foundation Schema
+
+The first Postgres schema target is foundation-only:
+
+- `forge_schema_migrations`: migration version records with checksums.
+- `storage_backend_metadata`: low-risk backend metadata records.
+- `storage_migration_audit`: migration audit records.
+- `shadow_diagnostic_reports`: disabled shadow diagnostic report persistence shape.
+- `shadow_diagnostic_report_events`: disabled diagnostic event persistence shape.
+- `shadow_diagnostic_redactions`: disabled diagnostic redaction persistence shape.
+
+The shadow diagnostic tables are schema-only in Phase 13B-C. Live shadow reports remain bounded in-memory diagnostics and are not persisted into Postgres by default or through any live path.
+
+The Postgres runner executes migrations in deterministic version order, skips already-applied versions, records applied versions with checksums, and runs inside a transaction. A separate migration lock is not taken in Phase 13B-C; live Postgres migration execution is not part of the default daemon path yet. A future live migration phase must add explicit lock policy before concurrent operator execution is allowed.
 
 ## Target Roles
 
@@ -39,8 +54,8 @@ Qdrant:
 ## Migration Phases
 
 1. Phase 13A: backend config, capability contracts, Postgres connector scaffold, migration runner scaffold, docs, and parity plan.
-2. Phase 13B: Postgres schema foundation for a small non-authoritative subset.
-3. Phase 13C: SQLite/Postgres parity tests for schema, read/write behavior, ordering, timestamps, transactions, and JSON fields.
+2. Phase 13B: Postgres schema foundation for storage metadata and disabled shadow diagnostic schema.
+3. Phase 13C: SQLite/Postgres foundation parity tests for migration shape, ordering, idempotence, JSONB fields, and timestamps.
 4. Phase 13D: diagnostic store persistence after explicit approval.
 5. Phase 13E: retrieval metadata Postgres adapter.
 6. Phase 13F: Qdrant vector adapter design.
@@ -100,10 +115,10 @@ Group D:
 
 ## Forbidden Authority Changes
 
-- Do not make Postgres the default backend in Phase 13A.
-- Do not dual-write live data in Phase 13A.
-- Do not wire Redis into live queues or caches in Phase 13A.
-- Do not wire Qdrant into live retrieval in Phase 13A.
+- Do not make Postgres the default backend in Phase 13A or Phase 13B-C.
+- Do not dual-write live data in Phase 13A or Phase 13B-C.
+- Do not wire Redis into live queues or caches in Phase 13A or Phase 13B-C.
+- Do not wire Qdrant into live retrieval in Phase 13A or Phase 13B-C.
 - Do not make Redis or Qdrant canonical truth.
 - Do not make vector hits admissible evidence.
 - Do not change public APIs, routes, gateway behavior, modelruntime behavior, retrieval behavior, or memory semantics.

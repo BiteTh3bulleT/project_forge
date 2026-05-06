@@ -6,6 +6,21 @@ This document defines the required tests before SQLite-backed live storage can b
 
 Phase 13A adds backend config, capability contracts, Postgres connector scaffolding, and migration runner scaffolding. Live storage remains SQLite by default.
 
+## Phase 13B-C Status
+
+Phase 13B-C adds Postgres foundation migrations and default-safe parity tests for a low-risk subset:
+
+- migration version records,
+- storage backend metadata,
+- migration audit records,
+- disabled shadow diagnostic report schema,
+- disabled shadow diagnostic event schema,
+- disabled shadow diagnostic redaction schema.
+
+This is foundation parity, not data parity. The live SQLite schema does not write these new Postgres foundation tables, and live shadow diagnostics remain bounded in memory. Repository data parity begins only after a future repository adapter phase adds an explicit SQLite/Postgres implementation pair.
+
+Default tests do not require Docker or Postgres. The optional integration test runs only when `FORGE_POSTGRES_TEST_DSN` is set.
+
 ## Required Parity Test Areas
 
 Schema parity:
@@ -34,6 +49,15 @@ Migration parity:
 - Transaction-wrapped migrations.
 - Failure injection with rollback.
 - Schema digest or checksum comparison.
+
+Phase 13B-C migration parity:
+- empty migration set succeeds,
+- migrations are sorted by version,
+- already-applied migrations are skipped,
+- failed migrations report version/name context,
+- applied versions are recorded,
+- SQL registry entries match `services/core/migrations/postgres/*.sql`,
+- optional Postgres integration validates real table creation and idempotent rerun when `FORGE_POSTGRES_TEST_DSN` is provided.
 
 Dual-write parity:
 - SQLite/Postgres write comparison.
