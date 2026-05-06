@@ -17,6 +17,69 @@ The Docker stack includes Postgres, Redis, and Qdrant as infrastructure for the 
 
 As of this inventory, the application still uses SQLite for live persistence. The managed services do not replace SQLite until explicit storage adapters, migrations, dual-write or migration tooling, backup/restore policy, and tests exist.
 
+Phase 13A adds the storage backend foundation:
+
+- `FORGE_STORE_BACKEND=sqlite|postgres` with `sqlite` as the default.
+- `FORGE_POSTGRES_DSN` parsed for future Postgres connection scaffolding.
+- `FORGE_REDIS_ADDR` and `FORGE_QDRANT_URL` parsed as infrastructure endpoints only.
+- backend capability contracts that keep Redis and Qdrant out of canonical truth authority.
+- a Postgres migration runner scaffold with a migration version table only.
+
+Phase 13A does not migrate live tables, dual-write data, switch reads, wire Redis into queues/caches, or wire Qdrant into retrieval.
+
+## Backend migration stages
+
+Group A: non-authoritative diagnostics, only if persistence is approved later.
+
+- shadow diagnostic reports
+- route/chat/retrieval/advisory diagnostic summaries
+
+Group B: operational relational records after parity exists.
+
+- jobs
+- settings
+- approvals
+- audit-adjacent records
+- gateway invocation metadata
+
+Group C: memory and retrieval records after stronger parity exists.
+
+- memory observations, notes, links, usefulness, and provenance
+- retrieval runs and results
+- embedding metadata
+- VSA inspectability tables
+
+Group D: FORGE-K canonical persistence, later only.
+
+- Kernel journal/state persistence
+- Courthouse evidence/admission records
+- Semantic Algebra objects
+- snapshots, context compiler metadata, KV manifests, runtime proposal records, consensus records
+
+Tables remain SQLite until their group has schema parity, write/read parity, transaction parity, rollback/restore coverage, and explicit cutover approval.
+
+## Redis candidates
+
+Redis candidates are ephemeral only:
+
+- queue coordination
+- job progress stream mirrors
+- locks
+- bounded caches
+- pub/sub notifications
+
+Redis must not store canonical truth, durable memory, evidence admission, provenance, or source-of-record state. Redis loss must be recoverable from SQLite/Postgres records.
+
+## Qdrant candidates
+
+Qdrant candidates are vector acceleration only:
+
+- embedding vector indexes
+- nearest-neighbor retrieval acceleration
+- future shadow vector indexes
+
+Qdrant must not store canonical truth, admissibility, provenance authority, or memory source of record. Qdrant indexes must be rebuildable from relational records.
+
 ## Current entity/table pattern
 
 - Service-level SQL repositories in `services/core/internal/*` (`jobs`, `approvals`, `audit`, `gateway`, `artifacts`, `memory`, `retrieval`, `policy`, etc.).

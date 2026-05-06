@@ -5,12 +5,18 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"forge/projectforge/services/core/internal/storagebackend"
 )
 
 type Config struct {
 	DataDir                                     string
 	Port                                        int
 	WorkspaceDir                                string
+	StoreBackend                                string
+	PostgresDSN                                 string
+	RedisAddr                                   string
+	QdrantURL                                   string
 	EnableModelRuntime                          bool
 	GPUEnabled                                  bool
 	NVIDIADCGMEnabled                           bool
@@ -117,6 +123,10 @@ func Load() Config {
 		DataDir:                    dataDir,
 		Port:                       port,
 		WorkspaceDir:               workspace,
+		StoreBackend:               envStringDefault("FORGE_STORE_BACKEND", "sqlite"),
+		PostgresDSN:                strings.TrimSpace(os.Getenv("FORGE_POSTGRES_DSN")),
+		RedisAddr:                  strings.TrimSpace(os.Getenv("FORGE_REDIS_ADDR")),
+		QdrantURL:                  strings.TrimSpace(os.Getenv("FORGE_QDRANT_URL")),
 		EnableModelRuntime:         envBool("FORGE_ENABLE_MODEL_RUNTIME", false),
 		GPUEnabled:                 envBool("FORGE_GPU_ENABLED", false),
 		NVIDIADCGMEnabled:          envBool("FORGE_NVIDIA_DCGM_ENABLED", false),
@@ -180,6 +190,23 @@ func Load() Config {
 		ForgeKShadowRetrievalMetadataEnabled: envBool("FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED", false),
 		ForgeKShadowAdvisoryEnabled:          envBool("FORGE_K_SHADOW_ADVISORY_ENABLED", false),
 	}
+}
+
+func (c Config) StorageBackendConfig() (storagebackend.Config, error) {
+	return storagebackend.NewConfig(storagebackend.ConfigInput{
+		Backend:     c.StoreBackend,
+		PostgresDSN: c.PostgresDSN,
+		RedisAddr:   c.RedisAddr,
+		QdrantURL:   c.QdrantURL,
+	})
+}
+
+func envStringDefault(key, defaultValue string) string {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return defaultValue
+	}
+	return raw
 }
 
 func envBool(key string, defaultValue bool) bool {

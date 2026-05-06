@@ -19,6 +19,9 @@ The Docker stack now includes Qdrant as a managed vector-store service for the n
 - vector hits are not admitted evidence
 - Qdrant scores cannot bypass Courthouse, memory usefulness evidence, policy, or Kernel authority
 - SQLite/Postgres records remain the provenance and inspectability source of record
+- Qdrant indexes must be rebuildable from relational records
+
+Phase 13A does not wire Qdrant into live retrieval. `FORGE_QDRANT_URL` is infrastructure config only, and vector hits remain non-authoritative retrieval acceleration.
 
 ## Embedding Pipeline
 

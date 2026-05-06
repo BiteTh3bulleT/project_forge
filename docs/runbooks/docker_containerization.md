@@ -9,6 +9,7 @@ The current primary database is SQLite:
 - database file: `${FORGE_DATA_DIR}/forge.sqlite`
 - container path: `/data/forge.sqlite`
 - Docker volume: `forge-data`
+- storage backend selector: `FORGE_STORE_BACKEND=sqlite` by default
 
 The current retrieval, memory, VSA, settings, audit-adjacent records, jobs, approvals, and embeddings metadata are stored through the core SQLite path.
 
@@ -19,6 +20,8 @@ Postgres, Redis, and Qdrant are included as managed containers for the next stor
 - Qdrant: future vector index for embedding retrieval acceleration. Qdrant vectors must not become truth or admissibility.
 
 In this containerization pass, the Go core still reads and writes SQLite. The new service containers are up and health-checked, but not yet used by the live memory code.
+
+Phase 13A adds application-side backend config and capability contracts. `FORGE_STORE_BACKEND=postgres` is parsed for future migration scaffolding, but SQLite remains the live default and no live data is dual-written or read-switched in this phase.
 
 Optional providers such as Ollama and Hugging Face TEI can be started as sidecars, but they do not replace FORGE authority paths.
 

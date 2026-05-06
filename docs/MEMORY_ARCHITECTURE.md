@@ -14,6 +14,8 @@ The Docker stack now includes Postgres, Redis, and Qdrant as managed infrastruct
 
 Until storage adapters and migration tests are implemented, the live memory system still reads and writes SQLite.
 
+Phase 13A introduces `FORGE_STORE_BACKEND=sqlite|postgres` and backend capability contracts, but it does not migrate live memory. Redis and Qdrant endpoint settings do not switch memory authority. Any future Postgres read switch requires parity tests, rollback, backup/restore coverage, and explicit approval.
+
 ## Memory Layers
 
 1. `Cold memory`
