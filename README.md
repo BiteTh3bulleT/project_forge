@@ -190,10 +190,11 @@ npm run docker:config
 npm run docker:build
 npm run docker:start
 npm run docker:desktop
+npm run docker:web
 npm run docker:stop
 ```
 
-The Docker stack runs the core service with a persisted SQLite volume and serves the desktop Vite app as a browser surface. `npm run docker:start` now best-effort opens that browser surface at `http://127.0.0.1:1420/#/dashboard`; set `FORGE_DOCKER_OPEN=0` to suppress auto-open. On Intel iGPU hosts, `npm run docker:start` auto-enables the `/dev/dri` telemetry override unless `FORGE_DOCKER_IGPU=0` is set. Use `npm run docker:desktop` when you want the native Tauri desktop shell on the host with Docker-backed core, Postgres, Redis, and Qdrant services. See `docs/runbooks/docker_containerization.md`.
+The Docker stack runs core services and persisted databases. `npm run docker:start` starts Postgres, Redis, Qdrant, and the Go core only. Use `npm run docker:desktop` for the native Tauri desktop shell with Docker-backed core/data services. `npm run docker:web` is available for the development-only browser surface at `http://127.0.0.1:1420/#/dashboard`. On Intel iGPU hosts, `npm run docker:start` auto-enables the `/dev/dri` telemetry override unless `FORGE_DOCKER_IGPU=0` is set. See `docs/runbooks/docker_containerization.md`.
 
 Default endpoints:
 

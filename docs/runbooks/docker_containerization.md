@@ -29,24 +29,18 @@ Optional providers such as Ollama and Hugging Face TEI can be started as sidecar
 
 On hosts with `/dev/dri/renderD128`, `npm run docker:start` automatically layers `docker-compose.igpu.yml` into the Compose invocation. That passes the Intel iGPU render devices into the core container, adds the host render/video group IDs, enables Intel telemetry, and uses the container's `intel_gpu_top` binary for utilization sampling. Intel PMU access requires the override to run the core container as root and add telemetry-only container privileges (`CAP_PERFMON`, `CAP_SYS_ADMIN`, `seccomp=unconfined`, and host user namespace mode). Set `FORGE_DOCKER_IGPU=0` to disable this override or `FORGE_DOCKER_IGPU=1` to require it.
 
-## Start Core And Web UI
+## Start Core And Databases
 
 ```bash
 npm run docker:start
 ```
 
-`npm run docker:start` runs `scripts/forge-docker-up.sh`, starts Postgres, Redis, Qdrant, core, and desktop-web, preserves existing named volumes, and best-effort opens the browser-served desktop at `http://127.0.0.1:1420/#/dashboard`.
-
-To start the stack without opening a browser window:
-
-```bash
-FORGE_DOCKER_OPEN=0 npm run docker:start
-```
+`npm run docker:start` runs `scripts/forge-docker-up.sh`, starts Postgres, Redis, Qdrant, and core, and preserves existing named volumes. It does not start the browser-served `desktop-web` container. The normal operator shell is native Tauri through `npm run docker:desktop`.
 
 If the native dev core or desktop is already using the default ports, choose alternate published ports:
 
 ```bash
-FORGE_CORE_PORT=18493 FORGE_DESKTOP_PORT=1421 npm run docker:start
+FORGE_CORE_PORT=18493 npm run docker:start
 ```
 
 Open:
@@ -58,7 +52,17 @@ Open:
 - Redis: `127.0.0.1:6379`
 - Qdrant HTTP: `http://127.0.0.1:6333`
 
-The Tauri desktop shell still runs through the native desktop workflow. Docker cannot launch the native Tauri window by itself because that shell depends on the host display session, window manager, WebKit/Tauri runtime integration, and local desktop permissions. The `desktop-web` container serves the same Vite app as a browser surface for containerized inspection.
+## Development Web Surface
+
+The development-only browser surface remains available when needed:
+
+```bash
+npm run docker:web
+```
+
+That starts `desktop-web`, exposes `http://127.0.0.1:1420/#/dashboard`, and best-effort opens it unless `FORGE_DOCKER_OPEN=0` is set.
+
+The Tauri desktop shell still runs through the native desktop workflow. Docker cannot launch the native Tauri window by itself because that shell depends on the host display session, window manager, WebKit/Tauri runtime integration, and local desktop permissions. The `desktop-web` container serves the same Vite app as a browser surface for development and containerized inspection.
 
 ## Native Desktop Shell With Docker Backend
 
@@ -72,13 +76,15 @@ npm run docker:desktop
 
 The helper starts Postgres, Redis, Qdrant, and the Go core through Docker, then launches the native Tauri shell with `VITE_FORGE_API_URL` pointed at the Docker-published core URL.
 
+If `desktop-web` was already started by `npm run docker:web`, the helper stops only that browser-served container before launching native Tauri. This frees the shared Vite/Tauri development port `1420` without stopping the Docker-backed core or data services.
+
 If the default core port is busy, choose an alternate core port:
 
 ```bash
 FORGE_CORE_PORT=18493 npm run docker:desktop
 ```
 
-This does not start the `desktop-web` container. Use `npm run docker:start` when you want the browser-served desktop build as part of the Compose stack.
+This does not start the `desktop-web` container. Use `npm run docker:web` when you want the browser-served desktop build for development.
 
 ## Managed Data Services
 
@@ -88,7 +94,8 @@ The default Compose stack starts:
 - `redis`
 - `qdrant`
 - `core`
-- `desktop-web`
+
+`desktop-web` is intentionally opt-in through `npm run docker:web`.
 
 Useful probes:
 

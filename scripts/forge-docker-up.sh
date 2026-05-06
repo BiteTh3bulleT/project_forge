@@ -40,7 +40,7 @@ fi
 
 services=("$@")
 if [[ ${#services[@]} -eq 0 ]]; then
-  services=(postgres redis qdrant core desktop-web)
+  services=(postgres redis qdrant core)
 fi
 
 has_service() {
