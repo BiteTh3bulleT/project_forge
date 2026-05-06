@@ -46,6 +46,26 @@ Open:
 
 The Tauri desktop shell still runs through the native desktop workflow. The `desktop-web` container serves the same Vite app as a browser surface for containerized inspection.
 
+## Native Desktop Shell With Docker Backend
+
+The native Tauri desktop shell is not run inside Docker by default. It depends on the host display session, window manager, WebKit/Tauri runtime integration, and local desktop permissions. Docker remains the right boundary for core services, databases, and browser-served inspection surfaces.
+
+Use this helper when you want the desktop shell on the host with Docker-backed data services:
+
+```bash
+npm run docker:desktop
+```
+
+The helper starts Postgres, Redis, Qdrant, and the Go core through Docker, then launches the native Tauri shell with `VITE_FORGE_API_URL` pointed at the Docker-published core URL.
+
+If the default core port is busy, choose an alternate core port:
+
+```bash
+FORGE_CORE_PORT=18493 npm run docker:desktop
+```
+
+This does not start the `desktop-web` container. Use `npm run docker:start` when you want the browser-served desktop build as part of the Compose stack.
+
 ## Managed Data Services
 
 The default Compose stack starts:
