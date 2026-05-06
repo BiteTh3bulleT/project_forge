@@ -2,7 +2,7 @@
 
 Status: Phase 11F `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`.
 
-These contracts define future adapter boundaries conceptually. They do not wire FORGE-K into the live daemon and do not authorize Phase 12 live integration.
+These contracts define future adapter boundaries conceptually. They do not wire FORGE-K into live authority and do not authorize live state mutation.
 
 ## Adapter Law
 

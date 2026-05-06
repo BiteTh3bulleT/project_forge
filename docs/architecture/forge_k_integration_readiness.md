@@ -2,7 +2,7 @@
 
 Status: Phase 11F implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`.
 
-Phase 11F does not authorize Phase 12 live integration.
+Phase 11F does not authorize live authority migration.
 
 ## Executive Summary
 

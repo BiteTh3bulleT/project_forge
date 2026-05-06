@@ -2,6 +2,7 @@ package forgekshadow
 
 import (
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -42,9 +43,29 @@ var rawContentMetadataKeys = []string{
 	"tool_output",
 	"tool_payload",
 	"retrieval_content",
+	"retrieval_query",
+	"retrieval_result_body",
 	"memory_content",
 	"source_chunk",
+	"source_text",
+	"source_content",
+	"chunk",
+	"chunk_text",
+	"document",
+	"document_content",
+	"document_text",
 	"file_contents",
+	"file_content",
+	"search_query",
+	"query_text",
+	"search_snippet",
+	"snippet",
+	"embedding",
+	"embeddings",
+	"embedding_input",
+	"embedding_vector",
+	"vector",
+	"vectors",
 	"request_payload",
 	"content",
 	"query",
@@ -85,7 +106,17 @@ func safeMetadata(in map[string]any) (map[string]any, error) {
 			out[trimmedKey] = text
 		case nil:
 			continue
-		case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+		case float32:
+			if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
+				return nil, fmt.Errorf("%w: non-finite value for %q", ErrUnsafeMetadata, trimmedKey)
+			}
+			out[trimmedKey] = v
+		case float64:
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				return nil, fmt.Errorf("%w: non-finite value for %q", ErrUnsafeMetadata, trimmedKey)
+			}
+			out[trimmedKey] = v
+		case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
 			out[trimmedKey] = v
 		default:
 			return nil, fmt.Errorf("%w: non-deterministic value for %q", ErrUnsafeMetadata, trimmedKey)
@@ -104,6 +135,22 @@ func containsUnsafeTerm(value string) bool {
 	}
 	for _, term := range unsafeMetadataTerms {
 		if strings.Contains(normalized, term) {
+			return true
+		}
+	}
+	return false
+}
+
+func containsRawContentTerm(value string) bool {
+	normalized := normalizeMetadataToken(value)
+	if normalized == "" {
+		return false
+	}
+	for _, key := range rawContentMetadataKeys {
+		if normalized == key {
+			return true
+		}
+		if strings.Contains(key, "_") && strings.Contains(normalized, key) {
 			return true
 		}
 	}

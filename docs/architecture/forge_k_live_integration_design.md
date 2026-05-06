@@ -289,9 +289,8 @@ Phase 12B must be bounded:
 8. Phase 12H: disabled-by-default chat metadata shadow implementation with no content capture and no response behavior change.
 9. Phase 12I: chat metadata hardening without expanding touchpoints or capture scope.
 10. Phase 12J: retrieval metadata expansion design only; no retrieval observation implementation in that phase.
-11. Phase 12K: possible disabled-by-default retrieval metadata shadow implementation only if separately approved.
-12. Phase 12L: possible retrieval metadata hardening only after a Phase 12K implementation.
-13. Later phases: scoped authority migration only with separate approval, tests, and rollback.
+11. Phase 12K-L: disabled-by-default retrieval metadata shadow implementation and hardening; bounded post-run metadata only, no retrieval/search/embedding execution from FORGE-K, no content capture, no route/API behavior change.
+12. Later phases: scoped authority migration only with separate approval, tests, and rollback.
 
 ## What Not To Do
 

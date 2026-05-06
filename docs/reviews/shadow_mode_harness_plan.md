@@ -2,7 +2,7 @@
 
 Status: simulator-only plan retained as historical Phase 11G handoff. Phase 12B implemented the first read-only `/health` metadata observer, and Phase 12C hardened it without adding touchpoints.
 
-Phase 11G does not observe live daemon requests, wire live adapters, or authorize Phase 12 live integration.
+Phase 11G does not observe live daemon requests, wire live adapters, or authorize live authority migration.
 
 ## Proposed Phase 12B Plan
 

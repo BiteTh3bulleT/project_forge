@@ -1,18 +1,22 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 
 	"forge/projectforge/services/core/internal/artifacts"
 	"forge/projectforge/services/core/internal/dossiers"
 	"forge/projectforge/services/core/internal/evaluations"
+	"forge/projectforge/services/core/internal/forgekshadow"
 	"forge/projectforge/services/core/internal/imports"
 	"forge/projectforge/services/core/internal/insights"
 	"forge/projectforge/services/core/internal/jobs"
@@ -137,6 +141,7 @@ func (s *Server) handleCreateRetrievalRun(w http.ResponseWriter, r *http.Request
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
+	started := time.Now()
 	run, err := s.retrieval.Run(r.Context(), retrieval.RunRequest{
 		Query:           body.Query,
 		Mode:            retrieval.Mode(strings.TrimSpace(body.Mode)),
@@ -157,7 +162,89 @@ func (s *Server) handleCreateRetrievalRun(w http.ResponseWriter, r *http.Request
 		return
 	}
 	_ = s.log.Emit(r.Context(), "retrieval.run.created", map[string]any{"runId": run.ID, "mode": run.Mode, "query": run.Query})
+	s.observeRetrievalRunMetadata(r.Context(), run, strings.TrimSpace(body.Model), time.Since(started))
 	writeJSON(w, http.StatusOK, map[string]any{"run": run})
+}
+
+func (s *Server) observeRetrievalRunMetadata(ctx context.Context, run *retrieval.Run, embeddingModelID string, duration time.Duration) {
+	if s == nil || s.forgeKShadow == nil || run == nil {
+		return
+	}
+	resultCount := len(run.Results)
+	selectedCount := 0
+	firstResultID := ""
+	firstSourceRefID := ""
+	firstRank := 0
+	scores := make([]float64, 0, resultCount)
+	for _, result := range run.Results {
+		if result.SelectedForPacket {
+			selectedCount++
+		}
+		if firstResultID == "" {
+			firstResultID = strconv.FormatInt(result.ID, 10)
+			if result.ChunkID != nil {
+				firstSourceRefID = strconv.FormatInt(*result.ChunkID, 10)
+			}
+			if result.RankIndex >= 0 {
+				firstRank = result.RankIndex + 1
+			}
+		}
+		scores = append(scores, result.HybridScore)
+	}
+	s.forgeKShadow.ObserveRetrievalMetadataBestEffort(ctx, forgekshadow.RetrievalMetadataInput{
+		WorkspaceID:       s.cfg.WorkspaceDir,
+		RequestID:         middleware.GetReqID(ctx),
+		RetrievalRunID:    strconv.FormatInt(run.ID, 10),
+		RetrievalResultID: firstResultID,
+		SourceType:        sourceTypeForRetrievalResult(firstSourceRefID),
+		SourceRefID:       firstSourceRefID,
+		ResultCount:       resultCount,
+		SelectedCount:     selectedCount,
+		ScoreSummary:      retrievalScoreSummary(scores),
+		RankingPosition:   firstRank,
+		RetrievalStrategy: string(run.Mode),
+		IndexType:         indexTypeForRetrievalMode(run.Mode),
+		EmbeddingModelID:  embeddingModelID,
+		Duration:          duration,
+		Metadata: map[string]any{
+			"touchpoint": "retrieval_run_created",
+		},
+	})
+}
+
+func sourceTypeForRetrievalResult(sourceRefID string) string {
+	if strings.TrimSpace(sourceRefID) == "" {
+		return ""
+	}
+	return "chunk"
+}
+
+func indexTypeForRetrievalMode(mode retrieval.Mode) string {
+	switch mode {
+	case retrieval.ModeKeyword:
+		return "fts"
+	case retrieval.ModeSemantic:
+		return "vector"
+	case retrieval.ModeHybrid:
+		return "hybrid"
+	default:
+		return "unknown"
+	}
+}
+
+func retrievalScoreSummary(scores []float64) string {
+	if len(scores) == 0 {
+		return ""
+	}
+	maxScore := scores[0]
+	sum := 0.0
+	for _, score := range scores {
+		if score > maxScore {
+			maxScore = score
+		}
+		sum += score
+	}
+	return fmt.Sprintf("max=%.3f avg=%.3f", maxScore, sum/float64(len(scores)))
 }
 
 func (s *Server) handleListRetrievalRuns(w http.ResponseWriter, r *http.Request) {

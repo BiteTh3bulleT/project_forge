@@ -206,9 +206,9 @@ The detailed test plan is `docs/testing/phase_12h_chat_metadata_shadow_tests.md`
 
 ## Phase 12J Handoff
 
-Phase 12H implemented bounded chat metadata. Phase 12I hardened that chat metadata path. Phase 12J designs retrieval metadata only.
+Phase 12H implemented bounded chat metadata. Phase 12I hardened that chat metadata path. Phase 12J designed retrieval metadata. Phase 12K-L later implemented and hardened bounded retrieval metadata diagnostics.
 
-Phase 12K may implement retrieval metadata only if separately approved. No retrieval content, source text, chunk text, raw query, RAG output, embedding, vector, memory content, prompt, model output, request body, or response body capture is approved by Phase 12J.
+No retrieval content, source text, chunk text, raw query, RAG output, embedding, vector, memory content, prompt, model output, request body, or response body capture is approved by Phase 12J or Phase 12K-L.
 
 ## What Not To Do
 

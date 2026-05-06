@@ -1,6 +1,6 @@
 # FORGE-K Build Phases
 
-Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12B Read-only Shadow Harness Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12C Shadow Diagnostics Review and Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12D Controlled Shadow Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12E Route Envelope Shadow Metadata is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12F Route Envelope Shadow Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12G Chat Metadata Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
+Status: Phase 11A Rust Kernel Core research/planning complete; Phase 11B Rust deterministic validation crate and Phase 11C Go/Rust test corpus alignment are implemented as `RESEARCH_ONLY / SIMULATOR_ONLY`. Phase 11D Rust Validation CI and Tooling Integration is implemented as `RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY`. Phase 11E Consensus Mesh is implemented as `SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY`. Phase 11F Integration Readiness Contracts is implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`. Phase 11G Shadow Mode Harness Design is implemented as `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`. Phase 12A Live Integration Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12B Read-only Shadow Harness Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12C Shadow Diagnostics Review and Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12D Controlled Shadow Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12E Route Envelope Shadow Metadata is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12F Route Envelope Shadow Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12G Chat Metadata Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12H Chat Metadata Shadow Implementation is implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`. Phase 12I Chat Metadata Shadow Hardening is implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`. Phase 12J Retrieval Metadata Expansion Design is implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. Phase 12K Retrieval Metadata Shadow Implementation and Phase 12L Retrieval Metadata Shadow Hardening are implemented/tested as a combined `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / HARDENED_IN_PASS` metadata-only pass.
 
 Each phase must preserve the doctrine that models are drivers, neural outputs are proposals, rule outputs are validations, Courthouse admits evidence, Kernel commits through semantic syscalls, snapshots preserve shape, and KV cache is acceleration only.
 
@@ -9,7 +9,7 @@ Each phase must preserve the doctrine that models are drivers, neural outputs ar
 Every future FORGE-K phase must declare one scope marker before work starts:
 
 - `SIMULATOR_ONLY`: confined to `services/core/internal/forgek`, docs, and tests; live daemon authority is unchanged.
-- `LIVE_INTEGRATION`: intentionally changes live daemon authority or routes live state through FORGE-K boundaries; requires explicit integration design and tests.
+- `LIVE_INTEGRATION`: touches the live daemon path. Read-only live diagnostics must also declare `READ_ONLY` and `DISABLED_BY_DEFAULT`; authority migration or live state mutation requires explicit authority-migration design and tests.
 - `DOCS_ONLY`: documentation, status, or planning only.
 - `RESEARCH_ONLY`: exploratory work that cannot be treated as production authority.
 
@@ -429,15 +429,17 @@ Allowed future metadata: retrieval run/result refs, workspace/request/correlatio
 
 Forbidden future metadata: source text, chunk text, document content, file content, raw user query, search snippets, embeddings, vectors, RAG output, prompts, model outputs, memory content, request/response bodies, auth headers, cookies, tokens, API keys, secrets, and large raw content blobs.
 
-What not to do: implement Phase 12K, add retrieval metadata observer code, execute retrieval/search/embedding calls, implement live RAG, capture source/chunk/query/vector content, add public diagnostics APIs, change route behavior, call modelruntime, execute tools, write memory, mutate controllane, or start authority migration.
+What not to do from Phase 12J alone: implement Phase 12K, add retrieval metadata observer code, execute retrieval/search/embedding calls, implement live RAG, capture source/chunk/query/vector content, add public diagnostics APIs, change route behavior, call modelruntime, execute tools, write memory, mutate controllane, or start authority migration.
 
 ## Phase 12K - Retrieval Metadata Shadow Implementation
 
 Scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
-Status: not started.
+Status: implemented and tested as part of the combined Phase 12K-L pass.
 
-Goal: implement bounded retrieval metadata diagnostics only if separately approved.
+Goal: implement bounded retrieval metadata diagnostics after live retrieval run creation, disabled by default and gated by both the global shadow flag and `FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED`.
+
+Deliverables: retrieval metadata config flag, typed retrieval metadata model, retrieval metadata observer, safe field normalization/redaction, post-run API observer hook, bounded in-memory diagnostics, route/API stability tests, invalid-body/header/query no-capture tests, sink isolation tests, and hardening review.
 
 Validation criteria: all tests in `docs/testing/phase_12k_retrieval_metadata_shadow_tests.md` pass before completion.
 
@@ -447,9 +449,11 @@ What not to do: capture source text, chunks, embeddings/vectors, raw queries, pr
 
 Scope: `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
 
-Status: not started.
+Status: implemented and tested in the combined Phase 12K-L hardening pass.
 
-Goal: review and harden any future Phase 12K implementation before broader metadata surfaces are considered.
+Goal: harden retrieval metadata diagnostics before broader metadata surfaces are considered.
+
+Hardening summary: Phase 12L adds no touchpoints beyond Phase 12K, broadens no capture scope, persists no reports, and keeps retrieval metadata diagnostic-only, metadata-only, bounded, and disabled by default.
 
 What not to do: add new touchpoints, broaden retrieval capture, persist diagnostics, add public diagnostics APIs, execute tools, call modelruntime, run retrieval/search/embeddings, write memory, mutate controllane, or start authority migration.
 

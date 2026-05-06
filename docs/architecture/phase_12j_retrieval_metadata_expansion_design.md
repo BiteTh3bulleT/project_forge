@@ -2,11 +2,13 @@
 
 Status: implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 
+Current note: Phase 12K-L later implemented and hardened the approved bounded retrieval metadata observer boundary. This document remains the Phase 12J design record.
+
 ## Executive Summary
 
-Phase 12J designs a possible future retrieval metadata shadow expansion. It does not implement retrieval metadata observation, add live touchpoints, add routes, add feature flags, or change live daemon behavior.
+Phase 12J designed a possible future retrieval metadata shadow expansion. It did not implement retrieval metadata observation, add live touchpoints, add routes, add feature flags, or change live daemon behavior.
 
-The current implemented shadow surfaces remain `/health` metadata, route-envelope metadata, and bounded chat metadata. A future Phase 12K may observe retrieval/search/embedding metadata already produced by live paths only if separately approved and only if it stays metadata-only, read-only, disabled by default, and no-effect.
+At Phase 12J exit, the implemented shadow surfaces were `/health` metadata, route-envelope metadata, and bounded chat metadata. Phase 12K-L later implemented bounded retrieval metadata diagnostics under the constraints defined here.
 
 Core rule: retrieval metadata is routing and evidence metadata, not truth. It must not admit evidence, compile context, run retrieval, call embeddings, write memory, create RAG output, or affect responses.
 
@@ -21,7 +23,7 @@ Core rule: retrieval metadata is routing and evidence metadata, not truth. It mu
 - Phase 12H implements disabled-by-default chat metadata diagnostics.
 - Phase 12I hardens chat metadata diagnostics.
 
-No implemented shadow path observes retrieval routes, search results, embeddings, chunks, source text, memory content, prompts, model output, request bodies, or response bodies.
+At Phase 12J exit, no implemented shadow path observed retrieval routes, search results, embeddings, chunks, source text, memory content, prompts, model output, request bodies, or response bodies. Phase 12K-L later implemented bounded post-run retrieval metadata diagnostics only; it still does not capture retrieval/search/embedding content, source/chunk text, raw queries, prompts, model output, request bodies, or response bodies.
 
 ## Why Retrieval Metadata Is Higher Risk Than Chat Metadata
 

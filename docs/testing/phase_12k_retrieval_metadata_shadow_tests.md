@@ -1,12 +1,14 @@
 # Phase 12K Retrieval Metadata Shadow Test Plan
 
-Status: future test plan only. Phase 12K is not started.
+Status: implemented test record. Phase 12K retrieval metadata shadowing and Phase 12L hardening were combined into Phase 12K-L.
 
 ## Scope
 
-Future Phase 12K scope, if approved: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+Phase 12K scope: `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
 
-This document defines the tests required before any retrieval metadata shadow implementation can be accepted. It does not authorize implementation.
+Phase 12L scope: `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`.
+
+This document records the required and implemented tests for bounded retrieval metadata diagnostics.
 
 ## Required Test Groups
 
@@ -94,7 +96,7 @@ This document defines the tests required before any retrieval metadata shadow im
 
 ## Required Commands
 
-Future Phase 12K validation must run at least:
+Phase 12K-L validation runs:
 
 - `cd services/core && go test ./internal/forgek/...`
 - `cd services/core && go test ./internal/forgekshadow/...`
@@ -108,7 +110,7 @@ Future Phase 12K validation must run at least:
 
 ## Exit Criteria
 
-Phase 12K is complete only if retrieval metadata diagnostics are disabled by default, read-only, bounded, metadata-only, non-authoritative, and proven to have no effect on live responses, live retrieval behavior, live memory writes, live context compilation, or live authority paths.
+Phase 12K-L is complete only if retrieval metadata diagnostics are disabled by default, read-only, bounded, metadata-only, non-authoritative, and proven to have no effect on live responses, live retrieval behavior, live memory writes, live context compilation, or live authority paths.
 
 ## What Not To Do
 

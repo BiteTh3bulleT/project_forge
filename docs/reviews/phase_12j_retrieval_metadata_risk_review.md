@@ -6,7 +6,7 @@ Status: implemented as part of `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
 
 Phase 12J compares possible shadow metadata surfaces after Phase 12I chat metadata hardening. Retrieval metadata may be a valid next controlled expansion only if it captures refs, IDs, counts, score summaries, fingerprints, strategies, status, timing, and bounded warnings from live-produced metadata. It must never capture source text, chunks, snippets, embeddings, vectors, raw query text, prompts, model outputs, memory content, request/response bodies, or RAG output.
 
-No implementation is authorized by this review. Phase 12K must be separately approved before any retrieval metadata observer, flag, route hook, or live code is added.
+At Phase 12J exit, no implementation was authorized by this review. Phase 12K-L later implemented only the bounded metadata observer/config path under these constraints.
 
 ## Risk Review Matrix
 
@@ -22,7 +22,7 @@ No implementation is authorized by this review. Phase 12K must be separately app
 
 Retrieval metadata is higher risk than chat metadata because the live retrieval path may handle query text, source chunks, snippets, file refs, embedding vectors, ranking scores, selected packet evidence, VSA scoring, result persistence, context evidence insertion, and memory observation records. A future observer must therefore be ref-only and must attach only after live retrieval behavior has already produced safe metadata.
 
-Recommended allowed fields for a future Phase 12K:
+Recommended allowed fields from the Phase 12J design:
 
 - retrieval run id
 - retrieval result id

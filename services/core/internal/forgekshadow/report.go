@@ -17,11 +17,12 @@ type ObservationInput struct {
 }
 
 type DiagnosticReport struct {
-	Observation   shadowharness.ShadowObservation
-	Comparison    shadowharness.ShadowComparisonReport
-	RouteEnvelope *RouteEnvelopeObservation
-	ChatMetadata  *ChatMetadataObservation
-	StoredAt      time.Time
+	Observation       shadowharness.ShadowObservation
+	Comparison        shadowharness.ShadowComparisonReport
+	RouteEnvelope     *RouteEnvelopeObservation
+	ChatMetadata      *ChatMetadataObservation
+	RetrievalMetadata *RetrievalMetadataObservation
+	StoredAt          time.Time
 }
 
 type RouteEnvelopeInput struct {
@@ -88,4 +89,50 @@ type ChatMetadataObservation struct {
 	CorrelationID string         `json:"correlation_id,omitempty"`
 	Warnings      []string       `json:"warnings,omitempty"`
 	Metadata      map[string]any `json:"metadata,omitempty"`
+}
+
+type RetrievalMetadataInput struct {
+	WorkspaceID       string
+	RequestID         string
+	CorrelationID     string
+	RetrievalRunID    string
+	RetrievalResultID string
+	SourceType        string
+	SourceRefID       string
+	SourceHash        string
+	ResultCount       int
+	SelectedCount     int
+	ScoreSummary      string
+	RankingPosition   int
+	RetrievalStrategy string
+	IndexType         string
+	EmbeddingModelID  string
+	FreshnessStatus   string
+	Duration          time.Duration
+	Warnings          []string
+	Metadata          map[string]any
+}
+
+type RetrievalMetadataObservation struct {
+	ObservationID     string         `json:"observation_id"`
+	ObservedAt        time.Time      `json:"observed_at"`
+	WorkspaceID       string         `json:"workspace_id,omitempty"`
+	RequestID         string         `json:"request_id,omitempty"`
+	CorrelationID     string         `json:"correlation_id,omitempty"`
+	RetrievalRunID    string         `json:"retrieval_run_id,omitempty"`
+	RetrievalResultID string         `json:"retrieval_result_id,omitempty"`
+	SourceType        string         `json:"source_type,omitempty"`
+	SourceRefID       string         `json:"source_ref_id,omitempty"`
+	SourceHash        string         `json:"source_hash,omitempty"`
+	ResultCount       int            `json:"result_count,omitempty"`
+	SelectedCount     int            `json:"selected_count,omitempty"`
+	ScoreSummary      string         `json:"score_summary,omitempty"`
+	RankingPosition   int            `json:"ranking_position,omitempty"`
+	RetrievalStrategy string         `json:"retrieval_strategy,omitempty"`
+	IndexType         string         `json:"index_type,omitempty"`
+	EmbeddingModelID  string         `json:"embedding_model_id,omitempty"`
+	FreshnessStatus   string         `json:"freshness_status,omitempty"`
+	DurationMS        int64          `json:"duration_ms"`
+	Warnings          []string       `json:"warnings,omitempty"`
+	Metadata          map[string]any `json:"metadata,omitempty"`
 }

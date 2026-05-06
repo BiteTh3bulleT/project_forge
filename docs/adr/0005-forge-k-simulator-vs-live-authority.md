@@ -23,7 +23,7 @@ No live state mutation may route through FORGE-K without an integration design, 
 Every future FORGE-K phase must declare one scope marker before work starts:
 
 - `SIMULATOR_ONLY`: work is confined to the FORGE-K simulator, docs, and tests; live daemon authority is unchanged.
-- `LIVE_INTEGRATION`: work intentionally changes live daemon authority or routes live state through FORGE-K boundaries, with integration design and tests required.
+- `LIVE_INTEGRATION`: work touches live daemon paths. Read-only diagnostics must explicitly declare `READ_ONLY` and remain disabled by default. Live authority changes or live state mutation require an authority migration plan, integration design, and tests.
 - `DOCS_ONLY`: work changes documentation/status/planning only.
 - `RESEARCH_ONLY`: work is exploratory and cannot be treated as production authority.
 

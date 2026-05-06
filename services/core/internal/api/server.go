@@ -234,8 +234,9 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	var shadowObserver *forgekshadow.Observer
 	if cfg.ForgeKShadowModeEnabled {
 		shadowObserver = forgekshadow.NewObserver(forgekshadow.Config{
-			Enabled:             true,
-			ChatMetadataEnabled: cfg.ForgeKShadowChatMetadataEnabled,
+			Enabled:                  true,
+			ChatMetadataEnabled:      cfg.ForgeKShadowChatMetadataEnabled,
+			RetrievalMetadataEnabled: cfg.ForgeKShadowRetrievalMetadataEnabled,
 		})
 	}
 	srv := &Server{

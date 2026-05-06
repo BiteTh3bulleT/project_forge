@@ -1,6 +1,6 @@
 # Phase 12B Shadow Harness Specification
 
-Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12D controlled expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E route-envelope metadata implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12F route-envelope hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12G chat metadata expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12H chat metadata shadowing implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12I chat metadata hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12J retrieval metadata expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`.
+Status: Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12D controlled expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12E route-envelope metadata implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12F route-envelope hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12G chat metadata expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12H chat metadata shadowing implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12I chat metadata hardening implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12J retrieval metadata expansion design implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12K-L retrieval metadata shadowing implemented and hardened as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / HARDENED_IN_PASS`.
 
 ## Scope
 
@@ -10,7 +10,11 @@ Phase 12B implements a read-only shadow harness that observes selected live meta
 
 ## Feature Flag
 
-Implemented flag: `FORGE_K_SHADOW_MODE_ENABLED=false`.
+Implemented flags:
+
+- `FORGE_K_SHADOW_MODE_ENABLED=false`
+- `FORGE_K_SHADOW_CHAT_METADATA_ENABLED=false`
+- `FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED=false`
 
 Config defaults:
 
@@ -60,6 +64,14 @@ Phase 12H adds one chat metadata touchpoint, and Phase 12I hardens that same tou
 - no chat content, prompt, completion, model output, request body, response body, tool payload, retrieval content, or memory content capture is approved
 - Phase 12H/12I coverage is recorded in `docs/testing/phase_12h_chat_metadata_shadow_tests.md` and `docs/reviews/phase_12i_chat_metadata_shadow_hardening.md`
 
+Phase 12K-L adds and hardens one retrieval metadata touchpoint:
+
+- retrieval metadata observation requires both `FORGE_K_SHADOW_MODE_ENABLED=true` and `FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED=true`
+- the touchpoint runs after the live `/api/retrieval/runs` handler has already created the retrieval run
+- reports capture bounded metadata only: retrieval run/result refs, source type/ref, result count, selected count, bounded score summary, ranking position, retrieval strategy, index type, safe embedding model id, timing, and diagnostic markers
+- no source text, chunk text, document content, raw query text, search snippet, embedding/vector, RAG output, prompt, model output, request body, response body, memory content, secret, route/API behavior, or user-visible output change is approved
+- Phase 12K-L coverage is recorded in `docs/testing/phase_12k_retrieval_metadata_shadow_tests.md` and `docs/reviews/phase_12kl_retrieval_metadata_shadow_hardening.md`
+
 ## Future Candidate Live Request Types
 
 Later phases may consider:
@@ -67,7 +79,6 @@ Later phases may consider:
 - chat message submission metadata
 - assistant completion metadata
 - governed gateway trace metadata
-- live retrieval/search/embedding record metadata already produced by live paths
 - live context compile metadata already produced by live paths
 - audit/correlation trace metadata
 - modelruntime trace metadata already produced by live paths
@@ -103,8 +114,12 @@ Forbidden metadata:
 - raw secrets
 - raw credentials
 - large raw content blobs
-- unredacted prompts unless separately approved
-- full model output unless already public and explicitly bounded
+- prompts
+- model output
+- request bodies
+- response bodies
+- raw user queries
+- source, chunk, document, file, retrieval, memory, embedding, vector, tool, or RAG content
 
 ## Mirrored Evidence Refs
 
@@ -220,11 +235,10 @@ After Phase 12I:
 - no modelruntime calls are approved.
 - no gateway/tool execution is approved.
 - no memory write or controllane mutation is approved.
-- retrieval metadata remains design-only after Phase 12J.
-- no retrieval content observation exists.
+- retrieval metadata diagnostics are implemented/hardened after Phase 12K-L, but content observation remains forbidden.
 - no retrieval/search/embedding execution from FORGE-K is approved.
 
-The Phase 12D design is in `docs/architecture/phase_12d_controlled_shadow_expansion_design.md`; the touchpoint decision is in `docs/reviews/phase_12d_touchpoint_selection.md`; the Phase 12E and Phase 12F test coverage is recorded in `docs/testing/phase_12e_shadow_route_envelope_tests.md`; the Phase 12F hardening review is recorded in `docs/reviews/phase_12f_route_envelope_shadow_hardening.md`; the Phase 12G chat metadata design is recorded in `docs/architecture/phase_12g_chat_metadata_expansion_design.md`; the Phase 12I chat metadata hardening review is recorded in `docs/reviews/phase_12i_chat_metadata_shadow_hardening.md`; the Phase 12J retrieval metadata design is recorded in `docs/architecture/phase_12j_retrieval_metadata_expansion_design.md`.
+The Phase 12D design is in `docs/architecture/phase_12d_controlled_shadow_expansion_design.md`; the touchpoint decision is in `docs/reviews/phase_12d_touchpoint_selection.md`; the Phase 12E and Phase 12F test coverage is recorded in `docs/testing/phase_12e_shadow_route_envelope_tests.md`; the Phase 12F hardening review is recorded in `docs/reviews/phase_12f_route_envelope_shadow_hardening.md`; the Phase 12G chat metadata design is recorded in `docs/architecture/phase_12g_chat_metadata_expansion_design.md`; the Phase 12I chat metadata hardening review is recorded in `docs/reviews/phase_12i_chat_metadata_shadow_hardening.md`; the Phase 12J retrieval metadata design is recorded in `docs/architecture/phase_12j_retrieval_metadata_expansion_design.md`; the Phase 12K-L retrieval metadata hardening review is recorded in `docs/reviews/phase_12kl_retrieval_metadata_shadow_hardening.md`.
 
 ## What Not To Do
 
