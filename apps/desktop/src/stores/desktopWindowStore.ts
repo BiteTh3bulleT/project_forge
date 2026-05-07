@@ -223,6 +223,14 @@ function browserViewportBounds(): {
   };
 }
 
+function normalizeHostLabel(hostLabel: string | null | undefined): string {
+  const clean = hostLabel?.trim();
+  if (DETACHED_TAURI_TOOL_WINDOWS) {
+    return clean && clean.length > 0 ? clean : "main";
+  }
+  return "main";
+}
+
 function normalizeBrowserWindow(window_: DesktopWindow): DesktopWindow {
   const bounds = browserViewportBounds();
   const width = Math.min(Math.max(window_.width || 960, 420), bounds.maxWidth);
@@ -234,7 +242,7 @@ function normalizeBrowserWindow(window_: DesktopWindow): DesktopWindow {
   const maxY = Math.max(0, bounds.maxHeight - height);
   return {
     ...window_,
-    hostLabel: window_.hostLabel || "main",
+    hostLabel: normalizeHostLabel(window_.hostLabel),
     x: Math.min(
       Math.max(Number.isFinite(window_.x) ? window_.x : 0, 0),
       maxX,
@@ -386,7 +394,7 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
       await closeTauriWindow(tauriLabelForTool(toolId)).catch(() => undefined);
     }
     const state = get();
-    const hostLabel = opts?.hostLabel?.trim() || "main";
+    const hostLabel = normalizeHostLabel(opts?.hostLabel);
     const existing = state.windows.find(
       (w) => w.toolId === toolId && (w.hostLabel || "main") === hostLabel,
     );
@@ -533,10 +541,15 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
 
   moveToHost: (id, hostLabel, x, y) =>
     set((s) => {
-      const cleanHostLabel = hostLabel.trim() || "main";
+      const cleanHostLabel = normalizeHostLabel(hostLabel);
       const windows = s.windows.map((w) => {
         if (w.id !== id) return w;
-        return { ...w, hostLabel: cleanHostLabel, x, y };
+        return normalizeBrowserWindow({
+          ...w,
+          hostLabel: cleanHostLabel,
+          x,
+          y,
+        });
       });
       const next = { ...s, windows, focusedId: id };
       persist(next);

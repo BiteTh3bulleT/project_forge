@@ -48,38 +48,37 @@ describe("desktop window store", () => {
     expect(state.focusedId).toBe(id);
   });
 
-  it("keeps one window registry while transferring a surface between shell hosts", async () => {
+  it("collapses legacy secondary host labels into the main extended shell", async () => {
     const { useDesktopWindowStore } = await import("./desktopWindowStore");
-    useDesktopWindowStore.setState({
-      windows: [],
-      focusedId: null,
-    });
+    window.localStorage.setItem(
+      "forge.os.windows.v1",
+      JSON.stringify([
+        {
+          id: "legacy-window",
+          toolId: "chat",
+          hostLabel: "forge-right",
+          x: 120,
+          y: 80,
+          width: 960,
+          height: 640,
+          z: 2,
+          minimized: false,
+          maximized: false,
+          tauri: false,
+        },
+      ]),
+    );
 
-    const id = await useDesktopWindowStore
-      .getState()
-      .openWindow("chat", { hostLabel: "main" });
-    useDesktopWindowStore
-      .getState()
-      .moveToHost(id!, "forge-right", 120, 80);
+    useDesktopWindowStore.getState().hydrate();
 
     const state = useDesktopWindowStore.getState();
     expect(state.windows).toHaveLength(1);
     expect(state.windows[0]).toMatchObject({
-      id,
+      id: "legacy-window",
       toolId: "chat",
-      hostLabel: "forge-right",
-      x: 120,
-      y: 80,
-    });
-    const persisted = JSON.parse(
-      window.localStorage.getItem("forge.os.windows.v1") ?? "[]",
-    );
-    expect(persisted[0]).toMatchObject({
-      id,
-      toolId: "chat",
-      hostLabel: "forge-right",
-      x: 120,
-      y: 80,
+      hostLabel: "main",
+      x: 40,
+      y: 0,
     });
   });
 
