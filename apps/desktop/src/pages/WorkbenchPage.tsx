@@ -27,13 +27,16 @@ export function WorkbenchPage() {
   const [jobDetail, setJobDetail] = useState<JobDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const recentJobEvents = Array.isArray(jobDetail?.events)
+    ? jobDetail.events.slice(-12)
+    : [];
 
   const refreshList = useCallback(async () => {
     const res = await api.artifacts.list({
       limit: 200,
       jobId: jobId.trim() ? jobId.trim() : undefined,
     });
-    setArtifacts(res.artifacts);
+    setArtifacts(Array.isArray(res.artifacts) ? res.artifacts : []);
   }, [jobId]);
 
   useEffect(() => {
@@ -447,11 +450,11 @@ export function WorkbenchPage() {
               </div>
             ) : null}
 
-            {jobDetail && jobDetail.events.length > 0 ? (
+            {jobDetail && recentJobEvents.length > 0 ? (
               <div>
                 <div className="mb-2 forge-ops-label">Recent job events</div>
                 <div className="max-h-80 space-y-1 overflow-auto rounded border border-forge-platinum/10 bg-black/25 p-2 text-[11px] text-forge-mist">
-                  {jobDetail.events.slice(-12).map((ev) => (
+                  {recentJobEvents.map((ev) => (
                     <div
                       key={ev.id}
                       className="border-b border-forge-platinum/5 py-1 last:border-0"

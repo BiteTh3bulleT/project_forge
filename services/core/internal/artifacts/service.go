@@ -187,7 +187,7 @@ func (s *Service) ListByJob(ctx context.Context, jobID string) ([]Artifact, erro
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Artifact
+	out := []Artifact{}
 	for rows.Next() {
 		var a Artifact
 		var jobIDVal sql.NullString
@@ -275,7 +275,7 @@ func (s *Service) List(ctx context.Context, jobID *string, limit int) ([]Artifac
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Artifact
+	out := []Artifact{}
 	for rows.Next() {
 		var a Artifact
 		var jobIDVal sql.NullString
