@@ -2633,33 +2633,54 @@ html[data-effects="subtle"] .forge-context-card:hover {
   overflow: hidden;
 }
 
+.forge-os-wallpaper__art {
+  position: absolute;
+  inset: 0;
+  opacity: 0.92;
+}
+
+.forge-os-wallpaper__art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  filter: saturate(1.06) contrast(1.04);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .forge-os-wallpaper__gradient {
   position: absolute;
   inset: 0;
   background:
     radial-gradient(
-      ellipse at 20% 18%,
-      rgba(var(--forge-cyan-rgb), 0.16),
-      transparent 56%
+      ellipse at 72% 28%,
+      rgba(0, 0, 0, 0.08),
+      transparent 42%
     ),
     radial-gradient(
-      ellipse at 80% 88%,
-      rgba(var(--forge-amber-rgb), 0.08),
-      transparent 60%
+      ellipse at 50% 100%,
+      rgba(var(--forge-cyan-rgb), 0.12),
+      transparent 56%
     ),
     linear-gradient(
-      170deg,
-      #050709 0%,
-      #0a1015 38%,
-      #0d1620 58%,
-      #06080c 100%
+      90deg,
+      rgba(0, 0, 0, 0.22) 0%,
+      rgba(0, 0, 0, 0.06) 45%,
+      rgba(0, 0, 0, 0.28) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.16) 0%,
+      transparent 32%,
+      rgba(0, 0, 0, 0.28) 100%
     );
 }
 
 .forge-os-wallpaper__grid {
   position: absolute;
   inset: 0;
-  opacity: 0.32;
+  opacity: 0.1;
   background-image:
     linear-gradient(rgba(var(--forge-cyan-rgb), 0.06) 1px, transparent 1px),
     linear-gradient(
@@ -2685,9 +2706,15 @@ html[data-effects="subtle"] .forge-context-card:hover {
   inset: 0;
   background: radial-gradient(
     circle at 50% 64%,
-    rgba(var(--forge-cyan-rgb), 0.08),
+    rgba(var(--forge-cyan-rgb), 0.06),
     transparent 42%
   );
+}
+
+@media (orientation: portrait) {
+  .forge-os-wallpaper__art img {
+    object-position: center;
+  }
 }
 
 .forge-os-statusbar {
@@ -2794,6 +2821,14 @@ html[data-effects="subtle"] .forge-context-card:hover {
   backdrop-filter: blur(18px);
 }
 
+.forge-os-hero__panel--error {
+  display: block;
+  max-width: min(38rem, calc(100vw - 3rem));
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  background: rgba(8, 12, 16, 0.74);
+}
+
 .forge-os-hero__anvil {
   width: 100%;
   height: auto;
@@ -2829,7 +2864,7 @@ html[data-effects="subtle"] .forge-context-card:hover {
 }
 
 .forge-os-hero__error {
-  margin-top: 1rem;
+  margin-top: 0;
   font-size: 0.78rem;
   color: rgba(var(--forge-danger-rgb), 0.9);
   background: rgba(var(--forge-danger-rgb), 0.08);
@@ -2985,9 +3020,11 @@ html[data-effects="subtle"] .forge-context-card:hover {
 .forge-os-taskbar__start {
   display: inline-flex;
   align-items: center;
-  gap: 0.55rem;
+  justify-content: center;
+  gap: 0.5rem;
   min-height: 2.6rem;
-  padding: 0.3rem 0.85rem 0.3rem 0.45rem;
+  min-width: 3.35rem;
+  padding: 0.24rem 0.62rem;
   border-radius: 12px;
   border: 1px solid rgba(var(--forge-cyan-rgb), 0.24);
   background:
@@ -3014,13 +3051,16 @@ html[data-effects="subtle"] .forge-context-card:hover {
 }
 
 .forge-os-taskbar__anvil {
-  width: 1.65rem;
-  height: 1.65rem;
-  color: rgb(var(--forge-cyan-rgb));
+  width: 2.15rem;
+  height: 2.15rem;
+  object-fit: contain;
   filter: drop-shadow(0 0 8px rgba(var(--forge-cyan-rgb), 0.45));
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .forge-os-taskbar__label {
+  display: none;
   font-family: theme(fontFamily.mono);
 }
 
@@ -3237,6 +3277,15 @@ html[data-effects="subtle"] .forge-context-card:hover {
   background: rgba(var(--forge-cyan-rgb), 0.12);
   color: rgb(var(--forge-cyan-rgb));
   flex: 0 0 auto;
+}
+
+.forge-os-startmenu__avatar img {
+  width: 2.15rem;
+  height: 2.15rem;
+  object-fit: contain;
+  filter: drop-shadow(0 0 8px rgba(var(--forge-cyan-rgb), 0.34));
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .forge-os-startmenu__operator-name {

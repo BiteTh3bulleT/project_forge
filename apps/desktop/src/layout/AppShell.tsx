@@ -445,7 +445,12 @@ export function AppShell(props: AppShellProps) {
             aria-label="Open Start menu"
             aria-expanded={startOpen}
           >
-            <ForgeAnvilIcon className="forge-os-taskbar__anvil" />
+            <img
+              className="forge-os-taskbar__anvil"
+              src="/brand/forge-start-button.png"
+              alt=""
+              draggable={false}
+            />
             <span className="forge-os-taskbar__label">FORGE</span>
           </button>
 
@@ -604,6 +609,17 @@ type DockContextMenu = {
 function DesktopWallpaper() {
   return (
     <div className="forge-os-wallpaper" aria-hidden>
+      <picture className="forge-os-wallpaper__art">
+        <source
+          media="(orientation: portrait)"
+          srcSet="/brand/forge-vertical.png"
+        />
+        <img
+          src="/brand/forge-horizontal.png"
+          alt=""
+          draggable={false}
+        />
+      </picture>
       <div className="forge-os-wallpaper__gradient" />
       <div className="forge-os-wallpaper__grid" />
       <div className="forge-os-wallpaper__glow" />
@@ -612,19 +628,11 @@ function DesktopWallpaper() {
 }
 
 function ForgeHero(props: { lastErr: string | null }) {
+  if (!props.lastErr) return null;
   return (
     <div className="forge-os-hero">
-      <div className="forge-os-hero__panel">
-        <ForgeAnvilIcon className="forge-os-hero__anvil" decorative />
-        <div className="forge-os-hero__copy">
-          <div className="forge-os-hero__wordmark">F.O.R.G.E.</div>
-          <div className="forge-os-hero__tagline">
-            Foundry for Orchestrated Reasoning, Growth, and Execution.
-          </div>
-          {props.lastErr ? (
-            <div className="forge-os-hero__error">{props.lastErr}</div>
-          ) : null}
-        </div>
+      <div className="forge-os-hero__panel forge-os-hero__panel--error">
+        <div className="forge-os-hero__error">{props.lastErr}</div>
       </div>
     </div>
   );
@@ -939,7 +947,11 @@ function StartMenu(props: {
         <header className="forge-os-startmenu__head">
           <div className="forge-os-startmenu__operator">
             <div className="forge-os-startmenu__avatar">
-              <ForgeAnvilIcon className="h-7 w-7" decorative />
+              <img
+                src="/brand/forge-start-button.png"
+                alt=""
+                draggable={false}
+              />
             </div>
             <div className="min-w-0">
               <div className="forge-os-startmenu__operator-name">
@@ -1104,38 +1116,5 @@ function DockContextMenuView(props: {
         Cancel
       </button>
     </div>
-  );
-}
-
-function ForgeAnvilIcon(props: { className?: string; decorative?: boolean }) {
-  return (
-    <svg
-      viewBox="0 0 64 64"
-      className={props.className}
-      aria-hidden="true"
-      role={props.decorative === false ? "img" : undefined}
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path
-        d="M10 22h44l-4 8H22a8 8 0 0 1-8-8h-4z"
-        fill="currentColor"
-        fillOpacity="0.18"
-        strokeWidth="1.5"
-      />
-      <path d="M22 30v6h20v-6" strokeWidth="1.5" />
-      <path
-        d="M18 36h28l-3 8H21l-3-8z"
-        fill="currentColor"
-        fillOpacity="0.12"
-        strokeWidth="1.5"
-      />
-      <path d="M16 44h32" strokeWidth="1.5" />
-      <path d="M14 50h36" strokeWidth="1.5" opacity="0.6" />
-      <path d="M52 22v-6" strokeWidth="1.5" opacity="0.7" />
-      <path d="M48 22v-4" strokeWidth="1.5" opacity="0.5" />
-    </svg>
   );
 }
