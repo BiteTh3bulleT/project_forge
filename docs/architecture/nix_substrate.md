@@ -1,7 +1,8 @@
 # Nix Substrate
 
 _Phase N1 — light Nix foundation. Phase N2 adds private NixOS host
-substrate scaffolding._
+substrate scaffolding. Phase N3 adds the read-only Host Kernel Bridge
+diagnostic library._
 
 This document explains how Nix is used in FORGE today and what it is
 **not** used for yet. Nix's role in FORGE will grow over time, but in
@@ -132,7 +133,13 @@ Exposed modules:
 
 These modules are opt-in scaffolds. They define `/forge` directories,
 a `forge` user/group, a default-safe `forge-core` systemd service shape,
-and a disabled-by-default read-only Host Kernel Bridge scaffold.
+and a disabled-by-default read-only Host Kernel Bridge report directory
+and environment file.
+
+Phase N3 implements the Host Kernel Bridge diagnostic snapshot library
+in `services/core/internal/hostbridge`. The NixOS module remains
+read-only and does not add a timer, route, modelruntime call, rebuild
+action, service restart, or autonomous host mutation.
 
 They do not migrate live authority, fork Linux, execute tools, add
 routes, mutate modelruntime behavior, or make Nix mandatory.

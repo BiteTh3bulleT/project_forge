@@ -84,6 +84,19 @@ References:
 - `docs/architecture/cpu_ram_kernel_gpu_accelerator_split.md`
 - `docs/runbooks/no_gpu_boot_and_recovery.md`
 
+## FORGE-OS Host Substrate
+
+Phase N2 adds private NixOS host substrate scaffolding for `/forge`, the `forge-core` service shape, and host diagnostics report directories. Phase N3 adds a read-only Host Kernel Bridge diagnostic library at `services/core/internal/hostbridge`.
+
+Host diagnostics are operational evidence only. They do not become semantic memory, live FORGE-K authority, gateway authority, modelruntime authority, or autonomous host control.
+
+References:
+
+- `docs/adr/0007-forge-os-host-substrate.md`
+- `docs/architecture/forge_os_host_substrate.md`
+- `docs/architecture/forge_host_kernel_bridge.md`
+- `docs/operations/host_kernel_bridge_diagnostics.md`
+
 The desktop client now supports a **monitor-aware desktop shell**:
 
 - multiple real Tauri shell windows

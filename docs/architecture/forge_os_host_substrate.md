@@ -44,7 +44,7 @@ NixOS scaffolding creates these directories with conservative ownership. It does
 | modelruntime | Existing live path | No runtime behavior changes |
 | FORGE-K | Simulator/shadow only | No live authority migration |
 | FORGE shell | Existing desktop app | No UI focus in Phase N2 |
-| Host Kernel Bridge | Design only | Read-only diagnostics |
+| Host Kernel Bridge | Implemented library | Phase N3 read-only diagnostic snapshots; no startup wiring or public route |
 
 ## Observation And Control Ladder
 
@@ -58,13 +58,13 @@ FORGE host powers must climb this ladder deliberately:
 6. Automate safe action
 7. Own policy
 
-Phase N2 stops at design and scaffolding for observation/reporting. It does not implement host mutation.
+Phase N2 stopped at design and scaffolding for observation/reporting. Phase N3 implements read-only diagnostic snapshot generation. It still does not implement host mutation.
 
 ## Authority Boundary
 
 Host diagnostics do not become canonical truth by themselves. They are evidence and operational context. Durable semantic writes still require existing validation, syscall, approval, audit, and commit boundaries.
 
-No Phase N2 module may bypass gateway execution authority, permissions, lane governance, audit, controllane validation, memory authority, or modelruntime governance.
+No host substrate module may bypass gateway execution authority, permissions, lane governance, audit, controllane validation, memory authority, or modelruntime governance.
 
 ## Rollback
 

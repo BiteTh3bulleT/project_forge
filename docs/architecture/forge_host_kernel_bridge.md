@@ -2,7 +2,9 @@
 
 The Host Kernel Bridge is a read-only diagnostic boundary between FORGE and the Linux/NixOS host substrate.
 
-Phase N2 defines the bridge architecture only. It does not add host mutation, kernel mutation, automatic rebuilds, or live authority migration.
+Phase N2 defined the bridge architecture. Phase N3 implements a read-only diagnostic snapshot library at `services/core/internal/hostbridge`.
+
+The bridge does not add host mutation, kernel mutation, automatic rebuilds, public routes, or live authority migration.
 
 ## Purpose
 
@@ -39,9 +41,34 @@ Forbidden in Phase N2:
 - writing semantic memory directly
 - bypassing gateway, permissions, lanes, audit, or controllane paths
 
+## Phase N3 Implementation
+
+The Phase N3 implementation generates a bounded `Snapshot` with these top-level fields:
+
+- `snapshot_id`
+- `captured_at`
+- `host`
+- `kernel`
+- `boot`
+- `cpu`
+- `memory`
+- `disk`
+- `gpu`
+- `thermal`
+- `services`
+- `modelruntime`
+- `degraded`
+- `warnings`
+- `redactions`
+- `source_errors`
+
+Each source fails independently. Missing `/proc` files, unavailable `nvidia-smi`, absent thermal sysfs, unavailable `systemctl`, and missing modelruntime health providers produce unavailable/degraded source records without failing the whole snapshot.
+
+Snapshot persistence is an explicit helper that writes JSON under the configured report directory, normally `/forge/runtime/host-kernel`. It does not write semantic memory and is not called from core startup by default.
+
 ## Diagnostic Sources
 
-Potential future sources include:
+Implemented sources include:
 
 | Source | Diagnostic Use | Sensitivity Handling |
 |---|---|---|
@@ -49,13 +76,27 @@ Potential future sources include:
 | `/proc/cmdline` | Boot parameters | Redact secrets and tokens |
 | `/proc/modules` | Loaded modules | Store module names and versions |
 | `/proc/meminfo` | Memory pressure | Store aggregates |
-| `/proc/stat` | CPU pressure | Store aggregates |
+| `/proc/loadavg`, `/proc/stat` | CPU pressure | Store aggregates |
+| storage root statfs | Disk pressure | Store aggregate totals and pressure level |
 | `/sys/class/thermal` | Thermal state | Store sensor labels and temperatures |
-| systemd DBus or `systemctl show` | Unit state | Store unit name and health summary |
-| GPU tools | GPU/VRAM status | Store aggregate utilization and driver identity |
-| FORGE health endpoints | modelruntime/core health | Store health state and correlation IDs |
+| `systemctl show forge-core.service` | Unit state | Store unit name and health summary |
+| `nvidia-smi` when available | GPU/VRAM status | Store aggregate driver/device identity and VRAM totals |
+| optional internal provider | modelruntime health | Store health state only |
 
 The bridge should prefer metadata and hashes over raw sensitive payloads.
+
+## Redaction
+
+Boot parameters redact values whose keys or values look like passwords, tokens, secrets, credentials, keys, auth headers, bearer values, or URLs with embedded credentials. Redaction records cite the source and reason without retaining the sensitive value.
+
+## Read-Only Command Boundary
+
+Phase N3 may run only bounded read-only commands:
+
+- `nvidia-smi --query-gpu=... --format=csv,noheader,nounits`
+- `systemctl show forge-core.service --property=Id,LoadState,ActiveState,SubState --no-pager`
+
+It must not run rebuild, package upgrade, service control, module load/unload, destructive filesystem, gateway, retrieval, embedding, or modelruntime execution commands.
 
 ## Diagnostics Are Not Authority
 
