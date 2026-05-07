@@ -110,13 +110,13 @@ export function WorkspaceLayoutsPage() {
 
       <Panel
         title="Workspace Layouts"
-        subtitle="Monitor-aware multi-window presets backed by real display detection and Tauri window placement."
+        subtitle="Monitor-aware presets for confined in-shell FORGE desktop surfaces."
       >
         {!supported ? (
           <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-4 text-sm text-forge-mist">
-            Multi-window and monitor placement require the Tauri desktop
-            runtime. The browser shell can read saved presets but will not
-            simulate displays or extra windows.
+            Monitor detection requires the Tauri desktop runtime. The browser
+            shell can read saved presets but will not simulate attached
+            displays.
           </div>
         ) : null}
         {fallbackNotice ? (
@@ -568,7 +568,7 @@ export function WorkspaceLayoutsPage() {
 
             <Panel
               title="Runtime Windows"
-              subtitle="Real shell windows currently registered by the desktop runtime."
+              subtitle="Current shell registration for the main desktop host."
             >
               <div className="space-y-2">
                 {runtimeWindows.length === 0 ? (

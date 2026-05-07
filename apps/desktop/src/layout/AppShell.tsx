@@ -11,7 +11,13 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { api } from "../lib/api";
-import { isTauriDesktop, listForgeWindows } from "../lib/desktop";
+import {
+  DETACHED_TAURI_TOOL_WINDOWS,
+  isTauriDesktop,
+  listForgeWindows,
+  monitorSignature,
+  spanCurrentWindowAcrossMonitors,
+} from "../lib/desktop";
 import { useUiStore } from "../stores/uiStore";
 import { useWorkspaceLayoutStore } from "../stores/workspaceLayoutStore";
 import { useWorkspaceStore } from "../stores/workspaceStore";
@@ -80,12 +86,13 @@ export function AppShell(props: AppShellProps) {
   const location = useLocation();
   const pathname = location.pathname;
   const currentTool = useMemo(() => getShellTool(pathname), [pathname]);
-  const dockedTauriShell = isTauriDesktop();
+  const detachedTauriShell = isTauriDesktop() && DETACHED_TAURI_TOOL_WINDOWS;
 
   const core = useWorkspaceStore((s) => s.core);
   const meta = useWorkspaceStore((s) => s.meta);
   const lastErr = useWorkspaceStore((s) => s.lastCoreError);
   const fallbackNotice = useWorkspaceLayoutStore((s) => s.fallbackNotice);
+  const monitors = useWorkspaceLayoutStore((s) => s.monitors);
   const clearFallbackNotice = useWorkspaceLayoutStore(
     (s) => s.clearFallbackNotice,
   );
@@ -115,12 +122,15 @@ export function AppShell(props: AppShellProps) {
   const isMainWindow = props.isMainWindow;
 
   const isHome = pathname === HOME_ROUTE;
+  const monitorLayoutSignature = useMemo(
+    () => monitorSignature(monitors),
+    [monitors],
+  );
 
-  // Browser dev only: when the URL changes to a deep-linked surface, open an
-  // in-shell window for it. In Tauri mode the main window stays on "/" — each
-  // tool gets its own real OS window, so this effect is a no-op there.
+  // Deep links open confined in-shell desktop windows. The disabled detached
+  // Tauri compatibility path owns tool routes in separate webviews.
   useEffect(() => {
-    if (isTauriDesktop()) return;
+    if (detachedTauriShell) return;
     if (isHome) return;
     if (!isMainWindow) return;
     const tool = currentTool;
@@ -131,15 +141,14 @@ export function AppShell(props: AppShellProps) {
     } else if (existing.minimized || focusedId !== existing.id) {
       void restore(existing.id);
     }
-    // intentionally omit windows / focusedId — we only react to URL changes
+    // intentionally omit windows / focusedId: this effect only reacts to route changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, isMainWindow, isHome]);
+  }, [pathname, isMainWindow, isHome, detachedTauriShell]);
 
-  // Tauri only: reconcile the desktop window store against the real Tauri
-  // window list every second, so opening/closing windows from anywhere
-  // (including OS chrome) is reflected in the FORGE taskbar.
+  // Detached Tauri compatibility only: reconcile the desktop window store
+  // against real Tauri windows. Normal Tauri uses confined in-shell windows.
   useEffect(() => {
-    if (!isTauriDesktop()) return;
+    if (!detachedTauriShell) return;
     if (!isMainWindow) return;
     let cancelled = false;
     const reconcile = useDesktopWindowStore.getState().reconcileFromTauri;
@@ -154,7 +163,22 @@ export function AppShell(props: AppShellProps) {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [isMainWindow]);
+  }, [isMainWindow, detachedTauriShell]);
+
+  // Confined Tauri mode uses one FORGE shell as a virtual desktop. When
+  // multiple monitors are attached, stretch that shell across the combined
+  // work area so in-shell windows can move between monitor regions.
+  useEffect(() => {
+    if (!isMainWindow) return;
+    if (detachedTauriShell) return;
+    if (!isTauriDesktop()) return;
+    if (monitors.length < 2) return;
+    void spanCurrentWindowAcrossMonitors(monitors);
+    // monitorLayoutSignature intentionally drives this effect; the monitor
+    // array itself can be cloned during store refreshes without geometry
+    // changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMainWindow, detachedTauriShell, monitorLayoutSignature]);
 
   useEffect(() => {
     if (!isMainWindow) return;
@@ -230,9 +254,9 @@ export function AppShell(props: AppShellProps) {
   function launchTool(tool: ShellToolDefinition) {
     setStartOpen(false);
     void openWindow(tool.id);
-    // Tauri keeps tool surfaces docked in the main shell. Browser dev still
-    // navigates so routed page work remains easy to test locally.
-    if (!dockedTauriShell) {
+    // Confined shell mode navigates after opening so deep links and reloads
+    // rehydrate the matching in-shell window.
+    if (!detachedTauriShell) {
       navigate(tool.route);
     }
   }
@@ -241,7 +265,7 @@ export function AppShell(props: AppShellProps) {
     if (window_.minimized) {
       void restore(window_.id);
     } else if (focusedId === window_.id) {
-      if (dockedTauriShell) {
+      if (detachedTauriShell) {
         void focus(window_.id);
       } else {
         void minimize(window_.id);
@@ -249,7 +273,7 @@ export function AppShell(props: AppShellProps) {
     } else {
       void focus(window_.id);
     }
-    if (!dockedTauriShell) {
+    if (!detachedTauriShell) {
       const tool = allShellTools.find((t) => t.id === window_.toolId);
       if (tool) navigate(tool.route);
     }
@@ -313,10 +337,10 @@ export function AppShell(props: AppShellProps) {
   );
   const shellRenderedWindows = useMemo(
     () =>
-      dockedTauriShell
+      detachedTauriShell
         ? visibleWindows.filter((window_) => !window_.tauri)
         : visibleWindows,
-    [dockedTauriShell, visibleWindows],
+    [detachedTauriShell, visibleWindows],
   );
 
   return (
@@ -407,16 +431,8 @@ export function AppShell(props: AppShellProps) {
             <ForgeHero lastErr={lastErr} />
           ) : null}
 
-          {dockedTauriShell && focusedWindow && !focusedWindow.tauri ? (
-            <DockedWindow
-              window={focusedWindow}
-              onMinimize={() => void minimize(focusedWindow.id)}
-              onClose={() => void closeWindow(focusedWindow.id)}
-            />
-          ) : null}
-
-          {!dockedTauriShell
-            ? visibleWindows.map((win) => (
+          {!detachedTauriShell
+            ? shellRenderedWindows.map((win) => (
                 <FloatingWindow
                   key={win.id}
                   window={win}
@@ -431,10 +447,9 @@ export function AppShell(props: AppShellProps) {
               ))
             : null}
 
-          {/* Browser dev only: hidden router-driven children for deep-link
-              routes. Tauri spawns a separate webview per surface, so the
-              shell window doesn't need the router output mounted. */}
-          {!isTauriDesktop() ? (
+          {/* Hidden router-driven children for deep-link routes. Detached
+              Tauri compatibility renders routes in separate webviews. */}
+          {!detachedTauriShell ? (
             <div className="forge-os-router-sink" aria-hidden>
               {props.children}
             </div>
@@ -509,7 +524,7 @@ export function AppShell(props: AppShellProps) {
                   aria-current={isActive ? "page" : undefined}
                   title={
                     isActive
-                      ? dockedTauriShell
+                      ? detachedTauriShell
                         ? `${tile.tool.label} (active)`
                         : `${tile.tool.label} (click to minimize)`
                       : isMinimized
@@ -829,67 +844,6 @@ function FloatingWindow(props: {
           aria-hidden
         />
       ) : null}
-    </section>
-  );
-}
-
-function DockedWindow(props: {
-  window: DesktopWindow;
-  onMinimize: () => void;
-  onClose: () => void;
-}) {
-  const tool = useMemo(
-    () => allShellTools.find((t) => t.id === props.window.toolId) ?? null,
-    [props.window.toolId],
-  );
-  const Component = tool ? getToolComponent(tool.id) : null;
-
-  return (
-    <section className="forge-os-window forge-os-window--docked forge-os-window--focused">
-      <div className="forge-os-window__chrome forge-os-window__chrome--docked">
-        <div className="forge-os-window__title">
-          <span className="forge-os-window__sigil">
-            {tool?.shortLabel ?? "??"}
-          </span>
-          <div className="min-w-0">
-            <div className="forge-os-window__name">
-              {tool?.label ?? "Unknown surface"}
-            </div>
-            <div className="forge-os-window__sub">
-              {tool?.description ?? ""}
-            </div>
-          </div>
-        </div>
-        <div className="forge-os-window__buttons">
-          <button
-            type="button"
-            className="forge-os-window__btn"
-            onClick={props.onMinimize}
-            aria-label="Minimize"
-            title="Minimize"
-          >
-            –
-          </button>
-          <button
-            type="button"
-            className="forge-os-window__btn forge-os-window__btn--close"
-            onClick={props.onClose}
-            aria-label="Close"
-            title="Close"
-          >
-            ×
-          </button>
-        </div>
-      </div>
-      <div className="forge-os-window__body forge-os-window__body--docked">
-        <div className="forge-os-window__content">
-          {Component ? (
-            <Component />
-          ) : (
-            <UnsupportedToolNotice toolId={tool?.id} />
-          )}
-        </div>
-      </div>
     </section>
   );
 }

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import {
+  DETACHED_TAURI_TOOL_WINDOWS,
   closeTauriWindow,
   createShellWindow,
   focusTauriWindow,
@@ -13,7 +14,6 @@ import { allShellTools, type ShellToolId } from "../layout/shellConfig";
 const PINNED_KEY = "forge.os.pinned.v1";
 const WINDOWS_KEY = "forge.os.windows.v1";
 const FOCUS_KEY = "forge.os.focus.v1";
-export const DETACHED_TAURI_TOOL_WINDOWS = true;
 
 const DEFAULT_PINNED: ShellToolId[] = [
   "chat",
@@ -38,14 +38,12 @@ export function toolIdFromTauriLabel(label: string): ShellToolId | null {
   return null;
 }
 
-// In Tauri mode, geometry is owned by the OS. The store still remembers the
-// last known geometry for browser-mode dev rendering; Tauri windows keep their
-// own native position/size. `tauri: true` flags windows that are real OS
-// windows (so the shell knows not to render in-shell chrome for them).
+// Tool surfaces are in-shell MDI windows by default, including in Tauri. The
+// `tauri` flag is kept only for the disabled detached-window compatibility path.
 export type DesktopWindow = {
   id: string;
   toolId: ShellToolId;
-  // browser-only geometry; ignored in Tauri mode
+  // in-shell geometry; ignored only by the disabled detached Tauri path
   x: number;
   y: number;
   width: number;
@@ -536,7 +534,7 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
     set((s) => {
       // Only reconcile in Tauri mode; otherwise leave the in-shell windows
       // untouched.
-      if (!isTauriDesktop()) return s;
+      if (!isTauriDesktop() || !DETACHED_TAURI_TOOL_WINDOWS) return s;
 
       // Map current Tauri snapshots (excluding the shell "main" window) by
       // toolId.

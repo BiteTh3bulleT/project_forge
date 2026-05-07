@@ -1,5 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+type TestMonitor = {
+  id: string;
+  ordinal: number;
+  name: string;
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  workArea: { x: number; y: number; width: number; height: number };
+  scaleFactor: number;
+};
+
 const desktopMocks = vi.hoisted(() => ({
   createShellWindow: vi.fn(async () => ({ label: "layout-chat" })),
   emitWorkspaceSync: vi.fn(async () => undefined),
@@ -13,12 +23,37 @@ const desktopMocks = vi.hoisted(() => ({
   })),
   getWindowByLabel: vi.fn(async () => null),
   isTauriDesktop: vi.fn(() => true),
-  listAvailableMonitors: vi.fn(async () => []),
+  listAvailableMonitors: vi.fn(async (): Promise<TestMonitor[]> => []),
   listRuntimeWindows: vi.fn(async () => [{ label: "main" }]),
   monitorSignature: vi.fn(() => ""),
+  spanCurrentWindowAcrossMonitors: vi.fn(async () => true),
+  tauriWindow: {
+    setTitle: vi.fn(async () => undefined),
+    setPosition: vi.fn(async () => undefined),
+    setSize: vi.fn(async () => undefined),
+    show: vi.fn(async () => undefined),
+    setFocus: vi.fn(async () => undefined),
+  },
+}));
+
+vi.mock("@tauri-apps/api/window", () => ({
+  LogicalPosition: class LogicalPosition {
+    constructor(
+      public x: number,
+      public y: number,
+    ) {}
+  },
+  LogicalSize: class LogicalSize {
+    constructor(
+      public width: number,
+      public height: number,
+    ) {}
+  },
+  getCurrentWindow: () => desktopMocks.tauriWindow,
 }));
 
 vi.mock("../lib/desktop", () => ({
+  DETACHED_TAURI_TOOL_WINDOWS: false,
   WORKSPACE_NAVIGATE_EVENT: "forge://workspace-navigate",
   createShellWindow: desktopMocks.createShellWindow,
   emitWorkspaceSync: desktopMocks.emitWorkspaceSync,
@@ -29,6 +64,8 @@ vi.mock("../lib/desktop", () => ({
   listAvailableMonitors: desktopMocks.listAvailableMonitors,
   listRuntimeWindows: desktopMocks.listRuntimeWindows,
   monitorSignature: desktopMocks.monitorSignature,
+  spanCurrentWindowAcrossMonitors:
+    desktopMocks.spanCurrentWindowAcrossMonitors,
 }));
 
 function activeLayoutDoc() {
@@ -52,7 +89,9 @@ function activeLayoutDoc() {
             targetMonitorId: null,
             targetMonitorOrdinal: 0,
             targetMonitorRole: null,
-            bounds: null,
+            bounds: null as
+              | { x: number; y: number; width: number; height: number }
+              | null,
             fallbackReason: null,
           },
         ],
@@ -69,31 +108,88 @@ function activeLayoutDoc() {
   };
 }
 
+function currentMainLayoutDoc() {
+  const doc = activeLayoutDoc();
+  doc.layouts[0]!.windows = [
+    {
+      id: "main-window",
+      runtimeLabel: "main",
+      title: "FORGE Main",
+      role: "mixed",
+      assignedRoutes: ["/chat"],
+      activeRoute: "/chat",
+      targetMonitorId: null,
+      targetMonitorOrdinal: 0,
+      targetMonitorRole: null,
+      bounds: { x: 40, y: 40, width: 1200, height: 800 },
+      fallbackReason: null,
+    },
+  ];
+  return doc;
+}
+
 describe("workspace layout hydration", () => {
   beforeEach(() => {
     vi.resetModules();
     localStorage.clear();
     desktopMocks.createShellWindow.mockClear();
     desktopMocks.emitWorkspaceSync.mockClear();
+    desktopMocks.spanCurrentWindowAcrossMonitors.mockClear();
+    desktopMocks.tauriWindow.setPosition.mockClear();
+    desktopMocks.tauriWindow.setSize.mockClear();
     localStorage.setItem(
       "forge.workspace.layouts.v2",
       JSON.stringify(activeLayoutDoc()),
     );
   });
 
-  it("restores saved detachable layout windows during Tauri shell startup", async () => {
+  it("does not restore saved layout windows as detached OS windows", async () => {
     const { useWorkspaceLayoutStore } = await import("./workspaceLayoutStore");
 
     await useWorkspaceLayoutStore.getState().hydrate("/");
 
-    expect(desktopMocks.createShellWindow).toHaveBeenCalledWith(
-      expect.objectContaining({
-        label: "layout-chat",
-        route: "/chat",
-        title: "FORGE Chat",
-      }),
+    expect(desktopMocks.createShellWindow).not.toHaveBeenCalled();
+    expect(useWorkspaceLayoutStore.getState().fallbackNotice).toContain(
+      "Detached layout windows are disabled",
     );
     expect(useWorkspaceLayoutStore.getState().ready).toBe(true);
     expect(useWorkspaceLayoutStore.getState().currentWindowLabel).toBe("main");
+  });
+
+  it("keeps the main shell spanned instead of restoring it to one monitor", async () => {
+    const monitors = [
+      {
+        id: "left",
+        ordinal: 0,
+        name: "Left",
+        position: { x: 0, y: 0 },
+        size: { width: 1920, height: 1080 },
+        workArea: { x: 0, y: 0, width: 1920, height: 1040 },
+        scaleFactor: 1,
+      },
+      {
+        id: "right",
+        ordinal: 1,
+        name: "Right",
+        position: { x: 1920, y: 0 },
+        size: { width: 2560, height: 1440 },
+        workArea: { x: 1920, y: 0, width: 2560, height: 1400 },
+        scaleFactor: 1,
+      },
+    ];
+    desktopMocks.listAvailableMonitors.mockResolvedValueOnce(monitors);
+    localStorage.setItem(
+      "forge.workspace.layouts.v2",
+      JSON.stringify(currentMainLayoutDoc()),
+    );
+    const { useWorkspaceLayoutStore } = await import("./workspaceLayoutStore");
+
+    await useWorkspaceLayoutStore.getState().hydrate("/");
+
+    expect(desktopMocks.spanCurrentWindowAcrossMonitors).toHaveBeenCalledWith(
+      monitors,
+    );
+    expect(desktopMocks.tauriWindow.setPosition).not.toHaveBeenCalled();
+    expect(desktopMocks.tauriWindow.setSize).not.toHaveBeenCalled();
   });
 });

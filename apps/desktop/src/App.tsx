@@ -228,9 +228,8 @@ export default function App() {
     };
   }, [navigate, refreshEnvironment, isMainWindow, currentWindowLabel]);
 
-  // Non-main Tauri windows are real OS app windows — they render only their
-  // route, with no shell chrome. The shell (taskbar, Start, wallpaper) lives
-  // in the main window.
+  // Detached non-main Tauri windows are compatibility hosts. Normal tool
+  // surfaces are confined in-shell windows inside the main FORGE desktop.
   if (!isMainWindow) {
     return (
       <div className="forge-tauri-surface">

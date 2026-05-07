@@ -9,6 +9,7 @@ const desktopMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/desktop", () => ({
+  DETACHED_TAURI_TOOL_WINDOWS: false,
   closeTauriWindow: desktopMocks.closeTauriWindow,
   createShellWindow: desktopMocks.createShellWindow,
   focusTauriWindow: desktopMocks.focusTauriWindow,
@@ -26,7 +27,7 @@ describe("desktop window store", () => {
     desktopMocks.minimizeTauriWindow.mockClear();
   });
 
-  it("opens tool surfaces as detachable Tauri windows in the desktop shell", async () => {
+  it("opens tool surfaces as confined in-shell windows in the desktop shell", async () => {
     const { useDesktopWindowStore } = await import("./desktopWindowStore");
     useDesktopWindowStore.setState({
       windows: [],
@@ -36,17 +37,11 @@ describe("desktop window store", () => {
     const id = await useDesktopWindowStore.getState().openWindow("chat");
 
     expect(id).toBeTruthy();
-    expect(desktopMocks.createShellWindow).toHaveBeenCalledWith(
-      expect.objectContaining({
-        label: "forge-app-chat",
-        route: "/chat",
-        title: "FORGE — Chat",
-      }),
-    );
+    expect(desktopMocks.createShellWindow).not.toHaveBeenCalled();
     const state = useDesktopWindowStore.getState();
     expect(state.windows).toHaveLength(1);
     expect(state.windows[0]?.toolId).toBe("chat");
-    expect(state.windows[0]?.tauri).toBe(true);
+    expect(state.windows[0]?.tauri).toBe(false);
     expect(state.focusedId).toBe(id);
   });
 

@@ -1,9 +1,16 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useDesktopWindowStore } from "../stores/desktopWindowStore";
+import { useWorkspaceLayoutStore } from "../stores/workspaceLayoutStore";
 
 import { AppShell } from "./AppShell";
 
@@ -24,11 +31,17 @@ function SearchChangeHarness() {
 const desktopMocks = vi.hoisted(() => ({
   isTauriDesktop: vi.fn(() => true),
   listForgeWindows: vi.fn(() => new Promise<never>(() => {})),
+  spanCurrentWindowAcrossMonitors: vi.fn(async () => false),
 }));
 
 vi.mock("../lib/desktop", () => ({
+  DETACHED_TAURI_TOOL_WINDOWS: false,
   isTauriDesktop: desktopMocks.isTauriDesktop,
   listForgeWindows: desktopMocks.listForgeWindows,
+  monitorSignature: (monitors: Array<{ id: string }>) =>
+    monitors.map((monitor) => monitor.id).join(";"),
+  spanCurrentWindowAcrossMonitors:
+    desktopMocks.spanCurrentWindowAcrossMonitors,
 }));
 
 vi.mock("../lib/api", () => ({
@@ -45,13 +58,14 @@ vi.mock("./toolRegistry", () => ({
   },
 }));
 
-describe("AppShell docked Tauri tool surfaces", () => {
+describe("AppShell confined Tauri tool surfaces", () => {
   beforeEach(() => {
     window.localStorage.clear();
     desktopMocks.isTauriDesktop.mockReturnValue(true);
     desktopMocks.listForgeWindows.mockImplementation(
       () => new Promise<never>(() => {}),
     );
+    desktopMocks.spanCurrentWindowAcrossMonitors.mockClear();
     useDesktopWindowStore.setState({
       pinned: ["chat", "jobs", "memory", "models", "approvals", "settings"],
       windows: [
@@ -70,13 +84,19 @@ describe("AppShell docked Tauri tool surfaces", () => {
       ],
       focusedId: "chat-window",
     });
+    useWorkspaceLayoutStore.setState({
+      monitors: [],
+      supported: true,
+      currentWindowLabel: "main",
+      fallbackNotice: null,
+    });
   });
 
   afterEach(() => {
     cleanup();
   });
 
-  it("keeps the active dock tab visible when clicked in Tauri shell mode", () => {
+  it("renders Tauri tool surfaces as movable in-shell windows", async () => {
     render(
       <MemoryRouter>
         <AppShell isMainWindow={true}>
@@ -87,47 +107,16 @@ describe("AppShell docked Tauri tool surfaces", () => {
 
     expect(screen.getByTestId("mock-tool-content")).toBeTruthy();
 
-    fireEvent.click(screen.getByTitle("Chat (active)"));
+    fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
 
-    expect(screen.getByTestId("mock-tool-content")).toBeTruthy();
-    expect(useDesktopWindowStore.getState().focusedId).toBe("chat-window");
-    expect(useDesktopWindowStore.getState().windows[0]?.minimized).toBe(false);
-  });
-
-  it("uses the docked scroll body for Tauri shell surfaces", () => {
-    const { container } = render(
-      <MemoryRouter>
-        <AppShell isMainWindow={true}>
-          <div />
-        </AppShell>
-      </MemoryRouter>,
-    );
-
-    expect(
-      container.querySelector(".forge-os-window__body--docked"),
-    ).toBeTruthy();
-  });
-
-  it("does not duplicate detached Tauri windows inside the main shell", () => {
-    useDesktopWindowStore.setState({
-      pinned: ["chat"],
-      windows: [
-        {
-          id: "chat-native-window",
-          toolId: "chat",
-          x: 0,
-          y: 0,
-          width: 0,
-          height: 0,
-          z: 1,
-          minimized: false,
-          maximized: false,
-          tauri: true,
-        },
-      ],
-      focusedId: "chat-native-window",
+    await waitFor(() => {
+      expect(screen.queryByTestId("mock-tool-content")).toBeNull();
+      expect(useDesktopWindowStore.getState().focusedId).toBeNull();
+      expect(useDesktopWindowStore.getState().windows[0]?.minimized).toBe(true);
     });
+  });
 
+  it("uses floating window chrome for Tauri shell surfaces", () => {
     const { container } = render(
       <MemoryRouter>
         <AppShell isMainWindow={true}>
@@ -136,10 +125,58 @@ describe("AppShell docked Tauri tool surfaces", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.queryByTestId("mock-tool-content")).toBeNull();
-    expect(
-      container.querySelector(".forge-os-window__body--docked"),
-    ).toBeNull();
+    expect(container.querySelector(".forge-os-window__body")).toBeTruthy();
+    expect(container.querySelector(".forge-os-window__body--docked")).toBeNull();
+  });
+
+  it("does not poll detached Tauri window state in confined shell mode", () => {
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(desktopMocks.listForgeWindows).not.toHaveBeenCalled();
+  });
+
+  it("spans the main shell across detected monitor work areas", async () => {
+    const monitors = [
+      {
+        id: "left",
+        ordinal: 0,
+        name: "Left",
+        position: { x: 0, y: 0 },
+        size: { width: 1920, height: 1080 },
+        workArea: { x: 0, y: 0, width: 1920, height: 1040 },
+        scaleFactor: 1,
+      },
+      {
+        id: "right",
+        ordinal: 1,
+        name: "Right",
+        position: { x: 1920, y: 0 },
+        size: { width: 2560, height: 1440 },
+        workArea: { x: 1920, y: 0, width: 2560, height: 1400 },
+        scaleFactor: 1,
+      },
+    ];
+    useWorkspaceLayoutStore.setState({ monitors });
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(
+        desktopMocks.spanCurrentWindowAcrossMonitors,
+      ).toHaveBeenCalledWith(monitors);
+    });
   });
 
   it("keeps Start open when a background surface only changes search params", () => {

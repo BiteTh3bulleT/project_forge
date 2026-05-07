@@ -5,6 +5,8 @@ import {
   currentMonitor,
   getAllWindows,
   getCurrentWindow,
+  LogicalPosition,
+  LogicalSize,
   type Monitor,
   type Window,
 } from "@tauri-apps/api/window";
@@ -12,6 +14,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export const WORKSPACE_LAYOUT_EVENT = "forge://workspace-layouts-updated";
 export const WORKSPACE_NAVIGATE_EVENT = "forge://workspace-navigate";
+export const DETACHED_TAURI_TOOL_WINDOWS = false;
 
 export type MonitorSnapshot = {
   id: string;
@@ -106,6 +109,51 @@ export function monitorSignature(monitors: MonitorSnapshot[]) {
     )
     .sort()
     .join(";");
+}
+
+export function virtualDesktopBounds(monitors: MonitorSnapshot[]) {
+  const usable = monitors
+    .map((monitor) => monitor.workArea)
+    .filter(
+      (bounds) =>
+        Number.isFinite(bounds.x) &&
+        Number.isFinite(bounds.y) &&
+        Number.isFinite(bounds.width) &&
+        Number.isFinite(bounds.height) &&
+        bounds.width > 0 &&
+        bounds.height > 0,
+    );
+  if (usable.length === 0) return null;
+  const minX = Math.min(...usable.map((bounds) => bounds.x));
+  const minY = Math.min(...usable.map((bounds) => bounds.y));
+  const maxX = Math.max(...usable.map((bounds) => bounds.x + bounds.width));
+  const maxY = Math.max(...usable.map((bounds) => bounds.y + bounds.height));
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(1, maxX - minX),
+    height: Math.max(1, maxY - minY),
+  };
+}
+
+export async function spanCurrentWindowAcrossMonitors(
+  monitors: MonitorSnapshot[],
+) {
+  if (!isTauriDesktop() || monitors.length < 2) return false;
+  const bounds = virtualDesktopBounds(monitors);
+  if (!bounds) return false;
+  try {
+    const appWindow = getCurrentWindow();
+    await appWindow.setPosition(new LogicalPosition(bounds.x, bounds.y));
+    await appWindow.setSize(new LogicalSize(bounds.width, bounds.height));
+    await appWindow.setFocus().catch(() => undefined);
+    return true;
+  } catch (error) {
+    if (typeof console !== "undefined") {
+      console.error("[FORGE] failed to span shell across monitors", error);
+    }
+    return false;
+  }
 }
 
 function areaIntersection(

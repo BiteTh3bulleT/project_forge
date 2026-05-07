@@ -8,6 +8,7 @@ import {
 
 import { assignableShellTools } from "../layout/shellConfig";
 import {
+  DETACHED_TAURI_TOOL_WINDOWS,
   WORKSPACE_NAVIGATE_EVENT,
   createShellWindow,
   emitWorkspaceSync,
@@ -18,6 +19,7 @@ import {
   listAvailableMonitors,
   listRuntimeWindows,
   monitorSignature,
+  spanCurrentWindowAcrossMonitors,
   type MonitorSnapshot,
 } from "../lib/desktop";
 
@@ -858,6 +860,19 @@ async function applyLayout(
     windowRecord.fallbackReason = resolved.fallbackReason;
     if (resolved.fallbackReason) fallbacks.push(resolved.fallbackReason);
 
+    if (
+      !DETACHED_TAURI_TOOL_WINDOWS &&
+      windowRecord.runtimeLabel !== currentLabel
+    ) {
+      const reason =
+        "Detached layout windows are disabled; open this surface inside the main FORGE desktop.";
+      windowRecord.fallbackReason = [windowRecord.fallbackReason, reason]
+        .filter(Boolean)
+        .join(" ");
+      fallbacks.push(reason);
+      continue;
+    }
+
     const targetWindow =
       windowRecord.runtimeLabel === currentLabel
         ? null
@@ -865,12 +880,18 @@ async function applyLayout(
     if (windowRecord.runtimeLabel === currentLabel) {
       const appWindow = getCurrentWindow();
       await appWindow.setTitle(windowRecord.title);
-      await appWindow
-        .setPosition(new LogicalPosition(resolved.bounds.x, resolved.bounds.y))
-        .catch(() => undefined);
-      await appWindow
-        .setSize(new LogicalSize(resolved.bounds.width, resolved.bounds.height))
-        .catch(() => undefined);
+      if (DETACHED_TAURI_TOOL_WINDOWS || resolvedMonitors.length < 2) {
+        await appWindow
+          .setPosition(
+            new LogicalPosition(resolved.bounds.x, resolved.bounds.y),
+          )
+          .catch(() => undefined);
+        await appWindow
+          .setSize(new LogicalSize(resolved.bounds.width, resolved.bounds.height))
+          .catch(() => undefined);
+      } else {
+        await spanCurrentWindowAcrossMonitors(resolvedMonitors);
+      }
       await navigateWindow(currentLabel, windowRecord.activeRoute);
       await bringWindowFront(appWindow, true).catch(() => undefined);
     } else if (targetWindow) {
@@ -906,12 +927,14 @@ async function applyLayout(
     }
   }
 
-  const desired = new Set(layout.windows.map((item) => item.runtimeLabel));
-  const runtimeWindows = await listRuntimeWindows();
-  for (const runtimeWindow of runtimeWindows) {
-    if (runtimeWindow.label === "main") continue;
-    if (!desired.has(runtimeWindow.label)) {
-      await runtimeWindow.close().catch(() => undefined);
+  if (DETACHED_TAURI_TOOL_WINDOWS) {
+    const desired = new Set(layout.windows.map((item) => item.runtimeLabel));
+    const runtimeWindows = await listRuntimeWindows();
+    for (const runtimeWindow of runtimeWindows) {
+      if (runtimeWindow.label === "main") continue;
+      if (!desired.has(runtimeWindow.label)) {
+        await runtimeWindow.close().catch(() => undefined);
+      }
     }
   }
   await syncRuntimeWindowRegistry(doc);
