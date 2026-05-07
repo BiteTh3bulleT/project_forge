@@ -3181,7 +3181,8 @@ html[data-effects="subtle"] .forge-context-card:hover {
   left: 1rem;
   bottom: 5.4rem;
   width: min(44rem, calc(100vw - 2rem));
-  max-height: min(36rem, calc(100vh - 8rem));
+  height: min(36rem, calc(100vh - 8rem));
+  min-height: 22rem;
   display: flex;
   flex-direction: column;
   border-radius: 22px;
@@ -3212,6 +3213,7 @@ html[data-effects="subtle"] .forge-context-card:hover {
 .forge-os-startmenu__head {
   display: flex;
   flex-direction: column;
+  flex: 0 0 auto;
   gap: 0.7rem;
   padding: 0.9rem 1.1rem;
   border-bottom: 1px solid rgba(var(--forge-border-strong-rgb), 0.1);
@@ -3280,20 +3282,23 @@ html[data-effects="subtle"] .forge-context-card:hover {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .forge-os-startmenu__section:not(:last-child) {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  max-height: min(13rem, 34vh);
   border-bottom: 1px solid rgba(var(--forge-border-strong-rgb), 0.08);
 }
 
 .forge-os-startmenu__section:last-child {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
 }
 
 .forge-os-startmenu__section-label {
+  flex: 0 0 auto;
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.18em;
@@ -3306,6 +3311,11 @@ html[data-effects="subtle"] .forge-context-card:hover {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
   gap: 0.5rem;
+  max-height: 8.5rem;
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 0.2rem;
+  overscroll-behavior: contain;
 }
 
 .forge-os-startmenu__tile {
@@ -3321,6 +3331,7 @@ html[data-effects="subtle"] .forge-context-card:hover {
     rgba(255, 255, 255, 0.025);
   color: rgb(var(--forge-text-rgb));
   text-align: left;
+  min-width: 0;
   transition:
     border-color 140ms ease,
     background-color 140ms ease,
@@ -3360,14 +3371,16 @@ html[data-effects="subtle"] .forge-context-card:hover {
   flex-direction: column;
   gap: 0.2rem;
   overflow-y: auto;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
   padding-right: 0.25rem;
+  overscroll-behavior: contain;
 }
 
 .forge-os-startmenu__row {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 0.7rem;
   padding: 0.55rem 0.6rem;
   border-radius: 10px;
@@ -3375,6 +3388,7 @@ html[data-effects="subtle"] .forge-context-card:hover {
   border: 1px solid transparent;
   color: rgba(var(--forge-text-rgb), 0.92);
   text-align: left;
+  min-width: 0;
   transition:
     background-color 120ms ease,
     border-color 120ms ease;
@@ -3419,6 +3433,49 @@ html[data-effects="subtle"] .forge-context-card:hover {
   padding: 0.8rem 0.6rem;
   font-size: 0.78rem;
   color: rgba(var(--forge-muted-rgb), 0.7);
+}
+
+@media (max-height: 620px) {
+  .forge-os-startmenu {
+    bottom: 4.8rem;
+    height: min(34rem, calc(100vh - 6.8rem));
+    min-height: 20rem;
+  }
+
+  .forge-os-startmenu__head {
+    gap: 0.5rem;
+    padding: 0.65rem 0.9rem;
+  }
+
+  .forge-os-startmenu__input {
+    min-height: 1.95rem;
+  }
+
+  .forge-os-startmenu__section {
+    padding: 0.6rem 0.9rem;
+  }
+
+  .forge-os-startmenu__section:not(:last-child) {
+    max-height: 7rem;
+  }
+
+  .forge-os-startmenu__section-label {
+    margin-bottom: 0.4rem;
+  }
+
+  .forge-os-startmenu__grid {
+    max-height: 4.6rem;
+    grid-template-columns: repeat(auto-fill, minmax(6.6rem, 1fr));
+  }
+
+  .forge-os-startmenu__tile {
+    gap: 0.35rem;
+    padding: 0.55rem 0.6rem;
+  }
+
+  .forge-os-startmenu__row {
+    padding: 0.48rem 0.55rem;
+  }
 }
 
 /* Floating window manager (Step 2 / 3) */
@@ -3590,6 +3647,17 @@ html[data-effects="subtle"] .forge-context-card:hover {
 .forge-os-window__body {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.forge-os-window__content,
+.forge-tauri-surface {
+  container: forge-window-content / inline-size;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -3597,12 +3665,106 @@ html[data-effects="subtle"] .forge-context-card:hover {
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
   overscroll-behavior: contain;
 }
 
 .forge-os-window__body--docked > * {
   min-width: 0;
+}
+
+.forge-tauri-surface {
+  display: flex;
+  flex-direction: column;
+  background: rgb(var(--forge-bg-rgb));
+  color: rgb(var(--forge-text-rgb));
+}
+
+.forge-os-window__content > *,
+.forge-tauri-surface > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.forge-os-window__content .forge-ops-board,
+.forge-tauri-surface .forge-ops-board {
+  padding: clamp(0.65rem, 1.8cqw, 1.25rem);
+}
+
+.forge-os-window__content .forge-chat-layout,
+.forge-tauri-surface .forge-chat-layout {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+@container forge-window-content (max-width: 1100px) {
+  .forge-chat-layout {
+    grid-template-columns:
+      minmax(12rem, var(--forge-chat-thread-width, 260px))
+      7px minmax(0, 1fr);
+  }
+
+  .forge-chat-resizer--right,
+  .forge-chat-inspector {
+    display: none !important;
+  }
+}
+
+@container forge-window-content (max-width: 780px) {
+  .forge-chat-layout {
+    display: flex !important;
+    flex-direction: column;
+    overflow-x: hidden;
+  }
+
+  .forge-chat-resizer {
+    display: none !important;
+  }
+
+  .forge-chat-thread-rail {
+    max-height: 13rem;
+    border-right: 0 !important;
+  }
+
+  .forge-ops-board {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .forge-ops-board .grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .forge-ops-panel__head,
+  .forge-ops-panel__body {
+    padding: 0.75rem;
+  }
+
+  .forge-ops-panel__head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+}
+
+@container forge-window-content (max-width: 560px) {
+  .forge-ops-board {
+    font-size: 0.92rem;
+  }
+
+  .forge-ops-card,
+  .forge-ops-panel {
+    border-radius: 7px;
+  }
+
+  .forge-ops-table {
+    min-width: 34rem;
+  }
+
+  .forge-chat-thread-rail {
+    max-height: 10rem;
+  }
 }
 
 .forge-os-window__resize {

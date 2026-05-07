@@ -400,12 +400,13 @@ export async function createShellWindow(options: {
       width: options.bounds.width,
       height: options.bounds.height,
       visible: true,
-      focus: false,
+      focus: true,
       resizable: true,
       preventOverflow: true,
     });
     try {
       await window.show();
+      await window.setFocus();
     } catch (error) {
       if (typeof console !== "undefined") {
         console.error(

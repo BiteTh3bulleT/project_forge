@@ -232,7 +232,11 @@ export default function App() {
   // route, with no shell chrome. The shell (taskbar, Start, wallpaper) lives
   // in the main window.
   if (!isMainWindow) {
-    return <RoutedViews />;
+    return (
+      <div className="forge-tauri-surface">
+        <RoutedViews />
+      </div>
+    );
   }
   return (
     <AppShell isMainWindow={isMainWindow}>

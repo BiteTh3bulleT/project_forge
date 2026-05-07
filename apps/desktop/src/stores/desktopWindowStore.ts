@@ -139,7 +139,7 @@ function loadWindows(): DesktopWindow[] {
   const list = safeParseArray<DesktopWindow>(raw, isDesktopWindow);
   // Drop any persisted Tauri-flagged windows on load — Tauri owns those and
   // the reconciler will repopulate.
-  return list.filter((w) => !w.tauri);
+  return list.filter((w) => !w.tauri).map(normalizeBrowserWindow);
 }
 
 function loadFocus(): string | null {
@@ -190,6 +190,45 @@ function defaultGeometry(index: number): {
     y: base.y + offset,
     width: base.width,
     height: base.height,
+  };
+}
+
+function browserViewportBounds(): {
+  maxWidth: number;
+  maxHeight: number;
+} {
+  if (typeof window === "undefined") {
+    return { maxWidth: 1280, maxHeight: 760 };
+  }
+  // The browser fallback paints inside a desktop shell with statusbar and
+  // taskbar chrome. Keep restored windows inside the usable center area.
+  return {
+    maxWidth: Math.max(420, window.innerWidth - 24),
+    maxHeight: Math.max(320, window.innerHeight - 132),
+  };
+}
+
+function normalizeBrowserWindow(window_: DesktopWindow): DesktopWindow {
+  const bounds = browserViewportBounds();
+  const width = Math.min(Math.max(window_.width || 960, 420), bounds.maxWidth);
+  const height = Math.min(
+    Math.max(window_.height || 640, 320),
+    bounds.maxHeight,
+  );
+  const maxX = Math.max(0, bounds.maxWidth - width);
+  const maxY = Math.max(0, bounds.maxHeight - height);
+  return {
+    ...window_,
+    x: Math.min(
+      Math.max(Number.isFinite(window_.x) ? window_.x : 0, 0),
+      maxX,
+    ),
+    y: Math.min(
+      Math.max(Number.isFinite(window_.y) ? window_.y : 0, 0),
+      maxY,
+    ),
+    width,
+    height,
   };
 }
 
@@ -256,6 +295,34 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
       if (existing) {
         await focusTauriWindow(label);
         return existing.id;
+      }
+      if (await focusTauriWindow(label)) {
+        const id = makeId();
+        const z = nextZ(get().windows);
+        set((s) => {
+          const next = {
+            ...s,
+            windows: [
+              ...s.windows,
+              {
+                id,
+                toolId,
+                x: 0,
+                y: 0,
+                width: 0,
+                height: 0,
+                z,
+                minimized: false,
+                maximized: false,
+                tauri: true,
+              },
+            ],
+            focusedId: id,
+          };
+          persist(next);
+          return next;
+        });
+        return id;
       }
       const geo = defaultGeometry(get().windows.length);
       const created = await createShellWindow({
@@ -325,9 +392,10 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
       maximized: false,
       tauri: false,
     };
+    const normalizedWindow = normalizeBrowserWindow(newWindow);
     const next: DesktopWindowState = {
       ...state,
-      windows: [...state.windows, newWindow],
+      windows: [...state.windows, normalizedWindow],
       focusedId: id,
     };
     set(next);
@@ -426,9 +494,11 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
 
   move: (id, x, y) =>
     set((s) => {
-      const windows = s.windows.map((w) =>
-        w.id === id ? { ...w, x, y } : w,
-      );
+      const windows = s.windows.map((w) => {
+        if (w.id !== id) return w;
+        const nextWindow = { ...w, x, y };
+        return w.tauri ? nextWindow : normalizeBrowserWindow(nextWindow);
+      });
       const next = { ...s, windows };
       persist(next);
       return next;
@@ -436,9 +506,11 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
 
   resize: (id, width, height) =>
     set((s) => {
-      const windows = s.windows.map((w) =>
-        w.id === id ? { ...w, width, height } : w,
-      );
+      const windows = s.windows.map((w) => {
+        if (w.id !== id) return w;
+        const nextWindow = { ...w, width, height };
+        return w.tauri ? nextWindow : normalizeBrowserWindow(nextWindow);
+      });
       const next = { ...s, windows };
       persist(next);
       return next;

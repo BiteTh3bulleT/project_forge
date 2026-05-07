@@ -307,6 +307,10 @@ export function AppShell(props: AppShellProps) {
     () => [...windows].sort((a, b) => a.z - b.z),
     [windows],
   );
+  const visibleWindows = useMemo(
+    () => sortedWindows.filter((window_) => !window_.minimized),
+    [sortedWindows],
+  );
 
   return (
     <div
@@ -391,8 +395,8 @@ export function AppShell(props: AppShellProps) {
         ) : null}
 
         <main className="forge-os-desktop">
-          {/* Wallpaper-only when no FORGE windows are present. */}
-          {windows.length === 0 ? <ForgeHero lastErr={lastErr} /> : null}
+          {/* Wallpaper-only when no visible FORGE windows are present. */}
+          {visibleWindows.length === 0 ? <ForgeHero lastErr={lastErr} /> : null}
 
           {dockedTauriShell && focusedWindow ? (
             <DockedWindow
@@ -403,7 +407,7 @@ export function AppShell(props: AppShellProps) {
           ) : null}
 
           {!dockedTauriShell
-            ? sortedWindows.map((win) => (
+            ? visibleWindows.map((win) => (
                 <FloatingWindow
                   key={win.id}
                   window={win}
@@ -793,7 +797,13 @@ function FloatingWindow(props: {
         </div>
       </div>
       <div className="forge-os-window__body">
-        {Component ? <Component /> : <UnsupportedToolNotice toolId={tool?.id} />}
+        <div className="forge-os-window__content">
+          {Component ? (
+            <Component />
+          ) : (
+            <UnsupportedToolNotice toolId={tool?.id} />
+          )}
+        </div>
       </div>
       {!props.window.maximized ? (
         <div
@@ -855,7 +865,13 @@ function DockedWindow(props: {
         </div>
       </div>
       <div className="forge-os-window__body forge-os-window__body--docked">
-        {Component ? <Component /> : <UnsupportedToolNotice toolId={tool?.id} />}
+        <div className="forge-os-window__content">
+          {Component ? (
+            <Component />
+          ) : (
+            <UnsupportedToolNotice toolId={tool?.id} />
+          )}
+        </div>
       </div>
     </section>
   );
