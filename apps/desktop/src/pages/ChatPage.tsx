@@ -228,13 +228,54 @@ function usableChatStatus(model: ModelRuntimeModel): boolean {
   );
 }
 
+function chatModelStatusRank(status: string | undefined): number {
+  switch (String(status ?? "").trim().toLowerCase()) {
+    case "loaded":
+      return 5;
+    case "available":
+      return 4;
+    case "verified":
+      return 3;
+    case "imported":
+      return 2;
+    case "loading":
+    case "unloading":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function preferredAutoChatModel(
+  models: ModelRuntimeModel[],
+): ModelRuntimeModel | null {
+  const candidates = models
+    .filter((model) => supportsChatCapability(model) && usableChatStatus(model))
+    .slice()
+    .sort((a, b) => {
+      const rank = chatModelStatusRank(b.status) - chatModelStatusRank(a.status);
+      if (rank !== 0) return rank;
+      return a.id.localeCompare(b.id);
+    });
+  return candidates[0] ?? null;
+}
+
 function describeChatModel(
   modelId: string,
   models: ModelRuntimeModel[],
 ): string {
   const id = modelId.trim();
-  if (!id)
+  if (!id) {
+    const preferred = preferredAutoChatModel(models);
+    if (preferred) {
+      const label = preferred.displayName?.trim() || preferred.id;
+      const status = String(preferred.status ?? "").trim();
+      return status.toLowerCase() === "loaded"
+        ? `Auto will use active loaded model ${label}.`
+        : `Auto will use ${label} unless the runtime selects a better route.`;
+    }
     return "Auto routing uses the runtime default or configured adapter fallback.";
+  }
   const selected = models.find((model) => model.id === id);
   if (!selected)
     return `Pinned to saved model ${id}. It is not present in the current runtime list.`;
@@ -1864,8 +1905,22 @@ export function ChatPage() {
       assistantDryRun,
     };
     const requestedModel = selectedChatModelId.trim();
-    if (requestedModel) {
+    const modelListReady =
+      chatModelLoadState === "ready" || chatModelLoadState === "unavailable";
+    const requestedModelAvailable =
+      requestedModel &&
+      (!modelListReady ||
+        chatModels.some((model) => model.id === requestedModel));
+    if (requestedModel && requestedModelAvailable) {
       body.modelId = requestedModel;
+    } else {
+      if (requestedModel && modelListReady) {
+        setSelectedChatModelId("");
+      }
+      const preferred = preferredAutoChatModel(chatModels);
+      if (preferred) {
+        body.modelId = preferred.id;
+      }
     }
     if (useStream) body.stream = true;
     else if (useSyncBlock) body.syncAssistant = true;
@@ -1976,9 +2031,37 @@ export function ChatPage() {
         }
       };
 
+      const cleanupStream = () => {
+        es.close();
+        streamEsRef.current = null;
+        if (streamTokenFlushTimerRef.current)
+          window.clearTimeout(streamTokenFlushTimerRef.current);
+        streamTokenFlushTimerRef.current = null;
+        streamTokenBufferRef.current = "";
+        setStreamingText(null);
+        setStreamingEvents([]);
+      };
+
+      const recoverSavedAssistantReply = async (): Promise<boolean> => {
+        try {
+          const d = await api.chat.threads.get(threadId);
+          const messages = Array.isArray(d.messages)
+            ? d.messages.map((m) => normalizeMessage(m))
+            : [];
+          if (!findAssistantReply(messages, userMessageId)) return false;
+          setActive(normalizeThread(d));
+          void refreshThreads();
+          return true;
+        } catch {
+          return false;
+        }
+      };
+
       const pushThinkingEvent = (event: ChatThinkingEvent) => {
         setStreamingEvents((prev) => [...prev.slice(-79), event]);
       };
+
+      let settled = false;
 
       es.addEventListener("token", (ev) => {
         try {
@@ -1994,6 +2077,8 @@ export function ChatPage() {
 
       es.addEventListener("done", (ev) => {
         try {
+          if (settled) return;
+          settled = true;
           const raw = JSON.parse((ev as MessageEvent).data as string) as {
             assistantMessage?: ChatMessage;
           };
@@ -2009,6 +2094,7 @@ export function ChatPage() {
           void refreshThreads();
           resolve();
         } catch (e) {
+          settled = true;
           es.close();
           streamEsRef.current = null;
           flushTokenBuffer();
@@ -2017,16 +2103,39 @@ export function ChatPage() {
         }
       });
 
+      const failOrRecover = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        cleanupStream();
+        void recoverSavedAssistantReply().then((recovered) => {
+          if (recovered) {
+            resolve();
+            return;
+          }
+          reject(error);
+        });
+      };
+
+      es.addEventListener("error", (ev) => {
+        const data =
+          typeof (ev as MessageEvent).data === "string"
+            ? ((ev as MessageEvent).data as string)
+            : "";
+        if (!data) return;
+        try {
+          const raw = JSON.parse(data) as { message?: string; error?: string };
+          const message =
+            raw.message?.trim() ||
+            raw.error?.trim() ||
+            "Assistant stream failed.";
+          failOrRecover(new Error(message));
+        } catch {
+          failOrRecover(new Error(data));
+        }
+      });
+
       es.onerror = () => {
-        es.close();
-        streamEsRef.current = null;
-        if (streamTokenFlushTimerRef.current)
-          window.clearTimeout(streamTokenFlushTimerRef.current);
-        streamTokenFlushTimerRef.current = null;
-        streamTokenBufferRef.current = "";
-        setStreamingText(null);
-        setStreamingEvents([]);
-        reject(new Error("Assistant stream disconnected."));
+        failOrRecover(new Error("Assistant stream disconnected."));
       };
 
       es.addEventListener("agent_stage", (ev) => {
@@ -2315,6 +2424,11 @@ export function ChatPage() {
     [chatModels, selectedChatModelId],
   );
 
+  const autoChatModel = useMemo(
+    () => preferredAutoChatModel(chatModels),
+    [chatModels],
+  );
+
   const assistantModeSummary = useMemo(
     () =>
       describeAssistantMode({
@@ -2512,6 +2626,8 @@ export function ChatPage() {
                     <span className="rounded-full border border-forge-platinum/10 bg-forge-platinum/5 px-2.5 py-1 text-[10px] text-forge-mist">
                       {selectedChatModel?.displayName?.trim() ||
                         selectedChatModel?.id ||
+                        autoChatModel?.displayName?.trim() ||
+                        autoChatModel?.id ||
                         "Auto model"}
                     </span>
                   </div>
