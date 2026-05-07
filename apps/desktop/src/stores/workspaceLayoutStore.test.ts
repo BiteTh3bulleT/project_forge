@@ -61,6 +61,8 @@ vi.mock("../lib/desktop", () => ({
   getCurrentWindowSnapshot: desktopMocks.getCurrentWindowSnapshot,
   getWindowByLabel: desktopMocks.getWindowByLabel,
   isTauriDesktop: desktopMocks.isTauriDesktop,
+  isForgeManagedWindowLabel: (label: string) =>
+    label === "main" || label.startsWith("forge-"),
   isShellHostWindowLabel: (label: string) =>
     label === "main" ||
     (label.startsWith("forge-") && !label.startsWith("forge-app-")),
@@ -164,6 +166,10 @@ describe("workspace layout hydration", () => {
       label: "forge-build-workbench",
       close: vi.fn(async () => undefined),
     };
+    const staleDetachedToolWindow = {
+      label: "forge-app-chat",
+      close: vi.fn(async () => undefined),
+    };
     desktopMocks.listAvailableMonitors.mockResolvedValueOnce([
       {
         id: "main-display",
@@ -187,6 +193,7 @@ describe("workspace layout hydration", () => {
     desktopMocks.listRuntimeWindows.mockResolvedValue([
       { label: "main" },
       secondaryWindow,
+      staleDetachedToolWindow,
     ]);
     const { useWorkspaceLayoutStore } = await import("./workspaceLayoutStore");
 
@@ -195,6 +202,7 @@ describe("workspace layout hydration", () => {
     expect(desktopMocks.createShellWindow).not.toHaveBeenCalled();
     expect(desktopMocks.spanCurrentWindowAcrossMonitors).toHaveBeenCalled();
     expect(secondaryWindow.close).toHaveBeenCalled();
+    expect(staleDetachedToolWindow.close).toHaveBeenCalled();
     expect(useWorkspaceLayoutStore.getState().runtimeWindows).toEqual([
       expect.objectContaining({
         runtimeLabel: "main",

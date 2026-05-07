@@ -15,8 +15,8 @@ import {
   getCurrentWindowLabel,
   getCurrentWindowSnapshot,
   getWindowByLabel,
+  isForgeManagedWindowLabel,
   isTauriDesktop,
-  isShellHostWindowLabel,
   listAvailableMonitors,
   listRuntimeWindows,
   monitorSignature,
@@ -794,7 +794,7 @@ async function closeSecondaryShellHosts() {
   const runtimeWindows = await listRuntimeWindows();
   for (const runtimeWindow of runtimeWindows) {
     if (runtimeWindow.label === "main") continue;
-    if (isShellHostWindowLabel(runtimeWindow.label)) {
+    if (isForgeManagedWindowLabel(runtimeWindow.label)) {
       await runtimeWindow.close().catch(() => undefined);
     }
   }
@@ -1002,7 +1002,7 @@ async function applyLayout(
     if (!desired.has(runtimeWindow.label)) {
       if (
         DETACHED_TAURI_TOOL_WINDOWS ||
-        isShellHostWindowLabel(runtimeWindow.label)
+        isForgeManagedWindowLabel(runtimeWindow.label)
       ) {
         await runtimeWindow.close().catch(() => undefined);
       }

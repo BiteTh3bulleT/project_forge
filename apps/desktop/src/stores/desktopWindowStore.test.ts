@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const desktopMocks = vi.hoisted(() => ({
-  closeTauriWindow: vi.fn(),
+  closeTauriWindow: vi.fn(async () => true),
   createShellWindow: vi.fn(async () => ({ label: "forge-app-chat" })),
   focusTauriWindow: vi.fn(),
   isTauriDesktop: vi.fn(() => true),
@@ -38,6 +38,9 @@ describe("desktop window store", () => {
 
     expect(id).toBeTruthy();
     expect(desktopMocks.createShellWindow).not.toHaveBeenCalled();
+    expect(desktopMocks.closeTauriWindow).toHaveBeenCalledWith(
+      "forge-app-chat",
+    );
     const state = useDesktopWindowStore.getState();
     expect(state.windows).toHaveLength(1);
     expect(state.windows[0]?.toolId).toBe("chat");

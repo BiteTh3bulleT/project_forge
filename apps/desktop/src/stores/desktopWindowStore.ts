@@ -382,6 +382,9 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
     }
 
     // Browser fallback: in-shell window manager (single-instance per tool).
+    if (isTauriDesktop()) {
+      await closeTauriWindow(tauriLabelForTool(toolId)).catch(() => undefined);
+    }
     const state = get();
     const hostLabel = opts?.hostLabel?.trim() || "main";
     const existing = state.windows.find(

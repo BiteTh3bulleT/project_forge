@@ -83,6 +83,11 @@ export function isShellHostWindowLabel(label: string | null | undefined) {
   );
 }
 
+export function isForgeManagedWindowLabel(label: string | null | undefined) {
+  const clean = label?.trim();
+  return clean === "main" || Boolean(clean && clean.startsWith("forge-"));
+}
+
 export function monitorIdFromMonitor(monitor: Monitor) {
   return [
     monitor.name ?? "unnamed",
