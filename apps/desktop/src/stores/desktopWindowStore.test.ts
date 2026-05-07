@@ -45,6 +45,31 @@ describe("desktop window store", () => {
     expect(state.focusedId).toBe(id);
   });
 
+  it("keeps one window registry while transferring a surface between shell hosts", async () => {
+    const { useDesktopWindowStore } = await import("./desktopWindowStore");
+    useDesktopWindowStore.setState({
+      windows: [],
+      focusedId: null,
+    });
+
+    const id = await useDesktopWindowStore
+      .getState()
+      .openWindow("chat", { hostLabel: "main" });
+    useDesktopWindowStore
+      .getState()
+      .moveToHost(id!, "forge-right", 120, 80);
+
+    const state = useDesktopWindowStore.getState();
+    expect(state.windows).toHaveLength(1);
+    expect(state.windows[0]).toMatchObject({
+      id,
+      toolId: "chat",
+      hostLabel: "forge-right",
+      x: 120,
+      y: 80,
+    });
+  });
+
   it("drops stale persisted focus and selects a visible window during hydration", async () => {
     window.localStorage.setItem(
       "forge.os.windows.v1",

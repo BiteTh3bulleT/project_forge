@@ -13,10 +13,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   DETACHED_TAURI_TOOL_WINDOWS,
+  isShellHostWindowLabel,
   isTauriDesktop,
   listForgeWindows,
-  monitorSignature,
-  spanCurrentWindowAcrossMonitors,
 } from "../lib/desktop";
 import { useUiStore } from "../stores/uiStore";
 import { useWorkspaceLayoutStore } from "../stores/workspaceLayoutStore";
@@ -93,7 +92,7 @@ export function AppShell(props: AppShellProps) {
   const meta = useWorkspaceStore((s) => s.meta);
   const lastErr = useWorkspaceStore((s) => s.lastCoreError);
   const fallbackNotice = useWorkspaceLayoutStore((s) => s.fallbackNotice);
-  const monitors = useWorkspaceLayoutStore((s) => s.monitors);
+  const runtimeWindows = useWorkspaceLayoutStore((s) => s.runtimeWindows);
   const clearFallbackNotice = useWorkspaceLayoutStore(
     (s) => s.clearFallbackNotice,
   );
@@ -110,6 +109,7 @@ export function AppShell(props: AppShellProps) {
   const focus = useDesktopWindowStore((s) => s.focus);
   const toggleMaximize = useDesktopWindowStore((s) => s.toggleMaximize);
   const move = useDesktopWindowStore((s) => s.move);
+  const moveToHost = useDesktopWindowStore((s) => s.moveToHost);
   const resize = useDesktopWindowStore((s) => s.resize);
   const pin = useDesktopWindowStore((s) => s.pin);
   const unpin = useDesktopWindowStore((s) => s.unpin);
@@ -124,10 +124,6 @@ export function AppShell(props: AppShellProps) {
   const hostLabel = props.hostLabel?.trim() || "main";
 
   const isHome = pathname === HOME_ROUTE;
-  const monitorLayoutSignature = useMemo(
-    () => monitorSignature(monitors),
-    [monitors],
-  );
 
   // Deep links open confined in-shell desktop windows. The disabled detached
   // Tauri compatibility path owns tool routes in separate webviews.
@@ -169,21 +165,6 @@ export function AppShell(props: AppShellProps) {
     };
   }, [isMainWindow, detachedTauriShell]);
 
-  // Confined Tauri mode uses one FORGE shell as a virtual desktop. When
-  // multiple monitors are attached, stretch that shell across the combined
-  // work area so in-shell windows can move between monitor regions.
-  useEffect(() => {
-    if (!isMainWindow) return;
-    if (detachedTauriShell) return;
-    if (!isTauriDesktop()) return;
-    if (monitors.length < 2) return;
-    void spanCurrentWindowAcrossMonitors(monitors);
-    // monitorLayoutSignature intentionally drives this effect; the monitor
-    // array itself can be cloned during store refreshes without geometry
-    // changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMainWindow, detachedTauriShell, monitorLayoutSignature]);
-
   useEffect(() => {
     if (!isMainWindow) return;
     let cancelled = false;
@@ -205,6 +186,19 @@ export function AppShell(props: AppShellProps) {
       window.clearInterval(id);
     };
   }, [isMainWindow]);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (
+        event.key === "forge.os.windows.v1" ||
+        event.key === "forge.os.focus.v1"
+      ) {
+        useDesktopWindowStore.getState().hydrate();
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   useEffect(() => {
     if (!isMainWindow) return;
@@ -263,6 +257,49 @@ export function AppShell(props: AppShellProps) {
     if (!detachedTauriShell) {
       navigate(tool.route);
     }
+  }
+
+  function resolveTransferredWindow(
+    win: DesktopWindow,
+    nextX: number,
+    nextY: number,
+  ) {
+    const currentHost = runtimeWindows.find(
+      (runtimeWindow) => runtimeWindow.runtimeLabel === hostLabel,
+    );
+    if (!currentHost?.bounds) return { hostLabel, x: nextX, y: nextY };
+    const globalX = currentHost.bounds.x + nextX;
+    const globalY = currentHost.bounds.y + nextY;
+    const centerX = globalX + win.width / 2;
+    const centerY = globalY + win.height / 2;
+    const targetHost = runtimeWindows.find((runtimeWindow) => {
+      if (!isShellHostWindowLabel(runtimeWindow.runtimeLabel)) return false;
+      const bounds = runtimeWindow.bounds;
+      if (!bounds) return false;
+      return (
+        centerX >= bounds.x &&
+        centerX <= bounds.x + bounds.width &&
+        centerY >= bounds.y &&
+        centerY <= bounds.y + bounds.height
+      );
+    });
+    if (!targetHost?.bounds || targetHost.runtimeLabel === hostLabel) {
+      return { hostLabel, x: nextX, y: nextY };
+    }
+    return {
+      hostLabel: targetHost.runtimeLabel,
+      x: globalX - targetHost.bounds.x,
+      y: globalY - targetHost.bounds.y,
+    };
+  }
+
+  function moveAcrossShellHosts(win: DesktopWindow, nextX: number, nextY: number) {
+    const transferred = resolveTransferredWindow(win, nextX, nextY);
+    if (transferred.hostLabel !== (win.hostLabel || "main")) {
+      moveToHost(win.id, transferred.hostLabel, transferred.x, transferred.y);
+      return;
+    }
+    move(win.id, transferred.x, transferred.y);
   }
 
   function focusFromDock(window_: DesktopWindow) {
@@ -455,7 +492,7 @@ export function AppShell(props: AppShellProps) {
                   onMinimize={() => void minimize(win.id)}
                   onClose={() => void closeWindow(win.id)}
                   onToggleMaximize={() => toggleMaximize(win.id)}
-                  onMove={(x, y) => move(win.id, x, y)}
+                  onMove={(x, y) => moveAcrossShellHosts(win, x, y)}
                   onResize={(w, h) => resize(win.id, w, h)}
                 />
               ))

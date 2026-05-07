@@ -74,6 +74,7 @@ type DesktopWindowState = {
   focus: (id: string) => Promise<void>;
   // Geometry (browser fallback only)
   move: (id: string, x: number, y: number) => void;
+  moveToHost: (id: string, hostLabel: string, x: number, y: number) => void;
   resize: (id: string, width: number, height: number) => void;
   // Internal: rehydrate from storage
   hydrate: () => void;
@@ -523,6 +524,18 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
         return w.tauri ? nextWindow : normalizeBrowserWindow(nextWindow);
       });
       const next = { ...s, windows };
+      persist(next);
+      return next;
+    }),
+
+  moveToHost: (id, hostLabel, x, y) =>
+    set((s) => {
+      const cleanHostLabel = hostLabel.trim() || "main";
+      const windows = s.windows.map((w) => {
+        if (w.id !== id) return w;
+        return { ...w, hostLabel: cleanHostLabel, x, y };
+      });
+      const next = { ...s, windows, focusedId: id };
       persist(next);
       return next;
     }),

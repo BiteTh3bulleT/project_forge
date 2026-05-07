@@ -26,7 +26,6 @@ const desktopMocks = vi.hoisted(() => ({
   listAvailableMonitors: vi.fn(async (): Promise<TestMonitor[]> => []),
   listRuntimeWindows: vi.fn(async () => [{ label: "main" }]),
   monitorSignature: vi.fn(() => ""),
-  spanCurrentWindowAcrossMonitors: vi.fn(async () => true),
   tauriWindow: {
     setTitle: vi.fn(async () => undefined),
     setPosition: vi.fn(async () => undefined),
@@ -67,8 +66,6 @@ vi.mock("../lib/desktop", () => ({
   listAvailableMonitors: desktopMocks.listAvailableMonitors,
   listRuntimeWindows: desktopMocks.listRuntimeWindows,
   monitorSignature: desktopMocks.monitorSignature,
-  spanCurrentWindowAcrossMonitors:
-    desktopMocks.spanCurrentWindowAcrossMonitors,
 }));
 
 function activeLayoutDoc() {
@@ -137,7 +134,6 @@ describe("workspace layout hydration", () => {
     localStorage.clear();
     desktopMocks.createShellWindow.mockClear();
     desktopMocks.emitWorkspaceSync.mockClear();
-    desktopMocks.spanCurrentWindowAcrossMonitors.mockClear();
     desktopMocks.tauriWindow.setPosition.mockClear();
     desktopMocks.tauriWindow.setSize.mockClear();
     localStorage.setItem(
@@ -183,7 +179,7 @@ describe("workspace layout hydration", () => {
     expect(useWorkspaceLayoutStore.getState().currentWindowLabel).toBe("main");
   });
 
-  it("keeps the main shell spanned instead of restoring it to one monitor", async () => {
+  it("restores the main desktop host to its assigned monitor", async () => {
     const monitors = [
       {
         id: "left",
@@ -213,10 +209,7 @@ describe("workspace layout hydration", () => {
 
     await useWorkspaceLayoutStore.getState().hydrate("/");
 
-    expect(desktopMocks.spanCurrentWindowAcrossMonitors).toHaveBeenCalledWith(
-      monitors,
-    );
-    expect(desktopMocks.tauriWindow.setPosition).not.toHaveBeenCalled();
-    expect(desktopMocks.tauriWindow.setSize).not.toHaveBeenCalled();
+    expect(desktopMocks.tauriWindow.setPosition).toHaveBeenCalled();
+    expect(desktopMocks.tauriWindow.setSize).toHaveBeenCalled();
   });
 });

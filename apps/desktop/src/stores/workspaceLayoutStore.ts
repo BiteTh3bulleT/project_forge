@@ -20,7 +20,6 @@ import {
   listAvailableMonitors,
   listRuntimeWindows,
   monitorSignature,
-  spanCurrentWindowAcrossMonitors,
   type MonitorSnapshot,
 } from "../lib/desktop";
 
@@ -868,18 +867,12 @@ async function applyLayout(
     if (windowRecord.runtimeLabel === currentLabel) {
       const appWindow = getCurrentWindow();
       await appWindow.setTitle(windowRecord.title);
-      if (DETACHED_TAURI_TOOL_WINDOWS || resolvedMonitors.length < 2) {
-        await appWindow
-          .setPosition(
-            new LogicalPosition(resolved.bounds.x, resolved.bounds.y),
-          )
-          .catch(() => undefined);
-        await appWindow
-          .setSize(new LogicalSize(resolved.bounds.width, resolved.bounds.height))
-          .catch(() => undefined);
-      } else {
-        await spanCurrentWindowAcrossMonitors(resolvedMonitors);
-      }
+      await appWindow
+        .setPosition(new LogicalPosition(resolved.bounds.x, resolved.bounds.y))
+        .catch(() => undefined);
+      await appWindow
+        .setSize(new LogicalSize(resolved.bounds.width, resolved.bounds.height))
+        .catch(() => undefined);
       await navigateWindow(currentLabel, windowRecord.activeRoute);
       await bringWindowFront(appWindow, true).catch(() => undefined);
     } else if (targetWindow) {

@@ -31,17 +31,17 @@ function SearchChangeHarness() {
 const desktopMocks = vi.hoisted(() => ({
   isTauriDesktop: vi.fn(() => true),
   listForgeWindows: vi.fn(() => new Promise<never>(() => {})),
-  spanCurrentWindowAcrossMonitors: vi.fn(async () => false),
 }));
 
 vi.mock("../lib/desktop", () => ({
   DETACHED_TAURI_TOOL_WINDOWS: false,
+  isShellHostWindowLabel: (label: string) =>
+    label === "main" ||
+    (label.startsWith("forge-") && !label.startsWith("forge-app-")),
   isTauriDesktop: desktopMocks.isTauriDesktop,
   listForgeWindows: desktopMocks.listForgeWindows,
   monitorSignature: (monitors: Array<{ id: string }>) =>
     monitors.map((monitor) => monitor.id).join(";"),
-  spanCurrentWindowAcrossMonitors:
-    desktopMocks.spanCurrentWindowAcrossMonitors,
 }));
 
 vi.mock("../lib/api", () => ({
@@ -65,7 +65,6 @@ describe("AppShell confined Tauri tool surfaces", () => {
     desktopMocks.listForgeWindows.mockImplementation(
       () => new Promise<never>(() => {}),
     );
-    desktopMocks.spanCurrentWindowAcrossMonitors.mockClear();
     useDesktopWindowStore.setState({
       pinned: ["chat", "jobs", "memory", "models", "approvals", "settings"],
       windows: [
@@ -90,6 +89,7 @@ describe("AppShell confined Tauri tool surfaces", () => {
       supported: true,
       currentWindowLabel: "main",
       fallbackNotice: null,
+      runtimeWindows: [],
     });
   });
 
@@ -142,42 +142,46 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(desktopMocks.listForgeWindows).not.toHaveBeenCalled();
   });
 
-  it("spans the main shell across detected monitor work areas", async () => {
-    const monitors = [
-      {
-        id: "left",
-        ordinal: 0,
-        name: "Left",
-        position: { x: 0, y: 0 },
-        size: { width: 1920, height: 1080 },
-        workArea: { x: 0, y: 0, width: 1920, height: 1040 },
-        scaleFactor: 1,
-      },
-      {
-        id: "right",
-        ordinal: 1,
-        name: "Right",
-        position: { x: 1920, y: 0 },
-        size: { width: 2560, height: 1440 },
-        workArea: { x: 1920, y: 0, width: 2560, height: 1400 },
-        scaleFactor: 1,
-      },
-    ];
-    useWorkspaceLayoutStore.setState({ monitors });
+  it("renders each in-shell window only on its assigned desktop host", () => {
+    useDesktopWindowStore.setState({
+      windows: [
+        {
+          id: "chat-window",
+          toolId: "chat",
+          hostLabel: "forge-right",
+          x: 100,
+          y: 92,
+          width: 960,
+          height: 640,
+          z: 1,
+          minimized: false,
+          maximized: false,
+          tauri: false,
+        },
+      ],
+      focusedId: "chat-window",
+    });
 
-    render(
+    const mainShell = render(
       <MemoryRouter>
-        <AppShell isMainWindow={true}>
+        <AppShell isMainWindow={true} hostLabel="main">
           <div />
         </AppShell>
       </MemoryRouter>,
     );
 
-    await waitFor(() => {
-      expect(
-        desktopMocks.spanCurrentWindowAcrossMonitors,
-      ).toHaveBeenCalledWith(monitors);
-    });
+    expect(mainShell.queryByTestId("mock-tool-content")).toBeNull();
+    mainShell.unmount();
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true} hostLabel="forge-right">
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("mock-tool-content")).toBeTruthy();
   });
 
   it("keeps Start open when a background surface only changes search params", () => {
