@@ -61,6 +61,9 @@ vi.mock("../lib/desktop", () => ({
   getCurrentWindowSnapshot: desktopMocks.getCurrentWindowSnapshot,
   getWindowByLabel: desktopMocks.getWindowByLabel,
   isTauriDesktop: desktopMocks.isTauriDesktop,
+  isShellHostWindowLabel: (label: string) =>
+    label === "main" ||
+    (label.startsWith("forge-") && !label.startsWith("forge-app-")),
   listAvailableMonitors: desktopMocks.listAvailableMonitors,
   listRuntimeWindows: desktopMocks.listRuntimeWindows,
   monitorSignature: desktopMocks.monitorSignature,
@@ -143,15 +146,39 @@ describe("workspace layout hydration", () => {
     );
   });
 
-  it("does not restore saved layout windows as detached OS windows", async () => {
+  it("restores saved secondary layout windows as desktop shell hosts", async () => {
+    desktopMocks.listAvailableMonitors.mockResolvedValueOnce([
+      {
+        id: "main-display",
+        ordinal: 0,
+        name: "Main",
+        position: { x: 0, y: 0 },
+        size: { width: 1920, height: 1080 },
+        workArea: { x: 0, y: 0, width: 1920, height: 1040 },
+        scaleFactor: 1,
+      },
+      {
+        id: "second-display",
+        ordinal: 1,
+        name: "Second",
+        position: { x: 1920, y: 0 },
+        size: { width: 1920, height: 1080 },
+        workArea: { x: 1920, y: 0, width: 1920, height: 1040 },
+        scaleFactor: 1,
+      },
+    ]);
     const { useWorkspaceLayoutStore } = await import("./workspaceLayoutStore");
 
     await useWorkspaceLayoutStore.getState().hydrate("/");
 
-    expect(desktopMocks.createShellWindow).not.toHaveBeenCalled();
-    expect(useWorkspaceLayoutStore.getState().fallbackNotice).toContain(
-      "Detached layout windows are disabled",
+    expect(desktopMocks.createShellWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "layout-chat",
+        route: "/chat",
+        title: "FORGE Chat",
+      }),
     );
+    expect(useWorkspaceLayoutStore.getState().fallbackNotice).toBeNull();
     expect(useWorkspaceLayoutStore.getState().ready).toBe(true);
     expect(useWorkspaceLayoutStore.getState().currentWindowLabel).toBe("main");
   });

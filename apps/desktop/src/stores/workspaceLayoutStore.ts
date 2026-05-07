@@ -16,6 +16,7 @@ import {
   getCurrentWindowSnapshot,
   getWindowByLabel,
   isTauriDesktop,
+  isShellHostWindowLabel,
   listAvailableMonitors,
   listRuntimeWindows,
   monitorSignature,
@@ -860,19 +861,6 @@ async function applyLayout(
     windowRecord.fallbackReason = resolved.fallbackReason;
     if (resolved.fallbackReason) fallbacks.push(resolved.fallbackReason);
 
-    if (
-      !DETACHED_TAURI_TOOL_WINDOWS &&
-      windowRecord.runtimeLabel !== currentLabel
-    ) {
-      const reason =
-        "Detached layout windows are disabled; open this surface inside the main FORGE desktop.";
-      windowRecord.fallbackReason = [windowRecord.fallbackReason, reason]
-        .filter(Boolean)
-        .join(" ");
-      fallbacks.push(reason);
-      continue;
-    }
-
     const targetWindow =
       windowRecord.runtimeLabel === currentLabel
         ? null
@@ -927,12 +915,15 @@ async function applyLayout(
     }
   }
 
-  if (DETACHED_TAURI_TOOL_WINDOWS) {
-    const desired = new Set(layout.windows.map((item) => item.runtimeLabel));
-    const runtimeWindows = await listRuntimeWindows();
-    for (const runtimeWindow of runtimeWindows) {
-      if (runtimeWindow.label === "main") continue;
-      if (!desired.has(runtimeWindow.label)) {
+  const desired = new Set(layout.windows.map((item) => item.runtimeLabel));
+  const runtimeWindows = await listRuntimeWindows();
+  for (const runtimeWindow of runtimeWindows) {
+    if (runtimeWindow.label === "main") continue;
+    if (!desired.has(runtimeWindow.label)) {
+      if (
+        DETACHED_TAURI_TOOL_WINDOWS ||
+        isShellHostWindowLabel(runtimeWindow.label)
+      ) {
         await runtimeWindow.close().catch(() => undefined);
       }
     }

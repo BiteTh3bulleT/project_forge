@@ -43,6 +43,7 @@ export function toolIdFromTauriLabel(label: string): ShellToolId | null {
 export type DesktopWindow = {
   id: string;
   toolId: ShellToolId;
+  hostLabel: string;
   // in-shell geometry; ignored only by the disabled detached Tauri path
   x: number;
   y: number;
@@ -81,6 +82,7 @@ type DesktopWindowState = {
 };
 
 type OpenOpts = {
+  hostLabel?: string;
   x?: number;
   y?: number;
   width?: number;
@@ -231,6 +233,7 @@ function normalizeBrowserWindow(window_: DesktopWindow): DesktopWindow {
   const maxY = Math.max(0, bounds.maxHeight - height);
   return {
     ...window_,
+    hostLabel: window_.hostLabel || "main",
     x: Math.min(
       Math.max(Number.isFinite(window_.x) ? window_.x : 0, 0),
       maxX,
@@ -321,6 +324,7 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
               {
                 id,
                 toolId,
+                hostLabel: "main",
                 x: 0,
                 y: 0,
                 width: 0,
@@ -358,6 +362,7 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
       const optimistic: DesktopWindow = {
         id,
         toolId,
+        hostLabel: "main",
         x: opts?.x ?? geo.x,
         y: opts?.y ?? geo.y,
         width: opts?.width ?? geo.width,
@@ -377,7 +382,10 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
 
     // Browser fallback: in-shell window manager (single-instance per tool).
     const state = get();
-    const existing = state.windows.find((w) => w.toolId === toolId);
+    const hostLabel = opts?.hostLabel?.trim() || "main";
+    const existing = state.windows.find(
+      (w) => w.toolId === toolId && (w.hostLabel || "main") === hostLabel,
+    );
     if (existing) {
       const z = nextZ(state.windows);
       const next: DesktopWindowState = {
@@ -397,6 +405,7 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
     const newWindow: DesktopWindow = {
       id,
       toolId,
+      hostLabel,
       x: opts?.x ?? geo.x,
       y: opts?.y ?? geo.y,
       width: opts?.width ?? geo.width,
@@ -577,6 +586,7 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
         filtered.push({
           id: makeId(),
           toolId,
+          hostLabel: "main",
           x: 0,
           y: 0,
           width: 0,

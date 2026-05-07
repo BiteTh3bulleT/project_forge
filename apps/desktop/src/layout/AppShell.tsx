@@ -37,6 +37,7 @@ import { getToolComponent } from "./toolRegistry";
 type AppShellProps = {
   children: ReactNode;
   isMainWindow: boolean;
+  hostLabel?: string;
 };
 
 type AttentionLevel = "none" | "low" | "medium" | "high";
@@ -120,6 +121,7 @@ export function AppShell(props: AppShellProps) {
   const [now, setNow] = useState(() => new Date());
   const [contextMenu, setContextMenu] = useState<DockContextMenu | null>(null);
   const isMainWindow = props.isMainWindow;
+  const hostLabel = props.hostLabel?.trim() || "main";
 
   const isHome = pathname === HOME_ROUTE;
   const monitorLayoutSignature = useMemo(
@@ -135,15 +137,17 @@ export function AppShell(props: AppShellProps) {
     if (!isMainWindow) return;
     const tool = currentTool;
     if (tool.id === "other" || tool.id === "job-detail") return;
-    const existing = windows.find((w) => w.toolId === tool.id);
+    const existing = windows.find(
+      (w) => w.toolId === tool.id && (w.hostLabel || "main") === hostLabel,
+    );
     if (!existing) {
-      void openWindow(tool.id);
+      void openWindow(tool.id, { hostLabel });
     } else if (existing.minimized || focusedId !== existing.id) {
       void restore(existing.id);
     }
     // intentionally omit windows / focusedId: this effect only reacts to route changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, isMainWindow, isHome, detachedTauriShell]);
+  }, [pathname, isMainWindow, isHome, detachedTauriShell, hostLabel]);
 
   // Detached Tauri compatibility only: reconcile the desktop window store
   // against real Tauri windows. Normal Tauri uses confined in-shell windows.
@@ -253,7 +257,7 @@ export function AppShell(props: AppShellProps) {
 
   function launchTool(tool: ShellToolDefinition) {
     setStartOpen(false);
-    void openWindow(tool.id);
+    void openWindow(tool.id, { hostLabel });
     // Confined shell mode navigates after opening so deep links and reloads
     // rehydrate the matching in-shell window.
     if (!detachedTauriShell) {
@@ -301,26 +305,32 @@ export function AppShell(props: AppShellProps) {
     for (const toolId of pinned) {
       const tool = toolMap.get(toolId);
       if (!tool) continue;
-      const window_ = windows.find((w) => w.toolId === toolId) ?? null;
+      const window_ =
+        windows.find(
+          (w) =>
+            w.toolId === toolId && (w.hostLabel || "main") === hostLabel,
+        ) ?? null;
       tiles.push({ kind: "tile", tool, window: window_, pinned: true });
     }
     const pinnedSet = new Set(pinned);
     for (const window_ of windows) {
+      if ((window_.hostLabel || "main") !== hostLabel) continue;
       if (pinnedSet.has(window_.toolId)) continue;
       const tool = toolMap.get(window_.toolId);
       if (!tool) continue;
       tiles.push({ kind: "tile", tool, window: window_, pinned: false });
     }
     return tiles;
-  }, [pinned, windows]);
+  }, [hostLabel, pinned, windows]);
 
   // Active foreground tool (focused, non-minimized).
   const focusedWindow = useMemo<DesktopWindow | null>(() => {
     if (!focusedId) return null;
     const w = windows.find((w_) => w_.id === focusedId);
     if (!w || w.minimized) return null;
+    if ((w.hostLabel || "main") !== hostLabel) return null;
     return w;
-  }, [focusedId, windows]);
+  }, [focusedId, hostLabel, windows]);
   const focusedTool = useMemo<ShellToolDefinition | null>(() => {
     if (!focusedWindow) return null;
     return allShellTools.find((t) => t.id === focusedWindow.toolId) ?? null;
@@ -332,8 +342,12 @@ export function AppShell(props: AppShellProps) {
     [windows],
   );
   const visibleWindows = useMemo(
-    () => sortedWindows.filter((window_) => !window_.minimized),
-    [sortedWindows],
+    () =>
+      sortedWindows.filter(
+        (window_) =>
+          !window_.minimized && (window_.hostLabel || "main") === hostLabel,
+      ),
+    [hostLabel, sortedWindows],
   );
   const shellRenderedWindows = useMemo(
     () =>

@@ -52,6 +52,7 @@ describe("desktop window store", () => {
         {
           id: "alive-window",
           toolId: "chat",
+          hostLabel: "main",
           x: 120,
           y: 92,
           width: 960,

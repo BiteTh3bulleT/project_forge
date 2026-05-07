@@ -14,6 +14,7 @@ import { AppShell } from "./layout/AppShell";
 import {
   WORKSPACE_LAYOUT_EVENT,
   WORKSPACE_NAVIGATE_EVENT,
+  isShellHostWindowLabel,
   isTauriDesktop,
 } from "./lib/desktop";
 import { ActionLanesPage } from "./pages/ActionLanesPage";
@@ -123,7 +124,9 @@ export default function App() {
   const currentWindowLabel = useWorkspaceLayoutStore(
     (s) => s.currentWindowLabel,
   );
-  const isMainWindow = layoutReady && currentWindowLabel === "main";
+  const isPrimaryShellWindow = layoutReady && currentWindowLabel === "main";
+  const isShellHostWindow =
+    layoutReady && isShellHostWindowLabel(currentWindowLabel);
   const contrastPreference = useUiStore((s) => s.contrastPreference);
   const effectsPreference = useUiStore((s) => s.effectsPreference);
 
@@ -137,11 +140,11 @@ export default function App() {
   }, [contrastPreference, effectsPreference]);
 
   useEffect(() => {
-    if (!isMainWindow) return;
+    if (!isPrimaryShellWindow) return;
     void ping();
     const id = window.setInterval(() => void ping(), 8000);
     return () => window.clearInterval(id);
-  }, [ping, isMainWindow]);
+  }, [ping, isPrimaryShellWindow]);
 
   useEffect(() => {
     void hydrateLayouts(location.pathname + location.search);
@@ -156,10 +159,10 @@ export default function App() {
   }, [location.pathname, location.search, syncCurrentRoute]);
 
   useEffect(() => {
-    if (!isMainWindow) return;
+    if (!isPrimaryShellWindow) return;
     const id = window.setInterval(() => void refreshEnvironment(), 5000);
     return () => window.clearInterval(id);
-  }, [refreshEnvironment, isMainWindow]);
+  }, [refreshEnvironment, isPrimaryShellWindow]);
 
   useEffect(() => {
     if (!isTauriDesktop()) {
@@ -175,7 +178,7 @@ export default function App() {
     let environmentRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
     const scheduleEnvironmentRefresh = () => {
-      if (!isMainWindow) return;
+      if (!isPrimaryShellWindow) return;
       if (environmentRefreshTimer !== null) return;
       environmentRefreshTimer = setTimeout(() => {
         environmentRefreshTimer = null;
@@ -206,7 +209,7 @@ export default function App() {
       disposers.push(
         await appWindow.onFocusChanged(() => scheduleEnvironmentRefresh()),
       );
-      if (isMainWindow) {
+      if (isPrimaryShellWindow) {
         disposers.push(
           await listen<{ origin?: string }>(WORKSPACE_LAYOUT_EVENT, (event) => {
             const origin = event.payload?.origin?.trim() ?? "";
@@ -226,11 +229,11 @@ export default function App() {
         clearTimeout(environmentRefreshTimer);
       }
     };
-  }, [navigate, refreshEnvironment, isMainWindow, currentWindowLabel]);
+  }, [navigate, refreshEnvironment, isPrimaryShellWindow, currentWindowLabel]);
 
-  // Detached non-main Tauri windows are compatibility hosts. Normal tool
-  // surfaces are confined in-shell windows inside the main FORGE desktop.
-  if (!isMainWindow) {
+  // Detached tool windows are compatibility hosts. Main and secondary monitor
+  // desktop hosts render the full shell; tool surfaces stay in-shell.
+  if (!isShellHostWindow) {
     return (
       <div className="forge-tauri-surface">
         <RoutedViews />
@@ -238,7 +241,10 @@ export default function App() {
     );
   }
   return (
-    <AppShell isMainWindow={isMainWindow}>
+    <AppShell
+      isMainWindow={isShellHostWindow}
+      hostLabel={currentWindowLabel || "main"}
+    >
       <RoutedViews />
     </AppShell>
   );

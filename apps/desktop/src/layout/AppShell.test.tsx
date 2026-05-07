@@ -72,6 +72,7 @@ describe("AppShell confined Tauri tool surfaces", () => {
         {
           id: "chat-window",
           toolId: "chat",
+          hostLabel: "main",
           x: 120,
           y: 92,
           width: 960,

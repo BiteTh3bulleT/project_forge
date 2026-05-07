@@ -15,6 +15,7 @@ import { invoke } from "@tauri-apps/api/core";
 export const WORKSPACE_LAYOUT_EVENT = "forge://workspace-layouts-updated";
 export const WORKSPACE_NAVIGATE_EVENT = "forge://workspace-navigate";
 export const DETACHED_TAURI_TOOL_WINDOWS = false;
+const DETACHED_TOOL_WINDOW_LABEL_PREFIX = "forge-app-";
 
 export type MonitorSnapshot = {
   id: string;
@@ -68,6 +69,18 @@ export type DesktopSystemDiagnostics = {
 
 export function isTauriDesktop() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+export function isShellHostWindowLabel(label: string | null | undefined) {
+  const clean = label?.trim();
+  return (
+    clean === "main" ||
+    Boolean(
+      clean &&
+        clean.startsWith("forge-") &&
+        !clean.startsWith(DETACHED_TOOL_WINDOW_LABEL_PREFIX),
+    )
+  );
 }
 
 export function monitorIdFromMonitor(monitor: Monitor) {
