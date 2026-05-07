@@ -3,6 +3,7 @@ import {
   fireEvent,
   render,
   screen,
+  within,
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -182,6 +183,50 @@ describe("AppShell confined Tauri tool surfaces", () => {
     );
 
     expect(screen.getByTestId("mock-tool-content")).toBeTruthy();
+  });
+
+  it("does not duplicate a window across simultaneously mounted shell hosts", () => {
+    useDesktopWindowStore.setState({
+      windows: [
+        {
+          id: "chat-window",
+          toolId: "chat",
+          hostLabel: "forge-right",
+          x: 100,
+          y: 92,
+          width: 960,
+          height: 640,
+          z: 1,
+          minimized: false,
+          maximized: false,
+          tauri: false,
+        },
+      ],
+      focusedId: "chat-window",
+    });
+
+    const mainShell = render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true} hostLabel="main">
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+    const rightShell = render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true} hostLabel="forge-right">
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(
+      within(mainShell.container).queryByTestId("mock-tool-content"),
+    ).toBeNull();
+    expect(
+      within(rightShell.container).getByTestId("mock-tool-content"),
+    ).toBeTruthy();
+    expect(screen.getAllByTestId("mock-tool-content")).toHaveLength(1);
   });
 
   it("keeps Start open when a background surface only changes search params", () => {

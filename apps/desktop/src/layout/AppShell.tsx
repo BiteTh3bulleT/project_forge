@@ -6,6 +6,7 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -31,6 +32,11 @@ import {
   type ShellToolDefinition,
   type ShellToolId,
 } from "./shellConfig";
+import {
+  projectDesktopWindowToHost,
+  resolveDesktopHostPlacement,
+  type DesktopPlacement,
+} from "./desktopGeometry";
 import { getToolComponent } from "./toolRegistry";
 
 type AppShellProps = {
@@ -264,33 +270,14 @@ export function AppShell(props: AppShellProps) {
     nextX: number,
     nextY: number,
   ) {
-    const currentHost = runtimeWindows.find(
-      (runtimeWindow) => runtimeWindow.runtimeLabel === hostLabel,
+    return resolveDesktopHostPlacement(
+      runtimeWindows,
+      hostLabel,
+      win,
+      nextX,
+      nextY,
+      isShellHostWindowLabel,
     );
-    if (!currentHost?.bounds) return { hostLabel, x: nextX, y: nextY };
-    const globalX = currentHost.bounds.x + nextX;
-    const globalY = currentHost.bounds.y + nextY;
-    const centerX = globalX + win.width / 2;
-    const centerY = globalY + win.height / 2;
-    const targetHost = runtimeWindows.find((runtimeWindow) => {
-      if (!isShellHostWindowLabel(runtimeWindow.runtimeLabel)) return false;
-      const bounds = runtimeWindow.bounds;
-      if (!bounds) return false;
-      return (
-        centerX >= bounds.x &&
-        centerX <= bounds.x + bounds.width &&
-        centerY >= bounds.y &&
-        centerY <= bounds.y + bounds.height
-      );
-    });
-    if (!targetHost?.bounds || targetHost.runtimeLabel === hostLabel) {
-      return { hostLabel, x: nextX, y: nextY };
-    }
-    return {
-      hostLabel: targetHost.runtimeLabel,
-      x: globalX - targetHost.bounds.x,
-      y: globalY - targetHost.bounds.y,
-    };
   }
 
   function moveAcrossShellHosts(win: DesktopWindow, nextX: number, nextY: number) {
@@ -378,18 +365,25 @@ export function AppShell(props: AppShellProps) {
     () => [...windows].sort((a, b) => a.z - b.z),
     [windows],
   );
-  const visibleWindows = useMemo(
+  const visibleWindows = useMemo<
+    Array<{ window: DesktopWindow; placement: DesktopPlacement }>
+  >(
     () =>
-      sortedWindows.filter(
-        (window_) =>
-          !window_.minimized && (window_.hostLabel || "main") === hostLabel,
-      ),
-    [hostLabel, sortedWindows],
+      sortedWindows.flatMap((window_) => {
+        if (window_.minimized) return [];
+        const placement = projectDesktopWindowToHost(
+          runtimeWindows,
+          hostLabel,
+          window_,
+        );
+        return placement ? [{ window: window_, placement }] : [];
+      }),
+    [hostLabel, runtimeWindows, sortedWindows],
   );
   const shellRenderedWindows = useMemo(
     () =>
       detachedTauriShell
-        ? visibleWindows.filter((window_) => !window_.tauri)
+        ? visibleWindows.filter(({ window }) => !window.tauri)
         : visibleWindows,
     [detachedTauriShell, visibleWindows],
   );
@@ -483,10 +477,12 @@ export function AppShell(props: AppShellProps) {
           ) : null}
 
           {!detachedTauriShell
-            ? shellRenderedWindows.map((win) => (
+            ? shellRenderedWindows.map(({ window: win, placement }) => (
                 <FloatingWindow
                   key={win.id}
                   window={win}
+                  placement={placement}
+                  interactive={(win.hostLabel || "main") === hostLabel}
                   focused={focusedId === win.id}
                   onFocus={() => void focus(win.id)}
                   onMinimize={() => void minimize(win.id)}
@@ -715,6 +711,8 @@ function ForgeHero(props: { lastErr: string | null }) {
 
 function FloatingWindow(props: {
   window: DesktopWindow;
+  placement: DesktopPlacement;
+  interactive: boolean;
   focused: boolean;
   onFocus: () => void;
   onMinimize: () => void;
@@ -728,7 +726,12 @@ function FloatingWindow(props: {
     [props.window.toolId],
   );
   const Component = tool ? getToolComponent(tool.id) : null;
-  const dragRef = useRef<{ dx: number; dy: number } | null>(null);
+  const dragRef = useRef<{
+    pointerStartX: number;
+    pointerStartY: number;
+    windowStartX: number;
+    windowStartY: number;
+  } | null>(null);
   const resizeRef = useRef<{
     startX: number;
     startY: number;
@@ -737,18 +740,26 @@ function FloatingWindow(props: {
   } | null>(null);
 
   function startDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!props.interactive) return;
     if (props.window.maximized) return;
     if (event.button !== 0) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
     event.preventDefault();
     dragRef.current = {
-      dx: event.clientX - props.window.x,
-      dy: event.clientY - props.window.y,
+      pointerStartX: event.clientX,
+      pointerStartY: event.clientY,
+      windowStartX: props.window.x,
+      windowStartY: props.window.y,
     };
     props.onFocus();
     const onMove = (e: PointerEvent) => {
       if (!dragRef.current) return;
-      const x = Math.max(0, e.clientX - dragRef.current.dx);
-      const y = Math.max(0, e.clientY - dragRef.current.dy);
+      const x =
+        dragRef.current.windowStartX +
+        (e.clientX - dragRef.current.pointerStartX);
+      const y =
+        dragRef.current.windowStartY +
+        (e.clientY - dragRef.current.pointerStartY);
       props.onMove(x, y);
     };
     const onUp = () => {
@@ -761,8 +772,10 @@ function FloatingWindow(props: {
   }
 
   function startResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!props.interactive) return;
     if (props.window.maximized) return;
     if (event.button !== 0) return;
+    event.currentTarget.setPointerCapture?.(event.pointerId);
     event.preventDefault();
     event.stopPropagation();
     resizeRef.current = {
@@ -791,7 +804,7 @@ function FloatingWindow(props: {
 
   if (props.window.minimized) return null;
 
-  const style = props.window.maximized
+  const style: CSSProperties = props.window.maximized
     ? {
         left: 0,
         top: 0,
@@ -800,11 +813,12 @@ function FloatingWindow(props: {
         zIndex: props.window.z,
       }
     : {
-        left: props.window.x,
-        top: props.window.y,
+        left: props.placement.x,
+        top: props.placement.y,
         width: props.window.width,
         height: props.window.height,
         zIndex: props.window.z,
+        pointerEvents: props.interactive ? undefined : "none",
       };
 
   return (
@@ -815,8 +829,9 @@ function FloatingWindow(props: {
         props.window.maximized && "forge-os-window--maximized",
       )}
       style={style}
+      aria-hidden={props.interactive ? undefined : true}
       onPointerDown={() => {
-        if (!props.focused) props.onFocus();
+        if (props.interactive && !props.focused) props.onFocus();
       }}
     >
       <div

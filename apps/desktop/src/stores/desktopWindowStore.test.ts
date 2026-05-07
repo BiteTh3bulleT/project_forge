@@ -68,6 +68,16 @@ describe("desktop window store", () => {
       x: 120,
       y: 80,
     });
+    const persisted = JSON.parse(
+      window.localStorage.getItem("forge.os.windows.v1") ?? "[]",
+    );
+    expect(persisted[0]).toMatchObject({
+      id,
+      toolId: "chat",
+      hostLabel: "forge-right",
+      x: 120,
+      y: 80,
+    });
   });
 
   it("drops stale persisted focus and selects a visible window during hydration", async () => {
