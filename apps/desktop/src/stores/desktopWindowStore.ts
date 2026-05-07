@@ -13,7 +13,7 @@ import { allShellTools, type ShellToolId } from "../layout/shellConfig";
 const PINNED_KEY = "forge.os.pinned.v1";
 const WINDOWS_KEY = "forge.os.windows.v1";
 const FOCUS_KEY = "forge.os.focus.v1";
-const DETACHED_TAURI_TOOL_WINDOWS = false;
+export const DETACHED_TAURI_TOOL_WINDOWS = true;
 
 const DEFAULT_PINNED: ShellToolId[] = [
   "chat",
@@ -148,6 +148,20 @@ function loadFocus(): string | null {
   return raw && raw.length > 0 ? raw : null;
 }
 
+function validFocusForWindows(
+  windows: DesktopWindow[],
+  focusedId: string | null,
+): string | null {
+  if (focusedId && windows.some((window_) => window_.id === focusedId)) {
+    return focusedId;
+  }
+  return topOf(windows.filter((window_) => !window_.minimized))?.id ?? null;
+}
+
+function loadValidFocus(windows: DesktopWindow[]): string | null {
+  return validFocusForWindows(windows, loadFocus());
+}
+
 function persist(state: {
   pinned: ShellToolId[];
   windows: DesktopWindow[];
@@ -260,14 +274,16 @@ function toolRoute(toolId: ShellToolId): string {
 export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
   pinned: typeof window === "undefined" ? DEFAULT_PINNED : loadPinned(),
   windows: typeof window === "undefined" ? [] : loadWindows(),
-  focusedId: typeof window === "undefined" ? null : loadFocus(),
+  focusedId:
+    typeof window === "undefined" ? null : loadValidFocus(loadWindows()),
 
   hydrate: () => {
     if (typeof window === "undefined") return;
+    const windows = loadWindows();
     set({
       pinned: loadPinned(),
-      windows: loadWindows(),
-      focusedId: loadFocus(),
+      windows,
+      focusedId: loadValidFocus(windows),
     });
   },
 

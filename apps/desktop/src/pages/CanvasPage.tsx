@@ -42,12 +42,15 @@ export function CanvasPage() {
   const loadBoard = useCallback(
     async (id: number) => {
       const b = await api.canvas.boards.get(id);
-      setActive(normalizeBoardDetail(b));
+      const normalized = normalizeBoardDetail(b);
+      setActive(normalized);
       setParams({ boardId: String(id) });
       setSelectedNoteId((prev) => {
-        if (b.notes.length === 0) return null;
-        if (prev && b.notes.some((note) => note.id === prev)) return prev;
-        return b.notes[0].id;
+        if (normalized.notes.length === 0) return null;
+        if (prev && normalized.notes.some((note) => note.id === prev)) {
+          return prev;
+        }
+        return normalized.notes[0]!.id;
       });
     },
     [setParams],
@@ -65,14 +68,16 @@ export function CanvasPage() {
         if (Number.isFinite(fromUrl) && fromUrl > 0) {
           const b = await api.canvas.boards.get(fromUrl);
           if (!cancelled) {
-            setActive(normalizeBoardDetail(b));
-            setSelectedNoteId(b.notes[0]?.id ?? null);
+            const normalized = normalizeBoardDetail(b);
+            setActive(normalized);
+            setSelectedNoteId(normalized.notes[0]?.id ?? null);
           }
         } else if (nextBoards.length > 0 && !cancelled) {
           const b = await api.canvas.boards.get(nextBoards[0].id);
           if (!cancelled) {
-            setActive(normalizeBoardDetail(b));
-            setSelectedNoteId(b.notes[0]?.id ?? null);
+            const normalized = normalizeBoardDetail(b);
+            setActive(normalized);
+            setSelectedNoteId(normalized.notes[0]?.id ?? null);
             setParams({ boardId: String(b.id) });
           }
         }

@@ -18,6 +18,7 @@ vi.mock("../lib/desktop", () => ({
 
 describe("desktop window store", () => {
   beforeEach(() => {
+    vi.resetModules();
     window.localStorage.clear();
     desktopMocks.closeTauriWindow.mockClear();
     desktopMocks.createShellWindow.mockClear();
@@ -25,7 +26,7 @@ describe("desktop window store", () => {
     desktopMocks.minimizeTauriWindow.mockClear();
   });
 
-  it("opens tool surfaces in the main shell instead of detachable Tauri windows", async () => {
+  it("opens tool surfaces as detachable Tauri windows in the desktop shell", async () => {
     const { useDesktopWindowStore } = await import("./desktopWindowStore");
     useDesktopWindowStore.setState({
       windows: [],
@@ -35,11 +36,43 @@ describe("desktop window store", () => {
     const id = await useDesktopWindowStore.getState().openWindow("chat");
 
     expect(id).toBeTruthy();
-    expect(desktopMocks.createShellWindow).not.toHaveBeenCalled();
+    expect(desktopMocks.createShellWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "forge-app-chat",
+        route: "/chat",
+        title: "FORGE — Chat",
+      }),
+    );
     const state = useDesktopWindowStore.getState();
     expect(state.windows).toHaveLength(1);
     expect(state.windows[0]?.toolId).toBe("chat");
-    expect(state.windows[0]?.tauri).toBe(false);
+    expect(state.windows[0]?.tauri).toBe(true);
     expect(state.focusedId).toBe(id);
+  });
+
+  it("drops stale persisted focus and selects a visible window during hydration", async () => {
+    window.localStorage.setItem(
+      "forge.os.windows.v1",
+      JSON.stringify([
+        {
+          id: "alive-window",
+          toolId: "chat",
+          x: 120,
+          y: 92,
+          width: 960,
+          height: 640,
+          z: 3,
+          minimized: false,
+          maximized: false,
+          tauri: false,
+        },
+      ]),
+    );
+    window.localStorage.setItem("forge.os.focus.v1", "missing-window");
+
+    const { useDesktopWindowStore } = await import("./desktopWindowStore");
+    useDesktopWindowStore.getState().hydrate();
+
+    expect(useDesktopWindowStore.getState().focusedId).toBe("alive-window");
   });
 });

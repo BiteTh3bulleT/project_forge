@@ -141,6 +141,33 @@ function modelManagementRequest(metadata?: Record<string, unknown>) {
   };
 }
 
+type ModelGovernanceDecision = {
+  requiresApproval?: boolean;
+  approved?: boolean;
+  dryRun?: boolean;
+  approvalRequestId?: number;
+  operation?: string;
+  reason?: string;
+};
+
+function modelGovernanceMessage(payload: unknown, label: string) {
+  if (!payload || typeof payload !== "object") return null;
+  const governance = (payload as { governance?: unknown }).governance;
+  if (!governance || typeof governance !== "object") return null;
+  const decision = governance as ModelGovernanceDecision;
+  const approvalId =
+    typeof decision.approvalRequestId === "number"
+      ? ` #${decision.approvalRequestId}`
+      : "";
+  if (decision.requiresApproval && !decision.approved) {
+    return `${label} requires approval${approvalId}.`;
+  }
+  if (decision.dryRun) {
+    return `${label} dry run completed.`;
+  }
+  return null;
+}
+
 function emptyModelRuntimeUsage(): ModelRuntimeUsageSummary {
   return {
     registered: 0,
@@ -406,6 +433,16 @@ export function ModelsPage() {
       setImportBackend("");
       setImportCapabilities("chat,completion");
       setImportPreferred(false);
+      const governanceMessage = modelGovernanceMessage(result, "Model import");
+      if (governanceMessage) {
+        await refreshOverview(true);
+        setStatus(governanceMessage);
+        setErr(null);
+        return;
+      }
+      if (!result.result?.model?.id) {
+        throw new Error("Model import response did not include a model.");
+      }
       await refreshOverview(true, result.result.model.id);
       setStatus(
         result.result.duplicate
@@ -448,31 +485,64 @@ export function ModelsPage() {
     const busyKey = `${action}:${modelId}`;
     setActionBusy(busyKey);
     try {
+      let result: unknown = null;
       switch (action) {
         case "verify":
-          await api.modelRuntime.verify(modelId, modelManagementRequest());
+          result = await api.modelRuntime.verify(
+            modelId,
+            modelManagementRequest(),
+          );
           break;
         case "enable":
-          await api.modelRuntime.enable(modelId, modelManagementRequest());
+          result = await api.modelRuntime.enable(
+            modelId,
+            modelManagementRequest(),
+          );
           break;
         case "disable":
-          await api.modelRuntime.disable(modelId, modelManagementRequest());
+          result = await api.modelRuntime.disable(
+            modelId,
+            modelManagementRequest(),
+          );
           break;
         case "archive":
-          await api.modelRuntime.archive(modelId, modelManagementRequest());
+          result = await api.modelRuntime.archive(
+            modelId,
+            modelManagementRequest(),
+          );
           break;
         case "remove":
-          await api.modelRuntime.remove(modelId, modelManagementRequest());
-          if (selectedModelId === modelId) {
-            setSelectedModelId("");
-          }
+          result = await api.modelRuntime.remove(
+            modelId,
+            modelManagementRequest(),
+          );
           break;
         case "load":
-          await api.modelRuntime.load(modelId, modelManagementRequest());
+          result = await api.modelRuntime.load(
+            modelId,
+            modelManagementRequest(),
+          );
           break;
         case "unload":
-          await api.modelRuntime.unload(modelId, modelManagementRequest());
+          result = await api.modelRuntime.unload(
+            modelId,
+            modelManagementRequest(),
+          );
           break;
+      }
+      const governanceMessage = modelGovernanceMessage(
+        result,
+        `Model ${action}`,
+      );
+      if (governanceMessage) {
+        await refreshOverview(true, modelId);
+        await refreshSelectedModel(modelId);
+        setStatus(governanceMessage);
+        setErr(null);
+        return;
+      }
+      if (action === "remove" && selectedModelId === modelId) {
+        setSelectedModelId("");
       }
       const nextSelection =
         selectedModelId === modelId && action === "remove" ? "" : modelId;

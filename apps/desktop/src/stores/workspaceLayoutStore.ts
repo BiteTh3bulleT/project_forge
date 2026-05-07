@@ -23,7 +23,7 @@ import {
 
 const STORAGE_KEY = "forge.workspace.layouts.v2";
 const STORAGE_KEY_LEGACY = "forge.workspace.layouts.v1";
-const AUTO_RESTORE_TAURI_LAYOUTS = false;
+const AUTO_RESTORE_TAURI_LAYOUTS = true;
 
 type WindowRole =
   | "chat"

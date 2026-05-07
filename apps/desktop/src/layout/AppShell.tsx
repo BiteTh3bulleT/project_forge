@@ -218,7 +218,7 @@ export function AppShell(props: AppShellProps) {
   useEffect(() => {
     setStartOpen(false);
     setStartQuery("");
-  }, [pathname, location.search]);
+  }, [pathname]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -311,6 +311,13 @@ export function AppShell(props: AppShellProps) {
     () => sortedWindows.filter((window_) => !window_.minimized),
     [sortedWindows],
   );
+  const shellRenderedWindows = useMemo(
+    () =>
+      dockedTauriShell
+        ? visibleWindows.filter((window_) => !window_.tauri)
+        : visibleWindows,
+    [dockedTauriShell, visibleWindows],
+  );
 
   return (
     <div
@@ -396,9 +403,11 @@ export function AppShell(props: AppShellProps) {
 
         <main className="forge-os-desktop">
           {/* Wallpaper-only when no visible FORGE windows are present. */}
-          {visibleWindows.length === 0 ? <ForgeHero lastErr={lastErr} /> : null}
+          {shellRenderedWindows.length === 0 ? (
+            <ForgeHero lastErr={lastErr} />
+          ) : null}
 
-          {dockedTauriShell && focusedWindow ? (
+          {dockedTauriShell && focusedWindow && !focusedWindow.tauri ? (
             <DockedWindow
               window={focusedWindow}
               onMinimize={() => void minimize(focusedWindow.id)}

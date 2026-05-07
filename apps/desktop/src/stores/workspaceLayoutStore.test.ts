@@ -81,12 +81,18 @@ describe("workspace layout hydration", () => {
     );
   });
 
-  it("does not restore saved detachable layout windows during Tauri shell startup", async () => {
+  it("restores saved detachable layout windows during Tauri shell startup", async () => {
     const { useWorkspaceLayoutStore } = await import("./workspaceLayoutStore");
 
     await useWorkspaceLayoutStore.getState().hydrate("/");
 
-    expect(desktopMocks.createShellWindow).not.toHaveBeenCalled();
+    expect(desktopMocks.createShellWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "layout-chat",
+        route: "/chat",
+        title: "FORGE Chat",
+      }),
+    );
     expect(useWorkspaceLayoutStore.getState().ready).toBe(true);
     expect(useWorkspaceLayoutStore.getState().currentWindowLabel).toBe("main");
   });

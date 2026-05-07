@@ -502,7 +502,7 @@ export function ToolGatewayPage() {
           >
             {canExecuteLocally ? "Execute" : "Blocked by preflight"}
           </PrimaryButton>
-          {last && typeof last.approvalRequestId === "number" ? (
+          {last && gatewayApprovalRequestId(last) !== null ? (
             <GhostButton onClick={() => navigate("/approvals")}>
               Open approvals
             </GhostButton>
@@ -708,15 +708,16 @@ export function ToolGatewayPage() {
 }
 
 function GatewayResultSummary(props: { result: Record<string, unknown> }) {
+  const approvalRequestId = gatewayApprovalRequestId(props.result);
   const rows: Array<[string, string]> = [
     ["Status", toText(props.result.status)],
     ["Policy outcome", toText(props.result.policyOutcome)],
-    ["Tool", toText(props.result.toolId)],
-    ["Lane", toText(props.result.laneId)],
+    ["Tool", toText(props.result.toolId ?? props.result.tool)],
+    ["Lane", toText(props.result.laneId ?? props.result.lane)],
     ["Action", toText(props.result.action)],
     ["Risk class", toText(props.result.riskClass)],
     ["Execution level", toText(props.result.executionLevel)],
-    ["Approval request", toText(props.result.approvalRequestId)],
+    ["Approval request", toText(approvalRequestId)],
     ["Job", toText(props.result.jobId)],
     ["Correlation", toText(props.result.correlationId)],
     ["Audit", toText(props.result.auditId)],
@@ -776,6 +777,18 @@ function toText(value: unknown) {
 function normalizeStringList(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.map((item) => String(item).trim()).filter(Boolean);
+}
+
+function gatewayApprovalRequestId(result: Record<string, unknown>) {
+  if (typeof result.approvalRequestId === "number") {
+    return result.approvalRequestId;
+  }
+  const data = result.data;
+  if (data && typeof data === "object") {
+    const nested = (data as Record<string, unknown>).approvalRequestId;
+    if (typeof nested === "number") return nested;
+  }
+  return null;
 }
 
 function summarizeOutput(value: unknown) {

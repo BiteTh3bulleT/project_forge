@@ -2,6 +2,7 @@ import { emit } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   availableMonitors,
+  currentMonitor,
   getAllWindows,
   getCurrentWindow,
   type Monitor,
@@ -186,38 +187,37 @@ export async function getCurrentWindowSnapshot(): Promise<RuntimeWindowSnapshot>
     };
   }
   const appWindow = getCurrentWindow();
-  const getMonitor = async () => {
-    const maybeWindow = appWindow as unknown as {
-      currentMonitor?: () => Promise<Monitor | null>;
-    };
-    if (typeof maybeWindow.currentMonitor === "function") {
-      return maybeWindow.currentMonitor();
-    }
-    return null;
-  };
-  const [title, focused, monitor, position, size, monitors] = await Promise.all(
-    [
+  const [title, focused, monitor, position, size, scaleFactor, monitors] =
+    await Promise.all([
       appWindow.title(),
       appWindow.isFocused(),
-      getMonitor(),
+      currentMonitor().catch(() => null),
       appWindow.outerPosition(),
       appWindow.outerSize(),
+      appWindow.scaleFactor().catch(() => 1),
       availableMonitors().catch(() => [] as Monitor[]),
-    ],
-  );
-  const bounds = {
+    ]);
+  const physicalBounds = {
     x: position.x,
     y: position.y,
     width: size.width,
     height: size.height,
   };
-  const resolvedMonitor = monitor ?? resolveMonitorFromBounds(monitors, bounds);
+  const logicalPosition = position.toLogical(scaleFactor);
+  const logicalSize = size.toLogical(scaleFactor);
+  const resolvedMonitor =
+    monitor ?? resolveMonitorFromBounds(monitors, physicalBounds);
   return {
     label: appWindow.label,
     title,
     isFocused: focused,
     monitorId: resolvedMonitor ? monitorIdFromMonitor(resolvedMonitor) : null,
-    bounds,
+    bounds: {
+      x: logicalPosition.x,
+      y: logicalPosition.y,
+      width: logicalSize.width,
+      height: logicalSize.height,
+    },
   };
 }
 

@@ -121,7 +121,7 @@ FROM canvas_notes WHERE board_id = ? ORDER BY id ASC`, boardID)
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Note
+	out := []Note{}
 	for rows.Next() {
 		var n Note
 		var links string
