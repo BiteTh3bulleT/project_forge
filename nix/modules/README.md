@@ -1,27 +1,24 @@
-# Nix Modules — Scaffold Only (Phase N1)
+# Nix Modules — Legacy Placeholder
 
-This directory is a **placeholder** for future NixOS modules that will
-deploy FORGE services declaratively.
+This directory was the Phase N1 placeholder for future NixOS modules.
 
-## Status in Phase N1
+## Current Status
 
-- **No real modules.** Do not import from a NixOS configuration.
-- **Not exposed** from `flake.nix`.
-- Phase N1 only provides dev shells, basic packages, and checks.
+Phase N2 added private NixOS host substrate scaffolding under:
 
-## Planned modules (Phase N4)
+- `nix/nixos/modules/forge-os.nix`
+- `nix/nixos/modules/forge-services.nix`
+- `nix/nixos/modules/forge-storage.nix`
+- `nix/nixos/modules/forge-host-kernel.nix`
 
-- `services.forge-core` — systemd unit, data dir, port, config.
-- `services.forge-desktop` — optional kiosk/user-service profile.
-- Shared hardening options (capability bounds, seccomp, cgroup limits).
+Those modules are exported from `flake.nix` as `nixosModules.*`.
 
-## Prerequisites before implementation
+This directory remains for older notes and future non-NixOS module
+planning. Do not import files from `nix/modules/` into a host
+configuration.
 
-1. FORGE service boundaries are unified (v1/v2 authoritative path
-   clearly decided).
-2. Config surface (`services/core/internal/config`) is stable enough
-   to be lifted into NixOS module options.
-3. Audit/permission defaults have been validated for server deployment.
+## Boundaries
 
-Until then, deploy via the existing `npm run up` / systemd unit path
-outside Nix.
+Phase N2 modules are scaffolding only. They do not migrate live
+authority, add public routes, alter modelruntime behavior, wire FORGE-K
+into live authority, or add autonomous host mutation.

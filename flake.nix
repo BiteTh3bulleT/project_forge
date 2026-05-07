@@ -51,5 +51,13 @@
     ) // {
       # System-independent outputs.
       overlays.default = import ./nix/overlays/default.nix;
+
+      nixosModules = {
+        forge-os = import ./nix/nixos/modules/forge-os.nix;
+        forge-services = import ./nix/nixos/modules/forge-services.nix;
+        forge-storage = import ./nix/nixos/modules/forge-storage.nix;
+        forge-host-kernel = import ./nix/nixos/modules/forge-host-kernel.nix;
+        default = self.nixosModules.forge-os;
+      };
     };
 }

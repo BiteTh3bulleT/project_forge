@@ -1,6 +1,7 @@
 # Nix Substrate
 
-_Phase N1 — light Nix foundation._
+_Phase N1 — light Nix foundation. Phase N2 adds private NixOS host
+substrate scaffolding._
 
 This document explains how Nix is used in FORGE today and what it is
 **not** used for yet. Nix's role in FORGE will grow over time, but in
@@ -117,11 +118,24 @@ See `nix/tool-capsules/README.md`. Capsules will map FORGE AI-OS tool
 capabilities to hermetic Nix environments — but only after the
 authoritative gateway/autonomy path is clear.
 
-## 9. Future NixOS modules
+## 9. NixOS modules
 
-See `nix/modules/README.md`. Service modules (`services.forge-core`)
-and composition profiles (`developer` / `secure` / `demo` / `ci`) are
-scheduled for Phase N4, after FORGE's service boundaries have unified.
+Phase N2 supersedes the Phase N1 placeholder-only status by adding
+private NixOS module scaffolding under `nix/nixos/modules/`.
+
+Exposed modules:
+
+- `nixosModules.forge-os`
+- `nixosModules.forge-services`
+- `nixosModules.forge-storage`
+- `nixosModules.forge-host-kernel`
+
+These modules are opt-in scaffolds. They define `/forge` directories,
+a `forge` user/group, a default-safe `forge-core` systemd service shape,
+and a disabled-by-default read-only Host Kernel Bridge scaffold.
+
+They do not migrate live authority, fork Linux, execute tools, add
+routes, mutate modelruntime behavior, or make Nix mandatory.
 
 ## 10. Relationship to gateway / tool surface
 
