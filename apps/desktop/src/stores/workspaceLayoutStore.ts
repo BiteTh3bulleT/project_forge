@@ -23,6 +23,7 @@ import {
 
 const STORAGE_KEY = "forge.workspace.layouts.v2";
 const STORAGE_KEY_LEGACY = "forge.workspace.layouts.v1";
+const AUTO_RESTORE_TAURI_LAYOUTS = false;
 
 type WindowRole =
   | "chat"
@@ -944,7 +945,11 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>(
       doc = ensureActiveLayout(doc);
       if (supported) {
         doc = await syncCurrentRuntimeWindow(pathname, monitors);
-        if (currentWindowLabel === "main" && doc.activeLayoutId) {
+        if (
+          AUTO_RESTORE_TAURI_LAYOUTS &&
+          currentWindowLabel === "main" &&
+          doc.activeLayoutId
+        ) {
           doc = await applyLayout(doc.activeLayoutId, true, monitors);
         }
       }
@@ -974,7 +979,12 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>(
       doc.lastKnownMonitors = monitors;
       doc.lastMonitorSignature = signature;
       persistDoc(doc);
-      if (changed && currentWindowLabel === "main" && doc.activeLayoutId) {
+      if (
+        AUTO_RESTORE_TAURI_LAYOUTS &&
+        changed &&
+        currentWindowLabel === "main" &&
+        doc.activeLayoutId
+      ) {
         const refreshed = await applyLayout(
           doc.activeLayoutId,
           false,

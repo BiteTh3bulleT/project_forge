@@ -11,7 +11,7 @@ var (
 	reMkdirShell  = regexp.MustCompile(`(?i)\bmkdir(?:\s+-p)?\s+([^\s#]+)`)
 	reMakeFolder  = regexp.MustCompile(`(?i)(?:create|make)\s+(?:a\s+)?(?:directory|dir|folder)(?:\s+(?:at|in|under|for|:))?\s+['"]?([^'"\n]+?)['"]?(?:\s|$)`)
 	reActionVerb  = regexp.MustCompile(`(?i)\b(create|write|save|edit|modify|update|delete|remove|rename|move|copy|run|execute|build|test|install|commit|checkout|stash|chmod|fetch|scan|open|start|stop|restart|read|list|show)\b`)
-	reStatusProbe = regexp.MustCompile(`(?i)\b(how\s+are|is\s+everything|is\s+it\s+working|any\s+updates|any\s+progress|where\s+are\s+we|what\s+is\s+the\s+status|status\s+of|how\s+is\s+it\s+going|what\s+is\s+next|did\s+it\s+work|seemed\s+to\s+work|was\s+it\s+created|was\s+that\s+created|was\s+the\s+file\s+created|did\s+that\s+work)\b`)
+	reStatusProbe = regexp.MustCompile(`(?i)\b(how\s+are|is\s+everything|is\s+it\s+working|any\s+updates|any\s+progress|where\s+are\s+we|what\s+is\s+the\s+status|status\s+of|how\s+is\s+it\s+going|what\s+is\s+next|did\s+it\s+work|seemed\s+to\s+work|did(?:n't|nt|\s+not)\s+seem\s+to\s+work|that\s+did(?:n't|nt|\s+not)\s+work|was\s+it\s+created|was\s+that\s+created|was\s+the\s+file\s+created|did\s+that\s+work)\b`)
 	reURL         = regexp.MustCompile(`https?://[^\s]+`)
 )
 
@@ -83,6 +83,12 @@ func ForcedChatModelName(user string) string {
 	if wantsCompositeFilesystemWorkflow(user) {
 		return ""
 	}
+	if wantsDesktopAppOpen(user) {
+		return ChatModelName("desktop.open")
+	}
+	if wantsRepoInspect(user) {
+		return ChatModelName("repo.inspect")
+	}
 	intent := ParseHyperlaneIntent(user)
 	switch intent.Route {
 	case hyperlane.RouteGatewayFSMkdir,
@@ -97,6 +103,33 @@ func ForcedChatModelName(user string) string {
 		return ChatModelName(intent.Route)
 	}
 	return ""
+}
+
+func wantsDesktopAppOpen(user string) bool {
+	s := normalizeIntentText(user)
+	if s == "" {
+		return false
+	}
+	if !(strings.Contains(s, "open") || strings.Contains(s, "launch") || strings.Contains(s, "start")) {
+		return false
+	}
+	appHints := []string{
+		"file explorer",
+		"explorer",
+		"google chrome",
+		"chrome",
+		"browser",
+		"notepad",
+		"powershell",
+		"terminal",
+		"konsole",
+	}
+	for _, hint := range appHints {
+		if strings.Contains(s, hint) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsCompositeFilesystemWorkflow reports whether a user turn combines folder creation
@@ -291,6 +324,28 @@ func wantsBrowserOpen(user string) bool {
 		return false
 	}
 	return reURL.MatchString(user) && (strings.Contains(s, "open browser") || strings.Contains(s, "open in browser") || strings.Contains(s, "browse to") || strings.Contains(s, "open url"))
+}
+
+func wantsRepoInspect(user string) bool {
+	s := normalizeIntentText(user)
+	if s == "" {
+		return false
+	}
+	hasRepoTarget := strings.Contains(s, "repo") ||
+		strings.Contains(s, "repository") ||
+		strings.Contains(s, "codebase") ||
+		strings.Contains(s, "project") ||
+		strings.Contains(s, "workspace")
+	if !hasRepoTarget {
+		return false
+	}
+	return strings.Contains(s, "explore") ||
+		strings.Contains(s, "inspect") ||
+		strings.Contains(s, "familiarize") ||
+		strings.Contains(s, "familiarise") ||
+		strings.Contains(s, "orient") ||
+		strings.Contains(s, "read docs") ||
+		strings.Contains(s, "look around")
 }
 
 func ParseWebSearchQuery(user string) (string, bool) {

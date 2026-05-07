@@ -49,6 +49,14 @@ func desktopPlatformLaunchCandidates(normalized string) [][]string {
 			{"powershell.exe"},
 			{"cmd.exe"},
 		}
+	case strings.Contains(normalized, "file explorer") || normalized == "explorer":
+		return [][]string{{"explorer.exe"}}
+	case strings.Contains(normalized, "google chrome") || normalized == "chrome":
+		return [][]string{
+			{"chrome.exe"},
+			{`C:\Program Files\Google\Chrome\Application\chrome.exe`},
+			{`C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`},
+		}
 	case strings.Contains(normalized, "notepad"):
 		return [][]string{{"notepad.exe"}}
 	default:

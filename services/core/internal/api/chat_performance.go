@@ -154,6 +154,9 @@ func deterministicNoModelIntent(normalized string) bool {
 	if normalized == "what is your name" || normalized == "whats your name" || normalized == "who are you" || normalized == "what are you" {
 		return true
 	}
+	if normalized == "what is my name" || normalized == "whats my name" || normalized == "who am i" {
+		return true
+	}
 	return isWeatherWithoutLocationQuery(normalized)
 }
 
@@ -230,7 +233,7 @@ func (s *Server) renderNoModelChatReply(ctx context.Context, decision chatPerfor
 	case "empty":
 		return "No request text received."
 	case "deterministic_chat_reply":
-		if text, ok := deterministicNoToolChatReply(content); ok {
+		if text, ok := deterministicNoToolChatReply(th, content); ok {
 			return text
 		}
 	case "status":

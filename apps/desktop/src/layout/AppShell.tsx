@@ -80,6 +80,7 @@ export function AppShell(props: AppShellProps) {
   const location = useLocation();
   const pathname = location.pathname;
   const currentTool = useMemo(() => getShellTool(pathname), [pathname]);
+  const dockedTauriShell = isTauriDesktop();
 
   const core = useWorkspaceStore((s) => s.core);
   const meta = useWorkspaceStore((s) => s.meta);
@@ -229,10 +230,9 @@ export function AppShell(props: AppShellProps) {
   function launchTool(tool: ShellToolDefinition) {
     setStartOpen(false);
     void openWindow(tool.id);
-    // In Tauri mode the spawned OS window owns its own URL; the shell stays
-    // at "/". In browser dev we navigate to keep the in-shell window driven
-    // by the route.
-    if (!isTauriDesktop()) {
+    // Tauri keeps tool surfaces docked in the main shell. Browser dev still
+    // navigates so routed page work remains easy to test locally.
+    if (!dockedTauriShell) {
       navigate(tool.route);
     }
   }
@@ -241,11 +241,15 @@ export function AppShell(props: AppShellProps) {
     if (window_.minimized) {
       void restore(window_.id);
     } else if (focusedId === window_.id) {
-      void minimize(window_.id);
+      if (dockedTauriShell) {
+        void focus(window_.id);
+      } else {
+        void minimize(window_.id);
+      }
     } else {
       void focus(window_.id);
     }
-    if (!isTauriDesktop()) {
+    if (!dockedTauriShell) {
       const tool = allShellTools.find((t) => t.id === window_.toolId);
       if (tool) navigate(tool.route);
     }
@@ -387,14 +391,18 @@ export function AppShell(props: AppShellProps) {
         ) : null}
 
         <main className="forge-os-desktop">
-          {/* Wallpaper-only when no FORGE windows are present. In Tauri mode
-              the windows are real OS windows owned by the compositor — the
-              shell never paints them; the dock + Start are the only FORGE
-              UI here. */}
+          {/* Wallpaper-only when no FORGE windows are present. */}
           {windows.length === 0 ? <ForgeHero lastErr={lastErr} /> : null}
 
-          {/* Browser dev only: in-shell window manager. */}
-          {!isTauriDesktop()
+          {dockedTauriShell && focusedWindow ? (
+            <DockedWindow
+              window={focusedWindow}
+              onMinimize={() => void minimize(focusedWindow.id)}
+              onClose={() => void closeWindow(focusedWindow.id)}
+            />
+          ) : null}
+
+          {!dockedTauriShell
             ? sortedWindows.map((win) => (
                 <FloatingWindow
                   key={win.id}
@@ -483,7 +491,9 @@ export function AppShell(props: AppShellProps) {
                   aria-current={isActive ? "page" : undefined}
                   title={
                     isActive
-                      ? `${tile.tool.label} (click to minimize)`
+                      ? dockedTauriShell
+                        ? `${tile.tool.label} (active)`
+                        : `${tile.tool.label} (click to minimize)`
                       : isMinimized
                         ? `${tile.tool.label} (minimized)`
                         : isOpen
@@ -792,6 +802,61 @@ function FloatingWindow(props: {
           aria-hidden
         />
       ) : null}
+    </section>
+  );
+}
+
+function DockedWindow(props: {
+  window: DesktopWindow;
+  onMinimize: () => void;
+  onClose: () => void;
+}) {
+  const tool = useMemo(
+    () => allShellTools.find((t) => t.id === props.window.toolId) ?? null,
+    [props.window.toolId],
+  );
+  const Component = tool ? getToolComponent(tool.id) : null;
+
+  return (
+    <section className="forge-os-window forge-os-window--docked forge-os-window--focused">
+      <div className="forge-os-window__chrome forge-os-window__chrome--docked">
+        <div className="forge-os-window__title">
+          <span className="forge-os-window__sigil">
+            {tool?.shortLabel ?? "??"}
+          </span>
+          <div className="min-w-0">
+            <div className="forge-os-window__name">
+              {tool?.label ?? "Unknown surface"}
+            </div>
+            <div className="forge-os-window__sub">
+              {tool?.description ?? ""}
+            </div>
+          </div>
+        </div>
+        <div className="forge-os-window__buttons">
+          <button
+            type="button"
+            className="forge-os-window__btn"
+            onClick={props.onMinimize}
+            aria-label="Minimize"
+            title="Minimize"
+          >
+            –
+          </button>
+          <button
+            type="button"
+            className="forge-os-window__btn forge-os-window__btn--close"
+            onClick={props.onClose}
+            aria-label="Close"
+            title="Close"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+      <div className="forge-os-window__body forge-os-window__body--docked">
+        {Component ? <Component /> : <UnsupportedToolNotice toolId={tool?.id} />}
+      </div>
     </section>
   );
 }

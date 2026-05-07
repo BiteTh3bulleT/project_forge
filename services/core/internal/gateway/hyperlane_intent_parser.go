@@ -173,6 +173,8 @@ func isModelruntimeStatusQuery(s string) bool {
 
 func gatewayToolRouteHint(s string) (route string, confidence float64, matchedRule string) {
 	switch {
+	case wantsDesktopAppOpen(s):
+		return hyperlane.RouteGatewayDesktopOpen, 0.76, "gateway_desktop_app_open"
 	case wantsWebSearch(s):
 		return hyperlane.RouteGatewayWebSearch, 0.72, "gateway_web_search"
 	case wantsURLFetch(s):

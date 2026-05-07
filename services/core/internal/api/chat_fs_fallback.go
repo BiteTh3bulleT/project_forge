@@ -86,6 +86,45 @@ func (s *Server) runChatFSDeterministicFallback(
 		gwActivity["syntheticToolExecution"] = true
 		return true
 	}
+	if forcedModel == gateway.ChatModelName("repo.inspect") {
+		pushStage("deterministic_repo_inspect_dispatch", map[string]any{"path": "."})
+		res, err := s.gwChatExec(ctx, corr, "repo.inspect", []string{"."}, nil)
+		if err != nil {
+			if final.Len() > 0 {
+				final.WriteString("\n\n")
+			}
+			final.WriteString("FORGE (deterministic repo): " + err.Error())
+			gwActivity["executionState"] = "error"
+			gwActivity["failureReason"] = err.Error()
+			gwActivity["toolSelected"] = "repo.inspect"
+			gwActivity["toolArgs"] = map[string]any{"path": "."}
+			gwActivity["syntheticToolExecution"] = true
+			return true
+		}
+		if res.Status != gateway.StatusOK {
+			if final.Len() > 0 {
+				final.WriteString("\n\n")
+			}
+			final.WriteString(fmt.Sprintf("FORGE (deterministic repo): gateway %s — %s", res.Status, strings.TrimSpace(coalesceReason(res))))
+			gwActivity["executionState"] = res.Status
+			gwActivity["failureReason"] = coalesceReason(res)
+			gwActivity["toolSelected"] = "repo.inspect"
+			gwActivity["toolArgs"] = map[string]any{"path": "."}
+			gwActivity["executionResult"] = res.Data
+			gwActivity["syntheticToolExecution"] = true
+			return true
+		}
+		if final.Len() > 0 {
+			final.WriteString("\n\n")
+		}
+		final.WriteString("FORGE (deterministic repo): " + formatToolResult("repo.inspect", res))
+		gwActivity["toolSelected"] = "repo.inspect"
+		gwActivity["toolArgs"] = map[string]any{"path": "."}
+		gwActivity["executionState"] = "ok"
+		gwActivity["executionResult"] = res.Data
+		gwActivity["syntheticToolExecution"] = true
+		return true
+	}
 	_, _, _, combined := gateway.ParseCombinedMkdirAndWrite(lastUserContent)
 	if combined {
 		return s.runDeterministicMkdirThenWrite(ctx, corr, lastUserContent, pushStage, gwActivity, final)

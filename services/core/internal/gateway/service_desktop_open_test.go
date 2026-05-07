@@ -24,6 +24,19 @@ func TestDesktopNormalizeAppHint(t *testing.T) {
 	}
 }
 
+func TestDesktopNormalizeAppHintPoliteDesktopRequests(t *testing.T) {
+	cases := map[string]string{
+		"Can you open file explorer please": "file explorer",
+		"Open my file explorer":             "file explorer",
+		"Open google chrome please":         "google chrome",
+	}
+	for in, want := range cases {
+		if got := desktopNormalizeAppHint(in); got != want {
+			t.Fatalf("desktopNormalizeAppHint(%q)=%q want %q", in, got, want)
+		}
+	}
+}
+
 func TestDesktopLaunchCandidates(t *testing.T) {
 	candidates := desktopLaunchCandidates("software center")
 	if len(candidates) == 0 {
@@ -44,6 +57,40 @@ func TestDesktopLaunchCandidatesMinecraftOnWindows(t *testing.T) {
 	}
 	if candidates[0][0] != "minecraft:" {
 		t.Fatalf("expected first Minecraft candidate to use URI launcher, got %q", candidates[0][0])
+	}
+}
+
+func TestDesktopLaunchCandidatesTerminalOnWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows-specific launcher candidates")
+	}
+	candidates := desktopLaunchCandidates("can you open a terminal please")
+	if len(candidates) == 0 {
+		t.Fatalf("expected launch candidates for terminal")
+	}
+	for _, candidate := range candidates {
+		if len(candidate) == 0 {
+			t.Fatalf("empty candidate in terminal candidates: %#v", candidates)
+		}
+		switch candidate[0] {
+		case "wt.exe", "powershell.exe", "cmd.exe":
+		default:
+			t.Fatalf("expected Windows terminal candidate, got %q in %#v", candidate[0], candidates)
+		}
+	}
+}
+
+func TestDesktopLaunchCandidatesExplorerAndChromeOnWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows-specific launcher candidates")
+	}
+	explorerCandidates := desktopLaunchCandidates("file explorer")
+	if len(explorerCandidates) == 0 || explorerCandidates[0][0] != "explorer.exe" {
+		t.Fatalf("expected explorer.exe candidate, got %#v", explorerCandidates)
+	}
+	chromeCandidates := desktopLaunchCandidates("google chrome")
+	if len(chromeCandidates) == 0 || chromeCandidates[0][0] != "chrome.exe" {
+		t.Fatalf("expected chrome.exe candidate, got %#v", chromeCandidates)
 	}
 }
 

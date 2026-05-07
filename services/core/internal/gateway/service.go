@@ -2904,6 +2904,11 @@ func desktopNormalizeAppHint(raw string) string {
 	}
 	s = strings.Trim(s, `"'`)
 	s = strings.TrimSuffix(s, ".")
+	for _, prefix := range []string{"can you ", "could you ", "would you ", "please "} {
+		if strings.HasPrefix(s, prefix) {
+			s = strings.TrimSpace(strings.TrimPrefix(s, prefix))
+		}
+	}
 	for _, prefix := range []string{"open ", "launch ", "start "} {
 		if strings.HasPrefix(s, prefix) {
 			s = strings.TrimSpace(strings.TrimPrefix(s, prefix))
@@ -2913,12 +2918,17 @@ func desktopNormalizeAppHint(raw string) string {
 		}
 	}
 	s = strings.TrimPrefix(s, "the ")
+	s = strings.TrimPrefix(s, "my ")
+	s = strings.TrimSuffix(s, " please")
 	s = strings.Join(strings.Fields(s), " ")
 	return s
 }
 
 func desktopLaunchCandidates(hint string) [][]string {
 	normalized := strings.TrimSpace(strings.ToLower(hint))
+	if platform := desktopPlatformLaunchCandidates(normalized); len(platform) > 0 {
+		return platform
+	}
 	switch {
 	case normalized == "konsole" || strings.Contains(normalized, "konsole"):
 		return [][]string{
@@ -2947,9 +2957,6 @@ func desktopLaunchCandidates(hint string) [][]string {
 			{"gtk-launch", "org.gnome.Software.desktop"},
 		}
 	default:
-		if platform := desktopPlatformLaunchCandidates(normalized); len(platform) > 0 {
-			return platform
-		}
 		fields := strings.Fields(normalized)
 		if len(fields) > 0 && desktopSafeCommandToken(fields[0]) {
 			return [][]string{{fields[0]}}

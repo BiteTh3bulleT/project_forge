@@ -460,6 +460,31 @@ func (s *Server) completeAssistantWithGatewayTools(
 		_ = s.log.Emit(ctx, "chat.message.assistant", map[string]any{"threadId": threadID, "messageId": am.ID, "ok": true, "tools": true, "deterministicShortcut": true})
 		return am
 	}
+	if forcedModel == gateway.ChatModelName("repo.inspect") {
+		pushStage("deterministic_repo_inspect_shortcut", map[string]any{"reason": "explicit repo orientation intent"})
+		gwActivity := map[string]any{
+			"userRequestSummary": trimSummary(lastUserContent, 500),
+			"toolManifest":       manifests,
+			"stages":             stages,
+			"toolCallEmitted":    false,
+		}
+		trackedActivity = gwActivity
+		var final strings.Builder
+		s.runChatFSDeterministicFallback(ctx, corr, lastUserContent, forcedModel, pushStage, gwActivity, &final)
+		if final.Len() == 0 {
+			final.WriteString("(no deterministic output)")
+		}
+		am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", final.String(), map[string]any{
+			"replyToUserMessageId": userMessageID,
+			"correlationId":        corr,
+			"ollamaSkipped":        true,
+			"toolManifest":         manifests,
+			"toolPipeline":         map[string]any{"stages": stages},
+			"toolGatewayActivity":  gwActivity,
+		})
+		_ = s.log.Emit(ctx, "chat.message.assistant", map[string]any{"threadId": threadID, "messageId": am.ID, "ok": true, "tools": true, "deterministicShortcut": true})
+		return am
+	}
 	if _, _, ok := gateway.ParseDownloadSorterScriptIntent(lastUserContent); ok {
 		pushStage("deterministic_download_sorter_shortcut", map[string]any{"reason": "explicit Downloads sorter script intent"})
 		gwActivity := map[string]any{
@@ -1892,16 +1917,68 @@ func forgeAuthorityToolOmissionMessage(forcedModel string) string {
 	return fmt.Sprintf("FORGE authority boundary: the request was routed to `%s`, but the model returned prose instead of a governed tool call. I discarded the model prose because the model does not decide what FORGE can access or execute. No gateway action ran for this message; retrying should go through FORGE preflight, gateway policy, and approval/capability checks.", toolID)
 }
 
-func deterministicNoToolChatReply(content string) (string, bool) {
+func deterministicNoToolChatReply(th *chat.ThreadDetail, content string) (string, bool) {
 	normalized := normalizeAssistantIntent(content)
 	switch normalized {
 	case "what is your name", "whats your name", "who are you", "what are you":
 		return "I am FORGE.", true
+	case "what is my name", "whats my name", "who am i":
+		if name := latestOperatorNameFromThread(th); name != "" {
+			return "Your name is " + name + ".", true
+		}
+		return "I don't have your name in this thread.", true
 	}
 	if isWeatherWithoutLocationQuery(normalized) {
 		return "What city or ZIP code should I check for the weather?", true
 	}
 	return "", false
+}
+
+func latestOperatorNameFromThread(th *chat.ThreadDetail) string {
+	if th == nil {
+		return ""
+	}
+	for i := len(th.Messages) - 1; i >= 0; i-- {
+		msg := th.Messages[i]
+		if msg.Role != "user" {
+			continue
+		}
+		if name := parseOperatorNameClaim(msg.Content); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+func parseOperatorNameClaim(content string) string {
+	text := strings.TrimSpace(content)
+	if text == "" {
+		return ""
+	}
+	lower := strings.ToLower(text)
+	idx := strings.LastIndex(lower, "my name is")
+	if idx < 0 {
+		return ""
+	}
+	rest := strings.TrimSpace(text[idx+len("my name is"):])
+	rest = strings.Trim(rest, " \t\r\n:,-")
+	if rest == "" {
+		return ""
+	}
+	fields := strings.Fields(rest)
+	parts := make([]string, 0, 3)
+	for _, field := range fields {
+		token := strings.Trim(field, `"'()[]{}<>`)
+		token = strings.TrimRight(token, ".!,?;:")
+		if token == "" {
+			break
+		}
+		parts = append(parts, token)
+		if strings.ContainsAny(field, ".!,?;:") || len(parts) >= 3 {
+			break
+		}
+	}
+	return strings.TrimSpace(strings.Join(parts, " "))
 }
 
 func normalizeAssistantIntent(content string) string {
@@ -2032,6 +2109,11 @@ func stripLeadingReasoningScaffold(content string) (string, bool) {
 		"reasoning process:",
 		"internal reasoning:",
 		"chain of thought:",
+		"first, the user said:",
+		"user's latest input:",
+		"we need to answer:",
+		"we need answer:",
+		"my response should",
 		"analysis:",
 		"reasoning:",
 	}

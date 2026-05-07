@@ -13,6 +13,7 @@ import { allShellTools, type ShellToolId } from "../layout/shellConfig";
 const PINNED_KEY = "forge.os.pinned.v1";
 const WINDOWS_KEY = "forge.os.windows.v1";
 const FOCUS_KEY = "forge.os.focus.v1";
+const DETACHED_TAURI_TOOL_WINDOWS = false;
 
 const DEFAULT_PINNED: ShellToolId[] = [
   "chat",
@@ -248,7 +249,7 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
     }),
 
   openWindow: async (toolId, opts) => {
-    if (isTauriDesktop()) {
+    if (isTauriDesktop() && DETACHED_TAURI_TOOL_WINDOWS) {
       // Real OS window path. Spawn or focus the Tauri webview.
       const label = tauriLabelForTool(toolId);
       const existing = get().windows.find((w) => w.toolId === toolId);

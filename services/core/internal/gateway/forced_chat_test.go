@@ -38,6 +38,7 @@ func TestIsLikelyStatusProbeTurn(t *testing.T) {
 		{name: "status check", in: "How are we looking?", want: true},
 		{name: "plain update request", in: "Any updates on this task?", want: true},
 		{name: "did it work phrasing", in: "Well that seemed to work, didn't it?", want: true},
+		{name: "did not work phrasing", in: "That didn't seem to work", want: true},
 		{name: "operational intent", in: "Run a status command", want: false},
 	}
 	for _, tc := range cases {
@@ -71,6 +72,7 @@ func TestShouldAttachChatTools(t *testing.T) {
 		{name: "weather with location enabled", in: "what is the weather in Chicago today?", want: true},
 		{name: "weather without location disabled", in: "what is the weather looking like today?", want: false},
 		{name: "browser open enabled", in: "open browser https://example.com", want: true},
+		{name: "repo exploration enabled", in: "You can explore your repo. Familiarize yourself with yourself.", want: true},
 		{name: "chat question disabled", in: "How do you operate?", want: false},
 	}
 	for _, tc := range cases {
@@ -96,8 +98,11 @@ func TestForcedChatModelNameWebAndBrowser(t *testing.T) {
 		{name: "weather with location", in: "what is the weather in Chicago today?", want: ChatModelName("web.search")},
 		{name: "fetch url", in: "fetch https://example.com", want: ChatModelName("net.fetch")},
 		{name: "open browser", in: "open browser https://example.com", want: ChatModelName("desktop.open")},
+		{name: "open chrome app", in: "Open google chrome please.", want: ChatModelName("desktop.open")},
+		{name: "open file explorer", in: "Can you open file explorer please", want: ChatModelName("desktop.open")},
 		{name: "open terminal and run", in: "Open terminal and run sudo zypper refresh", want: ChatModelName("desktop.open")},
 		{name: "open terminal ssh workflow", in: "Open terminal, ssh into robert@10.150.1.9 password test-pass. Create a directory labled SSH-AI-TEST", want: ChatModelName("desktop.open")},
+		{name: "repo exploration", in: "You can explore your repo. Familiarize yourself with yourself.", want: ChatModelName("repo.inspect")},
 	}
 	for _, tc := range cases {
 		tc := tc

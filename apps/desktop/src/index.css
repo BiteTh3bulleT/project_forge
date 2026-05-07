@@ -3469,6 +3469,15 @@ html[data-effects="subtle"] .forge-context-card:hover {
   border-color: rgba(var(--forge-border-strong-rgb), 0.12);
 }
 
+.forge-os-window--docked {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  border-color: rgba(var(--forge-border-strong-rgb), 0.12);
+}
+
 .forge-os-window__chrome {
   display: flex;
   align-items: center;
@@ -3486,8 +3495,16 @@ html[data-effects="subtle"] .forge-context-card:hover {
   user-select: none;
 }
 
+.forge-os-window__chrome--docked {
+  cursor: default;
+}
+
 .forge-os-window__chrome:active {
   cursor: grabbing;
+}
+
+.forge-os-window__chrome--docked:active {
+  cursor: default;
 }
 
 .forge-os-window__title {
@@ -3574,6 +3591,18 @@ html[data-effects="subtle"] .forge-context-card:hover {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+}
+
+.forge-os-window__body--docked {
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.forge-os-window__body--docked > * {
+  min-width: 0;
 }
 
 .forge-os-window__resize {

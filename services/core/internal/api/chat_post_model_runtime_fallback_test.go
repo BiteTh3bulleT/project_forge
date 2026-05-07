@@ -482,6 +482,90 @@ func TestChatPostSyncStripsModelRuntimeReasoningScaffold(t *testing.T) {
 	}
 }
 
+func TestChatPostSyncStripsRawModelPlanningPreamble(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.chatContent = "We need to answer: \"How are you doing today?\"\n\nFinal answer: I'm operational and ready."
+	srv.modelRuntime = fakeRuntime
+	t.Setenv("OLLAMA_MODEL", "qwen2.5-coder")
+	t.Setenv("OLLAMA_BASE_URL", "http://127.0.0.1:1")
+
+	thread, err := srv.chat.CreateThread(context.Background(), "runtime planning strip", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+
+	raw := []byte(`{"content":"How are you doing today?","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message in response")
+	}
+	if got := strings.TrimSpace(payload.AssistantMessage.Content); got != "I'm operational and ready." {
+		t.Fatalf("expected final answer only, got=%q", got)
+	}
+	if strings.Contains(payload.AssistantMessage.Content, "We need to answer") || strings.Contains(payload.AssistantMessage.Content, "Final answer") {
+		t.Fatalf("assistant content leaked planning scaffold: %q", payload.AssistantMessage.Content)
+	}
+	warnings, ok := payload.AssistantMessage.Metadata["assistantContentWarnings"].([]any)
+	if !ok {
+		t.Fatalf("expected assistantContentWarnings metadata, got %#v", payload.AssistantMessage.Metadata["assistantContentWarnings"])
+	}
+	if !containsAnyString(warnings, "stripped_reasoning_scaffold") {
+		t.Fatalf("expected stripped_reasoning_scaffold warning, got %#v", warnings)
+	}
+}
+
+func TestChatPostSyncAnswersOperatorNameFromThreadMemory(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.chatContent = "Your name is User."
+	srv.modelRuntime = fakeRuntime
+	t.Setenv("OLLAMA_MODEL", "qwen2.5-coder")
+	t.Setenv("OLLAMA_BASE_URL", "http://127.0.0.1:1")
+
+	thread, err := srv.chat.CreateThread(context.Background(), "operator name recall", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	if _, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "My name is Robert.", nil); err != nil {
+		t.Fatalf("append name message: %v", err)
+	}
+
+	raw := []byte(`{"content":"What is my name?","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message in response")
+	}
+	if got := strings.TrimSpace(payload.AssistantMessage.Content); got != "Your name is Robert." {
+		t.Fatalf("expected deterministic name recall, got=%q", got)
+	}
+	if fakeRuntime.chatCalls != 0 {
+		t.Fatalf("expected no model call for deterministic name recall, got %d", fakeRuntime.chatCalls)
+	}
+}
+
 func TestChatPostSyncFallsBackWhenModelRuntimeOnlyReturnsReasoningScaffold(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	fakeRuntime := newFakeModelRuntime()
@@ -983,6 +1067,49 @@ func TestChatPostRemoteSSHBannerUsesDesktopOpenNotLocalWrite(t *testing.T) {
 	}
 	if strings.Contains(payload.AssistantMessage.Content, "FORGE (deterministic python):") {
 		t.Fatalf("expected remote desktop path, got local python response %q", payload.AssistantMessage.Content)
+	}
+}
+
+func TestChatPostRepoExplorationUsesGatewayNotModelCommandSuggestions(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.chatContent = "bash\nCopy\ncat README.md\ncat AGENTS.md"
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "repo exploration", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	raw := []byte(`{"content":"You can explore your repo. Familiarize yourself with yourself lol","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message")
+	}
+	if strings.Contains(payload.AssistantMessage.Content, "cat README.md") || strings.Contains(payload.AssistantMessage.Content, "bash\nCopy") {
+		t.Fatalf("model command suggestion leaked into assistant content: %q", payload.AssistantMessage.Content)
+	}
+	if !strings.Contains(payload.AssistantMessage.Content, "FORGE (deterministic repo):") {
+		t.Fatalf("expected deterministic repo inspection response, got %q", payload.AssistantMessage.Content)
+	}
+	activity := metadataMap(payload.AssistantMessage.Metadata, "toolGatewayActivity")
+	if got := strings.TrimSpace(asString(activity["toolSelected"])); got != "repo.inspect" {
+		t.Fatalf("toolSelected=%q activity=%#v", got, activity)
+	}
+	if fakeRuntime.chatCalls != 0 {
+		t.Fatalf("expected no model runtime call for deterministic repo inspection, got %d", fakeRuntime.chatCalls)
+	}
+	if got := gatewayInvocationTools(t, st); strings.Join(got, ",") != "repo.inspect" {
+		t.Fatalf("expected only repo.inspect gateway invocation, got %v", got)
 	}
 }
 
