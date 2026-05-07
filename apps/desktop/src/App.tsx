@@ -14,7 +14,6 @@ import { AppShell } from "./layout/AppShell";
 import {
   WORKSPACE_LAYOUT_EVENT,
   WORKSPACE_NAVIGATE_EVENT,
-  isShellHostWindowLabel,
   isTauriDesktop,
 } from "./lib/desktop";
 import { ActionLanesPage } from "./pages/ActionLanesPage";
@@ -125,8 +124,7 @@ export default function App() {
     (s) => s.currentWindowLabel,
   );
   const isPrimaryShellWindow = layoutReady && currentWindowLabel === "main";
-  const isShellHostWindow =
-    layoutReady && isShellHostWindowLabel(currentWindowLabel);
+  const isShellHostWindow = isPrimaryShellWindow;
   const contrastPreference = useUiStore((s) => s.contrastPreference);
   const effectsPreference = useUiStore((s) => s.effectsPreference);
 

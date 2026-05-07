@@ -26,6 +26,7 @@ const desktopMocks = vi.hoisted(() => ({
   listAvailableMonitors: vi.fn(async (): Promise<TestMonitor[]> => []),
   listRuntimeWindows: vi.fn(async () => [{ label: "main" }]),
   monitorSignature: vi.fn(() => ""),
+  spanCurrentWindowAcrossMonitors: vi.fn(async () => true),
   tauriWindow: {
     setTitle: vi.fn(async () => undefined),
     setPosition: vi.fn(async () => undefined),
@@ -66,6 +67,21 @@ vi.mock("../lib/desktop", () => ({
   listAvailableMonitors: desktopMocks.listAvailableMonitors,
   listRuntimeWindows: desktopMocks.listRuntimeWindows,
   monitorSignature: desktopMocks.monitorSignature,
+  spanCurrentWindowAcrossMonitors: desktopMocks.spanCurrentWindowAcrossMonitors,
+  virtualDesktopBounds: (monitors: TestMonitor[]) => {
+    if (monitors.length === 0) return null;
+    const minX = Math.min(...monitors.map((monitor) => monitor.workArea.x));
+    const minY = Math.min(...monitors.map((monitor) => monitor.workArea.y));
+    const maxX = Math.max(
+      ...monitors.map((monitor) => monitor.workArea.x + monitor.workArea.width),
+    );
+    const maxY = Math.max(
+      ...monitors.map(
+        (monitor) => monitor.workArea.y + monitor.workArea.height,
+      ),
+    );
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  },
 }));
 
 function activeLayoutDoc() {
@@ -81,7 +97,7 @@ function activeLayoutDoc() {
         windows: [
           {
             id: "window-1",
-            runtimeLabel: "layout-chat",
+            runtimeLabel: "forge-build-workbench",
             title: "FORGE Chat",
             role: "chat",
             assignedRoutes: ["/chat"],
@@ -134,6 +150,7 @@ describe("workspace layout hydration", () => {
     localStorage.clear();
     desktopMocks.createShellWindow.mockClear();
     desktopMocks.emitWorkspaceSync.mockClear();
+    desktopMocks.spanCurrentWindowAcrossMonitors.mockClear();
     desktopMocks.tauriWindow.setPosition.mockClear();
     desktopMocks.tauriWindow.setSize.mockClear();
     localStorage.setItem(
@@ -142,7 +159,11 @@ describe("workspace layout hydration", () => {
     );
   });
 
-  it("restores saved secondary layout windows as desktop shell hosts", async () => {
+  it("spans the main desktop shell instead of creating duplicate monitor desktops", async () => {
+    const secondaryWindow = {
+      label: "forge-build-workbench",
+      close: vi.fn(async () => undefined),
+    };
     desktopMocks.listAvailableMonitors.mockResolvedValueOnce([
       {
         id: "main-display",
@@ -163,17 +184,24 @@ describe("workspace layout hydration", () => {
         scaleFactor: 1,
       },
     ]);
+    desktopMocks.listRuntimeWindows.mockResolvedValue([
+      { label: "main" },
+      secondaryWindow,
+    ]);
     const { useWorkspaceLayoutStore } = await import("./workspaceLayoutStore");
 
     await useWorkspaceLayoutStore.getState().hydrate("/");
 
-    expect(desktopMocks.createShellWindow).toHaveBeenCalledWith(
+    expect(desktopMocks.createShellWindow).not.toHaveBeenCalled();
+    expect(desktopMocks.spanCurrentWindowAcrossMonitors).toHaveBeenCalled();
+    expect(secondaryWindow.close).toHaveBeenCalled();
+    expect(useWorkspaceLayoutStore.getState().runtimeWindows).toEqual([
       expect.objectContaining({
-        label: "layout-chat",
-        route: "/chat",
-        title: "FORGE Chat",
+        runtimeLabel: "main",
+        currentRoute: "/chat",
+        bounds: { x: 0, y: 0, width: 3840, height: 1040 },
       }),
-    );
+    ]);
     expect(useWorkspaceLayoutStore.getState().fallbackNotice).toBeNull();
     expect(useWorkspaceLayoutStore.getState().ready).toBe(true);
     expect(useWorkspaceLayoutStore.getState().currentWindowLabel).toBe("main");
@@ -209,7 +237,8 @@ describe("workspace layout hydration", () => {
 
     await useWorkspaceLayoutStore.getState().hydrate("/");
 
-    expect(desktopMocks.tauriWindow.setPosition).toHaveBeenCalled();
-    expect(desktopMocks.tauriWindow.setSize).toHaveBeenCalled();
+    expect(desktopMocks.spanCurrentWindowAcrossMonitors).toHaveBeenCalled();
+    expect(desktopMocks.tauriWindow.setPosition).not.toHaveBeenCalled();
+    expect(desktopMocks.tauriWindow.setSize).not.toHaveBeenCalled();
   });
 });

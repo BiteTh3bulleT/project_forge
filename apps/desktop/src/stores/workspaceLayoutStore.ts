@@ -20,12 +20,15 @@ import {
   listAvailableMonitors,
   listRuntimeWindows,
   monitorSignature,
+  spanCurrentWindowAcrossMonitors,
+  virtualDesktopBounds,
   type MonitorSnapshot,
 } from "../lib/desktop";
 
 const STORAGE_KEY = "forge.workspace.layouts.v2";
 const STORAGE_KEY_LEGACY = "forge.workspace.layouts.v1";
 const AUTO_RESTORE_TAURI_LAYOUTS = true;
+const EXTENDED_DESKTOP_SINGLE_SHELL = true;
 
 type WindowRole =
   | "chat"
@@ -787,6 +790,16 @@ async function syncRuntimeWindowRegistry(doc: LayoutDoc) {
   );
 }
 
+async function closeSecondaryShellHosts() {
+  const runtimeWindows = await listRuntimeWindows();
+  for (const runtimeWindow of runtimeWindows) {
+    if (runtimeWindow.label === "main") continue;
+    if (isShellHostWindowLabel(runtimeWindow.label)) {
+      await runtimeWindow.close().catch(() => undefined);
+    }
+  }
+}
+
 async function navigateWindow(runtimeLabel: string, route: string) {
   const target = await getWindowByLabel(runtimeLabel);
   if (!target) return;
@@ -849,6 +862,80 @@ async function applyLayout(
   doc.lastMonitorSignature = monitorSignature(resolvedMonitors);
   doc.monitorDesignations = resolvedMonitorState.monitorDesignations;
   doc.lastRestoreAtMs = markRestore ? nowMs() : doc.lastRestoreAtMs;
+
+  if (EXTENDED_DESKTOP_SINGLE_SHELL && currentLabel === "main") {
+    const mainRecord =
+      layout.windows.find((item) => item.runtimeLabel === "main") ??
+      layout.windows[0] ??
+      defaultWindowForLayout({
+        runtimeLabel: "main",
+        title: "FORGE",
+        role: "mixed",
+        targetMonitorOrdinal: 0,
+        activeRoute: "/chat",
+      });
+    const resolved = resolveWindowPlacement(
+      mainRecord,
+      resolvedMonitors,
+      doc.monitorDesignations,
+    );
+    if (resolved.fallbackReason) fallbacks.push(resolved.fallbackReason);
+
+    const appWindow = getCurrentWindow();
+    await appWindow.setTitle(mainRecord.title || "FORGE");
+    let shellBounds = resolved.bounds;
+    if (resolvedMonitors.length > 1) {
+      const spanned = await spanCurrentWindowAcrossMonitors(resolvedMonitors);
+      shellBounds = virtualDesktopBounds(resolvedMonitors) ?? resolved.bounds;
+      if (!spanned) {
+        fallbacks.push(
+          "Unable to span the desktop shell across all displays; using the main display.",
+        );
+        await appWindow
+          .setPosition(new LogicalPosition(resolved.bounds.x, resolved.bounds.y))
+          .catch(() => undefined);
+        await appWindow
+          .setSize(
+            new LogicalSize(resolved.bounds.width, resolved.bounds.height),
+          )
+          .catch(() => undefined);
+        shellBounds = resolved.bounds;
+      }
+    } else {
+      await appWindow
+        .setPosition(new LogicalPosition(resolved.bounds.x, resolved.bounds.y))
+        .catch(() => undefined);
+      await appWindow
+        .setSize(new LogicalSize(resolved.bounds.width, resolved.bounds.height))
+        .catch(() => undefined);
+    }
+    await navigateWindow("main", mainRecord.activeRoute || "/chat");
+    await bringWindowFront(appWindow, true).catch(() => undefined);
+    await closeSecondaryShellHosts();
+
+    const runtimeRecord: RuntimeWindowRecord = {
+      runtimeLabel: "main",
+      layoutId: layout.id,
+      layoutWindowId: mainRecord.id,
+      role: mainRecord.role,
+      currentRoute: mainRecord.activeRoute || "/chat",
+      title: mainRecord.title || "FORGE",
+      monitorId: resolved.monitor?.id ?? null,
+      isFocused: true,
+      bounds: shellBounds,
+      lastSeenAtMs: nowMs(),
+    };
+    mergeRuntimeWindow(doc, runtimeRecord);
+    doc.runtimeWindows = doc.runtimeWindows.filter(
+      (item) => item.runtimeLabel === "main",
+    );
+    doc.fallbackNotice = fallbacks.length > 0 ? fallbacks.join(" ") : null;
+    layout.lastActivatedAtMs = nowMs();
+    layout.updatedAtMs = nowMs();
+    persistDoc(doc);
+    await emitWorkspaceSync(currentLabel);
+    return doc;
+  }
 
   for (const windowRecord of layout.windows) {
     if (!windowRecord.runtimeLabel) continue;

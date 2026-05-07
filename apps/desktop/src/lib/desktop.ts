@@ -126,7 +126,12 @@ export function monitorSignature(monitors: MonitorSnapshot[]) {
 
 export function virtualDesktopBounds(monitors: MonitorSnapshot[]) {
   const usable = monitors
-    .map((monitor) => monitor.workArea)
+    .map((monitor) => ({
+      x: Math.round(monitor.workArea.x / monitor.scaleFactor),
+      y: Math.round(monitor.workArea.y / monitor.scaleFactor),
+      width: Math.round(monitor.workArea.width / monitor.scaleFactor),
+      height: Math.round(monitor.workArea.height / monitor.scaleFactor),
+    }))
     .filter(
       (bounds) =>
         Number.isFinite(bounds.x) &&
