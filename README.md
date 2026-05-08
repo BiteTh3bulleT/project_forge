@@ -86,11 +86,11 @@ References:
 
 ## FORGE-OS Host Substrate
 
-Phase N2 adds private NixOS host substrate scaffolding for `/forge`, the `forge-core` service shape, and host diagnostics report directories. Phase N3 adds a read-only Host Kernel Bridge diagnostic library at `services/core/internal/hostbridge`. Phase N4 adds the advisory FORGE-H resource policy layer at `services/core/internal/forgeh`. Phase G1 adds the opt-in FORGE graphical shell session foundation with disabled-by-default NixOS module scaffolding, session metadata, safe environment wiring, and a placeholder desktop entry only.
+Phase N2 adds private NixOS host substrate scaffolding for `/forge`, the `forge-core` service shape, and host diagnostics report directories. Phase N3 adds a read-only Host Kernel Bridge diagnostic library at `services/core/internal/hostbridge`. Phase N4 adds the advisory FORGE-H resource policy layer at `services/core/internal/forgeh`. Phase G1 adds the opt-in FORGE graphical shell session foundation with disabled-by-default NixOS module scaffolding and safe environment wiring. Phase G2 adds `packages.forge-shell-session` and `apps.forge-shell-session`, a manual safe-mode launcher for the existing Tauri shell binary paths.
 
 Host diagnostics are operational evidence only. They do not become semantic memory, live FORGE-K authority, gateway authority, modelruntime authority, or autonomous host control.
 
-The Phase G1 graphical shell foundation is not a desktop replacement yet. It does not autostart, enable autologin, install a compositor, run host commands, restart services, mutate NixOS configuration, call modelruntime, write memory, change public APIs, or route live authority through FORGE-K.
+The Phase G2 graphical shell launcher is not a desktop replacement yet. It does not autostart, enable autologin, install a compositor, run host commands, restart services, mutate NixOS configuration, call modelruntime, write memory, change public APIs, or route live authority through FORGE-K.
 
 References:
 
@@ -202,6 +202,15 @@ npm run build
 npm run build:desktop
 npm run build:core
 ```
+
+Graphical shell package commands:
+
+```bash
+nix build .#forge-shell-session
+nix run .#forge-shell-session
+```
+
+`forge-shell-session` sets safe shell-mode environment variables and launches an existing `apps/desktop/src-tauri/target/{release,debug}/forge_desktop` binary when present. If the Tauri binary is missing, it exits non-zero with the build commands instead of pretending the shell launched.
 
 Container commands:
 

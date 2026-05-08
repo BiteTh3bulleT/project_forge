@@ -15,7 +15,7 @@ let
       cfg.package.pname or cfg.package.name or "forge-shell";
   execLine =
     if cfg.package == null then
-      "${pkgs.runtimeShell} -lc \"echo 'FORGE graphical shell package is not wired in Phase G1' >&2; exit 1\""
+      "${pkgs.runtimeShell} -lc \"echo 'FORGE graphical shell package is not wired; set forge.shellSession.package = pkgs.forge-shell-session' >&2; exit 1\""
     else
       "${cfg.package}/bin/forge-shell-session";
 in
@@ -30,13 +30,15 @@ in
     mode = lib.mkOption {
       type = lib.types.enum [ "fullscreen-shell" ];
       default = "fullscreen-shell";
-      description = "FORGE graphical shell launch mode. Phase G1 only scaffolds fullscreen-shell.";
+      description = "FORGE graphical shell launch mode. Phase G1/G2 only supports fullscreen-shell.";
     };
 
     package = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
-      default = null;
-      description = "Optional package providing the FORGE graphical shell binary. Null keeps the session descriptor as inert packaging scaffolding.";
+      default = if pkgs ? forge-shell-session then pkgs.forge-shell-session else null;
+      defaultText = lib.literalExpression "pkgs.forge-shell-session if available, otherwise null";
+      example = lib.literalExpression "pkgs.forge-shell-session";
+      description = "Optional package providing the FORGE graphical shell session wrapper. Null keeps the session descriptor as inert packaging scaffolding.";
     };
 
     user = lib.mkOption {
@@ -57,7 +59,7 @@ in
     autoStart = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "Reserved for a future phase. Phase G1 must not autostart or replace an existing desktop.";
+      description = "Reserved for a future phase. Phase G1/G2 must not autostart or replace an existing desktop.";
     };
 
     coreURL = lib.mkOption {
@@ -83,11 +85,15 @@ in
     assertions = [
       {
         assertion = cfg.mode == "fullscreen-shell";
-        message = "Phase G1 supports only forge.shellSession.mode = fullscreen-shell.";
+        message = "Phase G1/G2 supports only forge.shellSession.mode = fullscreen-shell.";
       }
       {
         assertion = cfg.autoStart == false;
-        message = "Phase G1 FORGE graphical shell session must not autostart or replace the user's desktop.";
+        message = "Phase G1/G2 FORGE graphical shell session must not autostart or replace the user's desktop.";
+      }
+      {
+        assertion = cfg.safeMode == true;
+        message = "Phase G2 FORGE graphical shell session must remain in safe mode.";
       }
     ];
 
@@ -102,6 +108,7 @@ in
       FORGE_SHELL_DISPLAY_BACKEND=${cfg.displayBackend}
       FORGE_CORE_URL=${cfg.coreURL}
       FORGE_SHELL_SAFE_MODE=${boolString cfg.safeMode}
+      FORGE_SHELL_FULLSCREEN=true
       FORGE_SHELL_AUTOSTART=false
       FORGE_SHELL_HOST_MUTATION=false
       FORGE_SHELL_DIRECT_SYSTEM_CONTROL=false

@@ -4,7 +4,7 @@ Phase N2 defines the first private host substrate foundation for FORGE-OS.
 
 FORGE is the AI-OS operating environment. Linux and NixOS remain the boot and hardware substrate. This phase does not fork Linux, does not migrate live authority, and does not give FORGE autonomous host mutation powers.
 
-Phase G1 extends this substrate model by defining FORGE as the graphical shell session for a FORGE-OS machine. This is not a web dashboard pointed at a headless server. It is the operator-facing desktop shell, launcher, workspace surface, command center, and system context surface running above the NixOS display/session layer.
+Phase G1 extends this substrate model by defining FORGE as the graphical shell session for a FORGE-OS machine. Phase G2 adds a manually launchable Nix wrapper for that shell session. This is not a web dashboard pointed at a headless server. It is the operator-facing desktop shell, launcher, workspace surface, command center, and system context surface running above the NixOS display/session layer.
 
 ## Stack
 
@@ -49,7 +49,7 @@ NixOS scaffolding creates these directories with conservative ownership. It does
 | Postgres/Qdrant/Redis | External for now | Container/local service bring-up remains outside this NixOS module phase |
 | modelruntime | Existing live path | No runtime behavior changes |
 | FORGE-K | Simulator/shadow only | No live authority migration |
-| FORGE graphical shell | G1 inert Nix/session scaffold | Intended shell session surface; no Go, route, host mutation, autostart, compositor, desktop replacement, or authority changes in G1 |
+| FORGE graphical shell | G2 launchable Nix wrapper | Intended shell session surface; manual wrapper around existing Tauri binary paths; no Go, route, host mutation, autostart, compositor, desktop replacement, or authority changes in G2 |
 | Host Kernel Bridge | Implemented library | Phase N3 read-only diagnostic snapshots; no startup wiring or public route |
 | FORGE-H Resource Policy | Implemented library | Phase N4 advisory-only policy snapshots from Host Kernel Bridge diagnostics |
 | FORGE-H Resource Proposals | Implemented library | Phase N5 request-approval records from resource policy snapshots; no execution or host mutation |
@@ -71,7 +71,7 @@ The FORGE graphical shell owns the visible operating surface for a FORGE-OS sess
 - model/runtime status
 - future Dream Mode review surface
 
-G1 defines this role and its safety boundaries. It adds an opt-in NixOS module for session metadata and runtime-directory scaffolding. It does not implement a compositor, change packaging, autostart, replace the user's desktop, change the live daemon, or turn FORGE-K into live authority.
+G1 defines this role and its safety boundaries. G2 adds `packages.forge-shell-session` and `apps.forge-shell-session` as a safe launcher around the existing Tauri desktop binary paths. It does not implement a compositor, package the full Tauri application derivation, autostart, replace the user's desktop, change the live daemon, or turn FORGE-K into live authority.
 
 The initial session mode is `fullscreen-shell`. Future modes may include `kiosk`, `compositor-integrated`, `remote-operator`, and `multi-monitor-shell`. Until those modes have explicit implementation and tests, they remain design candidates only.
 

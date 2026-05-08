@@ -362,3 +362,14 @@ This is a concise status read of FORGE-K phases against the current repository. 
 - `nix/nixos/modules/forge-shell-session.nix` adds disabled-by-default NixOS module scaffolding for `forge.shellSession.*`, safe environment metadata, runtime-directory preparation, and a placeholder desktop entry.
 - `flake.nix` exports `nixosModules.forge-shell-session`; `nix/nixos/modules/forge-os.nix` imports it without enabling it.
 - Phase G1 does not autostart FORGE, enable autologin, replace the user's desktop, add a compositor, run service control, rebuild NixOS, mutate host state, call modelruntime, write semantic memory, change routes/public APIs, or make FORGE-K live authority.
+
+## Phase G2 Validation
+
+- Phase G2 is recorded as `FORGE-OS GRAPHICAL SHELL LAUNCHER / MANUAL / SAFE-MODE`.
+- `nix/packages/forge-shell-session.nix` provides `/bin/forge-shell-session`.
+- `flake.nix` exposes `packages.forge-shell-session` and `apps.forge-shell-session` while preserving `forge-core` outputs.
+- The wrapper sets safe shell-session defaults, defaults `FORGE_CORE_URL` to `http://127.0.0.1:18492`, honors an operator override, and launches `FORGE_SHELL_BINARY` or the existing local Tauri `forge_desktop` binary paths when available.
+- If the Tauri binary is unavailable, the wrapper exits non-zero with exact build/run next steps. It does not silently no-op or claim success.
+- `nix/checks/forge-shell-session.nix` statically verifies wrapper existence, safe defaults, localhost core default, and absence of direct host/runtime mutation commands.
+- The NixOS shell-session module remains opt-in and disabled by default; `autoStart` remains false by default.
+- Phase G2 does not autostart FORGE, enable autologin, replace the user's desktop, add a compositor, run service control, rebuild NixOS, mutate host state, call modelruntime, write semantic memory, change routes/public APIs, or make FORGE-K live authority.

@@ -1,5 +1,5 @@
 {
-  description = "FORGE AI-OS — local-first governed cognitive operating substrate (Phase N1: light Nix foundation)";
+  description = "FORGE AI-OS — local-first governed cognitive operating substrate and FORGE-OS shell foundation";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -29,6 +29,7 @@
       {
         packages = {
           forge-core = pkgs.callPackage ./nix/packages/forge-core.nix { };
+          forge-shell-session = pkgs.callPackage ./nix/packages/forge-shell-session.nix { };
           default = self.packages.${system}.forge-core;
         };
 
@@ -36,6 +37,10 @@
           forge-core = {
             type = "app";
             program = "${self.packages.${system}.forge-core}/bin/core";
+          };
+          forge-shell-session = {
+            type = "app";
+            program = "${self.packages.${system}.forge-shell-session}/bin/forge-shell-session";
           };
           default = self.apps.${system}.forge-core;
         };
@@ -50,6 +55,9 @@
         checks = {
           go-tests = pkgs.callPackage ./nix/checks/go-tests.nix { };
           go-vet = pkgs.callPackage ./nix/checks/go-vet.nix { };
+          forge-shell-session = pkgs.callPackage ./nix/checks/forge-shell-session.nix {
+            forge-shell-session = self.packages.${system}.forge-shell-session;
+          };
           js-build = pkgs.callPackage ./nix/checks/js-build.nix { };
         };
 

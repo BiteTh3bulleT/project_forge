@@ -1,6 +1,6 @@
 # FORGE Graphical Shell
 
-Phase G1 defines FORGE as the graphical shell session for a NixOS-based FORGE-OS machine.
+Phase G1 defines FORGE as the graphical shell session for a NixOS-based FORGE-OS machine. Phase G2 adds a manually launchable Nix wrapper for that shell session.
 
 This is not a web dashboard controlling a headless server. FORGE is intended to become the visible operating interface: the desktop shell, launcher, workspace surface, command center, approval surface, and system context surface. NixOS remains the boot, hardware, graphics, service, and host configuration substrate.
 
@@ -18,20 +18,20 @@ This is not a web dashboard controlling a headless server. FORGE is intended to 
 
 FORGE is the graphical shell above NixOS. It is not the kernel, not the display server, not the package manager, and not a shortcut around existing FORGE authority boundaries.
 
-## G1 Scope
+## G1/G2 Scope
 
-G1 defines the shell session contract and an inert NixOS module foundation. It does not implement a compositor or replace the current desktop workflow.
+G1 defines the shell session contract and an inert NixOS module foundation. G2 adds a `forge-shell-session` package and flake app that set safe shell-session environment variables and launch an existing local Tauri `forge_desktop` binary when one is available.
 
-The only G1 launch mode is `fullscreen-shell`. Future modes may include:
+The only G1/G2 launch mode is `fullscreen-shell`. Future modes may include:
 
 - `kiosk`
 - `compositor-integrated`
 - `remote-operator`
 - `multi-monitor-shell`
 
-Those modes are not implemented or promised by G1.
+Those modes are not implemented or promised by G1/G2.
 
-G1 does not:
+G1/G2 does not:
 
 - edit Go services
 - replace the user's desktop
@@ -61,13 +61,20 @@ The FORGE graphical shell owns the visible operating surface for a FORGE-OS sess
 - model/runtime status
 - future Dream Mode review surface
 
-G1 does not need to implement all of these. It defines the contract that future work must respect.
+G1/G2 does not need to implement all of these. It defines the contract that future work must respect and provides the first manual launcher.
 
 ## Existing Desktop App Mapping
 
 The repository already has a desktop/Tauri development path documented through root npm scripts such as `npm run desktop`, `npm run dev`, and `npm -w @forge/desktop run build`.
 
-G1 treats that existing desktop shell as the current candidate shell binary/package. Future session scaffolding may launch the existing shell package when packaging is complete. If packaging is incomplete, future NixOS work must use TODO-safe placeholders and explicit operator instructions rather than pretending a production shell package exists.
+G2 identifies the current shell implementation as:
+
+- `apps/desktop`, workspace package `@forge/desktop`
+- `apps/desktop/src-tauri`, Rust package `forge_desktop`
+- `apps/desktop/src-tauri/tauri.conf.json`
+- binary paths `apps/desktop/src-tauri/target/release/forge_desktop` and `apps/desktop/src-tauri/target/debug/forge_desktop`
+
+The Nix package in G2 is a wrapper around those existing binary paths. It does not yet build the Tauri application inside Nix. If the binary is unavailable, it fails loudly with exact build/run instructions.
 
 ## Shell-To-Core Boundary
 
@@ -136,9 +143,11 @@ Rollback expectations:
 - keep `forge-core` usable through existing workflows
 - restart the display manager or reboot only when the operator chooses
 
-## Session Scaffolding Shape
+## Session Scaffolding And Launcher Shape
 
-G1 adds an inert, opt-in NixOS module at `nix/nixos/modules/forge-shell-session.nix`. It prepares:
+G1 adds an inert, opt-in NixOS module at `nix/nixos/modules/forge-shell-session.nix`. G2 adds `nix/packages/forge-shell-session.nix` and exposes `packages.forge-shell-session` plus `apps.forge-shell-session`.
+
+The module prepares:
 
 - a session descriptor
 - environment variables such as `FORGE_CORE_URL`
@@ -146,7 +155,16 @@ G1 adds an inert, opt-in NixOS module at `nix/nixos/modules/forge-shell-session.
 - runtime directory for shell session state
 - safe local core URL wiring
 
-It does not add a systemd user service, autologin, compositor dependency, display-manager replacement, or automatic launch path. Compositor choices remain future implementation decisions. Candidate paths include Wayland with cage, Wayland with sway, Wayland with Hyprland, or an X11 fallback if required. G1 does not claim any compositor path is implemented.
+The wrapper prepares:
+
+- `FORGE_SHELL_SESSION_ENABLED=true`
+- `FORGE_SHELL_MODE=fullscreen-shell`
+- `FORGE_CORE_URL=http://127.0.0.1:18492` unless overridden
+- `FORGE_SHELL_SAFE_MODE=true`
+- `FORGE_SHELL_FULLSCREEN=true`
+- explicit false flags for host mutation, direct system control, model mutation, semantic memory writes, and FORGE-K live authority
+
+It does not add a systemd user service, autologin, compositor dependency, display-manager replacement, or automatic launch path. Compositor choices remain future implementation decisions. Candidate paths include Wayland with cage, Wayland with sway, Wayland with Hyprland, or an X11 fallback if required. G2 does not claim any compositor path is implemented.
 
 ## Authority Non-Changes
 

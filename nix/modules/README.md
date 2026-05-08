@@ -20,7 +20,8 @@ configuration.
 
 ## Boundaries
 
-Phase N2/G1 modules are scaffolding only. They do not migrate live
-authority, add public routes, alter modelruntime behavior, wire FORGE-K
-into live authority, replace the desktop, autostart the graphical shell,
-or add autonomous host mutation.
+Phase N2/G1/G2 modules and packages are scaffolding/launcher surfaces
+only. They do not migrate live authority, add public routes, alter
+modelruntime behavior, wire FORGE-K into live authority, replace the
+desktop, autostart the graphical shell, install a compositor, or add
+autonomous host mutation.

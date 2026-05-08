@@ -1,0 +1,249 @@
+# FORGE Phase G2 — Launchable Graphical Shell Package
+
+You are working in the `project_forge` repository.
+
+Phase G1 is complete. It added the FORGE graphical shell session foundation:
+- `nix/nixos/modules/forge-shell-session.nix`
+- `nixosModules.forge-shell-session`
+- ADR/docs for FORGE as the graphical shell
+- safe environment/session scaffolding
+- disabled-by-default behavior
+- placeholder desktop entry when no package is wired
+
+Now implement Phase G2: make the FORGE graphical shell session launchable through a real Nix package/wrapper.
+
+G2 should turn the G1 shell contract into a manually launchable shell command without replacing the user’s desktop, enabling autologin, installing a compositor, or mutating the host.
+
+## Goal
+
+Create a launchable `forge-shell-session` package/app that starts the existing FORGE desktop/shell UI in safe fullscreen shell mode and connects it to local `forge-core`.
+
+The intended manual flow:
+
+```text
+nix run .#forge-shell-session
+
+or, once imported into NixOS:
+
+forge-shell-session
+
+The shell should launch as FORGE’s graphical operator interface, not as a random web dashboard.
+
+Doctrine To Preserve
+FORGE is the graphical shell interface.
+NixOS/Linux remains the substrate.
+G2 must not replace the desktop.
+G2 must not enable autologin.
+G2 must not require KDE/GNOME.
+G2 must not implement a custom compositor.
+G2 must not mutate host state.
+G2 must not run systemd control commands.
+G2 must not run nixos-rebuild.
+G2 must not load/unload models.
+G2 must not write semantic memory directly.
+G2 must not bypass gateway, permissions, lanes, audit, controllane, memory, modelruntime, FORGE-H, or FORGE-K authority.
+Build Scope
+
+Add or update:
+
+nix/packages/forge-shell-session.nix
+flake.nix
+nix/overlays/default.nix if needed
+nix/nixos/modules/forge-shell-session.nix
+docs/operations/forge_graphical_shell_session.md
+docs/architecture/forge_graphical_shell.md
+
+Expose:
+
+packages.forge-shell-session
+apps.forge-shell-session
+
+Do not remove existing packages/apps.
+
+Existing Desktop Shell Discovery
+
+First, identify the current FORGE desktop/shell implementation.
+
+Look for:
+
+workspace/package names
+Tauri desktop entrypoint
+package scripts
+build output names
+root npm run desktop
+root npm run dev
+npm -w @forge/desktop run build
+any desktop/, apps/desktop, src-tauri, or related shell app paths
+
+Document what was found in docs/operations/forge_graphical_shell_session.md.
+
+If the desktop app can be launched safely from a wrapper, wire it.
+
+If the desktop app cannot yet be packaged reliably, create a wrapper that fails clearly with exact next steps. Do not fake success.
+
+Wrapper Behavior
+
+The forge-shell-session command must:
+
+Set safe environment variables.
+Point to local forge-core.
+Launch the existing FORGE graphical shell if available.
+Prefer fullscreen/shell mode where supported.
+Fail clearly if the shell binary/build output is unavailable.
+Never run host mutation commands.
+
+Required environment:
+
+FORGE_SHELL_SESSION_ENABLED=true
+FORGE_SHELL_MODE=fullscreen-shell
+FORGE_CORE_URL=http://127.0.0.1:18492
+FORGE_SHELL_SAFE_MODE=true
+FORGE_SHELL_FULLSCREEN=true
+FORGE_SHELL_HOST_MUTATION=false
+FORGE_SHELL_DIRECT_SYSTEM_CONTROL=false
+FORGE_SHELL_MODEL_MUTATION=false
+FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false
+FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false
+
+Allow FORGE_CORE_URL override through the environment, but default to:
+
+http://127.0.0.1:18492
+Nix Package
+
+Create nix/packages/forge-shell-session.nix.
+
+It should provide:
+
+/bin/forge-shell-session
+
+The package may be a wrapper around the existing desktop app if packaging is already possible.
+
+If packaging is not yet possible, the wrapper should:
+
+print a clear message
+mention the missing desktop package/binary
+point to the documented build command
+exit non-zero
+preserve all safe env defaults
+
+Do not create a silent no-op.
+
+Flake Updates
+
+Update flake.nix to expose:
+
+packages.forge-shell-session
+apps.forge-shell-session
+
+Keep:
+
+packages.forge-core
+apps.forge-core
+
+Do not break existing devShells or checks.
+
+Also update the stale flake description so it no longer says only “Phase N1.” Use language that reflects Nix substrate + FORGE-OS shell work.
+
+NixOS Module Update
+
+Update nix/nixos/modules/forge-shell-session.nix.
+
+Change the default package from null only if safe and buildable.
+
+Preferred:
+
+module option still allows package = null
+but when forge.os or package set provides forge-shell-session, use it as a documented example
+keep module disabled by default
+keep autoStart = false
+keep safe mode true
+keep host mutation false
+keep direct system control false
+
+Do not make the module autostart.
+
+Manual Launch Documentation
+
+Update docs/operations/forge_graphical_shell_session.md.
+
+Include:
+
+how to build the shell package
+how to run it manually
+how to set FORGE_CORE_URL
+how to verify it is in safe mode
+expected failure if desktop shell is not packaged
+rollback/fallback instructions
+known limitations
+
+Include commands such as:
+
+nix build .#forge-shell-session
+nix run .#forge-shell-session
+
+Only include commands that actually match the repo implementation.
+
+Tests / Checks
+
+Add checks where practical.
+
+Required static/unit checks:
+
+packages.forge-shell-session exists.
+apps.forge-shell-session exists.
+wrapper contains safe env defaults.
+wrapper defaults FORGE_CORE_URL to localhost.
+wrapper does not contain direct systemctl.
+wrapper does not contain nixos-rebuild.
+wrapper does not contain modprobe or rmmod.
+wrapper does not contain reboot/shutdown.
+wrapper does not contain package manager install/upgrade/remove.
+wrapper does not contain modelruntime load/unload/spawn calls.
+wrapper does not contain direct semantic memory write calls.
+shell session module remains disabled by default.
+autoStart remains false by default.
+existing tests still pass.
+
+If there is an existing Nix check structure, add a lightweight check for the wrapper.
+
+Acceptance Criteria
+nix/packages/forge-shell-session.nix exists.
+flake.nix exposes packages.forge-shell-session.
+flake.nix exposes apps.forge-shell-session.
+forge-shell-session command exists in the package output.
+The command sets safe FORGE shell environment variables.
+The command either launches the actual existing FORGE desktop shell or fails loudly with exact next steps.
+forge-shell-session.nix module remains opt-in and disabled by default.
+No autologin is enabled.
+No desktop replacement is enabled.
+No compositor is required or installed in G2.
+No host mutation is introduced.
+No service control is introduced.
+No NixOS rebuild behavior is introduced.
+No kernel/module behavior is introduced.
+No modelruntime load/unload behavior is introduced.
+No direct semantic memory writes are introduced.
+No live FORGE-K authority migration occurs.
+Existing tests pass.
+WHAT NOT TO DO
+Do not build a web dashboard and call it the shell.
+Do not make this remote-only.
+Do not replace the user’s desktop.
+Do not enable autologin.
+Do not require KDE.
+Do not require GNOME.
+Do not install or require a compositor in G2.
+Do not implement a custom compositor.
+Do not run systemctl start/stop/restart.
+Do not run nixos-rebuild.
+Do not load or unload kernel modules.
+Do not reboot or shut down the machine.
+Do not install, remove, or upgrade packages.
+Do not delete files or clean directories.
+Do not load or unload models.
+Do not spawn model runtimes.
+Do not write directly to semantic memory.
+Do not add public unauthenticated routes.
+Do not bypass gateway, permissions, lanes, audit, controllane, memory, modelruntime, FORGE-H, or FORGE-K authority.
+Do not pretend the shell package works if it only has a placeholder.
+Do not output code in chat; make repository changes only.
