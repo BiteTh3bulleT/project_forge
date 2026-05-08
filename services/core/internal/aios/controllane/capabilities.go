@@ -28,6 +28,7 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 		CapMemorySupersessionMark,
 		CapModelDerive,
 		CapContextCompile,
+		CapKVIdentityValidate,
 	)
 	return &StaticCapabilityService{
 		sourceCapabilities: map[domain.ActionSource]map[string]struct{}{
@@ -45,11 +46,13 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 				CapMemorySupersessionMark,
 				CapModelDerive,
 				CapContextCompile,
+				CapKVIdentityValidate,
 			),
 			domain.SourceAdapter: setOf(
 				CapMemoryNoteCreate,
 				CapMemoryLinkCreate,
 				CapContextCompile,
+				CapKVIdentityValidate,
 			),
 			domain.SourceFutureIRIS: setOf(
 				CapMemoryNoteCreate,

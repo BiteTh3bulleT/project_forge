@@ -1,5 +1,7 @@
 # Autonomy Layer (Phase 5.75)
 
+Status: `[LIVE] / [PARTIAL]`. The autonomy package exists in the live AI-OS path for bounded intent, policy, budget, and kernel-mediated syscall execution. It is not unrestricted self-modification: durable changes still require Control Lane validation, audit, and configured authority.
+
 Phase 5.75 adds bounded FORGE initiative without bypassing kernel controls.
 
 Core rule:

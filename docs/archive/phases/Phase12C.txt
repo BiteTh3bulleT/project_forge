@@ -1,0 +1,332 @@
+You are working in the FORGE repository.
+
+Implement Phase 12C: Shadow Diagnostics Review and Hardening.
+
+Scope: LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY.
+
+Do not add new live touchpoints.
+Do not observe all routes.
+Do not add public diagnostics APIs.
+Do not add routes.
+Do not change public APIs.
+Do not change response bodies.
+Do not change response headers.
+Do not change status codes.
+Do not execute tools.
+Do not call modelruntime from FORGE-K.
+Do not call retrieval/search/embedding providers from FORGE-K.
+Do not implement live RAG.
+Do not write memory.
+Do not execute controllane semantic mutations from FORGE-K.
+Do not alter gateway, permissions, lanes, audit, modelruntime, retrieval, memory, search, embeddings, API, or controllane behavior.
+Do not create a second authority path.
+Do not make FORGE-K live authority.
+
+Purpose:
+
+Phase 12B implemented the first disabled-by-default, read-only, diagnostic-only shadow observer for `/health` request metadata.
+
+Phase 12C hardens that implementation before any wider live observation.
+
+The goal is to review and strengthen:
+
+- disabled-by-default behavior
+- `/health` no-effect guarantees
+- diagnostic sink behavior
+- redaction/secret rejection
+- bounded retention
+- failure isolation
+- no-effect tests
+- documentation accuracy
+- readiness for a future Phase 12D or 12B expansion decision
+
+This phase must not expand shadow mode beyond the existing `/health` metadata observer.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/architecture/forge_k_live_integration_design.md
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/architecture/phase_12b_adapter_interfaces.md
+- docs/architecture/shadow_mode.md
+- docs/architecture/shadow_mode_harness.md
+- docs/testing/phase_12b_shadow_harness_tests.md
+- docs/reviews/phase_12a_live_integration_readiness.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- services/core/internal/forgekshadow/...
+- services/core/internal/forgek/shadowharness/...
+- services/core/internal/api/server.go
+- services/core/internal/api/routes.go
+- services/core/internal/api/server_route_inventory_test.go
+- services/core/internal/config/...
+
+Hard stop conditions:
+
+If `go test ./internal/forgek/...` does not pass before changes, stop.
+
+If `go test ./internal/forgekshadow/...` does not pass before changes, stop.
+
+If the route inventory tests fail before changes, stop.
+
+If Phase 12B status is not recorded as implemented/tested, stop.
+
+Core doctrine:
+
+- Shadow mode observes and reports only.
+- Shadow diagnostics are non-authoritative.
+- Shadow diagnostics must not affect live response behavior.
+- Shadow diagnostics must not mutate live state.
+- Shadow diagnostics must not execute tools.
+- Shadow diagnostics must not call modelruntime.
+- Shadow diagnostics must not perform retrieval/search/embedding calls.
+- Shadow diagnostics must not write memory.
+- Shadow diagnostics must not call controllane mutations.
+- Shadow diagnostics must not create a second authority path.
+- `/health` remains the only live touchpoint in this phase.
+- `FORGE_K_SHADOW_MODE_ENABLED` remains disabled by default.
+
+Deliverables:
+
+1. Review current Phase 12B implementation.
+
+Inspect:
+
+- config flag parsing
+- `forgekshadow` observer
+- in-memory sink
+- redaction logic
+- no-effect policy logic
+- `/health` integration point
+- tests
+- docs
+
+Create or update:
+
+- docs/reviews/phase_12c_shadow_diagnostics_review.md
+
+Include:
+
+- implementation summary
+- current touchpoint
+- no-effect guarantees
+- risk review
+- test coverage review
+- gaps found
+- hardening actions completed
+- remaining deferred work
+- recommendation for next phase
+
+2. Harden disabled-by-default behavior.
+
+Tests must prove:
+
+- unset env/config disables shadow mode
+- invalid env/config does not enable shadow mode unless existing config rules require otherwise
+- disabled mode calls no observer
+- disabled mode stores no reports
+- disabled mode leaves `/health` status/body/headers unchanged
+
+3. Harden enabled behavior.
+
+Tests must prove:
+
+- enabled mode stores only diagnostic metadata
+- enabled mode observes `/health` only
+- enabled mode does not capture request body
+- enabled mode does not capture response body
+- enabled mode does not change `/health` status/body/headers
+- enabled mode does not change route inventory
+- enabled mode failure does not fail `/health`
+
+4. Harden diagnostic sink.
+
+Ensure:
+
+- bounded retention is deterministic
+- oldest report is dropped on overflow
+- sink can be disabled
+- sink stores no secrets
+- sink stores no large raw content blobs
+- sink failure is isolated from live requests
+- reports are clearly non-authoritative
+
+Tests:
+
+- bounded retention
+- drop oldest
+- no report when disabled
+- no panic on sink error
+- no live behavior change on sink error
+
+5. Harden redaction and metadata safety.
+
+Improve or test secret-looking key/value rejection for:
+
+- api_key
+- secret
+- token
+- password
+- private_key
+- bearer
+- plaintext
+- credential
+- authorization
+- cookie
+- session
+
+Rules:
+
+- unsafe metadata should be dropped or reject the report
+- live request must continue unaffected
+- no unsafe metadata stored in diagnostics
+
+6. Harden no-effect validator.
+
+Tests must prove rejection when any forbidden side-effect flag is enabled:
+
+- live mutation
+- tool execution
+- modelruntime call
+- retrieval execution
+- embedding call
+- memory write
+- user-visible output
+- public API change
+- controllane mutation, if represented
+
+7. Add internal diagnostic introspection only if already present.
+
+Do not add public API routes.
+
+If useful, add package-level test helpers or internal-only methods to inspect sink state.
+
+Do not expose diagnostics over HTTP in this phase.
+
+8. Add regression tests for route/API stability.
+
+Use existing route inventory tests.
+
+Required:
+
+- route inventory unchanged
+- `/health` response unchanged with flag disabled
+- `/health` response unchanged with flag enabled
+- no new route for diagnostics
+- no public response shape changes
+
+9. Add forbidden import tests.
+
+Ensure:
+
+- `services/core/internal/forgek/...` does not import live daemon packages
+- `services/core/internal/forgekshadow` does not import gateway/modelruntime/retrieval/search/embeddings/memory/controllane unless strictly test-only and no live call path
+- `forgekshadow` may import `forgek/shadowharness`
+
+Forbidden production imports for `forgekshadow`:
+
+- internal/gateway
+- internal/modelruntime
+- internal/retrieval
+- internal/search
+- internal/embeddings
+- internal/memory
+- internal/aios/controllane
+
+10. Update docs.
+
+Update:
+
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/architecture/forge_k_live_integration_design.md
+- docs/architecture/shadow_mode.md
+- docs/testing/phase_12b_shadow_harness_tests.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- README.md if useful
+
+Add Phase 12C notes:
+
+- shadow diagnostics hardened
+- `/health` remains the only touchpoint
+- no public diagnostics route exists
+- no user-visible behavior changed
+- no live authority changed
+- next expansion requires separate approval
+
+11. Run validation.
+
+Run:
+
+cd services/core && go test ./internal/forgek/...
+
+cd services/core && go test ./internal/forgekshadow/...
+
+cd services/core && go test ./internal/api -run "TestServerRouteInventory|TestServerRouteInventoryHealthAndMiddlewareSmoke" -count=1
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+npm run test:forgek:parity
+git diff --check
+
+Document exact results.
+
+Acceptance criteria:
+
+- Phase 12C review doc exists
+- disabled-by-default tests pass
+- enabled no-effect tests pass
+- sink retention tests pass
+- sink failure isolation tests pass
+- redaction/secret rejection tests pass
+- no-effect validator tests pass
+- route inventory unchanged
+- `/health` response unchanged
+- no public diagnostics API added
+- no new live touchpoints added
+- no tool execution
+- no modelruntime calls
+- no retrieval/search/embedding calls
+- no memory writes
+- no controllane mutations
+- docs updated
+- validation commands pass
+
+WHAT NOT TO DO:
+
+- Do not expand shadow mode beyond `/health`.
+- Do not add public diagnostics endpoints.
+- Do not persist reports to DB.
+- Do not capture request bodies.
+- Do not capture response bodies.
+- Do not call modelruntime.
+- Do not execute tools.
+- Do not query retrieval/search/embeddings.
+- Do not write memory.
+- Do not call controllane mutations.
+- Do not alter user-visible output.
+- Do not change route behavior.
+- Do not make FORGE-K live authority.
+- Do not create a second Kernel.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code/docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- Phase 12C review summary
+- hardening actions completed
+- disabled/enabled behavior
+- sink behavior
+- redaction behavior
+- no-effect validation
+- route/API stability results
+- commands run
+- test results
+- whether any live behavior changed
+- recommended next phase

@@ -232,6 +232,7 @@ const (
 	ActionDeriveModel        SemanticActionType = "DERIVE_MODEL"
 	ActionArchiveNote        SemanticActionType = "ARCHIVE_NOTE"
 	ActionCompileContext     SemanticActionType = "COMPILE_CONTEXT"
+	ActionValidateKVIdentity SemanticActionType = "VALIDATE_KV_IDENTITY"
 )
 
 type SyscallRequest struct {

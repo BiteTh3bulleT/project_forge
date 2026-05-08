@@ -1,0 +1,434 @@
+You are working in the FORGE repository.
+
+Implement Phase 12M-Q: FORGE-K Shadow Advisory Pipeline.
+
+Scope: LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / ADVISORY_DIAGNOSTIC_ONLY.
+
+This phase wraps Phase 12 by connecting existing shadow observations to a FORGE-K advisory diagnostic pipeline.
+
+Do not make FORGE-K live authority.
+Do not change user-visible responses.
+Do not alter route behavior.
+Do not add public diagnostics APIs.
+Do not add routes.
+Do not execute tools.
+Do not call modelruntime from FORGE-K.
+Do not execute retrieval/search/embedding calls from FORGE-K.
+Do not implement live RAG.
+Do not write memory.
+Do not execute controllane semantic mutations from FORGE-K.
+Do not modify gateway, permissions, lanes, audit, modelruntime, retrieval, search, embeddings, memory, API, or controllane behavior.
+Do not capture request bodies.
+Do not capture response bodies.
+Do not capture prompts.
+Do not capture completions.
+Do not capture source/chunk text.
+Do not capture embeddings/vectors.
+Do not capture tool payloads.
+Do not capture memory content.
+Do not create a second authority path.
+
+Purpose:
+
+Phase 12B introduced disabled-by-default `/health` shadow metadata.
+Phase 12E introduced route-envelope metadata.
+Phase 12H introduced chat metadata.
+Phase 12K-L introduced retrieval metadata.
+
+All are read-only, disabled-by-default, metadata-only, diagnostic-only, and non-authoritative.
+
+Phase 12M-Q creates the first FORGE-K shadow advisory pipeline using those existing diagnostic inputs.
+
+FORGE-K may now produce internal advisory reports such as:
+
+- what claims it would accept/reject
+- what evidence refs appear safe or stale
+- what context bundle shape it would compile
+- what it would exclude
+- what risks or missing evidence it sees
+
+But it must not affect live output.
+
+Core rule:
+
+FORGE-K may advise.
+FORGE-K may not decide.
+FORGE-K may not mutate.
+FORGE-K may not respond to the user.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/architecture/forge_k_live_integration_design.md
+- docs/architecture/shadow_mode.md
+- docs/architecture/shadow_mode_harness.md
+- docs/architecture/context_compiler_and_kv_cache.md
+- docs/architecture/consensus_mesh.md
+- docs/architecture/memory_taxonomy.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- services/core/internal/forgek/consensus/...
+- services/core/internal/forgek/contextcompiler/...
+- services/core/internal/forgek/shadowharness/...
+- services/core/internal/forgekshadow/...
+- services/core/internal/api/server.go
+- services/core/internal/api/routes.go
+- services/core/internal/api/server_route_inventory_test.go
+- services/core/internal/config/...
+
+Hard stop conditions:
+
+If `go test ./internal/forgek/...` does not pass before changes, stop.
+
+If `go test ./internal/forgekshadow/...` does not pass before changes, stop.
+
+If route inventory tests fail before changes, stop.
+
+If API tests fail before changes, document and stop unless clearly unrelated.
+
+If Phase 12K-L is not recorded as implemented/tested, stop.
+
+Feature flags:
+
+Keep existing flags:
+
+- FORGE_K_SHADOW_MODE_ENABLED=false
+- FORGE_K_SHADOW_CHAT_METADATA_ENABLED=false
+- FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED=false
+
+Add a new disabled-by-default advisory flag:
+
+- FORGE_K_SHADOW_ADVISORY_ENABLED=false
+
+Rules:
+
+- advisory requires global shadow flag true
+- advisory flag false means no advisory reports
+- advisory must not enable chat/retrieval observers by itself
+- advisory consumes whatever safe shadow reports already exist
+- advisory never causes new live retrieval/model/tool/memory calls
+- advisory never affects live response
+
+Deliverables:
+
+1. Add advisory config.
+
+Add disabled-by-default config support for:
+
+- FORGE_K_SHADOW_ADVISORY_ENABLED
+
+Suggested config field:
+
+- ForgeKShadowAdvisoryEnabled bool
+
+Tests:
+
+- default false
+- global false + advisory true means no advisory report
+- global true + advisory false means no advisory report
+- global true + advisory true allows advisory report generation
+- advisory does not force-enable chat or retrieval metadata
+
+2. Extend `forgekshadow` with advisory models.
+
+Add models such as:
+
+- ShadowAdvisoryReport
+- ShadowEvidenceSummary
+- ShadowConsensusAdvisory
+- ShadowContextCompilerAdvisory
+- ShadowRiskSummary
+
+Fields should include refs/counts/classes/summaries only.
+
+Example ShadowAdvisoryReport fields:
+
+- report_id
+- generated_at
+- workspace_id, optional
+- request_id, optional
+- correlation_id, optional
+- source_shadow_report_refs
+- route_metadata_refs
+- chat_metadata_refs
+- retrieval_metadata_refs
+- evidence_summary
+- consensus_advisory
+- context_compiler_advisory
+- risk_summary
+- warnings
+- no_effect_verified
+- metadata
+
+Rules:
+
+- diagnostic only
+- no canonical truth
+- no live response influence
+- no raw content
+- no prompts/completions
+- no source/chunk text
+- no embeddings/vectors
+- no memory content
+- deterministic serialization
+- metadata redaction enforced
+
+3. Add advisory pipeline.
+
+Add a service/helper such as:
+
+- ShadowAdvisoryService
+- BuildShadowAdvisory(input)
+
+It may consume only existing in-memory diagnostic reports from:
+
+- `/health`
+- route-envelope metadata
+- chat metadata
+- retrieval metadata
+
+It may use FORGE-K simulator types only in read-only/diagnostic mode:
+
+- Consensus Mesh for claim/evidence advisory shape
+- Context Compiler for dry-run ContextBundle shape, if safe inputs exist
+- ShadowHarness no-effect validator
+
+It must not:
+
+- call live retrieval
+- call live modelruntime
+- call gateway
+- write memory
+- call controllane
+- alter live response
+- emit public output
+
+4. Add Context Compiler shadow dry run.
+
+Add diagnostic-only context compiler advisory.
+
+It should:
+
+- build a ContextCompileRequest from safe refs/metadata only
+- create a shadow ContextBundle or shadow context summary only if safe
+- include bundle hash / block counts / cache eligibility summary
+- not compile from raw content
+- not include message bodies
+- not include prompts
+- not include retrieval source text
+- not become live context
+- not call modelruntime
+
+If safe inputs are insufficient, produce a warning instead of compiling.
+
+5. Add Consensus Mesh advisory.
+
+Add diagnostic-only consensus advisory.
+
+It should:
+
+- summarize possible evidence refs and risk flags
+- optionally create proposed claims only from metadata if safe
+- reject unsupported factual claims
+- mark insufficient evidence as uncertain
+- never write memory
+- never admit evidence
+- never produce final response text
+- never influence live response
+
+If no safe claims can be made from metadata, produce a “metadata-only / no factual claims” advisory.
+
+6. Add bounded advisory sink support.
+
+Use existing in-memory diagnostic sink.
+
+Rules:
+
+- bounded retention
+- no persistence
+- no public API
+- advisory report failure isolated
+- no live request failure
+- no raw content stored
+- secret-looking metadata rejected
+
+Tests:
+
+- advisory reports stored only when enabled
+- sink remains bounded
+- sink failure does not affect live request
+- unsafe advisory metadata rejected
+- no raw content stored
+
+7. Add tests.
+
+Required tests:
+
+Feature flags:
+- advisory default disabled
+- global false + advisory true = no advisory
+- global true + advisory false = no advisory
+- global true + advisory true = advisory allowed
+- advisory does not force-enable chat/retrieval flags
+
+No-effect:
+- advisory does not change response status/body/header
+- advisory does not change route inventory
+- advisory does not call modelruntime
+- advisory does not execute retrieval/search/embedding
+- advisory does not execute tools
+- advisory does not write memory
+- advisory does not call controllane mutation
+- advisory failure does not fail live request
+
+Context Compiler shadow:
+- safe metadata can produce diagnostic context summary or bundle
+- insufficient safe metadata produces warning, not failure
+- no request/response body used
+- no prompt/completion/source text used
+- no live Context Compiler replacement
+- no live modelruntime call
+
+Consensus advisory:
+- metadata-only input does not create unsupported factual truth
+- unsupported claims become uncertain/rejected
+- advisory report is not canonical truth
+- no memory update occurs
+- no action execution occurs
+
+Content safety:
+- prompt-like fields rejected
+- completion-like fields rejected
+- body/content/source/chunk/vector/memory fields rejected
+- secrets rejected
+- oversized metadata rejected
+
+Regression:
+- `/health` behavior unchanged
+- route-envelope behavior unchanged
+- chat metadata behavior unchanged
+- retrieval metadata behavior unchanged
+- no public diagnostics route exists
+- route inventory unchanged
+- SSE behavior unchanged
+- timeout behavior unchanged
+
+8. Keep forbidden imports.
+
+Ensure:
+
+- `services/core/internal/forgek/...` does not import live daemon packages
+- `services/core/internal/forgekshadow` does not import gateway/modelruntime/retrieval/search/embeddings/memory/controllane in production code except through already-approved metadata-only boundaries
+- no executable call paths to forbidden systems are introduced
+
+9. Update docs.
+
+Create:
+
+- docs/reviews/phase_12mq_shadow_advisory_pipeline.md
+
+Update:
+
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- README.md
+- docs/architecture/shadow_mode.md
+- docs/architecture/shadow_mode_harness.md
+- docs/architecture/context_compiler_and_kv_cache.md
+- docs/architecture/consensus_mesh.md
+- docs/architecture/forge_k_live_integration_design.md
+
+Add Phase 12M-Q notes:
+
+- advisory pipeline implemented
+- disabled by default
+- diagnostic only
+- no live response influence
+- no raw content capture
+- Context Compiler shadow dry-run only
+- Consensus Mesh advisory only
+- live daemon remains authority
+
+10. Run validation.
+
+Run:
+
+cd services/core && go test ./internal/forgek/...
+
+cd services/core && go test ./internal/forgekshadow/...
+
+cd services/core && go test ./internal/api -run "TestServerRouteInventory|TestServerRouteInventoryHealthAndMiddlewareSmoke" -count=1
+
+Run broader API tests:
+
+cd services/core && go test ./internal/api -count=1
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+npm run test:forgek:parity
+git diff --check
+
+Document exact results.
+
+Acceptance criteria:
+
+- advisory flag exists and defaults disabled
+- advisory requires global shadow flag
+- advisory does not force-enable chat/retrieval flags
+- advisory reports are diagnostic only
+- Context Compiler shadow dry-run exists or safely warns when insufficient metadata exists
+- Consensus Mesh advisory exists or safely warns when insufficient metadata exists
+- no raw content captured
+- no prompt/completion/source/chunk/vector/memory content captured
+- no live response influence
+- no public diagnostics API
+- no persistent reports
+- no route inventory change
+- no modelruntime call
+- no retrieval/search/embedding execution
+- no tool execution
+- no memory write
+- no controllane mutation
+- existing shadow observers unchanged
+- docs updated
+- validation commands pass
+
+WHAT NOT TO DO:
+
+- Do not make advisory output visible to users.
+- Do not change live response composition.
+- Do not replace live context compiler.
+- Do not execute live retrieval/search/embeddings.
+- Do not call live modelruntime.
+- Do not execute tools.
+- Do not write memory.
+- Do not call controllane mutations.
+- Do not capture raw content.
+- Do not add public diagnostics endpoints.
+- Do not persist reports to DB.
+- Do not make FORGE-K live authority.
+- Do not create a second Kernel.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code/docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- advisory pipeline summary
+- Context Compiler shadow behavior
+- Consensus Mesh advisory behavior
+- selected metadata consumed
+- metadata explicitly not consumed
+- flag behavior
+- sink behavior
+- no-effect validation
+- route/API/chat/retrieval stability results
+- commands run
+- test results
+- whether any live behavior changed
+- recommended Phase 12 closeout or Phase 13 entry

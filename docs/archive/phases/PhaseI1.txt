@@ -1,0 +1,319 @@
+# FORGE Reality Alignment + Live Integration Phase
+
+You are working inside the FORGE repository.
+
+Your job is not to add new doctrine, new simulator phases, or new architecture dreams.
+
+Your job is to make the existing project more honest, more wired, more testable, and more production-shaped.
+
+## Mission
+
+FORGE has strong architecture, but current review found a gap between:
+
+- doctrine/docs
+- simulator-only systems
+- live daemon integration
+- live test coverage
+- CI enforcement
+- repo hygiene
+
+This pass must focus on making the live system catch up to the architecture.
+
+## Hard Rules
+
+- Do not introduce new architectural phases.
+- Do not add new simulator-only subsystems.
+- Do not weaken existing safety fences.
+- Do not bypass the control lane commit gate.
+- Do not allow simulator packages to import live daemon packages.
+- Do not make FORGE-H mutable.
+- Do not convert propose-only agents into commit-capable agents unless the existing semantic syscall/control-lane approval path is used.
+- Do not remove doctrine; label it accurately.
+- Do not hide failing integration tests behind silent skips unless explicitly documented and CI has a required integration mode.
+- Keep deterministic behavior intact.
+
+## Current Review Findings To Address
+
+The audit found:
+
+1. `aios/controllane` and `gateway` are under-tested relative to their importance.
+   - `aios/controllane`: approximately 51 test funcs / 465 source funcs.
+   - `gateway`: approximately 73 test funcs / 589 source funcs.
+   - These are live load-bearing systems and need higher coverage.
+
+2. Simulator systems are better tested than live daemon systems.
+   - This is backwards.
+   - The live daemon path needs acceptance tests.
+
+3. FORGE-K / FORGE-H / runtime / KV / lymphatic systems are often described as if live, but are simulator-only in many places.
+   - This must be clearly marked.
+
+4. `AGENTS.md`, `CODEX.md`, `autonomy_layer.md`, and `rule_based_agents.md` may overstate current live status.
+   - Rewrite unclear present-tense claims.
+   - Mark claims as `[LIVE]`, `[SIMULATOR-ONLY]`, or `[FUTURE]`.
+
+5. There are many untracked `Phase*.txt` files in repo root.
+   - Move them to an appropriate docs/archive/planning location or add a clear ignore/archive policy.
+   - Do not leave repo root polluted.
+
+6. Gateway smoke test is slow.
+   - Identify the slow test.
+   - Split/tag it so normal inner-loop test runs stay fast.
+   - Preserve the full smoke test under an explicit build tag or CI target.
+
+7. Integration tests skip silently when env vars are missing.
+   - Required env vars:
+     - `FORGE_POSTGRES_TEST_DSN`
+     - `FORGE_QDRANT_TEST_URL`
+     - `FORGE_REDIS_TEST_ADDR`
+   - Make skips explicit and visible.
+   - Add documentation and CI targets for required integration mode.
+
+## Primary Goal
+
+Land one live-integration phase end-to-end.
+
+Pick the smallest viable simulator-to-live migration target.
+
+Preferred target:
+
+**KV identity gates**
+
+Reason:
+- clean boundary
+- small enough to wire safely
+- useful enough to prove simulator-to-live migration pattern
+- can be tested against the live daemon/control-lane path
+
+If KV identity gates are not the best candidate after inspection, choose the smallest viable alternative and document why.
+
+## Required Work
+
+### 1. Inspect Current Reality
+
+Review the repo and identify:
+
+- where KV identity gate logic currently lives
+- whether it is simulator-only
+- whether related live daemon concepts already exist
+- which live packages need to call it
+- what tests already exist
+- what docs claim about it
+
+Create or update a short review note:
+
+`docs/reviews/live_integration_reality_check.md`
+
+Include:
+
+- what is live
+- what is simulator-only
+- what is future
+- what is ambiguous
+- what you changed in this pass
+
+### 2. Implement One Live Integration Path
+
+Wire the chosen subsystem into the live daemon path without bypassing the semantic commit architecture.
+
+The live integration must:
+
+- pass through the proper control lane / semantic syscall / gateway boundary where applicable
+- preserve transaction semantics
+- preserve approval → validate → apply → journal → commit ordering
+- fail closed
+- rollback on error
+- produce useful journal/audit output if the current architecture supports it
+- avoid simulator/live package boundary violations
+
+Do not fake integration by only adding docs or tests around simulator code.
+
+There must be at least one live-side code path proving this subsystem is usable outside the simulator.
+
+### 3. Add Live Acceptance Tests
+
+Add tests proving:
+
+- valid live request succeeds
+- invalid request is rejected
+- rejected request does not mutate state
+- transaction rollback occurs on failure
+- journal/audit behavior is preserved where applicable
+- simulator packages still cannot import live daemon packages
+- FORGE-H mutation guard remains enforced
+- propose-only rule agents still cannot commit directly
+
+Prioritize tests in:
+
+- `aios/controllane`
+- `gateway`
+- live daemon package(s) touched by this integration
+
+### 4. Coverage Floor Push
+
+Raise meaningful coverage on load-bearing live layers.
+
+Target:
+
+- `aios/controllane`: push toward 40%+
+- `gateway`: push toward 40%+
+
+Do not chase fake coverage with shallow tests.
+
+Add tests around:
+
+- approval failures
+- validation failures
+- apply failures
+- journal failures
+- commit failures
+- rollback behavior
+- idempotence
+- duplicate request handling
+- unauthorized mutation attempts
+- gateway rejection paths
+- malformed payloads
+- missing capability/tool cases
+- propose-only enforcement
+
+If full 40% cannot be reached in one pass, document exactly what remains.
+
+### 5. Doctrine Markup Pass
+
+Update doctrine docs so a skim reader cannot mistake simulator-only work for live daemon behavior.
+
+At minimum inspect and update:
+
+- `AGENTS.md`
+- `CODEX.md`
+- `docs/architecture/autonomy_layer.md`
+- `docs/architecture/rule_based_agents.md`
+- any FORGE-K/FORGE-H/runtime/KV docs touched by the live integration
+
+Use explicit status tags:
+
+- `[LIVE]`
+- `[SIMULATOR-ONLY]`
+- `[FUTURE]`
+- `[PARTIAL]`
+
+Specific fixes:
+
+- Move the ADR 0005 simulator/live disclaimer near the top of any FORGE-K section.
+- Rewrite any claim saying rule agents “commit” if they only “propose.”
+- Make gateway-only execution status clear.
+- Make removed legacy routes clear without implying the entire tool registry was removed.
+- Make FORGE-H immutability status clear.
+- Decide whether `CODEX.md` is current implementation spec or future vision.
+  - If future vision, label it.
+  - If current spec, align it to code.
+  - If obsolete, move to archive with a note.
+
+### 6. CI / Test Hygiene
+
+Improve test visibility.
+
+Required:
+
+- make DB/Redis/Qdrant integration skips loud and documented
+- add or update a CI target for full integration mode
+- document required env vars
+- keep normal local test loop fast
+- tag slow gateway smoke test if appropriate
+
+Desired commands should be documented in:
+
+`docs/testing/definition_of_done.md`
+
+Include:
+
+- fast local test command
+- full test command
+- integration test command
+- Nix flake check command
+- required env vars
+- what skipped tests mean
+
+### 7. Repo Hygiene
+
+Handle root `Phase*.txt` files.
+
+Do one of:
+
+- move them to `docs/archive/phases/`
+- move them to `docs/planning/phases/`
+- add a clear `.gitignore` rule if they are scratch-only
+
+Preferred:
+
+`docs/archive/phases/`
+
+Add a README in that directory explaining:
+
+- these are planning/review artifacts
+- they are not live implementation truth
+- current truth is determined by code, ADRs, status docs, and tests
+
+### 8. Add a Migration Pattern Doc
+
+Create:
+
+`docs/architecture/simulator_to_live_migration.md`
+
+Include:
+
+- how to choose a simulator subsystem for live migration
+- required safety checks
+- required acceptance tests
+- package boundary rules
+- control-lane/syscall requirements
+- doctrine update requirements
+- rollback requirements
+- how to mark partial/live/simulator status
+- checklist for future migrations
+
+This should become the repeatable pattern for moving FORGE-K/FORGE-H/runtime/KV/lymphatic concepts into live daemon reality.
+
+## Acceptance Criteria
+
+This pass is complete only if:
+
+- at least one simulator subsystem has a real live daemon integration path
+- live acceptance tests prove it
+- `aios/controllane` and/or `gateway` coverage improves meaningfully
+- simulator/live boundary tests still pass
+- FORGE-H mutation guard still passes
+- propose-only agents remain propose-only
+- docs clearly distinguish `[LIVE]`, `[SIMULATOR-ONLY]`, `[FUTURE]`, and `[PARTIAL]`
+- integration test env var behavior is documented and visible
+- slow gateway smoke test is isolated or documented
+- root `Phase*.txt` clutter is moved or ignored
+- `go test ./...` passes
+- `go vet ./...` passes
+- `nix flake check` passes if available in this environment
+- no new doctrine-only phase is added
+
+## Output Required
+
+At the end, produce a concise report with:
+
+1. What was actually live before this pass
+2. What is live after this pass
+3. What remains simulator-only
+4. What remains future vision
+5. Tests added
+6. Coverage before/after if available
+7. Docs updated
+8. CI/test changes
+9. Any risks or incomplete items
+10. Recommended next live-integration target
+
+## Tone
+
+Be brutally honest.
+
+Do not write victory-lap language unless the code proves it.
+
+FORGE does not need more mythology right now.
+
+FORGE needs the map to match the territory.

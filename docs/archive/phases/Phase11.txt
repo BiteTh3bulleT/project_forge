@@ -1,0 +1,425 @@
+You are working in the FORGE repository.
+
+Implement Phase 11A: Rust Kernel Core Research and Planning.
+
+Scope: RESEARCH_ONLY / DOCS_ONLY.
+
+Do not implement Rust code yet.
+Do not add a Rust crate yet.
+Do not change Go runtime behavior.
+Do not wire FORGE-K into the live daemon.
+Do not modify live AI-OS, gateway, permissions, lanes, audit, modelruntime, API routes, or controllane behavior.
+Do not change public APIs.
+Do not add routes.
+Do not refactor Go packages in this phase.
+
+Purpose:
+
+FORGE-K Phase 1-10 is implemented and tested in the Go simulator under:
+
+services/core/internal/forgek
+
+The next strategic step is to determine whether a future Rust Kernel Core is justified, what the safe Rust boundary should be, and which FORGE-K primitives are stable enough to port later.
+
+Phase 11A is planning only.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0001-forge-k-is-a-cognitive-microkernel.md
+- docs/adr/0002-models-are-drivers-not-authority.md
+- docs/adr/0003-snapshots-are-shape-not-truth.md
+- docs/adr/0004-kv-cache-is-acceleration-not-memory.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/architecture/forge_k_overview.md
+- docs/architecture/core_doctrine.md
+- docs/architecture/kernel_simulator.md
+- docs/architecture/neuron_fabric.md
+- docs/architecture/lane_model.md
+- docs/architecture/memory_palace_and_courthouse.md
+- docs/architecture/semantic_algebra.md
+- docs/architecture/snapshots.md
+- docs/architecture/context_compiler_and_kv_cache.md
+- docs/architecture/runtime_driver_boundary.md
+- docs/architecture/lymphatic_lane.md
+- docs/roadmap/forge_k_build_phases.md
+- docs/reviews/current_phase_status.md
+- docs/testing/definition_of_done.md
+- services/core/internal/forgek/...
+
+Hard stop conditions:
+
+If `go test ./internal/forgek/...` does not pass before this planning pass, stop and report the failing tests.
+
+If ADR 0005 is missing, stop and report that Rust planning cannot proceed until the simulator/live authority boundary is documented.
+
+Goal:
+
+Create a serious Rust Kernel Core research and planning package.
+
+This phase should answer:
+
+1. Why would FORGE-K need a Rust kernel core?
+2. What parts of the current Go simulator are stable enough to become Rust later?
+3. What parts are too fluid and must stay Go for now?
+4. What would the Go/Rust boundary look like?
+5. What data structures need stable serialization before Rust exists?
+6. What invariants would Rust enforce better than Go?
+7. What risks come from starting Rust too early?
+8. What is the smallest safe Rust proof-of-concept for a later phase?
+9. What tests must exist before any Rust implementation begins?
+10. What is the recommended Phase 11B implementation scope, if any?
+
+Core doctrine:
+
+- FORGE-K owns truth.
+- The model is not the operating system.
+- Models are drivers, not authority.
+- Rust must harden deterministic kernel primitives, not replace the whole application.
+- Rust must not create a second live authority path.
+- Rust must not bypass Go simulator tests.
+- Rust must not bypass semantic syscalls.
+- Rust must not own live daemon state until a later explicit LIVE_INTEGRATION phase.
+- Rust should begin as a library boundary, not a daemon replacement.
+- Rust should protect invariants that are stable, deterministic, and testable.
+
+Candidate Rust Kernel Core areas:
+
+Strong candidates:
+
+- canonical serialization
+- deterministic hashing
+- object identity validation
+- capability checks
+- journal hash-chain integrity
+- manifest validation
+- snapshot shape hashing
+- context block hashing
+- KV nine-gate validation
+- stable enum/type definitions
+- deterministic ordering/sorting helpers
+- safe ID and ref validation
+- policy-neutral validation primitives
+
+Weak candidates for immediate Rust:
+
+- live daemon integration
+- model/runtime drivers
+- gateway/tool execution
+- API route handling
+- desktop/Tauri integration
+- live AI-OS controllane replacement
+- Memory Palace retrieval scoring if still changing
+- semantic algebra planner if still evolving
+- Lymphatic sweep policy if still broadening
+- runtime scheduler
+- live KV reuse
+- anything requiring external model/network/tool calls
+
+Deliverables:
+
+1. Create docs/architecture/rust_kernel_core_plan.md
+
+Include:
+
+- executive summary
+- current FORGE-K simulator status
+- why Rust is being considered
+- what Rust should own
+- what Rust should not own
+- Go/Rust boundary options
+- recommended boundary
+- stable candidate primitives
+- unstable/deferred primitives
+- data serialization requirements
+- FFI/API options
+- testing strategy
+- migration strategy
+- risk register
+- recommended Phase 11B scope
+- what not to do
+
+2. Create docs/reviews/phase_11_readiness.md
+
+Include:
+
+- readiness summary
+- current Phase 1-10 status
+- tests currently passing
+- blockers before Rust implementation
+- stable interfaces
+- unstable interfaces
+- package-by-package assessment of `services/core/internal/forgek`
+- recommended Rust candidates
+- deferred Rust candidates
+- required pre-Rust tests
+- recommended next step
+
+3. Create docs/adr/0006-rust-kernel-core-boundary.md
+
+ADR format:
+
+# ADR 0006 - Rust Kernel Core Boundary
+
+Status: Proposed or Accepted, whichever is appropriate based on findings.
+
+Context:
+
+- FORGE-K Phase 1-10 exists as Go simulator authority.
+- Rust may be valuable for deterministic kernel primitives.
+- The live daemon is still not FORGE-K-governed.
+- Rust must not become a second ungoverned authority path.
+
+Decision:
+
+Prefer a Rust library boundary for deterministic validation primitives only.
+
+Initial Rust candidates:
+
+- canonical serialization
+- hashing
+- manifest validation
+- capability check primitives
+- journal integrity primitives
+- KV nine-gate validation primitives
+
+Non-goals:
+
+- no live daemon integration
+- no model runtime calls
+- no gateway/tool execution
+- no route/API changes
+- no replacement of Go simulator yet
+
+Consequences:
+
+Positive:
+- stronger invariant enforcement
+- clearer stable kernel contracts
+- easier future hardware/software co-design path
+- better deterministic test corpus
+
+Negative:
+- adds language/tooling complexity
+- requires stable serialization contracts
+- can slow development if started too early
+- FFI boundary must be carefully tested
+
+Alternatives considered:
+
+- keep everything in Go
+- rewrite all FORGE-K in Rust
+- start with Rust daemon
+- start with tiny Rust validation library
+
+4. Update docs/roadmap/forge_k_build_phases.md
+
+Update Phase 11 to reflect:
+
+Phase 11A — Rust Kernel Core Research / Planning
+Scope: RESEARCH_ONLY / DOCS_ONLY
+
+Phase 11B — Rust Deterministic Validation Crate, optional future
+Scope: RESEARCH_ONLY or SIMULATOR_ONLY depending on decision
+
+Phase 11C — Go/Rust test corpus alignment, optional future
+
+Do not mark Rust implementation complete.
+
+5. Update docs/reviews/current_phase_status.md
+
+Do not mark Phase 11 implemented.
+
+Add:
+
+- Phase 11A planning started or completed
+- Phase 11 remains NOT STARTED for implementation
+- Rust implementation is deferred until Phase 11B, if approved
+
+6. Update README.md only if useful.
+
+Add a short note:
+
+FORGE-K Phase 11A is a research/planning checkpoint for a possible Rust deterministic kernel-core boundary. No Rust implementation or live daemon integration exists yet.
+
+7. Add services/core/internal/forgek/README.md updates if present.
+
+Add:
+
+- Phase 1-10 package map
+- Phase 11A planning note
+- what remains Go
+- what may later become Rust
+
+8. Inspect current FORGE-K package stability.
+
+Review these packages:
+
+- forgek root kernel/syscalls/capabilities/journal/object registry
+- forgek/neurons
+- forgek/court
+- forgek/palace
+- forgek/semantic
+- forgek/snapshots
+- forgek/contextcompiler
+- forgek/kv
+- forgek/runtime
+- forgek/lymphatic
+
+For each package, classify:
+
+- STABLE_FOR_RUST_CANDIDATE
+- NEEDS_MORE_GO_HARDENING
+- TOO_FLUID_FOR_RUST
+- KEEP_IN_GO
+
+Include reasoning.
+
+9. Define stable contract requirements.
+
+Before Rust implementation, define what must be stable:
+
+- object IDs
+- workspace IDs
+- source refs
+- manifest JSON schema
+- canonical serialization
+- hash algorithm
+- enum values
+- error codes
+- syscall names
+- capability names
+- journal event names
+- KV gate names
+- context block type names
+- snapshot type names
+- runtime manifest fields
+- lymphatic finding/proposal types
+
+10. Define test corpus strategy.
+
+Recommend creation of a future deterministic fixture corpus:
+
+- valid/invalid KernelObject fixtures
+- valid/invalid Capability fixtures
+- valid/invalid JournalEvent fixtures
+- valid/invalid Snapshot fixtures
+- valid/invalid ContextBlock fixtures
+- valid/invalid KVCacheManifest fixtures
+- valid/invalid RuntimeDriverManifest fixtures
+- canonical serialization golden files
+- hash golden files
+- failure-mode fixtures
+
+No fixture implementation required in Phase 11A unless trivial docs-only examples are useful.
+
+11. Define Go/Rust boundary options.
+
+Compare:
+
+Option A — Rust crate called by Go through cgo
+Option B — Rust CLI helper invoked by Go
+Option C — Rust WASM module
+Option D — Rust service sidecar
+Option E — No Rust yet
+
+Recommend one.
+
+Likely recommendation:
+
+Phase 11B should start with a standalone Rust crate and CLI test harness for deterministic validation primitives, not cgo or live daemon integration.
+
+12. Risk register.
+
+Include risks:
+
+- Rust started before contracts stable
+- duplicate authority path
+- FFI complexity
+- CI/toolchain complexity
+- serialization mismatch
+- hash mismatch
+- Go/Rust drift
+- live daemon accidental dependency
+- tests not shared across languages
+- over-porting fluid subsystems
+
+13. What not to do section.
+
+Must include:
+
+- Do not rewrite FORGE-K in Rust.
+- Do not replace the Go simulator.
+- Do not integrate Rust into live daemon yet.
+- Do not create live state mutation paths.
+- Do not call model runtimes from Rust.
+- Do not route gateway/tool execution through Rust.
+- Do not add routes.
+- Do not change public APIs.
+- Do not bypass ADR 0005.
+- Do not create a second kernel authority path.
+- Do not port unstable subsystems.
+- Do not add Rust dependencies to CI until Phase 11B is approved.
+
+14. Run validation.
+
+Run docs-safe checks if available.
+
+At minimum run:
+
+cd services/core && go test ./internal/forgek/...
+
+Then, if feasible:
+
+npm run build:core
+npm run lint
+npm test
+
+Do not run Rust build because no Rust code should be added.
+
+Document exact commands and results.
+
+Acceptance criteria:
+
+- docs/architecture/rust_kernel_core_plan.md exists
+- docs/reviews/phase_11_readiness.md exists
+- ADR 0006 exists as Proposed or Accepted
+- roadmap updated with Phase 11A/11B distinction
+- current phase status updated without claiming Rust implementation
+- no Rust code added
+- no live daemon integration added
+- no public APIs changed
+- no route behavior changed
+- no model/gateway behavior changed
+- package stability assessment completed
+- recommended Phase 11B scope is clear
+- tests/checks are run and documented
+
+WHAT NOT TO DO:
+
+- Do not implement Rust.
+- Do not create Cargo.toml.
+- Do not add a Rust crate.
+- Do not change Go code except tiny doc references if absolutely necessary.
+- Do not wire FORGE-K into live daemon.
+- Do not change live modelruntime/gateway/API behavior.
+- Do not create live state mutation paths.
+- Do not change syscalls.
+- Do not change schema.
+- Do not create a second authority path.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- ADR 0006 status
+- recommended Rust boundary
+- stable Rust candidates
+- deferred Rust candidates
+- package stability assessment summary
+- commands run
+- test results
+- whether Phase 11B is recommended
+- recommended next prompt

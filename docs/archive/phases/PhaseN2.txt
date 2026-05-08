@@ -1,0 +1,116 @@
+# FORGE-OS Phase N2 — Host Substrate Foundation
+
+You are working in the `project_forge` repository.
+
+Goal:
+Build the first private FORGE-OS host substrate layer. FORGE is not just an app; it is the AI-OS operating environment. Linux/NixOS remains the boot and hardware substrate. FORGE owns the AI runtime, memory/state authority, context/journal/governance layer, and eventually the operating shell.
+
+This phase must be careful, boring, and safe. No live authority migration. No bare-metal kernel fork. No autonomous system mutation.
+
+## Current Doctrine To Preserve
+
+- FORGE is the AI-OS.
+- FORGE owns canonical memory/state and commit authority.
+- Durable semantic writes must pass through existing validation/syscall/approval/audit paths.
+- Model runtimes are drivers/proposers, not truth authority.
+- FORGE-K simulator/shadow work must not become live authority in this phase.
+- Host observation is diagnostic only unless an explicit approved control path is added later.
+
+## Build Scope
+
+Create the foundation for a private NixOS-based FORGE-OS host profile.
+
+Add:
+
+1. `docs/adr/0007-forge-os-host-substrate.md`
+   - Define FORGE-OS Host Substrate.
+   - State that Linux/NixOS is the boot/hardware substrate.
+   - State that FORGE owns the AI-OS runtime layer.
+   - State that this phase is not a Linux fork and not live authority migration.
+   - Include boundaries, non-goals, risks, and rollback strategy.
+
+2. `docs/architecture/forge_os_host_substrate.md`
+   - Explain the full stack:
+     Hardware → Linux kernel → NixOS host config → FORGE services → FORGE-K/FORGE-H/modelruntime → FORGE shell.
+   - Define `/forge` storage layout.
+   - Define service map.
+   - Define host observation/control ladder:
+     observe → report → recommend → request approval → execute bounded action → automate safe action → own policy.
+
+3. `docs/architecture/forge_host_kernel_bridge.md`
+   - Design a read-only Host Kernel Bridge.
+   - It should observe:
+     kernel version, boot parameters, loaded modules, CPU/RAM/disk pressure, GPU/VRAM status if available, thermal state if available, running/failed services, modelruntime health.
+   - It must not mutate host state in this phase.
+   - It must prefer stable refs/metadata over raw sensitive data.
+   - It must clearly separate diagnostics from authority.
+
+4. `docs/architecture/forge_os_boot_flow.md`
+   - Define desired boot flow:
+     power on → Linux/NixOS boot → FORGE services start → modelruntime starts → FORGE state/memory mounts → FORGE shell becomes operator surface.
+   - Include degraded boot behavior:
+     no GPU, modelruntime unavailable, database unavailable, FORGE safe mode.
+
+5. Add NixOS module scaffolding under:
+   - `nix/nixos/modules/forge-os.nix`
+   - `nix/nixos/modules/forge-services.nix`
+   - `nix/nixos/modules/forge-storage.nix`
+   - `nix/nixos/modules/forge-host-kernel.nix`
+
+6. Update `flake.nix` to expose:
+   - `nixosModules.forge-os`
+   - any module exports needed for later host configs
+
+7. The NixOS modules should be scaffolding-first:
+   - create options
+   - define intended systemd service shape for `forge-core`
+   - define `/forge` directory layout
+   - define forge user/group if appropriate
+   - define default-safe environment variables
+   - keep dangerous controls disabled
+   - do not require a full host migration yet
+
+8. Add tests/checks where practical:
+   - Nix formatting/check evaluation if possible
+   - no accidental FORGE-K live authority import
+   - no new public API routes
+   - no semantic memory write path changes
+   - no modelruntime execution changes
+
+## Important Design Rules
+
+- This phase may package and declare FORGE as a system service.
+- This phase may define host observation architecture.
+- This phase may define NixOS module options.
+- This phase may prepare `/forge` storage layout.
+- This phase must not modify live request behavior.
+- This phase must not wire FORGE-K into live authority.
+- This phase must not add autonomous host mutation.
+- This phase must not fork Linux.
+- This phase must not claim FORGE controls the kernel yet.
+
+## WHAT NOT TO DO
+
+- Do not turn this into a public distro.
+- Do not add SaaS assumptions.
+- Do not make FORGE multi-user.
+- Do not write code directly in chat; make repository changes only.
+- Do not bypass existing gateway, permission, lane, audit, modelruntime, or controllane authority.
+- Do not create a second memory/state authority path.
+- Do not add destructive file deletion.
+- Do not add automatic system rebuilds.
+- Do not add self-update behavior.
+- Do not add live kernel mutation.
+- Do not add live FORGE-K authority migration.
+- Do not make the UI the focus of this phase.
+
+## Acceptance Criteria
+
+- The repository documents FORGE-OS Host Substrate clearly.
+- A future developer can understand how FORGE becomes the OS environment without forking Linux first.
+- NixOS module scaffolding exists and is exported by the flake.
+- The `/forge` storage layout is defined.
+- `forge-core` has a clear systemd service path, even if host deployment remains manual.
+- Host Kernel Bridge is designed as read-only diagnostics only.
+- Existing tests/checks still pass.
+- No live behavior changes occur.

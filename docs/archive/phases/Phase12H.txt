@@ -1,0 +1,518 @@
+You are working in the FORGE repository.
+
+Implement Phase 12H: Chat Metadata Shadow Implementation.
+
+Scope: LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT.
+
+This phase expands the existing disabled-by-default FORGE-K shadow observer to include bounded chat metadata only.
+
+Do not capture chat message content.
+Do not capture prompts.
+Do not capture completions.
+Do not capture assistant response text.
+Do not capture system prompts.
+Do not capture tool payloads.
+Do not capture tool outputs.
+Do not capture request bodies.
+Do not capture response bodies.
+Do not capture retrieval result content.
+Do not capture source chunks.
+Do not capture memory content.
+Do not capture auth headers, cookies, bearer tokens, API keys, or secrets.
+Do not add public diagnostics APIs.
+Do not add routes.
+Do not change public APIs.
+Do not change response bodies.
+Do not change response headers.
+Do not change status codes.
+Do not execute tools.
+Do not call modelruntime from FORGE-K.
+Do not call retrieval/search/embedding providers from FORGE-K.
+Do not implement live RAG.
+Do not write memory.
+Do not execute controllane semantic mutations from FORGE-K.
+Do not alter gateway, permissions, lanes, audit, modelruntime, retrieval, memory, search, embeddings, API, or controllane behavior.
+Do not create a second authority path.
+Do not make FORGE-K live authority.
+
+Purpose:
+
+Phase 12E implemented disabled-by-default route-envelope metadata shadowing.
+
+Phase 12F hardened route-envelope metadata shadowing.
+
+Phase 12G designed the next expansion: chat metadata only.
+
+Phase 12H implements chat metadata shadowing while preserving all no-effect guarantees.
+
+The live daemon remains authority. FORGE-K receives only redacted, diagnostic chat metadata.
+
+Core rule:
+
+Chat metadata means metadata only.
+No message content.
+No prompt text.
+No model output.
+No tool payloads.
+No retrieval content.
+No memory content.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/architecture/forge_k_live_integration_design.md
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/architecture/phase_12d_controlled_shadow_expansion_design.md
+- docs/architecture/phase_12g_chat_metadata_expansion_design.md
+- docs/testing/phase_12e_shadow_route_envelope_tests.md
+- docs/testing/phase_12h_chat_metadata_shadow_tests.md, if present
+- docs/reviews/phase_12f_route_envelope_shadow_hardening.md
+- docs/reviews/phase_12g_chat_metadata_risk_review.md, if present
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- docs/architecture/shadow_mode.md
+- docs/architecture/shadow_mode_harness.md
+- services/core/internal/forgekshadow/...
+- services/core/internal/forgek/shadowharness/...
+- services/core/internal/api/server.go
+- services/core/internal/api/routes.go
+- services/core/internal/api/workspace.go
+- services/core/internal/api/chat_assistant_gateway.go
+- services/core/internal/api/chat_fs_fallback.go
+- services/core/internal/api/server_route_inventory_test.go
+- services/core/internal/config/...
+
+Hard stop conditions:
+
+If `go test ./internal/forgek/...` does not pass before changes, stop.
+
+If `go test ./internal/forgekshadow/...` does not pass before changes, stop.
+
+If route inventory tests fail before changes, stop.
+
+If full API tests fail before changes, document and stop unless clearly unrelated.
+
+If Phase 12G design is missing, stop.
+
+If Phase 12F status is not recorded as implemented/tested, stop.
+
+Core doctrine:
+
+- Shadow mode observes and reports only.
+- Shadow diagnostics are non-authoritative.
+- Shadow diagnostics must not affect live response behavior.
+- Shadow diagnostics must not mutate live state.
+- Shadow diagnostics must not execute tools.
+- Shadow diagnostics must not call modelruntime.
+- Shadow diagnostics must not perform retrieval/search/embedding calls.
+- Shadow diagnostics must not write memory.
+- Shadow diagnostics must not call controllane mutations.
+- Shadow diagnostics must not create a second authority path.
+- `FORGE_K_SHADOW_MODE_ENABLED` remains disabled by default.
+- Chat metadata must also be disabled by default.
+- Existing `/health` and route-envelope shadow behavior must remain unchanged.
+
+Feature flags:
+
+Keep existing:
+
+- `FORGE_K_SHADOW_MODE_ENABLED=false`
+
+Add a scoped flag if consistent with config style:
+
+- `FORGE_K_SHADOW_CHAT_METADATA_ENABLED=false`
+
+Rules:
+
+- global shadow flag false disables all shadow work
+- chat metadata flag false disables chat metadata even if global shadow is enabled
+- chat metadata must never enable unless both global and chat-specific flags are true
+- no public settings UI/API change in this phase unless existing private config pattern requires it
+
+Allowed chat metadata:
+
+- route class: chat
+- chat operation kind, if safe and bounded
+- thread id if already safe/stable
+- message id if already safe/stable
+- workspace id if already safe/stable
+- request id / correlation id
+- role class only if safe: user, assistant, system, tool
+- message count or bounded count summary
+- status/timing metadata
+- model/provider id only if already exposed safely and not secret
+- stream/non-stream class
+- diagnostic markers
+- bounded warnings
+
+Forbidden chat metadata:
+
+- message body
+- prompt text
+- completion text
+- assistant response text
+- system prompt
+- tool payloads
+- tool outputs
+- file contents
+- source chunks
+- retrieval result content
+- memory content
+- auth headers
+- cookies
+- bearer tokens
+- API keys
+- raw authorization metadata
+- unredacted model parameters if sensitive
+- large raw content blobs
+- secrets or secret-looking metadata
+
+Preferred implementation strategy:
+
+- Extend `services/core/internal/forgekshadow` with chat metadata observation models.
+- Keep `services/core/internal/forgek/...` pure and free of live imports.
+- Add a narrow chat metadata observation call at the safest chat route boundary only.
+- Prefer capturing metadata after live handler ownership is established.
+- Do not wrap or buffer streaming bodies.
+- Do not capture request or response bodies.
+- Do not inspect payload content.
+- If safe metadata is not available without body inspection, omit it.
+- Store reports only in the existing bounded in-memory diagnostic sink.
+- Keep feature flags disabled by default.
+
+Deliverables:
+
+1. Extend config.
+
+Add disabled-by-default support for:
+
+- FORGE_K_SHADOW_CHAT_METADATA_ENABLED
+
+Suggested config field:
+
+- ForgeKShadowChatMetadataEnabled bool
+
+Rules:
+
+- default false
+- invalid values follow existing config convention
+- global shadow flag must also be true
+- no public API/settings surface change
+
+Tests:
+
+- default false
+- global false + chat true means no chat observation
+- global true + chat false means no chat observation
+- global true + chat true enables chat metadata path
+- invalid value does not accidentally enable
+
+2. Extend `forgekshadow` chat metadata model.
+
+Add model such as:
+
+- ChatMetadataObservation
+
+Fields may include:
+
+- observation_id
+- observed_at
+- route_class
+- operation_kind
+- workspace_id, optional
+- thread_id, optional
+- message_id, optional
+- request_id, optional
+- correlation_id, optional
+- role_class, optional
+- message_count, optional
+- stream_class, optional
+- model_id, optional
+- provider_id, optional
+- duration_ms, optional
+- warnings
+- metadata
+
+Rules:
+
+- no content fields
+- no body fields
+- no prompt fields
+- no completion fields
+- no tool payload fields
+- no retrieval content fields
+- no memory content fields
+- no raw headers
+- no auth values
+- no cookies
+- no secrets
+- deterministic serialization
+- metadata redaction enforced
+- diagnostic only
+
+3. Extend observer.
+
+Add method such as:
+
+- ObserveChatMetadata(input ChatMetadataInput)
+
+Rules:
+
+- no-op unless both global and chat metadata flags are enabled
+- stores diagnostic report only when enabled
+- best-effort only
+- failure isolated from live request
+- no mutation
+- no tool/model/retrieval/memory calls
+- no response changes
+- no content inspection
+
+4. Add chat metadata normalization.
+
+Normalize only safe fields.
+
+Rules:
+
+- role class must be one of known safe enum values or omitted
+- stream class must be bounded enum if captured
+- operation kind must be bounded enum if captured
+- model/provider id must be omitted if unsafe or secret-like
+- IDs must be treated as opaque refs and length-bounded
+- no high-cardinality raw content
+- no query strings
+- no headers
+- no body-derived values unless already parsed safely by live owner and non-content
+
+5. Add safest chat integration point.
+
+Pick one narrow live touchpoint.
+
+Recommended first chat touchpoint:
+
+- chat route metadata after live handler returns, with no body inspection
+
+Acceptable alternatives:
+
+- chat route envelope classification only
+- chat thread/message ids only if already available as route params or stable handler metadata
+- assistant stream metadata only if no response wrapping/buffering is needed and SSE behavior is unchanged
+
+Do not capture chat body.
+
+Do not capture generated response.
+
+Do not buffer SSE.
+
+If the only way to capture a field is by inspecting a request/response body, omit that field.
+
+6. Preserve existing behavior.
+
+Tests must prove:
+
+- route envelope shadow still works
+- `/health` shadow still works
+- chat metadata flag disabled by default
+- existing route inventory unchanged
+- chat routes remain mounted
+- assistant stream/SSE route behavior unchanged
+- timeout behavior unchanged
+- response equivalence for representative chat route where practical
+
+7. Add `forgekshadow` tests.
+
+Required tests:
+
+- chat metadata disabled stores nothing
+- global enabled but chat disabled stores nothing
+- global disabled but chat enabled stores nothing
+- both enabled stores diagnostic metadata
+- no message body captured
+- no prompt captured
+- no completion captured
+- no system prompt captured
+- no tool payload captured
+- no retrieval content captured
+- no memory content captured
+- no auth/cookie/secret stored
+- oversized metadata rejected
+- secret-looking metadata rejected
+- sink bounded retention still works
+- sink failure isolated
+- no-effect policy still enforced
+
+8. Add API tests.
+
+Required API tests:
+
+- route inventory unchanged
+- no public diagnostics routes
+- representative chat route behavior unchanged with flags disabled
+- representative chat route behavior unchanged with global enabled/chat disabled
+- representative chat route behavior unchanged with global enabled/chat enabled
+- no request body capture on chat POST route
+- no response body capture
+- `/api/chat/threads/{id}/assistant-stream` remains mounted and order guard remains valid
+- SSE behavior is not buffered/wrapped
+- `/forge` timeout behavior remains unchanged
+- `/v1` conditional behavior remains unchanged
+
+If a handler requires heavy state and returns non-2xx, compare disabled/enabled behavior rather than requiring success.
+
+9. Add forbidden behavior tests.
+
+Prove no calls are made to:
+
+- gateway execution
+- modelruntime
+- retrieval/search/embeddings
+- memory writes
+- controllane mutation
+
+Use test fakes/counters only if consistent with repo style.
+
+At minimum, extend forbidden import tests and route behavior tests.
+
+10. Keep forbidden import boundaries.
+
+Ensure:
+
+- `services/core/internal/forgek/...` does not import live daemon packages
+- `services/core/internal/forgekshadow` does not import gateway/modelruntime/retrieval/search/embeddings/memory/controllane in production code
+- `forgekshadow` may import `forgek/shadowharness`
+
+Forbidden production imports for `forgekshadow`:
+
+- internal/gateway
+- internal/modelruntime
+- internal/retrieval
+- internal/search
+- internal/embeddings
+- internal/memory
+- internal/aios/controllane
+
+11. Do not add Rust fixtures for chat metadata in this phase.
+
+Rust/fixture parity may be added later after the Go chat metadata model stabilizes.
+
+Do not modify `crates/forgek-validate` unless required by existing tests.
+
+12. Update docs.
+
+Update:
+
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- README.md
+- docs/architecture/phase_12g_chat_metadata_expansion_design.md
+- docs/testing/phase_12h_chat_metadata_shadow_tests.md, create if missing
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/architecture/shadow_mode.md
+
+Add Phase 12H notes:
+
+- chat metadata implemented
+- disabled by default
+- requires global shadow flag and chat-specific flag
+- no content capture
+- no prompts/completions/model outputs
+- no body capture
+- no public diagnostics routes
+- no tool/model/retrieval/memory/controllane calls
+- reports remain bounded in-memory diagnostics
+- live daemon remains authority
+
+13. Run validation.
+
+Run:
+
+cd services/core && go test ./internal/forgek/...
+
+cd services/core && go test ./internal/forgekshadow/...
+
+cd services/core && go test ./internal/api -run "TestServerRouteInventory|TestServerRouteInventoryHealthAndMiddlewareSmoke" -count=1
+
+Run broader API tests if feasible:
+
+cd services/core && go test ./internal/api -count=1
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+npm run test:forgek:parity
+git diff --check
+
+Document exact results.
+
+Acceptance criteria:
+
+- `FORGE_K_SHADOW_MODE_ENABLED` remains disabled by default
+- chat metadata flag exists and defaults disabled
+- chat metadata only records when both global and chat flags are enabled
+- enabled mode stores bounded chat metadata diagnostics
+- no message content captured
+- no prompt text captured
+- no completion/model output captured
+- no tool payload/output captured
+- no retrieval/memory content captured
+- no request bodies captured
+- no response bodies captured
+- no auth/cookie/secrets stored
+- route inventory unchanged
+- response status/body/header shape unchanged
+- chat route behavior unchanged
+- SSE route behavior unchanged
+- `/health` shadow behavior unchanged
+- route-envelope shadow behavior unchanged
+- no public diagnostics API added
+- no persistent reports
+- no tool execution
+- no modelruntime calls
+- no retrieval/search/embedding calls
+- no memory writes
+- no controllane mutations
+- docs updated
+- validation commands pass
+
+WHAT NOT TO DO:
+
+- Do not capture chat content.
+- Do not capture prompts.
+- Do not capture completions.
+- Do not capture request bodies.
+- Do not capture response bodies.
+- Do not capture tool payloads.
+- Do not capture retrieval content.
+- Do not capture memory content.
+- Do not add public diagnostics endpoints.
+- Do not persist reports to DB.
+- Do not call modelruntime.
+- Do not execute tools.
+- Do not query retrieval/search/embeddings.
+- Do not write memory.
+- Do not call controllane mutations.
+- Do not alter user-visible output.
+- Do not change route behavior.
+- Do not make FORGE-K live authority.
+- Do not create a second Kernel.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code/docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- chat metadata observer behavior
+- selected metadata captured
+- metadata explicitly not captured
+- flag behavior
+- sink behavior
+- redaction behavior
+- no-effect validation
+- route/API/chat/SSE stability results
+- commands run
+- test results
+- whether any live behavior changed
+- recommended next phase

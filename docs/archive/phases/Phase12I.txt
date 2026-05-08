@@ -1,0 +1,447 @@
+You are working in the FORGE repository.
+
+Implement Phase 12I: Chat Metadata Shadow Hardening.
+
+Scope: LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY.
+
+Do not add new live touchpoints.
+Do not expand beyond bounded chat metadata.
+Do not capture chat message content.
+Do not capture prompts.
+Do not capture completions.
+Do not capture assistant response text.
+Do not capture system prompts.
+Do not capture tool payloads.
+Do not capture tool outputs.
+Do not capture request bodies.
+Do not capture response bodies.
+Do not capture retrieval result content.
+Do not capture source chunks.
+Do not capture memory content.
+Do not capture auth headers, cookies, bearer tokens, API keys, or secrets.
+Do not add public diagnostics APIs.
+Do not add routes.
+Do not change public APIs.
+Do not change response bodies.
+Do not change response headers.
+Do not change status codes.
+Do not execute tools.
+Do not call modelruntime from FORGE-K.
+Do not call retrieval/search/embedding providers from FORGE-K.
+Do not implement live RAG.
+Do not write memory.
+Do not execute controllane semantic mutations from FORGE-K.
+Do not alter gateway, permissions, lanes, audit, modelruntime, retrieval, memory, search, embeddings, API, or controllane behavior.
+Do not create a second authority path.
+Do not make FORGE-K live authority.
+
+Purpose:
+
+Phase 12H implemented disabled-by-default chat metadata shadowing.
+
+Phase 12I hardens that implementation before any further expansion.
+
+This phase should strengthen:
+
+- dual-flag behavior
+- chat metadata boundaries
+- no-content guarantees
+- no-prompt/no-completion guarantees
+- no request/response body capture
+- chat route response equivalence
+- SSE/assistant-stream safety
+- sink behavior
+- redaction and secret rejection
+- bounded metadata enforcement
+- no-effect validation
+- forbidden import coverage
+- documentation accuracy
+
+This phase must not expand shadow mode beyond the current chat metadata observer.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/architecture/forge_k_live_integration_design.md
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/architecture/phase_12d_controlled_shadow_expansion_design.md
+- docs/architecture/phase_12g_chat_metadata_expansion_design.md
+- docs/testing/phase_12h_chat_metadata_shadow_tests.md
+- docs/reviews/phase_12f_route_envelope_shadow_hardening.md
+- docs/reviews/phase_12g_chat_metadata_risk_review.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- docs/architecture/shadow_mode.md
+- docs/architecture/shadow_mode_harness.md
+- services/core/internal/forgekshadow/...
+- services/core/internal/forgek/shadowharness/...
+- services/core/internal/api/server.go
+- services/core/internal/api/routes.go
+- services/core/internal/api/workspace.go
+- services/core/internal/api/chat_assistant_gateway.go
+- services/core/internal/api/chat_fs_fallback.go
+- services/core/internal/api/server_route_inventory_test.go
+- services/core/internal/config/...
+
+Hard stop conditions:
+
+If `go test ./internal/forgek/...` does not pass before changes, stop.
+
+If `go test ./internal/forgekshadow/...` does not pass before changes, stop.
+
+If route inventory tests fail before changes, stop.
+
+If full API tests fail before changes, document and stop unless clearly unrelated.
+
+If Phase 12H status is not recorded as implemented/tested, stop.
+
+Core doctrine:
+
+- Shadow mode observes and reports only.
+- Shadow diagnostics are non-authoritative.
+- Shadow diagnostics must not affect live response behavior.
+- Shadow diagnostics must not mutate live state.
+- Shadow diagnostics must not execute tools.
+- Shadow diagnostics must not call modelruntime.
+- Shadow diagnostics must not perform retrieval/search/embedding calls.
+- Shadow diagnostics must not write memory.
+- Shadow diagnostics must not call controllane mutations.
+- Shadow diagnostics must not create a second authority path.
+- `FORGE_K_SHADOW_MODE_ENABLED` remains disabled by default.
+- `FORGE_K_SHADOW_CHAT_METADATA_ENABLED` remains disabled by default.
+- Chat metadata requires both flags enabled.
+- No content capture is allowed.
+
+Allowed chat metadata remains limited to:
+
+- route class: chat
+- operation kind
+- safe thread id/ref
+- safe message id/ref
+- workspace id/ref if already safe
+- request id / correlation id
+- role class only
+- bounded message count summary
+- stream/non-stream class
+- safe model/provider id if already available and non-secret
+- status/timing metadata
+- diagnostic markers
+- bounded warnings
+
+Forbidden chat metadata:
+
+- message body
+- prompt text
+- completion text
+- assistant response text
+- system prompt
+- tool payloads
+- tool outputs
+- file contents
+- source chunks
+- retrieval result content
+- memory content
+- auth headers
+- cookies
+- bearer tokens
+- API keys
+- raw authorization metadata
+- unredacted model parameters if sensitive
+- large raw content blobs
+- secrets or secret-looking metadata
+
+Deliverables:
+
+1. Create docs/reviews/phase_12i_chat_metadata_shadow_hardening.md
+
+Include:
+
+- implementation summary
+- current chat metadata scope
+- no-effect guarantees
+- risk review
+- coverage review
+- hardening actions completed
+- remaining deferred work
+- recommendation for next phase
+
+2. Harden dual-flag behavior.
+
+Tests must prove:
+
+- global flag false + chat flag false = no chat reports
+- global flag false + chat flag true = no chat reports
+- global flag true + chat flag false = no chat reports
+- global flag true + chat flag true = chat metadata reports allowed
+- invalid flag values do not accidentally enable chat metadata unless existing config convention requires otherwise
+- route-envelope and /health behavior remain unchanged
+
+3. Harden allowed metadata normalization.
+
+Tests must prove:
+
+- role class is bounded enum only
+- stream class is bounded enum only
+- operation kind is bounded enum only
+- IDs/refs are length-bounded
+- unsafe model/provider id is omitted or rejected
+- metadata serialization is deterministic
+- high-cardinality content is not stored
+
+4. Harden forbidden metadata rejection.
+
+Expand or verify unsafe terms:
+
+- api_key
+- secret
+- token
+- password
+- private_key
+- bearer
+- plaintext
+- credential
+- authorization
+- cookie
+- session
+- set_cookie
+- x_api_key
+- auth
+- jwt
+- refresh_token
+- access_token
+- prompt
+- completion
+- response_body
+- request_body
+- body
+- content
+- raw_content
+- message
+- message_body
+- assistant_response
+- system_prompt
+- tool_payload
+- tool_output
+- retrieval_content
+- memory_content
+
+Rules:
+
+- unsafe metadata must be dropped or reject the diagnostic report
+- no unsafe metadata may be stored
+- live request must continue unaffected
+
+5. Harden no-content tests.
+
+Tests must prove:
+
+- chat POST body is not captured
+- invalid chat POST body is not captured
+- assistant response body is not captured
+- assistant stream/SSE body is not captured
+- prompt-like fields are rejected
+- completion-like fields are rejected
+- tool payload/output-like fields are rejected
+- retrieval/memory content-like fields are rejected
+- auth/cookie headers are not captured
+- query parameters are not captured
+
+6. Harden chat route response equivalence.
+
+Tests must compare disabled/enabled behavior for representative chat routes.
+
+Required:
+
+- route inventory unchanged
+- representative chat route behavior unchanged with both flags disabled
+- representative chat route behavior unchanged with global enabled/chat disabled
+- representative chat route behavior unchanged with both flags enabled
+- status/body/header shape unchanged
+- no public diagnostics route exists
+- existing assistant stream route remains mounted
+- assistant stream/SSE ordering guard remains valid
+- SSE response is not wrapped/buffered by chat metadata observer
+
+If handlers require heavy state and return non-2xx, compare disabled/enabled behavior rather than forcing success.
+
+7. Harden sink behavior.
+
+Ensure:
+
+- bounded retention remains deterministic
+- oldest report is dropped on overflow
+- chat metadata reports obey size limits
+- disabled sink stores nothing
+- sink failure is isolated from live requests
+- reports remain clearly non-authoritative
+
+Tests:
+
+- bounded retention for chat metadata reports
+- drop oldest behavior
+- sink disabled behavior
+- sink failure isolation
+- no live behavior change on sink error
+
+8. Harden no-effect validator.
+
+Tests must prove rejection when any forbidden side-effect flag is enabled:
+
+- live mutation
+- tool execution
+- modelruntime call
+- retrieval execution
+- search execution, if represented
+- embedding call
+- memory write
+- user-visible output
+- public API change
+- controllane mutation, if represented
+
+9. Harden forbidden behavior/import tests.
+
+Ensure:
+
+- `services/core/internal/forgek/...` does not import live daemon packages
+- `services/core/internal/forgekshadow` does not import gateway/modelruntime/retrieval/search/embeddings/memory/controllane in production code
+- `forgekshadow` may import `forgek/shadowharness`
+
+Forbidden production imports for `forgekshadow`:
+
+- internal/gateway
+- internal/modelruntime
+- internal/retrieval
+- internal/search
+- internal/embeddings
+- internal/memory
+- internal/aios/controllane
+
+10. Add no-public-diagnostics-route regression.
+
+Tests must prove:
+
+- no /api/forgek-shadow route exists
+- no /api/shadow route exists
+- no /forge/shadow route exists
+- no diagnostics route was added
+
+11. Update docs.
+
+Update:
+
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- README.md
+- docs/architecture/phase_12g_chat_metadata_expansion_design.md
+- docs/testing/phase_12h_chat_metadata_shadow_tests.md
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/architecture/shadow_mode.md
+
+Add Phase 12I notes:
+
+- chat metadata hardened
+- no new live touchpoints
+- no content/prompt/completion/body capture
+- SSE behavior preserved
+- chat route behavior preserved
+- route inventory preserved
+- diagnostics remain bounded in-memory only
+- no public diagnostics route
+- no live authority change
+
+12. Run validation.
+
+Run:
+
+cd services/core && go test ./internal/forgek/...
+
+cd services/core && go test ./internal/forgekshadow/...
+
+cd services/core && go test ./internal/api -run "TestServerRouteInventory|TestServerRouteInventoryHealthAndMiddlewareSmoke" -count=1
+
+Run broader API tests:
+
+cd services/core && go test ./internal/api -count=1
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+npm run test:forgek:parity
+git diff --check
+
+Document exact results.
+
+Acceptance criteria:
+
+- Phase 12I review doc exists
+- dual-flag behavior hardened
+- bounded metadata normalization tested
+- forbidden metadata rejection tested
+- no-content tests pass
+- chat route response equivalence tested
+- SSE behavior preserved
+- diagnostic sink hardened
+- no-effect validator hardened
+- forbidden import tests pass
+- no public diagnostics route exists
+- route inventory unchanged
+- no new live touchpoints added
+- no message content captured
+- no prompt/completion/model output captured
+- no request/response bodies captured
+- no tool/retrieval/memory content captured
+- no auth/cookie/secrets captured
+- no persistent reports
+- no tool execution
+- no modelruntime calls
+- no retrieval/search/embedding calls
+- no memory writes
+- no controllane mutations
+- docs updated
+- validation commands pass
+
+WHAT NOT TO DO:
+
+- Do not expand beyond chat metadata.
+- Do not add retrieval metadata yet.
+- Do not add gateway metadata yet.
+- Do not add modelruntime metadata yet.
+- Do not observe payloads.
+- Do not capture request bodies.
+- Do not capture response bodies.
+- Do not capture query strings.
+- Do not capture auth headers.
+- Do not add public diagnostics endpoints.
+- Do not persist reports to DB.
+- Do not call modelruntime.
+- Do not execute tools.
+- Do not query retrieval/search/embeddings.
+- Do not write memory.
+- Do not call controllane mutations.
+- Do not alter user-visible output.
+- Do not change route behavior.
+- Do not make FORGE-K live authority.
+- Do not create a second Kernel.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code/docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- Phase 12I review summary
+- chat metadata hardening completed
+- metadata captured
+- metadata explicitly not captured
+- flag behavior
+- sink behavior
+- redaction behavior
+- no-effect validation
+- route/API/chat/SSE stability results
+- commands run
+- test results
+- whether any live behavior changed
+- recommended next phase

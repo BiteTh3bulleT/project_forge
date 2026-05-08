@@ -1,0 +1,424 @@
+You are working in the FORGE repository.
+
+Implement Phase 12B: FORGE-K Read-only Shadow Harness Implementation.
+
+Scope: LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT.
+
+This is the first live-adjacent FORGE-K integration phase.
+
+The implementation must be disabled by default, read-only, diagnostic-only, and no-effect.
+
+Do not mutate live state.
+Do not change public APIs.
+Do not add routes.
+Do not change route behavior.
+Do not change response bodies.
+Do not change response headers.
+Do not change status codes.
+Do not execute tools.
+Do not call modelruntime from FORGE-K.
+Do not call retrieval/search/embedding providers from FORGE-K.
+Do not write memory.
+Do not execute controllane semantic mutations from FORGE-K.
+Do not alter gateway, permissions, lanes, audit, modelruntime, retrieval, memory, search, embeddings, API, or controllane behavior.
+Do not create a second authority path.
+Do not make FORGE-K live authority.
+
+Purpose:
+
+Phase 12A designed the first live integration path: a future disabled-by-default read-only shadow harness.
+
+Phase 12B implements that first shadow harness.
+
+The live daemon remains the authority. FORGE-K only receives redacted, read-only metadata after the live path has already handled the request or produced stable trace refs.
+
+Shadow mode must never affect user-visible output.
+
+Core rule:
+
+Shadow mode observes, normalizes, reports, and drops diagnostics on failure.
+Shadow mode does not decide, mutate, execute, or respond.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/architecture/forge_k_live_integration_design.md
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/architecture/phase_12b_adapter_interfaces.md
+- docs/architecture/shadow_mode.md
+- docs/architecture/shadow_mode_harness.md
+- docs/architecture/forge_k_adapter_contracts.md
+- docs/testing/phase_12b_shadow_harness_tests.md
+- docs/reviews/phase_12a_live_integration_readiness.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- services/core/internal/forgek/shadowharness/...
+- services/core/internal/forgek/integrationready/...
+- services/core/internal/api/server.go
+- services/core/internal/api/routes.go
+- services/core/internal/api/server_route_inventory_test.go
+- services/core/internal/config/...
+- services/core/internal/audit/...
+- services/core/internal/gateway/...
+- services/core/internal/modelruntime/...
+- services/core/internal/retrieval/...
+- services/core/internal/search/...
+- services/core/internal/embeddings/...
+- services/core/internal/memory/...
+
+Hard stop conditions:
+
+If `go test ./internal/forgek/...` does not pass before changes, stop and report failing tests.
+
+If Phase 12A docs are missing, stop.
+
+If Phase 11G shadowharness package is missing, stop.
+
+If route inventory tests are failing before changes, stop.
+
+Implementation doctrine:
+
+- Feature flag disabled by default.
+- Disabled means zero shadow reports and no adapter calls.
+- Enabled means diagnostic reports only.
+- Reports are non-authoritative.
+- Reports must prefer refs and redacted summaries.
+- Secret-looking metadata must be rejected or dropped.
+- Shadow failures must not fail live requests.
+- Shadow work must be bounded.
+- Shadow mode must not add public routes.
+- Shadow mode must not change existing route inventory.
+- Shadow mode must not create live FORGE-K authority.
+
+Suggested feature flag:
+
+- `FORGE_K_SHADOW_MODE_ENABLED=false`
+
+Suggested config field:
+
+- `ForgeKShadowModeEnabled bool`
+
+Add this only if it follows existing config style.
+
+Do not add settings UI or API changes in this phase unless there is already a private config pattern for env-only flags.
+
+Preferred architecture:
+
+Create a live-adjacent package outside `services/core/internal/forgek` so simulator packages stay pure.
+
+Suggested package:
+
+- services/core/internal/forgekshadow
+
+This package may import:
+
+- services/core/internal/forgek/shadowharness
+
+This package may define live-adjacent read-only observer/sink types.
+
+This package must not let `services/core/internal/forgek/...` import live daemon packages.
+
+Deliverables:
+
+1. Add config flag.
+
+Add disabled-by-default config support for:
+
+- FORGE_K_SHADOW_MODE_ENABLED
+
+Rules:
+
+- default false
+- no behavior change when unset
+- no public API change
+- no route change
+- no settings UI change unless explicitly already supported by config pattern
+
+Tests:
+
+- default disabled
+- env true enables config field
+- invalid values treated as false or existing config parsing convention
+
+2. Create shadow harness live-adjacent package.
+
+Suggested files:
+
+- services/core/internal/forgekshadow/config.go
+- services/core/internal/forgekshadow/observer.go
+- services/core/internal/forgekshadow/sink.go
+- services/core/internal/forgekshadow/redact.go
+- services/core/internal/forgekshadow/report.go
+- services/core/internal/forgekshadow/errors.go
+
+Responsibilities:
+
+- accept read-only observation input
+- build `shadowharness.ShadowObservation`
+- build `shadowharness.ShadowComparisonReport`
+- validate no-effect policy
+- redact/drop unsafe metadata
+- write to in-memory bounded diagnostic sink only
+- never mutate live state
+- never execute tools
+- never call modelruntime
+- never call retrieval/search/embeddings
+- never write memory
+
+3. Implement in-memory diagnostic sink.
+
+Create bounded in-memory sink.
+
+Fields/behavior:
+
+- max reports default small, such as 50 or 100
+- drop oldest on limit
+- no persistence
+- no public API
+- no canonical memory writes
+- no audit authority writes
+- report storage best-effort only
+- sink failure must not fail live request
+
+Tests:
+
+- stores report when enabled
+- bounded retention
+- drop oldest
+- disabled mode stores nothing
+- sink error does not affect live request helper
+
+4. Implement redaction/metadata safety.
+
+Reject or drop secret-looking metadata keys/values:
+
+- api_key
+- secret
+- token
+- password
+- private_key
+- bearer
+- plaintext
+- credential
+
+Rules:
+
+- fail closed for unsafe report metadata
+- report may be dropped if unsafe
+- live request must continue unaffected
+
+Tests:
+
+- secret-looking metadata dropped/rejected
+- no report stored with unsafe metadata
+- live request unaffected
+
+5. Implement no-effect policy wrapper.
+
+Use `shadowharness.ShadowHarnessPolicy` defaults.
+
+Ensure all side-effect fields remain false:
+
+- allow_live_mutation
+- allow_tool_execution
+- allow_modelruntime_calls
+- allow_retrieval_execution
+- allow_embedding_calls
+- allow_memory_writes
+- allow_user_visible_output
+- allow_public_api_changes
+
+Tests:
+
+- default policy no-effect passes
+- any side-effect enabled fails
+- observer refuses side-effect policy
+
+6. Wire minimal disabled-by-default observer into live daemon.
+
+Pick the smallest safe live touchpoint.
+
+Recommended first touchpoint:
+
+- `/health` request metadata only
+
+or
+
+- API route envelope metadata around `Server.Handler()` middleware only
+
+Use the least invasive option.
+
+Preferred behavior:
+
+- When flag disabled: no observer work.
+- When flag enabled: capture route/method/path/workspace/correlation/timing metadata only.
+- Do not capture request body.
+- Do not capture response body.
+- Do not modify response writer behavior unless absolutely necessary.
+- Do not change status code.
+- Do not change headers.
+- Do not change response body.
+- Do not add routes.
+
+If wrapping response writer is required to capture status code, test response equivalence carefully. If risky, do not capture status in this phase.
+
+7. Do not implement full RAG shadow.
+
+Phase 12B may define/report RAGShadowReport only from explicitly provided existing refs.
+
+Do not call retrieval/search/embeddings.
+
+Do not execute new queries.
+
+Do not use live retrieval results to modify responses.
+
+For this first implementation, it is acceptable for RAGShadowReport to be empty or omitted unless safe existing metadata is already available.
+
+8. Do not implement modelruntime/gateway shadow calls.
+
+May capture only stable trace refs if they are already available at the selected safe touchpoint.
+
+Do not call modelruntime.
+
+Do not call gateway.
+
+Do not inspect or execute tools.
+
+9. Tests.
+
+Add tests for:
+
+Feature flag:
+- default disabled
+- env enables
+- disabled means no reports
+
+Route behavior:
+- route inventory unchanged
+- `/health` response unchanged with shadow disabled
+- `/health` response unchanged with shadow enabled
+- no response body/header/status changes
+
+No-effect:
+- no tool execution
+- no modelruntime call
+- no retrieval/search/embedding call
+- no memory write
+- no controllane mutation
+- no public API shape change
+
+Observer/sink:
+- enabled stores diagnostic report
+- disabled stores no report
+- sink bounded retention
+- sink failure ignored
+- secret metadata rejected/dropped
+- no-effect validator enforced
+
+Forbidden imports:
+- `services/core/internal/forgek` must not import live daemon packages
+- `forgekshadow` may import `forgek/shadowharness`
+- `forgekshadow` must not import gateway/modelruntime/retrieval/search/embeddings/memory unless a test-specific fake is used and there is no live call path
+
+10. Update docs.
+
+Update:
+
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- README.md
+- docs/architecture/forge_k_live_integration_design.md
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/testing/phase_12b_shadow_harness_tests.md
+
+Add:
+
+- Phase 12B implemented as disabled-by-default read-only shadow harness
+- initial touchpoint selected
+- reports are in-memory diagnostics only
+- no public routes
+- no response changes
+- no live mutation
+- no tool/model/retrieval/embedding/memory execution
+- live daemon remains authority
+
+11. Validation commands.
+
+Run:
+
+cd services/core && go test ./internal/forgek/...
+
+Run new package tests, likely:
+
+cd services/core && go test ./internal/forgekshadow/...
+
+Run API tests relevant to route behavior:
+
+cd services/core && go test ./internal/api -run "TestServerRouteInventory|TestServerRouteInventoryHealthAndMiddlewareSmoke" -count=1
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+npm run test:forgek:parity
+git diff --check
+
+Document exact results.
+
+Acceptance criteria:
+
+- feature flag exists and defaults disabled
+- disabled mode performs no shadow reporting
+- enabled mode produces only diagnostic in-memory reports
+- initial live touchpoint is minimal and safe
+- route inventory unchanged
+- public response behavior unchanged
+- no public API or route changes
+- no request/response bodies captured
+- no secrets stored
+- no live mutation
+- no tool execution
+- no modelruntime calls
+- no retrieval/search/embedding calls
+- no memory writes
+- no controllane mutation
+- live daemon remains authority
+- tests pass
+- docs updated
+
+WHAT NOT TO DO:
+
+- Do not implement broad live shadow mode.
+- Do not observe all routes yet.
+- Do not add public diagnostics APIs.
+- Do not persist reports to DB unless explicitly approved by Phase 12A spec and tests.
+- Do not capture request/response bodies.
+- Do not call modelruntime.
+- Do not execute tools.
+- Do not query retrieval/search/embeddings.
+- Do not write memory.
+- Do not call controllane mutations.
+- Do not alter user-visible output.
+- Do not change route behavior.
+- Do not create a second Kernel.
+- Do not make FORGE-K live authority.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code in files.
+
+After completion, respond with:
+
+- files created/changed
+- feature flag behavior
+- selected live touchpoint
+- report sink behavior
+- redaction/no-secret behavior
+- no-effect guarantees
+- tests added
+- commands run
+- test results
+- whether routes/API changed
+- whether any live behavior changed
+- recommended next phase

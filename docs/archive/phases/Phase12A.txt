@@ -1,0 +1,394 @@
+You are working in the FORGE repository.
+
+Implement Phase 12A: FORGE-K Live Integration Design.
+
+Scope: DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY.
+
+Do not wire FORGE-K into the live daemon.
+Do not implement live shadow mode yet.
+Do not modify live AI-OS, gateway, permissions, lanes, audit, modelruntime, API routes, retrieval, embeddings, memory, search, or controllane behavior.
+Do not change public APIs.
+Do not add routes.
+Do not call live model runtimes.
+Do not execute tools.
+Do not query live retrieval/embeddings from FORGE-K.
+Do not implement live RAG.
+Do not write live memory.
+Do not alter user-visible responses.
+Do not create a second authority path.
+Do not implement Phase 12B yet.
+
+Purpose:
+
+FORGE-K Phase 1-11G is implemented/tested in simulator, research, tooling, governance, integration-prep, and shadow-design layers.
+
+The live daemon still uses existing AI-OS/gateway/permissions/lane/audit authority paths.
+
+Phase 12A designs the first live integration path without implementing it.
+
+The goal is to produce a concrete, testable, rollback-safe design for Phase 12B: read-only shadow harness implementation.
+
+This phase must decide:
+
+- what live paths Phase 12B may observe
+- what live paths Phase 12B must not touch
+- what adapters are needed
+- what data is mirrored
+- what reports are generated
+- where reports are stored, if at all
+- how shadow mode is disabled
+- how no-effect behavior is proven
+- how route/API/user-visible behavior remains unchanged
+- what tests block Phase 12B
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/adr/0006-rust-kernel-core-boundary.md
+- docs/architecture/forge_k_overview.md
+- docs/architecture/core_doctrine.md
+- docs/architecture/forge_k_integration_readiness.md
+- docs/architecture/forge_k_adapter_contracts.md
+- docs/architecture/shadow_mode.md
+- docs/architecture/shadow_mode_harness.md
+- docs/architecture/consensus_mesh.md
+- docs/architecture/context_compiler_and_kv_cache.md
+- docs/architecture/memory_taxonomy.md
+- docs/reviews/forge_k_live_path_mapping.md
+- docs/reviews/shadow_mode_harness_plan.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- docs/testing/definition_of_done.md
+- services/core/internal/forgek/integrationready/...
+- services/core/internal/forgek/shadowharness/...
+- services/core/internal/api/...
+- services/core/internal/aios/...
+- services/core/internal/gateway/...
+- services/core/internal/permissions/...
+- services/core/internal/lanes/...
+- services/core/internal/audit/...
+- services/core/internal/modelruntime/...
+- services/core/internal/memory/...
+- services/core/internal/retrieval/...
+- services/core/internal/search/...
+- services/core/internal/embeddings/...
+
+Hard stop conditions:
+
+If `go test ./internal/forgek/...` does not pass before this phase, stop and report failing tests.
+
+If Phase 11F integration readiness contracts are missing, stop.
+
+If Phase 11G shadow harness design is missing, stop.
+
+If ADR 0005 is missing, stop.
+
+Core doctrine:
+
+- Phase 12A is design only.
+- Live daemon remains existing authority.
+- FORGE-K remains non-authoritative until a later approved live integration phase.
+- Phase 12B, if approved later, must be read-only shadow mode only.
+- Shadow mode must not affect live responses.
+- Shadow mode must not mutate live state.
+- Shadow mode must not execute tools.
+- Shadow mode must not call modelruntime.
+- Shadow mode must not perform live retrieval from FORGE-K.
+- Shadow mode must not write memory.
+- Shadow mode must not add public API routes unless a later phase explicitly approves diagnostics endpoints.
+- Gateway remains live tool execution authority.
+- Controllane remains live semantic mutation authority.
+- Permissions/lanes/audit remain live gates.
+- RAG/retrieval remains evidence-only and read-only in shadow mode.
+- Consensus accepted does not mean canonical truth.
+- Kernel commit remains canonical truth.
+
+Deliverables:
+
+1. Create docs/architecture/forge_k_live_integration_design.md
+
+Include:
+
+- executive summary
+- current simulator/live split
+- Phase 12A scope
+- Phase 12B proposed scope
+- non-goals
+- live authority preservation
+- read-only shadow integration concept
+- live touchpoint map
+- adapter design
+- data flow
+- no-effect guarantees
+- storage/reporting strategy
+- feature flag / kill switch strategy
+- failure handling
+- rollback strategy
+- test strategy
+- security review
+- performance review
+- phased implementation sequence
+- what not to do
+
+Must explicitly state:
+
+Phase 12A does not authorize implementation.
+Phase 12B must be separately approved before live code changes.
+
+2. Create docs/reviews/phase_12a_live_integration_readiness.md
+
+Include:
+
+- readiness summary
+- what Phase 1-11G provides
+- remaining blockers
+- live integration risk register
+- recommended Phase 12B boundaries
+- required tests before any Phase 12B code
+- go/no-go checklist
+- rollback requirements
+- required operator-visible status, if any
+- open questions
+
+3. Create docs/architecture/phase_12b_shadow_harness_spec.md
+
+This is a design spec only.
+
+Define the future Phase 12B implementation plan:
+
+- feature flag name
+- config defaults
+- disabled-by-default behavior
+- observed live request types
+- live request metadata captured
+- live evidence refs mirrored
+- live retrieval/search metadata mirrored
+- live context compile metadata mirrored
+- live gateway/audit/modelruntime traces mirrored
+- FORGE-K shadow report generated
+- storage location for shadow diagnostics, if any
+- retention policy
+- no user-visible effect guarantee
+- no mutation guarantee
+- no tool/model/retrieval execution guarantee
+- required tests
+
+Suggested feature flag:
+
+- `FORGE_K_SHADOW_MODE_ENABLED=false`
+
+Suggested hard default:
+
+- disabled unless explicitly enabled
+
+4. Create docs/architecture/phase_12b_adapter_interfaces.md
+
+Design only.
+
+Define future adapter interfaces:
+
+- LiveRequestObservationAdapter
+- LiveRouteTraceAdapter
+- LiveRetrievalTraceAdapter
+- LiveContextCompileTraceAdapter
+- LiveGatewayTraceAdapter
+- LiveAuditTraceAdapter
+- LiveModelRuntimeTraceAdapter
+- LiveMemoryEvidenceTraceAdapter
+- ShadowReportSink
+
+For each adapter define:
+
+- purpose
+- input
+- output
+- allowed operations
+- forbidden operations
+- provenance requirements
+- error behavior
+- no-effect requirements
+- tests required
+
+5. Update docs/reviews/forge_k_live_path_mapping.md
+
+Add Phase 12A design notes:
+
+- first candidate for Phase 12B
+- required adapter per live path
+- whether path is in-scope for first shadow harness
+- whether path is explicitly out-of-scope
+- risk rating
+- test requirements
+
+6. Update docs/architecture/shadow_mode.md
+
+Add:
+
+- Phase 11F defined shadow policy
+- Phase 11G defined simulator harness contracts
+- Phase 12A designs first live shadow implementation
+- Phase 12B will implement only if separately approved
+
+7. Update docs/architecture/shadow_mode_harness.md
+
+Add:
+
+- Phase 12A design handoff section
+- what the simulator harness model maps to in live shadow mode
+- what remains simulator-only
+- what cannot be wired in Phase 12B
+
+8. Update docs/roadmap/forge_k_build_phases.md
+
+Add/update:
+
+- Phase 12A — Live Integration Design
+  Scope: DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY
+
+- Phase 12B — Read-only Shadow Harness Implementation
+  Scope: LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT
+
+- Phase 12C — Shadow Diagnostics Review and Hardening
+  Scope: LIVE_INTEGRATION / OBSERVABILITY_ONLY
+
+- Phase 12D — Limited FORGE-K Advisory Mode
+  Scope: LIVE_INTEGRATION / ADVISORY_ONLY
+
+Do not mark Phase 12B started.
+
+9. Update docs/reviews/current_phase_status.md
+
+Add Phase 12A row:
+
+Title:
+Live Integration Design
+
+Status:
+IMPLEMENTED if docs are complete
+
+Where it lives:
+- docs/architecture/forge_k_live_integration_design.md
+- docs/reviews/phase_12a_live_integration_readiness.md
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/architecture/phase_12b_adapter_interfaces.md
+
+Tests / Evidence:
+- docs-only validation
+- `go test ./internal/forgek/...` still passes
+- no live code changed
+
+Open work:
+- Phase 12B read-only shadow harness implementation
+- no live mutation yet
+
+10. Update README.md
+
+Add short note:
+
+FORGE-K has entered live integration design. Phase 12A is documentation/design only. The live daemon remains on existing authority paths. No FORGE-K live shadow mode or mutation exists yet.
+
+11. Optional: create docs/testing/phase_12b_shadow_harness_tests.md
+
+Define required future tests:
+
+- feature flag default disabled
+- enabling flag does not change response
+- no extra routes unless explicitly approved
+- no live state mutation
+- no tool execution
+- no modelruntime calls from FORGE-K
+- no retrieval execution from FORGE-K
+- no memory writes
+- no public API response shape changes
+- shadow report generation behind flag
+- shadow report failure does not fail live request
+- route inventory unchanged
+- audit records clearly marked diagnostic if any are written
+
+12. Add what-not-to-do sections.
+
+Must include:
+
+- Do not implement Phase 12B in this phase.
+- Do not wire FORGE-K into live daemon.
+- Do not observe live requests yet.
+- Do not add feature flags in code yet.
+- Do not modify live APIs.
+- Do not add routes.
+- Do not call live retrieval or embeddings.
+- Do not call modelruntime.
+- Do not execute tools.
+- Do not write memory.
+- Do not alter user-visible output.
+- Do not create a second authority path.
+- Do not bypass gateway/permissions/lanes/audit.
+- Do not bypass controllane.
+
+13. Run validation.
+
+Run:
+
+cd services/core && go test ./internal/forgek/...
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+npm run test:forgek:parity
+git diff --check
+
+Document exact results.
+
+Acceptance criteria:
+
+- live integration design doc exists
+- Phase 12A readiness review exists
+- Phase 12B shadow harness spec exists
+- Phase 12B adapter interface design exists
+- live path mapping updated
+- shadow mode docs updated
+- roadmap updated
+- current phase status updated
+- README updated
+- no live code changed
+- no public APIs changed
+- no routes changed
+- no FORGE-K live daemon wiring
+- no live retrieval/RAG implementation
+- no modelruntime/gateway/controllane behavior changes
+- validation commands pass
+
+WHAT NOT TO DO:
+
+- Do not implement Phase 12B.
+- Do not modify live daemon behavior.
+- Do not add code-level feature flags.
+- Do not create live adapters.
+- Do not add routes.
+- Do not call modelruntime.
+- Do not execute tools.
+- Do not query live retrieval/embeddings.
+- Do not write memory.
+- Do not affect user-visible output.
+- Do not create a second Kernel.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- Phase 12A design summary
+- Phase 12B proposed scope
+- live touchpoints selected
+- live touchpoints excluded
+- adapter interfaces designed
+- no-effect strategy
+- rollback/kill-switch strategy
+- tests planned
+- commands run
+- test results
+- whether any live behavior changed
+- recommended next phase

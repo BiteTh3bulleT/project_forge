@@ -1,0 +1,538 @@
+You are working in the FORGE repository.
+
+Implement Phase 12K-L: Retrieval Metadata Shadow Implementation and Hardening.
+
+Scope: LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / HARDENED_IN_PASS.
+
+This combines the originally planned Phase 12K retrieval metadata shadow implementation and Phase 12L retrieval metadata hardening into one bounded pass.
+
+Do not implement live RAG.
+Do not execute retrieval from FORGE-K.
+Do not execute search from FORGE-K.
+Do not call embedding providers from FORGE-K.
+Do not capture source text.
+Do not capture chunk text.
+Do not capture document content.
+Do not capture embeddings.
+Do not capture vectors.
+Do not capture raw user query text.
+Do not capture prompts.
+Do not capture model outputs.
+Do not capture request bodies.
+Do not capture response bodies.
+Do not capture memory content.
+Do not add public diagnostics APIs.
+Do not add routes.
+Do not change public APIs.
+Do not change response bodies.
+Do not change response headers.
+Do not change status codes.
+Do not execute tools.
+Do not call modelruntime from FORGE-K.
+Do not write memory.
+Do not execute controllane semantic mutations from FORGE-K.
+Do not alter gateway, permissions, lanes, audit, modelruntime, retrieval, memory, search, embeddings, API, or controllane behavior.
+Do not create a second authority path.
+Do not make FORGE-K live authority.
+
+Purpose:
+
+Phase 12J designed retrieval metadata shadowing.
+
+Phase 12K-L implements and hardens retrieval metadata shadowing in one pass.
+
+The observer must be disabled by default, read-only, metadata-only, diagnostic-only, and no-effect.
+
+The live daemon remains authority. FORGE-K receives only bounded retrieval/search/embedding metadata that live paths already produced.
+
+Core rule:
+
+Retrieval metadata means metadata only.
+
+No source text.
+No chunks.
+No embeddings.
+No vectors.
+No RAG execution.
+No retrieval execution from FORGE-K.
+No memory writes.
+No evidence admission.
+No context compilation.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/architecture/forge_k_live_integration_design.md
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/architecture/phase_12d_controlled_shadow_expansion_design.md
+- docs/architecture/phase_12g_chat_metadata_expansion_design.md
+- docs/architecture/phase_12j_retrieval_metadata_expansion_design.md
+- docs/reviews/phase_12j_retrieval_metadata_risk_review.md
+- docs/testing/phase_12k_retrieval_metadata_shadow_tests.md
+- docs/architecture/memory_taxonomy.md
+- docs/architecture/shadow_mode.md
+- docs/architecture/shadow_mode_harness.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- services/core/internal/forgekshadow/...
+- services/core/internal/forgek/shadowharness/...
+- services/core/internal/retrieval/...
+- services/core/internal/search/...
+- services/core/internal/embeddings/...
+- services/core/internal/memory/...
+- services/core/internal/api/server.go
+- services/core/internal/api/routes.go
+- services/core/internal/api/server_route_inventory_test.go
+- services/core/internal/config/...
+
+Hard stop conditions:
+
+If Phase 12J docs are missing, stop and report that retrieval metadata design must land first.
+
+If `go test ./internal/forgek/...` does not pass before changes, stop.
+
+If `go test ./internal/forgekshadow/...` does not pass before changes, stop.
+
+If route inventory tests fail before changes, stop.
+
+If full API tests fail before changes, document and stop unless clearly unrelated.
+
+Core doctrine:
+
+- Shadow mode observes and reports only.
+- Shadow diagnostics are non-authoritative.
+- Retrieval metadata is evidence/routing metadata, not truth.
+- Retrieval metadata must not admit evidence.
+- Retrieval metadata must not compile context.
+- Retrieval metadata must not write memory.
+- Retrieval metadata must not execute retrieval.
+- Retrieval metadata must not call embedding providers.
+- Retrieval metadata must not create RAG output.
+- Shadow mode must not affect user-visible output.
+- Shadow mode must not mutate live state.
+- Shadow mode must not execute tools.
+- Shadow mode must not call modelruntime.
+- Shadow mode must not create a second authority path.
+- `FORGE_K_SHADOW_MODE_ENABLED` remains disabled by default.
+- Add retrieval metadata behind its own disabled-by-default flag.
+
+Feature flags:
+
+Keep existing:
+
+- FORGE_K_SHADOW_MODE_ENABLED=false
+- FORGE_K_SHADOW_CHAT_METADATA_ENABLED=false
+
+Add:
+
+- FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED=false
+
+Rules:
+
+- global shadow flag false disables all shadow work
+- retrieval metadata flag false disables retrieval metadata even if global shadow is enabled
+- retrieval metadata must never enable unless both global and retrieval-specific flags are true
+- no public settings UI/API change in this phase unless an existing private config pattern requires it
+
+Allowed retrieval metadata:
+
+- retrieval run id
+- retrieval result id
+- workspace id
+- request id / correlation id
+- source type
+- source ref id
+- source hash/fingerprint if already available
+- result count
+- selected count
+- score summary
+- ranking position
+- retrieval strategy name
+- index name or index type
+- embedding model id if already safe/non-secret
+- freshness/staleness flags
+- timing/status metadata
+- diagnostic markers
+- bounded warnings
+
+Forbidden retrieval metadata:
+
+- source text
+- chunk text
+- document content
+- file content
+- prompt text
+- model output
+- retrieval result body
+- embeddings
+- vectors
+- raw user query text
+- auth headers
+- cookies
+- bearer tokens
+- API keys
+- raw authorization metadata
+- memory content
+- unredacted search snippets
+- large raw content blobs
+- secrets or secret-looking metadata
+
+Preferred implementation strategy:
+
+- Extend `services/core/internal/forgekshadow` with retrieval metadata observation models.
+- Keep `services/core/internal/forgek/...` pure and free of live imports.
+- Add a narrow observer that accepts already-produced retrieval metadata refs only.
+- Do not call retrieval/search/embedding methods from FORGE-K.
+- Do not inspect source/chunk/query/vector content.
+- If safe metadata is not available without content inspection, omit it.
+- Store reports only in the existing bounded in-memory diagnostic sink.
+- Keep feature flags disabled by default.
+
+Deliverables:
+
+1. Extend config.
+
+Add disabled-by-default support for:
+
+- FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED
+
+Suggested config field:
+
+- ForgeKShadowRetrievalMetadataEnabled bool
+
+Rules:
+
+- default false
+- invalid values follow existing config convention
+- global shadow flag must also be true
+- no public API/settings surface change
+
+Tests:
+
+- default false
+- global false + retrieval true means no retrieval observation
+- global true + retrieval false means no retrieval observation
+- global true + retrieval true enables retrieval metadata path
+- invalid value does not accidentally enable
+
+2. Extend `forgekshadow` retrieval metadata model.
+
+Add model such as:
+
+- RetrievalMetadataObservation
+
+Fields may include:
+
+- observation_id
+- observed_at
+- route_class or source_class
+- workspace_id, optional
+- request_id, optional
+- correlation_id, optional
+- retrieval_run_id, optional
+- retrieval_result_id, optional
+- source_type, optional
+- source_ref_id, optional
+- source_hash, optional
+- result_count, optional
+- selected_count, optional
+- score_summary, optional
+- ranking_position, optional
+- retrieval_strategy, optional
+- index_type, optional
+- embedding_model_id, optional
+- freshness_status, optional
+- duration_ms, optional
+- warnings
+- metadata
+
+Rules:
+
+- no content fields
+- no body fields
+- no query text fields
+- no chunk text fields
+- no embedding/vector fields
+- no prompt/model output fields
+- no memory content fields
+- no raw headers
+- no auth values
+- no cookies
+- no secrets
+- deterministic serialization
+- metadata redaction enforced
+- diagnostic only
+
+3. Extend observer.
+
+Add method such as:
+
+- ObserveRetrievalMetadata(input RetrievalMetadataInput)
+
+Rules:
+
+- no-op unless both global and retrieval metadata flags are enabled
+- stores diagnostic report only when enabled
+- best-effort only
+- failure isolated from live request
+- no mutation
+- no retrieval/search/embedding execution
+- no tool/model/memory/controllane calls
+- no response changes
+- no content inspection
+
+4. Add retrieval metadata normalization.
+
+Normalize only safe fields.
+
+Rules:
+
+- strategy/index/source type must be bounded enum/string class if possible
+- IDs/refs are opaque and length-bounded
+- scores are bounded numeric summaries only
+- count summaries are bounded integers only
+- embedding model id must be omitted if unsafe or secret-like
+- no raw query text
+- no snippets
+- no source text
+- no vector values
+- no high-cardinality raw content
+
+5. Add safest retrieval integration point.
+
+Pick the narrowest safe live touchpoint.
+
+Preferred first implementation:
+
+- observe already-created retrieval run/result metadata at the point where live retrieval code has already completed and produced stable refs
+
+Acceptable alternative:
+
+- add a test-only or internal observer path that can be called with synthetic already-produced retrieval metadata until a safe live hook is obvious
+
+Rules:
+
+- no new retrieval calls
+- no new search calls
+- no embedding calls
+- no source/chunk/query inspection
+- no response mutation
+- no context compile
+- no evidence admission
+
+If no safe live retrieval metadata hook exists without changing live retrieval behavior, implement the `forgekshadow` observer/model/tests only and document the live hook as deferred.
+
+6. Preserve existing behavior.
+
+Tests must prove:
+
+- /health shadow still works
+- route-envelope shadow still works
+- chat metadata shadow still works
+- retrieval metadata flag disabled by default
+- route inventory unchanged
+- representative API behavior unchanged
+- no public diagnostics route exists
+
+7. Add `forgekshadow` tests.
+
+Required tests:
+
+- retrieval metadata disabled stores nothing
+- global enabled but retrieval disabled stores nothing
+- global disabled but retrieval enabled stores nothing
+- both enabled stores diagnostic metadata
+- source text rejected
+- chunk text rejected
+- document content rejected
+- raw query rejected
+- embedding/vector metadata rejected
+- prompt/model output rejected
+- memory content rejected
+- auth/cookie/secret rejected
+- oversized metadata rejected
+- sink bounded retention still works
+- sink failure isolated
+- no-effect policy still enforced
+- deterministic serialization
+
+8. Add API / behavior tests if live hook is added.
+
+Required if a live hook is added:
+
+- route inventory unchanged
+- representative retrieval route behavior unchanged with flags disabled
+- representative retrieval route behavior unchanged with global enabled/retrieval disabled
+- representative retrieval route behavior unchanged with both flags enabled
+- status/body/header shape unchanged
+- no public diagnostics route exists
+- no request body capture
+- no response body capture
+- no source/chunk/query/vector capture
+- retrieval result count unchanged
+- retrieval selection unchanged
+- context compile behavior unchanged
+
+If no live hook is added, explicitly document that only model/observer hardening was implemented and live retrieval hook is deferred.
+
+9. Add forbidden behavior tests.
+
+Prove no calls are made to:
+
+- retrieval execution
+- search execution
+- embedding provider
+- gateway execution
+- modelruntime
+- memory writes
+- controllane mutation
+
+Use test fakes/counters only if consistent with repo style.
+
+At minimum, extend forbidden import tests and observer behavior tests.
+
+10. Keep forbidden import boundaries.
+
+Ensure:
+
+- `services/core/internal/forgek/...` does not import live daemon packages
+- `services/core/internal/forgekshadow` does not import gateway/modelruntime/retrieval/search/embeddings/memory/controllane in production code unless a narrow live metadata type is absolutely required and does not expose executable call paths
+- `forgekshadow` may import `forgek/shadowharness`
+
+Forbidden production imports for `forgekshadow` unless explicitly justified in docs/tests:
+
+- internal/gateway
+- internal/modelruntime
+- internal/retrieval
+- internal/search
+- internal/embeddings
+- internal/memory
+- internal/aios/controllane
+
+11. Do not add Rust fixtures for retrieval metadata in this phase.
+
+Rust/fixture parity may be added later after the Go retrieval metadata model stabilizes.
+
+Do not modify `crates/forgek-validate` unless required by existing tests.
+
+12. Update docs.
+
+Update:
+
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- README.md
+- docs/architecture/phase_12j_retrieval_metadata_expansion_design.md
+- docs/testing/phase_12k_retrieval_metadata_shadow_tests.md
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/architecture/shadow_mode.md
+
+Create if useful:
+
+- docs/reviews/phase_12kl_retrieval_metadata_shadow_hardening.md
+
+Add Phase 12K-L notes:
+
+- retrieval metadata model/observer implemented
+- retrieval metadata hardened in same pass
+- disabled by default
+- requires global shadow flag and retrieval-specific flag
+- no source/chunk/query/vector/RAG capture
+- no retrieval/search/embedding execution
+- no public diagnostics routes
+- no tool/model/memory/controllane calls
+- reports remain bounded in-memory diagnostics
+- live daemon remains authority
+- if live hook deferred, state that clearly
+
+13. Run validation.
+
+Run:
+
+cd services/core && go test ./internal/forgek/...
+
+cd services/core && go test ./internal/forgekshadow/...
+
+cd services/core && go test ./internal/api -run "TestServerRouteInventory|TestServerRouteInventoryHealthAndMiddlewareSmoke" -count=1
+
+Run broader API tests if feasible:
+
+cd services/core && go test ./internal/api -count=1
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+npm run test:forgek:parity
+git diff --check
+
+Document exact results.
+
+Acceptance criteria:
+
+- `FORGE_K_SHADOW_MODE_ENABLED` remains disabled by default
+- retrieval metadata flag exists and defaults disabled
+- retrieval metadata only records when both global and retrieval flags are enabled
+- enabled mode stores bounded retrieval metadata diagnostics
+- no source text captured
+- no chunk text captured
+- no document content captured
+- no raw query captured
+- no embeddings/vectors captured
+- no memory content captured
+- no prompts/model outputs captured
+- no request bodies captured
+- no response bodies captured
+- no auth/cookie/secrets stored
+- route inventory unchanged
+- response status/body/header shape unchanged
+- existing /health, route-envelope, and chat metadata behavior unchanged
+- no public diagnostics API added
+- no persistent reports
+- no retrieval/search/embedding execution
+- no tool execution
+- no modelruntime calls
+- no memory writes
+- no controllane mutations
+- docs updated
+- validation commands pass
+
+WHAT NOT TO DO:
+
+- Do not implement live RAG.
+- Do not execute retrieval/search/embedding calls.
+- Do not capture source/chunk/query/vector content.
+- Do not capture prompts/model outputs.
+- Do not capture request/response bodies.
+- Do not add public diagnostics endpoints.
+- Do not persist reports to DB.
+- Do not call modelruntime.
+- Do not execute tools.
+- Do not write memory.
+- Do not call controllane mutations.
+- Do not alter user-visible output.
+- Do not change route behavior.
+- Do not make FORGE-K live authority.
+- Do not create a second Kernel.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code/docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- retrieval metadata observer behavior
+- selected metadata captured
+- metadata explicitly not captured
+- flag behavior
+- sink behavior
+- redaction behavior
+- no-effect validation
+- route/API/retrieval stability results
+- commands run
+- test results
+- whether any live behavior changed
+- whether live retrieval hook was added or deferred
+- recommended next phase

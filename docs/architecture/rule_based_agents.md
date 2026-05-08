@@ -1,5 +1,7 @@
 # Rule-Based Agents (Phase 5.5 + 5.75 Integration)
 
+Status: `[LIVE] / [PARTIAL]`. Deterministic rule agents can propose intents and semantic actions. They do not commit by themselves; any durable effect must pass autonomy policy and Control Lane syscall validation.
+
 Rule-based agents are deterministic internal workers that detect conditions and propose bounded follow-up action.
 
 They do not bypass semantic syscalls.

@@ -18,6 +18,7 @@ const (
 	CapMemorySupersessionMark = "memory.supersession.mark"
 	CapModelDerive            = "model.derive"
 	CapContextCompile         = "context.compile"
+	CapKVIdentityValidate     = "kv.identity.validate"
 )
 
 type ActionDefinition struct {
@@ -130,6 +131,15 @@ func NewStaticActionRegistry() *StaticActionRegistry {
 			ApprovalPossible: false,
 			TargetObjectType: "context_packet",
 			AuditEventName:   "semantic_syscall.compile_context",
+		},
+		domain.ActionValidateKVIdentity: {
+			Action:           domain.ActionValidateKVIdentity,
+			Capability:       CapKVIdentityValidate,
+			Mutating:         false,
+			SupportsDryRun:   true,
+			ApprovalPossible: false,
+			TargetObjectType: "kv_identity_validation",
+			AuditEventName:   "semantic_syscall.validate_kv_identity",
 		},
 	}
 	return &StaticActionRegistry{definitions: defs}

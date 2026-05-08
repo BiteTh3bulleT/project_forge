@@ -1,0 +1,739 @@
+You are working in the FORGE repository.
+
+Implement Phase 10: FORGE-K Lymphatic Lane.
+
+Scope: SIMULATOR_ONLY.
+
+Do not wire FORGE-K Lymphatic Lane into the live daemon.
+Do not modify live dream/autonomy behavior.
+Do not modify live cleanup jobs.
+Do not change public APIs.
+Do not add routes.
+Do not change gateway behavior.
+Do not change modelruntime behavior.
+Do not mutate live AI-OS controllane behavior.
+
+Preflight:
+
+Read these first and treat them as binding:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/architecture/forge_k_overview.md
+- docs/architecture/core_doctrine.md
+- docs/architecture/lane_model.md
+- docs/architecture/neuron_fabric.md
+- docs/architecture/snapshots.md
+- docs/architecture/context_compiler_and_kv_cache.md
+- docs/architecture/runtime_driver_boundary.md
+- docs/roadmap/forge_k_build_phases.md
+- docs/reviews/current_phase_status.md
+- docs/testing/definition_of_done.md
+- services/core/internal/forgek/...
+- services/core/internal/forgek/snapshots/...
+- services/core/internal/forgek/contextcompiler/...
+- services/core/internal/forgek/kv/...
+- services/core/internal/forgek/runtime/...
+
+Hard stop conditions:
+
+If ADR 0005 is missing, stop.
+
+If Phase 9 Runtime Driver Boundary is missing, stop.
+
+If `go test ./internal/forgek/...` does not pass before changes, stop and report failing tests.
+
+Goal:
+
+Build the FORGE-K Lymphatic Lane inside `services/core/internal/forgek`.
+
+The Lymphatic Lane is the simulator maintenance, hygiene, coherence, and anti-rot system.
+
+It should detect stale, expired, orphaned, contradicted, superseded, invalidated, or cleanup-eligible simulator objects and produce deterministic maintenance reports and cleanup proposals.
+
+It must not silently delete canonical truth.
+It must not mutate source objects without syscalls.
+It must not wire into live daemon cleanup.
+It must not run automatically in the live runtime.
+
+Core doctrine:
+
+- Lymphatic Lane cleans, audits, proposes, expires, compacts, and reports.
+- Lymphatic Lane does not own truth.
+- Lymphatic Lane does not bypass Kernel authority.
+- Cleanup proposals are not canonical mutations until committed through semantic syscalls.
+- Superseded, rejected, invalidated, and expired objects remain inspectable.
+- Provenance must never be destroyed.
+- Lymphatic sweeps must be deterministic for stable inputs.
+- Maintenance reports are evidence/proposals, not final authority.
+- Cache eviction does not delete memory.
+- Snapshot expiration does not delete source truth.
+- Runtime output aging does not delete model evidence.
+- Contradiction sweeps must not silently merge contradictions.
+
+Use public/professional terminology only:
+
+- Lymphatic Lane
+- Lymphatic Sweep
+- Maintenance Report
+- Cleanup Proposal
+- Stale Object
+- Orphaned Reference
+- Supersession Candidate
+- Expiration Candidate
+- Cache Hygiene
+- Snapshot Hygiene
+- Runtime Result Hygiene
+- Contradiction Sweep
+- Deterministic Maintenance
+
+Do not use private symbolic, mystical, occult, numerological, or unserious language anywhere in repo files.
+
+Implementation expectations:
+
+1. Inspect current FORGE-K package layout.
+
+Adapt to existing style under:
+
+- services/core/internal/forgek
+- services/core/internal/forgek/snapshots
+- services/core/internal/forgek/contextcompiler
+- services/core/internal/forgek/kv
+- services/core/internal/forgek/runtime
+- services/core/internal/forgek/court
+- services/core/internal/forgek/palace
+- services/core/internal/forgek/semantic
+
+Suggested new package:
+
+- services/core/internal/forgek/lymphatic
+
+Suggested files:
+
+- services/core/internal/forgek/lymphatic/models.go
+- services/core/internal/forgek/lymphatic/service.go
+- services/core/internal/forgek/lymphatic/sweeps.go
+- services/core/internal/forgek/lymphatic/policies.go
+- services/core/internal/forgek/lymphatic/statuses.go
+- services/core/internal/forgek/lymphatic/errors.go
+
+Kernel/syscall wiring:
+
+- services/core/internal/forgek/lymphatic_syscalls.go
+- services/core/internal/forgek/lymphatic_syscalls_test.go
+
+Tests:
+
+- services/core/internal/forgek/lymphatic/lymphatic_policy_test.go
+- services/core/internal/forgek/lymphatic/lymphatic_sweep_test.go
+- services/core/internal/forgek/lymphatic/maintenance_report_test.go
+- services/core/internal/forgek/lymphatic/cleanup_proposal_test.go
+- services/core/internal/forgek/lymphatic/snapshot_hygiene_test.go
+- services/core/internal/forgek/lymphatic/kv_hygiene_test.go
+- services/core/internal/forgek/lymphatic/runtime_hygiene_test.go
+- services/core/internal/forgek/lymphatic/contradiction_sweep_test.go
+- services/core/internal/forgek/lymphatic/no_silent_mutation_test.go
+
+Adjust names to match existing repo style.
+
+2. Implement LymphaticPolicy.
+
+Fields similar to:
+
+- policy_id
+- workspace_id
+- sweep_kinds_enabled
+- max_report_items
+- stale_after_duration_ms
+- expire_after_duration_ms
+- kv_cold_after_reuse_count
+- kv_expire_after_duration_ms
+- snapshot_expire_after_duration_ms
+- runtime_result_stale_after_ms
+- include_rejected_evidence
+- include_superseded_objects
+- include_invalidated_kv
+- dry_run
+- created_at
+- metadata
+
+Rules:
+
+- Default policy must be deterministic.
+- Dry-run should be true by default.
+- Policy must not grant mutation authority.
+- Policy must be serializable.
+- Policy must not include secrets.
+
+3. Define sweep kinds.
+
+Suggested sweep kinds:
+
+- SNAPSHOT_HYGIENE
+- KV_HYGIENE
+- RUNTIME_RESULT_HYGIENE
+- CONTEXT_BUNDLE_HYGIENE
+- CONTRADICTION_SWEEP
+- SUPERSESSION_SWEEP
+- ORPHAN_REF_SWEEP
+- PALACE_ROUTE_HYGIENE
+- SEMANTIC_OBJECT_HYGIENE
+- CASE_HYGIENE
+- JOURNAL_INTEGRITY_SWEEP
+
+Phase 10 should implement deterministic minimal behavior for:
+
+- SNAPSHOT_HYGIENE
+- KV_HYGIENE
+- RUNTIME_RESULT_HYGIENE
+- CONTRADICTION_SWEEP
+- ORPHAN_REF_SWEEP
+
+Other sweep kinds can be declared and return “not implemented” warnings or empty results.
+
+4. Implement LymphaticSweepRequest.
+
+Fields similar to:
+
+- request_id
+- workspace_id
+- case_id, optional
+- sweep_kinds
+- policy_id, optional
+- dry_run
+- include_details
+- requested_by
+- created_at
+- metadata
+
+Rules:
+
+- Requires workspace_id.
+- Defaults dry_run=true.
+- Deterministically sorts sweep kinds.
+- Does not mutate objects directly.
+
+5. Implement MaintenanceReport.
+
+Fields similar to:
+
+- report_id
+- workspace_id
+- case_id, optional
+- sweep_kinds
+- policy_id
+- dry_run
+- findings
+- cleanup_proposals
+- warnings
+- errors
+- summary
+- created_by
+- created_at
+- journal_refs
+- metadata
+
+Rules:
+
+- Report is evidence/proposal, not canonical truth.
+- Report must preserve refs.
+- Report must be deterministic for same inputs.
+- Report must not delete or mutate source objects.
+- Report should be inspectable after creation.
+
+6. Implement LymphaticFinding.
+
+Fields similar to:
+
+- finding_id
+- finding_type
+- severity
+- workspace_id
+- case_id, optional
+- object_refs
+- source_refs
+- reason
+- recommended_action
+- created_at
+- metadata
+
+Finding types:
+
+- STALE_SNAPSHOT
+- SUPERSEDED_SNAPSHOT
+- EXPIRED_SNAPSHOT_CANDIDATE
+- INVALIDATED_KV_MANIFEST
+- EVICTABLE_KV_MANIFEST
+- STALE_RUNTIME_RESULT
+- OPEN_CONTRADICTION
+- ORPHANED_REFERENCE
+- UNREFERENCED_ROUTE
+- UNKNOWN_OBJECT_REF
+- JOURNAL_GAP_WARNING
+
+Severities:
+
+- INFO
+- LOW
+- MEDIUM
+- HIGH
+- CRITICAL
+
+7. Implement CleanupProposal.
+
+Fields similar to:
+
+- proposal_id
+- proposal_type
+- workspace_id
+- case_id, optional
+- target_object_refs
+- proposed_syscall_name
+- proposed_payload
+- reason
+- safety_notes
+- requires_review
+- created_at
+- metadata
+
+Proposal types:
+
+- EXPIRE_SNAPSHOT
+- SUPERSEDE_SNAPSHOT
+- INVALIDATE_KV
+- EVICT_KV
+- DEMOTE_KV_TIER
+- MARK_RUNTIME_RESULT_STALE
+- REGISTER_CONTRADICTION_REVIEW
+- REPAIR_ORPHAN_REF
+- EXPIRE_RESTORE_SEED
+- NO_OP_REVIEW
+
+Rules:
+
+- Proposal is not execution.
+- Proposal may include suggested syscall name/payload.
+- Proposal must not execute itself.
+- Proposal must not mutate state.
+- Dangerous proposals require review=true.
+
+8. Implement LymphaticService.
+
+Methods:
+
+- run_sweep
+- run_snapshot_hygiene
+- run_kv_hygiene
+- run_runtime_result_hygiene
+- run_contradiction_sweep
+- run_orphan_ref_sweep
+- get_report
+- list_reports
+- get_proposal
+- list_proposals
+- create_proposal
+- apply_proposal, optional but must route through Kernel if implemented
+
+Phase 10 recommendation:
+
+Implement proposal creation and report storage.
+Do not implement automatic proposal application unless it only returns a SyscallRequest and tests prove it does not execute directly.
+
+9. Snapshot hygiene behavior.
+
+Use snapshot service refs.
+
+Detect:
+
+- superseded snapshots
+- expired snapshots
+- old sealed snapshots that are expiration candidates
+- restore seeds tied to superseded snapshots
+- snapshots with missing source refs, if object registry lookup is available
+
+Proposals:
+
+- EXPIRE_SNAPSHOT
+- EXPIRE_RESTORE_SEED
+- NO_OP_REVIEW for ambiguous cases
+
+Rules:
+
+- Do not delete snapshots.
+- Do not mutate snapshots directly.
+- Expiration requires snapshot.expire syscall in a separate path.
+
+10. KV hygiene behavior.
+
+Use KV service refs.
+
+Detect:
+
+- invalidated manifests
+- evicted manifests
+- expired manifests
+- manifests with zero reuse count and cold tier
+- manifests whose context bundle ref is missing, if lookup is available
+- manifests whose identity metadata is incomplete
+
+Proposals:
+
+- EVICT_KV
+- INVALIDATE_KV
+- DEMOTE_KV_TIER
+- NO_OP_REVIEW
+
+Rules:
+
+- Do not delete manifests.
+- Do not mutate KV manifests directly.
+- KV eviction/invalidation requires KV syscalls.
+
+11. Runtime result hygiene behavior.
+
+Use runtime service refs/results if stored.
+
+Detect:
+
+- stale runtime results
+- runtime results with errors
+- runtime results without context refs
+- runtime outputs that have not been submitted to Courthouse
+- runtime outputs with warnings
+
+Proposals:
+
+- MARK_RUNTIME_RESULT_STALE
+- NO_OP_REVIEW
+- optional court.submit proposal only if existing patterns support request-only proposals
+
+Rules:
+
+- Runtime output remains proposal evidence.
+- Do not automatically submit runtime output to Courthouse.
+- Do not admit runtime output.
+- Do not mutate runtime results directly.
+
+12. Contradiction sweep behavior.
+
+Use Courthouse refs.
+
+Detect:
+
+- open contradictions
+- contradictions involving superseded exhibits
+- contradictions with no ruling
+- contradictions unresolved after policy window
+
+Proposals:
+
+- REGISTER_CONTRADICTION_REVIEW
+- NO_OP_REVIEW
+
+Rules:
+
+- Do not merge contradictions.
+- Do not resolve contradictions automatically.
+- Do not delete exhibits.
+- Do not alter admissibility.
+
+13. Orphan ref sweep behavior.
+
+Check refs across objects if existing registries allow.
+
+Detect:
+
+- snapshot source refs that point to missing objects
+- context block refs that point to missing source refs
+- KV manifests referencing missing bundles/blocks
+- runtime results referencing missing context bundles
+- Palace routes referencing missing candidate refs
+
+Proposals:
+
+- REPAIR_ORPHAN_REF
+- NO_OP_REVIEW
+
+Rules:
+
+- Do not delete objects.
+- Do not rewrite refs automatically.
+- Report and propose only.
+
+14. Implement Lymphatic syscalls.
+
+Required:
+
+- lymph.run_sweep
+- lymph.get_report
+- lymph.list_reports
+- lymph.get_proposal
+- lymph.list_proposals
+- lymph.create_proposal
+
+Optional:
+
+- lymph.apply_proposal
+
+Recommendation:
+
+Do not implement `lymph.apply_proposal` execution yet. If added, it must only create a SyscallRequest and must not execute it automatically.
+
+Syscall behavior:
+
+lymph.run_sweep:
+- requires capability
+- runs deterministic sweep
+- stores MaintenanceReport
+- stores CleanupProposals
+- journals LYMPHATIC_SWEEP_COMPLETED
+
+lymph.get_report:
+- read-only
+- returns report
+
+lymph.list_reports:
+- read-only
+- lists reports by workspace/case/kind
+
+lymph.get_proposal:
+- read-only
+- returns proposal
+
+lymph.list_proposals:
+- read-only
+- lists proposals by workspace/case/type
+
+lymph.create_proposal:
+- requires capability
+- stores proposal
+- journals LYMPHATIC_PROPOSAL_CREATED
+
+15. Add capabilities.
+
+Support:
+
+- lymph.run_sweep
+- lymph.get_report
+- lymph.list_reports
+- lymph.get_proposal
+- lymph.list_proposals
+- lymph.create_proposal
+- lymph.read
+
+Tests must prove:
+
+- actor without lymph.run_sweep cannot run sweep
+- read-only actor cannot create proposal
+- workspace scope enforced
+- sweep journals report event
+- proposals do not execute themselves
+
+16. Integrate with Kernel.
+
+Update Kernel to own LymphaticService.
+
+Add:
+
+- lymphatic service field
+- accessor if consistent with existing pattern
+- registerLymphaticSyscalls in registerCoreSyscalls
+
+Do not wire into live daemon.
+
+17. Integration boundaries.
+
+Lymphatic Lane may inspect refs from:
+
+- snapshots
+- contextcompiler
+- kv
+- runtime
+- court
+- palace
+- semantic
+- object registry
+- journal
+
+But it must not directly mutate those services.
+
+All cleanup effects must be proposals or separate syscalls.
+
+18. Add tests.
+
+Required test coverage:
+
+Policy:
+- default policy deterministic
+- dry-run true by default
+- invalid policy rejected
+- policy does not grant mutation authority
+
+MaintenanceReport:
+- valid report creation
+- findings sorted deterministically
+- proposals sorted deterministically
+- report preserves refs
+- report is inspectable
+
+CleanupProposal:
+- valid proposal creation
+- proposal does not execute itself
+- proposed syscall payload preserved
+- dangerous proposal requires review
+
+Snapshot hygiene:
+- superseded snapshot detected
+- old sealed snapshot proposed for expiration
+- snapshot source refs preserved
+- snapshot not mutated
+
+KV hygiene:
+- invalidated manifest detected
+- evictable cold manifest detected
+- manifest not mutated
+- proposal suggests KV syscall but does not execute
+
+Runtime hygiene:
+- stale runtime result detected
+- runtime result with warning detected
+- runtime result not auto-submitted to court
+- runtime result not mutated
+
+Contradiction sweep:
+- open contradiction detected
+- no silent merge
+- no exhibit deletion
+- proposal suggests review
+
+Orphan ref sweep:
+- missing ref detected
+- no automatic repair
+- report includes affected object refs
+
+Syscalls:
+- all required lymph syscalls registered
+- run_sweep requires capability
+- create_proposal requires capability
+- read syscalls work
+- mutating syscalls journal events
+- workspace scope enforced
+
+No silent mutation:
+- sweep does not mutate snapshots
+- sweep does not mutate KV manifests
+- sweep does not mutate runtime results
+- sweep does not resolve contradictions
+- sweep does not mutate CasePacket
+- sweep does not mutate SemanticObjects
+- sweep does not delete provenance
+- sweep does not call model runtimes
+- sweep does not change live daemon behavior
+
+19. Add docs.
+
+Update:
+
+- docs/architecture/lane_model.md
+- docs/architecture/forge_k_overview.md
+- docs/roadmap/forge_k_build_phases.md
+- docs/reviews/current_phase_status.md
+- docs/reviews/full_project_review_checklist.md
+- README.md if current phase advances to Phase 10
+- services/core/internal/forgek/README.md if present
+
+Create if useful:
+
+- docs/architecture/lymphatic_lane.md
+
+Include:
+
+- Phase 10 scope
+- LymphaticService
+- LymphaticPolicy
+- LymphaticSweepRequest
+- MaintenanceReport
+- LymphaticFinding
+- CleanupProposal
+- supported sweep kinds
+- simulator-only boundary
+- no silent mutation doctrine
+- current limitations
+- Phase 11 handoff
+
+20. Run tests.
+
+Run:
+
+go test ./internal/forgek/...
+
+Then run if feasible:
+
+npm run build:core
+npm run lint
+npm test
+
+If full repo tests fail for unrelated desktop/Node reasons, document exact failure and whether it is unrelated.
+
+21. Definition of done.
+
+Phase 10 is complete when:
+
+- lymphatic package exists
+- LymphaticPolicy exists and is tested
+- LymphaticSweepRequest exists and is tested
+- MaintenanceReport exists and is tested
+- LymphaticFinding exists and is tested
+- CleanupProposal exists and is tested
+- LymphaticService exists and is tested
+- Snapshot hygiene exists and is tested
+- KV hygiene exists and is tested
+- Runtime result hygiene exists and is tested
+- Contradiction sweep exists and is tested
+- Orphan ref sweep exists and is tested
+- lymphatic syscalls are registered and tested
+- Kernel owns LymphaticService in simulator only
+- capabilities gate sweep/proposal operations
+- sweeps are journaled
+- proposals do not execute themselves
+- no silent mutation tests pass
+- docs are updated
+- current phase status is updated
+- `go test ./internal/forgek/...` passes
+
+WHAT NOT TO DO:
+
+- Do not wire Lymphatic Lane into live daemon.
+- Do not change live dream/autonomy cleanup.
+- Do not add background jobs.
+- Do not add routes.
+- Do not call model runtimes.
+- Do not delete objects.
+- Do not silently expire snapshots.
+- Do not silently evict KV manifests.
+- Do not silently resolve contradictions.
+- Do not mutate runtime results.
+- Do not mutate ContextBundles.
+- Do not mutate snapshots/KV/court/semantic state directly.
+- Do not destroy provenance.
+- Do not implement Rust kernel core.
+- Do not implement live integration.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code in files.
+
+After implementation, respond with:
+
+- files created/changed
+- lymphatic components implemented
+- sweep kinds implemented
+- syscalls implemented
+- capability behavior
+- journal behavior
+- no-silent-mutation behavior
+- snapshot/KV/runtime/court integration behavior
+- tests added
+- commands run
+- test results
+- assumptions made
+- recommended next phase

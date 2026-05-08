@@ -1,0 +1,349 @@
+# FORGE-OS Phase N4 — FORGE-H Resource Policy Layer
+
+You are working in the `project_forge` repository.
+
+Phase N2 created the FORGE-OS host substrate scaffolding.
+Phase N3 implemented the read-only Host Kernel Bridge diagnostic snapshot locally.
+
+Now implement Phase N4: FORGE-H Resource Policy.
+
+## Goal
+
+Build a FORGE-H resource policy layer that consumes read-only host diagnostics and produces bounded resource posture and recommendations.
+
+This phase gives FORGE resource judgment, not host mutation authority.
+
+FORGE-H should help answer:
+
+- Is the machine healthy enough for interactive work?
+- Should background ingest/indexing pause?
+- Should a model load be allowed, deferred, or rejected?
+- Is RAM/VRAM/disk pressure normal, elevated, constrained, or critical?
+- Should FORGE enter degraded mode?
+- Should the operator be warned?
+- Which workload lane should run now?
+
+## Doctrine To Preserve
+
+- FORGE is the AI-OS.
+- Linux/NixOS remains the boot and hardware substrate.
+- Host Kernel Bridge observations are diagnostic evidence, not authority.
+- FORGE-H may classify, recommend, and gate only through existing governed paths.
+- FORGE-H must not mutate host state in this phase.
+- FORGE-K remains simulator/shadow only unless a later explicit phase changes that.
+- Durable memory writes still require existing syscall/validation/approval/audit/commit paths.
+- Model runtimes remain drivers/proposers, not truth authority.
+
+## Build Scope
+
+Create a resource policy subsystem, preferably under one of these paths depending on existing repo conventions:
+
+- `services/core/internal/forgeh`
+- `services/core/internal/resourcepolicy`
+- `services/core/internal/hostpolicy`
+
+Use the existing N3 Host Kernel Bridge snapshot type as input.
+
+If N3 snapshot types live elsewhere, import them cleanly. Do not duplicate diagnostic structs unless necessary.
+
+## Required Concepts
+
+Implement these core types or equivalent:
+
+### ResourcePressure
+
+Enum/string classification:
+
+- `unavailable`
+- `normal`
+- `elevated`
+- `constrained`
+- `critical`
+
+### ResourcePosture
+
+Overall machine posture:
+
+- `normal`
+- `degraded`
+- `constrained`
+- `critical`
+
+### WorkloadLane
+
+At minimum:
+
+- `interactive`
+- `background_ingest`
+- `embedding`
+- `model_load`
+- `model_inference`
+- `maintenance`
+- `desktop_ui`
+
+### PolicyDecision
+
+A bounded advisory decision:
+
+- `allow`
+- `allow_with_warning`
+- `defer`
+- `deny`
+- `unavailable`
+
+### ResourcePolicySnapshot
+
+Should include:
+
+- `policy_id`
+- `captured_at`
+- `source_snapshot_id`
+- `overall_posture`
+- `ram_pressure`
+- `swap_pressure`
+- `disk_pressure`
+- `vram_pressure`
+- `thermal_pressure`
+- `lane_decisions`
+- `model_load_recommendation`
+- `background_work_recommendation`
+- `warnings`
+- `operator_actions`
+- `source_errors`
+- `advisory_only`
+
+Default `advisory_only` must be `true`.
+
+## Required Policy Behavior
+
+Implement conservative default thresholds.
+
+Suggested initial logic:
+
+### RAM
+
+- normal: available RAM >= 30%
+- elevated: available RAM < 30%
+- constrained: available RAM < 15%
+- critical: available RAM < 7%
+- unavailable: missing data
+
+### Swap
+
+- normal: swap unused or lightly used
+- elevated: swap used > 25%
+- constrained: swap used > 50%
+- critical: swap used > 80%
+- unavailable: missing data
+
+### Disk
+
+Evaluate `/forge` storage root or configured storage path.
+
+- normal: free disk >= 20%
+- elevated: free disk < 20%
+- constrained: free disk < 10%
+- critical: free disk < 5%
+- unavailable: missing data
+
+### VRAM
+
+If GPU unavailable, return `unavailable`, not failure.
+
+If available:
+
+- normal: free VRAM >= 35%
+- elevated: free VRAM < 35%
+- constrained: free VRAM < 20%
+- critical: free VRAM < 10%
+
+### Thermal
+
+If thermal data unavailable, return `unavailable`.
+
+If available, classify conservatively based on sensor values.
+
+Do not hard-fail on missing thermal data.
+
+## Lane Decisions
+
+Use the resource posture to recommend workload behavior.
+
+Examples:
+
+### interactive
+
+- allow unless overall posture is critical
+- allow_with_warning if constrained
+
+### background_ingest
+
+- allow when normal
+- defer when elevated/constrained
+- deny when critical
+
+### embedding
+
+- allow when RAM/disk normal
+- defer when RAM or disk elevated
+- deny when RAM/disk critical
+
+### model_load
+
+- allow when RAM/VRAM normal
+- allow_with_warning when elevated
+- defer when constrained
+- deny when critical
+
+### model_inference
+
+- allow for small/currently-loaded models during elevated state
+- defer large new loads during constrained state
+- deny only during critical state or unavailable required resources
+
+### maintenance
+
+- allow when normal/elevated
+- defer when constrained
+- deny when critical
+
+## Model Load Recommendation
+
+Implement a policy output that can say:
+
+- `small_local_ok`
+- `current_model_only`
+- `defer_large_model`
+- `cpu_only_safe_mode`
+- `deny_new_model_load`
+- `unavailable`
+
+Do not actually load or unload models.
+
+Do not call model runtime spawn paths.
+
+## Operator Actions
+
+Produce human-readable but bounded recommendations, such as:
+
+- "Defer background ingest until RAM pressure returns to normal."
+- "Avoid loading large GPU models; VRAM is constrained."
+- "Free disk space under /forge before running embedding jobs."
+- "Thermal diagnostics unavailable; continue without thermal policy."
+
+Do not include scary fake certainty.
+Do not recommend destructive cleanup.
+
+## Integration
+
+Expose the policy layer through one safe internal mechanism:
+
+Preferred:
+
+- internal package callable from diagnostics/admin code
+- optional internal/admin-gated endpoint if the repo already has such a convention
+- optional CLI/dev diagnostic command if existing command structure supports it
+
+Do not create a public unauthenticated route.
+
+Do not wire it into automatic runtime behavior yet unless there is an existing safe advisory path.
+
+If integrating with modelruntime, only attach policy as advisory metadata unless explicitly approved by existing modelruntime governance.
+
+## NixOS Module Updates
+
+Update `nix/nixos/modules/forge-host-kernel.nix` or related module only if needed to add config knobs.
+
+Suggested options:
+
+- `forge.resourcePolicy.enable`
+- `forge.resourcePolicy.advisoryOnly = true`
+- `forge.resourcePolicy.runtimePath = "${config.forge.storage.root}/runtime/resource-policy"`
+
+Default:
+
+- disabled or advisory-only
+- no host mutation
+- no service restarts
+- no model auto-load/unload
+
+## Tests
+
+Add tests for:
+
+1. RAM pressure classification
+2. Disk pressure classification
+3. VRAM unavailable behavior
+4. VRAM constrained/critical classification
+5. Thermal unavailable behavior
+6. Overall posture calculation
+7. Lane decisions for normal/elevated/constrained/critical states
+8. Model load recommendation behavior
+9. Advisory-only default
+10. No mutation behavior
+
+Mutation forbidden list must include:
+
+- `nixos-rebuild`
+- `systemctl restart`
+- `systemctl stop`
+- `systemctl start`
+- `modprobe`
+- `rmmod`
+- package manager upgrade commands
+- destructive cleanup
+- model auto-load
+- model auto-unload
+- direct semantic memory writes
+
+## Documentation
+
+Add or update:
+
+- `docs/architecture/forge_h_resource_policy.md`
+- `docs/architecture/forge_os_host_substrate.md`
+- `docs/architecture/forge_host_kernel_bridge.md`
+- optional `docs/operations/resource_policy_diagnostics.md`
+- optional ADR `docs/adr/0008-forge-h-resource-policy.md`
+
+Document:
+
+- FORGE-H role
+- input from Host Kernel Bridge
+- resource pressure levels
+- lane decisions
+- advisory-only boundary
+- future path toward bounded approved controls
+- what remains forbidden
+
+## Acceptance Criteria
+
+- FORGE-H can produce a resource policy snapshot from a Host Kernel Bridge diagnostic snapshot.
+- Missing GPU/thermal data does not fail policy generation.
+- Resource pressure levels are deterministic and tested.
+- Workload lane decisions are deterministic and tested.
+- Model load recommendation is advisory only.
+- No host mutation is introduced.
+- No model auto-load/unload is introduced.
+- No direct semantic memory write path is introduced.
+- No live FORGE-K authority migration occurs.
+- Existing tests still pass.
+- Nix checks still pass where available.
+
+## WHAT NOT TO DO
+
+- Do not mutate host state.
+- Do not restart services.
+- Do not run `nixos-rebuild`.
+- Do not load or unload kernel modules.
+- Do not auto-load or auto-unload models.
+- Do not pause real workers automatically yet.
+- Do not delete files.
+- Do not perform cleanup.
+- Do not write policy results directly into semantic memory.
+- Do not bypass gateway, permissions, lanes, audit, controllane, or modelruntime governance.
+- Do not create public unauthenticated API routes.
+- Do not make GPU required.
+- Do not make thermal data required.
+- Do not turn this into a UI phase.
+- Do not turn FORGE-H into live kernel authority.

@@ -1,0 +1,361 @@
+You are working in the FORGE repository.
+
+Implement Phase 13D-E: Diagnostic Persistence and Retrieval Metadata Relational Adapter.
+
+Scope: LIVE_INFRA / DIAGNOSTIC_STORAGE / DEFAULT_SQLITE / DISABLED_BY_DEFAULT.
+
+This combines:
+
+- Phase 13D — Shadow Diagnostic Persistence
+- Phase 13E — Retrieval Metadata Relational Adapter
+
+Do not make Postgres the default backend.
+Do not migrate live memory to Postgres.
+Do not migrate canonical memory tables.
+Do not switch reads to Postgres.
+Do not dual-write canonical live data.
+Do not persist raw prompts, completions, message bodies, source chunks, retrieval content, embeddings, vectors, tool payloads, memory content, auth headers, cookies, tokens, or secrets.
+Do not wire Redis into queues/caches yet.
+Do not wire Qdrant into retrieval yet.
+Do not change public APIs.
+Do not add routes.
+Do not alter live memory semantics.
+Do not alter gateway/modelruntime/retrieval behavior.
+Do not make Redis or Qdrant canonical truth.
+Do not make vector hits admissible evidence.
+Do not make FORGE-K live authority.
+
+Purpose:
+
+Phase 13A created the storage backend foundation.
+
+Phase 13B-C added Postgres foundation migrations and parity tests for storage metadata plus disabled shadow diagnostic schema.
+
+Phase 13D-E should add the first safe diagnostic persistence path and retrieval metadata relational adapter scaffolding.
+
+This is not a live store cutover.
+
+Core doctrine:
+
+- SQLite remains live default.
+- Postgres diagnostic persistence is opt-in and disabled by default.
+- Shadow diagnostics are non-authoritative.
+- Persisted diagnostics are not memory.
+- Retrieval metadata is not retrieval content.
+- Retrieval metadata is not RAG output.
+- Retrieval metadata does not admit evidence.
+- Postgres does not become canonical live store yet.
+- Qdrant remains unwired.
+- Redis remains unwired.
+- No public diagnostics API.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- .env.docker.example
+- docker-compose.yml
+- docs/architecture/storage_backend_migration.md
+- docs/testing/storage_backend_parity.md
+- docs/data_model/persistence_inventory.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- services/core/migrations/postgres/...
+- services/core/internal/storagebackend/...
+- services/core/internal/store/...
+- services/core/internal/config/...
+- services/core/internal/forgekshadow/...
+- services/core/internal/api/...
+- services/core/internal/retrieval/...
+
+Hard stop conditions:
+
+If `cd services/core && go test ./...` fails before changes, stop.
+
+If Phase 13B-C status is not recorded as implemented/tested, stop.
+
+If Postgres shadow diagnostic schema is missing, stop.
+
+If SQLite is not still the default live backend, stop.
+
+Feature flag:
+
+Add a disabled-by-default diagnostic persistence flag:
+
+- `FORGE_SHADOW_DIAGNOSTIC_PERSISTENCE_ENABLED=false`
+
+Rules:
+
+- disabled by default
+- requires `FORGE_STORE_BACKEND=postgres` or explicit Postgres DSN, depending on chosen safe design
+- must not persist when disabled
+- must not affect in-memory diagnostic sink behavior
+- must not affect live responses
+- must not add public APIs
+- must not write canonical memory
+
+Deliverables:
+
+1. Add diagnostic persistence config.
+
+Add config support for:
+
+- FORGE_SHADOW_DIAGNOSTIC_PERSISTENCE_ENABLED=false
+
+Optional:
+
+- FORGE_SHADOW_DIAGNOSTIC_RETENTION_DAYS
+- FORGE_SHADOW_DIAGNOSTIC_MAX_PAYLOAD_BYTES
+
+Rules:
+
+- default disabled
+- invalid values fail closed or follow existing config conventions
+- enabling persistence without Postgres config fails clearly or no-ops safely
+- no public settings API
+
+Tests:
+
+- default disabled
+- enabled requires Postgres configuration
+- invalid config fails safe
+- enabling does not switch main store backend
+
+2. Implement Postgres diagnostic repository.
+
+Add package/file as appropriate:
+
+- services/core/internal/forgekshadow/persistence.go
+- or services/core/internal/store/shadow_diagnostics.go
+
+Repository should write only safe diagnostic summaries:
+
+- report id
+- created at
+- report type
+- workspace/request/correlation refs
+- route class/pattern refs
+- chat metadata refs
+- retrieval metadata refs
+- advisory summary refs
+- counts/scores/classes
+- risk flags
+- redaction summary
+- no_effect_verified
+- schema version
+- retention expiry
+
+Rules:
+
+- no raw content fields
+- no bodies
+- no prompts/completions
+- no source/chunk text
+- no embeddings/vectors
+- no memory content
+- no secrets
+- JSON payload must be size-limited
+- write failure must not fail live request
+- persisted rows are non-authoritative diagnostics
+
+3. Wire persistence behind flag.
+
+When diagnostic persistence is enabled:
+
+- existing in-memory sink still works
+- selected diagnostics may also be persisted to Postgres
+- persistence is best-effort
+- persistence failure records internal warning if possible, but does not affect live request
+- no public API is added
+
+If persistence cannot be safely wired without affecting live code, implement repository + tests only and document live wiring deferred.
+
+4. Add retrieval metadata relational adapter scaffold.
+
+Create adapter/repository structures for retrieval metadata in relational storage.
+
+Goal:
+
+- map retrieval metadata diagnostics to relational-safe DTOs
+- prepare for future Postgres retrieval metadata adapter
+- no read switch
+- no live retrieval behavior change
+
+Rules:
+
+- no source text
+- no chunks
+- no raw query
+- no vectors
+- no embeddings
+- no live retrieval execution
+- no Qdrant calls
+- no RAG
+
+5. Add tests.
+
+Diagnostic persistence tests:
+
+- disabled means no Postgres write
+- enabled writes safe diagnostic row
+- unsafe metadata rejected
+- oversized payload rejected
+- persistence failure isolated
+- no raw content stored
+- retention expiry set
+- schema version set
+- no canonical truth markers present
+
+Retrieval metadata relational adapter tests:
+
+- maps run/result refs safely
+- maps counts/scores/classes safely
+- rejects source text
+- rejects chunk text
+- rejects raw query
+- rejects vector/embedding values
+- rejects memory content
+- deterministic serialization
+- no live retrieval call
+
+Config tests:
+
+- persistence default disabled
+- persistence enabled requires safe backend config
+- SQLite default remains unchanged
+- Postgres is not default
+
+6. Add optional Postgres integration tests.
+
+Only run if env is present:
+
+- FORGE_POSTGRES_TEST_DSN
+
+Tests:
+
+- migrate schema
+- insert diagnostic report
+- retrieve by id
+- list by created_at
+- retention expiry query
+- idempotent migration
+
+Do not require Docker/Postgres for normal `npm test`.
+
+7. Update migrations if needed.
+
+If Phase 13B-C already has shadow diagnostic schema, extend only if needed.
+
+Rules:
+
+- migrations idempotent
+- no canonical memory tables
+- no retrieval content tables
+- no vector tables
+- no raw body/content columns
+
+8. Update docs.
+
+Update:
+
+- docs/architecture/storage_backend_migration.md
+- docs/testing/storage_backend_parity.md
+- docs/data_model/persistence_inventory.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- README.md if useful
+
+Create:
+
+- docs/reviews/phase_13de_diagnostic_persistence_and_retrieval_adapter.md
+
+Include:
+
+- what was persisted
+- what was explicitly not persisted
+- flags
+- fallback behavior
+- Postgres role
+- SQLite default confirmation
+- retrieval metadata boundary
+- Qdrant still unwired
+- Redis still unwired
+
+9. Validation commands.
+
+Run:
+
+cd services/core && go test ./internal/storagebackend/... ./internal/store/... ./internal/config/... ./internal/forgekshadow/...
+
+Then:
+
+cd services/core && go test ./...
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+docker compose config
+git diff --check
+
+If Postgres is running and integration env is available:
+
+FORGE_POSTGRES_TEST_DSN="postgres://forge:forge_dev_password@127.0.0.1:5432/forge?sslmode=disable" \
+  go test ./internal/store/... ./internal/forgekshadow/... -run Postgres -count=1
+
+Document exact results.
+
+Acceptance criteria:
+
+- diagnostic persistence flag exists and defaults disabled
+- SQLite remains default
+- Postgres diagnostic repository exists
+- no raw content persisted
+- unsafe/oversized payloads rejected
+- persistence failure isolated
+- retrieval metadata relational adapter exists
+- retrieval adapter rejects content/query/vector fields
+- normal tests do not require Postgres
+- optional Postgres integration tests are gated by env
+- no public APIs/routes changed
+- no live memory migration
+- no read switch
+- no dual-write canonical data
+- Qdrant remains unwired
+- Redis remains unwired
+- docs updated
+- validation commands pass
+
+WHAT NOT TO DO:
+
+- Do not make Postgres default.
+- Do not migrate memory tables.
+- Do not persist raw diagnostics.
+- Do not persist prompts/completions/message bodies/source chunks/vectors.
+- Do not create public diagnostics APIs.
+- Do not switch live reads to Postgres.
+- Do not dual-write canonical data.
+- Do not wire Redis into queues/caches.
+- Do not wire Qdrant into retrieval.
+- Do not call retrieval/search/embedding providers.
+- Do not alter live gateway/modelruntime/retrieval/memory behavior.
+- Do not make diagnostic rows canonical truth.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code/docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- diagnostic persistence behavior
+- retrieval metadata adapter behavior
+- flags added
+- data persisted
+- data explicitly not persisted
+- Postgres integration test behavior
+- docs updated
+- commands run
+- test results
+- whether SQLite remains default
+- whether any live behavior changed
+- recommended next phase

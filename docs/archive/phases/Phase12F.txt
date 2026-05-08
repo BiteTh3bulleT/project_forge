@@ -1,0 +1,449 @@
+You are working in the FORGE repository.
+
+Implement Phase 12F: Route Envelope Shadow Hardening.
+
+Scope: LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY.
+
+Do not add new live touchpoints.
+Do not expand beyond route-envelope metadata.
+Do not observe chat content.
+Do not observe retrieval content.
+Do not observe gateway payloads.
+Do not add public diagnostics APIs.
+Do not add routes.
+Do not change public APIs.
+Do not change response bodies.
+Do not change response headers.
+Do not change status codes.
+Do not capture request bodies.
+Do not capture response bodies.
+Do not capture prompts.
+Do not capture model outputs.
+Do not capture retrieval result content.
+Do not capture auth headers, cookies, bearer tokens, API keys, or secrets.
+Do not execute tools.
+Do not call modelruntime from FORGE-K.
+Do not call retrieval/search/embedding providers from FORGE-K.
+Do not implement live RAG.
+Do not write memory.
+Do not execute controllane semantic mutations from FORGE-K.
+Do not alter gateway, permissions, lanes, audit, modelruntime, retrieval, memory, search, embeddings, API, or controllane behavior.
+Do not create a second authority path.
+Do not make FORGE-K live authority.
+
+Purpose:
+
+Phase 12E implemented disabled-by-default route-envelope metadata shadowing.
+
+Phase 12F hardens that implementation before any further expansion.
+
+This phase should strengthen:
+
+- route pattern safety
+- route class normalization
+- query/header/body leakage prevention
+- SSE route preservation
+- timeout behavior preservation
+- conditional /v1 behavior preservation
+- /forge route preservation
+- response equivalence
+- diagnostic sink safety
+- metadata redaction
+- forbidden import coverage
+- no-effect guarantees
+- documentation accuracy
+
+This phase must not expand shadow mode beyond current route-envelope metadata.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/architecture/forge_k_live_integration_design.md
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/architecture/phase_12d_controlled_shadow_expansion_design.md
+- docs/testing/phase_12e_shadow_route_envelope_tests.md
+- docs/architecture/shadow_mode.md
+- docs/architecture/shadow_mode_harness.md
+- docs/reviews/phase_12c_shadow_diagnostics_review.md
+- docs/reviews/phase_12d_touchpoint_selection.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- services/core/internal/forgekshadow/...
+- services/core/internal/forgek/shadowharness/...
+- services/core/internal/api/server.go
+- services/core/internal/api/routes.go
+- services/core/internal/api/server_route_inventory_test.go
+- services/core/internal/config/...
+
+Hard stop conditions:
+
+If `go test ./internal/forgek/...` does not pass before changes, stop.
+
+If `go test ./internal/forgekshadow/...` does not pass before changes, stop.
+
+If route inventory tests fail before changes, stop.
+
+If full API tests fail before changes, document the failure and stop unless clearly unrelated.
+
+If Phase 12E status is not recorded as implemented/tested, stop.
+
+Core doctrine:
+
+- Shadow mode observes and reports only.
+- Shadow diagnostics are non-authoritative.
+- Shadow diagnostics must not affect live response behavior.
+- Shadow diagnostics must not mutate live state.
+- Shadow diagnostics must not execute tools.
+- Shadow diagnostics must not call modelruntime.
+- Shadow diagnostics must not perform retrieval/search/embedding calls.
+- Shadow diagnostics must not write memory.
+- Shadow diagnostics must not call controllane mutations.
+- Shadow diagnostics must not create a second authority path.
+- `FORGE_K_SHADOW_MODE_ENABLED` remains disabled by default.
+- Current route-envelope metadata is the only live shadow expansion.
+- No further live observation is added in this phase.
+
+Allowed route-envelope metadata remains limited to:
+
+- HTTP method
+- matched route pattern
+- normalized route class
+- timing duration
+- safe request id when available
+- diagnostic markers
+- bounded warnings
+
+Forbidden metadata:
+
+- raw path query string
+- request body
+- response body
+- prompt text
+- model output
+- file contents
+- source chunks
+- retrieval result content
+- memory content
+- auth headers
+- cookies
+- bearer tokens
+- API keys
+- raw authorization metadata
+- large raw content blobs
+- secrets or secret-looking metadata
+
+Deliverables:
+
+1. Create docs/reviews/phase_12f_route_envelope_shadow_hardening.md
+
+Include:
+
+- implementation summary
+- current route-envelope scope
+- no-effect guarantees
+- risk review
+- coverage review
+- hardening actions completed
+- remaining deferred work
+- recommendation for next phase
+
+2. Harden route class normalization.
+
+Review and strengthen route class behavior.
+
+Expected route classes may include:
+
+- health
+- api
+- forge
+- openai_compat
+- static_or_unknown
+- other
+
+Tests must prove:
+
+- /health maps to health
+- /api/... maps to api
+- /forge/... maps to forge
+- /v1/... maps to openai_compat when mounted
+- unknown paths map to static_or_unknown or other
+- query strings do not affect route class
+- raw query content is never stored
+- high-cardinality path fragments are not stored when route pattern is available
+
+3. Harden matched route pattern safety.
+
+Tests must prove:
+
+- matched route pattern is preferred over raw path
+- raw query string is not stored
+- dynamic IDs are not stored when route pattern is available
+- unknown route paths are redacted or route-class-only
+- route pattern serialization is deterministic
+
+4. Harden disabled/enabled behavior.
+
+Tests must prove:
+
+- unset env/config disables route-envelope reports
+- invalid env/config does not enable shadow mode unless existing config convention says otherwise
+- disabled mode calls no route-envelope observer
+- disabled mode stores no route-envelope reports
+- enabled mode stores only diagnostic route-envelope reports
+- enabled mode continues to support existing /health diagnostics
+- enabled mode does not change any response behavior
+
+5. Harden response equivalence.
+
+Tests must prove response equivalence for representative routes with shadow disabled and enabled:
+
+- /health
+- representative simple /api route
+- representative unmatched route / 404
+- /forge route mounting behavior
+- /v1 route conditional behavior when OpenAI compatibility is disabled
+- /v1 route conditional behavior when OpenAI compatibility is enabled, if practical
+- /api/chat/threads/{id}/assistant-stream remains mounted and ordering guard remains valid
+
+Do not require successful model output where setup is heavy. Use route-mounted status checks where appropriate, but compare disabled/enabled behavior.
+
+6. Harden SSE and timeout preservation.
+
+Tests or documented checks must prove:
+
+- /api/chat/threads/{id}/assistant-stream remains outside the main /api timeout group as before
+- /forge timeout behavior remains unchanged
+- /v1 timeout behavior remains unchanged
+- route-envelope observer does not wrap or buffer streaming bodies
+- route-envelope observer does not capture SSE response body
+
+7. Harden diagnostic sink behavior.
+
+Ensure:
+
+- bounded retention remains deterministic
+- oldest report is dropped on overflow
+- route-envelope reports do not bypass size limits
+- disabled sink stores nothing
+- sink failure is isolated from live requests
+- reports remain clearly non-authoritative
+
+Tests:
+
+- bounded retention for route-envelope reports
+- drop oldest behavior
+- sink disabled behavior
+- sink failure isolation
+- no live behavior change on sink failure
+
+8. Harden redaction and metadata safety.
+
+Expand or verify unsafe metadata terms:
+
+- api_key
+- secret
+- token
+- password
+- private_key
+- bearer
+- plaintext
+- credential
+- authorization
+- cookie
+- session
+- set_cookie
+- x_api_key
+- auth
+- jwt
+- refresh_token
+- access_token
+- prompt
+- completion
+- response_body
+- request_body
+- body
+- content
+- raw_content
+
+Rules:
+
+- unsafe metadata must be dropped or reject the diagnostic report
+- no unsafe metadata may be stored
+- live request must continue unaffected
+
+9. Harden no-effect validator.
+
+Tests must prove rejection when any forbidden side-effect flag is enabled:
+
+- live mutation
+- tool execution
+- modelruntime call
+- retrieval execution
+- search execution, if represented
+- embedding call
+- memory write
+- user-visible output
+- public API change
+- controllane mutation, if represented
+
+10. Add route-envelope specific no-capture tests.
+
+Tests must prove:
+
+- POST body is not captured
+- invalid POST body is not captured
+- response body is not captured
+- headers are not captured
+- auth/cookie headers are not captured
+- query parameters are not captured
+- route metadata remains bounded
+
+11. Add forbidden import tests.
+
+Ensure:
+
+- `services/core/internal/forgek/...` does not import live daemon packages
+- `services/core/internal/forgekshadow` does not import gateway/modelruntime/retrieval/search/embeddings/memory/controllane in production code
+- `forgekshadow` may import `forgek/shadowharness`
+
+Forbidden production imports for `forgekshadow`:
+
+- internal/gateway
+- internal/modelruntime
+- internal/retrieval
+- internal/search
+- internal/embeddings
+- internal/memory
+- internal/aios/controllane
+
+12. Add no-public-diagnostics-route regression.
+
+Tests must prove:
+
+- no /api/forgek-shadow route exists
+- no /api/shadow route exists
+- no /forge/shadow route exists
+- no diagnostics route was added
+
+13. Update docs.
+
+Update:
+
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- README.md
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/architecture/phase_12d_controlled_shadow_expansion_design.md
+- docs/testing/phase_12e_shadow_route_envelope_tests.md
+- docs/architecture/shadow_mode.md
+
+Add Phase 12F notes:
+
+- route-envelope metadata hardened
+- no new live touchpoints
+- no body/query/header/secret capture
+- SSE behavior preserved
+- timeout behavior preserved
+- route inventory preserved
+- diagnostics remain bounded in-memory only
+- no public diagnostics route
+- no live authority change
+
+14. Run validation.
+
+Run:
+
+cd services/core && go test ./internal/forgek/...
+
+cd services/core && go test ./internal/forgekshadow/...
+
+cd services/core && go test ./internal/api -run "TestServerRouteInventory|TestServerRouteInventoryHealthAndMiddlewareSmoke" -count=1
+
+Run broader API tests:
+
+cd services/core && go test ./internal/api -count=1
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+npm run test:forgek:parity
+git diff --check
+
+Document exact results.
+
+Acceptance criteria:
+
+- Phase 12F review doc exists
+- route class normalization hardened
+- matched route pattern safety tested
+- query/body/header leakage prevention tested
+- response equivalence tested
+- SSE route behavior preserved
+- timeout behavior preserved
+- diagnostic sink hardened
+- redaction list expanded or verified
+- no-effect validator hardened
+- forbidden import tests pass
+- no public diagnostics route exists
+- route inventory unchanged
+- no new live touchpoints added
+- no request bodies captured
+- no response bodies captured
+- no prompts/model outputs captured
+- no retrieval/memory content captured
+- no auth/cookie/secrets captured
+- no persistent reports
+- no tool execution
+- no modelruntime calls
+- no retrieval/search/embedding calls
+- no memory writes
+- no controllane mutations
+- docs updated
+- validation commands pass
+
+WHAT NOT TO DO:
+
+- Do not expand beyond route-envelope metadata.
+- Do not add chat metadata yet.
+- Do not add retrieval metadata yet.
+- Do not add gateway metadata yet.
+- Do not observe all payloads.
+- Do not capture request bodies.
+- Do not capture response bodies.
+- Do not capture query strings.
+- Do not capture auth headers.
+- Do not add public diagnostics endpoints.
+- Do not persist reports to DB.
+- Do not call modelruntime.
+- Do not execute tools.
+- Do not query retrieval/search/embeddings.
+- Do not write memory.
+- Do not call controllane mutations.
+- Do not alter user-visible output.
+- Do not change route behavior.
+- Do not make FORGE-K live authority.
+- Do not create a second Kernel.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code/docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- Phase 12F review summary
+- route-envelope hardening completed
+- metadata captured
+- metadata explicitly not captured
+- flag behavior
+- sink behavior
+- redaction behavior
+- no-effect validation
+- route/API stability results
+- SSE/timeout preservation results
+- commands run
+- test results
+- whether any live behavior changed
+- recommended next phase

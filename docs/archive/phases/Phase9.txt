@@ -1,0 +1,679 @@
+You are working in the FORGE repository.
+
+Implement Phase 9: FORGE-K Runtime Driver Integration.
+
+Scope: SIMULATOR_ONLY / DRIVER_BOUNDARY_ONLY.
+
+Do not wire FORGE-K into the live daemon.
+Do not replace live modelruntime.
+Do not modify live gateway behavior.
+Do not change public APIs.
+Do not add routes.
+Do not call real model runtimes.
+Do not add OpenAI/Ollama/vLLM/SGLang/TensorRT calls in this phase.
+Do not perform real KV cache reuse.
+Do not change live AI-OS controllane behavior.
+
+Preflight:
+
+Read these first and treat them as binding:
+
+- AGENTS.md
+- README.md
+- docs/adr/0002-models-are-drivers-not-authority.md
+- docs/adr/0004-kv-cache-is-acceleration-not-memory.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/architecture/forge_k_overview.md
+- docs/architecture/core_doctrine.md
+- docs/architecture/context_compiler_and_kv_cache.md
+- docs/roadmap/forge_k_build_phases.md
+- docs/reviews/current_phase_status.md
+- docs/testing/definition_of_done.md
+- services/core/internal/forgek/...
+- services/core/internal/forgek/contextcompiler/...
+- services/core/internal/forgek/kv/...
+
+Hard stop conditions:
+
+If ADR 0005 is missing, stop and report:
+“ADR 0005 is missing. Phase 9 cannot start until FORGE-K simulator vs live authority is documented.”
+
+If Phase 8 Deterministic KV System is missing, stop and report:
+“Phase 8 Deterministic KV System is missing. Phase 9 cannot start until KVCacheManifest, KVService, nine-gate validation, and KV syscalls exist.”
+
+If `go test ./internal/forgek/...` does not pass before changes, stop and report failing tests.
+
+Goal:
+
+Build the FORGE-K runtime driver boundary inside `services/core/internal/forgek`.
+
+Phase 9 should define model runtimes as governed drivers, not authority.
+
+This phase adds:
+
+- RuntimeDriver interface
+- RuntimeDriverManifest
+- RuntimeCapabilityManifest
+- RuntimeGenerateRequest
+- RuntimeGenerateResult
+- RuntimeDriverRegistry
+- MockRuntimeDriver for tests
+- RuntimeService or RuntimeBroker
+- Runtime syscalls
+- Integration with ContextBundle and KV identity metadata by reference only
+- Tests proving model/runtime output is proposal evidence only and cannot mutate canonical truth
+
+Core doctrine:
+
+- Models are drivers, not authority.
+- Runtime drivers generate outputs but do not own truth.
+- Runtime output is proposal/evidence until admitted/committed by existing FORGE-K mechanisms.
+- Runtime drivers must not mutate Kernel objects directly.
+- Runtime drivers must not bypass semantic syscalls.
+- Runtime drivers must not admit evidence.
+- Runtime drivers must not write snapshots, context blocks, or KV manifests directly.
+- Runtime drivers may report capabilities.
+- Runtime drivers may accept ContextBundle references or canonical prompt text from the Context Compiler.
+- Runtime drivers may receive KV lookup metadata, but Phase 9 must not perform real backend KV reuse.
+- Runtime generation must be deterministic in tests via mock drivers.
+- No live daemon integration in this phase.
+
+Use public/professional terminology only:
+
+- Runtime Driver
+- Runtime Driver Registry
+- Runtime Capability Manifest
+- Runtime Generate Request
+- Runtime Generate Result
+- Runtime Broker
+- model-as-driver
+- proposal output
+- governed runtime boundary
+- simulator-only
+
+Do not use private symbolic, mystical, occult, numerological, or unserious language anywhere in repo files.
+
+Implementation expectations:
+
+1. Inspect current FORGE-K package layout.
+
+Adapt to existing style under:
+
+- services/core/internal/forgek
+- services/core/internal/forgek/contextcompiler
+- services/core/internal/forgek/kv
+- services/core/internal/forgek/neurons
+- services/core/internal/forgek/court
+- services/core/internal/forgek/semantic
+
+Suggested new package:
+
+- services/core/internal/forgek/runtime
+
+Suggested files:
+
+- services/core/internal/forgek/runtime/models.go
+- services/core/internal/forgek/runtime/driver.go
+- services/core/internal/forgek/runtime/registry.go
+- services/core/internal/forgek/runtime/service.go
+- services/core/internal/forgek/runtime/capabilities.go
+- services/core/internal/forgek/runtime/mock_driver.go
+- services/core/internal/forgek/runtime/statuses.go
+- services/core/internal/forgek/runtime/errors.go
+
+Kernel/syscall wiring:
+
+- services/core/internal/forgek/runtime_syscalls.go
+- services/core/internal/forgek/runtime_syscalls_test.go
+
+Tests:
+
+- services/core/internal/forgek/runtime/runtime_driver_manifest_test.go
+- services/core/internal/forgek/runtime/runtime_registry_test.go
+- services/core/internal/forgek/runtime/runtime_service_test.go
+- services/core/internal/forgek/runtime/runtime_generate_test.go
+- services/core/internal/forgek/runtime/runtime_model_as_driver_test.go
+- services/core/internal/forgek/runtime/runtime_context_integration_test.go
+- services/core/internal/forgek/runtime/runtime_kv_boundary_test.go
+
+Adjust names to match existing repo style.
+
+2. Implement RuntimeDriverManifest.
+
+Fields similar to:
+
+- driver_id
+- driver_name
+- driver_kind
+- version
+- runtime_backend
+- runtime_version
+- supported_models
+- supported_capabilities
+- supports_streaming
+- supports_tool_calling
+- supports_structured_outputs
+- supports_prefix_cache
+- supports_paged_kv
+- supports_kv_quantization
+- supports_kv_offload
+- supports_priority_eviction
+- supports_cache_salt
+- supports_non_prefix_reuse
+- supports_cross_instance_reuse
+- deterministic_for_tests
+- authority_level
+- created_at
+- metadata
+
+Rules:
+
+- Manifest is capability declaration only.
+- Manifest does not grant authority.
+- Manifest cannot mutate truth.
+- Manifest must be serializable.
+- Manifest should not include secrets.
+
+3. Define driver kinds.
+
+Suggested driver kinds:
+
+- MOCK
+- LOCAL_DEV
+- VLLM
+- SGLANG
+- TENSORRT_LLM
+- OLLAMA
+- LLAMA_CPP
+- REMOTE_API
+- FUTURE
+
+Phase 9 should implement only MOCK.
+
+Other driver kinds are declarations/placeholders only.
+
+4. Implement RuntimeCapabilityManifest.
+
+Fields similar to:
+
+- runtime_id
+- runtime_version
+- model_id
+- model_revision
+- tokenizer_id
+- tokenizer_revision
+- chat_template_hash
+- supports_prefix_cache
+- supports_paged_kv
+- supports_kv_quantization
+- supports_kv_offload
+- supports_priority_eviction
+- supports_cache_salt
+- supports_non_prefix_reuse
+- supports_cross_instance_reuse
+- supports_structured_outputs
+- supports_tool_calling
+- max_context_tokens
+- max_output_tokens
+- metadata
+
+Rules:
+
+- Capability manifest can feed KV identity assumptions.
+- It is not authority.
+- It must not override KV nine-gate validation.
+- It must not bypass Context Compiler.
+
+5. Implement RuntimeGenerateRequest.
+
+Fields similar to:
+
+- request_id
+- workspace_id
+- case_id, optional
+- bundle_id
+- context_block_refs
+- canonical_prompt_text
+- model_id
+- model_revision
+- tokenizer_id
+- tokenizer_revision
+- chat_template_hash
+- prompt_layout_hash
+- policy_schema_hash
+- syscall_schema_hash
+- token_input_hash
+- kv_lookup_id, optional
+- kv_cache_id, optional
+- max_output_tokens
+- temperature
+- structured_output_schema, optional
+- requested_by
+- created_at
+- metadata
+
+Rules:
+
+- Requires workspace_id.
+- Requires bundle_id or canonical_prompt_text.
+- Requires model/runtime identity fields.
+- Does not compile context.
+- Does not perform KV lookup.
+- Does not mutate KV manifest.
+- Does not mutate source objects.
+
+6. Implement RuntimeGenerateResult.
+
+Fields similar to:
+
+- result_id
+- request_id
+- driver_id
+- workspace_id
+- case_id, optional
+- model_id
+- output_text
+- output_json, optional
+- finish_reason
+- prompt_token_estimate
+- output_token_estimate
+- runtime_metadata
+- warnings
+- error
+- created_at
+- provenance_refs
+- proposal_object_ref, optional
+- journal_refs
+
+Rules:
+
+- RuntimeGenerateResult is proposal/evidence only.
+- It is not truth.
+- It is not admitted evidence automatically.
+- It does not mutate CasePacket.
+- It does not mutate SemanticObject authority.
+- It can be submitted to Courthouse in future phases, but not automatically.
+- It should preserve context bundle refs and request refs.
+
+7. Implement RuntimeDriver interface.
+
+Methods:
+
+- Manifest() RuntimeDriverManifest
+- Capabilities(ctx, modelID string) (RuntimeCapabilityManifest, error)
+- Generate(ctx, req RuntimeGenerateRequest) (RuntimeGenerateResult, error)
+- Health(ctx) RuntimeHealth, error
+
+Rules:
+
+- Interface must not expose Kernel internals.
+- Drivers cannot access ObjectRegistry or Journal directly.
+- Drivers cannot execute syscalls.
+- Drivers return results only.
+
+8. Implement MockRuntimeDriver.
+
+For tests only.
+
+Behavior:
+
+- deterministic output based on request input or configured output
+- can simulate errors
+- can simulate capability support
+- can simulate token estimates
+- does not call network
+- does not call model runtime
+- does not write files
+- does not mutate Kernel
+
+9. Implement RuntimeDriverRegistry.
+
+Methods:
+
+- register_driver
+- get_driver
+- list_drivers
+- unregister_driver, optional
+- get_capabilities
+
+Rules:
+
+- Reject duplicate driver IDs.
+- Reject invalid manifests.
+- List order deterministic.
+- No secrets stored in manifests.
+
+10. Implement RuntimeService / RuntimeBroker.
+
+Methods:
+
+- register_driver
+- list_drivers
+- get_driver_manifest
+- get_capabilities
+- generate
+- health
+
+Rules:
+
+- Generate requires a registered driver.
+- Generate validates request.
+- Generate calls driver.
+- Generate returns RuntimeGenerateResult.
+- Generate may create a proposal SemanticObject only if explicitly requested through future syscall boundary; default Phase 9 should just return result.
+- Generate must not mutate canonical state except through runtime syscalls/journal records.
+- Generate must not admit evidence.
+- Generate must not register KV cache.
+- Generate must not bypass Context Compiler.
+
+11. Add runtime syscalls.
+
+Required:
+
+- runtime.register_driver
+- runtime.list_drivers
+- runtime.get_driver
+- runtime.capabilities
+- runtime.generate
+- runtime.health
+
+Syscall behavior:
+
+runtime.register_driver:
+- requires capability
+- registers driver manifest or a mock driver
+- journals RUNTIME_DRIVER_REGISTERED
+
+runtime.list_drivers:
+- read-only
+- lists manifests
+
+runtime.get_driver:
+- read-only
+- returns manifest
+
+runtime.capabilities:
+- read-only
+- returns RuntimeCapabilityManifest
+
+runtime.generate:
+- requires capability
+- validates request
+- calls registered driver
+- journals RUNTIME_GENERATION_REQUESTED and/or RUNTIME_GENERATION_COMPLETED
+- returns RuntimeGenerateResult
+- must not create canonical truth from output
+
+runtime.health:
+- read-only
+- returns driver health
+
+12. Add capabilities.
+
+Support:
+
+- runtime.register_driver
+- runtime.list_drivers
+- runtime.get_driver
+- runtime.capabilities
+- runtime.generate
+- runtime.health
+- runtime.read
+
+Tests must prove:
+
+- actor without runtime.register_driver cannot register
+- actor without runtime.generate cannot generate
+- read-only actor cannot generate
+- workspace scope enforced
+- generation syscall journals events
+- driver output cannot mutate objects
+
+13. Integrate with Context Compiler by refs only.
+
+RuntimeGenerateRequest may consume:
+
+- ContextBundle ID
+- ContextBlock refs
+- canonical_prompt_text
+- token_input_hash
+- prompt_layout_hash
+
+Rules:
+
+- Runtime does not compile context.
+- Runtime does not alter ContextBundle.
+- Runtime does not create ContextBlock.
+- Runtime output cites bundle/request refs.
+
+Tests:
+
+- generate from compiled ContextBundle ref
+- generation preserves bundle_id
+- ContextBundle unchanged after generation
+- missing bundle/prompt rejected
+
+14. Integrate with KV system by metadata only.
+
+RuntimeGenerateRequest may consume:
+
+- kv_lookup_id
+- kv_cache_id
+- KV identity fields
+- runtime capability manifest fields
+
+Rules:
+
+- Runtime does not perform real KV reuse.
+- Runtime does not register KV cache.
+- Runtime does not mark KV hit/miss.
+- Runtime can include kv metadata in result.
+- KV nine-gate validation remains owned by KVService.
+
+Tests:
+
+- generation can reference KV hit metadata
+- generation can reference KV miss metadata
+- runtime cannot create KV hit
+- runtime cannot mutate KV manifest
+- runtime capability manifest can supply runtime assumptions for future KV validation
+
+15. Integrate with Courthouse by non-automatic proposal only.
+
+Rules:
+
+- Runtime output is not automatically an Exhibit.
+- Runtime output is not automatically ADMITTED.
+- Runtime output may be submitted later through court.submit, but not in Phase 9 default flow.
+- Runtime output must not create rulings.
+
+Tests:
+
+- runtime.generate result is not Exhibit
+- runtime.generate does not change CasePacket
+- runtime.generate does not admit evidence
+- optional explicit future SyscallRequest pattern may be documented but not executed
+
+16. Integrate with Semantic Algebra by non-automatic proposal only.
+
+Rules:
+
+- Runtime output is not automatically SemanticObject truth.
+- Runtime output may be represented as proposal metadata if useful.
+- Runtime output cannot promote/demote/derive canonical semantic objects.
+- Runtime output cannot execute semantic syscalls.
+
+Tests:
+
+- runtime output does not mutate SemanticObject
+- runtime output is proposal/evidence only
+
+17. Add tests.
+
+Required test coverage:
+
+RuntimeDriverManifest:
+- valid manifest
+- invalid driver ID rejected
+- duplicate driver rejected
+- no secrets in manifest
+- deterministic list order
+
+RuntimeCapabilityManifest:
+- capabilities serialize
+- cache feature flags preserved
+- runtime assumptions visible
+- manifest does not grant authority
+
+MockRuntimeDriver:
+- deterministic generate
+- simulated error
+- health
+- capabilities
+
+RuntimeDriverRegistry:
+- register/list/get
+- duplicate reject
+- unknown driver reject
+
+RuntimeService:
+- generate calls driver
+- generate validates request
+- generate preserves context refs
+- generate returns proposal-only result
+- driver errors handled
+- service does not mutate source objects
+
+Runtime syscalls:
+- all required runtime syscalls registered
+- register_driver requires capability
+- generate requires capability
+- read-only syscalls behave as expected
+- generation journals events
+- workspace scope enforced
+
+Model-as-driver:
+- runtime output is not truth
+- runtime output is not admitted evidence
+- runtime output does not mutate CasePacket
+- runtime output does not mutate ContextBundle
+- runtime output does not mutate KVCacheManifest
+- runtime output does not bypass semantic syscalls
+
+Context integration:
+- generate from ContextBundle ref
+- generate from canonical prompt text
+- missing context rejected
+- ContextBundle unchanged
+
+KV boundary:
+- runtime can read/include KV metadata
+- runtime cannot record KV hit
+- runtime cannot invalidate/evict/promote KV manifest
+- KV validation remains separate
+
+18. Add docs.
+
+Update:
+
+- docs/architecture/forge_k_overview.md
+- docs/architecture/context_compiler_and_kv_cache.md
+- docs/roadmap/forge_k_build_phases.md
+- docs/reviews/current_phase_status.md
+- docs/reviews/full_project_review_checklist.md
+- README.md if current phase advances to Phase 9
+- services/core/internal/forgek/README.md if present
+
+Add/update architecture doc if useful:
+
+- docs/architecture/runtime_driver_boundary.md
+
+Include:
+
+- Phase 9 scope
+- RuntimeDriver interface
+- RuntimeDriverManifest
+- RuntimeCapabilityManifest
+- RuntimeGenerateRequest/Result
+- RuntimeDriverRegistry
+- RuntimeService/Broker
+- MockRuntimeDriver
+- model-as-driver doctrine
+- context integration by reference
+- KV boundary
+- no live daemon integration
+- current limitations
+- Phase 10 handoff
+
+19. Run tests.
+
+Run:
+
+go test ./internal/forgek/...
+
+Then run if feasible:
+
+npm run build:core
+npm run lint
+npm test
+
+If full repo tests fail for unrelated desktop/Node reasons, document exact failure and whether it is unrelated.
+
+20. Definition of done.
+
+Phase 9 is complete when:
+
+- runtime package exists
+- RuntimeDriver interface exists and is tested
+- RuntimeDriverManifest exists and is tested
+- RuntimeCapabilityManifest exists and is tested
+- RuntimeGenerateRequest/Result exist and are tested
+- MockRuntimeDriver exists and is tested
+- RuntimeDriverRegistry exists and is tested
+- RuntimeService/Broker exists and is tested
+- runtime syscalls are registered and tested
+- Kernel owns RuntimeService in simulator only
+- capabilities gate register/generate operations
+- generation events are journaled
+- runtime output is proposal/evidence only
+- runtime output does not mutate truth
+- runtime output does not admit evidence
+- runtime output does not mutate context/KV/snapshots
+- no real model runtime calls are added
+- docs are updated
+- current phase status is updated
+- `go test ./internal/forgek/...` passes
+
+WHAT NOT TO DO:
+
+- Do not wire FORGE-K runtime into live daemon.
+- Do not call real model runtimes.
+- Do not add OpenAI/Ollama/vLLM/SGLang/TensorRT calls.
+- Do not implement streaming.
+- Do not implement tool calling.
+- Do not implement live KV reuse.
+- Do not mutate ContextBundle from runtime.
+- Do not mutate KV manifests from runtime.
+- Do not admit runtime output automatically.
+- Do not create canonical truth from runtime output.
+- Do not change live modelruntime.
+- Do not change gateway behavior.
+- Do not change routes.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code in files.
+
+After implementation, respond with:
+
+- files created/changed
+- runtime components implemented
+- syscalls implemented
+- capability behavior
+- journal behavior
+- model-as-driver behavior
+- context integration behavior
+- KV boundary behavior
+- tests added
+- commands run
+- test results
+- assumptions made
+- recommended next phase

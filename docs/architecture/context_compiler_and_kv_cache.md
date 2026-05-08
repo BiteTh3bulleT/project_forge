@@ -1,12 +1,12 @@
 # Context Compiler and Deterministic KV Cache
 
-Status: Phase 7 Context Compiler and Phase 8 Deterministic KV System are implemented in the FORGE-K simulator.
+Status: Phase 7 Context Compiler and Phase 8 Deterministic KV System are implemented in the FORGE-K simulator. Phase i1 adds `[PARTIAL]` live validation-only reuse of the deterministic KV identity gate logic through `services/core/internal/kvidentity` and AI-OS Control Lane `VALIDATE_KV_IDENTITY`; FORGE-K `KVService` remains `[SIMULATOR-ONLY]`, and there is still no live KV reuse.
 
 The Context Compiler turns admitted semantic shape, snapshot refs, and restore seeds into deterministic, token-addressable ContextBlocks and ContextBundles. The KV cache accelerates exact reusable token shapes in a later phase. Neither context shape nor KV reuse is canonical memory.
 
 Phase 11E ConsensusReport refs may become future context inputs by reference. Context compilation must not treat a consensus report as admitted truth unless Courthouse admission exists; consensus is response/action governance, not canonical memory.
 
-Phase 7 scope is `SIMULATOR_ONLY` under `services/core/internal/forgek/contextcompiler` and `services/core/internal/forgek/context_syscalls.go`. Phase 8 scope is `SIMULATOR_ONLY` under `services/core/internal/forgek/kv` and `services/core/internal/forgek/kv_syscalls.go`. Neither phase is wired into the live daemon, and neither modifies the live AI-OS `COMPILE_CONTEXT`, gateway, model runtime, route, or public API paths.
+Phase 7 scope is `SIMULATOR_ONLY` under `services/core/internal/forgek/contextcompiler` and `services/core/internal/forgek/context_syscalls.go`. Phase 8 service scope is `SIMULATOR_ONLY` under `services/core/internal/forgek/kv` and `services/core/internal/forgek/kv_syscalls.go`. The shared KV identity gate validator is live validation-only; it does not wire simulator KV manifests, lookup, tiering, invalidation, eviction, Context Compiler output, runtime cache reuse, or modelruntime behavior into the live daemon.
 
 Phase 12M-Q adds a shadow advisory context summary in `services/core/internal/forgekshadow` only. That advisory consumes existing safe diagnostic refs and counts, may produce a deterministic summary hash, and may safely warn when metadata is insufficient. It is not a simulator `ContextBundle`, not a live prompt, not a replacement for live `COMPILE_CONTEXT`, not a KV manifest, and not user-visible output.
 

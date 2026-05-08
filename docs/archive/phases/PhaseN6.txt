@@ -1,0 +1,333 @@
+# FORGE-OS Phase N6 — Bounded Resource Action Executor
+
+You are working in the `project_forge` repository.
+
+Phase N3 implemented the read-only Host Kernel Bridge.
+Phase N4 implemented advisory-only FORGE-H resource policy.
+Phase N5 implemented FORGE-H Resource Action Proposals and approval/reject/expire/supersede lifecycle transitions.
+
+Now implement Phase N6: a bounded executor for approved FORGE-H resource action proposals.
+
+## Goal
+
+Execute only approved, non-expired, bounded FORGE-internal resource actions.
+
+N6 is the “execute bounded action” step in the host-control ladder:
+
+observe → report → recommend → request approval → execute bounded action → automate safe action → own policy
+
+This phase must not mutate the host OS.
+
+N6 may update FORGE-internal operational/runtime policy state through explicit, testable, reversible adapters.
+
+## Doctrine To Preserve
+
+- FORGE is the AI-OS.
+- Linux/NixOS remains the boot and hardware substrate.
+- Host Kernel Bridge diagnostics are evidence only.
+- FORGE-H resource policy remains governed.
+- Resource proposals require approval before execution.
+- N6 may execute only bounded FORGE-internal policy actions.
+- N6 must not mutate host state.
+- N6 must not execute systemd/Nix/kernel/package-manager commands.
+- N6 must not load/unload models directly.
+- N6 must not write semantic memory directly.
+- N6 must not create live FORGE-K authority.
+- N6 must not bypass gateway, permissions, lanes, audit, controllane, memory, or modelruntime governance.
+
+## Build Scope
+
+Add a bounded resource action executor.
+
+Preferred location:
+
+- `services/core/internal/forgeh`
+
+or a clean sibling package if existing conventions suggest it:
+
+- `services/core/internal/resourceexec`
+
+The executor should consume `ResourceActionProposal` records created in N5.
+
+## Core Types
+
+Add types equivalent to:
+
+### ResourceActionExecution
+
+Fields:
+
+- `execution_id`
+- `proposal_id`
+- `source_policy_id`
+- `source_snapshot_id`
+- `action_type`
+- `target_lane`
+- `status`
+- `started_at`
+- `finished_at`
+- `result`
+- `reason`
+- `side_effects`
+- `operator_approval_required`
+- `approved_before_execution`
+- `bounded`
+- `host_mutation`
+- `semantic_memory_write`
+- `modelruntime_mutation`
+- `errors`
+
+### ExecutionStatus
+
+- `planned`
+- `executed`
+- `skipped`
+- `rejected`
+- `failed`
+- `blocked`
+
+### ExecutionResult
+
+- `operator_warned`
+- `background_ingest_deferred`
+- `background_ingest_paused`
+- `embedding_deferred`
+- `new_model_load_denied`
+- `large_model_load_deferred`
+- `current_model_only_preferred`
+- `cpu_safe_mode_preferred`
+- `degraded_mode_entered`
+- `maintenance_scheduled_later`
+
+## Allowed Proposal Actions In N6
+
+N6 may handle these approved proposals:
+
+- `warn_operator`
+- `defer_background_ingest`
+- `pause_background_ingest`
+- `defer_embedding`
+- `deny_new_model_load`
+- `defer_large_model_load`
+- `prefer_current_model_only`
+- `prefer_cpu_safe_mode`
+- `enter_degraded_mode`
+- `schedule_maintenance_later`
+
+## Required Execution Rules
+
+Execution must require:
+
+1. Proposal status is `approved`
+2. Proposal is not expired
+3. Proposal is `advisory_only == true`
+4. Action type is in the N6 allow-list
+5. Execution adapter is present
+6. Execution produces a bounded operational record
+7. No host mutation occurs
+8. No modelruntime mutation occurs
+9. No semantic memory write occurs
+
+Approved proposals are eligible for execution.
+Proposed/rejected/expired/superseded proposals must not execute.
+
+## Adapter Design
+
+Use explicit interfaces/adapters so the executor does not directly call host/runtime subsystems.
+
+Suggested interfaces:
+
+### OperatorNotifier
+
+- records or emits bounded operator warning
+- no public unauthenticated route
+- no host mutation
+
+### LanePolicyWriter
+
+- records internal lane preference:
+  - background ingest deferred/paused
+  - embedding deferred
+  - maintenance scheduled later
+- must not kill processes
+- must not stop services
+- must not delete queued work
+
+### ModelPolicyWriter
+
+- records internal policy preference:
+  - deny new model load
+  - defer large model load
+  - prefer current model only
+  - prefer CPU safe mode
+- must not call modelruntime LoadModel/UnloadModel
+- must not spawn runtimes
+
+### DegradedModeWriter
+
+- records internal degraded-mode posture
+- must not restart services
+- must not change host config
+
+In tests, use fake adapters.
+
+If real repo services already have safe governed equivalents, integrate only if they preserve existing authority boundaries.
+
+## Side Effects
+
+Every execution must report side effects as bounded strings, such as:
+
+- `operator_notification_recorded`
+- `lane_policy_background_ingest_deferred`
+- `model_policy_new_loads_denied`
+- `degraded_mode_flag_recorded`
+
+Do not perform destructive or host-level side effects.
+
+## Idempotency
+
+Execution must be idempotent by proposal ID.
+
+Running the same approved proposal twice should not create conflicting state.
+
+Options:
+
+- return existing execution record if already executed
+- or mark second attempt as skipped with reason `already_executed`
+
+Add tests for this.
+
+## Storage
+
+Preferred for N6:
+
+- internal package + tests
+- in-memory/fake ledger for tests
+- optional append-only operational execution ledger if existing storage conventions are clear
+
+Do not create a second canonical memory system.
+
+Execution records are operational governance records, not semantic memory.
+
+## NixOS Module Updates
+
+Add only inert config if needed:
+
+- `forge.resourcePolicy.execution.enable`
+- `forge.resourcePolicy.execution.runtimePath`
+
+Defaults:
+
+- disabled
+- no timer
+- no service
+- no host mutation
+- no modelruntime mutation
+
+If enabled, it may only prepare runtime directories/env flags.
+
+Do not add automatic execution timers in N6.
+
+## Tests
+
+Add tests for:
+
+1. Approved proposal executes
+2. Proposed proposal is blocked
+3. Rejected proposal is blocked
+4. Expired proposal is blocked
+5. Superseded proposal is blocked
+6. Unknown action is blocked
+7. Missing adapter is blocked
+8. warn_operator execution
+9. defer_background_ingest execution
+10. pause_background_ingest execution
+11. defer_embedding execution
+12. deny_new_model_load execution
+13. defer_large_model_load execution
+14. prefer_current_model_only execution
+15. prefer_cpu_safe_mode execution
+16. enter_degraded_mode execution
+17. schedule_maintenance_later execution
+18. idempotency by proposal ID
+19. execution record JSON stability
+20. no host mutation commands/text
+21. no modelruntime load/unload calls
+22. no direct semantic memory writes
+23. no live FORGE-K authority imports
+
+Forbidden text/import guard should include:
+
+- `exec.Command`
+- `nixos-rebuild`
+- `systemctl start`
+- `systemctl stop`
+- `systemctl restart`
+- `modprobe`
+- `rmmod`
+- `reboot`
+- `shutdown`
+- package manager upgrade commands
+- destructive cleanup
+- `os.RemoveAll`
+- `LoadModel`
+- `UnloadModel`
+- `Spawn`
+- `GenerateStream`
+- direct gateway execution
+- direct semantic memory writes
+- direct FORGE-K authority imports
+
+## Documentation
+
+Add/update:
+
+- `docs/architecture/forge_h_resource_policy.md`
+- `docs/architecture/forge_os_host_substrate.md`
+- `docs/operations/resource_policy_diagnostics.md`
+- optional ADR: `docs/adr/0010-forge-h-bounded-resource-execution.md`
+
+Document:
+
+- N6’s place in the control ladder
+- what bounded execution means
+- approved proposal requirement
+- allowed actions
+- adapter boundaries
+- idempotency
+- what remains forbidden
+- future N7 path for automating safe actions
+
+## Acceptance Criteria
+
+- Approved resource proposals can execute through bounded internal adapters.
+- Non-approved proposals cannot execute.
+- Expired/superseded/rejected proposals cannot execute.
+- Execution records are produced.
+- Execution is idempotent.
+- No host mutation is introduced.
+- No service control is introduced.
+- No NixOS rebuild behavior is introduced.
+- No kernel/module behavior is introduced.
+- No modelruntime load/unload behavior is introduced.
+- No direct semantic memory writes are introduced.
+- No live FORGE-K authority migration occurs.
+- Existing tests pass.
+- Nix checks pass where available.
+
+## WHAT NOT TO DO
+
+- Do not execute host actions.
+- Do not restart, start, or stop services.
+- Do not run `nixos-rebuild`.
+- Do not load or unload kernel modules.
+- Do not reboot or shut down the machine.
+- Do not install, remove, or upgrade packages.
+- Do not delete files or clean directories.
+- Do not load or unload models.
+- Do not spawn model runtimes.
+- Do not write directly to semantic memory.
+- Do not add public unauthenticated routes.
+- Do not bypass gateway, permissions, lanes, audit, controllane, memory, modelruntime, or FORGE-K authority.
+- Do not add automatic execution timers.
+- Do not turn this into a UI phase.

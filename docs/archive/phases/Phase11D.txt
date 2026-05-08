@@ -1,0 +1,286 @@
+You are working in the FORGE repository.
+
+Implement Phase 11D: Rust Validation CI and Tooling Integration.
+
+Scope: RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY.
+
+Do not wire Rust into the live daemon.
+Do not call Rust from Go production code.
+Do not replace the Go FORGE-K simulator.
+Do not modify live AI-OS, gateway, permissions, lanes, audit, modelruntime, API routes, or controllane behavior.
+Do not change public APIs.
+Do not add routes.
+Do not make Rust an authority path.
+Do not implement Rust model drivers.
+Do not implement live runtime execution.
+Do not make root `npm test` depend on Rust.
+
+Purpose:
+
+Phase 11B added the standalone Rust validation crate:
+
+- crates/forgek-validate
+
+Phase 11C added Go/Rust test corpus alignment and parity tooling:
+
+- fixtures/forgek
+- scripts/forgek-parity.mjs
+- npm run test:forgek:parity
+
+Phase 11D integrates Rust validation and Go/Rust parity checks into project tooling and CI without making Rust live authority or coupling it to normal runtime execution.
+
+Current root scripts already include:
+
+- npm run test:rust:forgek
+- npm run validate:forgek-fixtures
+- npm run test:forgek:parity
+
+Current CI does not run Rust validation yet.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- package.json
+- .github/workflows/ci.yml
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/adr/0006-rust-kernel-core-boundary.md
+- docs/architecture/rust_kernel_core_plan.md
+- docs/reviews/phase_11_readiness.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- docs/testing/definition_of_done.md
+- crates/forgek-validate/README.md
+- crates/forgek-validate/Cargo.toml
+- crates/forgek-validate/src/...
+- fixtures/forgek/...
+- scripts/forgek-parity.mjs
+
+Hard stop conditions:
+
+If crates/forgek-validate is missing, stop.
+
+If scripts/forgek-parity.mjs is missing, stop.
+
+If these commands fail before changes, stop and report failures:
+
+- npm run test:rust:forgek
+- npm run validate:forgek-fixtures
+- npm run test:forgek:parity
+
+Goal:
+
+Add Rust validation and Go/Rust parity checks as explicit CI/tooling guardrails.
+
+Rust validation should become visible in CI while remaining separate from live runtime authority.
+
+Deliverables:
+
+1. Preserve root scripts.
+
+Verify package.json includes:
+
+- test:rust:forgek
+- validate:forgek-fixtures
+- test:forgek:parity
+
+Do not remove or rename existing scripts.
+
+Do not make root `npm test` depend on Rust.
+
+Optional:
+
+Add a grouped script only if useful:
+
+- validate:forgek
+
+Suggested value:
+
+npm run test:rust:forgek && npm run validate:forgek-fixtures && npm run test:forgek:parity
+
+But do not use it to replace the explicit CI steps unless that improves clarity.
+
+2. Update CI.
+
+Modify:
+
+- .github/workflows/ci.yml
+
+Add Rust setup after Node setup or after npm ci.
+
+Use stable Rust.
+
+Recommended action:
+
+- dtolnay/rust-toolchain@stable
+
+or another simple stable Rust setup action already accepted by the repo style.
+
+Add CI steps after `npm ci` and before desktop build/smoke:
+
+- Rust FORGE-K validator tests
+  run: npm run test:rust:forgek
+
+- Rust FORGE-K fixture validation
+  run: npm run validate:forgek-fixtures
+
+- Go/Rust FORGE-K parity
+  run: npm run test:forgek:parity
+
+Preserve existing CI checks:
+
+- npm test
+- npm run lint
+- npm run typecheck
+- npm run build:desktop
+- npm run smoke
+
+Do not remove existing steps.
+
+3. Cache Rust only if simple.
+
+Optional:
+
+Add Rust cache using:
+
+- Swatinem/rust-cache@v2
+
+Scope it to:
+
+- crates/forgek-validate
+
+Do not overcomplicate CI.
+
+If adding cache feels risky, skip it and keep CI simple.
+
+4. Keep failure modes clear.
+
+Rust failures should show up as separate CI steps:
+
+- Rust FORGE-K validator tests
+- Rust FORGE-K fixture validation
+- Go/Rust FORGE-K parity
+
+Do not hide all Rust validation under one opaque command unless docs explain it.
+
+5. Add docs.
+
+Update:
+
+- README.md
+- docs/architecture/rust_kernel_core_plan.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- crates/forgek-validate/README.md
+
+Create or update:
+
+- docs/testing/rust_validation.md
+
+Include:
+
+- purpose
+- local commands
+- CI behavior
+- what each command validates
+- failure interpretation
+- fixture validation workflow
+- parity workflow
+- no live authority statement
+- no Go production Rust calls
+- root npm test does not depend on Rust
+
+6. Update phase status.
+
+Update docs/reviews/current_phase_status.md:
+
+- Add Phase 11D row or note:
+  - Rust Validation CI and Tooling Integration
+  - IMPLEMENTED + TESTED after this pass
+  - Scope: RESEARCH_ONLY / SIMULATOR_ONLY / TOOLING_ONLY
+  - Where it lives: package scripts, CI workflow, docs/testing/rust_validation.md
+  - No live daemon integration
+
+Update validation notes with exact commands run.
+
+7. Update roadmap.
+
+Update docs/roadmap/forge_k_build_phases.md:
+
+- Add or mark Phase 11D
+- State that Rust validation is now explicit CI/tooling
+- State that Rust remains non-authoritative and non-runtime
+- State root `npm test` remains Go/core focused unless a future ADR changes that
+
+8. Run validation locally.
+
+Run:
+
+npm run test:rust:forgek
+
+npm run validate:forgek-fixtures
+
+npm run test:forgek:parity
+
+Then run:
+
+cd crates/forgek-validate && cargo test
+
+cd services/core && go test ./internal/forgek/...
+
+Then, if feasible:
+
+npm run build:core
+
+npm run lint
+
+npm test
+
+If Node/desktop validation remains blocked by local workspace dependency state, do not fix it in this phase unless it directly blocks these commands. Document exact failures.
+
+9. Acceptance criteria.
+
+Phase 11D is complete when:
+
+- CI sets up stable Rust.
+- CI runs Rust FORGE-K validator tests.
+- CI runs Rust fixture validation.
+- CI runs Go/Rust parity checks.
+- Existing Go/desktop CI steps are preserved.
+- root scripts still work.
+- docs/testing/rust_validation.md exists or is updated.
+- README and status docs mention Rust validation tooling.
+- Rust remains research/simulator-only.
+- root `npm test` does not depend on Rust.
+- no live daemon integration exists.
+- no Go production code calls Rust.
+- no public APIs or routes change.
+- no gateway/modelruntime/controllane behavior changes.
+
+WHAT NOT TO DO:
+
+- Do not wire Rust into Go runtime.
+- Do not use cgo.
+- Do not make Rust live authority.
+- Do not replace the Go simulator.
+- Do not change live daemon behavior.
+- Do not change gateway/modelruntime/API routes.
+- Do not make root `npm test` require Rust.
+- Do not remove existing CI checks.
+- Do not add heavyweight CI complexity.
+- Do not add secrets to fixtures.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code in files.
+
+After completion, respond with:
+
+- files changed
+- CI steps added
+- package scripts added/changed
+- docs updated
+- commands run
+- test results
+- whether root npm test depends on Rust
+- whether CI now depends on Rust
+- whether live daemon integration changed
+- recommended next phase

@@ -1,6 +1,10 @@
 package kv
 
-import "time"
+import (
+	"time"
+
+	"forge/projectforge/services/core/internal/kvidentity"
+)
 
 const (
 	GateModel               = "same_model"
@@ -19,7 +23,7 @@ const (
 )
 
 const (
-	WarningTokenInputHashPlaceholder        = "token_input_hash_used_as_phase_8_identity_placeholder"
+	WarningTokenInputHashPlaceholder        = kvidentity.WarningTokenInputHashPlaceholder
 	WarningBackendCompositionalMetadataOnly = "backend_compositional_metadata_only"
 )
 
@@ -35,63 +39,73 @@ type ValidationResult struct {
 
 func ValidateIdentity(resultID string, manifest KVCacheManifest, request KVLookupRequest, createdAt time.Time) ValidationResult {
 	request = NormalizeLookupRequest(request)
-	failed := make([]string, 0)
-	warnings := make([]string, 0)
-	check := func(gate string, passed bool) {
-		if !passed {
-			failed = appendUnique(failed, gate)
-		}
-	}
-	check(GateManifestAvailable, HitEligibleStatus(manifest.Status))
-	check(GateCacheMode, manifest.CacheMode == request.CacheMode)
-	check(GateContextBundle, manifest.WorkspaceID == request.WorkspaceID &&
-		manifest.BundleID == request.BundleID &&
-		manifest.BlockID == request.BlockID &&
-		(request.BundleHash == "" || manifest.BundleHash == "" || manifest.BundleHash == request.BundleHash) &&
-		(request.StablePrefixHash == "" || manifest.StablePrefixHash == "" || manifest.StablePrefixHash == request.StablePrefixHash) &&
-		(request.VolatileSuffixHash == "" || manifest.VolatileSuffixHash == "" || manifest.VolatileSuffixHash == request.VolatileSuffixHash))
-	check(GateModel, manifest.ModelID == request.ModelID)
-	check(GateModelRevision, manifest.ModelRevision == request.ModelRevision)
-	check(GateTokenizer, manifest.TokenizerID == request.TokenizerID)
-	check(GateTokenizerRevision, manifest.TokenizerRevision == request.TokenizerRevision)
-	check(GateChatTemplate, manifest.ChatTemplateHash == request.ChatTemplateHash)
-	check(GatePromptLayout, manifest.PromptLayoutHash == request.PromptLayoutHash)
-	check(GatePolicySyscallSchema, manifest.PolicySchemaHash == request.PolicySchemaHash &&
-		manifest.SyscallSchemaHash == request.SyscallSchemaHash)
-	if manifest.FinalTokenIDsHash != "" && request.FinalTokenIDsHash != "" {
-		check(GateTokenIdentity, manifest.FinalTokenIDsHash == request.FinalTokenIDsHash)
-	} else {
-		check(GateTokenIdentity, manifest.TokenInputHash == request.TokenInputHash)
-		warnings = appendUnique(warnings, WarningTokenInputHashPlaceholder)
-	}
-	check(GateRuntimeAssumptions, manifest.RuntimeBackend == request.RuntimeBackend &&
-		manifest.RuntimeVersion == request.RuntimeVersion &&
-		manifest.AttentionBackend == request.AttentionBackend &&
-		manifest.RopeConfigHash == request.RopeConfigHash &&
-		manifest.KVPrecision == request.KVPrecision)
-	check(GateCacheSalt, manifest.CacheSalt == request.CacheSalt)
-	if manifest.CacheMode == ModeBackendCompositional {
-		warnings = appendUnique(warnings, WarningBackendCompositionalMetadataOnly)
-	}
+	shared := kvidentity.ValidateIdentity(resultID, manifestIdentity(manifest), requestIdentity(request), HitEligibleStatus(manifest.Status), createdAt)
 	return ValidationResult{
-		ResultID:         resultID,
-		CandidateCacheID: manifest.CacheID,
+		ResultID:         shared.ResultID,
+		CandidateCacheID: shared.CandidateCacheID,
 		RequestIdentity:  request,
-		Passed:           len(failed) == 0,
-		FailedGates:      NormalizeRefs(failed),
-		Warnings:         NormalizeRefs(warnings),
+		Passed:           shared.Passed,
+		FailedGates:      NormalizeRefs(shared.FailedGates),
+		Warnings:         NormalizeRefs(shared.Warnings),
 		CreatedAt:        createdAt,
 	}
 }
 
-func appendUnique(values []string, value string) []string {
-	if value == "" {
-		return values
+func manifestIdentity(manifest KVCacheManifest) kvidentity.ManifestIdentity {
+	return kvidentity.ManifestIdentity{
+		CacheID:            manifest.CacheID,
+		CacheMode:          string(manifest.CacheMode),
+		WorkspaceID:        manifest.WorkspaceID,
+		BundleID:           manifest.BundleID,
+		BlockID:            manifest.BlockID,
+		BundleHash:         manifest.BundleHash,
+		StablePrefixHash:   manifest.StablePrefixHash,
+		VolatileSuffixHash: manifest.VolatileSuffixHash,
+		ModelID:            manifest.ModelID,
+		ModelRevision:      manifest.ModelRevision,
+		TokenizerID:        manifest.TokenizerID,
+		TokenizerRevision:  manifest.TokenizerRevision,
+		ChatTemplateHash:   manifest.ChatTemplateHash,
+		PromptLayoutHash:   manifest.PromptLayoutHash,
+		PolicySchemaHash:   manifest.PolicySchemaHash,
+		SyscallSchemaHash:  manifest.SyscallSchemaHash,
+		TokenInputHash:     manifest.TokenInputHash,
+		FinalTokenIDsHash:  manifest.FinalTokenIDsHash,
+		RuntimeBackend:     manifest.RuntimeBackend,
+		RuntimeVersion:     manifest.RuntimeVersion,
+		AttentionBackend:   manifest.AttentionBackend,
+		RopeConfigHash:     manifest.RopeConfigHash,
+		KVPrecision:        manifest.KVPrecision,
+		CacheSalt:          manifest.CacheSalt,
+		Status:             string(manifest.Status),
 	}
-	for _, existing := range values {
-		if existing == value {
-			return values
-		}
+}
+
+func requestIdentity(request KVLookupRequest) kvidentity.RequestIdentity {
+	return kvidentity.RequestIdentity{
+		RequestID:          request.RequestID,
+		CacheMode:          string(request.CacheMode),
+		WorkspaceID:        request.WorkspaceID,
+		BundleID:           request.BundleID,
+		BlockID:            request.BlockID,
+		BundleHash:         request.BundleHash,
+		StablePrefixHash:   request.StablePrefixHash,
+		VolatileSuffixHash: request.VolatileSuffixHash,
+		ModelID:            request.ModelID,
+		ModelRevision:      request.ModelRevision,
+		TokenizerID:        request.TokenizerID,
+		TokenizerRevision:  request.TokenizerRevision,
+		ChatTemplateHash:   request.ChatTemplateHash,
+		PromptLayoutHash:   request.PromptLayoutHash,
+		PolicySchemaHash:   request.PolicySchemaHash,
+		SyscallSchemaHash:  request.SyscallSchemaHash,
+		TokenInputHash:     request.TokenInputHash,
+		FinalTokenIDsHash:  request.FinalTokenIDsHash,
+		RuntimeBackend:     request.RuntimeBackend,
+		RuntimeVersion:     request.RuntimeVersion,
+		AttentionBackend:   request.AttentionBackend,
+		RopeConfigHash:     request.RopeConfigHash,
+		KVPrecision:        request.KVPrecision,
+		CacheSalt:          request.CacheSalt,
 	}
-	return append(values, value)
 }

@@ -1,0 +1,384 @@
+You are working in the FORGE repository.
+
+Implement Phase 12G: Chat Metadata Expansion Design.
+
+Scope: DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY.
+
+Do not add new live touchpoints.
+Do not implement chat metadata observation.
+Do not observe chat routes yet.
+Do not capture chat message content.
+Do not capture prompts.
+Do not capture model outputs.
+Do not capture request bodies.
+Do not capture response bodies.
+Do not add public diagnostics APIs.
+Do not add routes.
+Do not change public APIs.
+Do not change response bodies.
+Do not change response headers.
+Do not change status codes.
+Do not execute tools.
+Do not call modelruntime from FORGE-K.
+Do not call retrieval/search/embedding providers from FORGE-K.
+Do not implement live RAG.
+Do not write memory.
+Do not execute controllane semantic mutations from FORGE-K.
+Do not alter gateway, permissions, lanes, audit, modelruntime, retrieval, memory, search, embeddings, API, or controllane behavior.
+Do not create a second authority path.
+Do not make FORGE-K live authority.
+
+Purpose:
+
+Phase 12E implemented disabled-by-default route-envelope metadata shadowing.
+
+Phase 12F hardened route-envelope diagnostics.
+
+Phase 12G designs the next controlled shadow expansion candidate: chat metadata.
+
+This phase does not implement chat metadata observation.
+
+The goal is to decide whether a future Phase 12H may observe bounded chat metadata, and if so, exactly which metadata fields are allowed, which are forbidden, what tests are required, and how no-effect behavior is proven.
+
+Core rule:
+
+Chat metadata means metadata only.
+No message content.
+No prompts.
+No completions.
+No tool payloads.
+No retrieval content.
+No memory content.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/architecture/forge_k_live_integration_design.md
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/architecture/phase_12d_controlled_shadow_expansion_design.md
+- docs/testing/phase_12e_shadow_route_envelope_tests.md
+- docs/reviews/phase_12f_route_envelope_shadow_hardening.md
+- docs/architecture/shadow_mode.md
+- docs/architecture/shadow_mode_harness.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- services/core/internal/forgekshadow/...
+- services/core/internal/forgek/shadowharness/...
+- services/core/internal/api/server.go
+- services/core/internal/api/routes.go
+- services/core/internal/api/workspace.go
+- services/core/internal/api/chat_assistant_gateway.go
+- services/core/internal/api/chat_fs_fallback.go
+- services/core/internal/api/server_route_inventory_test.go
+- services/core/internal/config/...
+
+Hard stop conditions:
+
+If `go test ./internal/forgek/...` does not pass before this phase, stop.
+
+If `go test ./internal/forgekshadow/...` does not pass before this phase, stop.
+
+If route inventory tests fail before this phase, stop.
+
+If Phase 12F status is not recorded as implemented/tested, stop.
+
+Core doctrine:
+
+- Phase 12G is design only.
+- No new live observation is added.
+- Current implemented live touchpoints remain `/health` metadata and route-envelope metadata only.
+- The live daemon remains authority.
+- FORGE-K shadow diagnostics remain non-authoritative.
+- Shadow mode must not affect user-visible output.
+- Shadow mode must not mutate live state.
+- Shadow mode must not execute tools.
+- Shadow mode must not call modelruntime.
+- Shadow mode must not perform retrieval/search/embedding calls.
+- Shadow mode must not write memory.
+- Shadow mode must not call controllane mutations.
+- Shadow mode must not create a second authority path.
+- Chat metadata must not become chat content.
+
+Candidate future Phase 12H touchpoint:
+
+- chat message submission metadata only
+
+Potential allowed metadata for future Phase 12H:
+
+- route class: chat
+- thread id, if already safe/stable
+- message id, if already safe/stable
+- workspace id, if already safe/stable
+- request id / correlation id
+- message role class only if safe, such as user/assistant/system/tool, but no content
+- message count or bounded count summary
+- status/timing metadata
+- model/provider id only if already exposed safely and not secret
+- diagnostic markers
+- warnings
+
+Forbidden metadata:
+
+- message body
+- prompt text
+- completion text
+- assistant response text
+- system prompt
+- tool payloads
+- tool outputs
+- file contents
+- source chunks
+- retrieval result content
+- memory content
+- auth headers
+- cookies
+- bearer tokens
+- API keys
+- raw authorization metadata
+- unredacted model parameters if sensitive
+- large raw content blobs
+- secrets or secret-looking metadata
+
+Deliverables:
+
+1. Create docs/architecture/phase_12g_chat_metadata_expansion_design.md
+
+Include:
+
+- executive summary
+- current Phase 12B/12F state
+- why chat metadata is higher risk than route envelope metadata
+- proposed future Phase 12H scope
+- allowed metadata
+- forbidden metadata
+- no-effect guarantees
+- data capture policy
+- redaction policy
+- performance budget
+- failure isolation
+- rollback/kill-switch requirements
+- required tests before implementation
+- what not to do
+
+2. Create docs/reviews/phase_12g_chat_metadata_risk_review.md
+
+Include a risk review comparing:
+
+- route envelope metadata
+- chat metadata
+- retrieval metadata
+- gateway trace metadata
+
+Focus on:
+
+- semantic sensitivity
+- prompt leakage risk
+- response leakage risk
+- body capture risk
+- modelruntime adjacency
+- retrieval/RAG adjacency
+- memory-write adjacency
+- tool execution adjacency
+- testability
+- recommended constraints
+
+Expected conclusion:
+
+Chat metadata may be a valid next expansion only if it captures identifiers/classes/counts/timing, never content.
+
+3. Create docs/testing/phase_12h_chat_metadata_shadow_tests.md
+
+Define future Phase 12H tests.
+
+Required future tests:
+
+- feature flag default disabled
+- disabled mode observes no chat metadata
+- enabled chat metadata mode captures metadata only
+- no request body capture
+- no response body capture
+- no prompt capture
+- no completion/model output capture
+- no system prompt capture
+- no tool payload/output capture
+- no retrieval content capture
+- no memory content capture
+- no auth/cookie/secret capture
+- route inventory unchanged
+- chat response status/body/header unchanged
+- assistant stream/SSE behavior unchanged
+- modelruntime call count unchanged
+- retrieval/search/embedding call count unchanged
+- gateway/tool execution count unchanged
+- memory write count unchanged
+- controllane mutation count unchanged
+- shadow failure does not fail chat request
+- metadata sink bounded
+- no public diagnostics routes
+
+4. Update docs/architecture/phase_12d_controlled_shadow_expansion_design.md
+
+Add Phase 12G handoff section:
+
+- Phase 12E implemented route envelope metadata
+- Phase 12F hardened route envelope metadata
+- Phase 12G designs chat metadata only
+- Phase 12H may implement chat metadata only if separately approved
+- no chat content capture is approved
+
+5. Update docs/architecture/phase_12b_shadow_harness_spec.md
+
+Add current scope note:
+
+- `/health` metadata implemented
+- route-envelope metadata implemented
+- chat metadata remains design-only after 12G
+- no chat content observation exists
+
+6. Update docs/architecture/shadow_mode.md
+
+Add:
+
+- Phase 12G design-only chat metadata boundary
+- future chat metadata remains disabled-by-default, read-only, metadata-only
+- no message content/prompt/output capture
+
+7. Update docs/reviews/current_phase_status.md
+
+Add Phase 12G row:
+
+Title:
+Chat Metadata Expansion Design
+
+Status:
+IMPLEMENTED if docs complete
+
+Scope:
+DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY
+
+Where:
+- docs/architecture/phase_12g_chat_metadata_expansion_design.md
+- docs/reviews/phase_12g_chat_metadata_risk_review.md
+- docs/testing/phase_12h_chat_metadata_shadow_tests.md
+
+Evidence:
+- docs-only validation
+- go test still passes
+- no live code changed
+
+Open work:
+- Phase 12H chat metadata shadow implementation, if approved
+
+8. Update docs/roadmap/forge_k_build_phases.md
+
+Add/update:
+
+- Phase 12G — Chat Metadata Expansion Design
+  Scope: DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY
+
+- Phase 12H — Chat Metadata Shadow Implementation
+  Scope: LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT
+
+- Phase 12I — Chat Metadata Shadow Hardening
+  Scope: LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY
+
+Do not mark 12H started.
+
+9. Update README.md if useful.
+
+Add short note:
+
+Phase 12G designs a future chat metadata shadow expansion. No chat observation, message content capture, prompt capture, model output capture, or live behavior change exists yet.
+
+10. What not to do section.
+
+Must include:
+
+- Do not implement Phase 12H.
+- Do not add chat metadata observer code yet.
+- Do not capture message content.
+- Do not capture prompts.
+- Do not capture completions.
+- Do not capture response bodies.
+- Do not capture request bodies.
+- Do not observe tool payloads.
+- Do not observe retrieval content.
+- Do not add public diagnostics APIs.
+- Do not change route behavior.
+- Do not modify API response shape.
+- Do not call modelruntime.
+- Do not execute tools.
+- Do not query retrieval/search/embeddings.
+- Do not write memory.
+- Do not call controllane mutations.
+- Do not make FORGE-K live authority.
+
+11. Run validation.
+
+Run:
+
+cd services/core && go test ./internal/forgek/...
+
+cd services/core && go test ./internal/forgekshadow/...
+
+cd services/core && go test ./internal/api -run "TestServerRouteInventory|TestServerRouteInventoryHealthAndMiddlewareSmoke" -count=1
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+npm run test:forgek:parity
+git diff --check
+
+Document exact results.
+
+Acceptance criteria:
+
+- Phase 12G design doc exists
+- chat metadata risk review exists
+- Phase 12H chat metadata test plan exists
+- allowed metadata is explicit
+- forbidden metadata is explicit
+- prompt/content/output capture is explicitly forbidden
+- current shadow docs updated
+- current phase status updated
+- roadmap updated
+- no live code changed
+- no new live touchpoints added
+- no chat observation added
+- tests/checks pass
+
+WHAT NOT TO DO:
+
+- Do not implement Phase 12H.
+- Do not observe chat routes.
+- Do not add live code.
+- Do not modify live daemon behavior.
+- Do not add code-level feature flags.
+- Do not create live adapters.
+- Do not add routes.
+- Do not call modelruntime.
+- Do not execute tools.
+- Do not query retrieval/search/embeddings.
+- Do not write memory.
+- Do not affect user-visible output.
+- Do not create a second Kernel.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- chat metadata design summary
+- allowed metadata
+- forbidden metadata
+- risk review summary
+- future Phase 12H test plan
+- docs updated
+- commands run
+- test results
+- whether any live behavior changed
+- recommended next phase

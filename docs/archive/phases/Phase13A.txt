@@ -1,0 +1,445 @@
+You are working in the FORGE repository.
+
+Implement Phase 13A: Storage Backend Foundation.
+
+Scope: LIVE_INFRA / STORAGE_FOUNDATION / DEFAULT_SQLITE.
+
+Postgres, Redis, and Qdrant are now managed services in Docker, but live application storage still uses SQLite.
+
+This phase introduces the storage backend foundation required for future migration.
+
+Do not migrate live memory to Postgres yet.
+Do not make Postgres the default backend.
+Do not remove SQLite.
+Do not dual-write live data yet.
+Do not wire Qdrant into live retrieval yet.
+Do not wire Redis into live queues/caches yet.
+Do not change public APIs.
+Do not add routes.
+Do not alter live memory semantics.
+Do not alter gateway/modelruntime/retrieval behavior.
+Do not make Redis or Qdrant canonical truth.
+Do not make vector hits admissible evidence.
+Do not make FORGE-K live authority.
+
+Purpose:
+
+The Docker stack now includes:
+
+- Postgres for future durable relational storage
+- Redis for future ephemeral coordination
+- Qdrant for future vector retrieval acceleration
+
+This phase adds the explicit application-side backend boundary:
+
+- storage backend config
+- Postgres connection scaffolding
+- migration runner structure
+- backend capability contracts
+- parity test strategy
+- no-default-switch guarantees
+
+Core doctrine:
+
+- SQLite remains the default live store.
+- Postgres is future durable relational storage.
+- Redis is ephemeral only: cache, queue, pub/sub, locks, streams.
+- Qdrant is vector acceleration only, not truth.
+- SQLite/Postgres remain provenance/inspectability source of record.
+- Qdrant vectors and scores cannot bypass policy, Courthouse, Consensus Mesh, Context Compiler, memory usefulness evidence, or Kernel authority.
+- No backend switch happens without explicit tests and rollback.
+- All storage migration must preserve authority boundaries.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docker-compose.yml
+- .env.docker.example
+- docs/runbooks/docker_containerization.md
+- docs/MEMORY_ARCHITECTURE.md
+- docs/RETRIEVAL_AND_EMBEDDINGS.md
+- docs/data_model/persistence_inventory.md
+- docs/reviews/current_phase_status.md
+- services/core/internal/config/...
+- services/core/internal/store/...
+- services/core/internal/memory/...
+- services/core/internal/retrieval/...
+- services/core/internal/audit/...
+- services/core/internal/jobs/...
+- services/core/internal/gateway/...
+- services/core/internal/approvals/...
+
+Hard stop conditions:
+
+If `npm test` or `go test ./...` is failing before changes, document and stop unless the failure is clearly unrelated.
+
+If Postgres/Redis/Qdrant Docker docs are missing, stop.
+
+If SQLite store initialization is unclear, stop and document the current storage entry points.
+
+Implementation goals:
+
+1. Add storage backend config.
+
+Add support for:
+
+- `FORGE_STORE_BACKEND=sqlite|postgres`
+
+Default:
+
+- `sqlite`
+
+Rules:
+
+- unset means sqlite
+- invalid value fails closed or follows existing config error conventions
+- postgres value should not be used unless DSN is present
+- config must not silently fall back to Postgres
+- SQLite path remains unchanged
+
+Keep existing env placeholders:
+
+- FORGE_POSTGRES_DSN
+- FORGE_REDIS_ADDR
+- FORGE_QDRANT_URL
+
+2. Add storage backend type.
+
+Create a small package if useful:
+
+- `services/core/internal/storagebackend`
+
+Suggested files:
+
+- `backend.go`
+- `config.go`
+- `capabilities.go`
+- `errors.go`
+
+Define:
+
+- BackendKind
+  - sqlite
+  - postgres
+
+- BackendCapabilities
+  - durable_relational
+  - transactional
+  - advisory_locks_available
+  - vector_index
+  - ephemeral_cache
+  - canonical_truth_allowed
+
+Rules:
+
+- SQLite and Postgres can be durable relational stores.
+- Redis cannot be canonical truth.
+- Qdrant cannot be canonical truth.
+- Qdrant is vector index / retrieval acceleration only.
+- Redis is cache/queue/stream/lock only.
+
+3. Add Postgres connection scaffolding.
+
+Add a Postgres connector package or extend existing store package cleanly.
+
+Suggested:
+
+- `services/core/internal/store/postgres.go`
+- `services/core/internal/store/backend.go`
+
+Rules:
+
+- do not replace existing SQLite open path
+- do not change existing SQLite migrations
+- Postgres connection should be tested with a DSN only where test infra permits
+- if integration Postgres is unavailable, use unit tests for config and connector behavior
+- avoid requiring Docker for normal `npm test`
+
+4. Add migration runner structure.
+
+Create Postgres migration scaffold.
+
+Suggested path:
+
+- `services/core/internal/store/postgres_migrations.go`
+
+or
+
+- `services/core/migrations/postgres/0001_initial.sql`
+
+Do not fully port every SQLite table in this pass unless already trivial.
+
+Add:
+
+- migration registry
+- migration version table design
+- idempotent migration pattern
+- transaction-wrapped migrations
+- advisory lock design note if not implemented
+- rollback/downgrade note
+
+If code is added:
+
+- implement migration table creation only
+- implement migration runner with no application tables or a tiny metadata table only
+
+Do not migrate memory tables in this pass.
+
+5. Add storage migration design doc.
+
+Create:
+
+- `docs/architecture/storage_backend_migration.md`
+
+Include:
+
+- current SQLite live state
+- Postgres target role
+- Redis target role
+- Qdrant target role
+- backend selection
+- migration phases
+- parity testing
+- dual-write strategy
+- read-switch strategy
+- rollback strategy
+- backup/restore policy
+- forbidden authority changes
+- table migration priority
+- what not to do
+
+6. Add storage parity plan.
+
+Create:
+
+- `docs/testing/storage_backend_parity.md`
+
+Include test requirements for future phases:
+
+- SQLite/Postgres schema parity
+- write/read parity
+- transaction parity
+- foreign-key parity
+- timestamp parity
+- JSON field parity
+- pagination/list order parity
+- migration idempotence
+- rollback/restore
+- dual-write comparison
+- checksum/digest comparison
+- failure injection
+
+7. Add persistence inventory update.
+
+Update:
+
+- `docs/data_model/persistence_inventory.md`
+
+Add:
+
+- backend migration stages
+- table priority grouping
+- canonical tables
+- diagnostic tables
+- retrieval/vector tables
+- ephemeral Redis candidates
+- Qdrant candidates
+- tables that must remain SQLite until parity exists
+
+Suggested migration priority:
+
+Group A:
+- shadow diagnostic reports if persistence is approved later
+- non-authoritative diagnostics only
+
+Group B:
+- jobs
+- settings
+- approvals
+- audit-adjacent records
+
+Group C:
+- memory notes/state/links/provenance
+- retrieval metadata
+- embeddings metadata
+
+Group D:
+- FORGE-K canonical persistence, later only
+
+8. Add Redis/Qdrant boundary docs.
+
+Update docs to clearly state:
+
+Redis:
+- no canonical truth
+- no durable memory
+- cache/queue/locks only
+- loss must be recoverable
+
+Qdrant:
+- no truth
+- no admissibility
+- vectors/scores are retrieval acceleration
+- provenance remains in relational store
+- Qdrant rebuild must be possible from relational records
+
+9. Add tests.
+
+Required tests:
+
+Config:
+- default backend is sqlite
+- sqlite backend preserves existing config behavior
+- postgres backend requires DSN
+- invalid backend rejected
+- Redis/Qdrant env vars do not imply backend switch
+
+Capabilities:
+- sqlite durable/canonical-capable
+- postgres durable/canonical-capable after future migration
+- Redis not canonical truth
+- Qdrant not canonical truth
+- vector index cannot be truth authority
+
+Postgres connector:
+- validates DSN
+- does not connect when backend sqlite
+- connector errors are clear
+- no Postgres requirement for default tests
+
+Migration runner:
+- migration version table SQL exists
+- migrations deterministic
+- migration runner does not run unless backend postgres
+- idempotence tested where possible
+
+No behavior change:
+- existing SQLite tests still pass
+- live memory path unchanged by default
+- retrieval path unchanged by default
+- shadow diagnostics unchanged by default
+
+10. Update current phase status.
+
+Update:
+
+- `docs/reviews/current_phase_status.md`
+
+Add Phase 13A:
+
+Title:
+Storage Backend Foundation
+
+Status:
+IMPLEMENTED if complete
+
+Scope:
+LIVE_INFRA / STORAGE_FOUNDATION / DEFAULT_SQLITE
+
+Where:
+- config/backend code
+- storage backend docs
+- parity test docs
+- migration scaffold
+
+Open work:
+- Postgres schema migration
+- dual-write tests
+- read-switch tests
+- Redis queue/cache wiring
+- Qdrant vector adapter
+- no live backend switch yet
+
+11. Update roadmap.
+
+Update:
+
+- `docs/roadmap/forge_k_build_phases.md`
+
+Add:
+
+- Phase 13A — Storage Backend Foundation
+- Phase 13B — Postgres Schema Foundation
+- Phase 13C — SQLite/Postgres Parity Tests
+- Phase 13D — Diagnostic Store Persistence
+- Phase 13E — Retrieval Metadata Postgres Adapter
+- Phase 13F — Qdrant Vector Adapter Design
+- Phase 13G — Qdrant Shadow Vector Index
+- Phase 13H — Redis Queue/Cache Boundary
+- Phase 13I — Store Cutover Readiness Review
+
+Do not mark Postgres live.
+
+12. Validation commands.
+
+Run:
+
+cd services/core && go test ./internal/config/... ./internal/store/... ./internal/storagebackend/...
+
+Then:
+
+cd services/core && go test ./...
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+docker compose config
+git diff --check
+
+If Docker services are running, optionally run:
+
+docker compose exec postgres pg_isready -U forge -d forge
+docker compose exec redis redis-cli ping
+curl -fsS http://127.0.0.1:6333/readyz
+
+Document exact results.
+
+Acceptance criteria:
+
+- `FORGE_STORE_BACKEND` exists and defaults to sqlite
+- SQLite remains live default
+- Postgres DSN config is parsed but not live default
+- Redis/Qdrant env vars do not switch authority
+- backend capability model exists
+- Redis/Qdrant cannot be canonical truth in capability model
+- Postgres migration scaffold exists
+- storage migration design doc exists
+- parity testing doc exists
+- persistence inventory updated
+- no live memory migration occurs
+- no public APIs/routes changed
+- existing tests pass
+
+WHAT NOT TO DO:
+
+- Do not migrate live memory to Postgres.
+- Do not make Postgres default.
+- Do not dual-write live data yet.
+- Do not wire Redis into live queues/caches yet.
+- Do not wire Qdrant into live retrieval yet.
+- Do not store vectors as truth.
+- Do not make retrieval scores admissible evidence.
+- Do not write canonical FORGE-K state to Postgres yet.
+- Do not alter live memory/retrieval/gateway/modelruntime behavior.
+- Do not add routes.
+- Do not change public APIs.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code/docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- backend config behavior
+- storage capability model
+- Postgres scaffold summary
+- Redis/Qdrant boundaries
+- migration docs added
+- tests added
+- commands run
+- test results
+- whether SQLite remains default
+- whether any live behavior changed
+- recommended next phase

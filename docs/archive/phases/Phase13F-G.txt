@@ -1,0 +1,357 @@
+You are working in the FORGE repository.
+
+Implement Phase 13F-G: Qdrant Shadow Vector Adapter.
+
+Scope: LIVE_INFRA / VECTOR_SHADOW / DISABLED_BY_DEFAULT / NON_AUTHORITATIVE.
+
+This combines:
+
+- Phase 13F — Qdrant Vector Adapter Design/Scaffold
+- Phase 13G — Qdrant Shadow Vector Index
+
+Do not make Qdrant the live retrieval backend.
+Do not execute live retrieval through Qdrant.
+Do not make Qdrant default.
+Do not make Qdrant canonical truth.
+Do not make vector hits admissible evidence.
+Do not store raw source text in Qdrant.
+Do not store chunk text in Qdrant.
+Do not store prompts, completions, message bodies, tool payloads, memory content, auth data, or secrets in Qdrant.
+Do not switch retrieval reads.
+Do not change public APIs.
+Do not add routes.
+Do not alter live memory semantics.
+Do not alter gateway/modelruntime/retrieval behavior.
+Do not wire Redis into queues/caches yet.
+Do not migrate canonical memory tables.
+Do not make FORGE-K live authority.
+
+Purpose:
+
+Phase 13D-E added diagnostic persistence primitives and retrieval metadata relational adapter scaffolding.
+
+Phase 13F-G adds a Qdrant shadow vector adapter and optional shadow index path.
+
+The vector store must remain retrieval acceleration only.
+
+Qdrant may store embeddings plus safe refs/metadata only.
+Relational storage remains provenance and inspectability source of record.
+
+Core doctrine:
+
+- Qdrant is not truth.
+- Qdrant is not evidence admission.
+- Qdrant scores are retrieval signals only.
+- Qdrant indexes must be rebuildable from relational records.
+- Relational records remain source of record.
+- Shadow vector indexing is disabled by default.
+- No live retrieval behavior changes.
+- No public API changes.
+- No content leakage.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- .env.docker.example
+- docker-compose.yml
+- docs/RETRIEVAL_AND_EMBEDDINGS.md
+- docs/MEMORY_ARCHITECTURE.md
+- docs/architecture/storage_backend_migration.md
+- docs/testing/storage_backend_parity.md
+- docs/data_model/persistence_inventory.md
+- docs/reviews/phase_13de_diagnostic_persistence_and_retrieval_adapter.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- services/core/internal/config/...
+- services/core/internal/embeddings/...
+- services/core/internal/retrieval/...
+- services/core/internal/store/...
+- services/core/internal/forgekshadow/...
+
+Hard stop conditions:
+
+If `cd services/core && go test ./...` fails before changes, stop.
+
+If Phase 13D-E status is not recorded as implemented/tested, stop.
+
+If Qdrant Docker infrastructure/env docs are missing, stop.
+
+If retrieval metadata relational adapter scaffold is missing, stop.
+
+Feature flags/config:
+
+Add disabled-by-default support for:
+
+- `FORGE_QDRANT_SHADOW_INDEX_ENABLED=false`
+
+Use existing:
+
+- `FORGE_QDRANT_URL`
+
+Optional:
+
+- `FORGE_QDRANT_COLLECTION=forge_shadow_embeddings`
+- `FORGE_QDRANT_VECTOR_SIZE`
+- `FORGE_QDRANT_TIMEOUT_MS`
+
+Rules:
+
+- default disabled
+- missing Qdrant URL means no-op/clear error when enabled
+- enabling Qdrant shadow index must not change live retrieval
+- enabling Qdrant shadow index must not affect response behavior
+- no public settings API unless existing config pattern requires it
+
+Deliverables:
+
+1. Add Qdrant client/adapter scaffold.
+
+Create package or files such as:
+
+- `services/core/internal/vectorstore/qdrant.go`
+- `services/core/internal/vectorstore/types.go`
+- `services/core/internal/vectorstore/errors.go`
+
+Define interfaces:
+
+- VectorStore
+- EnsureCollection
+- UpsertVector
+- SearchVector, shadow/test only
+- DeleteVector
+- Health
+
+Rules:
+
+- adapter interface is generic enough to test without live Qdrant
+- no live retrieval path uses it yet
+- no content fields accepted
+- metadata payload schema is safe/ref-only
+
+2. Define safe vector payload.
+
+Allowed Qdrant payload metadata:
+
+- object id/ref
+- source ref id
+- workspace id, if safe
+- embedding record id
+- embedding model id
+- embedding dims
+- source hash/fingerprint
+- retrieval strategy/index class
+- created_at
+- schema version
+- provenance ref id
+
+Forbidden payload metadata:
+
+- source text
+- chunk text
+- document content
+- prompt text
+- completion text
+- message body
+- tool payload/output
+- memory content
+- raw query
+- auth/cookie/token/secret values
+- large raw content blobs
+
+3. Add Qdrant shadow index service.
+
+Create:
+
+- `services/core/internal/vectorstore/shadow_index.go`
+
+or equivalent.
+
+Responsibilities:
+
+- accept already-produced embedding vectors and safe relational refs
+- validate payload is safe/ref-only
+- upsert into Qdrant only when enabled
+- never create embeddings
+- never run live retrieval
+- never alter retrieval result ordering
+- never admit evidence
+- never write canonical memory
+
+4. Add rebuild design/scaffold.
+
+Add docs and/or code for future rebuild:
+
+- rebuild Qdrant from relational embedding records
+- verify collection dims/model
+- drop/recreate allowed only behind explicit future command
+- no automatic destructive rebuild in this phase
+
+5. Add tests.
+
+Config tests:
+
+- Qdrant shadow index default disabled
+- enabled requires Qdrant URL
+- invalid config fails safe
+- enabling does not switch retrieval backend
+
+Payload safety tests:
+
+- valid payload passes
+- source text rejected
+- chunk text rejected
+- prompt/completion rejected
+- message body rejected
+- memory content rejected
+- raw query rejected
+- auth/cookie/secret rejected
+- oversized payload rejected
+
+Adapter tests:
+
+- fake vector store upsert works
+- ensure collection called only when enabled
+- upsert skipped when disabled
+- search is not called by live retrieval path
+- errors are isolated
+- vector dimensions validated
+- deterministic point id generation if implemented
+
+Shadow index tests:
+
+- accepts embedding vector + safe refs
+- rejects missing provenance/ref metadata
+- rejects content metadata
+- does not call embedding provider
+- does not call retrieval/search execution
+- does not mutate relational records
+- does not affect live retrieval results
+
+6. Optional Qdrant integration tests.
+
+Only run if env is present:
+
+- `FORGE_QDRANT_TEST_URL`
+
+Tests:
+
+- ready/health
+- create collection
+- upsert vector with safe payload
+- search vector returns point id
+- delete test collection
+
+Do not require Qdrant for normal `npm test`.
+
+7. Update retrieval docs.
+
+Update:
+
+- `docs/RETRIEVAL_AND_EMBEDDINGS.md`
+
+Add:
+
+- Qdrant shadow adapter behavior
+- vector payload policy
+- rebuild requirement
+- non-authority warning
+- Qdrant not default
+- no live retrieval change
+
+8. Update storage docs.
+
+Update:
+
+- `docs/architecture/storage_backend_migration.md`
+- `docs/testing/storage_backend_parity.md`
+- `docs/data_model/persistence_inventory.md`
+- `docs/reviews/current_phase_status.md`
+- `docs/roadmap/forge_k_build_phases.md`
+- README.md if useful
+
+Create:
+
+- `docs/reviews/phase_13fg_qdrant_shadow_vector_adapter.md`
+
+Include:
+
+- adapter summary
+- config/flags
+- allowed payload
+- forbidden payload
+- tests
+- Qdrant remains non-authoritative
+- live retrieval unchanged
+- SQLite/Postgres remain source of record
+
+9. Validation commands.
+
+Run:
+
+cd services/core && go test ./internal/vectorstore/... ./internal/config/... ./internal/retrieval/... ./internal/embeddings/...
+
+Then:
+
+cd services/core && go test ./...
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+docker compose config
+git diff --check
+
+If Qdrant is running and integration env is available:
+
+FORGE_QDRANT_TEST_URL="http://127.0.0.1:6333" \
+  go test ./internal/vectorstore/... -run Qdrant -count=1
+
+Document exact results.
+
+Acceptance criteria:
+
+- Qdrant shadow index flag exists and defaults disabled
+- Qdrant adapter scaffold exists
+- safe payload schema exists
+- unsafe content payloads rejected
+- shadow index service exists
+- shadow indexing disabled by default
+- no live retrieval path uses Qdrant
+- no embeddings are generated by Qdrant adapter
+- no content stored in Qdrant
+- optional Qdrant integration tests are env-gated
+- docs updated
+- validation commands pass
+
+WHAT NOT TO DO:
+
+- Do not make Qdrant live retrieval backend.
+- Do not switch retrieval reads.
+- Do not call Qdrant from live retrieval unless explicitly in disabled shadow path.
+- Do not store source/chunk text in Qdrant.
+- Do not store prompts/completions/message bodies in Qdrant.
+- Do not store embeddings as truth.
+- Do not make vector hits evidence.
+- Do not migrate memory tables.
+- Do not wire Redis.
+- Do not change public APIs/routes.
+- Do not alter live gateway/modelruntime/retrieval/memory behavior.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code/docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- Qdrant adapter behavior
+- shadow index behavior
+- flags/config added
+- payload allowed/forbidden
+- integration test behavior
+- docs updated
+- commands run
+- test results
+- whether live retrieval changed
+- whether Qdrant is authoritative
+- recommended next phase

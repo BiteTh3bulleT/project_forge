@@ -1,0 +1,319 @@
+You are working in the FORGE repository.
+
+Implement Phase 11C: Go/Rust Test Corpus Alignment.
+
+Scope: RESEARCH_ONLY / SIMULATOR_ONLY.
+
+Do not wire Rust into the live daemon.
+Do not call Rust from Go production code.
+Do not replace the Go FORGE-K simulator.
+Do not modify live AI-OS, gateway, permissions, lanes, audit, modelruntime, API routes, or controllane behavior.
+Do not change public APIs.
+Do not add routes.
+Do not make Rust required for normal Go runtime execution.
+Do not create a second authority path.
+
+Purpose:
+
+Phase 11B created the standalone Rust validation crate:
+
+- crates/forgek-validate
+
+and deterministic fixtures:
+
+- fixtures/forgek
+
+Phase 11C aligns Go and Rust around a shared deterministic fixture corpus.
+
+The goal is to prove that the Go FORGE-K simulator and Rust validator agree on the same stable artifacts, canonical JSON, validation rules, and hash outputs.
+
+This is still research/simulator-only.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/adr/0006-rust-kernel-core-boundary.md
+- docs/architecture/rust_kernel_core_plan.md
+- docs/reviews/phase_11_readiness.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- crates/forgek-validate/README.md
+- crates/forgek-validate/src/...
+- fixtures/forgek/...
+- services/core/internal/forgek/...
+- services/core/internal/forgek/snapshots/...
+- services/core/internal/forgek/contextcompiler/...
+- services/core/internal/forgek/kv/...
+- services/core/internal/forgek/runtime/...
+
+Hard stop conditions:
+
+If Phase 11B Rust crate is missing, stop.
+
+If `cd services/core && go test ./internal/forgek/...` does not pass before this phase, stop and report failing tests.
+
+If `cd crates/forgek-validate && cargo test` does not pass before this phase, stop and report failing tests.
+
+Goal:
+
+Create a shared Go/Rust deterministic test corpus workflow.
+
+Phase 11C should add:
+
+- Go fixture export helpers or tests
+- shared fixture schema notes
+- golden canonical JSON parity tests
+- golden hash parity tests
+- Rust fixture validation against Go-generated fixtures
+- scripts for running Go/Rust parity checks
+- docs explaining the parity boundary
+- no live integration
+
+Core doctrine:
+
+- Go simulator remains the implementation authority.
+- Rust validator remains research/simulator-only.
+- Fixtures are test evidence, not live authority.
+- Rust must not mutate Go state.
+- Go must not call Rust in production.
+- Canonicalization and hashing must be deterministic across languages.
+- Drift between Go and Rust validators must be caught by tests.
+- No live daemon behavior changes.
+
+Deliverables:
+
+1. Add fixture schema documentation.
+
+Create:
+
+- fixtures/forgek/README.md
+
+Include:
+
+- fixture purpose
+- valid/invalid/golden layout
+- fixture naming rules
+- stable fields
+- fields excluded from hashes
+- how Go and Rust use fixtures
+- what fixtures are not
+- no live authority statement
+
+2. Add Go fixture export/parity tests.
+
+Preferred location:
+
+- services/core/internal/forgek/fixture_parity_test.go
+
+or package-specific tests if cleaner:
+
+- services/core/internal/forgek/snapshots/snapshot_fixture_parity_test.go
+- services/core/internal/forgek/contextcompiler/context_fixture_parity_test.go
+- services/core/internal/forgek/kv/kv_fixture_parity_test.go
+- services/core/internal/forgek/runtime/runtime_fixture_parity_test.go
+
+Go tests should:
+
+- load fixtures from `fixtures/forgek/valid`
+- validate them using Go simulator models/services where practical
+- compare expected stable fields
+- compute Go-side canonical/hash outputs if helpers exist
+- compare against `fixtures/forgek/golden/hashes.json`
+- fail on drift
+
+Do not make Go tests invoke Rust yet unless it is clearly isolated as optional and not required for normal `go test`.
+
+3. Add Go canonicalization helpers only if needed.
+
+If Go simulator already has canonical serialization/hash helpers, use them.
+
+If not, add minimal test-only helpers or package helpers that do not change runtime behavior.
+
+Rules:
+
+- deterministic key ordering
+- sorted refs where schema treats refs as unordered
+- no timestamps in stable hash input
+- no random IDs
+- lowercase SHA-256 hex
+- match Rust expectations
+
+Do not destabilize existing Go simulator APIs.
+
+4. Add Rust parity tests.
+
+In `crates/forgek-validate`, add tests that:
+
+- validate every fixture in `fixtures/forgek/valid`
+- reject every fixture in `fixtures/forgek/invalid`
+- canonicalize valid fixtures and compare to golden canonical files
+- compute hashes and compare to `fixtures/forgek/golden/hashes.json`
+- ensure created_at/updated_at changes do not affect stable hashes when excluded
+- ensure source refs / identity fields do affect hashes when included
+
+5. Add shared hash manifest.
+
+Update or create:
+
+- fixtures/forgek/golden/hashes.json
+
+Should include hash entries for:
+
+- snapshot_manifest.valid.json
+- context_block.valid.json
+- context_bundle.valid.json
+- kv_cache_manifest.valid.json
+- runtime_driver_manifest.valid.json
+
+Each entry should record:
+
+- fixture path
+- hash kind
+- expected hash
+- included fields summary
+- excluded fields summary
+
+Keep this deterministic and human-readable.
+
+6. Add parity script.
+
+Create:
+
+- scripts/forgek-parity.mjs
+
+or a shell script if consistent with repo style.
+
+The script should run:
+
+- cd services/core && go test ./internal/forgek/...
+- cd crates/forgek-validate && cargo test
+- cd crates/forgek-validate && cargo run -- validate-fixtures ../../fixtures/forgek
+
+If root scripts are safe to update, add:
+
+- "test:forgek:parity": "node ./scripts/forgek-parity.mjs"
+
+Do not make root `npm test` depend on this yet unless explicitly approved.
+
+7. Add optional Rust CLI fixture command improvements.
+
+If needed, improve:
+
+- validate-fixtures <dir>
+
+It should:
+
+- validate all valid fixtures
+- reject all invalid fixtures
+- compare golden hashes if `golden/hashes.json` exists
+- print deterministic summary
+- exit nonzero on drift
+
+8. Add drift tests.
+
+Add tests that intentionally mutate fixture copies in memory and prove:
+
+- changing stable identity field changes hash
+- changing excluded timestamp does not change hash
+- removing source refs fails validation
+- adding secret-looking runtime manifest field fails validation
+- changing KV runtime assumption fails identity/hash validation where applicable
+
+9. Update docs.
+
+Update:
+
+- docs/architecture/rust_kernel_core_plan.md
+- docs/reviews/phase_11_readiness.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- crates/forgek-validate/README.md
+- services/core/internal/forgek/README.md if present
+- README.md if useful
+
+Docs must clearly say:
+
+- Phase 11C aligns Go/Rust fixture and hash behavior.
+- Rust remains research/simulator-only.
+- No production Go code calls Rust.
+- No live daemon integration exists.
+- Fixture parity is a guardrail for future Rust work.
+
+10. Run validation.
+
+Run:
+
+cd services/core && go test ./internal/forgek/...
+
+Then:
+
+cd crates/forgek-validate && cargo test
+
+Then:
+
+cd crates/forgek-validate && cargo run -- validate-fixtures ../../fixtures/forgek
+
+Then if script added:
+
+npm run test:forgek:parity
+
+Then if feasible:
+
+npm run build:core
+npm run lint
+npm test
+
+Document exact results.
+
+Acceptance criteria:
+
+- fixture README exists
+- Go fixture/parity tests exist
+- Rust fixture/golden parity tests exist
+- shared hashes.json exists and is verified
+- valid fixtures pass
+- invalid fixtures fail
+- canonical JSON parity is tested
+- hash parity is tested
+- drift tests exist
+- optional parity script exists
+- docs updated
+- no live daemon integration
+- no public API changes
+- no route changes
+- no Go production code calls Rust
+- `go test ./internal/forgek/...` passes
+- `cargo test` passes
+- fixture validation passes
+
+WHAT NOT TO DO:
+
+- Do not wire Rust into Go runtime.
+- Do not use cgo.
+- Do not make Rust live authority.
+- Do not replace Go simulator.
+- Do not modify live daemon behavior.
+- Do not change gateway/modelruntime/API routes.
+- Do not add Rust to required CI unless explicitly approved.
+- Do not make root `npm test` require Rust yet.
+- Do not create giant fixtures with raw content blobs.
+- Do not include secrets in fixtures.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code in files.
+
+After completion, respond with:
+
+- files created/changed
+- Go parity tests added
+- Rust parity tests added
+- fixture/golden files added or updated
+- hashes verified
+- script changes
+- docs updated
+- commands run
+- test results
+- whether root scripts changed
+- whether CI changed
+- recommended next phase

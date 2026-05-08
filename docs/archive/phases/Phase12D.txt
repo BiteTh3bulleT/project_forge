@@ -1,0 +1,329 @@
+You are working in the FORGE repository.
+
+Implement Phase 12D: Controlled Shadow Expansion Design.
+
+Scope: DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY.
+
+Do not add new live touchpoints.
+Do not observe chat routes yet.
+Do not observe all routes yet.
+Do not add public diagnostics APIs.
+Do not add routes.
+Do not change public APIs.
+Do not change response bodies.
+Do not change response headers.
+Do not change status codes.
+Do not execute tools.
+Do not call modelruntime from FORGE-K.
+Do not call retrieval/search/embedding providers from FORGE-K.
+Do not implement live RAG.
+Do not write memory.
+Do not execute controllane semantic mutations from FORGE-K.
+Do not alter gateway, permissions, lanes, audit, modelruntime, retrieval, memory, search, embeddings, API, or controllane behavior.
+Do not create a second authority path.
+Do not make FORGE-K live authority.
+
+Purpose:
+
+Phase 12B implemented the first disabled-by-default, read-only shadow observer for `/health` metadata only.
+
+Phase 12C hardened that implementation.
+
+Phase 12D designs the next controlled shadow expansion, but does not implement it.
+
+The goal is to choose and specify exactly one next candidate touchpoint for future Phase 12E implementation, with no-effect guarantees and tests defined before code.
+
+Candidate touchpoints:
+
+1. Route envelope metadata for all API requests
+2. Chat message submission metadata only
+3. Existing retrieval-result metadata only
+4. Existing gateway trace metadata only
+
+Recommended default:
+
+Design Phase 12E around route envelope metadata, not chat content.
+
+Why:
+
+- lowest semantic risk
+- no request/response body capture
+- can prove route inventory and response shape stability
+- useful diagnostic coverage
+- does not touch modelruntime, retrieval, memory, gateway, or controllane
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/architecture/forge_k_live_integration_design.md
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/architecture/phase_12b_adapter_interfaces.md
+- docs/architecture/shadow_mode.md
+- docs/architecture/shadow_mode_harness.md
+- docs/testing/phase_12b_shadow_harness_tests.md
+- docs/reviews/phase_12a_live_integration_readiness.md
+- docs/reviews/phase_12c_shadow_diagnostics_review.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- services/core/internal/forgekshadow/...
+- services/core/internal/forgek/shadowharness/...
+- services/core/internal/api/server.go
+- services/core/internal/api/routes.go
+- services/core/internal/api/server_route_inventory_test.go
+- services/core/internal/config/...
+
+Hard stop conditions:
+
+If `go test ./internal/forgek/...` does not pass before this phase, stop.
+
+If `go test ./internal/forgekshadow/...` does not pass before this phase, stop.
+
+If route inventory tests fail before this phase, stop.
+
+If Phase 12C status is not recorded as implemented/tested, stop.
+
+Core doctrine:
+
+- Phase 12D is design only.
+- No new live observation is added.
+- `/health` remains the only live touchpoint after this phase.
+- The live daemon remains authority.
+- FORGE-K shadow diagnostics remain non-authoritative.
+- Shadow mode must not affect user-visible output.
+- Shadow mode must not mutate live state.
+- Shadow mode must not execute tools.
+- Shadow mode must not call modelruntime.
+- Shadow mode must not perform retrieval/search/embedding calls.
+- Shadow mode must not write memory.
+- Shadow mode must not call controllane mutations.
+- Shadow mode must not create a second authority path.
+
+Deliverables:
+
+1. Create docs/architecture/phase_12d_controlled_shadow_expansion_design.md
+
+Include:
+
+- executive summary
+- current Phase 12B/12C state
+- candidate touchpoints
+- comparison matrix
+- selected recommended touchpoint for Phase 12E
+- excluded touchpoints and why
+- no-effect guarantees
+- data capture policy
+- redaction policy
+- performance budget
+- failure isolation
+- rollback/kill-switch requirements
+- required tests before implementation
+- what not to do
+
+2. Create docs/reviews/phase_12d_touchpoint_selection.md
+
+Include a decision matrix comparing:
+
+- route envelope metadata
+- chat message submission metadata
+- retrieval-result metadata
+- gateway trace metadata
+
+For each candidate include:
+
+- diagnostic value
+- risk level
+- data sensitivity
+- implementation complexity
+- testability
+- chance of response-shape drift
+- chance of accidental body capture
+- modelruntime risk
+- retrieval/RAG risk
+- memory-write risk
+- recommendation
+
+Expected recommendation:
+
+Route envelope metadata first.
+
+3. Create docs/testing/phase_12e_shadow_route_envelope_tests.md
+
+Define future Phase 12E tests.
+
+Required future tests:
+
+- feature flag default disabled
+- disabled mode observes only `/health` if existing behavior remains
+- enabled route-envelope mode captures method/path/route class/timing only
+- no request body capture
+- no response body capture
+- no headers modified
+- no status codes modified
+- no response bodies modified
+- route inventory unchanged
+- no public diagnostics routes
+- shadow failure does not fail request
+- report sink bounded
+- no secrets stored
+- no modelruntime calls
+- no retrieval/search/embedding calls
+- no gateway/tool execution
+- no memory writes
+- no controllane mutations
+- non-`/api` behavior unchanged unless explicitly included
+- `/api/chat/threads/{id}/assistant-stream` SSE behavior unchanged
+- timeout behavior unchanged
+
+4. Update docs/architecture/phase_12b_shadow_harness_spec.md
+
+Add Phase 12D handoff section:
+
+- Phase 12D is design only
+- Phase 12E may implement route-envelope metadata shadowing if separately approved
+- `/health` remains current only implemented touchpoint
+- no chat content capture
+- no RAG/retrieval execution
+- no modelruntime calls
+- no body capture
+
+5. Update docs/architecture/forge_k_live_integration_design.md
+
+Add controlled expansion plan:
+
+- 12B: `/health` metadata only
+- 12C: harden `/health`
+- 12D: design next expansion
+- 12E: possible route-envelope metadata implementation
+- later: possible chat/retrieval/gateway trace metadata only after route-envelope proves stable
+
+6. Update docs/reviews/current_phase_status.md
+
+Add Phase 12D row:
+
+Title:
+Controlled Shadow Expansion Design
+
+Status:
+IMPLEMENTED if docs complete
+
+Scope:
+DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY
+
+Where:
+- docs/architecture/phase_12d_controlled_shadow_expansion_design.md
+- docs/reviews/phase_12d_touchpoint_selection.md
+- docs/testing/phase_12e_shadow_route_envelope_tests.md
+
+Evidence:
+- docs-only validation
+- go test still passes
+- no live code changed
+
+Open work:
+- Phase 12E route-envelope shadow metadata implementation, if approved
+
+7. Update docs/roadmap/forge_k_build_phases.md
+
+Add/update:
+
+- Phase 12D — Controlled Shadow Expansion Design
+  Scope: DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY
+
+- Phase 12E — Route Envelope Shadow Metadata
+  Scope: LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT
+
+- Phase 12F — Shadow Diagnostics Review for Route Envelope
+  Scope: LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY
+
+Do not mark 12E started.
+
+8. Update README.md if useful.
+
+Add short note:
+
+Phase 12D designs the next controlled shadow expansion. `/health` remains the only implemented live touchpoint. No new live observation is added in Phase 12D.
+
+9. What not to do section.
+
+Must include:
+
+- Do not implement Phase 12E.
+- Do not add route-envelope observer code yet.
+- Do not observe all routes yet.
+- Do not capture request bodies.
+- Do not capture response bodies.
+- Do not add public diagnostics APIs.
+- Do not change route behavior.
+- Do not modify API response shape.
+- Do not call modelruntime.
+- Do not execute tools.
+- Do not query retrieval/search/embeddings.
+- Do not write memory.
+- Do not call controllane mutations.
+- Do not make FORGE-K live authority.
+
+10. Run validation.
+
+Run:
+
+cd services/core && go test ./internal/forgek/...
+
+cd services/core && go test ./internal/forgekshadow/...
+
+cd services/core && go test ./internal/api -run "TestServerRouteInventory|TestServerRouteInventoryHealthAndMiddlewareSmoke" -count=1
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+npm run test:forgek:parity
+git diff --check
+
+Document exact results.
+
+Acceptance criteria:
+
+- Phase 12D design doc exists
+- touchpoint selection review exists
+- Phase 12E route-envelope test plan exists
+- selected next touchpoint is explicitly recommended
+- excluded touchpoints are documented
+- Phase 12B/12C docs updated with handoff
+- current phase status updated
+- roadmap updated
+- no live code changed
+- no new live touchpoints added
+- `/health` remains only live touchpoint
+- tests/checks pass
+
+WHAT NOT TO DO:
+
+- Do not implement Phase 12E.
+- Do not modify live daemon behavior.
+- Do not add code-level feature flags.
+- Do not create live adapters.
+- Do not add routes.
+- Do not call modelruntime.
+- Do not execute tools.
+- Do not query retrieval/search/embeddings.
+- Do not write memory.
+- Do not affect user-visible output.
+- Do not create a second Kernel.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- touchpoints evaluated
+- selected Phase 12E candidate
+- excluded candidates and why
+- test plan created
+- docs updated
+- commands run
+- test results
+- whether any live behavior changed
+- recommended next phase

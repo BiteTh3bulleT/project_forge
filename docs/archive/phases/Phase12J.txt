@@ -1,0 +1,410 @@
+You are working in the FORGE repository.
+
+Implement Phase 12J: Retrieval Metadata Expansion Design.
+
+Scope: DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY.
+
+Do not add new live touchpoints.
+Do not implement retrieval metadata observation.
+Do not query retrieval/search/embedding providers from FORGE-K.
+Do not implement live RAG.
+Do not capture retrieval result content.
+Do not capture source chunks.
+Do not capture document text.
+Do not capture embeddings or vectors.
+Do not capture prompts.
+Do not capture model outputs.
+Do not capture request bodies.
+Do not capture response bodies.
+Do not add public diagnostics APIs.
+Do not add routes.
+Do not change public APIs.
+Do not change response bodies.
+Do not change response headers.
+Do not change status codes.
+Do not execute tools.
+Do not call modelruntime from FORGE-K.
+Do not write memory.
+Do not execute controllane semantic mutations from FORGE-K.
+Do not alter gateway, permissions, lanes, audit, modelruntime, retrieval, memory, search, embeddings, API, or controllane behavior.
+Do not create a second authority path.
+Do not make FORGE-K live authority.
+
+Purpose:
+
+Phase 12H implemented disabled-by-default chat metadata shadowing.
+
+Phase 12I hardened chat metadata shadowing.
+
+Phase 12J designs the next controlled shadow expansion candidate: retrieval metadata.
+
+This phase does not implement retrieval metadata observation.
+
+The goal is to decide whether a future Phase 12K may observe bounded retrieval/search/embedding metadata, and if so, exactly which metadata fields are allowed, which are forbidden, what tests are required, and how no-effect behavior is proven.
+
+Core rule:
+
+Retrieval metadata means metadata only.
+
+No source text.
+No chunks.
+No embeddings.
+No vectors.
+No RAG execution.
+No retrieval execution from FORGE-K.
+No memory writes.
+No evidence admission.
+No context compilation.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/architecture/forge_k_live_integration_design.md
+- docs/architecture/phase_12b_shadow_harness_spec.md
+- docs/architecture/phase_12d_controlled_shadow_expansion_design.md
+- docs/architecture/phase_12g_chat_metadata_expansion_design.md
+- docs/architecture/memory_taxonomy.md
+- docs/architecture/shadow_mode.md
+- docs/architecture/shadow_mode_harness.md
+- docs/testing/phase_12h_chat_metadata_shadow_tests.md
+- docs/reviews/phase_12i_chat_metadata_shadow_hardening.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- services/core/internal/forgekshadow/...
+- services/core/internal/forgek/shadowharness/...
+- services/core/internal/retrieval/...
+- services/core/internal/search/...
+- services/core/internal/embeddings/...
+- services/core/internal/memory/...
+- services/core/internal/api/server.go
+- services/core/internal/api/routes.go
+- services/core/internal/api/server_route_inventory_test.go
+- services/core/internal/config/...
+
+Hard stop conditions:
+
+If `go test ./internal/forgek/...` does not pass before this phase, stop.
+
+If `go test ./internal/forgekshadow/...` does not pass before this phase, stop.
+
+If route inventory tests fail before this phase, stop.
+
+If Phase 12I status is not recorded as implemented/tested, stop.
+
+Core doctrine:
+
+- Phase 12J is design only.
+- No new live observation is added.
+- Current implemented live touchpoints remain `/health`, route-envelope metadata, and bounded chat metadata.
+- The live daemon remains authority.
+- FORGE-K shadow diagnostics remain non-authoritative.
+- Retrieval metadata is evidence/routing metadata, not truth.
+- Retrieval metadata must not admit evidence.
+- Retrieval metadata must not compile context.
+- Retrieval metadata must not write memory.
+- Retrieval metadata must not execute retrieval.
+- Retrieval metadata must not call embedding providers.
+- Retrieval metadata must not create RAG output.
+- Shadow mode must not affect user-visible output.
+- Shadow mode must not mutate live state.
+- Shadow mode must not execute tools.
+- Shadow mode must not call modelruntime.
+- Shadow mode must not create a second authority path.
+
+Candidate future Phase 12K touchpoint:
+
+- retrieval/search/embedding metadata already produced by live paths
+
+Potential allowed metadata for future Phase 12K:
+
+- retrieval run id
+- retrieval result id
+- workspace id
+- request/correlation id
+- source type
+- source ref id
+- source hash/fingerprint if already available
+- result count
+- selected count
+- score summary
+- ranking position
+- retrieval strategy name
+- index name or index type
+- embedding model id if already safe/non-secret
+- freshness/staleness flags
+- timing/status metadata
+- diagnostic markers
+- bounded warnings
+
+Forbidden metadata:
+
+- source text
+- chunk text
+- document content
+- file content
+- prompt text
+- model output
+- retrieval result body
+- embeddings
+- vectors
+- raw query string if user-authored or sensitive
+- auth headers
+- cookies
+- bearer tokens
+- API keys
+- raw authorization metadata
+- memory content
+- unredacted search snippets
+- large raw content blobs
+- secrets or secret-looking metadata
+
+Deliverables:
+
+1. Create docs/architecture/phase_12j_retrieval_metadata_expansion_design.md
+
+Include:
+
+- executive summary
+- current Phase 12B through 12I state
+- why retrieval metadata is higher risk than chat metadata
+- proposed future Phase 12K scope
+- allowed metadata
+- forbidden metadata
+- no-effect guarantees
+- RAG boundary
+- data capture policy
+- redaction policy
+- performance budget
+- failure isolation
+- rollback/kill-switch requirements
+- required tests before implementation
+- what not to do
+
+2. Create docs/reviews/phase_12j_retrieval_metadata_risk_review.md
+
+Include a risk review comparing:
+
+- route envelope metadata
+- chat metadata
+- retrieval metadata
+- gateway trace metadata
+- modelruntime metadata
+
+Focus on:
+
+- semantic sensitivity
+- source text leakage risk
+- embedding/vector leakage risk
+- prompt/query leakage risk
+- RAG adjacency
+- memory-write adjacency
+- modelruntime adjacency
+- tool execution adjacency
+- testability
+- recommended constraints
+
+Expected conclusion:
+
+Retrieval metadata may be a valid next expansion only if it captures refs, IDs, counts, scores, fingerprints, strategies, and timing — never source text, chunks, embeddings, query text, or RAG output.
+
+3. Create docs/testing/phase_12k_retrieval_metadata_shadow_tests.md
+
+Define future Phase 12K tests.
+
+Required future tests:
+
+- feature flag default disabled
+- disabled mode observes no retrieval metadata
+- enabled retrieval metadata mode captures metadata only
+- no retrieval execution from FORGE-K
+- no search execution from FORGE-K
+- no embedding provider calls from FORGE-K
+- no source text capture
+- no chunk text capture
+- no document content capture
+- no embedding/vector capture
+- no raw user query capture
+- no memory content capture
+- no prompt/model output capture
+- no request/response body capture
+- no auth/cookie/secret capture
+- route inventory unchanged
+- API response status/body/header unchanged
+- retrieval behavior unchanged
+- retrieval result count unchanged
+- context compile behavior unchanged
+- modelruntime call count unchanged
+- gateway/tool execution count unchanged
+- memory write count unchanged
+- controllane mutation count unchanged
+- shadow failure does not fail live request
+- metadata sink bounded
+- no public diagnostics routes
+
+4. Update docs/architecture/phase_12g_chat_metadata_expansion_design.md
+
+Add Phase 12J handoff section:
+
+- Phase 12H implemented chat metadata.
+- Phase 12I hardened chat metadata.
+- Phase 12J designs retrieval metadata only.
+- Phase 12K may implement retrieval metadata only if separately approved.
+- no retrieval content/RAG/vector capture is approved.
+
+5. Update docs/architecture/phase_12b_shadow_harness_spec.md
+
+Add current scope note:
+
+- `/health` metadata implemented
+- route-envelope metadata implemented
+- chat metadata implemented
+- retrieval metadata remains design-only after 12J
+- no retrieval content observation exists
+
+6. Update docs/architecture/shadow_mode.md
+
+Add:
+
+- Phase 12J design-only retrieval metadata boundary
+- future retrieval metadata remains disabled-by-default, read-only, metadata-only
+- no source text/chunk/vector/query/RAG output capture
+
+7. Update docs/reviews/current_phase_status.md
+
+Add Phase 12J row:
+
+Title:
+Retrieval Metadata Expansion Design
+
+Status:
+IMPLEMENTED if docs complete
+
+Scope:
+DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY
+
+Where:
+- docs/architecture/phase_12j_retrieval_metadata_expansion_design.md
+- docs/reviews/phase_12j_retrieval_metadata_risk_review.md
+- docs/testing/phase_12k_retrieval_metadata_shadow_tests.md
+
+Evidence:
+- docs-only validation
+- go test still passes
+- no live code changed
+
+Open work:
+- Phase 12K retrieval metadata shadow implementation, if approved
+
+8. Update docs/roadmap/forge_k_build_phases.md
+
+Add/update:
+
+- Phase 12J — Retrieval Metadata Expansion Design
+  Scope: DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY
+
+- Phase 12K — Retrieval Metadata Shadow Implementation
+  Scope: LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT
+
+- Phase 12L — Retrieval Metadata Shadow Hardening
+  Scope: LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY
+
+Do not mark 12K started.
+
+9. Update README.md if useful.
+
+Add short note:
+
+Phase 12J designs a future retrieval metadata shadow expansion. No retrieval observation, RAG execution, source content capture, embedding capture, or live behavior change exists yet.
+
+10. What not to do section.
+
+Must include:
+
+- Do not implement Phase 12K.
+- Do not add retrieval metadata observer code yet.
+- Do not execute retrieval/search/embedding calls.
+- Do not implement live RAG.
+- Do not capture source text.
+- Do not capture chunks.
+- Do not capture embeddings/vectors.
+- Do not capture raw queries.
+- Do not capture memory content.
+- Do not add public diagnostics APIs.
+- Do not change route behavior.
+- Do not modify API response shape.
+- Do not call modelruntime.
+- Do not execute tools.
+- Do not write memory.
+- Do not call controllane mutations.
+- Do not make FORGE-K live authority.
+
+11. Run validation.
+
+Run:
+
+cd services/core && go test ./internal/forgek/...
+
+cd services/core && go test ./internal/forgekshadow/...
+
+cd services/core && go test ./internal/api -run "TestServerRouteInventory|TestServerRouteInventoryHealthAndMiddlewareSmoke" -count=1
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+npm run test:forgek:parity
+git diff --check
+
+Document exact results.
+
+Acceptance criteria:
+
+- Phase 12J design doc exists
+- retrieval metadata risk review exists
+- Phase 12K retrieval metadata test plan exists
+- allowed metadata is explicit
+- forbidden metadata is explicit
+- source/chunk/query/vector/RAG capture is explicitly forbidden
+- current shadow docs updated
+- current phase status updated
+- roadmap updated
+- no live code changed
+- no new live touchpoints added
+- no retrieval observation added
+- tests/checks pass
+
+WHAT NOT TO DO:
+
+- Do not implement Phase 12K.
+- Do not observe retrieval routes.
+- Do not add live code.
+- Do not modify live daemon behavior.
+- Do not add code-level feature flags.
+- Do not create live adapters.
+- Do not add routes.
+- Do not call modelruntime.
+- Do not execute tools.
+- Do not query retrieval/search/embeddings.
+- Do not write memory.
+- Do not affect user-visible output.
+- Do not create a second Kernel.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- retrieval metadata design summary
+- allowed metadata
+- forbidden metadata
+- RAG boundary
+- risk review summary
+- future Phase 12K test plan
+- docs updated
+- commands run
+- test results
+- whether any live behavior changed
+- recommended next phase

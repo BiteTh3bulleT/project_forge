@@ -56,6 +56,8 @@ func (v *DeterministicValidator) ValidatePayload(req domain.SyscallRequest, def 
 		return validateArchiveNote(req, store)
 	case domain.ActionCompileContext:
 		return validateCompileContext(req)
+	case domain.ActionValidateKVIdentity:
+		return validateKVIdentity(req)
 	default:
 		return []domain.SyscallError{errField(domain.ErrUnsupportedAction, "action", "unsupported action")}
 	}
@@ -436,6 +438,56 @@ func validateCompileContext(req domain.SyscallRequest) []domain.SyscallError {
 		}
 	}
 	return issues
+}
+
+func validateKVIdentity(req domain.SyscallRequest) []domain.SyscallError {
+	var issues []domain.SyscallError
+	manifest, ok := req.Payload["manifest"].(map[string]any)
+	if !ok {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.manifest", "manifest identity is required"))
+	}
+	request, ok := req.Payload["request"].(map[string]any)
+	if !ok {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.request", "request identity is required"))
+	}
+	for _, key := range requiredKVIdentityFields() {
+		if manifest != nil && strings.TrimSpace(readString(manifest, key)) == "" {
+			issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.manifest."+key, key+" is required"))
+		}
+		if request != nil && strings.TrimSpace(readString(request, key)) == "" {
+			issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.request."+key, key+" is required"))
+		}
+	}
+	if manifest != nil && strings.TrimSpace(readString(manifest, "cache_id")) == "" {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.manifest.cache_id", "cache_id is required"))
+	}
+	if manifest != nil && strings.TrimSpace(readString(manifest, "status")) == "" {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.manifest.status", "status is required"))
+	}
+	return issues
+}
+
+func requiredKVIdentityFields() []string {
+	return []string{
+		"cache_mode",
+		"workspace_id",
+		"bundle_id",
+		"model_id",
+		"model_revision",
+		"tokenizer_id",
+		"tokenizer_revision",
+		"chat_template_hash",
+		"prompt_layout_hash",
+		"policy_schema_hash",
+		"syscall_schema_hash",
+		"token_input_hash",
+		"runtime_backend",
+		"runtime_version",
+		"attention_backend",
+		"rope_config_hash",
+		"kv_precision",
+		"cache_salt",
+	}
 }
 
 func validateCompileContextOptions(payload map[string]any, prefix string) []domain.SyscallError {

@@ -1,0 +1,297 @@
+You are working in the FORGE repository.
+
+Implement Phase 13B-C: Postgres Schema Foundation and SQLite/Postgres Parity.
+
+Scope: LIVE_INFRA / STORAGE_PARITY / DEFAULT_SQLITE.
+
+This combines:
+
+- Phase 13B — Postgres Schema Foundation
+- Phase 13C — SQLite/Postgres Parity Tests
+
+Do not make Postgres the default backend.
+Do not migrate live memory to Postgres.
+Do not dual-write live data yet.
+Do not switch reads to Postgres.
+Do not wire Redis into queues/caches yet.
+Do not wire Qdrant into retrieval yet.
+Do not change public APIs.
+Do not add routes.
+Do not alter live memory semantics.
+Do not alter gateway/modelruntime/retrieval behavior.
+Do not make Redis or Qdrant canonical truth.
+Do not make vector hits admissible evidence.
+Do not make FORGE-K live authority.
+
+Purpose:
+
+Phase 13A added the storage backend foundation:
+
+- FORGE_STORE_BACKEND=sqlite|postgres
+- sqlite default
+- backend capabilities
+- Postgres connector scaffold
+- Postgres migration runner scaffold
+- storage migration docs
+- parity test docs
+
+Phase 13B-C should create the first real Postgres schema foundation and parity tests for a small, low-risk relational subset.
+
+SQLite must remain the live default.
+
+Recommended first migrated subset:
+
+Group A/B non-canonical or operational tables only.
+
+Preferred first target:
+
+- shadow diagnostic reports, if already represented safely as non-authoritative diagnostics
+
+or, if diagnostic persistence is still intentionally deferred:
+
+- a tiny storage metadata table only
+- migration bookkeeping
+- backend health metadata
+
+Do not migrate canonical memory tables yet.
+
+Core doctrine:
+
+- SQLite remains live default.
+- Postgres schema may exist without live cutover.
+- Postgres migrations must be idempotent.
+- Postgres parity tests must not require Docker for normal unit tests unless build tags or skips are used.
+- No live read/write path changes without explicit future phase.
+- Redis and Qdrant remain infrastructure only.
+- Storage parity does not equal authority migration.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- .env.docker.example
+- docker-compose.yml
+- docs/architecture/storage_backend_migration.md
+- docs/testing/storage_backend_parity.md
+- docs/data_model/persistence_inventory.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- services/core/internal/storagebackend/...
+- services/core/internal/store/...
+- services/core/internal/config/...
+- services/core/internal/forgekshadow/...
+- services/core/internal/memory/...
+- services/core/internal/retrieval/...
+
+Hard stop conditions:
+
+If `cd services/core && go test ./...` fails before changes, stop and report.
+
+If Phase 13A status is not recorded as implemented/tested, stop.
+
+If Postgres migration scaffold is missing, stop.
+
+If storage backend config is missing, stop.
+
+Implementation goals:
+
+1. Expand Postgres migration scaffold.
+
+Add real Postgres migration structure for low-risk foundation tables.
+
+Required:
+
+- migration version table
+- migration lock strategy design or no-op documented
+- idempotent migration execution
+- deterministic migration ordering
+- transactional migration execution where possible
+
+Do not port all SQLite schema.
+
+2. Pick a first parity target.
+
+Preferred target A:
+
+- shadow diagnostics persistence schema only, disabled/not wired live
+
+Possible tables:
+
+- shadow_diagnostic_reports
+- shadow_diagnostic_report_events
+- shadow_diagnostic_redactions
+
+But do not wire live reports into this table yet unless explicitly safe and disabled by default.
+
+Alternative target B:
+
+- storage_backend_metadata
+- storage_migration_audit
+
+Pick the safer target based on repo shape.
+
+3. Add Postgres SQL migrations.
+
+Suggested path:
+
+- services/core/migrations/postgres/0001_storage_metadata.sql
+- services/core/migrations/postgres/0002_shadow_diagnostics_schema.sql, only if selected
+
+Rules:
+
+- SQL must be idempotent
+- table/column names stable
+- timestamps explicit
+- JSON fields use jsonb
+- primary keys explicit
+- indexes explicit
+- no canonical memory tables yet
+
+4. Add SQLite/Postgres schema parity tests.
+
+Tests should compare intended shape where practical:
+
+- migration version table exists
+- storage metadata table exists
+- selected diagnostic table schema exists, if added
+- required indexes exist where practical
+- JSON field behavior documented/tested where practical
+- migrations are idempotent
+
+If live SQLite schema does not yet have equivalent tables, call this “foundation parity” and document that data parity starts when a repository adapter exists.
+
+5. Add Postgres migration runner tests.
+
+Tests:
+
+- empty migration set works
+- migrations run in order
+- already-applied migration is skipped
+- failed migration reports error
+- version table records applied migration
+- migration runner does not run when backend sqlite
+- missing DSN fails clearly when backend postgres
+- default test path does not require Docker
+
+6. Add optional integration test mode.
+
+If repo style allows, add Postgres integration tests behind an env guard:
+
+- FORGE_POSTGRES_TEST_DSN
+
+Tests only run when DSN is set.
+
+Do not require Postgres for normal `npm test`.
+
+7. Add storage repository contract placeholder.
+
+Create a repository interface only if useful.
+
+Do not migrate live repositories yet.
+
+Possible package:
+
+- services/core/internal/store/contracts.go
+
+Define:
+
+- StoreBackend
+- Migrator
+- HealthChecker
+- TransactionRunner
+
+Keep it minimal.
+
+8. Update docs.
+
+Update:
+
+- docs/architecture/storage_backend_migration.md
+- docs/testing/storage_backend_parity.md
+- docs/data_model/persistence_inventory.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- README.md if useful
+
+Add Phase 13B-C notes:
+
+- Postgres schema foundation exists
+- parity tests exist
+- SQLite remains default
+- no live data migration
+- no dual-write
+- no read switch
+- no Redis/Qdrant live wiring
+
+9. Validation commands.
+
+Run:
+
+cd services/core && go test ./internal/storagebackend/... ./internal/store/... ./internal/config/...
+
+Then:
+
+cd services/core && go test ./...
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+docker compose config
+git diff --check
+
+If Postgres is running and integration env is available, optionally run:
+
+FORGE_POSTGRES_TEST_DSN="postgres://forge:forge_dev_password@127.0.0.1:5432/forge?sslmode=disable" \
+  cd services/core && go test ./internal/store/... -run Postgres -count=1
+
+Document exact results.
+
+Acceptance criteria:
+
+- Postgres migration files exist
+- migration runner handles real migration list
+- migration idempotence tested
+- migration version recording tested
+- selected low-risk schema exists
+- parity/foundation tests exist
+- normal tests do not require Docker/Postgres
+- SQLite remains default
+- no live repository switched to Postgres
+- no dual-write
+- no public API/route changes
+- docs updated
+- validation commands pass
+
+WHAT NOT TO DO:
+
+- Do not migrate memory tables.
+- Do not migrate retrieval tables yet.
+- Do not make Postgres default.
+- Do not dual-write live data.
+- Do not switch reads to Postgres.
+- Do not wire Redis into queues/caches.
+- Do not wire Qdrant into retrieval.
+- Do not persist shadow diagnostics live unless separately approved and disabled.
+- Do not alter live memory/retrieval/gateway/modelruntime behavior.
+- Do not make vector scores evidence.
+- Do not add routes.
+- Do not change public APIs.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code/docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- migration files added
+- selected schema target
+- parity tests added
+- migration runner behavior
+- integration test behavior
+- docs updated
+- commands run
+- test results
+- whether SQLite remains default
+- whether any live behavior changed
+- recommended next phase

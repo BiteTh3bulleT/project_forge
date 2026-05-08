@@ -1,0 +1,835 @@
+You are working in the FORGE repository.
+
+Implement Phase 11E: FORGE Consensus Mesh.
+
+Scope: SIMULATOR_ONLY / GOVERNANCE_LAYER_ONLY.
+
+Do not wire Consensus Mesh into the live daemon.
+Do not modify live AI-OS, gateway, permissions, lanes, audit, modelruntime, API routes, or controllane behavior.
+Do not change public APIs.
+Do not add routes.
+Do not call real model runtimes.
+Do not execute tools.
+Do not write live memory.
+Do not let consensus become a second Kernel authority path.
+
+Purpose:
+
+Build the FORGE Consensus Mesh as a simulator-only claim governance layer inside FORGE-K.
+
+Consensus Mesh is not “more agents.”
+Consensus Mesh is governed claim acceptance.
+
+Core rule:
+
+No Consensus, No Claim.
+
+No factual claim, recommendation, action proposal, or memory update proposal should enter a final response shape unless it satisfies schema, evidence, quorum, conflict, risk, and consensus policy.
+
+Consensus accepted does not mean canonical truth.
+Consensus accepted means allowed for this response/action proposal.
+Kernel commit remains the only canonical truth path.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/adr/0006-rust-kernel-core-boundary.md
+- docs/architecture/forge_k_overview.md
+- docs/architecture/core_doctrine.md
+- docs/architecture/neuron_fabric.md
+- docs/architecture/memory_palace_and_courthouse.md
+- docs/architecture/semantic_algebra.md
+- docs/architecture/snapshots.md
+- docs/architecture/context_compiler_and_kv_cache.md
+- docs/architecture/runtime_driver_boundary.md
+- docs/architecture/lymphatic_lane.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- docs/testing/definition_of_done.md
+- services/core/internal/forgek/...
+- services/core/internal/forgek/neurons/...
+- services/core/internal/forgek/court/...
+- services/core/internal/forgek/semantic/...
+- services/core/internal/forgek/snapshots/...
+- services/core/internal/forgek/contextcompiler/...
+- services/core/internal/forgek/runtime/...
+- services/core/internal/forgek/lymphatic/...
+
+Also use the uploaded Micro-Agent Consensus Architecture as the design source if available in the working context.
+
+Hard stop conditions:
+
+If `go test ./internal/forgek/...` does not pass before this phase, stop and report failing tests.
+
+If ADR 0005 is missing, stop.
+
+If Phase 11D Rust tooling status is missing or broken, do not fix it in this phase unless it directly blocks Go simulator tests.
+
+Goal:
+
+Create the simulator-only FORGE Consensus Mesh.
+
+Initial implementation should include:
+
+- Claim model
+- EvidenceRef model
+- AgentRun model
+- ClaimLedger
+- Claim canonicalization
+- Conflict detection
+- ConsensusPolicy
+- Consensus scoring
+- Quorum rules
+- ConsensusDecision
+- ConsensusReport
+- ComposerGuard
+- ResponseCompositionInput
+- Consensus syscalls
+- tests proving accepted-claims-only behavior
+
+Do not implement a full agent swarm yet.
+Do not implement real model-backed agents yet.
+Do not implement live response generation yet.
+
+Core doctrine:
+
+- Consensus Mesh does not own truth.
+- Consensus Mesh does not admit evidence into canonical memory.
+- Consensus Mesh does not mutate Kernel state directly.
+- Consensus Mesh does not bypass Courthouse.
+- Consensus Mesh does not bypass semantic syscalls.
+- Consensus decisions are response/action governance, not canonical truth.
+- Runtime outputs remain proposals until accepted by consensus and/or admitted by Courthouse where applicable.
+- Memory updates remain proposals until committed through semantic syscalls.
+- Actions remain proposals until approved through risk/consensus/human confirmation where required.
+- Response Composer may use accepted claims, uncertain claims, approved action proposals, and style constraints only.
+- Composer must not see or use raw rejected claims as factual material.
+- Conflicts must be surfaced or escalated; never silently hidden.
+
+Use public/professional terminology only:
+
+- Consensus Mesh
+- Claim Ledger
+- Claim
+- EvidenceRef
+- ConsensusPolicy
+- ConsensusDecision
+- ConsensusReport
+- ComposerGuard
+- AcceptedClaimsOnly
+- Evidence Tier
+- Quorum
+- Weighted Support
+- Conflict Detection
+- Escalation
+- Agent Independence
+- Response Trace
+
+Do not use private symbolic, mystical, occult, numerological, or unserious language anywhere in repo files.
+
+Suggested package layout:
+
+- services/core/internal/forgek/consensus/
+
+Suggested files:
+
+- models.go
+- evidence.go
+- claims.go
+- canonicalizer.go
+- conflict.go
+- policy.go
+- scoring.go
+- quorum.go
+- ledger.go
+- report.go
+- composer_guard.go
+- service.go
+- statuses.go
+- errors.go
+
+Kernel/syscall wiring:
+
+- services/core/internal/forgek/consensus_syscalls.go
+- services/core/internal/forgek/consensus_syscalls_test.go
+
+Suggested tests:
+
+- services/core/internal/forgek/consensus/claim_model_test.go
+- services/core/internal/forgek/consensus/evidence_ref_test.go
+- services/core/internal/forgek/consensus/canonicalizer_test.go
+- services/core/internal/forgek/consensus/conflict_test.go
+- services/core/internal/forgek/consensus/scoring_test.go
+- services/core/internal/forgek/consensus/quorum_test.go
+- services/core/internal/forgek/consensus/ledger_test.go
+- services/core/internal/forgek/consensus/composer_guard_test.go
+- services/core/internal/forgek/consensus/no_consensus_no_claim_test.go
+- services/core/internal/forgek/consensus/consensus_service_test.go
+
+1. Implement Claim.
+
+Fields similar to:
+
+- claim_id
+- claim_key
+- claim_type
+- subject
+- predicate
+- value_json
+- scope
+- temporal
+- evidence_refs
+- confidence
+- agent_id
+- agent_run_id
+- risk_flags
+- status
+- created_at
+- metadata
+
+Claim types:
+
+- fact
+- preference
+- decision
+- task
+- event
+- constraint
+- recommendation
+- inference
+- uncertainty
+- action_proposal
+- memory_update_proposal
+
+Claim statuses:
+
+- proposed
+- accepted
+- rejected
+- uncertain
+- conflicted
+- needs_more_evidence
+- deferred
+
+Rules:
+
+- Claims require subject, predicate, claim_type, confidence, and agent_id.
+- Factual/recommendation/action/memory claims require evidence refs unless explicitly marked uncertainty/inference.
+- Claims do not mutate truth.
+- Claims are not evidence by themselves.
+- Claims must serialize deterministically.
+
+2. Implement EvidenceRef.
+
+Fields similar to:
+
+- evidence_id
+- evidence_type
+- tier
+- source
+- locator
+- retrieved_at
+- freshness_score
+- reliability_score
+- source_hash, optional
+- metadata
+
+Evidence types:
+
+- db_row
+- file_chunk
+- source_code
+- email
+- calendar_event
+- api_response
+- memory_record
+- user_message
+- system_config
+- model_inference
+
+Evidence tiers:
+
+- Tier 1 primary
+- Tier 2 derived with source ref
+- Tier 3 model inference
+
+Rules:
+
+- Tier 3 model inference cannot be sole support for factual claims.
+- No evidence ref means no factual acceptance.
+- Evidence refs must be stable and inspectable.
+
+3. Implement AgentRun.
+
+Fields similar to:
+
+- agent_run_id
+- request_id
+- agent_id
+- agent_type
+- input_hash
+- output_hash
+- started_at
+- completed_at
+- status
+- error
+- metadata
+
+Rules:
+
+- AgentRun records simulator evidence only.
+- AgentRun does not imply claim acceptance.
+
+4. Implement ClaimLedger.
+
+Methods:
+
+- submit_claim
+- submit_evidence_ref
+- list_claims
+- get_claim
+- list_evidence
+- group_by_claim_key
+- list_by_status
+
+Rules:
+
+- Ledger stores proposed claims.
+- Ledger does not accept/reject claims by itself.
+- Ledger preserves raw proposals.
+- Ledger returns deterministic ordering.
+
+5. Implement claim canonicalization.
+
+Canonical claim key:
+
+hash(claim_type + subject + predicate + normalized_value + scope + temporal_bucket)
+
+Rules:
+
+- equivalent values normalize to same claim key where practical
+- numeric strings and numbers normalize consistently
+- booleans normalize consistently
+- scope is deterministic
+- temporal bucket is deterministic
+- map key order cannot affect claim key
+- timestamps excluded unless part of temporal bucket
+
+Tests:
+
+- “three” and 3 may normalize only if explicit normalizer supports it; do not overbuild natural language.
+- 3 and “3” should normalize if value type allows numeric normalization.
+- same subject/predicate/scope/value creates same key.
+- different value creates different key.
+- different scope creates different key.
+
+6. Implement conflict detection.
+
+Claims conflict when:
+
+- same subject
+- same predicate
+- overlapping scope
+- overlapping temporal range/bucket
+- different normalized values
+
+Rules:
+
+- uncertainty claims do not create hard conflicts by default
+- action proposal conflicts compare target action/value
+- memory update proposal conflicts compare target memory subject/predicate/scope
+- conflict detection must be deterministic
+
+7. Implement ConsensusPolicy.
+
+Fields similar to:
+
+- policy_id
+- workspace_id
+- criticality
+- required_agents
+- required_tier1_count
+- min_support_ratio
+- max_conflict_ratio
+- require_human_confirmation
+- allow_tier3_for_facts
+- max_agent_count
+- max_tool_calls
+- max_model_calls
+- max_wall_time_ms
+- created_at
+- metadata
+
+Criticality levels:
+
+- low
+- medium
+- high
+- critical
+
+Defaults:
+
+Low:
+- required_agents: 1
+- Tier 2 acceptable
+- support_ratio >= 0.60
+- conflict_ratio < 0.40
+
+Medium:
+- required_agents: 2
+- at least one Tier 1 or two Tier 2 refs
+- support_ratio >= 0.67
+- conflict_ratio < 0.33
+
+High:
+- required_agents: 3
+- at least one Tier 1 required
+- support_ratio >= 0.80
+- conflict_ratio < 0.20
+
+Critical:
+- required_agents: 3+
+- Tier 1 required
+- support_ratio >= 0.80
+- conflict_ratio == 0
+- human confirmation required
+
+8. Implement weighted support scoring.
+
+Formula:
+
+vote_weight = agent_reliability * evidence_quality * freshness * confidence * independence_factor
+
+Implement:
+
+- agent reliability table
+- evidence tier weights
+- freshness weighting
+- confidence weighting
+- independence factor
+
+Keep deterministic and simple.
+
+Default evidence weights:
+
+- Tier 1: 1.00
+- Tier 2: 0.75
+- Tier 3: 0.30
+- no evidence: 0.00
+
+Independence factor:
+
+- independent primary sources: 1.0
+- same primary source via different route: 0.6
+- same derived source: 0.3
+
+Tests:
+
+- Tier 1 beats stale Tier 2.
+- same derived source is discounted.
+- unsupported factual claim has zero eligible support.
+- conflict ratio blocks acceptance.
+
+9. Implement ConsensusDecision.
+
+Fields similar to:
+
+- decision_id
+- request_id
+- claim_key
+- status
+- accepted_claim_ids
+- rejected_claim_ids
+- uncertain_claim_ids
+- conflicted_claim_ids
+- support_weight
+- opposing_weight
+- total_eligible_weight
+- support_ratio
+- conflict_ratio
+- quorum_met
+- evidence_policy_passed
+- risk_policy_passed
+- decision_reason
+- created_at
+- metadata
+
+Statuses:
+
+- accepted
+- rejected
+- uncertain
+- conflicted
+- needs_more_evidence
+- deferred
+
+10. Implement ConsensusReport.
+
+Fields:
+
+- report_id
+- request_id
+- workspace_id
+- policy_id
+- decisions
+- accepted_claim_ids
+- uncertain_claim_ids
+- rejected_claim_ids
+- conflicted_claim_ids
+- escalations
+- summary
+- created_at
+- metadata
+
+Rules:
+
+- report is not truth
+- report can be cited by snapshots/context later
+- report is deterministic for same inputs excluding IDs/timestamps
+
+11. Implement ComposerGuard.
+
+Inputs:
+
+- accepted_claims
+- uncertain_claims
+- approved_action_proposals
+- style_constraints
+- user_current_turn_text
+
+Forbidden:
+
+- rejected claims as factual input
+- raw proposed claims
+- unsupported facts
+- unapproved action proposals
+- uncommitted memory updates as truth
+
+Implement:
+
+- BuildComposerInput(report, ledger)
+- ValidateComposerOutputDraft(draft, claim_refs), if practical
+- AcceptedClaimsOnly payload type
+
+Tests:
+
+- composer input includes accepted claims
+- uncertain claims included only as uncertainty blocks
+- rejected claims excluded
+- raw proposed claims excluded
+- action proposal included only if accepted
+- memory update proposal included only as proposal, not truth
+
+12. Implement ConsensusService.
+
+Methods:
+
+- open_request
+- submit_claim
+- submit_evidence
+- evaluate
+- get_report
+- list_reports
+- build_composer_input
+
+Rules:
+
+- evaluate groups claims by canonical key
+- applies conflict detection
+- applies evidence policy
+- applies quorum
+- applies weighted scoring
+- creates ConsensusReport
+- does not mutate Kernel canonical truth
+- does not call model runtimes
+- does not execute tools
+
+13. Add consensus syscalls.
+
+Required:
+
+- consensus.open
+- consensus.submit_claim
+- consensus.submit_evidence
+- consensus.evaluate
+- consensus.get_report
+- consensus.list_reports
+- consensus.build_composer_input
+
+Syscall behavior:
+
+consensus.open:
+- creates consensus request/session
+- journals CONSENSUS_OPENED
+
+consensus.submit_claim:
+- requires capability
+- stores proposed claim
+- journals CONSENSUS_CLAIM_SUBMITTED
+
+consensus.submit_evidence:
+- requires capability
+- stores evidence ref
+- journals CONSENSUS_EVIDENCE_SUBMITTED
+
+consensus.evaluate:
+- requires capability
+- creates ConsensusReport and ConsensusDecisions
+- journals CONSENSUS_EVALUATED
+
+consensus.get_report:
+- read-only
+- returns report
+
+consensus.list_reports:
+- read-only
+- lists reports
+
+consensus.build_composer_input:
+- read-only or guarded syscall
+- returns accepted-claims-only composer payload
+
+14. Add capabilities.
+
+Support:
+
+- consensus.open
+- consensus.submit_claim
+- consensus.submit_evidence
+- consensus.evaluate
+- consensus.get_report
+- consensus.list_reports
+- consensus.build_composer_input
+- consensus.read
+
+Tests:
+
+- actor without consensus.submit_claim cannot submit claim
+- actor without consensus.evaluate cannot evaluate
+- read-only actor cannot mutate
+- workspace scope enforced
+- evaluation journals event
+
+15. Integrate with existing FORGE-K by reference only.
+
+Neuron Fabric:
+
+- NeuronEnvelope may be referenced as agent output evidence
+- no automatic claim acceptance
+
+Courthouse:
+
+- accepted consensus claim is not automatically admitted exhibit
+- consensus report may be submitted later as evidence, but not automatically
+- Courthouse still controls admissibility
+
+Semantic Algebra:
+
+- claim canonicalization can use semantic normalization helpers if useful
+- semantic operators must not be executed by consensus automatically
+
+Snapshots:
+
+- future ConsensusSnapshot can cite report refs
+- do not implement deep snapshot integration unless trivial
+
+Context Compiler:
+
+- accepted claims may become future ContextBlocks
+- do not compile context in consensus service
+
+Runtime:
+
+- RuntimeGenerateResult may be submitted as proposed claim evidence
+- runtime output is not accepted automatically
+
+Lymphatic:
+
+- future cleanup can detect stale claims/reports
+- do not implement lymphatic cleanup in this phase
+
+16. Add tests.
+
+Required tests:
+
+Claim model:
+- valid claim
+- invalid missing subject/predicate/type
+- factual claim without evidence rejected by policy
+- uncertainty claim can exist without Tier 1 evidence
+
+Evidence:
+- Tier 1/2/3 validation
+- invalid tier rejected
+- Tier 3 cannot sole-support factual acceptance
+
+Canonicalizer:
+- stable key
+- map order does not affect key
+- scope affects key
+- temporal bucket affects key
+- different values conflict
+
+Conflict:
+- same subject/predicate/scope different value conflicts
+- different scope does not conflict
+- uncertainty does not hard-conflict by default
+
+Scoring:
+- Tier 1 beats stale Tier 2
+- unsupported factual claim rejected
+- same derived source discounted
+- quorum required
+- high criticality requires Tier 1
+- critical requires human confirmation
+
+Consensus service:
+- submit claims
+- evaluate accepted claim
+- evaluate rejected unsupported claim
+- evaluate uncertain/conflicted claim
+- deterministic report shape
+
+Composer guard:
+- accepted claims included
+- rejected claims excluded
+- raw proposed claims excluded
+- uncertain claims included only as uncertainty
+- action proposal requires accepted status
+- memory update proposal cannot become truth
+
+Syscalls:
+- all consensus syscalls registered
+- capability checks
+- journal events
+- workspace scope
+- no canonical mutation outside consensus stores
+
+No second authority:
+- consensus accepted does not mutate Kernel truth
+- consensus accepted does not admit Courthouse exhibit
+- consensus report does not become ContextBlock
+- consensus does not call model runtime
+- consensus does not execute action
+- consensus does not write memory
+
+17. Add docs.
+
+Create:
+
+- docs/architecture/consensus_mesh.md
+
+Include:
+
+- purpose
+- scope
+- No Consensus, No Claim
+- separation of powers
+- claim model
+- evidence tiers
+- consensus policy
+- quorum/scoring
+- conflict detection
+- composer guard
+- memory update rule
+- action proposal rule
+- integration with FORGE-K
+- what not to do
+
+Update:
+
+- docs/architecture/forge_k_overview.md
+- docs/architecture/neuron_fabric.md
+- docs/architecture/memory_palace_and_courthouse.md
+- docs/architecture/semantic_algebra.md
+- docs/architecture/context_compiler_and_kv_cache.md if needed
+- docs/roadmap/forge_k_build_phases.md
+- docs/reviews/current_phase_status.md
+- README.md
+- services/core/internal/forgek/README.md if present
+
+18. Rust validator note.
+
+Do not add Rust validation for consensus in this phase unless trivial docs-only note.
+
+Add a future note:
+
+- Phase 11E fixtures may be added to Rust validation later after the Go consensus model stabilizes.
+
+Do not modify crates/forgek-validate unless explicitly needed.
+
+19. Run validation.
+
+Run:
+
+cd services/core && go test ./internal/forgek/...
+
+Then if feasible:
+
+npm run build:core
+npm run lint
+npm test
+
+Then if Rust tooling is unaffected but available:
+
+npm run test:forgek:parity
+
+Document exact results.
+
+20. Acceptance criteria.
+
+Phase 11E is complete when:
+
+- consensus package exists
+- Claim model exists and is tested
+- EvidenceRef model exists and is tested
+- ClaimLedger exists and is tested
+- canonicalization exists and is tested
+- conflict detection exists and is tested
+- ConsensusPolicy exists and is tested
+- weighted scoring exists and is tested
+- ConsensusDecision/Report exist and are tested
+- ComposerGuard exists and is tested
+- consensus syscalls exist and are tested
+- capability gates work
+- journal events work
+- accepted claims do not become canonical truth
+- composer cannot use rejected claims
+- unsupported factual claims are rejected or uncertain
+- docs are updated
+- `go test ./internal/forgek/...` passes
+- no live daemon integration occurred
+
+WHAT NOT TO DO:
+
+- Do not wire Consensus Mesh into live daemon.
+- Do not add live API routes.
+- Do not make consensus a second Kernel.
+- Do not auto-admit claims into Courthouse.
+- Do not auto-write memory.
+- Do not execute actions.
+- Do not call model runtime.
+- Do not spawn real model-backed agents.
+- Do not let composer access raw rejected claims.
+- Do not treat Tier 3 inference as sole factual evidence.
+- Do not make every simple request run the full mesh.
+- Do not modify live gateway/modelruntime/controllane behavior.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code in files.
+
+After completion, respond with:
+
+- files created/changed
+- consensus components implemented
+- syscalls implemented
+- evidence/scoring behavior
+- composer guard behavior
+- no-second-authority validation
+- tests added
+- docs updated
+- commands run
+- test results
+- assumptions made
+- recommended next phase

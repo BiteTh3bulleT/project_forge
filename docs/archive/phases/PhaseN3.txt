@@ -1,0 +1,224 @@
+# FORGE-OS Phase N3 — Read-Only Host Kernel Bridge Implementation
+
+You are working in the `project_forge` repository.
+
+Phase N2 is complete. It added FORGE-OS host substrate docs, ADR 0007, `/forge` storage scaffolding, NixOS module exports, and a read-only Host Kernel Bridge design.
+
+Now implement Phase N3: a read-only Host Kernel Bridge diagnostic subsystem.
+
+## Goal
+
+Build a read-only host diagnostic bridge that lets FORGE observe the Linux/NixOS host substrate without mutating it.
+
+The Host Kernel Bridge must collect bounded host diagnostics and expose them through existing internal diagnostic/state-safe paths. It must not become live authority, must not write semantic memory directly, and must not mutate the host.
+
+## Doctrine To Preserve
+
+- FORGE is the AI-OS.
+- Linux/NixOS remains the boot and hardware substrate.
+- FORGE-K remains simulator/shadow only unless a later explicit authority migration phase changes that.
+- Host observations are diagnostic evidence, not canonical semantic truth.
+- Durable semantic writes still require existing validation/syscall/approval/audit/commit paths.
+- Model runtimes remain drivers/proposers, not authority.
+- This phase must not add autonomous host mutation.
+
+## Build Scope
+
+Implement a new Host Kernel Bridge package/service module in the existing core/service architecture.
+
+Prefer a clean internal package name such as:
+
+- `services/core/internal/hostbridge`
+- or the closest existing internal package convention if one already exists
+
+The bridge should collect read-only diagnostics from safe host sources.
+
+## Diagnostics To Collect
+
+Implement bounded collection for:
+
+1. Kernel identity
+   - kernel version
+   - OS release if available
+   - architecture
+
+2. Boot information
+   - boot parameters from `/proc/cmdline`
+   - redact anything that looks like tokens, secrets, keys, passwords, credentials, URLs with embedded auth
+
+3. Loaded modules
+   - module names
+   - versions/refcounts if safely available
+   - no raw binary/module payloads
+
+4. CPU pressure
+   - aggregate CPU count
+   - load average if available
+   - basic utilization snapshot if simple and safe
+
+5. Memory pressure
+   - total RAM
+   - available RAM
+   - swap total/free
+   - derived pressure level: normal / elevated / critical / unavailable
+
+6. Disk pressure
+   - configured FORGE storage root
+   - total/free/used if available
+   - pressure level
+
+7. GPU/VRAM diagnostics
+   - detect NVIDIA if available through safe command/proc/sysfs path
+   - collect driver identity, GPU name, VRAM total/free/used if available
+   - if GPU tooling is missing, report unavailable, not failure
+
+8. Thermal diagnostics
+   - read available `/sys/class/thermal` data if present
+   - normalize labels and temperatures
+   - absence is okay
+
+9. Service health
+   - FORGE-related service states if running under systemd
+   - failed unit summary if safely available
+   - do not restart anything
+
+10. Modelruntime health
+   - call existing local health/status path only if one already exists
+   - do not create a new public route
+   - do not load models
+   - do not spawn model runtimes
+
+## Output Shape
+
+Create a stable diagnostic snapshot type.
+
+Suggested fields:
+
+- `snapshot_id`
+- `captured_at`
+- `host`
+- `kernel`
+- `boot`
+- `cpu`
+- `memory`
+- `disk`
+- `gpu`
+- `thermal`
+- `services`
+- `modelruntime`
+- `degraded`
+- `warnings`
+- `redactions`
+- `source_errors`
+
+Every source must fail independently. One failed source must not break the whole snapshot.
+
+## Storage / Exposure
+
+The snapshot may be:
+
+- written under `/forge/runtime/host-kernel` or the configured runtime directory
+- exposed through an existing internal diagnostics path if one exists
+- logged as bounded structured diagnostics
+
+Do not write directly to semantic memory.
+Do not create a new canonical memory path.
+Do not add a public unauthenticated API route.
+
+If an API is needed, make it internal/admin-gated and follow existing gateway/permission/audit conventions.
+
+## NixOS Module Integration
+
+Update `nix/nixos/modules/forge-host-kernel.nix` only as needed to prepare the report directory and environment variables.
+
+Keep:
+
+- `allowMutation = false`
+- read-only assertion
+- no control actions
+- no rebuilds
+- no service restarts
+
+If adding a systemd service/timer for diagnostics, it must be disabled by default unless safely scoped and explicitly enabled.
+
+Preferred default for N3:
+
+- library + manual/internal diagnostic call first
+- optional disabled-by-default timer second
+
+## Tests
+
+Add tests for:
+
+1. Redaction
+   - passwords/tokens/secrets in boot params are redacted
+
+2. Source failure isolation
+   - missing `/proc` file or GPU tooling does not fail entire snapshot
+
+3. Memory pressure classification
+
+4. Disk pressure classification
+
+5. No mutation commands
+   - ensure implementation does not call:
+     - `nixos-rebuild`
+     - `systemctl restart`
+     - `systemctl stop`
+     - `modprobe`
+     - `rmmod`
+     - package upgrade commands
+     - destructive file operations
+
+6. JSON snapshot stability
+   - snapshot has expected top-level fields
+
+7. FORGE-K boundary
+   - no live FORGE-K authority imports
+   - no semantic memory write path
+
+## Documentation Updates
+
+Update or add:
+
+- `docs/architecture/forge_host_kernel_bridge.md`
+- `docs/architecture/forge_os_host_substrate.md`
+- optional `docs/operations/host_kernel_bridge_diagnostics.md`
+
+Document:
+
+- what is collected
+- what is redacted
+- what is unavailable/degraded behavior
+- how to run diagnostics manually
+- why this remains read-only
+
+## Acceptance Criteria
+
+- A Host Kernel Bridge diagnostic snapshot can be generated.
+- Snapshot generation is read-only.
+- Missing sources degrade cleanly.
+- Boot params are redacted.
+- No host mutation commands exist in the implementation.
+- No live FORGE-K authority migration occurs.
+- No semantic memory bypass is introduced.
+- No modelruntime behavior changes are introduced.
+- Existing tests still pass.
+- Nix checks still pass where available.
+
+## WHAT NOT TO DO
+
+- Do not fork Linux.
+- Do not modify kernel parameters.
+- Do not run `nixos-rebuild`.
+- Do not restart services.
+- Do not load or unload kernel modules.
+- Do not add autonomous host mutation.
+- Do not add live FORGE-K authority.
+- Do not write host diagnostics directly into semantic memory.
+- Do not bypass gateway, permissions, lanes, audit, controllane, or modelruntime governance.
+- Do not create public unauthenticated diagnostic routes.
+- Do not make GPU availability required.
+- Do not make modelruntime availability required.
+- Do not let failed diagnostics block core startup.
+- Do not turn this into a UI phase.

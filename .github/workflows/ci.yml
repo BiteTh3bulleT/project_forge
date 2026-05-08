@@ -49,6 +49,9 @@ jobs:
       - name: Go/Rust FORGE-K parity
         run: npm run test:forgek:parity
 
+      - name: Integration test environment visibility
+        run: npm run test:integration:env
+
       - name: Go tests
         run: npm test
 

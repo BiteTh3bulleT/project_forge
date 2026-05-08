@@ -1,0 +1,282 @@
+# FORGE-OS Phase N5 — FORGE-H Resource Action Proposal Gate
+
+You are working in the `project_forge` repository.
+
+Phase N3 implemented the read-only Host Kernel Bridge.
+Phase N4 implemented advisory-only FORGE-H resource policy.
+
+Now implement Phase N5: a governed Resource Action Proposal Gate.
+
+## Goal
+
+Convert FORGE-H advisory resource policy outputs into bounded action proposals that can be reviewed, approved, rejected, expired, or superseded.
+
+This phase must not execute host actions.
+
+N5 is the “request approval” step in the host-control ladder:
+
+observe → report → recommend → request approval → execute bounded action → automate safe action → own policy
+
+N5 stops at request approval.
+
+## Doctrine To Preserve
+
+- FORGE is the AI-OS.
+- Linux/NixOS remains the boot and hardware substrate.
+- Host Kernel Bridge diagnostics are evidence only.
+- FORGE-H resource policy is advisory only.
+- Resource proposals are not execution authority.
+- No host mutation is allowed in this phase.
+- No model loading/unloading is allowed in this phase.
+- No service start/stop/restart is allowed in this phase.
+- No semantic memory writes outside governed paths.
+- No FORGE-K live authority migration.
+- No bypass of gateway, permissions, lanes, audit, controllane, memory, or modelruntime governance.
+
+## Build Scope
+
+Create an internal proposal subsystem, preferably under:
+
+- `services/core/internal/forgeh`
+- or `services/core/internal/resourceproposal`
+- or the closest existing approval/proposal convention in the repo
+
+It should consume a `forgeh.ResourcePolicySnapshot` and produce zero or more `ResourceActionProposal` records.
+
+## Proposal Types
+
+Support proposal action types:
+
+- `pause_background_ingest`
+- `defer_background_ingest`
+- `defer_embedding`
+- `deny_new_model_load`
+- `defer_large_model_load`
+- `prefer_current_model_only`
+- `prefer_cpu_safe_mode`
+- `warn_operator`
+- `enter_degraded_mode`
+- `schedule_maintenance_later`
+
+These are proposals only.
+
+They must not call workers, modelruntime, systemd, Nix, filesystem cleanup, or host mutation code.
+
+## Data Types
+
+Add types equivalent to:
+
+### ResourceActionProposal
+
+Fields:
+
+- `proposal_id`
+- `created_at`
+- `source_policy_id`
+- `source_snapshot_id`
+- `action_type`
+- `target_lane`
+- `recommended_decision`
+- `reason`
+- `risk_level`
+- `requires_operator_approval`
+- `status`
+- `expires_at`
+- `advisory_only`
+
+### ProposalStatus
+
+- `proposed`
+- `approved`
+- `rejected`
+- `expired`
+- `superseded`
+- `committed_later`
+
+### ProposalRisk
+
+- `low`
+- `moderate`
+- `high`
+- `critical`
+
+Default `advisory_only` must be true.
+
+All proposal IDs must be deterministic enough for tests or contain stable source references.
+
+## Proposal Generation Rules
+
+Generate proposals from FORGE-H policy decisions.
+
+Examples:
+
+### Background ingest
+
+If lane decision is:
+
+- `allow`: no proposal
+- `allow_with_warning`: optional `warn_operator`
+- `defer`: propose `defer_background_ingest`
+- `deny`: propose `pause_background_ingest`
+
+### Embedding
+
+If lane decision is:
+
+- `defer`: propose `defer_embedding`
+- `deny`: propose `defer_embedding` with higher risk
+
+### Model load
+
+If model load recommendation is:
+
+- `small_local_ok`: no proposal
+- `current_model_only`: propose `prefer_current_model_only`
+- `defer_large_model`: propose `defer_large_model_load`
+- `cpu_only_safe_mode`: propose `prefer_cpu_safe_mode`
+- `deny_new_model_load`: propose `deny_new_model_load`
+- `unavailable`: propose `warn_operator`
+
+### Overall posture
+
+If posture is:
+
+- `normal`: no degraded proposal
+- `degraded`: optional `warn_operator`
+- `constrained`: propose `enter_degraded_mode`
+- `critical`: propose `enter_degraded_mode` with high/critical risk
+
+## Approval Behavior
+
+This phase may model approval state transitions but must not execute approved proposals.
+
+Allowed transitions:
+
+- `proposed` → `approved`
+- `proposed` → `rejected`
+- `proposed` → `expired`
+- `proposed` → `superseded`
+
+Forbidden transition in N5:
+
+- anything that executes host/runtime mutation
+
+If the repo has an existing approval/audit system, integrate with it carefully.
+If integration would risk bypassing authority, keep this as an internal library and document future integration.
+
+## Storage
+
+Preferred:
+
+- internal package + tests first
+- optional append-only proposal ledger if existing storage conventions are clear
+
+Do not create a second canonical memory system.
+
+Proposal records are operational governance records, not semantic memory.
+
+If persisted, they must be traceable to:
+
+- source policy ID
+- source host snapshot ID
+- created timestamp
+- approval status
+- operator decision when available
+
+## NixOS Module
+
+Add only inert config if needed:
+
+- `forge.resourcePolicy.proposals.enable`
+- `forge.resourcePolicy.proposals.runtimePath`
+
+Defaults:
+
+- disabled
+- advisory-only
+- no service
+- no timer
+- no mutation
+
+## Tests
+
+Add tests for:
+
+1. Generating no proposals for normal policy
+2. Generating background ingest defer proposal
+3. Generating embedding defer proposal
+4. Generating model load defer proposal
+5. Generating CPU safe mode proposal
+6. Generating deny new model load proposal
+7. Generating degraded/critical posture proposal
+8. Proposal status transitions
+9. Expiration behavior
+10. Advisory-only default
+11. No mutation commands/text
+12. No forbidden authority imports
+13. No modelruntime calls
+14. No semantic memory writes
+15. No live FORGE-K authority imports
+
+Forbidden text/import guard should include:
+
+- `exec.Command`
+- `nixos-rebuild`
+- `systemctl start`
+- `systemctl stop`
+- `systemctl restart`
+- `modprobe`
+- `rmmod`
+- package manager upgrade commands
+- destructive cleanup
+- `LoadModel`
+- `UnloadModel`
+- direct gateway execution
+- direct semantic memory writes
+
+## Documentation
+
+Add/update:
+
+- `docs/architecture/forge_h_resource_policy.md`
+- `docs/architecture/forge_os_host_substrate.md`
+- `docs/operations/resource_policy_diagnostics.md`
+- optional ADR: `docs/adr/0009-forge-h-resource-action-proposals.md`
+
+Document:
+
+- N5’s role in the control ladder
+- proposals are not execution
+- approval state machine
+- proposal risk levels
+- what remains forbidden
+- future N6 path for bounded execution
+
+## Acceptance Criteria
+
+- Resource action proposals can be generated from FORGE-H policy snapshots.
+- Proposals are advisory-only.
+- Proposals can be approved/rejected/expired/superseded without execution.
+- No host mutation is introduced.
+- No modelruntime mutation is introduced.
+- No service control is introduced.
+- No NixOS rebuild behavior is introduced.
+- No direct semantic memory writes are introduced.
+- No live FORGE-K authority migration occurs.
+- Existing tests pass.
+- Nix checks pass where available.
+
+## WHAT NOT TO DO
+
+- Do not execute proposals.
+- Do not pause workers yet.
+- Do not restart services.
+- Do not run `nixos-rebuild`.
+- Do not load or unload models.
+- Do not load or unload kernel modules.
+- Do not delete files.
+- Do not run cleanup.
+- Do not write directly to semantic memory.
+- Do not add public unauthenticated routes.
+- Do not bypass gateway, permissions, lanes, audit, controllane, memory, modelruntime, or FORGE-K authority.
+- Do not turn this into a UI phase.

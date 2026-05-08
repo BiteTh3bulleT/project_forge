@@ -1,0 +1,554 @@
+You are working in the FORGE repository.
+
+Implement Phase 11G: FORGE-K Shadow Mode Harness Design.
+
+Scope: SIMULATOR_ONLY / SHADOW_DESIGN_ONLY.
+
+Do not wire FORGE-K into the live daemon.
+Do not modify live AI-OS, gateway, permissions, lanes, audit, modelruntime, API routes, retrieval, embeddings, memory, search, or controllane behavior.
+Do not change public APIs.
+Do not add routes.
+Do not call live model runtimes.
+Do not execute tools.
+Do not query live retrieval/embeddings from FORGE-K.
+Do not implement live RAG.
+Do not write live memory.
+Do not alter user-visible responses.
+Do not create a second authority path.
+Do not begin Phase 12 live integration.
+
+Purpose:
+
+Phase 11F created Integration Readiness Contracts, live path mappings, read-only adapter contracts, read-only RAG/retrieval mirror contracts, and shadow-mode policy.
+
+Phase 11G designs the shadow-mode harness that a future Phase 12B could implement against live systems.
+
+This phase should define the shape of shadow observation, request mirroring, diagnostic comparison reports, consensus/RAG/context shadow reports, and no-effect guarantees.
+
+No live daemon integration occurs in this phase.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/adr/0006-rust-kernel-core-boundary.md
+- docs/architecture/forge_k_overview.md
+- docs/architecture/core_doctrine.md
+- docs/architecture/forge_k_integration_readiness.md
+- docs/architecture/forge_k_adapter_contracts.md
+- docs/architecture/shadow_mode.md
+- docs/architecture/consensus_mesh.md
+- docs/architecture/context_compiler_and_kv_cache.md
+- docs/architecture/memory_taxonomy.md
+- docs/reviews/forge_k_live_path_mapping.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- docs/testing/definition_of_done.md
+- services/core/internal/forgek/integrationready/...
+- services/core/internal/forgek/consensus/...
+- services/core/internal/forgek/contextcompiler/...
+- services/core/internal/forgek/kv/...
+- services/core/internal/forgek/runtime/...
+- services/core/internal/forgek/lymphatic/...
+
+Hard stop conditions:
+
+If `go test ./internal/forgek/...` does not pass before this phase, stop and report failing tests.
+
+If Phase 11F integration readiness docs/package are missing, stop and report.
+
+If ADR 0005 is missing, stop.
+
+Core doctrine:
+
+- Shadow mode observes, mirrors, compares, and reports.
+- Shadow mode does not affect live behavior.
+- Shadow mode does not mutate live state.
+- Shadow mode does not execute tools.
+- Shadow mode does not call live model runtimes.
+- Shadow mode does not perform live retrieval.
+- Shadow mode does not write memory.
+- Shadow mode does not alter user-visible output.
+- Shadow reports are diagnostics only.
+- Any future live shadow harness must remain read-only until a later LIVE_INTEGRATION phase explicitly authorizes more.
+- RAG/retrieval shadowing is evidence/ref normalization only, not retrieval execution.
+
+Goal:
+
+Create the simulator-only design artifacts and pure contract models for the future shadow-mode harness.
+
+Deliverables:
+
+1. Create docs/architecture/shadow_mode_harness.md
+
+Include:
+
+- executive summary
+- purpose
+- current Phase 11F readiness boundary
+- shadow harness responsibilities
+- non-goals
+- shadow request lifecycle
+- shadow observation model
+- read-only adapter handoff
+- consensus shadow report
+- context shadow report
+- RAG/retrieval shadow report
+- runtime shadow report
+- KV shadow report
+- lymphatic shadow report
+- no-effect guarantees
+- failure modes
+- Phase 12B implementation gates
+- what not to do
+
+Must explicitly state:
+
+Phase 11G does not implement live shadow mode and does not authorize Phase 12 live integration.
+
+2. Create docs/reviews/shadow_mode_harness_plan.md
+
+Include:
+
+- proposed Phase 12B read-only shadow harness plan
+- live touchpoints that would be observed later
+- required adapters from Phase 11F
+- event/report flow
+- required tests before any live observation
+- rollback/disable strategy
+- risk register
+- no-mutation guarantees
+- open questions
+
+3. Add pure simulator package if useful:
+
+services/core/internal/forgek/shadowharness
+
+Files:
+
+- models.go
+- report.go
+- compare.go
+- policy.go
+- errors.go
+
+Do not import live daemon packages.
+
+Forbidden imports:
+
+- internal/api
+- internal/aios
+- internal/gateway
+- internal/permissions
+- internal/lanes
+- internal/audit
+- internal/modelruntime
+- internal/memory
+- internal/retrieval
+- internal/search
+- internal/embeddings
+
+4. Implement ShadowObservation model.
+
+Fields:
+
+- observation_id
+- workspace_id
+- request_id
+- observed_at
+- live_path
+- request_summary
+- input_refs
+- evidence_refs
+- retrieval_refs
+- context_refs
+- consensus_refs
+- runtime_refs
+- kv_refs
+- risk_flags
+- metadata
+
+Rules:
+
+- diagnostic only
+- no live mutation
+- deterministic serialization
+- no raw secret fields
+- no user-visible output authority
+
+5. Implement ShadowHarnessPolicy model.
+
+Fields:
+
+- policy_id
+- mode
+- allow_live_mutation
+- allow_tool_execution
+- allow_modelruntime_calls
+- allow_retrieval_execution
+- allow_embedding_calls
+- allow_memory_writes
+- allow_user_visible_output
+- allow_public_api_changes
+- produce_consensus_report
+- produce_context_report
+- produce_rag_report
+- produce_runtime_report
+- produce_kv_report
+- produce_lymphatic_report
+- metadata
+
+Rules:
+
+All allow_* fields must default false.
+
+Reporting flags may be true.
+
+6. Implement ShadowComparisonReport model.
+
+Fields:
+
+- report_id
+- workspace_id
+- request_id
+- generated_at
+- observation_refs
+- consensus_shadow
+- context_shadow
+- rag_shadow
+- runtime_shadow
+- kv_shadow
+- lymphatic_shadow
+- divergences
+- warnings
+- blockers
+- no_effect_verified
+- metadata
+
+Rules:
+
+- report is diagnostic only
+- deterministic ordering
+- no live mutation
+- no action execution
+- no memory writes
+
+7. Implement RAGShadowReport model.
+
+Fields:
+
+- report_id
+- request_id
+- retrieval_refs
+- evidence_refs
+- source_refs
+- normalized_evidence_count
+- tier1_count
+- tier2_count
+- tier3_count
+- stale_refs
+- unsupported_refs
+- warnings
+- metadata
+
+Rules:
+
+- observes existing retrieval refs only
+- does not execute retrieval
+- does not call embeddings
+- does not compile context
+- does not admit evidence
+- does not write memory
+- does not alter response
+
+8. Implement ConsensusShadowReport model.
+
+Fields:
+
+- report_id
+- request_id
+- consensus_report_ref
+- accepted_claim_count
+- rejected_claim_count
+- uncertain_claim_count
+- conflicted_claim_count
+- unsupported_fact_count
+- composer_guard_passed
+- warnings
+- metadata
+
+Rules:
+
+- diagnostic only
+- no accepted claim becomes truth
+- no composer output is emitted to user
+
+9. Implement ContextShadowReport model.
+
+Fields:
+
+- report_id
+- request_id
+- context_bundle_ref
+- block_count
+- stable_prefix_hash
+- volatile_suffix_hash
+- cache_eligible_block_count
+- rejected_evidence_leak_detected
+- warnings
+- metadata
+
+Rules:
+
+- diagnostic only
+- does not compile live context
+- may compare simulator ContextBundle refs if provided
+- does not affect live COMPILE_CONTEXT
+
+10. Implement RuntimeShadowReport model.
+
+Fields:
+
+- report_id
+- request_id
+- runtime_result_refs
+- driver_refs
+- model_identity_refs
+- proposal_only_verified
+- warnings
+- metadata
+
+Rules:
+
+- diagnostic only
+- no real runtime calls
+- runtime outputs remain proposals
+
+11. Implement KVShadowReport model.
+
+Fields:
+
+- report_id
+- request_id
+- kv_manifest_refs
+- cache_hit_count
+- cache_miss_count
+- invalidated_count
+- evicted_count
+- acceleration_not_memory_verified
+- warnings
+- metadata
+
+Rules:
+
+- diagnostic only
+- no live KV reuse
+- no runtime cache mutation
+
+12. Implement LymphaticShadowReport model.
+
+Fields:
+
+- report_id
+- request_id
+- maintenance_report_refs
+- cleanup_proposal_count
+- unsafe_proposal_count
+- no_silent_mutation_verified
+- warnings
+- metadata
+
+Rules:
+
+- diagnostic only
+- proposals do not execute
+
+13. Add no-effect validator.
+
+Implement a helper that validates a ShadowComparisonReport and ShadowHarnessPolicy confirm:
+
+- no live mutation
+- no tool execution
+- no modelruntime calls
+- no retrieval execution
+- no embedding calls
+- no memory writes
+- no user-visible output
+- no public API changes
+
+14. Add tests.
+
+Required tests:
+
+ShadowHarnessPolicy:
+- defaults forbid all side effects
+- reporting flags can be enabled without enabling side effects
+- invalid policy enabling mutation fails
+
+ShadowObservation:
+- validates required fields
+- deterministic serialization
+- rejects secret-looking metadata fields if practical
+- stores refs only
+
+ShadowComparisonReport:
+- deterministic ordering
+- no-effect validator passes valid report
+- no-effect validator rejects report/policy with side effects enabled
+
+RAGShadowReport:
+- can normalize existing refs
+- retrieval execution forbidden
+- embedding calls forbidden
+- memory writes forbidden
+- context compile forbidden
+- user-visible output forbidden
+
+ConsensusShadowReport:
+- accepted claims are diagnostic only
+- unsupported facts surfaced
+- composer guard diagnostics do not emit final answer
+
+ContextShadowReport:
+- rejected evidence leak detection field exists
+- does not modify ContextBundle
+- does not alter live COMPILE_CONTEXT
+
+RuntimeShadowReport:
+- proposal-only verified
+- no modelruntime calls
+
+KVShadowReport:
+- acceleration-not-memory verified
+- no live KV reuse
+
+LymphaticShadowReport:
+- no-silent-mutation verified
+- proposals do not execute
+
+Forbidden imports:
+- scan shadowharness package for forbidden live daemon imports
+- fail loudly if any forbidden import exists
+
+15. Update docs/reviews/current_phase_status.md
+
+Add Phase 11G:
+
+Title:
+Shadow Mode Harness Design
+
+Status:
+IMPLEMENTED if deliverables complete
+
+Scope:
+SIMULATOR_ONLY / SHADOW_DESIGN_ONLY
+
+Evidence:
+- shadow harness docs
+- shadowharness package/tests if added
+- no-effect validator
+- RAG shadow report contract
+- no live daemon wiring
+
+Open work:
+- Phase 12A live integration design
+- Phase 12B read-only shadow harness implementation
+- actual live observation deferred
+
+16. Update docs/roadmap/forge_k_build_phases.md
+
+Add/update:
+
+- Phase 11G — Shadow Mode Harness Design
+- Phase 12A — Live Integration Design
+- Phase 12B — Read-only Shadow Harness Implementation
+- Phase 12C — Limited Live Authority Migration
+
+Do not mark Phase 12 started.
+
+17. Update docs/architecture/shadow_mode.md
+
+Cross-link to shadow_mode_harness.md.
+
+Clarify:
+
+- shadow mode policy existed in 11F
+- shadow harness report model/design added in 11G
+- live shadow implementation deferred to Phase 12B
+
+18. Update README.md if useful.
+
+Add short note:
+
+Phase 11G defines the simulator-only shadow harness design. It does not observe live daemon requests yet and does not affect live behavior.
+
+19. Run validation.
+
+Run:
+
+cd services/core && go test ./internal/forgek/shadowharness/...
+
+Then:
+
+cd services/core && go test ./internal/forgek/...
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+npm run test:forgek:parity
+git diff --check
+
+Document exact results.
+
+Acceptance criteria:
+
+- shadow mode harness doc exists
+- shadow harness plan exists
+- shadowharness package exists if code added
+- no-effect validator exists if code added
+- RAGShadowReport contract exists
+- ConsensusShadowReport contract exists
+- ContextShadowReport contract exists
+- RuntimeShadowReport contract exists
+- KVShadowReport contract exists
+- LymphaticShadowReport contract exists
+- forbidden import tests pass
+- no live daemon integration
+- no public API changes
+- no route changes
+- no live retrieval/RAG execution
+- no gateway/modelruntime/controllane behavior changes
+- tests pass
+
+WHAT NOT TO DO:
+
+- Do not implement Phase 12.
+- Do not observe live daemon requests.
+- Do not wire adapters to live systems.
+- Do not implement live RAG.
+- Do not call live retrieval/embedding providers.
+- Do not modify live daemon behavior.
+- Do not mutate live memory/state.
+- Do not execute tools.
+- Do not call real model runtimes.
+- Do not modify public APIs.
+- Do not add routes.
+- Do not create a second Kernel.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code/docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- shadow harness design summary
+- report contracts defined
+- no-effect validator behavior
+- RAG shadow boundary
+- tests added
+- commands run
+- test results
+- whether any live behavior changed
+- recommended next phase

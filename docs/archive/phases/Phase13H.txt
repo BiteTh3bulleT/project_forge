@@ -1,0 +1,347 @@
+You are working in the FORGE repository.
+
+Implement Phase 13H: Redis Queue/Cache Boundary.
+
+Scope: LIVE_INFRA / EPHEMERAL_COORDINATION / DISABLED_BY_DEFAULT / NON_CANONICAL.
+
+Do not make Redis canonical truth.
+Do not store durable memory in Redis.
+Do not store evidence admission state in Redis.
+Do not store provenance authority in Redis.
+Do not make Redis required for normal operation.
+Do not switch live jobs/queues to Redis yet.
+Do not replace existing SQLite/Postgres-backed durable records.
+Do not wire Redis into live gateway/modelruntime/retrieval behavior.
+Do not change public APIs.
+Do not add routes.
+Do not alter live memory semantics.
+Do not make FORGE-K live authority.
+
+Purpose:
+
+Postgres, Redis, and Qdrant are now managed infrastructure.
+
+Phase 13A added storage backend foundations.
+Phase 13B-C added Postgres schema/parity foundations.
+Phase 13D-E added diagnostic persistence and retrieval relational adapter scaffolding.
+Phase 13F-G added Qdrant shadow vector adapter and non-authoritative vector index scaffold.
+
+Phase 13H defines and implements the Redis boundary for ephemeral coordination only.
+
+Redis may be used later for:
+
+- bounded caches
+- queues
+- pub/sub
+- locks
+- progress streams
+- rate-limit metadata
+- temporary job status mirrors
+
+But Redis must never be source of truth.
+
+Core doctrine:
+
+- Redis is ephemeral.
+- Redis loss must be recoverable.
+- Redis cannot be canonical truth.
+- Redis cannot be durable memory.
+- Redis cannot be evidence admission.
+- Redis cannot be provenance authority.
+- Redis cannot be the only job record.
+- Durable state must remain SQLite/Postgres.
+- Redis wiring must be disabled by default.
+- No live queue/cache behavior changes in this phase unless explicitly test-only and disabled.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- .env.docker.example
+- docker-compose.yml
+- docs/architecture/storage_backend_migration.md
+- docs/testing/storage_backend_parity.md
+- docs/data_model/persistence_inventory.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- docs/runbooks/docker_containerization.md
+- services/core/internal/config/...
+- services/core/internal/storagebackend/...
+- services/core/internal/store/...
+- services/core/internal/jobs/...
+- services/core/internal/gateway/...
+- services/core/internal/modelruntime/...
+- services/core/internal/retrieval/...
+- services/core/internal/forgekshadow/...
+
+Hard stop conditions:
+
+If `cd services/core && go test ./...` fails before changes, stop.
+
+If Phase 13F-G status is not recorded as implemented/tested, stop.
+
+If Redis Docker infrastructure/env docs are missing, stop.
+
+If storagebackend capability model does not mark Redis non-canonical, stop and fix that first.
+
+Feature flags/config:
+
+Use existing:
+
+- `FORGE_REDIS_ADDR`
+
+Add disabled-by-default support for:
+
+- `FORGE_REDIS_ENABLED=false`
+
+Optional:
+
+- `FORGE_REDIS_KEY_PREFIX=forge`
+- `FORGE_REDIS_TIMEOUT_MS=1000`
+
+Rules:
+
+- default disabled
+- missing Redis addr means no-op/clear error when enabled
+- enabling Redis must not change live job/gateway/modelruntime/retrieval behavior
+- no public settings API unless existing config pattern requires it
+
+Deliverables:
+
+1. Add Redis client/adapter scaffold.
+
+Create package such as:
+
+- `services/core/internal/ephemeral/redis.go`
+- `services/core/internal/ephemeral/types.go`
+- `services/core/internal/ephemeral/errors.go`
+
+or:
+
+- `services/core/internal/redisinfra/...`
+
+Define interfaces:
+
+- EphemeralStore
+- Cache
+- Queue
+- Lock
+- PubSub
+- ProgressStream
+- Health
+
+But keep implementation minimal.
+
+Recommended first implementation:
+
+- fake/in-memory implementation for tests
+- Redis config/client scaffold
+- no live queue wiring
+
+2. Define Redis capability model.
+
+Allowed Redis roles:
+
+- cache
+- queue
+- lock
+- pubsub
+- progress_stream
+- rate_limit_window
+- ephemeral_coordination
+
+Forbidden Redis roles:
+
+- canonical_truth
+- durable_memory
+- evidence_admission
+- provenance_authority
+- sole_job_record
+- canonical_audit
+- canonical_settings
+- vector_truth
+
+Tests:
+
+- Redis cannot be canonical
+- Redis loss is expected/recoverable
+- Redis cannot be required for default operation
+
+3. Add safe key namespace policy.
+
+Define:
+
+- key prefix
+- workspace-safe key segment rules
+- TTL requirement for cache/progress keys
+- no raw prompt/content in keys
+- no secrets in keys
+- no unbounded keys
+
+Tests:
+
+- unsafe key rejected
+- prompt/content-like keys rejected
+- no secret-like keys
+- TTL required for cache/progress entries
+
+4. Add Redis client scaffold.
+
+If using a Redis Go client dependency, keep it small and justified.
+
+If dependency already exists, use it.
+
+If no dependency exists and adding one is too broad, implement interface + docs + fake first and defer real Redis client.
+
+Rules:
+
+- Redis client is not used by live paths yet
+- Redis connection only initialized when enabled
+- failures do not break default sqlite-only operation
+- no default tests require Redis
+
+5. Add optional Redis integration tests.
+
+Only run if env is present:
+
+- `FORGE_REDIS_TEST_ADDR`
+
+Tests:
+
+- ping
+- set/get ephemeral cache key with TTL
+- queue push/pop test key
+- lock acquire/release test key
+- cleanup test keys
+
+Do not require Redis for normal `npm test`.
+
+6. Add docs.
+
+Update:
+
+- docs/architecture/storage_backend_migration.md
+- docs/testing/storage_backend_parity.md
+- docs/data_model/persistence_inventory.md
+- docs/runbooks/docker_containerization.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- README.md if useful
+
+Create:
+
+- docs/reviews/phase_13h_redis_ephemeral_boundary.md
+
+Include:
+
+- Redis role
+- allowed use cases
+- forbidden use cases
+- key policy
+- TTL policy
+- test strategy
+- no canonical truth guarantee
+- default disabled guarantee
+- future wiring candidates
+
+7. Add tests.
+
+Required tests:
+
+Config:
+- Redis disabled by default
+- Redis enabled requires addr
+- invalid config fails safe
+- Redis env does not change storage backend
+- Redis env does not affect SQLite default
+
+Capabilities:
+- Redis ephemeral only
+- Redis not canonical truth
+- Redis not durable memory
+- Redis not evidence/provenance authority
+
+Key policy:
+- safe key accepted
+- raw content key rejected
+- secret-looking key rejected
+- TTL required where applicable
+- deterministic prefixing
+
+Adapter:
+- fake cache set/get
+- fake queue push/pop
+- fake lock acquire/release
+- fake progress stream append/read
+- no live path uses Redis by default
+
+8. Validation commands.
+
+Run:
+
+cd services/core && go test ./internal/storagebackend/... ./internal/config/... ./internal/ephemeral/...
+
+Adjust path if package name differs.
+
+Then:
+
+cd services/core && go test ./...
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+docker compose config
+git diff --check
+
+If Redis is running and integration env is available:
+
+FORGE_REDIS_TEST_ADDR="127.0.0.1:6379" \
+  go test ./internal/ephemeral/... -run Redis -count=1
+
+Document exact results.
+
+Acceptance criteria:
+
+- Redis enabled flag exists and defaults disabled
+- Redis capability boundary exists
+- Redis cannot be canonical truth in tests
+- key/TTL policy exists
+- fake adapter tests pass
+- optional Redis integration tests are env-gated
+- no live path requires Redis
+- no public API/route changes
+- docs updated
+- validation commands pass
+
+WHAT NOT TO DO:
+
+- Do not switch live jobs to Redis.
+- Do not make Redis required.
+- Do not store canonical memory in Redis.
+- Do not store evidence admission in Redis.
+- Do not store provenance authority in Redis.
+- Do not store prompts/content/secrets in Redis.
+- Do not wire Redis into gateway/modelruntime/retrieval.
+- Do not change public APIs/routes.
+- Do not make Redis a source of truth.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code/docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- Redis boundary behavior
+- flags/config added
+- allowed Redis roles
+- forbidden Redis roles
+- key/TTL policy
+- fake adapter behavior
+- integration test behavior
+- docs updated
+- commands run
+- test results
+- whether Redis is required
+- whether any live behavior changed
+- recommended next phase

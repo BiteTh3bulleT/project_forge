@@ -1,4 +1,7 @@
 FORGE // MASTER UNIFIED COGNITIVE OS IMPLEMENTATION PROMPT
+
+Status: `[FUTURE]` implementation vision and planning prompt, not current implementation truth. Current behavior is defined by code, ADRs, `AGENTS.md`, `README.md`, status docs, and passing tests. Do not treat unimplemented statements in this file as live daemon status.
+
 Production-grade implementation only. No toy abstractions. No parallel kingdoms. No chatbot-wrapper nonsense.
 
 You are implementing the next major FORGE evolution:

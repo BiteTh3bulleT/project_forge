@@ -20,6 +20,8 @@ Control Lane owns:
 - audit emission for commit/reject/dry-run
 - deterministic typed results
 
+Phase i1 adds `[LIVE] / VALIDATION_ONLY` `VALIDATE_KV_IDENTITY` to this boundary. It validates deterministic KV identity gates through the shared pure package `services/core/internal/kvidentity`, returns an acceleration-only result summary, and does not mutate memory, call modelruntime, reuse live KV cache, or route through FORGE-K `KVService`.
+
 ## Kernel / user-space boundary
 
 - user space: users, adapters, internal cells, future IRIS propose semantic actions

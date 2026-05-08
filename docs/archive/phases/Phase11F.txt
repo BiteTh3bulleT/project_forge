@@ -1,0 +1,667 @@
+You are working in the FORGE repository.
+
+Implement Phase 11F: FORGE-K Integration Readiness Contracts.
+
+Scope: SIMULATOR_ONLY / INTEGRATION_PREP_ONLY.
+
+Do not wire FORGE-K into the live daemon.
+Do not modify live AI-OS, gateway, permissions, lanes, audit, modelruntime, API routes, retrieval, embeddings, memory, or controllane behavior.
+Do not change public APIs.
+Do not add routes.
+Do not call live model runtimes.
+Do not execute tools.
+Do not query live retrieval/embeddings from FORGE-K.
+Do not implement live RAG.
+Do not write live memory.
+Do not create a second authority path.
+Do not begin Phase 12 live integration.
+
+Purpose:
+
+FORGE-K Phase 1-11E is implemented and tested in the simulator. The live daemon still uses existing AI-OS/gateway/permissions/lane/audit authority paths.
+
+Before live integration, every FORGE-K subsystem must be made integration-ready.
+
+This phase defines stable contracts, adapter boundaries, live path mappings, dry-run bridge rules, shadow-mode rules, read-only RAG/retrieval adapter contracts, and readiness criteria.
+
+Goal:
+
+Get FORGE-K to the point where a future Phase 12 live integration can be planned safely.
+
+Read first:
+
+- AGENTS.md
+- README.md
+- docs/adr/0005-forge-k-simulator-vs-live-authority.md
+- docs/adr/0006-rust-kernel-core-boundary.md
+- docs/architecture/forge_k_overview.md
+- docs/architecture/core_doctrine.md
+- docs/architecture/kernel_simulator.md
+- docs/architecture/neuron_fabric.md
+- docs/architecture/memory_palace_and_courthouse.md
+- docs/architecture/semantic_algebra.md
+- docs/architecture/snapshots.md
+- docs/architecture/context_compiler_and_kv_cache.md
+- docs/architecture/runtime_driver_boundary.md
+- docs/architecture/lymphatic_lane.md
+- docs/architecture/consensus_mesh.md
+- docs/architecture/memory_taxonomy.md
+- docs/reviews/current_phase_status.md
+- docs/roadmap/forge_k_build_phases.md
+- docs/testing/definition_of_done.md
+- services/core/internal/forgek/...
+- services/core/internal/api/...
+- services/core/internal/aios/...
+- services/core/internal/gateway/...
+- services/core/internal/permissions/...
+- services/core/internal/lanes/...
+- services/core/internal/audit/...
+- services/core/internal/modelruntime/...
+- services/core/internal/memory/...
+- services/core/internal/retrieval/...
+- services/core/internal/search/...
+- services/core/internal/embeddings/...
+
+Hard stop conditions:
+
+If `go test ./internal/forgek/...` does not pass before this phase, stop and report failing tests.
+
+If ADR 0005 is missing, stop.
+
+If current phase status does not show Phase 11E implemented, stop and report.
+
+Core doctrine:
+
+- FORGE-K is still simulator authority only.
+- Live daemon remains on existing AI-OS/gateway/permissions/lane/audit authority paths.
+- Integration readiness is not live integration.
+- Adapter contracts must not mutate live state.
+- Shadow mode must be read-only/no-mutation.
+- RAG/retrieval is integration-prep only in this phase.
+- No FORGE-K subsystem may become live authority without explicit Phase 12 LIVE_INTEGRATION design and tests.
+- Consensus accepted does not mean canonical truth.
+- Kernel commit remains canonical truth.
+- Gateway remains live tool execution authority until an explicit migration phase.
+- Retrieval does not make content truth.
+- Embeddings, vector indexes, VSA records, and retrieval results are evidence/routing signals, not canonical truth.
+
+Deliverables:
+
+1. Create docs/architecture/forge_k_integration_readiness.md
+
+Include:
+
+- executive summary
+- current simulator/live split
+- integration readiness definition
+- non-goals
+- subsystem readiness matrix
+- live path mapping
+- adapter contract model
+- RAG/retrieval integration-prep boundary
+- shadow mode design
+- dry-run bridge rules
+- read-only mirror rules
+- no-mutation rules
+- test strategy
+- readiness checklist
+- Phase 12 gates
+- risks
+- what not to do
+
+Must explicitly state:
+
+Phase 11F does not authorize Phase 12 live integration.
+
+2. Create docs/reviews/forge_k_live_path_mapping.md
+
+Map live daemon systems to FORGE-K equivalents.
+
+Include table:
+
+Live system:
+- api routes
+- aios/controllane
+- gateway
+- permissions
+- lanes
+- audit
+- modelruntime
+- memory
+- retrieval
+- search
+- embeddings
+- dream/autonomy
+- backup/release
+- settings/config
+
+Map to FORGE-K:
+- Kernel
+- semantic syscalls
+- Neuron Fabric
+- Courthouse
+- Memory Palace
+- Semantic Algebra
+- Snapshots
+- Context Compiler
+- KV System
+- Runtime Boundary
+- Lymphatic Lane
+- Consensus Mesh
+- Rust Validator
+
+For each row include:
+
+- current live authority
+- FORGE-K target component
+- integration risk
+- required adapter
+- required tests
+- migration status
+- live mutation allowed? must be NO for this phase
+
+3. Create docs/architecture/forge_k_adapter_contracts.md
+
+Define future adapter interfaces conceptually.
+
+Include:
+
+- ReadOnlyLiveStateAdapter
+- LiveEvidenceAdapter
+- LiveMemoryMirrorAdapter
+- LiveRetrievalMirrorAdapter
+- ReadOnlyRAGAdapter
+- LiveEmbeddingTraceAdapter
+- LiveSearchTraceAdapter
+- LiveGatewayTraceAdapter
+- LiveModelRuntimeTraceAdapter
+- LiveAuditMirrorAdapter
+- LiveContextCompileMirrorAdapter
+- LiveConsensusShadowAdapter
+
+Adapter law:
+
+Adapters may observe, normalize, mirror, and report.
+Adapters may not mutate, execute, commit, approve, route, publish, call model runtimes, or alter user-visible output.
+
+Rules:
+
+- adapters are read-only in this phase
+- adapters do not mutate live state
+- adapters do not execute tools
+- adapters do not call model runtimes
+- adapters do not perform live retrieval from FORGE-K
+- adapters do not feed RAG results into user-visible responses
+- adapters may normalize live records into simulator evidence refs
+- adapters may produce dry-run reports
+- adapters must preserve provenance
+
+4. Add explicit ReadOnlyRAGAdapter contract.
+
+In docs/architecture/forge_k_adapter_contracts.md, include:
+
+ReadOnlyRAGAdapter purpose:
+
+Observe live retrieval/search/memory outputs and normalize them into FORGE-K EvidenceRefs for shadow-mode diagnostics.
+
+Allowed:
+
+- observe existing live retrieval run metadata
+- observe existing live search result metadata
+- observe existing embedding/VSA trace metadata
+- normalize source refs
+- normalize evidence refs
+- produce shadow RAG report
+- produce retrieval provenance diagnostics
+
+Forbidden:
+
+- execute new retrieval queries from FORGE-K
+- call embedding providers
+- mutate memory
+- admit evidence
+- compile context
+- call modelruntime
+- alter live response
+- write live memory
+- produce user-visible output
+- promote retrieved content to truth
+
+5. Create docs/architecture/shadow_mode.md
+
+Define shadow mode:
+
+Shadow mode means:
+
+- live request executes through existing live path
+- FORGE-K simulator may observe/mirror inputs
+- FORGE-K may produce comparison reports
+- FORGE-K may produce Consensus Mesh/RAG diagnostic reports
+- FORGE-K does not affect live response
+- FORGE-K does not mutate live state
+- FORGE-K does not execute tools
+- FORGE-K does not write memory
+- FORGE-K does not call live modelruntime
+- FORGE-K does not perform live retrieval
+- FORGE-K does not alter user-visible output
+- all shadow outputs are diagnostics only
+
+Include:
+
+- request mirroring
+- evidence mirroring
+- retrieval/RAG shadow reporting
+- response comparison
+- consensus comparison
+- context comparison
+- risk flags
+- audit/reporting model
+- hard stop conditions
+
+6. Add integration readiness test package.
+
+Create:
+
+services/core/internal/forgek/integrationready
+
+Files:
+
+- models.go
+- readiness.go
+- adapters.go
+- shadow.go
+- report.go
+- errors.go
+
+Tests:
+
+- integration_readiness_report_test.go
+- adapter_contract_test.go
+- shadow_mode_policy_test.go
+- rag_adapter_contract_test.go
+- live_path_mapping_test.go
+- no_live_mutation_test.go
+- forbidden_imports_test.go
+
+This package must not import live daemon packages.
+
+Forbidden imports:
+
+- forge/projectforge/services/core/internal/api
+- forge/projectforge/services/core/internal/aios
+- forge/projectforge/services/core/internal/gateway
+- forge/projectforge/services/core/internal/permissions
+- forge/projectforge/services/core/internal/lanes
+- forge/projectforge/services/core/internal/audit
+- forge/projectforge/services/core/internal/modelruntime
+- forge/projectforge/services/core/internal/memory
+- forge/projectforge/services/core/internal/retrieval
+- forge/projectforge/services/core/internal/search
+- forge/projectforge/services/core/internal/embeddings
+
+7. Implement IntegrationReadinessReport model.
+
+Fields:
+
+- report_id
+- generated_at
+- phase
+- subsystem_statuses
+- live_path_mappings
+- adapter_contracts
+- shadow_policy
+- missing_contracts
+- missing_tests
+- blockers
+- warnings
+- readiness_score
+- metadata
+
+Subsystem readiness statuses:
+
+- READY_FOR_SHADOW
+- NEEDS_ADAPTER
+- NEEDS_TESTS
+- TOO_RISKY
+- DEFERRED
+
+Rules:
+
+- report is diagnostic only
+- readiness_score is advisory only and cannot authorize live integration
+- no live mutation
+- deterministic ordering
+- serializable
+
+8. Implement adapter contract models.
+
+Define AdapterContract with fields:
+
+- adapter_id
+- adapter_type
+- purpose
+- allowed_operations
+- forbidden_operations
+- source_system
+- target_forgek_component
+- preserves_provenance
+- read_only
+- live_mutation_allowed
+- tool_execution_allowed
+- modelruntime_call_allowed
+- retrieval_execution_allowed
+- user_visible_output_allowed
+- metadata
+
+Adapter types:
+
+- READ_ONLY_LIVE_STATE
+- LIVE_EVIDENCE
+- LIVE_MEMORY_MIRROR
+- LIVE_RETRIEVAL_MIRROR
+- READ_ONLY_RAG
+- LIVE_EMBEDDING_TRACE
+- LIVE_SEARCH_TRACE
+- LIVE_GATEWAY_TRACE
+- LIVE_MODELRUNTIME_TRACE
+- LIVE_AUDIT_MIRROR
+- LIVE_CONTEXT_COMPILE_MIRROR
+- LIVE_CONSENSUS_SHADOW
+
+Rules:
+
+- read_only must be true
+- live_mutation_allowed must be false
+- tool_execution_allowed must be false
+- modelruntime_call_allowed must be false
+- user_visible_output_allowed must be false
+- retrieval_execution_allowed must be false for READ_ONLY_RAG and mirror adapters
+- provenance must be preserved
+
+9. Implement ShadowModePolicy model.
+
+Fields:
+
+- policy_id
+- mode
+- observe_live_request
+- mirror_inputs
+- mirror_evidence
+- mirror_retrieval
+- produce_shadow_reports
+- compare_context
+- compare_consensus
+- compare_response
+- allow_live_mutation
+- allow_tool_execution
+- allow_modelruntime_calls
+- allow_retrieval_execution
+- allow_memory_writes
+- allow_user_visible_output
+- metadata
+
+Rules:
+
+- allow_live_mutation false
+- allow_tool_execution false
+- allow_modelruntime_calls false
+- allow_retrieval_execution false
+- allow_memory_writes false
+- allow_user_visible_output false
+- policy is diagnostic only
+
+10. Implement LivePathMapping model.
+
+Fields:
+
+- live_system
+- live_authority_path
+- current_authority_owner
+- forgek_target_component
+- required_adapter
+- integration_risk
+- required_tests
+- migration_status
+- live_mutation_allowed
+- notes
+
+Rules:
+
+- live_mutation_allowed must be false in Phase 11F
+- deterministic ordering
+- serializable
+
+11. Add readiness matrix.
+
+For each FORGE-K subsystem classify:
+
+- Kernel
+- Neuron Fabric
+- Courthouse
+- Memory Palace
+- Semantic Algebra
+- Snapshots
+- Context Compiler
+- KV System
+- Runtime Boundary
+- Lymphatic Lane
+- Consensus Mesh
+- Rust Validator
+
+Fields:
+
+- simulator status
+- contract stability
+- live equivalent
+- adapter needed
+- test gaps
+- integration risk
+- recommended next action
+
+12. Define Phase 12 gates.
+
+Create explicit gates that must pass before live integration:
+
+- all simulator tests pass
+- route inventory tests pass
+- live path mapping exists
+- adapter contracts exist
+- RAG/retrieval read-only boundary exists
+- no-mutation shadow policy exists
+- rollback plan exists
+- live authority owner identified
+- no direct live mutation from FORGE-K
+- shadow comparison tests exist
+- consensus/composer guard remains enforced
+- gateway execution remains live authority until migration
+- memory writes remain live authority until migration
+- retrieval/RAG remains evidence-only until migration
+- no user-visible output is affected by shadow mode
+
+13. Add tests.
+
+Required tests:
+
+IntegrationReadinessReport:
+- validates required fields
+- deterministic ordering
+- deterministic serialization
+- readiness score advisory only
+- readiness score cannot authorize live integration
+
+AdapterContract:
+- all default contracts are read-only
+- all default contracts forbid live mutation
+- all default contracts forbid tool execution
+- all default contracts forbid modelruntime calls
+- all default contracts forbid user-visible output
+- provenance preservation required
+
+ReadOnlyRAGAdapter:
+- adapter is read-only
+- retrieval_execution_allowed false
+- embedding provider calls forbidden
+- memory writes forbidden
+- evidence normalization allowed
+- user-visible output forbidden
+- provenance required
+
+ShadowModePolicy:
+- live mutation forbidden
+- tool execution forbidden
+- modelruntime calls forbidden
+- retrieval execution forbidden
+- memory writes forbidden
+- user-visible output forbidden
+- comparison/reporting allowed
+
+LivePathMapping:
+- all mappings live_mutation_allowed false
+- all mappings define current live authority
+- all mappings define target FORGE-K component
+- all mappings define required adapter/tests
+
+Forbidden imports:
+- scan services/core/internal/forgek/integrationready for forbidden live daemon imports
+- fail loudly if any forbidden import exists
+
+14. Update docs/reviews/current_phase_status.md
+
+Add Phase 11F:
+
+Title:
+Integration Readiness Contracts
+
+Status:
+IMPLEMENTED if deliverables complete
+
+Scope:
+SIMULATOR_ONLY / INTEGRATION_PREP_ONLY
+
+Evidence:
+- integration readiness docs
+- live path mapping
+- adapter contracts
+- shadow mode design
+- read-only RAG adapter contract
+- integrationready tests
+
+Open work:
+- Phase 11G shadow mode harness design
+- Phase 12A live integration design
+- actual shadow mode implementation deferred
+
+15. Update docs/roadmap/forge_k_build_phases.md
+
+Add:
+
+- Phase 11F — Integration Readiness Contracts
+- Phase 11G — Shadow Mode Harness Design
+- Phase 12A — Live Integration Design
+- Phase 12B — Read-only Shadow Harness
+- Phase 12C — Limited Live Authority Migration
+
+Do not mark Phase 12 started.
+
+16. Update README.md.
+
+Add short note:
+
+FORGE-K has reached integration-readiness planning. Live daemon remains on existing authority paths. No FORGE-K live mutation exists yet. Phase 11F defines read-only adapter contracts, including RAG/retrieval mirror contracts, but does not implement live RAG.
+
+17. Update services/core/internal/forgek/README.md if present.
+
+Add:
+
+- Phase 11F package map
+- integrationready boundary note
+- read-only RAG/retrieval adapter note
+- live daemon remains unchanged
+
+18. Add what-not-to-do sections.
+
+Must include:
+
+- Do not wire FORGE-K into live daemon.
+- Do not create live mutation adapters.
+- Do not implement live RAG.
+- Do not call live retrieval/embedding providers from FORGE-K.
+- Do not replace live controllane.
+- Do not replace gateway.
+- Do not change API routes.
+- Do not execute tools from FORGE-K.
+- Do not call modelruntime from FORGE-K.
+- Do not let shadow mode affect user-visible output.
+- Do not create a second authority path.
+- Do not skip Phase 12 design.
+
+19. Run validation.
+
+Run:
+
+cd services/core && go test ./internal/forgek/integrationready/...
+
+Then:
+
+cd services/core && go test ./internal/forgek/...
+
+Then:
+
+npm run build:core
+npm run lint
+npm test
+npm run test:forgek:parity
+git diff --check
+
+Document exact results.
+
+Acceptance criteria:
+
+- integration readiness doc exists
+- live path mapping doc exists
+- adapter contracts doc exists
+- shadow mode doc exists
+- read-only RAG adapter contract exists
+- integrationready package exists and imports no live daemon packages
+- Phase 12 gates are documented
+- current phase status updated
+- roadmap updated
+- README updated
+- no live daemon integration
+- no public API changes
+- no route changes
+- no gateway/modelruntime/controllane behavior changes
+- no live retrieval/RAG implementation
+- no FORGE-K live mutation
+- tests pass
+
+WHAT NOT TO DO:
+
+- Do not implement Phase 12.
+- Do not wire adapters to live systems.
+- Do not implement live RAG.
+- Do not call live retrieval/embedding providers.
+- Do not modify live daemon behavior.
+- Do not mutate live memory/state.
+- Do not execute tools.
+- Do not call real model runtimes.
+- Do not modify public APIs.
+- Do not add routes.
+- Do not create a second Kernel.
+- Do not use private symbolic/mystical language.
+- Do not output huge code blocks in chat. Put code/docs in files.
+
+After completion, respond with:
+
+- files created/changed
+- integration readiness summary
+- live path mapping summary
+- adapter contracts defined
+- read-only RAG adapter boundary
+- shadow mode policy
+- Phase 12 gates
+- tests added
+- commands run
+- test results
+- whether any live behavior changed
+- recommended next phase

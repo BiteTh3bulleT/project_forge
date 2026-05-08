@@ -44,6 +44,18 @@ func NormalizeRefs(values []string) []string {
 	return out
 }
 
+func appendUnique(values []string, value string) []string {
+	if value == "" {
+		return values
+	}
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
 func CloneStrings(values []string) []string {
 	if values == nil {
 		return nil

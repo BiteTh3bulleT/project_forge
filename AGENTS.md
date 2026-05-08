@@ -26,9 +26,11 @@ Last convergence sweep update: 2026-04-22 (branch-local status alignment).
 - Do not treat KV cache as memory. KV cache is deterministic acceleration only and must pass identity validation before reuse.
 
 ## FORGE-K Live Authority Boundary
-- The FORGE-K simulator under `services/core/internal/forgek` is not live daemon authority yet.
-- Do not assume FORGE-K doctrine is enforced in live AI-OS, gateway, permissions, lane, audit, model runtime, or API paths.
-- Do not route live state mutation through FORGE-K without an explicit integration phase, design, tests, and documentation updates. See `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
+- `[SIMULATOR-ONLY]` The FORGE-K simulator under `services/core/internal/forgek` is not live daemon authority yet.
+- `[LIVE]` The live daemon still uses existing AI-OS, gateway, permissions, lane, audit, model runtime, retrieval, embeddings, memory, and API authority paths.
+- `[PARTIAL]` Narrow live validation seams may share pure deterministic contracts with FORGE-K, but that does not make FORGE-K services live authority.
+- Do not assume FORGE-K doctrine is enforced in live AI-OS, gateway, permissions, lane, audit, model runtime, retrieval, embeddings, memory, or API paths unless the live path has explicit integration tests.
+- Do not route live state mutation through FORGE-K without an explicit integration phase, design, tests, and documentation updates. See `docs/adr/0001-forge-k-is-a-cognitive-microkernel.md` and `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
 
 ## Project Priorities
 - **2026-04-15**: Phase 2 execution/approval/packet/context systems landed.
@@ -39,6 +41,7 @@ Last convergence sweep update: 2026-04-22 (branch-local status alignment).
 - **2026-05-04**: FORGE-K Phase 8 Deterministic KV System is implemented/tested in the simulator only (`services/core/internal/forgek/kv`); it records KV manifests and validates identity gates as acceleration metadata, with no live daemon wiring or runtime KV reuse.
 - **2026-05-04**: FORGE-K Phase 9 Runtime Driver Boundary is implemented/tested in the simulator only (`services/core/internal/forgek/runtime`); it uses deterministic mock drivers and proposal-only runtime results, with no live daemon wiring, real model calls, route changes, or live KV reuse.
 - **2026-05-04**: FORGE-K Phase 10 Lymphatic Lane is implemented/tested in the simulator only (`services/core/internal/forgek/lymphatic`, `lymphatic_syscalls.go`); outputs are Maintenance Reports and Cleanup Proposals only, with no live daemon, dream/autonomy cleanup, route, gateway, modelruntime, or controllane wiring, and no silent mutation.
+- **2026-05-08**: `[PARTIAL]` KV identity gate validation is shared through `services/core/internal/kvidentity` and exposed as live AI-OS Control Lane `VALIDATE_KV_IDENTITY` validation-only. FORGE-K `KVService` remains `[SIMULATOR-ONLY]`; there is no live KV reuse, runtime cache reuse, route/API change, modelruntime change, gateway change, or memory mutation.
 - Append-only per-job event streams as execution truth
 - Approval gates with separated request and decision records
 - Context normalization into durable guidance files (`AGENTS.md`, `CLAUDE.md`, briefing, cursor rule)
