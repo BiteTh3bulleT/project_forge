@@ -61,6 +61,16 @@ in
         description = "Directory reserved for advisory FORGE-H resource action proposal records.";
       };
     };
+
+    execution = {
+      enable = lib.mkEnableOption "FORGE-H bounded resource action execution scaffold";
+
+      runtimePath = lib.mkOption {
+        type = lib.types.str;
+        default = "${config.forge.storage.root}/runtime/resource-executions";
+        description = "Directory reserved for bounded FORGE-H resource action execution records.";
+      };
+    };
   };
 
   config = lib.mkMerge [
@@ -129,6 +139,36 @@ in
         FORGE_RESOURCE_PROPOSALS_RUNTIME_DIR=${policyCfg.proposals.runtimePath}
         FORGE_RESOURCE_PROPOSALS_ADVISORY_ONLY=true
         FORGE_RESOURCE_PROPOSALS_EXECUTION_ENABLED=false
+      '';
+    })
+
+    (lib.mkIf policyCfg.execution.enable {
+      assertions = [
+        {
+          assertion = policyCfg.advisoryOnly == true;
+          message = "Phase N6 FORGE-H resource execution requires advisory-only resource policy.";
+        }
+        {
+          assertion = policyCfg.allowMutation == false;
+          message = "Phase N6 FORGE-H resource execution must not enable host mutation.";
+        }
+        {
+          assertion = policyCfg.proposals.enable == true;
+          message = "Phase N6 FORGE-H resource execution requires proposal scaffolding to be enabled.";
+        }
+      ];
+
+      systemd.tmpfiles.rules = [
+        "d ${policyCfg.execution.runtimePath} 0750 ${config.forge.storage.user} ${config.forge.storage.group} -"
+      ];
+
+      environment.etc."forge/resource-execution.env".text = ''
+        FORGE_RESOURCE_EXECUTION_ENABLED=true
+        FORGE_RESOURCE_EXECUTION_RUNTIME_DIR=${policyCfg.execution.runtimePath}
+        FORGE_RESOURCE_EXECUTION_MODE=bounded-internal
+        FORGE_RESOURCE_EXECUTION_HOST_MUTATION=false
+        FORGE_RESOURCE_EXECUTION_MODELRUNTIME_MUTATION=false
+        FORGE_RESOURCE_EXECUTION_SEMANTIC_MEMORY_WRITE=false
       '';
     })
   ];

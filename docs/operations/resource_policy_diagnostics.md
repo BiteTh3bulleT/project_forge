@@ -2,8 +2,9 @@
 
 Phase N4 adds an internal advisory resource policy package at `services/core/internal/forgeh`.
 Phase N5 adds advisory resource action proposals in the same package.
+Phase N6 adds a bounded executor for approved resource action proposals.
 
-It consumes a Host Kernel Bridge diagnostic snapshot and returns a `ResourcePolicySnapshot`. Phase N5 can convert that policy snapshot into `ResourceActionProposal` records. It does not collect host diagnostics directly and does not mutate host or runtime state.
+It consumes a Host Kernel Bridge diagnostic snapshot and returns a `ResourcePolicySnapshot`. Phase N5 can convert that policy snapshot into `ResourceActionProposal` records. Phase N6 can produce `ResourceActionExecution` records through explicit adapters. It does not collect host diagnostics directly and does not mutate host or runtime state.
 
 ## What It Evaluates
 
@@ -18,6 +19,7 @@ It consumes a Host Kernel Bridge diagnostic snapshot and returns a `ResourcePoli
 - background-work recommendation
 - bounded warnings and operator actions
 - reviewable resource action proposals for background ingest, embedding, model-load posture, degraded-mode warning, and operator warning paths
+- bounded execution records for approved proposals
 
 ## How To Test
 
@@ -34,11 +36,20 @@ npm run build:core
 npm run lint
 ```
 
-## Advisory Only
+## Governed Boundary
 
 `ResourcePolicySnapshot.advisory_only` is always true in Phase N4. `ResourceActionProposal.advisory_only` is always true in Phase N5.
 
-Proposal records may move from `proposed` to `approved`, `rejected`, `expired`, or `superseded`. Approval is review state only. It is not permission for the Phase N5 code to execute host actions.
+Proposal records may move from `proposed` to `approved`, `rejected`, `expired`, or `superseded`. Approval is necessary but not sufficient. Phase N6 may only record bounded internal operational preferences through explicit adapters.
+
+N6 execution records must keep:
+
+- `bounded=true`
+- `host_mutation=false`
+- `semantic_memory_write=false`
+- `modelruntime_mutation=false`
+
+Execution is idempotent by proposal ID. Re-running the same approved proposal returns the existing execution record.
 
 FORGE-H does not:
 
@@ -55,3 +66,4 @@ FORGE-H does not:
 
 Operator actions are recommendations written in bounded, non-destructive language.
 Resource action proposals are governance records written in bounded, non-destructive language.
+Resource action executions are bounded internal operational records, not host commands.

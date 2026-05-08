@@ -2,8 +2,9 @@
 
 Phase N4 implements FORGE-H as an advisory host-resource policy layer.
 Phase N5 adds a governed Resource Action Proposal Gate on top of those advisory policy outputs.
+Phase N6 adds bounded execution records for approved resource action proposals through explicit FORGE-internal adapters.
 
-FORGE-H consumes read-only Host Kernel Bridge diagnostic snapshots and produces bounded resource posture, workload lane decisions, model-load recommendations, background-work recommendations, warnings, and operator actions. Phase N5 can convert those recommendations into reviewable resource action proposals.
+FORGE-H consumes read-only Host Kernel Bridge diagnostic snapshots and produces bounded resource posture, workload lane decisions, model-load recommendations, background-work recommendations, warnings, and operator actions. Phase N5 can convert those recommendations into reviewable resource action proposals. Phase N6 can execute approved proposals only as bounded internal operational preferences.
 
 It gives FORGE resource judgment. It does not give FORGE host mutation authority.
 
@@ -46,7 +47,7 @@ FORGE-H emits a `ResourcePolicySnapshot` with:
 - `source_errors`
 - `advisory_only`
 
-`advisory_only` is always `true` in Phase N4 and Phase N5.
+Policy snapshots and generated proposals remain advisory. Phase N6 execution records bounded FORGE-internal operational policy only; they are not semantic memory, host commands, service control, modelruntime mutation, or live FORGE-K authority.
 
 ## Resource Action Proposals
 
@@ -85,7 +86,7 @@ Phase N5 allows only non-executing lifecycle transitions:
 - `proposed` to `expired`
 - `proposed` to `superseded`
 
-`committed_later` is reserved for future bounded execution phases and is rejected by the Phase N5 transition helper. Approving a proposal records review state only. It does not pause workers, defer queues, load or unload models, restart services, run Nix, or mutate host state.
+`committed_later` is reserved for later lifecycle integration and is rejected by the Phase N5 transition helper. N6 records separate execution records and does not convert proposals into host commands.
 
 Risk levels:
 
@@ -95,6 +96,45 @@ Risk levels:
 - `critical`
 
 All generated proposals require operator approval and remain advisory-only.
+
+## Bounded Resource Execution
+
+Phase N6 adds `ResourceActionExecution` records. These records are created only when an approved, non-expired, advisory proposal passes the N6 allow-list and an explicit adapter is present.
+
+Allowed N6 actions:
+
+- `warn_operator`
+- `defer_background_ingest`
+- `pause_background_ingest`
+- `defer_embedding`
+- `deny_new_model_load`
+- `defer_large_model_load`
+- `prefer_current_model_only`
+- `prefer_cpu_safe_mode`
+- `enter_degraded_mode`
+- `schedule_maintenance_later`
+
+Execution adapters are narrow interfaces:
+
+- `OperatorNotifier`
+- `LanePolicyWriter`
+- `ModelPolicyWriter`
+- `DegradedModeWriter`
+
+Adapters may record bounded internal operational preferences such as an operator notification, lane preference, model-load preference, or degraded-mode flag. They must not kill processes, stop services, delete queued work, change host config, run commands, load or unload models, call modelruntime, write semantic memory, or affect public routes.
+
+Every execution record reports:
+
+- `approved_before_execution`
+- `bounded`
+- `host_mutation`
+- `semantic_memory_write`
+- `modelruntime_mutation`
+- `side_effects`
+
+For Phase N6, `bounded` must be `true`; `host_mutation`, `semantic_memory_write`, and `modelruntime_mutation` must be `false`.
+
+Execution is idempotent by proposal ID. Re-running the same approved proposal returns the existing execution record and must not duplicate side effects.
 
 ## Pressure Levels
 
@@ -153,9 +193,9 @@ FORGE-H may recommend:
 
 It does not load models, unload models, spawn runtimes, call inference backends, or change modelruntime scheduler behavior.
 
-## Advisory Boundary
+## Governed Boundary
 
-FORGE-H is advisory only in Phase N4 and Phase N5.
+FORGE-H policy and proposals remain advisory. Phase N6 adds bounded internal execution records, but still forbids host mutation, modelruntime mutation, and semantic memory writes.
 
 Forbidden:
 
@@ -170,16 +210,16 @@ Forbidden:
 - public unauthenticated routes
 - gateway, permissions, lanes, audit, controllane, modelruntime, or FORGE-K authority bypass
 
-Future phases may turn recommendations into approved bounded controls only after explicit design, approval, tests, rollback, and authority-boundary documentation.
+Future phases may automate safe actions only after explicit design, approval, tests, rollback, and authority-boundary documentation.
 
 ## Control Ladder
 
-FORGE-H currently sits at the request-approval step:
+FORGE-H currently sits at the bounded internal execution step:
 
 1. Observe: Host Kernel Bridge read-only diagnostics
 2. Report: diagnostic snapshots
 3. Recommend: Phase N4 resource policy
 4. Request approval: Phase N5 resource action proposals
-5. Execute bounded action: future phase only
+5. Execute bounded action: Phase N6 bounded FORGE-internal policy action
 6. Automate safe action: future phase only
 7. Own policy: future phase only

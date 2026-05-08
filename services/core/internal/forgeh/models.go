@@ -79,6 +79,28 @@ const (
 	ProposalRiskCritical = "critical"
 )
 
+const (
+	ExecutionStatusPlanned  = "planned"
+	ExecutionStatusExecuted = "executed"
+	ExecutionStatusSkipped  = "skipped"
+	ExecutionStatusRejected = "rejected"
+	ExecutionStatusFailed   = "failed"
+	ExecutionStatusBlocked  = "blocked"
+)
+
+const (
+	ExecutionResultOperatorWarned            = "operator_warned"
+	ExecutionResultBackgroundIngestDeferred  = "background_ingest_deferred"
+	ExecutionResultBackgroundIngestPaused    = "background_ingest_paused"
+	ExecutionResultEmbeddingDeferred         = "embedding_deferred"
+	ExecutionResultNewModelLoadDenied        = "new_model_load_denied"
+	ExecutionResultLargeModelLoadDeferred    = "large_model_load_deferred"
+	ExecutionResultCurrentModelOnlyPreferred = "current_model_only_preferred"
+	ExecutionResultCPUSafeModePreferred      = "cpu_safe_mode_preferred"
+	ExecutionResultDegradedModeEntered       = "degraded_mode_entered"
+	ExecutionResultMaintenanceScheduledLater = "maintenance_scheduled_later"
+)
+
 type ResourcePolicySnapshot struct {
 	PolicyID                     string                  `json:"policy_id"`
 	CapturedAt                   time.Time               `json:"captured_at"`
@@ -126,4 +148,26 @@ type ResourceActionProposal struct {
 	Supersedes               string    `json:"supersedes,omitempty"`
 	DecisionReason           string    `json:"decision_reason,omitempty"`
 	DecidedAt                time.Time `json:"decided_at,omitempty"`
+}
+
+type ResourceActionExecution struct {
+	ExecutionID              string    `json:"execution_id"`
+	ProposalID               string    `json:"proposal_id"`
+	SourcePolicyID           string    `json:"source_policy_id"`
+	SourceSnapshotID         string    `json:"source_snapshot_id"`
+	ActionType               string    `json:"action_type"`
+	TargetLane               string    `json:"target_lane,omitempty"`
+	Status                   string    `json:"status"`
+	StartedAt                time.Time `json:"started_at"`
+	FinishedAt               time.Time `json:"finished_at,omitempty"`
+	Result                   string    `json:"result,omitempty"`
+	Reason                   string    `json:"reason,omitempty"`
+	SideEffects              []string  `json:"side_effects"`
+	OperatorApprovalRequired bool      `json:"operator_approval_required"`
+	ApprovedBeforeExecution  bool      `json:"approved_before_execution"`
+	Bounded                  bool      `json:"bounded"`
+	HostMutation             bool      `json:"host_mutation"`
+	SemanticMemoryWrite      bool      `json:"semantic_memory_write"`
+	ModelruntimeMutation     bool      `json:"modelruntime_mutation"`
+	Errors                   []string  `json:"errors"`
 }

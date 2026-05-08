@@ -47,6 +47,7 @@ NixOS scaffolding creates these directories with conservative ownership. It does
 | Host Kernel Bridge | Implemented library | Phase N3 read-only diagnostic snapshots; no startup wiring or public route |
 | FORGE-H Resource Policy | Implemented library | Phase N4 advisory-only policy snapshots from Host Kernel Bridge diagnostics |
 | FORGE-H Resource Proposals | Implemented library | Phase N5 request-approval records from resource policy snapshots; no execution or host mutation |
+| FORGE-H Resource Execution | Implemented library | Phase N6 approved proposal execution through bounded internal adapters only; no host mutation, service control, modelruntime load/unload, or public route |
 
 ## Observation And Control Ladder
 
@@ -60,13 +61,15 @@ FORGE host powers must climb this ladder deliberately:
 6. Automate safe action
 7. Own policy
 
-Phase N2 stopped at design and scaffolding for observation/reporting. Phase N3 implements read-only diagnostic snapshot generation. Phase N4 reaches recommendation by producing advisory resource policy snapshots. Phase N5 reaches request approval by creating advisory resource action proposals that can be approved, rejected, expired, or superseded without execution. It still does not execute host actions or implement host mutation.
+Phase N2 stopped at design and scaffolding for observation/reporting. Phase N3 implements read-only diagnostic snapshot generation. Phase N4 reaches recommendation by producing advisory resource policy snapshots. Phase N5 reaches request approval by creating advisory resource action proposals that can be approved, rejected, expired, or superseded without execution. Phase N6 reaches bounded internal execution by recording approved proposal outcomes through explicit adapters. It still does not execute host actions or implement host mutation.
 
 ## Authority Boundary
 
 Host diagnostics do not become canonical truth by themselves. They are evidence and operational context. Durable semantic writes still require existing validation, syscall, approval, audit, and commit boundaries.
 
 No host substrate module may bypass gateway execution authority, permissions, lane governance, audit, controllane validation, memory authority, or modelruntime governance.
+
+NixOS modules may prepare directories and environment flags only. They must not schedule, trigger, or perform resource action execution.
 
 ## Rollback
 
