@@ -6,10 +6,9 @@
 
 # FORGE graphical shell session wrapper.
 #
-# Phase G3 can prefer a real Nix-provided Tauri desktop package when one is
-# available. The current forge-desktop-shell package is an honest placeholder,
-# so this wrapper preserves the G2 local-binary fallback until that package
-# advertises passthru.containsTauriBinary = true.
+# Prefer a real Nix-provided Tauri desktop package when one is available.
+# Preserve the G2 local-binary fallback when that package is absent or still
+# advertises passthru.containsTauriBinary = false.
 let
   packagedDesktopShell =
     if forgeDesktopShell != null && (forgeDesktopShell.passthru.containsTauriBinary or false) then
@@ -66,8 +65,7 @@ writeShellApplication {
       "FORGE graphical shell binary is not available." \
       "" \
       "The forge-shell-session wrapper is installed and safe-mode environment is set," \
-      "but the current Phase G3 forge-desktop-shell package does not yet contain a" \
-      "Nix-built Tauri desktop binary." \
+      "but no Nix-built or local Tauri desktop binary was found." \
       "" \
       "Expected binary locations:" \
       "  $repo_root/apps/desktop/src-tauri/target/release/forge_desktop" \

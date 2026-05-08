@@ -1,0 +1,209 @@
+# FORGE Phase G3.5 — Real Tauri Nix Build
+
+You are working in the `project_forge` repository.
+
+Phase G3 added the `forge-desktop-shell` package surface, but it is currently a launcher placeholder with `passthru.containsTauriBinary = false`.
+
+Now implement Phase G3.5: build the actual FORGE Tauri desktop shell through Nix.
+
+## Goal
+
+Turn `packages.forge-desktop-shell` from a placeholder into a real Nix-built desktop shell package that contains the actual FORGE Tauri binary.
+
+The target:
+
+```bash
+nix build .#forge-desktop-shell
+nix run .#forge-desktop-shell
+nix run .#forge-shell-session
+
+forge-shell-session should then detect that forge-desktop-shell.passthru.containsTauriBinary = true and prefer the packaged shell before local fallback paths.
+
+Doctrine
+FORGE is the graphical shell interface.
+NixOS/Linux remains the substrate.
+G3.5 must not replace the desktop.
+G3.5 must not enable autologin.
+G3.5 must not install, start, or require a compositor.
+G3.5 must not mutate host state.
+G3.5 must not run systemctl.
+G3.5 must not run nixos-rebuild.
+G3.5 must not load/unload models.
+G3.5 must not write semantic memory.
+G3.5 must not bypass gateway, permissions, lanes, audit, controllane, memory, modelruntime, FORGE-H, or FORGE-K authority.
+Build Scope
+
+Update or add:
+
+nix/packages/forge-desktop-shell.nix
+nix/checks/forge-desktop-shell.nix
+nix/checks/forge-shell-session.nix
+flake.nix
+docs/operations/forge_graphical_shell_session.md
+docs/architecture/forge_graphical_shell.md
+
+Do not break:
+
+packages.forge-core
+apps.forge-core
+packages.forge-shell-session
+apps.forge-shell-session
+Desktop App Inputs
+
+Use the existing desktop shell:
+
+frontend workspace: apps/desktop
+package name: @forge/desktop
+Tauri Rust crate: apps/desktop/src-tauri
+expected binary: forge_desktop
+stable wrapper command: forge-desktop-shell
+
+Inspect current package.json, lockfiles, Cargo files, Tauri config, and build scripts before choosing the exact Nix strategy.
+
+Nix Build Strategy
+
+Implement the most reliable Nix build path for the Tauri app.
+
+Expected concerns:
+
+npm dependency vendoring/hash
+Cargo dependency vendoring/hash
+Tauri build requirements
+WebKit/GTK/Linux desktop runtime libraries
+frontend build artifacts
+Rust binary output path
+wrapper runtime environment
+
+If dependency hashes are missing, let Nix fail with the expected hash and document the update process. Do not hardcode fake hashes.
+
+Package Output
+
+packages.forge-desktop-shell must provide:
+
+/bin/forge-desktop-shell
+
+Preferred also:
+
+/bin/forge_desktop
+
+The stable command remains:
+
+forge-desktop-shell
+
+Once the actual Tauri binary is present, set:
+
+passthru.containsTauriBinary = true;
+
+If the package still cannot build the real Tauri binary, keep:
+
+passthru.containsTauriBinary = false;
+
+and fail honestly with exact limitation notes.
+
+Runtime Environment
+
+The stable wrapper must preserve:
+
+FORGE_SHELL_SESSION_ENABLED=true
+FORGE_SHELL_MODE=fullscreen-shell
+FORGE_CORE_URL=http://127.0.0.1:18492
+VITE_FORGE_API_URL=$FORGE_CORE_URL
+FORGE_SHELL_SAFE_MODE=true
+FORGE_SHELL_FULLSCREEN=true
+FORGE_SHELL_HOST_MUTATION=false
+FORGE_SHELL_DIRECT_SYSTEM_CONTROL=false
+FORGE_SHELL_MODEL_MUTATION=false
+FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false
+FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false
+
+Allow FORGE_CORE_URL override.
+
+Do not add host/system mutation commands.
+
+Update forge-shell-session
+
+Ensure forge-shell-session keeps this selection order:
+
+FORGE_SHELL_BINARY, if executable
+Nix-packaged forge-desktop-shell, only if containsTauriBinary = true
+local apps/desktop/src-tauri/target/release/forge_desktop
+local apps/desktop/src-tauri/target/debug/forge_desktop
+loud failure with exact build steps
+
+Do not remove fallback behavior.
+
+Checks
+
+Add or update checks for:
+
+forge-desktop-shell package exists
+stable /bin/forge-desktop-shell exists
+actual Tauri binary exists if containsTauriBinary = true
+forge-shell-session still exists
+forge-shell-session prefers packaged shell only when containsTauriBinary = true
+FORGE_SHELL_BINARY override still works
+safe env defaults remain
+no systemctl
+no nixos-rebuild
+no modprobe / rmmod
+no reboot/shutdown
+no package-manager mutation at runtime
+no modelruntime load/unload/spawn calls
+no direct semantic memory write calls
+shell session module remains disabled by default
+autoStart remains false by default
+Documentation
+
+Update docs/operations/forge_graphical_shell_session.md with:
+
+exact build command
+exact run command
+whether Tauri is now fully packaged
+how to update npm/Cargo hashes
+required Linux runtime dependencies
+fallback path if package build fails
+FORGE_CORE_URL override
+FORGE_SHELL_BINARY override
+rollback notes
+
+Update docs/architecture/forge_graphical_shell.md with:
+
+G3.5 package status
+whether containsTauriBinary is true
+shell-session selection behavior
+statement that compositor/session integration is still future G4
+Acceptance Criteria
+nix build .#forge-desktop-shell attempts the real desktop/Tauri build.
+forge-desktop-shell provides a stable executable.
+If real Tauri packaging succeeds, containsTauriBinary = true.
+If real Tauri packaging is still blocked, failure is honest and documented.
+forge-shell-session still preserves G2/G3 fallback behavior.
+No autologin is enabled.
+No desktop replacement is enabled.
+No compositor is installed/required.
+No host mutation is introduced.
+No service control is introduced.
+No NixOS rebuild behavior is introduced.
+No kernel/module behavior is introduced.
+No modelruntime load/unload behavior is introduced.
+No direct semantic memory writes are introduced.
+No live FORGE-K authority migration occurs.
+WHAT NOT TO DO
+Do not build a web dashboard and call it the shell.
+Do not replace the desktop.
+Do not enable autologin.
+Do not install or require a compositor.
+Do not implement a custom compositor.
+Do not run systemctl start/stop/restart.
+Do not run nixos-rebuild.
+Do not load or unload kernel modules.
+Do not reboot or shut down the machine.
+Do not install/remove/upgrade packages at runtime.
+Do not delete files or clean directories.
+Do not load/unload models.
+Do not spawn model runtimes.
+Do not write directly to semantic memory.
+Do not add public unauthenticated routes.
+Do not bypass gateway, permissions, lanes, audit, controllane, memory, modelruntime, FORGE-H, or FORGE-K authority.
+Do not pretend the Tauri package is complete if it is not.
+Do not output code in chat; make repository changes only.

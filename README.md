@@ -86,11 +86,11 @@ References:
 
 ## FORGE-OS Host Substrate
 
-Phase N2 adds private NixOS host substrate scaffolding for `/forge`, the `forge-core` service shape, and host diagnostics report directories. Phase N3 adds a read-only Host Kernel Bridge diagnostic library at `services/core/internal/hostbridge`. Phase N4 adds the advisory FORGE-H resource policy layer at `services/core/internal/forgeh`. Phase G1 adds the opt-in FORGE graphical shell session foundation with disabled-by-default NixOS module scaffolding and safe environment wiring. Phase G2 adds `packages.forge-shell-session` and `apps.forge-shell-session`, a manual safe-mode launcher for the existing Tauri shell binary paths. Phase G3 adds `packages.forge-desktop-shell` and `apps.forge-desktop-shell` as a stable desktop-shell command surface; it is launcher-only until the full Tauri binary is Nix-packaged.
+Phase N2 adds private NixOS host substrate scaffolding for `/forge`, the `forge-core` service shape, and host diagnostics report directories. Phase N3 adds a read-only Host Kernel Bridge diagnostic library at `services/core/internal/hostbridge`. Phase N4 adds the advisory FORGE-H resource policy layer at `services/core/internal/forgeh`. Phase G1 adds the opt-in FORGE graphical shell session foundation with disabled-by-default NixOS module scaffolding and safe environment wiring. Phase G2 adds `packages.forge-shell-session` and `apps.forge-shell-session`, a manual safe-mode launcher for the existing Tauri shell binary paths. Phase G3 adds `packages.forge-desktop-shell` and `apps.forge-desktop-shell` as a stable desktop-shell command surface. Phase G3.5 upgrades that surface to a real Nix-built Tauri package containing the `forge_desktop` binary and the stable `forge-desktop-shell` wrapper.
 
 Host diagnostics are operational evidence only. They do not become semantic memory, live FORGE-K authority, gateway authority, modelruntime authority, or autonomous host control.
 
-The Phase G3 graphical shell package surface is not a desktop replacement yet. It does not autostart, enable autologin, install or require a compositor, run host commands, restart services, mutate NixOS configuration, call modelruntime, write memory, change public APIs, or route live authority through FORGE-K.
+The Phase G3.5 graphical shell package surface is not a desktop replacement yet. It does not autostart, enable autologin, install or require a compositor, run host commands, restart services, mutate NixOS configuration, call modelruntime, write memory, change public APIs, or route live authority through FORGE-K.
 
 References:
 
@@ -211,7 +211,7 @@ nix build .#forge-desktop-shell
 nix run .#forge-shell-session
 ```
 
-`forge-shell-session` sets safe shell-mode environment variables and prefers `FORGE_SHELL_BINARY`, then a Nix `forge-desktop-shell` command once it contains the real Tauri binary, then existing `apps/desktop/src-tauri/target/{release,debug}/forge_desktop` binaries. If the Tauri binary is missing, it exits non-zero with the build commands instead of pretending the shell launched.
+`forge-shell-session` sets safe shell-mode environment variables and prefers `FORGE_SHELL_BINARY`, then the Nix `forge-desktop-shell` package that now contains the real Tauri binary, then existing `apps/desktop/src-tauri/target/{release,debug}/forge_desktop` binaries. If the Tauri binary is missing, it exits non-zero with the build commands instead of pretending the shell launched.
 
 Container commands:
 

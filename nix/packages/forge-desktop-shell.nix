@@ -1,74 +1,157 @@
 {
   lib,
-  writeShellApplication,
+  stdenv,
+  rustPlatform,
+  buildNpmPackage,
+  cargo-tauri,
+  pkg-config,
+  wrapGAppsHook4,
+  dbus,
+  openssl,
+  glib,
+  glib-networking,
+  gtk3,
+  libsoup_3,
+  webkitgtk_4_1,
+  librsvg,
+  libayatana-appindicator,
 }:
 
 let
-  app = writeShellApplication {
-    name = "forge-desktop-shell";
+  version = "0.1.0";
+  repoSrc = lib.cleanSourceWith {
+    src = ../..;
+    filter =
+      path: type:
+      let
+        rel = lib.removePrefix ((toString ../..) + "/") (toString path);
+        base = baseNameOf path;
+      in
+      !(lib.hasPrefix "node_modules/" rel)
+      && !(lib.hasInfix "/node_modules/" rel)
+      && !(lib.hasPrefix "apps/desktop/dist" rel)
+      && !(lib.hasPrefix "apps/desktop/src-tauri/target/" rel)
+      && !(lib.hasPrefix ".git/" rel)
+      && base != "result";
+  };
 
-    text = ''
-      set -euo pipefail
+  desktopFrontend = buildNpmPackage {
+    pname = "forge-desktop-frontend";
+    inherit version;
 
-      export FORGE_SHELL_SESSION_ENABLED=true
-      export FORGE_SHELL_MODE=fullscreen-shell
-      export FORGE_CORE_URL="''${FORGE_CORE_URL:-http://127.0.0.1:18492}"
-      export VITE_FORGE_API_URL="''${VITE_FORGE_API_URL:-$FORGE_CORE_URL}"
-      export FORGE_SHELL_SAFE_MODE=true
-      export FORGE_SHELL_FULLSCREEN=true
-      export FORGE_SHELL_HOST_MUTATION=false
-      export FORGE_SHELL_DIRECT_SYSTEM_CONTROL=false
-      export FORGE_SHELL_MODEL_MUTATION=false
-      export FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false
-      export FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false
+    src = repoSrc;
+    npmDepsHash = "sha256-/Q0Xd7f/YGq/OUym7z4NXo7ZJX6Mma6+r6dzK6jkujc=";
+    npmBuildScript = "build:desktop";
 
-      if [ -n "''${FORGE_DESKTOP_SHELL_BINARY:-}" ]; then
-        if [ -x "$FORGE_DESKTOP_SHELL_BINARY" ]; then
-          exec "$FORGE_DESKTOP_SHELL_BINARY" "$@"
-        fi
-        echo "FORGE_DESKTOP_SHELL_BINARY is set but is not executable: $FORGE_DESKTOP_SHELL_BINARY" >&2
-        exit 1
-      fi
-
-      printf '%s\n' \
-        "FORGE desktop shell is not fully Nix-packaged yet." \
-        "" \
-        "This G3 package exposes the stable forge-desktop-shell command and safe" \
-        "shell-mode environment defaults, but it does not contain a Nix-built" \
-        "apps/desktop/src-tauri forge_desktop binary." \
-        "" \
-        "Known limitation:" \
-        "  Full Tauri packaging still needs npm dependency vendoring plus" \
-        "  Cargo/Tauri/WebKit build integration in Nix. This package fails loudly" \
-        "  at runtime instead of pretending that binary packaging is complete." \
-        "" \
-        "Current local build path:" \
-        "  npm -w @forge/desktop run tauri -- build" \
-        "" \
-        "Then launch through the session wrapper:" \
-        "  FORGE_SHELL_BINARY=/path/to/forge_desktop forge-shell-session" \
-        "" \
-        "Or launch this stable command with an explicit desktop binary:" \
-        "  FORGE_DESKTOP_SHELL_BINARY=/path/to/forge_desktop forge-desktop-shell" \
-        "" \
-        "Current safe shell settings:" \
-        "  FORGE_CORE_URL=$FORGE_CORE_URL" \
-        "  FORGE_SHELL_MODE=$FORGE_SHELL_MODE" \
-        "  FORGE_SHELL_SAFE_MODE=$FORGE_SHELL_SAFE_MODE" \
-        "  FORGE_SHELL_FULLSCREEN=$FORGE_SHELL_FULLSCREEN" >&2
-      exit 1
+    installPhase = ''
+      runHook preInstall
+      mkdir -p "$out"
+      cp -r apps/desktop/dist "$out/dist"
+      runHook postInstall
     '';
-
-    meta = with lib; {
-      description = "Stable FORGE desktop shell launcher placeholder for the Tauri shell";
-      license = licenses.mit;
-      mainProgram = "forge-desktop-shell";
-      platforms = platforms.unix;
-    };
   };
 in
-app.overrideAttrs (old: {
-  passthru = (old.passthru or { }) // {
-    containsTauriBinary = false;
+rustPlatform.buildRustPackage rec {
+  pname = "forge-desktop-shell";
+  inherit version;
+
+  src = repoSrc;
+  cargoRoot = "apps/desktop/src-tauri";
+  buildAndTestSubdir = cargoRoot;
+  cargoHash = "sha256-r//SuUqGxhrktI/J63j+tEbuJA5YeFLCzfPGqtDlZPo=";
+
+  nativeBuildInputs = [
+    cargo-tauri.hook
+    pkg-config
+  ]
+  ++ lib.optionals stdenv.hostPlatform.isLinux [
+    wrapGAppsHook4
+  ];
+
+  buildInputs = lib.optionals stdenv.hostPlatform.isLinux [
+    dbus
+    openssl
+    glib
+    glib-networking
+    gtk3
+    libsoup_3
+    webkitgtk_4_1
+    librsvg
+    libayatana-appindicator
+  ];
+
+  tauriNixConfig = builtins.toJSON {
+    build = {
+      beforeBuildCommand = "";
+      frontendDist = "../dist";
+    };
   };
-})
+
+  preBuild = ''
+    mkdir -p apps/desktop/dist
+    cp -R ${desktopFrontend}/dist/. apps/desktop/dist/
+    printf '%s' '${tauriNixConfig}' > apps/desktop/src-tauri/tauri.nix.conf.json
+    tauriBuildFlags+=(
+      "--config"
+      "tauri.nix.conf.json"
+    )
+  '';
+
+  doCheck = false;
+
+  postInstall = ''
+    runHook prePostInstall
+
+    tauriBinary="$out/bin/forge_desktop"
+    if [ ! -x "$tauriBinary" ]; then
+      echo "expected Tauri binary was not installed at $tauriBinary" >&2
+      echo "installed files:" >&2
+      find "$out" -maxdepth 4 \( -type f -o -type l \) >&2
+      exit 1
+    fi
+
+    printf '%s\n' \
+      '#!@shell@' \
+      'set -euo pipefail' \
+      "" \
+      'export FORGE_SHELL_SESSION_ENABLED="''${FORGE_SHELL_SESSION_ENABLED:-true}"' \
+      'export FORGE_SHELL_MODE="''${FORGE_SHELL_MODE:-fullscreen-shell}"' \
+      'export FORGE_CORE_URL="''${FORGE_CORE_URL:-http://127.0.0.1:18492}"' \
+      'export VITE_FORGE_API_URL="''${VITE_FORGE_API_URL:-$FORGE_CORE_URL}"' \
+      'export FORGE_SHELL_SAFE_MODE="''${FORGE_SHELL_SAFE_MODE:-true}"' \
+      'export FORGE_SHELL_FULLSCREEN="''${FORGE_SHELL_FULLSCREEN:-true}"' \
+      'export FORGE_SHELL_HOST_MUTATION="''${FORGE_SHELL_HOST_MUTATION:-false}"' \
+      'export FORGE_SHELL_DIRECT_SYSTEM_CONTROL="''${FORGE_SHELL_DIRECT_SYSTEM_CONTROL:-false}"' \
+      'export FORGE_SHELL_MODEL_MUTATION="''${FORGE_SHELL_MODEL_MUTATION:-false}"' \
+      'export FORGE_SHELL_SEMANTIC_MEMORY_WRITE="''${FORGE_SHELL_SEMANTIC_MEMORY_WRITE:-false}"' \
+      'export FORGE_SHELL_FORGE_K_LIVE_AUTHORITY="''${FORGE_SHELL_FORGE_K_LIVE_AUTHORITY:-false}"' \
+      "" \
+      'if [ -n "''${FORGE_DESKTOP_SHELL_BINARY:-}" ]; then' \
+      '  if [ -x "$FORGE_DESKTOP_SHELL_BINARY" ]; then' \
+      '    exec "$FORGE_DESKTOP_SHELL_BINARY" "$@"' \
+      '  fi' \
+      '  echo "FORGE_DESKTOP_SHELL_BINARY is set but is not executable: $FORGE_DESKTOP_SHELL_BINARY" >&2' \
+      '  exit 1' \
+      'fi' \
+      "" \
+      'exec "@tauriBinary@" "$@"' \
+      > "$out/bin/forge-desktop-shell"
+    substituteInPlace "$out/bin/forge-desktop-shell" \
+      --replace-fail "@shell@" "${stdenv.shell}" \
+      --replace-fail "@tauriBinary@" "$tauriBinary"
+    chmod +x "$out/bin/forge-desktop-shell"
+
+    runHook postPostInstall
+  '';
+
+  passthru = {
+    containsTauriBinary = true;
+  };
+
+  meta = with lib; {
+    description = "FORGE Tauri desktop shell packaged for the graphical shell session";
+    license = licenses.mit;
+    mainProgram = "forge-desktop-shell";
+    platforms = platforms.linux;
+  };
+}

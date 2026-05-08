@@ -383,3 +383,12 @@ This is a concise status read of FORGE-K phases against the current repository. 
 - `nix/checks/forge-desktop-shell.nix` and `nix/checks/forge-shell-session.nix` statically verify executable surfaces, safe env defaults, fallback paths, override behavior, loud failure behavior, and absence of direct host/runtime mutation commands.
 - The full Tauri binary derivation remains future work; G3 does not pretend the npm/Cargo/WebKit packaging pass is complete.
 - Phase G3 does not autostart FORGE, enable autologin, replace the user's desktop, add or require a compositor, run service control, rebuild NixOS, mutate host state, call modelruntime, write semantic memory, change routes/public APIs, or make FORGE-K live authority.
+
+## Phase G3.5 Validation
+
+- Phase G3.5 is recorded as `FORGE-OS REAL TAURI NIX BUILD / MANUAL / SAFE-MODE`.
+- `nix/packages/forge-desktop-shell.nix` now builds the desktop frontend and the `apps/desktop/src-tauri` Tauri crate with real npm and Cargo dependency hashes.
+- The package exposes `/bin/forge-desktop-shell` and `/bin/forge_desktop`, and advertises `passthru.containsTauriBinary = true`.
+- `nix/packages/forge-shell-session.nix` preserves the selection order: `FORGE_SHELL_BINARY`, then packaged `forge-desktop-shell`, then local release/debug Tauri binaries, then loud failure.
+- `nix/checks/forge-desktop-shell.nix` verifies the wrapped shell defaults, binary presence, override behavior, placeholder removal, and absence of direct host/runtime mutation text.
+- Phase G3.5 does not autostart FORGE, enable autologin, replace the user's desktop, add or require a compositor, run service control, rebuild NixOS, mutate host state, call modelruntime, write semantic memory, change routes/public APIs, or make FORGE-K live authority. Compositor/session integration remains future G4 work.
