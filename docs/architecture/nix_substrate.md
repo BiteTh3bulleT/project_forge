@@ -2,7 +2,7 @@
 
 _Phase N1 — light Nix foundation. Phase N2 adds private NixOS host
 substrate scaffolding. Phase N3 adds the read-only Host Kernel Bridge
-diagnostic library._
+diagnostic library. Phase N4 adds advisory FORGE-H resource policy._
 
 This document explains how Nix is used in FORGE today and what it is
 **not** used for yet. Nix's role in FORGE will grow over time, but in
@@ -140,6 +140,12 @@ Phase N3 implements the Host Kernel Bridge diagnostic snapshot library
 in `services/core/internal/hostbridge`. The NixOS module remains
 read-only and does not add a timer, route, modelruntime call, rebuild
 action, service restart, or autonomous host mutation.
+
+Phase N4 implements advisory resource policy in
+`services/core/internal/forgeh`. The NixOS resource-policy options
+reserve `/forge/runtime/resource-policy` and write an inert environment
+file only when explicitly enabled. They do not start services, pause
+workers, load models, unload models, or mutate the host.
 
 They do not migrate live authority, fork Linux, execute tools, add
 routes, mutate modelruntime behavior, or make Nix mandatory.

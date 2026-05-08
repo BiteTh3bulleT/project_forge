@@ -52,5 +52,11 @@ in
       enable = lib.mkDefault false;
       allowMutation = lib.mkDefault false;
     };
+
+    forge.resourcePolicy = {
+      enable = lib.mkDefault false;
+      advisoryOnly = lib.mkDefault true;
+      allowMutation = lib.mkDefault false;
+    };
   };
 }

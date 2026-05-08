@@ -98,6 +98,12 @@ Phase N3 may run only bounded read-only commands:
 
 It must not run rebuild, package upgrade, service control, module load/unload, destructive filesystem, gateway, retrieval, embedding, or modelruntime execution commands.
 
+## Resource Policy Consumer
+
+Phase N4 adds FORGE-H resource policy under `services/core/internal/forgeh`. FORGE-H consumes Host Kernel Bridge snapshots as diagnostic input and produces advisory resource posture, lane decisions, model-load recommendations, background-work recommendations, warnings, and operator actions.
+
+FORGE-H may classify and recommend. It does not make Host Kernel Bridge authoritative, execute host actions, call modelruntime, write semantic memory, or alter live responses.
+
 ## Diagnostics Are Not Authority
 
 Host observations can explain operational state but do not admit evidence, commit memory, execute tools, restart services, or change live responses. If a future phase adds control, every action must be explicit, bounded, approved where required, and journaled through existing FORGE authority paths.
