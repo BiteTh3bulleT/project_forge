@@ -11,8 +11,9 @@ Scope: light Nix foundation only
 | `flake.lock` | present | Lock file committed. |
 | Dev shells | present | `default`, `core`, `desktop`, `aios`. |
 | `forge-core` package | present | `nix/packages/forge-core.nix` with real `vendorHash`. |
-| `forge-desktop` package | deferred | Not yet exposed as a flake package. |
-| checks | present | `go-tests`, `go-vet`, `js-build`. |
+| `forge-shell-session` package/app | present | Manual safe-mode graphical shell session wrapper from G2. |
+| `forge-desktop-shell` package/app | present, launcher-only | Phase G3 stable command for the desktop shell package surface; complete only when it contains or wraps the real Tauri binary and advertises that through metadata such as `passthru.containsTauriBinary = true`. |
+| checks | present | `go-tests`, `go-vet`, `js-build`, plus shell-session wrapper checks when exposed by the current flake. |
 | tool capsules | README-only | Deferred scaffold. |
 | NixOS modules | README-only | Deferred scaffold. |
 | profiles | README-only | Deferred scaffold. |
@@ -20,7 +21,7 @@ Scope: light Nix foundation only
 ## Fake-hash status
 
 - `forge-core`: real `vendorHash` (not fake).
-- Desktop package capture: deferred.
+- Desktop package capture: Phase G3 launcher surface is present; full Tauri binary packaging still requires honest npm/Cargo/Tauri package work and validation.
 - Any references implying core fake-hash completion are documentation drift and should be treated as stale.
 
 ## Commands validated
@@ -38,7 +39,7 @@ Safe now:
 
 Not complete yet:
 - Clean `forge-core` Nix build path.
-- Desktop Nix package.
+- Full desktop Tauri binary inside `packages.forge-desktop-shell`.
 - Tool capsules/NixOS modules/profiles execution integration.
 
 ## Must wait

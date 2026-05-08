@@ -1,0 +1,235 @@
+# FORGE Phase G3 — Nix-Packaged FORGE Desktop Shell
+
+You are working in the `project_forge` repository.
+
+Phase G1 created the FORGE graphical shell session foundation.
+Phase G2 added a safe `forge-shell-session` wrapper that launches an existing local Tauri `forge_desktop` binary when available.
+
+Now implement Phase G3: package the actual FORGE desktop/Tauri shell as a Nix package and wire the shell session wrapper to use it when available.
+
+## Goal
+
+Create a Nix-buildable package for the FORGE graphical shell binary.
+
+The target flow should become:
+
+```bash
+nix build .#forge-desktop-shell
+nix run .#forge-shell-session
+
+forge-shell-session should prefer the Nix-built FORGE desktop shell package when configured, while preserving the current safe fallback behavior from G2.
+
+Doctrine To Preserve
+FORGE is the graphical shell interface.
+NixOS/Linux remains the substrate.
+G3 must not replace the desktop.
+G3 must not enable autologin.
+G3 must not install or require a compositor.
+G3 must not implement a custom compositor.
+G3 must not mutate host state.
+G3 must not run systemd control commands.
+G3 must not run nixos-rebuild.
+G3 must not load/unload models.
+G3 must not write semantic memory directly.
+G3 must not bypass gateway, permissions, lanes, audit, controllane, memory, modelruntime, FORGE-H, or FORGE-K authority.
+Build Scope
+
+Add or update:
+
+nix/packages/forge-desktop-shell.nix
+nix/packages/forge-shell-session.nix
+flake.nix
+nix/overlays/default.nix if needed
+nix/checks/forge-shell-session.nix
+optional nix/checks/forge-desktop-shell.nix
+docs/operations/forge_graphical_shell_session.md
+docs/architecture/forge_graphical_shell.md
+
+Expose:
+
+packages.forge-desktop-shell
+optionally apps.forge-desktop-shell
+keep packages.forge-shell-session
+keep apps.forge-shell-session
+
+Do not remove or break forge-core.
+
+Desktop/Tauri Package Discovery
+
+Use the existing desktop shell:
+
+workspace: apps/desktop
+package name: @forge/desktop
+Tauri Rust package: apps/desktop/src-tauri
+expected binary: forge_desktop
+
+Inspect current scripts and build files before choosing the package strategy.
+
+If full Tauri packaging is too large for this phase, implement the most honest working package step possible and document the limitation. Do not fake a successful build.
+
+Nix Package Requirements
+
+Create nix/packages/forge-desktop-shell.nix.
+
+It should attempt to build the desktop shell using the repo’s existing Tauri/frontend build process.
+
+Expected output:
+
+/bin/forge_desktop
+
+or a wrapper with a clear stable command:
+
+/bin/forge-desktop-shell
+
+If the actual Tauri binary name remains forge_desktop, provide a stable wrapper command too:
+
+/bin/forge-desktop-shell
+
+The wrapper should launch the Tauri binary with safe shell-mode environment defaults.
+
+Safe Environment Defaults
+
+The desktop shell package/wrapper must preserve:
+
+FORGE_SHELL_SESSION_ENABLED=true
+FORGE_SHELL_MODE=fullscreen-shell
+FORGE_CORE_URL=http://127.0.0.1:18492
+VITE_FORGE_API_URL=$FORGE_CORE_URL
+FORGE_SHELL_SAFE_MODE=true
+FORGE_SHELL_FULLSCREEN=true
+FORGE_SHELL_HOST_MUTATION=false
+FORGE_SHELL_DIRECT_SYSTEM_CONTROL=false
+FORGE_SHELL_MODEL_MUTATION=false
+FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false
+FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false
+
+Allow FORGE_CORE_URL override through the environment.
+
+Update forge-shell-session
+
+Update nix/packages/forge-shell-session.nix so it can use the packaged desktop shell.
+
+Preferred behavior:
+
+If FORGE_SHELL_BINARY is set and executable, use it.
+Else if a Nix-provided desktop shell binary is available, launch it.
+Else check local Tauri target/release and target/debug paths.
+Else fail loudly with exact build steps.
+
+Do not remove the G2 fallback.
+
+Do not silently no-op.
+
+Flake Updates
+
+Update flake.nix:
+
+packages.forge-desktop-shell = pkgs.callPackage ./nix/packages/forge-desktop-shell.nix { };
+packages.forge-shell-session = pkgs.callPackage ./nix/packages/forge-shell-session.nix {
+  forge-desktop-shell = self.packages.${system}.forge-desktop-shell;
+};
+
+Use the actual repo style.
+
+Add apps.forge-desktop-shell if the package exposes a stable runnable binary.
+
+Keep apps.forge-shell-session.
+
+NixOS Module Update
+
+Update nix/nixos/modules/forge-shell-session.nix only if needed.
+
+The module should be able to use forge-shell-session or forge-desktop-shell as the configured shell package.
+
+Keep:
+
+disabled by default
+autoStart = false
+safeMode = true
+host mutation false
+direct system control false
+model mutation false
+semantic memory write false
+
+Do not enable autostart.
+
+Checks
+
+Add or update checks for:
+
+packages.forge-desktop-shell exists.
+package exposes a stable executable.
+packages.forge-shell-session still exists.
+apps.forge-shell-session still exists.
+wrapper prefers configured/Nix shell binary.
+wrapper still allows FORGE_SHELL_BINARY override.
+wrapper still falls back to local Tauri binary paths.
+wrapper still fails loudly if no binary is available.
+safe env defaults remain present.
+no systemctl.
+no nixos-rebuild.
+no modprobe / rmmod.
+no reboot/shutdown.
+no package-manager mutation.
+no modelruntime load/unload/spawn calls.
+no direct semantic memory write calls.
+shell session module remains disabled by default.
+autoStart remains false by default.
+Documentation Updates
+
+Update docs/operations/forge_graphical_shell_session.md with:
+
+how to build the desktop shell package
+how to run the shell session
+how forge-shell-session chooses its binary
+how to override FORGE_SHELL_BINARY
+how to override FORGE_CORE_URL
+known limitations of the Nix/Tauri package
+rollback/fallback instructions
+
+Update docs/architecture/forge_graphical_shell.md with:
+
+G3 status
+packaged shell path
+shell session wrapper behavior
+statement that this still does not replace the desktop or add compositor integration
+Acceptance Criteria
+nix/packages/forge-desktop-shell.nix exists.
+flake.nix exposes packages.forge-desktop-shell.
+forge-desktop-shell provides a stable executable or fails honestly during build with documented limitations.
+forge-shell-session can launch the packaged desktop shell when available.
+G2 local-binary fallback remains.
+G2 loud failure behavior remains.
+No autologin is enabled.
+No desktop replacement is enabled.
+No compositor is required or installed in G3.
+No host mutation is introduced.
+No service control is introduced.
+No NixOS rebuild behavior is introduced.
+No kernel/module behavior is introduced.
+No modelruntime load/unload behavior is introduced.
+No direct semantic memory writes are introduced.
+No live FORGE-K authority migration occurs.
+Existing tests pass.
+WHAT NOT TO DO
+Do not build a web dashboard and call it the shell.
+Do not make this remote-only.
+Do not replace the user’s desktop.
+Do not enable autologin.
+Do not require KDE.
+Do not require GNOME.
+Do not install or require a compositor in G3.
+Do not implement a custom compositor.
+Do not run systemctl start/stop/restart.
+Do not run nixos-rebuild.
+Do not load or unload kernel modules.
+Do not reboot or shut down the machine.
+Do not install, remove, or upgrade packages at runtime.
+Do not delete files or clean directories.
+Do not load or unload models.
+Do not spawn model runtimes.
+Do not write directly to semantic memory.
+Do not add public unauthenticated routes.
+Do not bypass gateway, permissions, lanes, audit, controllane, memory, modelruntime, FORGE-H, or FORGE-K authority.
+Do not pretend the Tauri package is complete if it is not.
+Do not output code in chat; make repository changes only.

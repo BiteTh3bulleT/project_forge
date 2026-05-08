@@ -29,7 +29,10 @@
       {
         packages = {
           forge-core = pkgs.callPackage ./nix/packages/forge-core.nix { };
-          forge-shell-session = pkgs.callPackage ./nix/packages/forge-shell-session.nix { };
+          forge-desktop-shell = pkgs.callPackage ./nix/packages/forge-desktop-shell.nix { };
+          forge-shell-session = pkgs.callPackage ./nix/packages/forge-shell-session.nix {
+            forgeDesktopShell = self.packages.${system}.forge-desktop-shell;
+          };
           default = self.packages.${system}.forge-core;
         };
 
@@ -42,6 +45,10 @@
             type = "app";
             program = "${self.packages.${system}.forge-shell-session}/bin/forge-shell-session";
           };
+          forge-desktop-shell = {
+            type = "app";
+            program = "${self.packages.${system}.forge-desktop-shell}/bin/forge-desktop-shell";
+          };
           default = self.apps.${system}.forge-core;
         };
 
@@ -53,6 +60,9 @@
         };
 
         checks = {
+          forge-desktop-shell = pkgs.callPackage ./nix/checks/forge-desktop-shell.nix {
+            forgeDesktopShell = self.packages.${system}.forge-desktop-shell;
+          };
           go-tests = pkgs.callPackage ./nix/checks/go-tests.nix { };
           go-vet = pkgs.callPackage ./nix/checks/go-vet.nix { };
           forge-shell-session = pkgs.callPackage ./nix/checks/forge-shell-session.nix {

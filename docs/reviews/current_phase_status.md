@@ -373,3 +373,13 @@ This is a concise status read of FORGE-K phases against the current repository. 
 - `nix/checks/forge-shell-session.nix` statically verifies wrapper existence, safe defaults, localhost core default, and absence of direct host/runtime mutation commands.
 - The NixOS shell-session module remains opt-in and disabled by default; `autoStart` remains false by default.
 - Phase G2 does not autostart FORGE, enable autologin, replace the user's desktop, add a compositor, run service control, rebuild NixOS, mutate host state, call modelruntime, write semantic memory, change routes/public APIs, or make FORGE-K live authority.
+
+## Phase G3 Validation
+
+- Phase G3 is recorded as `FORGE-OS DESKTOP SHELL PACKAGE SURFACE / MANUAL / SAFE-MODE`.
+- `nix/packages/forge-desktop-shell.nix` provides `/bin/forge-desktop-shell`, a stable launcher command for the desktop shell package surface.
+- `flake.nix` exposes `packages.forge-desktop-shell` and `apps.forge-desktop-shell` while preserving `forge-core` and `forge-shell-session` outputs.
+- `nix/packages/forge-shell-session.nix` now prefers `FORGE_SHELL_BINARY`, then a Nix-provided desktop shell only after it advertises `passthru.containsTauriBinary = true`, then local Tauri release/debug `forge_desktop` paths, then loud failure with exact build steps.
+- `nix/checks/forge-desktop-shell.nix` and `nix/checks/forge-shell-session.nix` statically verify executable surfaces, safe env defaults, fallback paths, override behavior, loud failure behavior, and absence of direct host/runtime mutation commands.
+- The full Tauri binary derivation remains future work; G3 does not pretend the npm/Cargo/WebKit packaging pass is complete.
+- Phase G3 does not autostart FORGE, enable autologin, replace the user's desktop, add or require a compositor, run service control, rebuild NixOS, mutate host state, call modelruntime, write semantic memory, change routes/public APIs, or make FORGE-K live authority.
