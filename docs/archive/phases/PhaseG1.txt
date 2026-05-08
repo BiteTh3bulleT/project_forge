@@ -1,0 +1,312 @@
+# FORGE Phase G1 — Graphical Shell Session Foundation
+
+You are working in the `project_forge` repository.
+
+FORGE is evolving into the actual graphical shell interface for a NixOS-based FORGE-OS machine.
+
+This does NOT mean a web dashboard controlling a headless server.
+This means FORGE becomes the visible graphical operating interface: the desktop shell, launcher, workspace surface, command center, and system context surface.
+
+NixOS remains the substrate.
+FORGE becomes the graphical shell.
+
+## Goal
+
+Create the foundation for a FORGE graphical shell session.
+
+G1 must define and scaffold a NixOS graphical session that launches FORGE as the primary shell interface, while preserving all existing FORGE authority boundaries.
+
+This phase should be safe, incremental, and non-destructive.
+
+## Doctrine To Preserve
+
+- FORGE is the AI-OS operating environment.
+- NixOS/Linux remains the boot, hardware, display, and service substrate.
+- FORGE is the graphical shell session, not a normal desktop app.
+- FORGE shell must talk to `forge-core` through governed local APIs/interfaces.
+- FORGE shell must not directly mutate host state.
+- FORGE shell must not bypass gateway, permissions, lanes, audit, controllane, memory, modelruntime, FORGE-K, FORGE-H, or approval authority.
+- FORGE-H N3-N6 resource diagnostics/policy/proposals/executions remain governed and bounded.
+- No host mutation, service restarts, NixOS rebuilds, kernel/module changes, model loads/unloads, or direct semantic memory writes may be introduced in G1.
+
+## Concept
+
+The intended stack:
+
+Hardware
+  ↓
+Linux kernel
+  ↓
+NixOS
+  ↓
+Display/session layer
+  ↓
+FORGE graphical shell
+  ↓
+forge-core / FORGE-H / HostBridge / memory / journal / approvals
+  ↓
+Robert
+
+FORGE should become the operator-facing shell.
+
+## Build Scope
+
+Add graphical shell session scaffolding.
+
+Preferred files/areas:
+
+- `docs/architecture/forge_graphical_shell.md`
+- `docs/architecture/forge_os_host_substrate.md`
+- `docs/operations/forge_graphical_shell_session.md`
+- optional ADR: `docs/adr/0011-forge-graphical-shell-session.md`
+
+Add NixOS module scaffolding under:
+
+- `nix/nixos/modules/forge-shell-session.nix`
+
+Update `flake.nix` to expose:
+
+- `nixosModules.forge-shell-session`
+
+Update aggregate module if appropriate:
+
+- `nix/nixos/modules/forge-os.nix`
+
+Do not break existing module exports.
+
+## Session Model
+
+Define a FORGE graphical shell session.
+
+The first implementation should support one safe launch mode:
+
+- `fullscreen-shell`
+
+Future modes may include:
+
+- `kiosk`
+- `compositor-integrated`
+- `remote-operator`
+- `multi-monitor-shell`
+
+G1 only scaffolds `fullscreen-shell`.
+
+## NixOS Module Options
+
+Add options equivalent to:
+
+```nix
+forge.shellSession.enable
+forge.shellSession.mode
+forge.shellSession.package
+forge.shellSession.user
+forge.shellSession.displayBackend
+forge.shellSession.autoStart
+forge.shellSession.coreURL
+forge.shellSession.safeMode
+
+Suggested defaults:
+
+enable = false
+mode = "fullscreen-shell"
+displayBackend = "wayland"
+autoStart = false
+coreURL = "http://127.0.0.1:18492"
+safeMode = true
+
+Do not enable autologin by default.
+Do not replace the user’s desktop by default.
+Do not disable existing desktop environments by default.
+
+G1 must be opt-in.
+
+Shell Runtime Contract
+
+Document that FORGE shell owns the visible operating surface:
+
+desktop surface
+command palette
+workspace switcher
+launcher/start menu
+window/panel surface
+system/resource status
+notification area
+approval queue
+memory/journal browser
+host diagnostics panel
+model/runtime status
+Dream Mode review surface later
+
+But G1 does not need to implement all of these.
+
+G1 should only define the contract and create the session launch path.
+
+Existing Desktop App
+
+If the repo already has a desktop/Tauri shell, do not rewrite it.
+
+Instead:
+
+identify the current desktop shell entrypoint
+document how it maps to the FORGE graphical shell
+add session scaffolding that can launch the existing shell package/binary when available
+if packaging is incomplete, create TODO-safe scaffolding and docs rather than fake production behavior
+Shell-to-Core Boundary
+
+FORGE shell must access system state through forge-core.
+
+Allowed:
+
+read host diagnostics through existing safe/internal paths if available
+read FORGE-H policy/proposal/execution records through governed paths if available
+show service/resource status
+show approval queue if existing APIs support it
+show shell-safe status placeholders if APIs are not available yet
+
+Forbidden:
+
+direct systemctl
+direct nixos-rebuild
+direct kernel/module calls
+direct modelruntime load/unload
+direct filesystem cleanup
+direct semantic memory writes
+direct gateway execution bypass
+System Context Principle
+
+Document this principle clearly:
+
+FORGE as graphical shell provides full operating awareness, not full LLM context.
+
+The shell may observe structured system/session context:
+
+active workspace
+open panels/windows
+current project
+resource posture
+service health
+model status
+approvals
+recent errors
+user-triggered actions
+
+The context compiler decides what subset reaches the LLM.
+
+Do not dump raw full system state into model prompts.
+
+NixOS Session Scaffolding
+
+Implement module scaffolding to prepare for a shell session.
+
+Depending on existing packaging, this may include:
+
+session descriptor file
+environment variables
+systemd user service shape
+desktop/session entry placeholder
+runtime directory for shell session state
+safe local FORGE_CORE_URL
+
+Keep it inert unless explicitly enabled.
+
+Do not add a full compositor dependency unless already present and appropriate.
+If compositor/session details are uncertain, document supported future options:
+
+Wayland + cage
+Wayland + sway
+Wayland + Hyprland
+X11 fallback if needed
+
+Do not pretend the compositor is implemented if it is not.
+
+Environment Variables
+
+Prepare safe environment variables like:
+
+FORGE_SHELL_SESSION_ENABLED=true
+FORGE_SHELL_MODE=fullscreen-shell
+FORGE_CORE_URL=http://127.0.0.1:18492
+FORGE_SHELL_SAFE_MODE=true
+FORGE_SHELL_HOST_MUTATION=false
+FORGE_SHELL_DIRECT_SYSTEM_CONTROL=false
+FORGE_SHELL_MODEL_MUTATION=false
+FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false
+Tests / Checks
+
+Add tests/checks where practical:
+
+Nix module evaluates when imported
+Shell session is disabled by default
+AutoStart is false by default
+SafeMode is true by default
+Host mutation flag is false
+Direct system control flag is false
+No systemctl restart/start/stop
+No nixos-rebuild
+No kernel module mutation
+No modelruntime load/unload
+No direct semantic memory writes
+No public unauthenticated route added
+Existing tests still pass
+
+If Nix module tests are not already available, add docs and lightweight evaluation checks consistent with existing repo patterns.
+
+Documentation Required
+
+Add docs/architecture/forge_graphical_shell.md with:
+
+what FORGE graphical shell is
+what it is not
+stack diagram
+shell responsibilities
+shell-to-core boundary
+context awareness principle
+display/session substrate options
+future phases
+
+Add docs/operations/forge_graphical_shell_session.md with:
+
+how to enable the module later
+expected launch flow
+safe fallback
+rollback steps
+known limitations
+
+Optional ADR 0011 should state:
+
+FORGE is the graphical shell interface
+NixOS remains substrate
+G1 is opt-in scaffolding only
+no host mutation or authority migration
+Acceptance Criteria
+FORGE graphical shell architecture is documented.
+NixOS shell session module scaffold exists.
+Module is exported from flake.nix.
+Shell session is opt-in and disabled by default.
+Existing FORGE desktop app/shell entrypoint is identified or documented.
+Shell-to-core boundary is explicit.
+No host mutation is introduced.
+No service control is introduced.
+No NixOS rebuild behavior is introduced.
+No kernel/module behavior is introduced.
+No modelruntime load/unload behavior is introduced.
+No direct semantic memory writes are introduced.
+No live FORGE-K authority migration occurs.
+Existing tests pass.
+WHAT NOT TO DO
+Do not build a fake web dashboard and call it the shell.
+Do not replace the user’s desktop by default.
+Do not enable autologin by default.
+Do not require KDE, GNOME, or a full desktop environment.
+Do not implement a custom compositor in G1.
+Do not add direct host controls to the shell.
+Do not run systemctl start/stop/restart.
+Do not run nixos-rebuild.
+Do not load or unload kernel modules.
+Do not reboot or shut down the machine.
+Do not install, remove, or upgrade packages.
+Do not load or unload models.
+Do not spawn model runtimes.
+Do not write directly to semantic memory.
+Do not bypass gateway, permissions, lanes, audit, controllane, memory, modelruntime, FORGE-H, or FORGE-K authority.
+Do not make this a public/SaaS/multi-user shell.

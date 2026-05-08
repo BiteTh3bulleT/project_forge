@@ -352,3 +352,13 @@ This is a concise status read of FORGE-K phases against the current repository. 
 - PhaseI2 does not enable live KV reuse, backend cache lookup, tokenizer-specific final token IDs, modelruntime mutation, memory mutation, public API/route changes, gateway changes, retrieval/search/embedding changes, or FORGE-K `KVService` live authority.
 - Validation commands for this pass: preflight `cd services/core && go test ./internal/forgek/...`; focused red/green `cd services/core && go test ./internal/aios/controllane ./internal/kvidentity -run 'KVIdentity|ValidateIdentity' -count=1`; focused coverage `cd services/core && go test ./internal/aios/controllane ./internal/kvidentity -cover`; boundary `cd services/core && go test ./internal/forgek/... ./internal/forgekshadow/... ./internal/forgeh ./internal/gateway ./internal/aios/autonomy ./internal/aios/rulecells -count=1`; final `npm run build:core`, `npm run lint`, `npm test`, `npm run test:forgek:parity`, `npm run test:integration:env`, `nix --extra-experimental-features 'nix-command flakes' flake check --no-write-lock-file`, and `git diff --check`.
 - Coverage evidence for this pass: `internal/aios/controllane` 68.1% statements; `internal/kvidentity` 92.9% statements. Phase i1 recorded `internal/aios/controllane` at 67.6%.
+
+## Phase G1 Validation
+
+- Phase G1 is recorded as `FORGE-OS GRAPHICAL SHELL SESSION FOUNDATION / OPT-IN / DISABLED-BY-DEFAULT`.
+- `docs/architecture/forge_graphical_shell.md` defines FORGE as the graphical shell above NixOS, not as a web dashboard controlling a headless server.
+- `docs/operations/forge_graphical_shell_session.md` records the operator runbook, safe defaults, fallback model, and no-direct-host-control rules.
+- ADR 0011 accepts the graphical shell session direction while preserving NixOS as the substrate and existing FORGE authority paths.
+- `nix/nixos/modules/forge-shell-session.nix` adds disabled-by-default NixOS module scaffolding for `forge.shellSession.*`, safe environment metadata, runtime-directory preparation, and a placeholder desktop entry.
+- `flake.nix` exports `nixosModules.forge-shell-session`; `nix/nixos/modules/forge-os.nix` imports it without enabling it.
+- Phase G1 does not autostart FORGE, enable autologin, replace the user's desktop, add a compositor, run service control, rebuild NixOS, mutate host state, call modelruntime, write semantic memory, change routes/public APIs, or make FORGE-K live authority.

@@ -86,16 +86,21 @@ References:
 
 ## FORGE-OS Host Substrate
 
-Phase N2 adds private NixOS host substrate scaffolding for `/forge`, the `forge-core` service shape, and host diagnostics report directories. Phase N3 adds a read-only Host Kernel Bridge diagnostic library at `services/core/internal/hostbridge`. Phase N4 adds the advisory FORGE-H resource policy layer at `services/core/internal/forgeh`.
+Phase N2 adds private NixOS host substrate scaffolding for `/forge`, the `forge-core` service shape, and host diagnostics report directories. Phase N3 adds a read-only Host Kernel Bridge diagnostic library at `services/core/internal/hostbridge`. Phase N4 adds the advisory FORGE-H resource policy layer at `services/core/internal/forgeh`. Phase G1 adds the opt-in FORGE graphical shell session foundation with disabled-by-default NixOS module scaffolding, session metadata, safe environment wiring, and a placeholder desktop entry only.
 
 Host diagnostics are operational evidence only. They do not become semantic memory, live FORGE-K authority, gateway authority, modelruntime authority, or autonomous host control.
+
+The Phase G1 graphical shell foundation is not a desktop replacement yet. It does not autostart, enable autologin, install a compositor, run host commands, restart services, mutate NixOS configuration, call modelruntime, write memory, change public APIs, or route live authority through FORGE-K.
 
 References:
 
 - `docs/adr/0007-forge-os-host-substrate.md`
+- `docs/adr/0011-forge-graphical-shell-session.md`
 - `docs/architecture/forge_os_host_substrate.md`
+- `docs/architecture/forge_graphical_shell.md`
 - `docs/architecture/forge_host_kernel_bridge.md`
 - `docs/architecture/forge_h_resource_policy.md`
+- `docs/operations/forge_graphical_shell_session.md`
 - `docs/operations/host_kernel_bridge_diagnostics.md`
 - `docs/operations/resource_policy_diagnostics.md`
 

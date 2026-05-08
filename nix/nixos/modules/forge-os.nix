@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cfg = config.forge.os;
@@ -8,6 +13,7 @@ in
     ./forge-storage.nix
     ./forge-services.nix
     ./forge-host-kernel.nix
+    ./forge-shell-session.nix
   ];
 
   options.forge.os = {

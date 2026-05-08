@@ -6,12 +6,19 @@
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, flake-utils, ... }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      ...
+    }:
     let
       # Overlays that introduce FORGE packages under pkgs.*
       overlays = [ (import ./nix/overlays/default.nix) ];
     in
-    flake-utils.lib.eachDefaultSystem (system:
+    flake-utils.lib.eachDefaultSystem (
+      system:
       let
         pkgs = import nixpkgs {
           inherit system;
@@ -48,7 +55,8 @@
 
         formatter = pkgs.nixfmt;
       }
-    ) // {
+    )
+    // {
       # System-independent outputs.
       overlays.default = import ./nix/overlays/default.nix;
 
@@ -57,6 +65,7 @@
         forge-services = import ./nix/nixos/modules/forge-services.nix;
         forge-storage = import ./nix/nixos/modules/forge-storage.nix;
         forge-host-kernel = import ./nix/nixos/modules/forge-host-kernel.nix;
+        forge-shell-session = import ./nix/nixos/modules/forge-shell-session.nix;
         default = self.nixosModules.forge-os;
       };
     };

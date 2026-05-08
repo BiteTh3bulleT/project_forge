@@ -10,6 +10,7 @@ Phase N2 added private NixOS host substrate scaffolding under:
 - `nix/nixos/modules/forge-services.nix`
 - `nix/nixos/modules/forge-storage.nix`
 - `nix/nixos/modules/forge-host-kernel.nix`
+- `nix/nixos/modules/forge-shell-session.nix`
 
 Those modules are exported from `flake.nix` as `nixosModules.*`.
 
@@ -19,6 +20,7 @@ configuration.
 
 ## Boundaries
 
-Phase N2 modules are scaffolding only. They do not migrate live
+Phase N2/G1 modules are scaffolding only. They do not migrate live
 authority, add public routes, alter modelruntime behavior, wire FORGE-K
-into live authority, or add autonomous host mutation.
+into live authority, replace the desktop, autostart the graphical shell,
+or add autonomous host mutation.
