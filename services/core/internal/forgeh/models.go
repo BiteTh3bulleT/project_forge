@@ -50,6 +50,35 @@ const (
 	BackgroundWorkDeny  = "deny_background_work"
 )
 
+const (
+	ProposalActionPauseBackgroundIngest  = "pause_background_ingest"
+	ProposalActionDeferBackgroundIngest  = "defer_background_ingest"
+	ProposalActionDeferEmbedding         = "defer_embedding"
+	ProposalActionDenyNewModelLoad       = "deny_new_model_load"
+	ProposalActionDeferLargeModelLoad    = "defer_large_model_load"
+	ProposalActionPreferCurrentModelOnly = "prefer_current_model_only"
+	ProposalActionPreferCPUSafeMode      = "prefer_cpu_safe_mode"
+	ProposalActionWarnOperator           = "warn_operator"
+	ProposalActionEnterDegradedMode      = "enter_degraded_mode"
+	ProposalActionScheduleMaintenance    = "schedule_maintenance_later"
+)
+
+const (
+	ProposalStatusProposed       = "proposed"
+	ProposalStatusApproved       = "approved"
+	ProposalStatusRejected       = "rejected"
+	ProposalStatusExpired        = "expired"
+	ProposalStatusSuperseded     = "superseded"
+	ProposalStatusCommittedLater = "committed_later"
+)
+
+const (
+	ProposalRiskLow      = "low"
+	ProposalRiskModerate = "moderate"
+	ProposalRiskHigh     = "high"
+	ProposalRiskCritical = "critical"
+)
+
 type ResourcePolicySnapshot struct {
 	PolicyID                     string                  `json:"policy_id"`
 	CapturedAt                   time.Time               `json:"captured_at"`
@@ -77,4 +106,24 @@ type LaneDecision struct {
 type ResourcePolicyError struct {
 	Source string `json:"source"`
 	Error  string `json:"error"`
+}
+
+type ResourceActionProposal struct {
+	ProposalID               string    `json:"proposal_id"`
+	CreatedAt                time.Time `json:"created_at"`
+	SourcePolicyID           string    `json:"source_policy_id"`
+	SourceSnapshotID         string    `json:"source_snapshot_id"`
+	ActionType               string    `json:"action_type"`
+	TargetLane               string    `json:"target_lane,omitempty"`
+	RecommendedDecision      string    `json:"recommended_decision"`
+	Reason                   string    `json:"reason"`
+	RiskLevel                string    `json:"risk_level"`
+	RequiresOperatorApproval bool      `json:"requires_operator_approval"`
+	Status                   string    `json:"status"`
+	ExpiresAt                time.Time `json:"expires_at"`
+	AdvisoryOnly             bool      `json:"advisory_only"`
+	SupersededBy             string    `json:"superseded_by,omitempty"`
+	Supersedes               string    `json:"supersedes,omitempty"`
+	DecisionReason           string    `json:"decision_reason,omitempty"`
+	DecidedAt                time.Time `json:"decided_at,omitempty"`
 }

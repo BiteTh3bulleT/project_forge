@@ -1,8 +1,9 @@
 # FORGE-H Resource Policy Diagnostics
 
 Phase N4 adds an internal advisory resource policy package at `services/core/internal/forgeh`.
+Phase N5 adds advisory resource action proposals in the same package.
 
-It consumes a Host Kernel Bridge diagnostic snapshot and returns a `ResourcePolicySnapshot`. It does not collect host diagnostics directly and does not mutate host or runtime state.
+It consumes a Host Kernel Bridge diagnostic snapshot and returns a `ResourcePolicySnapshot`. Phase N5 can convert that policy snapshot into `ResourceActionProposal` records. It does not collect host diagnostics directly and does not mutate host or runtime state.
 
 ## What It Evaluates
 
@@ -16,6 +17,7 @@ It consumes a Host Kernel Bridge diagnostic snapshot and returns a `ResourcePoli
 - model-load recommendation
 - background-work recommendation
 - bounded warnings and operator actions
+- reviewable resource action proposals for background ingest, embedding, model-load posture, degraded-mode warning, and operator warning paths
 
 ## How To Test
 
@@ -34,7 +36,9 @@ npm run lint
 
 ## Advisory Only
 
-`ResourcePolicySnapshot.advisory_only` is always true in Phase N4.
+`ResourcePolicySnapshot.advisory_only` is always true in Phase N4. `ResourceActionProposal.advisory_only` is always true in Phase N5.
+
+Proposal records may move from `proposed` to `approved`, `rejected`, `expired`, or `superseded`. Approval is review state only. It is not permission for the Phase N5 code to execute host actions.
 
 FORGE-H does not:
 
@@ -50,3 +54,4 @@ FORGE-H does not:
 - add public routes
 
 Operator actions are recommendations written in bounded, non-destructive language.
+Resource action proposals are governance records written in bounded, non-destructive language.

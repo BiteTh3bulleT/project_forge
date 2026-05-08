@@ -51,6 +51,16 @@ in
       default = "${config.forge.storage.root}/runtime/resource-policy";
       description = "Directory reserved for advisory FORGE-H resource policy reports.";
     };
+
+    proposals = {
+      enable = lib.mkEnableOption "FORGE-H advisory resource action proposal diagnostics scaffold";
+
+      runtimePath = lib.mkOption {
+        type = lib.types.str;
+        default = "${config.forge.storage.root}/runtime/resource-proposals";
+        description = "Directory reserved for advisory FORGE-H resource action proposal records.";
+      };
+    };
   };
 
   config = lib.mkMerge [
@@ -95,6 +105,30 @@ in
         FORGE_RESOURCE_POLICY_ADVISORY_ONLY=true
         FORGE_RESOURCE_POLICY_RUNTIME_DIR=${policyCfg.runtimePath}
         FORGE_RESOURCE_POLICY_ALLOW_MUTATION=false
+      '';
+    })
+
+    (lib.mkIf policyCfg.proposals.enable {
+      assertions = [
+        {
+          assertion = policyCfg.advisoryOnly == true;
+          message = "Phase N5 FORGE-H resource proposals require advisory-only resource policy.";
+        }
+        {
+          assertion = policyCfg.allowMutation == false;
+          message = "Phase N5 FORGE-H resource proposals must not enable host mutation.";
+        }
+      ];
+
+      systemd.tmpfiles.rules = [
+        "d ${policyCfg.proposals.runtimePath} 0750 ${config.forge.storage.user} ${config.forge.storage.group} -"
+      ];
+
+      environment.etc."forge/resource-proposals.env".text = ''
+        FORGE_RESOURCE_PROPOSALS_ENABLED=true
+        FORGE_RESOURCE_PROPOSALS_RUNTIME_DIR=${policyCfg.proposals.runtimePath}
+        FORGE_RESOURCE_PROPOSALS_ADVISORY_ONLY=true
+        FORGE_RESOURCE_PROPOSALS_EXECUTION_ENABLED=false
       '';
     })
   ];

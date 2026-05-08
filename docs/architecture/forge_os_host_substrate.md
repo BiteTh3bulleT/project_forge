@@ -46,6 +46,7 @@ NixOS scaffolding creates these directories with conservative ownership. It does
 | FORGE shell | Existing desktop app | No UI focus in Phase N2 |
 | Host Kernel Bridge | Implemented library | Phase N3 read-only diagnostic snapshots; no startup wiring or public route |
 | FORGE-H Resource Policy | Implemented library | Phase N4 advisory-only policy snapshots from Host Kernel Bridge diagnostics |
+| FORGE-H Resource Proposals | Implemented library | Phase N5 request-approval records from resource policy snapshots; no execution or host mutation |
 
 ## Observation And Control Ladder
 
@@ -59,7 +60,7 @@ FORGE host powers must climb this ladder deliberately:
 6. Automate safe action
 7. Own policy
 
-Phase N2 stopped at design and scaffolding for observation/reporting. Phase N3 implements read-only diagnostic snapshot generation. Phase N4 reaches recommendation by producing advisory resource policy snapshots. It still does not request approval, execute host actions, or implement host mutation.
+Phase N2 stopped at design and scaffolding for observation/reporting. Phase N3 implements read-only diagnostic snapshot generation. Phase N4 reaches recommendation by producing advisory resource policy snapshots. Phase N5 reaches request approval by creating advisory resource action proposals that can be approved, rejected, expired, or superseded without execution. It still does not execute host actions or implement host mutation.
 
 ## Authority Boundary
 

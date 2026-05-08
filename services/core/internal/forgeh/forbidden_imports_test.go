@@ -63,8 +63,12 @@ func TestNoMutationCommandText(t *testing.T) {
 		"zypper",
 		"RemoveAll",
 		"LoadModel",
+		"UnloadModel",
 		"Unload",
 		"GenerateStream",
+		"gateway.Execute",
+		"SemanticWrite",
+		"CommitSemantic",
 		"WriteFile",
 	}
 	files, err := filepath.Glob("*.go")

@@ -1,8 +1,9 @@
 # FORGE-H Resource Policy
 
 Phase N4 implements FORGE-H as an advisory host-resource policy layer.
+Phase N5 adds a governed Resource Action Proposal Gate on top of those advisory policy outputs.
 
-FORGE-H consumes read-only Host Kernel Bridge diagnostic snapshots and produces bounded resource posture, workload lane decisions, model-load recommendations, background-work recommendations, warnings, and operator actions.
+FORGE-H consumes read-only Host Kernel Bridge diagnostic snapshots and produces bounded resource posture, workload lane decisions, model-load recommendations, background-work recommendations, warnings, and operator actions. Phase N5 can convert those recommendations into reviewable resource action proposals.
 
 It gives FORGE resource judgment. It does not give FORGE host mutation authority.
 
@@ -45,7 +46,55 @@ FORGE-H emits a `ResourcePolicySnapshot` with:
 - `source_errors`
 - `advisory_only`
 
-`advisory_only` is always `true` in Phase N4.
+`advisory_only` is always `true` in Phase N4 and Phase N5.
+
+## Resource Action Proposals
+
+Phase N5 adds `ResourceActionProposal` records. These are operational governance records, not host execution commands and not semantic memory.
+
+Supported proposal actions:
+
+- `pause_background_ingest`
+- `defer_background_ingest`
+- `defer_embedding`
+- `deny_new_model_load`
+- `defer_large_model_load`
+- `prefer_current_model_only`
+- `prefer_cpu_safe_mode`
+- `warn_operator`
+- `enter_degraded_mode`
+- `schedule_maintenance_later`
+
+Each proposal preserves its source policy and host snapshot references. Proposal IDs are deterministic for stable proposal inputs.
+
+## Proposal Lifecycle
+
+Proposal statuses:
+
+- `proposed`
+- `approved`
+- `rejected`
+- `expired`
+- `superseded`
+- `committed_later`
+
+Phase N5 allows only non-executing lifecycle transitions:
+
+- `proposed` to `approved`
+- `proposed` to `rejected`
+- `proposed` to `expired`
+- `proposed` to `superseded`
+
+`committed_later` is reserved for future bounded execution phases and is rejected by the Phase N5 transition helper. Approving a proposal records review state only. It does not pause workers, defer queues, load or unload models, restart services, run Nix, or mutate host state.
+
+Risk levels:
+
+- `low`
+- `moderate`
+- `high`
+- `critical`
+
+All generated proposals require operator approval and remain advisory-only.
 
 ## Pressure Levels
 
@@ -106,7 +155,7 @@ It does not load models, unload models, spawn runtimes, call inference backends,
 
 ## Advisory Boundary
 
-FORGE-H is advisory only in Phase N4.
+FORGE-H is advisory only in Phase N4 and Phase N5.
 
 Forbidden:
 
@@ -122,3 +171,15 @@ Forbidden:
 - gateway, permissions, lanes, audit, controllane, modelruntime, or FORGE-K authority bypass
 
 Future phases may turn recommendations into approved bounded controls only after explicit design, approval, tests, rollback, and authority-boundary documentation.
+
+## Control Ladder
+
+FORGE-H currently sits at the request-approval step:
+
+1. Observe: Host Kernel Bridge read-only diagnostics
+2. Report: diagnostic snapshots
+3. Recommend: Phase N4 resource policy
+4. Request approval: Phase N5 resource action proposals
+5. Execute bounded action: future phase only
+6. Automate safe action: future phase only
+7. Own policy: future phase only

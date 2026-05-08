@@ -57,6 +57,7 @@ in
       enable = lib.mkDefault false;
       advisoryOnly = lib.mkDefault true;
       allowMutation = lib.mkDefault false;
+      proposals.enable = lib.mkDefault false;
     };
   };
 }
