@@ -13,25 +13,27 @@ type ForgeKernelProcessor interface {
 }
 
 type ProcessorOptions struct {
-	Registry     ActionRegistry
-	Validator    SemanticActionValidator
-	Capabilities CapabilityService
-	ApprovalGate ApprovalGate
-	TxRunner     TransactionRunner
-	AuditSink    AuditSink
-	NowMillis    func() int64
-	RuleEngine   RuleEngine
+	Registry          ActionRegistry
+	Validator         SemanticActionValidator
+	Capabilities      CapabilityService
+	ApprovalGate      ApprovalGate
+	TxRunner          TransactionRunner
+	AuditSink         AuditSink
+	NowMillis         func() int64
+	RuleEngine        RuleEngine
+	KVIdentityMetrics KVIdentityEnforcementMetrics
 }
 
 type Processor struct {
-	registry     ActionRegistry
-	validator    SemanticActionValidator
-	capabilities CapabilityService
-	approvalGate ApprovalGate
-	txRunner     TransactionRunner
-	auditSink    AuditSink
-	nowMillis    func() int64
-	ruleEngine   RuleEngine
+	registry          ActionRegistry
+	validator         SemanticActionValidator
+	capabilities      CapabilityService
+	approvalGate      ApprovalGate
+	txRunner          TransactionRunner
+	auditSink         AuditSink
+	nowMillis         func() int64
+	ruleEngine        RuleEngine
+	kvIdentityMetrics KVIdentityEnforcementMetrics
 }
 
 type RuleEngine interface {
@@ -69,14 +71,15 @@ func NewProcessor(opts ProcessorOptions) *Processor {
 		tx = NewInMemoryTransactionRunner(store)
 	}
 	return &Processor{
-		registry:     reg,
-		validator:    validator,
-		capabilities: caps,
-		approvalGate: approval,
-		txRunner:     tx,
-		auditSink:    opts.AuditSink,
-		nowMillis:    nowFn,
-		ruleEngine:   opts.RuleEngine,
+		registry:          reg,
+		validator:         validator,
+		capabilities:      caps,
+		approvalGate:      approval,
+		txRunner:          tx,
+		auditSink:         opts.AuditSink,
+		nowMillis:         nowFn,
+		ruleEngine:        opts.RuleEngine,
+		kvIdentityMetrics: opts.KVIdentityMetrics,
 	}
 }
 
@@ -163,6 +166,17 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (dom
 	}
 	result.ValidationDetails = append(result.ValidationDetails, detailFor("idempotency", nil))
 
+	var kvIdentityDecision KVIdentityEnforcementDecision
+	if req.Action == domain.ActionValidateKVIdentity {
+		kvIdentityDecision = EnforceKVIdentity(req)
+		if !kvIdentityDecision.Accepted {
+			result.StateSummary = kvIdentityDecision.ToStateSummary()
+			p.recordKVIdentityDecision(kvIdentityDecision)
+			return p.reject(ctx, req, result, "kv_identity_enforcement", []domain.SyscallError{kvIdentityDecision.ToSyscallError()}), nil
+		}
+		result.ValidationDetails = append(result.ValidationDetails, detailFor("kv_identity_enforcement", nil))
+	}
+
 	payloadIssues := p.validator.ValidatePayload(req, def, p.txRunner.ReadStore())
 	result.ValidationDetails = append(result.ValidationDetails, detailFor("payload_validation", payloadIssues))
 	if len(payloadIssues) > 0 {
@@ -172,6 +186,11 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (dom
 	if req.DryRun {
 		result.Success = true
 		result.StateSummary["dryRun"] = true
+		if req.Action == domain.ActionValidateKVIdentity {
+			result.StateSummary = kvIdentityDecision.ToStateSummary()
+			result.StateSummary["dryRun"] = true
+			p.recordKVIdentityDecision(kvIdentityDecision)
+		}
 		result.Warnings = append(result.Warnings, "dry-run: request validated without commit")
 		result.AuditID = p.writeAudit(ctx, req, result)
 		return result, nil
@@ -266,6 +285,12 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (dom
 	result.StateSummary = summary
 	result.ValidationDetails = append(result.ValidationDetails, detailFor("commit", nil))
 	result.AuditID = p.writeAudit(ctx, req, result)
+	if req.Action == domain.ActionValidateKVIdentity {
+		if kvIdentityDecision.Decision == "" {
+			kvIdentityDecision = EnforceKVIdentity(req)
+		}
+		p.recordKVIdentityDecision(kvIdentityDecision)
+	}
 	if result.AuditID != "" {
 		if linker, ok := p.txRunner.(auditLinkingRunner); ok {
 			if err := linker.LinkAudit(ctx, req.CorrelationID, req.ID, result.AuditID); err != nil {
@@ -274,6 +299,13 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (dom
 		}
 	}
 	return result, nil
+}
+
+func (p *Processor) recordKVIdentityDecision(decision KVIdentityEnforcementDecision) {
+	if p == nil || p.kvIdentityMetrics == nil {
+		return
+	}
+	p.kvIdentityMetrics.Record(decision)
 }
 
 type commitError struct {
@@ -306,22 +338,38 @@ func (p *Processor) writeAudit(ctx context.Context, req domain.SyscallRequest, r
 		return ""
 	}
 	id, _ := p.auditSink.Record(ctx, SyscallAuditRecord{
-		Timestamp:        p.nowMillis(),
-		Action:           req.Action,
-		Actor:            req.Actor.ID,
-		Source:           req.Source,
-		WorkspaceID:      req.Scope.WorkspaceID,
-		RequestID:        req.ID,
-		CorrelationID:    req.CorrelationID,
-		TraceID:          req.TraceID,
-		DryRun:           req.DryRun,
-		Success:          result.Success,
-		ApprovalStatus:   result.ApprovalStatus,
-		ValidationIssues: result.RejectedReasons,
-		CommittedIDs:     result.CommittedObjectIDs,
-		ErrorCode:        result.DeterministicErrCode,
+		Timestamp:             p.nowMillis(),
+		Action:                req.Action,
+		Actor:                 req.Actor.ID,
+		Source:                req.Source,
+		WorkspaceID:           req.Scope.WorkspaceID,
+		RequestID:             req.ID,
+		CorrelationID:         req.CorrelationID,
+		TraceID:               req.TraceID,
+		DryRun:                req.DryRun,
+		Success:               result.Success,
+		ApprovalStatus:        result.ApprovalStatus,
+		ValidationIssues:      result.RejectedReasons,
+		CommittedIDs:          result.CommittedObjectIDs,
+		ErrorCode:             result.DeterministicErrCode,
+		KVIdentityEnforcement: kvIdentityAuditFields(result.StateSummary),
 	})
 	return id
+}
+
+func kvIdentityAuditFields(summary map[string]any) map[string]any {
+	if summary == nil {
+		return nil
+	}
+	fields, _ := summary["kvIdentityEnforcement"].(map[string]any)
+	if fields == nil {
+		return nil
+	}
+	out := make(map[string]any, len(fields))
+	for key, value := range fields {
+		out[key] = value
+	}
+	return out
 }
 
 func detailFor(layer string, issues []domain.SyscallError) domain.ValidationDetail {

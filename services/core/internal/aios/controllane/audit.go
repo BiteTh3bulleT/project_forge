@@ -11,20 +11,21 @@ import (
 )
 
 type SyscallAuditRecord struct {
-	Timestamp        int64
-	Action           domain.SemanticActionType
-	Actor            string
-	Source           domain.ActionSource
-	WorkspaceID      string
-	RequestID        string
-	CorrelationID    string
-	TraceID          string
-	DryRun           bool
-	Success          bool
-	ApprovalStatus   domain.ApprovalStatus
-	ValidationIssues []domain.SyscallError
-	CommittedIDs     []string
-	ErrorCode        domain.SyscallErrorCode
+	Timestamp             int64
+	Action                domain.SemanticActionType
+	Actor                 string
+	Source                domain.ActionSource
+	WorkspaceID           string
+	RequestID             string
+	CorrelationID         string
+	TraceID               string
+	DryRun                bool
+	Success               bool
+	ApprovalStatus        domain.ApprovalStatus
+	ValidationIssues      []domain.SyscallError
+	CommittedIDs          []string
+	ErrorCode             domain.SyscallErrorCode
+	KVIdentityEnforcement map[string]any
 }
 
 type AuditSink interface {
@@ -74,13 +75,14 @@ func (s *CoreAuditSink) Record(ctx context.Context, rec SyscallAuditRecord) (str
 		}(),
 		Summary: fmt.Sprintf("action=%s dryRun=%v source=%s", rec.Action, rec.DryRun, rec.Source),
 		Payload: map[string]any{
-			"workspaceId":      rec.WorkspaceID,
-			"requestId":        rec.RequestID,
-			"traceId":          rec.TraceID,
-			"approvalStatus":   rec.ApprovalStatus,
-			"committedIds":     rec.CommittedIDs,
-			"errorCode":        rec.ErrorCode,
-			"validationIssues": rec.ValidationIssues,
+			"workspaceId":           rec.WorkspaceID,
+			"requestId":             rec.RequestID,
+			"traceId":               rec.TraceID,
+			"approvalStatus":        rec.ApprovalStatus,
+			"committedIds":          rec.CommittedIDs,
+			"errorCode":             rec.ErrorCode,
+			"validationIssues":      rec.ValidationIssues,
+			"kvIdentityEnforcement": rec.KVIdentityEnforcement,
 		},
 	})
 	if err != nil {

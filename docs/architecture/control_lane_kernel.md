@@ -22,6 +22,8 @@ Control Lane owns:
 
 Phase i1 adds `[LIVE] / VALIDATION_ONLY` `VALIDATE_KV_IDENTITY` to this boundary. It validates deterministic KV identity gates through the shared pure package `services/core/internal/kvidentity`, returns an acceleration-only result summary, and does not mutate memory, call modelruntime, reuse live KV cache, or route through FORGE-K `KVService`.
 
+PhaseI2 marks this as `[PARTIAL LIVE ENFORCEMENT]`: `VALIDATE_KV_IDENTITY` is routed through Control Lane KV enforcement policy before acceptance. The policy rejects malformed claims, gate mismatches, unavailable manifests, and explicit or ambiguous live KV reuse requests; audit records include structured enforcement fields, and internal counters track accepted/rejected/malformed/unsupported decisions.
+
 ## Kernel / user-space boundary
 
 - user space: users, adapters, internal cells, future IRIS propose semantic actions

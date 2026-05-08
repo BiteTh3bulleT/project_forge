@@ -9,7 +9,19 @@ import (
 
 func TestValidateKVIdentityLiveSyscallSucceedsWithoutMemoryMutation(t *testing.T) {
 	ctx := context.Background()
-	k, _, auditSink := newTestKernel()
+	store := NewInMemorySemanticStore()
+	auditSink := NewInMemoryAuditSink()
+	counters := NewKVIdentityEnforcementCounters()
+	k := NewProcessor(ProcessorOptions{
+		Registry:          NewStaticActionRegistry(),
+		Validator:         NewDeterministicValidator(),
+		Capabilities:      NewStaticCapabilityService(),
+		ApprovalGate:      NewStaticApprovalGate(),
+		TxRunner:          NewInMemoryTransactionRunner(store),
+		AuditSink:         auditSink,
+		NowMillis:         func() int64 { return 1760000000000 },
+		KVIdentityMetrics: counters,
+	})
 	req := validKVIdentityRequest()
 	res, err := k.Process(ctx, req)
 	if err != nil {
@@ -30,11 +42,30 @@ func TestValidateKVIdentityLiveSyscallSucceedsWithoutMemoryMutation(t *testing.T
 	if res.AuditID == "" || len(auditSink.Records) == 0 || !auditSink.Records[len(auditSink.Records)-1].Success {
 		t.Fatalf("expected successful audit record, auditID=%q records=%#v", res.AuditID, auditSink.Records)
 	}
+	auditDecision := auditSink.Records[len(auditSink.Records)-1].KVIdentityEnforcement
+	if auditDecision["decision"] != KVIdentityDecisionAccepted || auditDecision["liveKVReuse"] != false {
+		t.Fatalf("audit missing KV enforcement decision: %#v", auditDecision)
+	}
+	if got := counters.Snapshot(); got.Accepted != 1 || got.Rejected != 0 {
+		t.Fatalf("unexpected counters after accept: %#v", got)
+	}
 }
 
 func TestValidateKVIdentityRejectsMismatchWithoutStateMutation(t *testing.T) {
 	ctx := context.Background()
-	k, store, auditSink := newTestKernel()
+	store := NewInMemorySemanticStore()
+	auditSink := NewInMemoryAuditSink()
+	counters := NewKVIdentityEnforcementCounters()
+	k := NewProcessor(ProcessorOptions{
+		Registry:          NewStaticActionRegistry(),
+		Validator:         NewDeterministicValidator(),
+		Capabilities:      NewStaticCapabilityService(),
+		ApprovalGate:      NewStaticApprovalGate(),
+		TxRunner:          NewInMemoryTransactionRunner(store),
+		AuditSink:         auditSink,
+		NowMillis:         func() int64 { return 1760000000000 },
+		KVIdentityMetrics: counters,
+	})
 	req := validKVIdentityRequest()
 	req.ID = "kv-identity-bad"
 	req.IdempotencyKey = "kv-idem-bad"
@@ -58,6 +89,13 @@ func TestValidateKVIdentityRejectsMismatchWithoutStateMutation(t *testing.T) {
 	}
 	if res.AuditID == "" || len(auditSink.Records) == 0 || auditSink.Records[len(auditSink.Records)-1].Success {
 		t.Fatalf("expected rejected audit record, auditID=%q records=%#v", res.AuditID, auditSink.Records)
+	}
+	auditDecision := auditSink.Records[len(auditSink.Records)-1].KVIdentityEnforcement
+	if auditDecision["decision"] != KVIdentityDecisionRejected {
+		t.Fatalf("audit missing rejected KV enforcement decision: %#v", auditDecision)
+	}
+	if got := counters.Snapshot(); got.Accepted != 0 || got.Rejected != 1 {
+		t.Fatalf("unexpected counters after rejection: %#v", got)
 	}
 }
 

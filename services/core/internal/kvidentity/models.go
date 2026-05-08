@@ -20,6 +20,7 @@ const (
 	GateContextBundle       = "same_context_bundle"
 	GateCacheMode           = "same_cache_mode"
 	GateManifestAvailable   = "manifest_available"
+	GateRequiredFields      = "required_identity_fields_present"
 )
 
 const (
@@ -106,6 +107,7 @@ func ValidateIdentity(resultID string, manifest ManifestIdentity, request Reques
 			failed = appendUnique(failed, gate)
 		}
 	}
+	check(GateRequiredFields, requiredManifestFieldsPresent(manifest) && requiredRequestFieldsPresent(request))
 	check(GateManifestAvailable, manifestHitEligible)
 	check(GateCacheMode, manifest.CacheMode == request.CacheMode)
 	check(GateContextBundle, manifest.WorkspaceID == request.WorkspaceID &&
@@ -146,6 +148,50 @@ func ValidateIdentity(resultID string, manifest ManifestIdentity, request Reques
 		Warnings:         NormalizeStrings(warnings),
 		CreatedAt:        createdAt,
 	}
+}
+
+func requiredManifestFieldsPresent(manifest ManifestIdentity) bool {
+	return manifest.CacheID != "" &&
+		manifest.CacheMode != "" &&
+		manifest.WorkspaceID != "" &&
+		manifest.BundleID != "" &&
+		manifest.ModelID != "" &&
+		manifest.ModelRevision != "" &&
+		manifest.TokenizerID != "" &&
+		manifest.TokenizerRevision != "" &&
+		manifest.ChatTemplateHash != "" &&
+		manifest.PromptLayoutHash != "" &&
+		manifest.PolicySchemaHash != "" &&
+		manifest.SyscallSchemaHash != "" &&
+		manifest.TokenInputHash != "" &&
+		manifest.RuntimeBackend != "" &&
+		manifest.RuntimeVersion != "" &&
+		manifest.AttentionBackend != "" &&
+		manifest.RopeConfigHash != "" &&
+		manifest.KVPrecision != "" &&
+		manifest.CacheSalt != "" &&
+		manifest.Status != ""
+}
+
+func requiredRequestFieldsPresent(request RequestIdentity) bool {
+	return request.CacheMode != "" &&
+		request.WorkspaceID != "" &&
+		request.BundleID != "" &&
+		request.ModelID != "" &&
+		request.ModelRevision != "" &&
+		request.TokenizerID != "" &&
+		request.TokenizerRevision != "" &&
+		request.ChatTemplateHash != "" &&
+		request.PromptLayoutHash != "" &&
+		request.PolicySchemaHash != "" &&
+		request.SyscallSchemaHash != "" &&
+		request.TokenInputHash != "" &&
+		request.RuntimeBackend != "" &&
+		request.RuntimeVersion != "" &&
+		request.AttentionBackend != "" &&
+		request.RopeConfigHash != "" &&
+		request.KVPrecision != "" &&
+		request.CacheSalt != ""
 }
 
 func NormalizeManifestIdentity(manifest ManifestIdentity) ManifestIdentity {

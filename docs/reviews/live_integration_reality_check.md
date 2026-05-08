@@ -10,6 +10,8 @@ FORGE-K remains mostly simulator authority. The live daemon still uses existing 
 
 Phase i1 adds one real live integration seam: deterministic KV identity validation now lives in the shared pure package `services/core/internal/kvidentity` and is used by both the FORGE-K simulator KV package and the live AI-OS Control Lane `VALIDATE_KV_IDENTITY` semantic syscall.
 
+PhaseI2 adds `[PARTIAL LIVE ENFORCEMENT]`: live `VALIDATE_KV_IDENTITY` now runs through an explicit Control Lane enforcement policy that classifies accepted, rejected, malformed, and unsupported live-reuse claims, records structured audit fields, and increments internal counters.
+
 This is validation-only. It does not enable live KV reuse, backend cache reuse, modelruntime mutation, tokenizer-specific token identity, public routes, public APIs, or FORGE-K live authority.
 
 ## Before This Pass
@@ -37,6 +39,7 @@ This is validation-only. It does not enable live KV reuse, backend cache reuse, 
 - `[LIVE]` No real KV tensors are stored or reused.
 - `[LIVE]` No backend cache is consulted.
 - `[LIVE]` No live prompt compilation is routed through FORGE-K Context Compiler.
+- `[LIVE]` PhaseI2 does not add public diagnostics routes or export metrics outside the live process.
 
 ## Current Live Status
 

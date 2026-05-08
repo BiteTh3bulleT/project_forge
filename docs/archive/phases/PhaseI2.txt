@@ -1,0 +1,404 @@
+# FORGE PhaseI2 — Live KV Identity Enforcement & Observation
+
+You are working inside the FORGE repository.
+
+PhaseI1 is complete enough to count as landed.
+
+PhaseI1 delivered:
+
+- shared deterministic KV identity validation in `services/core/internal/kvidentity`
+- simulator FORGE-K usage of the shared pure validator
+- live AI-OS Control Lane support for `VALIDATE_KV_IDENTITY`
+- capability registration for `kv.identity.validate`
+- explicit status that this is `[PARTIAL] LIVE VALIDATION / NO LIVE KV REUSE`
+- docs explaining the simulator-to-live migration pattern
+
+PhaseI2 must build on that seam.
+
+Do not make FORGE-K live.
+Do not enable live KV reuse.
+Do not allow simulator packages to become live authority.
+Do not add new mythology.
+
+## Phase Name
+
+PhaseI2 — Live KV Identity Enforcement & Observation
+
+## Mission
+
+Turn PhaseI1's live KV identity validation seam into a real live enforcement and observability layer.
+
+PhaseI1 proved:
+
+> the live daemon can validate KV identity deterministically.
+
+PhaseI2 must prove:
+
+> live daemon paths that make KV/cache/runtime identity claims cannot bypass deterministic KV identity validation, and those validation decisions are observable, auditable, and testable.
+
+This is still not live KV reuse.
+
+This is still not FORGE-K live authority.
+
+This is live guardrail enforcement.
+
+## Hard Boundaries
+
+The following must remain true:
+
+- FORGE-K remains simulator-only unless explicitly marked otherwise.
+- FORGE-K `KVService` must not become live daemon authority.
+- `services/core/internal/kvidentity` must remain pure and deterministic.
+- No model runtime mutation may be introduced.
+- No memory mutation may be introduced.
+- No backend cache reuse may be introduced.
+- No public KV reuse API may be introduced.
+- No simulator package may import live daemon packages.
+- FORGE-H remains immutable.
+- Rule/autonomy agents remain propose-only.
+- All live authority must continue through existing gateway / Control Lane / permissions / lane / audit boundaries.
+- Any rejected validation must fail closed.
+
+## Goal
+
+Add enforcement and observation around live KV identity validation.
+
+By the end of PhaseI2, the live daemon should have:
+
+1. A clear policy boundary for KV identity validation.
+2. Enforcement hooks where live code accepts or processes KV/cache/runtime identity-related claims.
+3. Structured audit output for validation decisions.
+4. Metrics or counters for validation accepted/rejected/error paths.
+5. Strong tests proving bypasses fail.
+6. Updated doctrine showing PhaseI2 as `[PARTIAL LIVE ENFORCEMENT]`, not live KV reuse.
+
+## Workstream 1 — Inspect Current Live KV/Cache/Runtime Claim Surface
+
+Search the repo for any code paths, payloads, docs, structs, domain actions, tool capabilities, gateway handlers, or Control Lane actions that reference:
+
+- KV
+- KV identity
+- cache identity
+- runtime identity
+- acceleration identity
+- deterministic identity
+- backend cache
+- model runtime
+- identity validation
+- `VALIDATE_KV_IDENTITY`
+- `kv.identity.validate`
+- `kvidentity`
+
+Create or update:
+
+`docs/reviews/phasei2_live_kv_enforcement_review.md`
+
+Include:
+
+- every live-facing KV/cache/runtime identity claim surface found
+- whether each surface is live, simulator-only, future, or partial
+- whether each surface currently enforces `kvidentity`
+- whether each surface is only documentation
+- what enforcement is safe to add now
+- what must remain future
+
+Do not skip this review.
+
+## Workstream 2 — Add Live Enforcement Policy
+
+Create a small live-side enforcement layer that wraps the shared pure validator without putting policy into the pure package.
+
+Preferred location:
+
+`services/core/internal/aios/controllane`
+
+or a nearby internal live package if the existing architecture has a better home.
+
+Possible names:
+
+- `kvenforcement`
+- `kvpolicy`
+- `identitypolicy`
+- `controllane/kvenforcement`
+
+Use the existing project naming style.
+
+The enforcement layer should:
+
+- call `services/core/internal/kvidentity`
+- classify results as accepted, rejected, malformed, unsupported, or internal error
+- return deterministic decision objects
+- carry enough structured fields for audit/log/metric use
+- never mutate memory
+- never mutate runtime
+- never reuse KV cache
+- fail closed on invalid or ambiguous input
+
+Example decision fields:
+
+- `accepted`
+- `reason`
+- `identity`
+- `source`
+- `accelerationOnly`
+- `memoryMutation`
+- `runtimeMutation`
+- `liveKVReuse`
+- `validatorVersion`
+- `policyVersion`
+
+Do not make this a giant framework.
+
+Make it boring. Boring is beautiful. Boring does not wake us up at 3 AM.
+
+## Workstream 3 — Enforce Validation Before Accepted Live Identity Claims
+
+Find the safest live path where KV/cache/runtime identity claims are accepted or summarized.
+
+At minimum, enforce policy inside the existing live Control Lane `VALIDATE_KV_IDENTITY` flow.
+
+If there are other live-facing handlers/capabilities that accept related identity claims, route those through the enforcement layer too.
+
+The enforcement behavior must be:
+
+- valid identity claim: accepted, audited, counted
+- invalid identity claim: rejected, audited, counted
+- malformed input: rejected, audited, counted
+- unsupported live reuse request: rejected, audited, counted
+- ambiguous request: rejected, audited, counted
+
+The response must remain honest:
+
+- `accelerationOnly: true`
+- `memoryMutation: false`
+- `runtimeMutation: false`
+- `liveKVReuse: false`
+
+Unless the code truly implements otherwise, which PhaseI2 must not do.
+
+## Workstream 4 — Audit Events
+
+Add structured audit/journal output for KV identity enforcement decisions.
+
+Use existing audit/journal patterns.
+
+Do not invent a parallel audit system.
+
+Add or confirm events like:
+
+- `semantic_syscall.validate_kv_identity.accepted`
+- `semantic_syscall.validate_kv_identity.rejected`
+- `semantic_syscall.validate_kv_identity.malformed`
+- `semantic_syscall.validate_kv_identity.unsupported_live_reuse`
+
+If the existing event naming style prefers one event with status fields, use that instead.
+
+Required audit fields:
+
+- action
+- capability
+- decision
+- reason
+- source
+- identity/hash where safe
+- accelerationOnly
+- memoryMutation
+- runtimeMutation
+- liveKVReuse
+- timestamp if the existing audit format includes it
+- request ID / correlation ID if available
+
+Do not log secrets, raw model payloads, or sensitive runtime data.
+
+## Workstream 5 — Metrics / Counters
+
+Add lightweight observability for the enforcement decisions.
+
+Use existing metrics patterns if present.
+
+Track at least:
+
+- KV identity validation accepted count
+- KV identity validation rejected count
+- malformed request count
+- unsupported live reuse attempt count
+- internal validation error count
+
+If there is no metrics framework, add a small internal counter abstraction consistent with the repo.
+
+Do not add a heavy dependency.
+
+Document whether metrics are live, test-only, or future-exported.
+
+## Workstream 6 — Tests
+
+Add focused tests.
+
+Required test coverage:
+
+### Pure validator tests
+
+For `services/core/internal/kvidentity`:
+
+- stable deterministic output for same input
+- different identity material produces different identity result
+- malformed input rejected
+- empty input rejected
+- unsupported claim type rejected if applicable
+- no time/random/global state dependency
+
+### Live enforcement tests
+
+For the new enforcement layer:
+
+- valid identity claim accepted
+- invalid identity claim rejected
+- malformed claim rejected
+- unsupported live KV reuse request rejected
+- ambiguous request rejected
+- decision object preserves `memoryMutation=false`
+- decision object preserves `runtimeMutation=false`
+- decision object preserves `liveKVReuse=false`
+- fail-closed behavior on validator error
+
+### Control Lane tests
+
+For `VALIDATE_KV_IDENTITY`:
+
+- action routes through enforcement layer
+- valid request succeeds
+- invalid request fails cleanly
+- rejection does not mutate state
+- audit event emitted for accepted request
+- audit event emitted for rejected request
+- metrics/counters increment for accepted request
+- metrics/counters increment for rejected request
+- transaction behavior remains correct
+- unauthorized caller cannot bypass validation
+
+### Boundary tests
+
+Confirm:
+
+- simulator package cannot import live daemon packages
+- live daemon does not import simulator-owned `KVService`
+- FORGE-H mutation guard still passes
+- rule/autonomy agents remain propose-only
+- gateway-only tool execution remains enforced
+
+## Workstream 7 — Coverage Improvement
+
+PhaseI1 started the live seam.
+
+PhaseI2 should improve coverage specifically around:
+
+- `services/core/internal/aios/controllane`
+- gateway capability routing if touched
+- the new enforcement package
+- `services/core/internal/kvidentity`
+
+Do not chase fake coverage.
+
+Meaningful coverage means tests around real failure modes:
+
+- invalid input
+- rejected capability
+- malformed payload
+- policy denial
+- audit failure if applicable
+- metrics failure if applicable
+- rollback/no-mutation behavior
+
+Record before/after coverage if practical.
+
+## Workstream 8 — Doctrine Update
+
+Update docs so nobody can confuse this with live KV reuse.
+
+At minimum inspect/update:
+
+- `AGENTS.md`
+- `CODEX.md`
+- `docs/current_phase_status.md` or equivalent current status doc
+- `docs/architecture/simulator_to_live_migration.md`
+- KV/FORGE-K/FORGE-H/runtime docs touched by this work
+- `docs/reviews/live_integration_reality_check.md`
+- new `docs/reviews/phasei2_live_kv_enforcement_review.md`
+
+Required language:
+
+```text
+[PARTIAL LIVE ENFORCEMENT] PhaseI2 enforces deterministic KV identity validation in selected live daemon paths. It does not enable live KV reuse, model runtime mutation, memory mutation, or FORGE-K live authority.
+
+Make clear:
+
+PhaseI1: live validation seam
+PhaseI2: live enforcement and observation
+Future phase: live KV reuse candidate, not implemented
+Workstream 9 — CI / Test Hygiene Follow-Through
+
+Verify PhaseI1 CI/test hygiene did not regress.
+
+Confirm:
+
+integration env var skips remain loud and documented
+slow gateway smoke test remains isolated or documented
+root Phase*.txt clutter remains handled
+normal local test loop remains fast
+full test command remains documented
+Nix check remains documented
+
+Do not silently weaken test expectations.
+
+Acceptance Criteria
+
+PhaseI2 is complete only if:
+
+live KV identity validation is routed through an explicit enforcement policy
+invalid/malformed/unsupported identity claims fail closed
+enforcement decisions are auditable
+enforcement decisions are observable through metrics/counters
+no live KV reuse is enabled
+no model runtime mutation is enabled
+no memory mutation is enabled
+FORGE-K remains simulator-only
+simulator/live package boundary tests still pass
+FORGE-H immutability tests still pass
+rule/autonomy agents remain propose-only
+docs clearly mark this as [PARTIAL LIVE ENFORCEMENT]
+tests prove accepted and rejected paths
+go test ./... passes
+go vet ./... passes
+nix flake check passes if available
+Completion Report
+
+At the end, produce a concise report:
+
+PhaseI2 status: PASS / PARTIAL / FAIL
+What enforcement was added
+What live paths now require KV identity validation
+What remains validation-only
+What remains simulator-only
+What remains future
+Audit events added or confirmed
+Metrics/counters added or confirmed
+Tests added
+Coverage before/after if available
+Docs updated
+Known risks
+Recommended PhaseI3 target
+What Not To Do
+Do not claim FORGE-K is live.
+Do not enable live KV reuse.
+Do not wire simulator KVService into live daemon authority.
+Do not add model runtime mutation.
+Do not add memory mutation.
+Do not create a second commit path.
+Do not bypass Control Lane.
+Do not bypass gateway/capability checks.
+Do not remove safety fences.
+Do not weaken FORGE-H immutability.
+Do not let rule/autonomy agents commit directly.
+Do not hide integration test skips.
+Do not add broad architecture docs without matching code/tests.
+Do not write victory language unless tests prove the claim.

@@ -8,6 +8,8 @@ FORGE-K simulator packages define target authority behavior. Live daemon integra
 
 Phase i1 demonstrates the preferred pattern with deterministic KV identity validation.
 
+PhaseI2 extends that pattern with `[PARTIAL LIVE ENFORCEMENT]`: live Control Lane code wraps the pure validator in a live-side policy layer that fails closed, records audit fields, and increments internal counters. The simulator service remains simulator-only.
+
 ## Migration Pattern
 
 1. Identify the smallest pure deterministic contract.
@@ -28,6 +30,16 @@ Phase i1 demonstrates the preferred pattern with deterministic KV identity valid
 | Live action | `VALIDATE_KV_IDENTITY` |
 | Capability | `kv.identity.validate` |
 | Mutation posture | validation-only; no memory/runtime mutation; no live KV reuse |
+
+## PhaseI2 Enforcement Example
+
+| Concern | Decision |
+| --- | --- |
+| Enforcement policy | `services/core/internal/aios/controllane/kv_enforcement.go` |
+| Metrics | `KVIdentityEnforcementCounters`, internal process counters only |
+| Audit | Existing Control Lane audit record with `kvIdentityEnforcement` fields |
+| Rejected inputs | gate mismatch, malformed payload, unavailable manifest, explicit or ambiguous live KV reuse request |
+| Still future | live KV reuse, runtime cache lookup, tokenizer-specific token IDs, exported metrics |
 
 ## Live-Safe Shared Package Rules
 

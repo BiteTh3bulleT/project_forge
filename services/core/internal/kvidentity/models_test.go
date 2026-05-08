@@ -1,6 +1,7 @@
 package kvidentity
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -40,6 +41,32 @@ func TestValidateIdentityFailsClosedForUnavailableManifest(t *testing.T) {
 	}
 	if !hasString(result.FailedGates, GateManifestAvailable) {
 		t.Fatalf("missing manifest gate failure: %v", result.FailedGates)
+	}
+}
+
+func TestValidateIdentityRejectsEmptyInput(t *testing.T) {
+	result := ValidateIdentity("result-empty", ManifestIdentity{}, RequestIdentity{}, true, testKVTime())
+	if result.Passed {
+		t.Fatalf("expected empty identity input to fail")
+	}
+	if len(result.FailedGates) == 0 {
+		t.Fatalf("expected failed gates for empty input")
+	}
+}
+
+func TestValidateIdentityIsIndependentOfTimeForGateOutcome(t *testing.T) {
+	manifest := testManifestIdentity()
+	request := testRequestIdentity()
+	left := ValidateIdentity("result-1", manifest, request, true, testKVTime())
+	right := ValidateIdentity("result-2", manifest, request, true, testKVTime().Add(24*time.Hour))
+	if left.Passed != right.Passed {
+		t.Fatalf("pass result changed with time: left=%v right=%v", left.Passed, right.Passed)
+	}
+	if strings.Join(left.FailedGates, ",") != strings.Join(right.FailedGates, ",") {
+		t.Fatalf("failed gates changed with time: left=%v right=%v", left.FailedGates, right.FailedGates)
+	}
+	if strings.Join(left.Warnings, ",") != strings.Join(right.Warnings, ",") {
+		t.Fatalf("warnings changed with time: left=%v right=%v", left.Warnings, right.Warnings)
 	}
 }
 

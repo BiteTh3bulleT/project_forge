@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"forge/projectforge/services/core/internal/aios/domain"
-	"forge/projectforge/services/core/internal/kvidentity"
 )
 
 func (p *Processor) normalize(req domain.SyscallRequest) domain.SyscallRequest {
@@ -65,28 +64,11 @@ func (p *Processor) apply(ctx context.Context, store SemanticStore, req domain.S
 }
 
 func applyValidateKVIdentity(req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {
-	manifest := kvManifestIdentityFromPayload(req.Payload["manifest"])
-	request := kvRequestIdentityFromPayload(req.Payload["request"])
-	result := kvidentity.ValidateIdentity(req.ID+":kv_identity_validation", manifest, request, liveKVManifestHitEligible(manifest.Status), millisToTime(req.RequestedAt))
-	summary := map[string]any{
-		"kvIdentityValidation": result,
-		"passed":               result.Passed,
-		"candidateCacheId":     result.CandidateCacheID,
-		"failedGates":          append([]string{}, result.FailedGates...),
-		"warnings":             append([]string{}, result.Warnings...),
-		"accelerationOnly":     true,
-		"memoryMutation":       false,
-		"runtimeMutation":      false,
-		"liveKVReuse":          false,
+	decision := EnforceKVIdentity(req)
+	if !decision.Accepted {
+		return nil, nil, nil, []domain.SyscallError{decision.ToSyscallError()}
 	}
-	if !result.Passed {
-		return nil, nil, nil, []domain.SyscallError{{
-			Code:    domain.ErrInvalidPayload,
-			Field:   "payload.request",
-			Message: "KV identity validation failed: " + strings.Join(result.FailedGates, ","),
-		}}
-	}
-	return nil, summary, result.Warnings, nil
+	return nil, decision.ToStateSummary(), decision.Warnings, nil
 }
 
 func applyCreateNote(store SemanticStore, req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {
