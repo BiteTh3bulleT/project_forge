@@ -86,16 +86,17 @@ References:
 
 ## FORGE-OS Host Substrate
 
-Phase N2 adds private NixOS host substrate scaffolding for `/forge`, the `forge-core` service shape, and host diagnostics report directories. Phase N3 adds a read-only Host Kernel Bridge diagnostic library at `services/core/internal/hostbridge`. Phase N4 adds the advisory FORGE-H resource policy layer at `services/core/internal/forgeh`. Phase G1 adds the opt-in FORGE graphical shell session foundation with disabled-by-default NixOS module scaffolding and safe environment wiring. Phase G2 adds `packages.forge-shell-session` and `apps.forge-shell-session`, a manual safe-mode launcher for the existing Tauri shell binary paths. Phase G3 adds `packages.forge-desktop-shell` and `apps.forge-desktop-shell` as a stable desktop-shell command surface. Phase G3.5 upgrades that surface to a real Nix-built Tauri package containing the `forge_desktop` binary and the stable `forge-desktop-shell` wrapper.
+Phase N2 adds private NixOS host substrate scaffolding for `/forge`, the `forge-core` service shape, and host diagnostics report directories. Phase N3 adds a read-only Host Kernel Bridge diagnostic library at `services/core/internal/hostbridge`. Phase N4 adds the advisory FORGE-H resource policy layer at `services/core/internal/forgeh`. Phase G1 adds the opt-in FORGE graphical shell session foundation with disabled-by-default NixOS module scaffolding and safe environment wiring. Phase G2 adds `packages.forge-shell-session` and `apps.forge-shell-session`, a manual safe-mode launcher for the existing Tauri shell binary paths. Phase G3 adds `packages.forge-desktop-shell` and `apps.forge-desktop-shell` as a stable desktop-shell command surface. Phase G3.5 upgrades that surface to a real Nix-built Tauri package containing the `forge_desktop` binary and the stable `forge-desktop-shell` wrapper. Phase G4 is the opt-in Wayland session integration lane: NixOS remains the substrate, a lightweight compositor such as Cage hosts the session, and the launch path remains `forge-shell-session` to preserve safe defaults and packaged-shell selection.
 
 Host diagnostics are operational evidence only. They do not become semantic memory, live FORGE-K authority, gateway authority, modelruntime authority, or autonomous host control.
 
-The Phase G3.5 graphical shell package surface is not a desktop replacement yet. It does not autostart, enable autologin, install or require a compositor, run host commands, restart services, mutate NixOS configuration, call modelruntime, write memory, change public APIs, or route live authority through FORGE-K.
+The Phase G4 graphical shell session is still opt-in. It may expose a selectable Wayland session when explicitly enabled, but it must not autostart, enable autologin, remove normal desktop or TTY fallback, run host commands, restart services, mutate NixOS configuration, call modelruntime, write memory, change public APIs, or route live authority through FORGE-K.
 
 References:
 
 - `docs/adr/0007-forge-os-host-substrate.md`
 - `docs/adr/0011-forge-graphical-shell-session.md`
+- `docs/adr/0012-forge-wayland-shell-session.md`
 - `docs/architecture/forge_os_host_substrate.md`
 - `docs/architecture/forge_graphical_shell.md`
 - `docs/architecture/forge_host_kernel_bridge.md`
@@ -212,6 +213,8 @@ nix run .#forge-shell-session
 ```
 
 `forge-shell-session` sets safe shell-mode environment variables and prefers `FORGE_SHELL_BINARY`, then the Nix `forge-desktop-shell` package that now contains the real Tauri binary, then existing `apps/desktop/src-tauri/target/{release,debug}/forge_desktop` binaries. If the Tauri binary is missing, it exits non-zero with the build commands instead of pretending the shell launched.
+
+Phase G4 Wayland session integration is selected only through explicit NixOS configuration and session choice. The intended flow is display-manager session selection, then a lightweight Wayland compositor such as Cage, then `forge-shell-session`, then the packaged `forge-desktop-shell`, then local `forge-core`.
 
 Container commands:
 

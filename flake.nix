@@ -33,6 +33,9 @@
           forge-shell-session = pkgs.callPackage ./nix/packages/forge-shell-session.nix {
             forgeDesktopShell = self.packages.${system}.forge-desktop-shell;
           };
+          forge-wayland-session = pkgs.callPackage ./nix/packages/forge-wayland-session.nix {
+            forge-shell-session = self.packages.${system}.forge-shell-session;
+          };
           default = self.packages.${system}.forge-core;
         };
 
@@ -48,6 +51,10 @@
           forge-desktop-shell = {
             type = "app";
             program = "${self.packages.${system}.forge-desktop-shell}/bin/forge-desktop-shell";
+          };
+          forge-wayland-session = {
+            type = "app";
+            program = "${self.packages.${system}.forge-wayland-session}/bin/forge-wayland-session";
           };
           default = self.apps.${system}.forge-core;
         };
@@ -67,6 +74,9 @@
           go-vet = pkgs.callPackage ./nix/checks/go-vet.nix { };
           forge-shell-session = pkgs.callPackage ./nix/checks/forge-shell-session.nix {
             forge-shell-session = self.packages.${system}.forge-shell-session;
+          };
+          forge-wayland-session = pkgs.callPackage ./nix/checks/forge-wayland-session.nix {
+            forge-wayland-session = self.packages.${system}.forge-wayland-session;
           };
           js-build = pkgs.callPackage ./nix/checks/js-build.nix { };
         };

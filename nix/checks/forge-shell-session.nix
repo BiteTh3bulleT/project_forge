@@ -42,8 +42,17 @@ stdenv.mkDerivation {
     grep -F 'options.forge.shellSession' "$module"
     grep -F 'enable = lib.mkEnableOption' "$module"
     grep -F 'default = false;' "$module"
+    grep -F 'default = "wayland";' "$module"
+    grep -F 'compositor = lib.mkOption' "$module"
+    grep -F 'fullscreen = lib.mkOption' "$module"
+    grep -F 'options.forge.shellSession.wayland' "$module"
+    grep -F 'sessionName = lib.mkOption' "$module"
+    grep -F 'environment.etc."xdg/wayland-sessions/' "$module"
+    grep -F 'services.displayManager.autoLogin.enable = lib.mkDefault false;' "$module"
     grep -F 'assertion = cfg.autoStart == false;' "$module"
     grep -F 'assertion = cfg.safeMode == true;' "$module"
+    grep -F 'assertion = cfg.fullscreen == true;' "$module"
+    grep -F 'assertion = cfg.wayland.enable == true;' "$module"
 
     forbidden='systemctl|nixos-rebuild|modprobe|rmmod|reboot|shutdown|apt-get|dnf|zypper|pacman|LoadModel|UnloadModel|GenerateStream|semantic memory write|os.RemoveAll|rm -rf'
     if grep -E "$forbidden" "$wrapper"; then

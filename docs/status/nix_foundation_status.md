@@ -1,7 +1,7 @@
 # Nix Foundation Status (Phase N1 truth check)
 
 Date: 2026-05-08
-Scope: light Nix foundation plus G3.5 graphical shell package status
+Scope: light Nix foundation plus G3.5 graphical shell package status and G4 Wayland session lane
 
 ## Presence and structure
 
@@ -15,7 +15,7 @@ Scope: light Nix foundation plus G3.5 graphical shell package status
 | `forge-desktop-shell` package/app | present, validated | Phase G3.5 stable command for the desktop shell package surface; the package advertises `passthru.containsTauriBinary = true`, builds the real Linux Tauri app, and exposes both `forge-desktop-shell` and `forge_desktop`. |
 | checks | present | `go-tests`, `go-vet`, `js-build`, plus shell-session wrapper checks when exposed by the current flake. |
 | tool capsules | README-only | Deferred scaffold. |
-| NixOS modules | README-only | Deferred scaffold. |
+| NixOS modules | present for shell session scaffolding | The G4 lane documents opt-in Wayland session integration on top of this substrate; implementation must remain disabled by default. |
 | profiles | README-only | Deferred scaffold. |
 
 ## Fake-hash status
@@ -39,8 +39,8 @@ Safe now:
 
 Not complete yet:
 - Clean `forge-core` Nix build path.
-- Compositor/session integration for using FORGE as a full desktop shell. The package exists, but it does not autostart or replace the user's desktop.
-- Tool capsules/NixOS modules/profiles execution integration.
+- Deeper compositor/window-manager behavior beyond the first G4 fullscreen Wayland session. The implemented G4 path is selectable session -> Cage substrate -> `forge-shell-session` -> packaged `forge-desktop-shell`; it must not autostart or replace the user's desktop.
+- Tool capsules/profiles execution integration.
 
 ## G3.5 graphical shell package commands
 
@@ -68,7 +68,21 @@ local Tauri binary directly. None of these paths add compositor integration,
 autologin, desktop replacement, service control, host mutation, modelruntime
 mutation, semantic memory writes, or FORGE-K live authority.
 
-README and AGENTS now record the G3.5 package boundary.
+README and AGENTS now record the G3.5 package boundary and G4 Wayland session boundary.
+
+## G4 Wayland shell session lane
+
+G4 is the opt-in session integration lane, not a new authority plane. NixOS/Linux remains the boot, display-manager, package, service, and rollback substrate. The preferred compositor substrate is Cage when cleanly available through Nixpkgs. The implemented `forge-wayland-session` wrapper and generated Wayland session descriptor launch `forge-shell-session`, preserve safe environment defaults, honor `FORGE_CORE_URL`, and fail loudly if the compositor or shell wrapper is unavailable.
+
+Required safe posture:
+
+- `forge.shellSession.enable = false` by default.
+- `forge.shellSession.autoStart = false` by default.
+- `forge.shellSession.safeMode = true` by default.
+- normal desktop sessions remain selectable.
+- TTY fallback remains available.
+- no autologin by default.
+- no host mutation, direct service control, NixOS rebuild, package-manager mutation, kernel-module command, modelruntime mutation, semantic memory write, or FORGE-K live authority from shell/session code.
 
 ## Must wait
 

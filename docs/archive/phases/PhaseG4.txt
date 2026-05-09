@@ -1,108 +1,169 @@
-# FORGE Phase G3.5 — Real Tauri Nix Build
+# FORGE Phase G4 — Wayland Shell Session Integration
 
 You are working in the `project_forge` repository.
 
-Phase G3 added the `forge-desktop-shell` package surface, but it is currently a launcher placeholder with `passthru.containsTauriBinary = false`.
+Phase G3.5 is complete. It may have been mislabeled as G4 in local notes, but the actual completed work is:
+- `packages.forge-desktop-shell`
+- `apps.forge-desktop-shell`
+- real Tauri/Nix desktop shell package
+- `passthru.containsTauriBinary = true`
+- `forge-shell-session` prefers the packaged shell when available
 
-Now implement Phase G3.5: build the actual FORGE Tauri desktop shell through Nix.
+Now implement the actual Phase G4: Wayland Shell Session Integration.
 
 ## Goal
 
-Turn `packages.forge-desktop-shell` from a placeholder into a real Nix-built desktop shell package that contains the actual FORGE Tauri binary.
+Wire the packaged FORGE graphical shell into an actual opt-in NixOS Wayland shell session.
 
-The target:
+Target flow:
 
-```bash
-nix build .#forge-desktop-shell
-nix run .#forge-desktop-shell
-nix run .#forge-shell-session
+NixOS login/session selection
+  → FORGE Shell Session
+  → lightweight Wayland substrate
+  → `forge-shell-session`
+  → `forge-desktop-shell`
+  → local `forge-core`
 
-forge-shell-session should then detect that forge-desktop-shell.passthru.containsTauriBinary = true and prefer the packaged shell before local fallback paths.
-
-Doctrine
-FORGE is the graphical shell interface.
+FORGE becomes the graphical shell interface.
 NixOS/Linux remains the substrate.
-G3.5 must not replace the desktop.
-G3.5 must not enable autologin.
-G3.5 must not install, start, or require a compositor.
-G3.5 must not mutate host state.
-G3.5 must not run systemctl.
-G3.5 must not run nixos-rebuild.
-G3.5 must not load/unload models.
-G3.5 must not write semantic memory.
-G3.5 must not bypass gateway, permissions, lanes, audit, controllane, memory, modelruntime, FORGE-H, or FORGE-K authority.
-Build Scope
 
-Update or add:
+## Doctrine
 
-nix/packages/forge-desktop-shell.nix
-nix/checks/forge-desktop-shell.nix
-nix/checks/forge-shell-session.nix
-flake.nix
-docs/operations/forge_graphical_shell_session.md
-docs/architecture/forge_graphical_shell.md
+- FORGE is the graphical shell interface.
+- NixOS/Linux remains the boot, hardware, service, package, and display substrate.
+- G4 must be opt-in.
+- G4 must not enable autologin by default.
+- G4 must not replace KDE/GNOME/other sessions by default.
+- G4 must not remove normal desktop fallback.
+- G4 must not remove TTY fallback.
+- G4 must not mutate host state directly.
+- G4 must not run `systemctl` control commands from shell code.
+- G4 must not run `nixos-rebuild`.
+- G4 must not load/unload kernel modules.
+- G4 must not load/unload models.
+- G4 must not write semantic memory directly.
+- G4 must not bypass gateway, permissions, lanes, audit, controllane, memory, modelruntime, FORGE-H, or FORGE-K authority.
+
+## Build Scope
+
+Add or update:
+
+- `nix/nixos/modules/forge-shell-session.nix`
+- `nix/packages/forge-shell-session.nix`
+- optional `nix/packages/forge-wayland-session.nix`
+- `flake.nix`
+- `nix/checks/forge-shell-session.nix`
+- optional `nix/checks/forge-wayland-session.nix`
+- `docs/architecture/forge_graphical_shell.md`
+- `docs/operations/forge_graphical_shell_session.md`
+- optional ADR: `docs/adr/0012-forge-wayland-shell-session.md`
 
 Do not break:
 
-packages.forge-core
-apps.forge-core
-packages.forge-shell-session
-apps.forge-shell-session
-Desktop App Inputs
+- `packages.forge-core`
+- `apps.forge-core`
+- `packages.forge-desktop-shell`
+- `apps.forge-desktop-shell`
+- `packages.forge-shell-session`
+- `apps.forge-shell-session`
 
-Use the existing desktop shell:
+## Required Session Model
 
-frontend workspace: apps/desktop
-package name: @forge/desktop
-Tauri Rust crate: apps/desktop/src-tauri
-expected binary: forge_desktop
-stable wrapper command: forge-desktop-shell
+Add support for an opt-in Wayland shell session.
 
-Inspect current package.json, lockfiles, Cargo files, Tauri config, and build scripts before choosing the exact Nix strategy.
+Preferred substrate:
 
-Nix Build Strategy
+- Cage, if cleanly available through Nixpkgs
 
-Implement the most reliable Nix build path for the Tauri app.
+Conceptual launch:
 
-Expected concerns:
+```text
+cage -- forge-shell-session
 
-npm dependency vendoring/hash
-Cargo dependency vendoring/hash
-Tauri build requirements
-WebKit/GTK/Linux desktop runtime libraries
-frontend build artifacts
-Rust binary output path
-wrapper runtime environment
+The session should use forge-shell-session, not bypass it, because forge-shell-session already owns the safe shell environment and packaged shell selection.
 
-If dependency hashes are missing, let Nix fail with the expected hash and document the update process. Do not hardcode fake hashes.
+NixOS Module Options
 
-Package Output
+Extend forge.shellSession options as needed:
 
-packages.forge-desktop-shell must provide:
+forge.shellSession.enable
+forge.shellSession.mode
+forge.shellSession.displayBackend
+forge.shellSession.compositor
+forge.shellSession.package
+forge.shellSession.user
+forge.shellSession.autoStart
+forge.shellSession.coreURL
+forge.shellSession.safeMode
+forge.shellSession.fullscreen
+forge.shellSession.runtimePath
+forge.shellSession.wayland.enable
+forge.shellSession.wayland.package
+forge.shellSession.wayland.sessionName
 
-/bin/forge-desktop-shell
+Safe defaults:
 
-Preferred also:
+enable = false
+mode = "fullscreen-shell"
+displayBackend = "wayland"
+compositor = "cage"
+autoStart = false
+coreURL = "http://127.0.0.1:18492"
+safeMode = true
+fullscreen = true
 
-/bin/forge_desktop
+Host/system authority flags must remain false:
 
-The stable command remains:
+hostMutation = false
+directSystemControl = false
+modelMutation = false
+semanticMemoryWrite = false
+forgeKLiveAuthority = false
 
-forge-desktop-shell
+If these flags are not explicit options yet, keep them explicit in generated environment/session files.
 
-Once the actual Tauri binary is present, set:
+Session Entry
 
-passthru.containsTauriBinary = true;
+Create a real session descriptor where appropriate.
 
-If the package still cannot build the real Tauri binary, keep:
+Acceptable output examples:
 
-passthru.containsTauriBinary = false;
+a Wayland session .desktop file
+a package-provided session launcher
+a NixOS module-generated session file
+a manual forge-wayland-session command
 
-and fail honestly with exact limitation notes.
+The session should be selectable or launchable without replacing the current desktop.
 
-Runtime Environment
+Do not enable it automatically.
 
-The stable wrapper must preserve:
+Do not enable autologin.
+
+Do not disable other sessions.
+
+Package / Wrapper
+
+If adding a package like forge-wayland-session, it should provide:
+
+/bin/forge-wayland-session
+
+It should:
+
+Set/confirm safe shell environment variables.
+Launch the configured lightweight Wayland compositor.
+Launch forge-shell-session inside it.
+Fail loudly if the compositor or shell binary is unavailable.
+Never run host mutation commands.
+
+Preferred selection:
+
+forge-wayland-session
+  → cage
+  → forge-shell-session
+  → forge-desktop-shell
+Environment Variables
+
+Preserve:
 
 FORGE_SHELL_SESSION_ENABLED=true
 FORGE_SHELL_MODE=fullscreen-shell
@@ -118,69 +179,101 @@ FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false
 
 Allow FORGE_CORE_URL override.
 
-Do not add host/system mutation commands.
+Safety / Fallback
 
-Update forge-shell-session
+Preserve fallback paths:
 
-Ensure forge-shell-session keeps this selection order:
+existing desktop environment
+TTY login
+manual nix run .#forge-shell-session
+manual nix run .#forge-desktop-shell
+FORGE_SHELL_BINARY=/path/to/forge_desktop
+disabling forge.shellSession.enable
+no deletion or migration of /forge
 
-FORGE_SHELL_BINARY, if executable
-Nix-packaged forge-desktop-shell, only if containsTauriBinary = true
-local apps/desktop/src-tauri/target/release/forge_desktop
-local apps/desktop/src-tauri/target/debug/forge_desktop
-loud failure with exact build steps
+Rollback must be documented clearly.
 
-Do not remove fallback behavior.
+Display Manager Behavior
 
+If integrating with a display manager, keep it conservative.
+
+Allowed:
+
+make FORGE Shell appear as an available session when explicitly enabled
+document how to select it
+
+Forbidden:
+
+defaulting to FORGE Shell automatically
+enabling autologin
+removing current sessions
+replacing display manager configuration without explicit opt-in
 Checks
 
 Add or update checks for:
 
-forge-desktop-shell package exists
-stable /bin/forge-desktop-shell exists
-actual Tauri binary exists if containsTauriBinary = true
-forge-shell-session still exists
-forge-shell-session prefers packaged shell only when containsTauriBinary = true
-FORGE_SHELL_BINARY override still works
-safe env defaults remain
-no systemctl
-no nixos-rebuild
-no modprobe / rmmod
-no reboot/shutdown
-no package-manager mutation at runtime
-no modelruntime load/unload/spawn calls
-no direct semantic memory write calls
-shell session module remains disabled by default
-autoStart remains false by default
+forge.shellSession.enable remains false by default.
+autoStart remains false by default.
+safe mode remains true by default.
+Wayland session wrapper exists if implemented.
+session wrapper launches forge-shell-session.
+session wrapper preserves safe environment defaults.
+session wrapper does not directly launch host commands.
+no systemctl start.
+no systemctl stop.
+no systemctl restart.
+no nixos-rebuild.
+no modprobe.
+no rmmod.
+no reboot/shutdown.
+no package-manager mutation at runtime.
+no modelruntime load/unload/spawn.
+no direct semantic memory writes.
+no live FORGE-K authority import.
+existing forge-desktop-shell package remains exposed.
+existing forge-shell-session app remains exposed.
 Documentation
 
-Update docs/operations/forge_graphical_shell_session.md with:
+Update docs/architecture/forge_graphical_shell.md:
 
-exact build command
-exact run command
-whether Tauri is now fully packaged
-how to update npm/Cargo hashes
-required Linux runtime dependencies
-fallback path if package build fails
-FORGE_CORE_URL override
-FORGE_SHELL_BINARY override
-rollback notes
+G4 status
+Wayland session role
+Cage/lightweight compositor substrate
+why FORGE is the shell but not the compositor/kernel
+shell-to-core boundary
+system context principle
+safety/rollback model
 
-Update docs/architecture/forge_graphical_shell.md with:
+Update docs/operations/forge_graphical_shell_session.md:
 
-G3.5 package status
-whether containsTauriBinary is true
-shell-session selection behavior
-statement that compositor/session integration is still future G4
+how to build the desktop shell
+how to run manually
+how to enable the Wayland session module
+how to launch/select FORGE Shell session
+how to rollback from TTY
+how to disable the shell session
+known limitations
+
+Optional ADR 0012 should state:
+
+FORGE Wayland shell session is accepted
+NixOS remains substrate
+Cage/lightweight compositor is a substrate choice, not FORGE authority
+G4 is opt-in
+no autologin by default
+no desktop replacement by default
+no host mutation
+no authority migration
 Acceptance Criteria
-nix build .#forge-desktop-shell attempts the real desktop/Tauri build.
-forge-desktop-shell provides a stable executable.
-If real Tauri packaging succeeds, containsTauriBinary = true.
-If real Tauri packaging is still blocked, failure is honest and documented.
-forge-shell-session still preserves G2/G3 fallback behavior.
-No autologin is enabled.
-No desktop replacement is enabled.
-No compositor is installed/required.
+G3.5 mislabeled-as-G4 references are corrected or clarified.
+G4 is documented as Wayland Shell Session Integration.
+A real opt-in Wayland session path exists.
+Session path launches forge-shell-session.
+forge-shell-session launches the packaged forge-desktop-shell.
+Session remains disabled by default.
+Autologin remains disabled by default.
+Existing desktop/session fallback remains available.
+TTY fallback remains available.
 No host mutation is introduced.
 No service control is introduced.
 No NixOS rebuild behavior is introduced.
@@ -188,16 +281,21 @@ No kernel/module behavior is introduced.
 No modelruntime load/unload behavior is introduced.
 No direct semantic memory writes are introduced.
 No live FORGE-K authority migration occurs.
+Existing checks pass.
 WHAT NOT TO DO
+Do not call G3.5 Tauri packaging work G4.
+Do not replace the user’s desktop by default.
+Do not enable autologin by default.
+Do not remove normal desktop fallback.
+Do not remove TTY fallback.
 Do not build a web dashboard and call it the shell.
-Do not replace the desktop.
-Do not enable autologin.
-Do not install or require a compositor.
-Do not implement a custom compositor.
+Do not make this remote-only.
+Do not make FORGE the compositor.
+Do not implement a custom compositor in G4.
 Do not run systemctl start/stop/restart.
 Do not run nixos-rebuild.
-Do not load or unload kernel modules.
-Do not reboot or shut down the machine.
+Do not load/unload kernel modules.
+Do not reboot/shutdown.
 Do not install/remove/upgrade packages at runtime.
 Do not delete files or clean directories.
 Do not load/unload models.
@@ -205,5 +303,4 @@ Do not spawn model runtimes.
 Do not write directly to semantic memory.
 Do not add public unauthenticated routes.
 Do not bypass gateway, permissions, lanes, audit, controllane, memory, modelruntime, FORGE-H, or FORGE-K authority.
-Do not pretend the Tauri package is complete if it is not.
 Do not output code in chat; make repository changes only.

@@ -13,11 +13,26 @@ let
       "not-packaged"
     else
       cfg.package.pname or cfg.package.name or "forge-shell";
-  execLine =
+  sessionPackageName =
+    if cfg.wayland.sessionPackage == null then
+      "not-packaged"
+    else
+      cfg.wayland.sessionPackage.pname or cfg.wayland.sessionPackage.name or "forge-wayland-session";
+  compositorPackageName =
+    if cfg.wayland.package == null then
+      "not-packaged"
+    else
+      cfg.wayland.package.pname or cfg.wayland.package.name or cfg.compositor;
+  shellExecLine =
     if cfg.package == null then
       "${pkgs.runtimeShell} -lc \"echo 'FORGE graphical shell package is not wired; set forge.shellSession.package = pkgs.forge-shell-session' >&2; exit 1\""
     else
       "${cfg.package}/bin/forge-shell-session";
+  waylandExecLine =
+    if cfg.wayland.sessionPackage == null || cfg.wayland.package == null || cfg.package == null then
+      "${pkgs.runtimeShell} -lc \"echo 'FORGE Wayland shell session is not wired; set forge.shellSession.package, wayland.package, and wayland.sessionPackage' >&2; exit 1\""
+    else
+      "env FORGE_CORE_URL=${cfg.coreURL} VITE_FORGE_API_URL=${cfg.coreURL} FORGE_SHELL_MODE=${cfg.mode} FORGE_SHELL_DISPLAY_BACKEND=${cfg.displayBackend} FORGE_SHELL_COMPOSITOR=${cfg.compositor} FORGE_SHELL_SAFE_MODE=${boolString cfg.safeMode} FORGE_SHELL_FULLSCREEN=${boolString cfg.fullscreen} FORGE_SHELL_RUNTIME_DIR=${cfg.runtimePath} FORGE_WAYLAND_COMPOSITOR=${cfg.wayland.package}/bin/${cfg.compositor} FORGE_SHELL_SESSION_BINARY=${cfg.package}/bin/forge-shell-session ${cfg.wayland.sessionPackage}/bin/forge-wayland-session";
 in
 {
   imports = [
@@ -30,7 +45,7 @@ in
     mode = lib.mkOption {
       type = lib.types.enum [ "fullscreen-shell" ];
       default = "fullscreen-shell";
-      description = "FORGE graphical shell launch mode. Phase G1/G2 only supports fullscreen-shell.";
+      description = "FORGE graphical shell launch mode. Phase G4 supports fullscreen-shell.";
     };
 
     package = lib.mkOption {
@@ -53,13 +68,19 @@ in
         "x11"
       ];
       default = "wayland";
-      description = "Display backend metadata for the FORGE graphical shell session scaffold.";
+      description = "Display backend metadata for the FORGE graphical shell session.";
+    };
+
+    compositor = lib.mkOption {
+      type = lib.types.enum [ "cage" ];
+      default = "cage";
+      description = "Lightweight Wayland compositor command used by the opt-in FORGE shell session.";
     };
 
     autoStart = lib.mkOption {
       type = lib.types.bool;
       default = false;
-      description = "Reserved for a future phase. Phase G1/G2 must not autostart or replace an existing desktop.";
+      description = "Reserved for a future phase. Phase G4 must not autostart or replace an existing desktop.";
     };
 
     coreURL = lib.mkOption {
@@ -74,6 +95,12 @@ in
       description = "Keep the graphical shell in safe mode with host mutation and direct system control disabled.";
     };
 
+    fullscreen = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Run the FORGE graphical shell as a fullscreen shell surface.";
+    };
+
     runtimePath = lib.mkOption {
       type = lib.types.str;
       default = "${config.forge.storage.root}/runtime/shell-session";
@@ -81,21 +108,69 @@ in
     };
   };
 
+  options.forge.shellSession.wayland = {
+    enable = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = "Generate the opt-in FORGE Wayland session descriptor when forge.shellSession.enable is true.";
+    };
+
+    package = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      default = if pkgs ? cage then pkgs.cage else null;
+      defaultText = lib.literalExpression "pkgs.cage if available, otherwise null";
+      example = lib.literalExpression "pkgs.cage";
+      description = "Package providing the lightweight Wayland compositor used by the FORGE shell session.";
+    };
+
+    sessionPackage = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      default = if pkgs ? forge-wayland-session then pkgs.forge-wayland-session else null;
+      defaultText = lib.literalExpression "pkgs.forge-wayland-session if available, otherwise null";
+      example = lib.literalExpression "pkgs.forge-wayland-session";
+      description = "Package providing /bin/forge-wayland-session.";
+    };
+
+    sessionName = lib.mkOption {
+      type = lib.types.str;
+      default = "forge-shell";
+      description = "Wayland session descriptor name, without the .desktop suffix.";
+    };
+  };
+
   config = lib.mkIf cfg.enable {
     assertions = [
       {
         assertion = cfg.mode == "fullscreen-shell";
-        message = "Phase G1/G2 supports only forge.shellSession.mode = fullscreen-shell.";
+        message = "Phase G4 supports only forge.shellSession.mode = fullscreen-shell.";
       }
       {
         assertion = cfg.autoStart == false;
-        message = "Phase G1/G2 FORGE graphical shell session must not autostart or replace the user's desktop.";
+        message = "Phase G4 FORGE graphical shell session must not autostart or replace the user's desktop.";
       }
       {
         assertion = cfg.safeMode == true;
-        message = "Phase G2 FORGE graphical shell session must remain in safe mode.";
+        message = "Phase G4 FORGE graphical shell session must remain in safe mode.";
+      }
+      {
+        assertion = cfg.fullscreen == true;
+        message = "Phase G4 FORGE graphical shell session must remain fullscreen.";
+      }
+      {
+        assertion = cfg.displayBackend == "wayland";
+        message = "Phase G4 FORGE graphical shell session supports only the Wayland display backend.";
+      }
+      {
+        assertion = cfg.compositor == "cage";
+        message = "Phase G4 FORGE graphical shell session supports only the cage compositor.";
+      }
+      {
+        assertion = cfg.wayland.enable == true;
+        message = "Phase G4 FORGE graphical shell session requires forge.shellSession.wayland.enable = true when forge.shellSession.enable is true.";
       }
     ];
+
+    services.displayManager.autoLogin.enable = lib.mkDefault false;
 
     systemd.tmpfiles.rules = [
       "d ${cfg.runtimePath} 0750 ${cfg.user} ${config.forge.storage.group} -"
@@ -106,9 +181,12 @@ in
       FORGE_SHELL_MODE=${cfg.mode}
       FORGE_SHELL_PACKAGE=${packageName}
       FORGE_SHELL_DISPLAY_BACKEND=${cfg.displayBackend}
+      FORGE_SHELL_COMPOSITOR=${cfg.compositor}
+      FORGE_SHELL_WAYLAND_PACKAGE=${compositorPackageName}
+      FORGE_SHELL_WAYLAND_SESSION_PACKAGE=${sessionPackageName}
       FORGE_CORE_URL=${cfg.coreURL}
       FORGE_SHELL_SAFE_MODE=${boolString cfg.safeMode}
-      FORGE_SHELL_FULLSCREEN=true
+      FORGE_SHELL_FULLSCREEN=${boolString cfg.fullscreen}
       FORGE_SHELL_AUTOSTART=false
       FORGE_SHELL_HOST_MUTATION=false
       FORGE_SHELL_DIRECT_SYSTEM_CONTROL=false
@@ -121,13 +199,33 @@ in
     environment.etc."forge/shell-session.desktop".text = ''
       [Desktop Entry]
       Name=FORGE Graphical Shell
-      Comment=FORGE graphical shell session scaffold
+      Comment=FORGE graphical shell launcher
       Type=Application
-      Exec=${execLine}
+      Exec=${shellExecLine}
       X-FORGE-Mode=${cfg.mode}
       X-FORGE-DisplayBackend=${cfg.displayBackend}
       X-FORGE-SafeMode=${boolString cfg.safeMode}
       X-FORGE-AutoStart=false
+    '';
+
+    environment.etc."xdg/wayland-sessions/${cfg.wayland.sessionName}.desktop".text = ''
+      [Desktop Entry]
+      Name=FORGE Shell Session
+      Comment=Opt-in FORGE Wayland graphical shell session
+      Type=Application
+      DesktopNames=FORGE
+      Exec=${waylandExecLine}
+      X-FORGE-Mode=${cfg.mode}
+      X-FORGE-DisplayBackend=wayland
+      X-FORGE-Compositor=${cfg.compositor}
+      X-FORGE-SafeMode=${boolString cfg.safeMode}
+      X-FORGE-Fullscreen=${boolString cfg.fullscreen}
+      X-FORGE-AutoStart=false
+      X-FORGE-HostMutation=false
+      X-FORGE-DirectSystemControl=false
+      X-FORGE-ModelMutation=false
+      X-FORGE-SemanticMemoryWrite=false
+      X-FORGE-ForgeKLiveAuthority=false
     '';
   };
 }

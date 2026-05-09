@@ -1,8 +1,10 @@
 # FORGE Graphical Shell
 
-Phase G1 defines FORGE as the graphical shell session for a NixOS-based FORGE-OS machine. Phase G2 adds a manually launchable Nix wrapper for that shell session. Phase G3 defines the Nix-packaged desktop shell target while preserving the same safe session boundaries. Phase G3.5 is the real Tauri Nix build phase.
+Phase G1 defines FORGE as the graphical shell session for a NixOS-based FORGE-OS machine. Phase G2 adds a manually launchable Nix wrapper for that shell session. Phase G3 defines the Nix-packaged desktop shell target while preserving the same safe session boundaries. Phase G3.5 is the real Tauri Nix build phase. Phase G4 is the opt-in Wayland shell session integration lane.
 
 Current G3.5 status: `packages.forge-desktop-shell` and `apps.forge-desktop-shell` now point at a real Tauri build derivation and the package advertises `passthru.containsTauriBinary = true`. `nix build .#forge-desktop-shell` succeeds on Linux and produces both the stable `forge-desktop-shell` wrapper and the underlying `forge_desktop` binary.
+
+Current G4 status: the intended integration is a selectable Wayland session, not a desktop replacement by default. The target flow is display-manager/session selection -> lightweight Wayland compositor substrate, preferably Cage when cleanly available through Nixpkgs -> `forge-shell-session` -> packaged `forge-desktop-shell` -> local `forge-core`. `forge-shell-session` remains in the path because it owns safe shell environment defaults and binary selection.
 
 This is not a web dashboard controlling a headless server. FORGE is intended to become the visible operating interface: the desktop shell, launcher, workspace surface, command center, approval surface, and system context surface. NixOS remains the boot, hardware, graphics, service, and host configuration substrate.
 
@@ -20,9 +22,11 @@ This is not a web dashboard controlling a headless server. FORGE is intended to 
 
 FORGE is the graphical shell above NixOS. It is not the kernel, not the display server, not the package manager, and not a shortcut around existing FORGE authority boundaries.
 
-## G1/G2/G3/G3.5 Scope
+## G1/G2/G3/G3.5/G4 Scope
 
 G1 defines the shell session contract and an inert NixOS module foundation. G2 adds a `forge-shell-session` package and flake app that set safe shell-session environment variables and launch an existing local Tauri `forge_desktop` binary when one is available. G3 targets a Nix-buildable `forge-desktop-shell` package for the actual desktop/Tauri shell and wires the session wrapper to prefer that package when available. G3.5 implements the real Linux Tauri Nix build.
+
+G4 adds the documentation/status lane for the real session integration contract: a NixOS-provided, disabled-by-default Wayland session that can be selected manually without removing the user's normal desktop. It may introduce a `forge-wayland-session` wrapper or a module-generated Wayland session descriptor, but it must launch the existing `forge-shell-session` wrapper inside the compositor instead of bypassing it.
 
 The only G1/G2/G3/G3.5 launch mode is `fullscreen-shell`. Future modes may include:
 
@@ -31,7 +35,7 @@ The only G1/G2/G3/G3.5 launch mode is `fullscreen-shell`. Future modes may inclu
 - `remote-operator`
 - `multi-monitor-shell`
 
-Those modes are not implemented or promised by G1/G2/G3/G3.5.
+Those modes are not implemented or promised by G1/G2/G3/G3.5. G4 narrows the next step to the `fullscreen-shell` Wayland path.
 
 G1/G2/G3/G3.5 does not:
 
@@ -46,6 +50,16 @@ G1/G2/G3/G3.5 does not:
 - change modelruntime behavior
 - write semantic memory
 - route live authority through FORGE-K
+
+G4 must preserve the same authority boundaries. It may add selectable Wayland session plumbing, but it must not:
+
+- enable the session by default
+- enable autologin
+- remove KDE, GNOME, another desktop, or TTY fallback
+- run `systemctl`, `nixos-rebuild`, package-manager mutation, `modprobe`, `rmmod`, reboot, or shutdown commands from shell/session code
+- load, unload, or spawn model runtimes
+- write semantic memory directly
+- make FORGE-K live authority
 
 ## Shell Responsibilities
 
@@ -89,7 +103,7 @@ The `forge-shell-session` wrapper must select binaries in this order:
 
 The G2 local-binary fallback remains part of the G3.5 contract. Desktop-shell packages must be skipped by `forge-shell-session` until they advertise a real Tauri binary. Because the current package advertises `passthru.containsTauriBinary = true`, the wrapper is expected to prefer it after `FORGE_SHELL_BINARY`. `FORGE_CORE_URL` remains an environment override, defaulting to `http://127.0.0.1:18492`, and `VITE_FORGE_API_URL` should follow it for current desktop code paths.
 
-Nix/Tauri package limitations must remain explicit. The current G3.5 package is validated as a Linux Nix package. It does not add compositor integration, display-manager integration, autostart, desktop replacement, or host mutation.
+Nix/Tauri package limitations must remain explicit. The current G3.5 package is validated as a Linux Nix package. It does not add compositor integration, display-manager integration, autostart, desktop replacement, or host mutation. G4 is the separate opt-in compositor/session lane and does not change the G3.5 package truth.
 
 Exact operator commands:
 
@@ -131,6 +145,7 @@ Forbidden shell behavior:
 - enabling autologin
 - replacing the user's desktop/session choices
 - installing, starting, or requiring a compositor in G3.5
+- bypassing `forge-shell-session` in G4 Wayland launchers
 - direct kernel or module calls
 - direct modelruntime load/unload
 - direct filesystem cleanup
@@ -162,23 +177,28 @@ Do not dump raw full system state into prompts. Do not dump raw logs, raw deskto
 
 ## Safe Fallback And Rollback
 
-The G1 shell session must remain opt-in. G3.5 does not change the disabled-by-default posture. Future NixOS scaffolding should default to:
+The shell session must remain opt-in. G3.5 does not change the disabled-by-default posture, and G4 must keep the same conservative defaults:
 
 - `enable = false`
 - `mode = "fullscreen-shell"`
 - `displayBackend = "wayland"`
+- `compositor = "cage"`
 - `autoStart = false`
 - `coreURL = "http://127.0.0.1:18492"`
 - `safeMode = true`
+- `fullscreen = true`
 
-Autologin must not be enabled by default. Existing desktop environments must not be disabled by default. A normal desktop or TTY fallback must remain available. G3.5 does not introduce a compositor dependency, display-manager replacement, host mutation path, modelruntime mutation path, semantic memory write path, or FORGE-K live authority path.
+Autologin must not be enabled by default. Existing desktop environments must not be disabled by default. A normal desktop or TTY fallback must remain available. G4 may make a FORGE Shell session selectable when explicitly enabled, but it must not make that session the default automatically. G4 does not introduce a display-manager replacement, host mutation path, modelruntime mutation path, semantic memory write path, or FORGE-K live authority path.
 
 Rollback expectations:
 
 - disable the FORGE shell session option
+- select a normal desktop session from the display manager
+- use TTY login if the display session is broken
 - keep existing desktop/session choices available
 - keep `/forge` data intact
 - keep `forge-core` usable through existing workflows
+- keep manual `nix run .#forge-shell-session` and `nix run .#forge-desktop-shell` paths available
 - use `FORGE_SHELL_BINARY=/path/to/forge_desktop forge-shell-session` when the packaged shell is unavailable
 - fall back to `npm run desktop` or the local Tauri release/debug binary paths during package work
 - restart the display manager or reboot only when the operator chooses
@@ -195,6 +215,15 @@ The module prepares:
 - runtime directory for shell session state
 - safe local core URL wiring
 
+G4 extends this shape with explicit Wayland session semantics:
+
+- `forge.shellSession.wayland.enable` remains disabled unless `forge.shellSession.enable` is explicitly enabled
+- `forge.shellSession.wayland.sessionName` names the selectable session
+- `forge.shellSession.wayland.package` or equivalent wrapper provides the session command when implemented
+- Cage is the preferred lightweight compositor substrate when available through Nixpkgs
+- the compositor launches `forge-shell-session`, not `forge-desktop-shell` directly
+- generated environment/session files must keep host mutation, direct system control, model mutation, semantic memory write, and FORGE-K live authority flags set to `false`
+
 The wrapper prepares:
 
 - `FORGE_SHELL_SESSION_ENABLED=true`
@@ -207,7 +236,7 @@ The wrapper prepares:
 
 The former launcher placeholder accepted `FORGE_DESKTOP_SHELL_BINARY=/path/to/forge_desktop` for direct operator testing. The current real-build derivation still supports that override for wrapper tests; normal local fallback should use `FORGE_SHELL_BINARY` at the session wrapper layer.
 
-It does not add a systemd user service, autologin, compositor dependency, display-manager replacement, or automatic launch path. Compositor/session integration remains future G4 work. Candidate paths include Wayland with cage, Wayland with sway, Wayland with Hyprland, or an X11 fallback if required. G3.5 does not claim any compositor path is implemented.
+G3.5 does not add a systemd user service, autologin, compositor dependency, display-manager replacement, or automatic launch path. G4 is the opt-in Wayland session integration lane. The preferred substrate is Cage because it is small and suitable for a single full-screen shell; sway, Hyprland, or X11 fallback paths require separate justification and tests. G4 still must not claim host authority: NixOS owns boot, hardware, display-manager plumbing, service management, packages, and rollback.
 
 ## Authority Non-Changes
 

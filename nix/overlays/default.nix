@@ -7,4 +7,7 @@ final: prev: {
   forge-shell-session = final.callPackage ../packages/forge-shell-session.nix {
     forgeDesktopShell = final.forge-desktop-shell;
   };
+  forge-wayland-session = final.callPackage ../packages/forge-wayland-session.nix {
+    forge-shell-session = final.forge-shell-session;
+  };
 }

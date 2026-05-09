@@ -60,7 +60,7 @@ Phase G3.5 is still only the package boundary. It does not:
 - change routes or public APIs
 - make FORGE-K live authority
 
-Compositor/session integration remains future G4 work.
+Compositor/session integration is Phase G4 work. G4 should be an opt-in Wayland session lane on the NixOS substrate, preferably using Cage as the lightweight compositor when available, and should launch `forge-shell-session` inside that compositor so safe environment defaults and packaged-shell selection stay centralized. G4 must not change the G3.5 truth that the desktop package is a real Tauri Nix build, and it must not autostart, enable autologin, remove fallback sessions, mutate host configuration, run service control, call modelruntime, write semantic memory, or make FORGE-K live authority.
 
 ## Fallback
 

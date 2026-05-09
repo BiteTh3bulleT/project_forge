@@ -392,3 +392,16 @@ This is a concise status read of FORGE-K phases against the current repository. 
 - `nix/packages/forge-shell-session.nix` preserves the selection order: `FORGE_SHELL_BINARY`, then packaged `forge-desktop-shell`, then local release/debug Tauri binaries, then loud failure.
 - `nix/checks/forge-desktop-shell.nix` verifies the wrapped shell defaults, binary presence, override behavior, placeholder removal, and absence of direct host/runtime mutation text.
 - Phase G3.5 does not autostart FORGE, enable autologin, replace the user's desktop, add or require a compositor, run service control, rebuild NixOS, mutate host state, call modelruntime, write semantic memory, change routes/public APIs, or make FORGE-K live authority. Compositor/session integration remains future G4 work.
+
+## Phase G4 Validation
+
+- Phase G4 is recorded as `FORGE-OS WAYLAND SHELL SESSION INTEGRATION / OPT-IN / SAFE-MODE`.
+- The implemented target flow is display-manager/session selection -> lightweight Wayland compositor substrate, preferably Cage when available through Nixpkgs -> `forge-shell-session` -> packaged `forge-desktop-shell` -> local `forge-core`.
+- `nix/packages/forge-wayland-session.nix` provides `/bin/forge-wayland-session`, validates the compositor and shell wrapper, preserves safe environment defaults, and launches `cage -- forge-shell-session`.
+- `nix/nixos/modules/forge-shell-session.nix` adds opt-in Wayland session options and generates an `/etc/xdg/wayland-sessions/<session>.desktop` descriptor only when `forge.shellSession.enable = true`.
+- `flake.nix` exposes `packages.forge-wayland-session`, `apps.forge-wayland-session`, and `checks.x86_64-linux.forge-wayland-session`.
+- G4 must keep NixOS/Linux as the boot, hardware, package, service, display-manager, and rollback substrate. FORGE is the graphical shell interface, not the host authority plane.
+- `forge-shell-session` remains the required launcher boundary for safe environment defaults, `FORGE_CORE_URL` wiring, host-authority false flags, and packaged-shell selection. `forge-wayland-session` and the session descriptor do not bypass it.
+- Safe defaults remain disabled by default: `forge.shellSession.enable = false`, `autoStart = false`, `safeMode = true`, `mode = "fullscreen-shell"`, `displayBackend = "wayland"`, and `compositor = "cage"`.
+- Rollback remains configuration/session rollback: select the normal desktop or TTY, disable the opt-in shell session, keep `/forge` data intact, and keep manual `nix run .#forge-shell-session` / `nix run .#forge-desktop-shell` paths available.
+- Phase G4 does not change Go/runtime code, route/API behavior, modelruntime behavior, gateway behavior, semantic memory, FORGE-H execution authority, or FORGE-K live authority.
