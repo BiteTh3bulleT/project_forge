@@ -1,8 +1,8 @@
 # Live Integration Reality Check
 
-Status: Phase i1 reality alignment.
+Status: Phase i1/PhaseI2/Phase 14B reality alignment.
 
-Date: 2026-05-08.
+Date: 2026-05-09.
 
 ## Executive Summary
 
@@ -12,7 +12,9 @@ Phase i1 adds one real live integration seam: deterministic KV identity validati
 
 PhaseI2 adds `[PARTIAL LIVE ENFORCEMENT]`: live `VALIDATE_KV_IDENTITY` now runs through an explicit Control Lane enforcement policy that classifies accepted, rejected, malformed, and unsupported live-reuse claims, records structured audit fields, and increments internal counters.
 
-This is validation-only. It does not enable live KV reuse, backend cache reuse, modelruntime mutation, tokenizer-specific token identity, public routes, public APIs, or FORGE-K live authority.
+Phase 14B adds a second narrow live validation seam: deterministic ref-shape validation now lives in shared pure package `services/core/internal/refvalidation` and is used by live AI-OS Control Lane `VALIDATE_REF_SHAPE`.
+
+These seams are validation-only. They do not enable live KV reuse, backend cache reuse, object truth lookup, evidence admission, context compilation, retrieval/search/embedding execution, modelruntime mutation, tokenizer-specific token identity, public routes, public APIs, or FORGE-K live authority.
 
 ## Before This Pass
 
@@ -28,6 +30,8 @@ This is validation-only. It does not enable live KV reuse, backend cache reuse, 
 - `[LIVE]` Added live acceptance tests proving successful validation, gate mismatch rejection, missing payload rejection, future-IRIS capability denial, no semantic memory mutation, and deterministic idempotency replay.
 - `[PARTIAL]` Extracted deterministic KV identity gate validation into `services/core/internal/kvidentity`.
 - `[SIMULATOR-ONLY]` Refactored `services/core/internal/forgek/kv` to call the same shared validator while preserving simulator-owned KV service behavior.
+- `[PARTIAL]` Added deterministic ref-shape validation in `services/core/internal/refvalidation`.
+- `[LIVE]` Added Control Lane `VALIDATE_REF_SHAPE`, capability `ref.shape.validate`, structured audit fields, dry-run summary preservation, and no-mutation state summaries.
 
 ## What Did Not Change
 
@@ -40,13 +44,16 @@ This is validation-only. It does not enable live KV reuse, backend cache reuse, 
 - `[LIVE]` No backend cache is consulted.
 - `[LIVE]` No live prompt compilation is routed through FORGE-K Context Compiler.
 - `[LIVE]` PhaseI2 does not add public diagnostics routes or export metrics outside the live process.
+- `[LIVE]` Phase 14B does not look up object truth, admit evidence, compile context, execute retrieval/search/embeddings, write memory, call modelruntime, execute tools, or route live mutation through FORGE-K simulator services.
 
 ## Current Live Status
 
 | Surface | Status | Notes |
 | --- | --- | --- |
 | AI-OS Control Lane KV identity validation | `[LIVE] / VALIDATION_ONLY` | `VALIDATE_KV_IDENTITY` validates deterministic identity gates and fails closed on mismatches. |
+| AI-OS Control Lane ref-shape validation | `[LIVE] / VALIDATION_ONLY` | `VALIDATE_REF_SHAPE` validates deterministic ref shape, normalizes refs, and fails closed on unsafe or unsupported refs. |
 | Shared KV identity gate logic | `[PARTIAL]` | Used by live Control Lane validation and simulator KV package. |
+| Shared ref-shape logic | `[PARTIAL]` | Used by live Control Lane validation only; object lookup and evidence admission remain future work. |
 | FORGE-K KV service | `[SIMULATOR-ONLY]` | Still owns simulator manifests, lookups, tiers, and hit/miss metadata only. |
 | Runtime KV reuse | `[FUTURE]` | Requires tokenizer-specific token IDs, runtime-driver identity capture, backend cache wiring, and explicit authority tests. |
 | Public diagnostics/API route | `[FUTURE]` | No route added in this pass. |
@@ -61,12 +68,16 @@ Required behavior covered by tests:
 - successful validation records acceleration-only state summary
 - validation result explicitly reports no memory mutation, no runtime mutation, and no live KV reuse
 - simulator KV and live Control Lane use the same deterministic gate logic
+- ref-shape validation normalizes/deduplicates refs deterministically
+- unsafe ref ids and unsupported ref types fail closed
+- ref-shape validation reports no memory mutation, no runtime mutation, and no live authority migration
 
 ## Remaining Ambiguity
 
 - `[FUTURE]` Tokenizer-specific final token IDs are still not available in live validation, so Phase i1 continues to use `token_input_hash` as the identity placeholder.
 - `[FUTURE]` Explicit SQLite journal evidence for the new syscall can be added if a future phase needs storage-level journal assertions beyond Control Lane audit and no-mutation acceptance tests.
 - `[FUTURE]` Live modelruntime runtime-assumption capture remains a prerequisite before any backend KV reuse can be considered.
+- `[FUTURE]` Ref-shape validation does not prove object existence or authority; object lookup, evidence admission, and context compilation require separate phases.
 
 ## Not Authorized
 
@@ -75,3 +86,5 @@ Required behavior covered by tests:
 - Do not treat KV identity validation as memory, evidence admission, or canonical truth.
 - Do not add public routes for KV validation without a separate API design.
 - Do not turn simulator `KVService` into live daemon authority without a scoped live integration phase and tests.
+- Do not treat ref-shape validation as object truth, evidence admission, context compilation, retrieval, or memory mutation.
+- Do not turn FORGE-K simulator services into live daemon authority through the ref-shape seam.

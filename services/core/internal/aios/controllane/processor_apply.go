@@ -58,6 +58,8 @@ func (p *Processor) apply(ctx context.Context, store SemanticStore, req domain.S
 		return applyCompileContext(ctx, store, req, p.ruleEngine)
 	case domain.ActionValidateKVIdentity:
 		return applyValidateKVIdentity(req)
+	case domain.ActionValidateRefShape:
+		return applyValidateRefShape(req)
 	default:
 		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrUnsupportedAction, Field: "action", Message: "unsupported action"}}
 	}
@@ -65,6 +67,14 @@ func (p *Processor) apply(ctx context.Context, store SemanticStore, req domain.S
 
 func applyValidateKVIdentity(req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {
 	decision := EnforceKVIdentity(req)
+	if !decision.Accepted {
+		return nil, nil, nil, []domain.SyscallError{decision.ToSyscallError()}
+	}
+	return nil, decision.ToStateSummary(), decision.Warnings, nil
+}
+
+func applyValidateRefShape(req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {
+	decision := EnforceRefShape(req)
 	if !decision.Accepted {
 		return nil, nil, nil, []domain.SyscallError{decision.ToSyscallError()}
 	}

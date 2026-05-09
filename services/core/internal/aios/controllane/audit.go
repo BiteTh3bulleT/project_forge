@@ -26,6 +26,7 @@ type SyscallAuditRecord struct {
 	CommittedIDs          []string
 	ErrorCode             domain.SyscallErrorCode
 	KVIdentityEnforcement map[string]any
+	RefShapeValidation    map[string]any
 }
 
 type AuditSink interface {
@@ -83,6 +84,7 @@ func (s *CoreAuditSink) Record(ctx context.Context, rec SyscallAuditRecord) (str
 			"errorCode":             rec.ErrorCode,
 			"validationIssues":      rec.ValidationIssues,
 			"kvIdentityEnforcement": rec.KVIdentityEnforcement,
+			"refShapeValidation":    rec.RefShapeValidation,
 		},
 	})
 	if err != nil {

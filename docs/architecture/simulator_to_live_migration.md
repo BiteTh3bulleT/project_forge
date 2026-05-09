@@ -1,6 +1,6 @@
 # Simulator To Live Migration
 
-Status: Phase i1/PhaseI2 partial live KV validation and enforcement pattern plus Phase 14A operational cutover design guidance.
+Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, and Phase 14B partial live ref-shape validation.
 
 ## Purpose
 
@@ -11,6 +11,8 @@ Phase i1 demonstrates the preferred pattern with deterministic KV identity valid
 PhaseI2 extends that pattern with `[PARTIAL LIVE ENFORCEMENT]`: live Control Lane code wraps the pure validator in a live-side policy layer that fails closed, records audit fields, and increments internal counters. The simulator service remains simulator-only.
 
 Phase 14A generalizes this into the operational cutover rule: make FORGE-K operational by migrating one narrow authority seam at a time through the existing live owner, not by importing simulator services wholesale.
+
+Phase 14B applies the pattern to deterministic ref-shape validation. `services/core/internal/refvalidation` is shared pure validation logic, and the live Control Lane action `VALIDATE_REF_SHAPE` uses it without importing FORGE-K simulator services or mutating live memory.
 
 ## Migration Pattern
 
@@ -42,6 +44,19 @@ Phase 14A generalizes this into the operational cutover rule: make FORGE-K opera
 | Audit | Existing Control Lane audit record with `kvIdentityEnforcement` fields |
 | Rejected inputs | gate mismatch, malformed payload, unavailable manifest, explicit or ambiguous live KV reuse request |
 | Still future | live KV reuse, runtime cache lookup, tokenizer-specific token IDs, exported metrics |
+
+## Phase 14B Ref Shape Example
+
+| Concern | Decision |
+| --- | --- |
+| Deterministic contract | typed ref-shape validation and normalization |
+| Shared pure package | `services/core/internal/refvalidation` |
+| Live caller | `services/core/internal/aios/controllane` |
+| Live action | `VALIDATE_REF_SHAPE` |
+| Capability | `ref.shape.validate` |
+| Audit | existing Control Lane audit record with `refShapeValidation` fields |
+| Mutation posture | validation-only; no object lookup, evidence admission, context compilation, retrieval, modelruntime call, or memory write |
+| Still future | source-object authority lookup, Courthouse admission integration, live context compilation, and broader FORGE-K Kernel authority |
 
 ## Live-Safe Shared Package Rules
 
@@ -84,8 +99,8 @@ Do not import FORGE-K Kernel, Context Compiler, KVService, Runtime Driver Bounda
 ## Future Candidates
 
 - `[PARTIAL]` KV identity validation: live validation exists; live reuse does not.
+- `[PARTIAL]` Ref shape validation: live validation exists; object lookup, evidence admission, context compilation, and memory writes do not.
 - `[FUTURE]` Context Compiler mirror: requires no-effect live comparison before any prompt authority migration.
 - `[FUTURE]` Runtime driver identity capture: requires modelruntime trace-only adapters before live reuse.
 - `[FUTURE]` Retrieval evidence admission: must go through Courthouse/control-lane boundaries, not vector-store scores.
 - `[FUTURE]` Storage/backend cutover: requires explicit live authority owner, repository parity tests, migration tests, backup/rollback proof, observability, and operator approval before any read switch or dual-write.
-- `[FUTURE]` Phase 14B operational validation seam: should extract one pure deterministic contract into a shared package and call it from the live Control Lane without replacing live authority.

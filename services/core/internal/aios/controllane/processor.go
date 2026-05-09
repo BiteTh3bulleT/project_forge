@@ -190,6 +190,10 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (dom
 			result.StateSummary = kvIdentityDecision.ToStateSummary()
 			result.StateSummary["dryRun"] = true
 			p.recordKVIdentityDecision(kvIdentityDecision)
+		} else if req.Action == domain.ActionValidateRefShape {
+			decision := EnforceRefShape(req)
+			result.StateSummary = decision.ToStateSummary()
+			result.StateSummary["dryRun"] = true
 		}
 		result.Warnings = append(result.Warnings, "dry-run: request validated without commit")
 		result.AuditID = p.writeAudit(ctx, req, result)
@@ -353,6 +357,7 @@ func (p *Processor) writeAudit(ctx context.Context, req domain.SyscallRequest, r
 		CommittedIDs:          result.CommittedObjectIDs,
 		ErrorCode:             result.DeterministicErrCode,
 		KVIdentityEnforcement: kvIdentityAuditFields(result.StateSummary),
+		RefShapeValidation:    refShapeAuditFields(result.StateSummary),
 	})
 	return id
 }
@@ -362,6 +367,21 @@ func kvIdentityAuditFields(summary map[string]any) map[string]any {
 		return nil
 	}
 	fields, _ := summary["kvIdentityEnforcement"].(map[string]any)
+	if fields == nil {
+		return nil
+	}
+	out := make(map[string]any, len(fields))
+	for key, value := range fields {
+		out[key] = value
+	}
+	return out
+}
+
+func refShapeAuditFields(summary map[string]any) map[string]any {
+	if summary == nil {
+		return nil
+	}
+	fields, _ := summary["refShapeValidation"].(map[string]any)
 	if fields == nil {
 		return nil
 	}

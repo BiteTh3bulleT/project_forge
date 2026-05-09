@@ -44,6 +44,7 @@ go test ./internal/forgek/...
 - Phase 13I Store Cutover Readiness Review: docs only, no package code
 - Phase i1 Reality Alignment and Live KV Identity Validation: shared pure validation package outside this simulator at `services/core/internal/kvidentity`; simulator KV still calls it, but `KVService` remains simulator-only
 - Phase 14A FORGE-K Operational Cutover Design: docs only, no package code
+- Phase 14B Ref Shape Validation: shared pure validation package outside this simulator at `services/core/internal/refvalidation`; live Control Lane uses it for validation only, with no simulator-service authority import
 
 ## Authority Boundary
 
@@ -94,6 +95,8 @@ Phase 12J is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. It designs a possible f
 Phase 13I is `DOCS_ONLY / READINESS_REVIEW`. It records that store cutover is not approved yet: SQLite remains the live default; Postgres is not canonical-ready; Qdrant is not live-retrieval-ready; Redis is not live-queue-ready. It adds no Go code to this package, no live storage switch, no dual-write, no read switch, no live memory migration, no live Qdrant retrieval, no Redis live queues/cache, and no FORGE-K live authority.
 
 Phase 14A is `DOCS_ONLY / LIVE_AUTHORITY_MIGRATION_DESIGN_ONLY`. It defines how FORGE-K can become operational through narrow live authority seams, starting with shared pure validation contracts and existing live owners. It adds no Go code to this package, imports no simulator services into live daemon authority, changes no routes/public APIs, changes no gateway/modelruntime/retrieval/memory behavior, and starts no live authority migration.
+
+Phase 14B is `PARTIAL LIVE VALIDATION / CONTROL_LANE / NO_AUTHORITY_REPLACEMENT`. It adds `services/core/internal/refvalidation` outside this simulator package and live Control Lane `VALIDATE_REF_SHAPE`. This package remains simulator-only: Phase 14B does not import FORGE-K simulator services as live authority, look up object truth, admit evidence, compile context, execute retrieval/search/embeddings, write memory, call modelruntime, change routes/public APIs, or create a second authority path.
 
 ## Future Rust Boundary
 

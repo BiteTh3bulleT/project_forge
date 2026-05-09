@@ -1,6 +1,6 @@
 # FORGE-K Operational Cutover Design
 
-Status: Phase 14A implemented as `DOCS_ONLY / LIVE_AUTHORITY_MIGRATION_DESIGN_ONLY`.
+Status: Phase 14A implemented as `DOCS_ONLY / LIVE_AUTHORITY_MIGRATION_DESIGN_ONLY`; Phase 14B implemented the first narrow `PARTIAL LIVE VALIDATION / CONTROL_LANE / NO_AUTHORITY_REPLACEMENT` seam.
 
 Date: 2026-05-09.
 
@@ -163,8 +163,10 @@ No-go:
 - Do not mutate live memory through simulator services.
 - Do not add public routes as part of an authority cutover unless the phase explicitly approves them.
 
-## Phase 14B Recommendation
+## Phase 14B Implemented Seam
 
-Recommended next phase: Phase 14B, `PARTIAL LIVE VALIDATION / CONTROL_LANE / NO_AUTHORITY_REPLACEMENT`.
+Phase 14B selected deterministic ref-shape validation as the first operational seam.
 
-Phase 14B should extract one deterministic validation contract into a shared pure package and invoke it from the live Control Lane. It should follow the Phase i1/I2 pattern and should not migrate live memory, retrieval, gateway, modelruntime, API routes, or FORGE-K Kernel authority.
+It extracts `services/core/internal/refvalidation` as a shared pure package and invokes it from live Control Lane action `VALIDATE_REF_SHAPE`. This follows the Phase i1/I2 pattern and does not migrate live memory, retrieval, gateway, modelruntime, API routes, or FORGE-K Kernel authority.
+
+The next operational phase must continue the same rule: choose one narrow contract, keep the existing live owner, prove no unauthorized mutation, and preserve rollback before any broader live authority migration.

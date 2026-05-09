@@ -233,6 +233,7 @@ const (
 	ActionArchiveNote        SemanticActionType = "ARCHIVE_NOTE"
 	ActionCompileContext     SemanticActionType = "COMPILE_CONTEXT"
 	ActionValidateKVIdentity SemanticActionType = "VALIDATE_KV_IDENTITY"
+	ActionValidateRefShape   SemanticActionType = "VALIDATE_REF_SHAPE"
 )
 
 type SyscallRequest struct {

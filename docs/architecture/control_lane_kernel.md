@@ -24,6 +24,8 @@ Phase i1 adds `[LIVE] / VALIDATION_ONLY` `VALIDATE_KV_IDENTITY` to this boundary
 
 PhaseI2 marks this as `[PARTIAL LIVE ENFORCEMENT]`: `VALIDATE_KV_IDENTITY` is routed through Control Lane KV enforcement policy before acceptance. The policy rejects malformed claims, gate mismatches, unavailable manifests, and explicit or ambiguous live KV reuse requests; audit records include structured enforcement fields, and internal counters track accepted/rejected/malformed/unsupported decisions.
 
+Phase 14B adds `[PARTIAL LIVE VALIDATION]` `VALIDATE_REF_SHAPE`. It validates deterministic ref shape through the shared pure package `services/core/internal/refvalidation`, returns normalized refs and no-mutation authority flags, and does not look up live objects, admit evidence, write memory, call modelruntime, execute retrieval, change routes, or route through FORGE-K simulator services.
+
 ## Kernel / user-space boundary
 
 - user space: users, adapters, internal cells, future IRIS propose semantic actions

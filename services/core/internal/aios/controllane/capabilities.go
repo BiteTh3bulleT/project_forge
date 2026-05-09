@@ -29,6 +29,7 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 		CapModelDerive,
 		CapContextCompile,
 		CapKVIdentityValidate,
+		CapRefShapeValidate,
 	)
 	return &StaticCapabilityService{
 		sourceCapabilities: map[domain.ActionSource]map[string]struct{}{
@@ -47,12 +48,14 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 				CapModelDerive,
 				CapContextCompile,
 				CapKVIdentityValidate,
+				CapRefShapeValidate,
 			),
 			domain.SourceAdapter: setOf(
 				CapMemoryNoteCreate,
 				CapMemoryLinkCreate,
 				CapContextCompile,
 				CapKVIdentityValidate,
+				CapRefShapeValidate,
 			),
 			domain.SourceFutureIRIS: setOf(
 				CapMemoryNoteCreate,

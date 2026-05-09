@@ -19,6 +19,7 @@ const (
 	CapModelDerive            = "model.derive"
 	CapContextCompile         = "context.compile"
 	CapKVIdentityValidate     = "kv.identity.validate"
+	CapRefShapeValidate       = "ref.shape.validate"
 )
 
 type ActionDefinition struct {
@@ -140,6 +141,15 @@ func NewStaticActionRegistry() *StaticActionRegistry {
 			ApprovalPossible: false,
 			TargetObjectType: "kv_identity_validation",
 			AuditEventName:   "semantic_syscall.validate_kv_identity",
+		},
+		domain.ActionValidateRefShape: {
+			Action:           domain.ActionValidateRefShape,
+			Capability:       CapRefShapeValidate,
+			Mutating:         false,
+			SupportsDryRun:   true,
+			ApprovalPossible: false,
+			TargetObjectType: "ref_shape_validation",
+			AuditEventName:   "semantic_syscall.validate_ref_shape",
 		},
 	}
 	return &StaticActionRegistry{definitions: defs}
