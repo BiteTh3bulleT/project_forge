@@ -1,6 +1,6 @@
 # Storage Backend Migration
 
-Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds the first Postgres schema foundation and parity tests for storage metadata plus disabled shadow diagnostic schema only. Phase 13D-E adds an opt-in diagnostic persistence repository and retrieval metadata relational adapter scaffold. Phase 13F-G adds a disabled-by-default Qdrant shadow vector adapter and shadow index scaffold. Phase 13H adds a disabled-by-default Redis ephemeral coordination boundary. These phases do not migrate live data.
+Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds the first Postgres schema foundation and parity tests for storage metadata plus disabled shadow diagnostic schema only. Phase 13D-E adds an opt-in diagnostic persistence repository and retrieval metadata relational adapter scaffold. Phase 13F-G adds a disabled-by-default Qdrant shadow vector adapter and shadow index scaffold. Phase 13H adds a disabled-by-default Redis ephemeral coordination boundary. Phase 13I adds the store cutover readiness review. Phase 14A adds FORGE-K operational cutover design. These phases do not migrate live data.
 
 ## Current Live State
 
@@ -21,7 +21,7 @@ Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds t
 
 Unset `FORGE_STORE_BACKEND` means `sqlite`. Redis and Qdrant endpoint variables do not imply a backend switch.
 
-Phase 13D-E intentionally keeps the live runtime on SQLite. A later cutover phase must add explicit adapter tests, migration tests, rollback tests, and operator runbooks before Postgres can become live.
+Phase 13D-E intentionally keeps the live runtime on SQLite. Phase 13I records that Postgres is foundation-ready but not canonical-ready. A later cutover phase must add explicit adapter tests, migration tests, rollback tests, and operator runbooks before Postgres can become live.
 
 ## Phase 13B-C Foundation Schema
 
@@ -127,6 +127,7 @@ Qdrant:
 7. Phase 13G: Qdrant shadow vector index, rebuildable, disabled by default, and non-authoritative.
 8. Phase 13H: Redis queue/cache boundary with loss-safe behavior, disabled by default and non-canonical.
 9. Phase 13I: store cutover readiness review.
+10. Phase 14A: operational cutover design; no backend switch or live authority migration.
 
 ## Parity Strategy
 
@@ -146,6 +147,8 @@ No read switch happens until:
 - Postgres schema migrations are idempotent.
 - Postgres adapter tests pass without Docker dependency for default tests.
 - Integration tests pass when Docker services are available.
+- repository parity tests pass for the selected table group.
+- dual-write comparison is designed and disabled by default.
 - Dual-write comparison is clean.
 - Backup and rollback are documented.
 - Operator-visible config clearly selects the backend.
@@ -157,6 +160,7 @@ No read switch happens until:
 - Redis state must be disposable.
 - Qdrant indexes must be rebuildable.
 - Backups must exist before any canonical table migration.
+- Any authority migration must have a tested config disablement or rollback path before merge.
 
 ## Table Migration Priority
 
@@ -180,10 +184,10 @@ Group D:
 
 ## Forbidden Authority Changes
 
-- Do not make Postgres the default backend in Phase 13A through Phase 13H.
-- Do not dual-write live data in Phase 13A through Phase 13H.
-- Do not wire Redis into live queues or caches in Phase 13A through Phase 13H.
-- Do not wire Qdrant into live retrieval in Phase 13A through Phase 13H.
+- Do not make Postgres the default backend in Phase 13A through Phase 13I or Phase 14A.
+- Do not dual-write live data in Phase 13A through Phase 13I or Phase 14A.
+- Do not wire Redis into live queues or caches in Phase 13A through Phase 13I or Phase 14A.
+- Do not wire Qdrant into live retrieval in Phase 13A through Phase 13I or Phase 14A.
 - Do not make Redis or Qdrant canonical truth.
 - Do not make vector hits admissible evidence.
 - Do not change public APIs, routes, gateway behavior, modelruntime behavior, retrieval behavior, or memory semantics.

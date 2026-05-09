@@ -1,6 +1,6 @@
 # Simulator To Live Migration
 
-Status: Phase i1 migration pattern.
+Status: Phase i1/PhaseI2 partial live KV validation and enforcement pattern plus Phase 14A operational cutover design guidance.
 
 ## Purpose
 
@@ -9,6 +9,8 @@ FORGE-K simulator packages define target authority behavior. Live daemon integra
 Phase i1 demonstrates the preferred pattern with deterministic KV identity validation.
 
 PhaseI2 extends that pattern with `[PARTIAL LIVE ENFORCEMENT]`: live Control Lane code wraps the pure validator in a live-side policy layer that fails closed, records audit fields, and increments internal counters. The simulator service remains simulator-only.
+
+Phase 14A generalizes this into the operational cutover rule: make FORGE-K operational by migrating one narrow authority seam at a time through the existing live owner, not by importing simulator services wholesale.
 
 ## Migration Pattern
 
@@ -85,3 +87,5 @@ Do not import FORGE-K Kernel, Context Compiler, KVService, Runtime Driver Bounda
 - `[FUTURE]` Context Compiler mirror: requires no-effect live comparison before any prompt authority migration.
 - `[FUTURE]` Runtime driver identity capture: requires modelruntime trace-only adapters before live reuse.
 - `[FUTURE]` Retrieval evidence admission: must go through Courthouse/control-lane boundaries, not vector-store scores.
+- `[FUTURE]` Storage/backend cutover: requires explicit live authority owner, repository parity tests, migration tests, backup/rollback proof, observability, and operator approval before any read switch or dual-write.
+- `[FUTURE]` Phase 14B operational validation seam: should extract one pure deterministic contract into a shared package and call it from the live Control Lane without replacing live authority.

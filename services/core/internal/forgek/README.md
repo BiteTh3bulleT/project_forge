@@ -41,7 +41,9 @@ go test ./internal/forgek/...
 - Phase 12H Chat Metadata Shadow Implementation: live-adjacent chat metadata observer outside this simulator at `services/core/internal/forgekshadow`
 - Phase 12I Chat Metadata Shadow Hardening: live-adjacent hardening outside this simulator; no new live touchpoint or simulator authority path
 - Phase 12J Retrieval Metadata Expansion Design: docs only, no package code
+- Phase 13I Store Cutover Readiness Review: docs only, no package code
 - Phase i1 Reality Alignment and Live KV Identity Validation: shared pure validation package outside this simulator at `services/core/internal/kvidentity`; simulator KV still calls it, but `KVService` remains simulator-only
+- Phase 14A FORGE-K Operational Cutover Design: docs only, no package code
 
 ## Authority Boundary
 
@@ -88,6 +90,10 @@ Phase 12H is `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT` and lives outs
 Phase 12I is `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY` and lives outside this simulator package in `services/core/internal/forgekshadow` and API tests. It hardens the Phase 12H chat metadata observer with dual-flag, enum/ref normalization, redaction, invalid-body/header/query/SSE no-capture, sink behavior, and no-effect tests. It adds no new touchpoints, syscalls, Kernel ownership, public routes, public APIs, live retrieval, embedding calls, live RAG, modelruntime calls, tool execution, memory writes, controllane mutation, gateway behavior changes, response changes, or user-visible output authority.
 
 Phase 12J is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. It designs a possible future retrieval metadata shadow expansion and adds no Go code to this package or to `forgekshadow`. It does not observe retrieval routes, capture source text, capture chunks, capture embeddings or vectors, capture raw queries, implement live RAG, add routes, add feature flags, call modelruntime, execute tools, query retrieval/search/embeddings, write memory, call controllane mutations, or route live daemon state through FORGE-K.
+
+Phase 13I is `DOCS_ONLY / READINESS_REVIEW`. It records that store cutover is not approved yet: SQLite remains the live default; Postgres is not canonical-ready; Qdrant is not live-retrieval-ready; Redis is not live-queue-ready. It adds no Go code to this package, no live storage switch, no dual-write, no read switch, no live memory migration, no live Qdrant retrieval, no Redis live queues/cache, and no FORGE-K live authority.
+
+Phase 14A is `DOCS_ONLY / LIVE_AUTHORITY_MIGRATION_DESIGN_ONLY`. It defines how FORGE-K can become operational through narrow live authority seams, starting with shared pure validation contracts and existing live owners. It adds no Go code to this package, imports no simulator services into live daemon authority, changes no routes/public APIs, changes no gateway/modelruntime/retrieval/memory behavior, and starts no live authority migration.
 
 ## Future Rust Boundary
 
