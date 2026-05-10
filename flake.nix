@@ -78,6 +78,7 @@
           forge-wayland-session = pkgs.callPackage ./nix/checks/forge-wayland-session.nix {
             forge-wayland-session = self.packages.${system}.forge-wayland-session;
           };
+          forge-vbox-graphics-test = pkgs.callPackage ./nix/checks/forge-vbox-graphics-test.nix { };
           js-build = pkgs.callPackage ./nix/checks/js-build.nix { };
         };
 
@@ -94,6 +95,7 @@
         forge-storage = import ./nix/nixos/modules/forge-storage.nix;
         forge-host-kernel = import ./nix/nixos/modules/forge-host-kernel.nix;
         forge-shell-session = import ./nix/nixos/modules/forge-shell-session.nix;
+        forge-vbox-graphics-test = import ./nix/nixos/profiles/forge-vbox-graphics-test.nix;
         default = self.nixosModules.forge-os;
       };
     };

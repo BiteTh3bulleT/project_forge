@@ -1,10 +1,12 @@
 # FORGE Graphical Shell
 
-Phase G1 defines FORGE as the graphical shell session for a NixOS-based FORGE-OS machine. Phase G2 adds a manually launchable Nix wrapper for that shell session. Phase G3 defines the Nix-packaged desktop shell target while preserving the same safe session boundaries. Phase G3.5 is the real Tauri Nix build phase. Phase G4 is the opt-in Wayland shell session integration lane.
+Phase G1 defines FORGE as the graphical shell session for a NixOS-based FORGE-OS machine. Phase G2 adds a manually launchable Nix wrapper for that shell session. Phase G3 defines the Nix-packaged desktop shell target while preserving the same safe session boundaries. Phase G3.5 is the real Tauri Nix build phase. Phase G4 is the opt-in Wayland shell session integration lane. Phase G5 adds a test-only VirtualBox/minimal NixOS graphics profile for manual TTY launch.
 
 Current G3.5 status: `packages.forge-desktop-shell` and `apps.forge-desktop-shell` now point at a real Tauri build derivation and the package advertises `passthru.containsTauriBinary = true`. `nix build .#forge-desktop-shell` succeeds on Linux and produces both the stable `forge-desktop-shell` wrapper and the underlying `forge_desktop` binary.
 
 Current G4 status: the intended integration is a selectable Wayland session, not a desktop replacement by default. The target flow is display-manager/session selection -> lightweight Wayland compositor substrate, preferably Cage when cleanly available through Nixpkgs -> `forge-shell-session` -> packaged `forge-desktop-shell` -> local `forge-core`. `forge-shell-session` remains in the path because it owns safe shell environment defaults and binary selection.
+
+Current G5 status: `nix/nixos/profiles/forge-vbox-graphics-test.nix` is an opt-in test profile for minimal Oracle VirtualBox NixOS graphics bring-up. The target flow is TTY login -> `forge-wayland-session` -> Cage -> `forge-shell-session` -> packaged `forge-desktop-shell` -> local `forge-core`. The profile is not a general desktop profile and must not install a full desktop environment, enable automatic login, remove TTY fallback, or expose remote graphics by default.
 
 This is not a web dashboard controlling a headless server. FORGE is intended to become the visible operating interface: the desktop shell, launcher, workspace surface, command center, approval surface, and system context surface. NixOS remains the boot, hardware, graphics, service, and host configuration substrate.
 
@@ -27,6 +29,8 @@ FORGE is the graphical shell above NixOS. It is not the kernel, not the display 
 G1 defines the shell session contract and an inert NixOS module foundation. G2 adds a `forge-shell-session` package and flake app that set safe shell-session environment variables and launch an existing local Tauri `forge_desktop` binary when one is available. G3 targets a Nix-buildable `forge-desktop-shell` package for the actual desktop/Tauri shell and wires the session wrapper to prefer that package when available. G3.5 implements the real Linux Tauri Nix build.
 
 G4 adds the documentation/status lane for the real session integration contract: a NixOS-provided, disabled-by-default Wayland session that can be selected manually without removing the user's normal desktop. It may introduce a `forge-wayland-session` wrapper or a module-generated Wayland session descriptor, but it must launch the existing `forge-shell-session` wrapper inside the compositor instead of bypassing it.
+
+G5 adds a minimal VM graphics test profile. The profile is active only when an operator imports it into a NixOS configuration or uses its flake module output. It installs the existing FORGE shell wrappers and minimal graphics/session support for TTY launch; it does not make FORGE the compositor, implement a custom compositor, replace the display manager, or change the authority model.
 
 The only G1/G2/G3/G3.5 launch mode is `fullscreen-shell`. Future modes may include:
 
@@ -60,6 +64,8 @@ G4 must preserve the same authority boundaries. It may add selectable Wayland se
 - load, unload, or spawn model runtimes
 - write semantic memory directly
 - make FORGE-K live authority
+
+G5 must preserve the same boundaries. It may provide a test profile for VirtualBox graphics bring-up, but it must not enable automatic login, remove TTY fallback, install a full desktop environment, expose remote graphics by default, mutate host state from wrappers, load or unload models, write semantic memory, or bypass gateway, permissions, lanes, audit, controllane, memory, modelruntime, FORGE-H, or FORGE-K authority.
 
 ## Shell Responsibilities
 
@@ -112,6 +118,15 @@ nix build .#forge-desktop-shell
 nix run .#forge-desktop-shell
 nix build .#forge-shell-session
 nix run .#forge-shell-session
+```
+
+G5 manual VirtualBox TTY commands:
+
+```bash
+nix build .#forge-desktop-shell
+nix build .#forge-shell-session
+nix build .#forge-wayland-session
+nix run .#forge-wayland-session
 ```
 
 Local development fallback commands:

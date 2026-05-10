@@ -1,12 +1,14 @@
 # FORGE Graphical Shell Session
 
-This runbook describes the Phase G1/G2/G3/G3.5/G4 graphical shell session contract.
+This runbook describes the Phase G1/G2/G3/G3.5/G4/G5 graphical shell session contract.
 
 G1 defines how an opt-in NixOS session should launch FORGE as the primary visible shell while preserving the existing FORGE authority boundaries. G2 adds a launchable `forge-shell-session` wrapper package and flake app. G3 adds the target package contract for a Nix-built desktop shell package named `forge-desktop-shell`, while preserving the G2 safe wrapper and local-binary fallback behavior.
 
 G3.5 is the real Tauri Nix build phase. `packages.forge-desktop-shell` has been changed from a launcher placeholder to a real Tauri build derivation, advertises `passthru.containsTauriBinary = true`, and builds the `forge_desktop` binary plus the stable `forge-desktop-shell` wrapper.
 
 G4 is the opt-in Wayland shell session integration lane. It should make FORGE Shell selectable or manually launchable through NixOS session plumbing and a lightweight compositor substrate, preferably Cage when cleanly available through Nixpkgs. The launch path remains compositor -> `forge-shell-session` -> packaged `forge-desktop-shell` -> local `forge-core`; G4 must not bypass `forge-shell-session`.
+
+G5 adds a test-only, opt-in VirtualBox/minimal NixOS graphics profile at `nix/nixos/profiles/forge-vbox-graphics-test.nix`. It is for manual TTY launch in a minimal VM and is documented in `docs/operations/virtualbox_forge_shell_test.md`. It does not install a full graphical desktop environment, enable automatic login, replace the user's desktop, remove TTY fallback, or grant wrappers host-control authority.
 
 ## Operator Meaning
 
@@ -107,6 +109,15 @@ Build the wrapper and safety checks:
 ```bash
 nix build .#forge-shell-session
 nix flake check
+```
+
+For a minimal VirtualBox NixOS VM with the G5 test profile, build the full manual TTY launch path:
+
+```bash
+nix build .#forge-desktop-shell
+nix build .#forge-shell-session
+nix build .#forge-wayland-session
+nix run .#forge-wayland-session
 ```
 
 If the local Nix requires explicit flakes support:
@@ -220,6 +231,8 @@ FORGE Shell session selection
   -> forge-desktop-shell
   -> local forge-core at FORGE_CORE_URL
 ```
+
+G5 uses the same launch path from a minimal VirtualBox TTY. When the profile is imported, `forge-wayland-session` is installed for manual launch, but the profile still keeps automatic login disabled and preserves TTY rollback.
 
 If a `forge-wayland-session` wrapper is present, it should provide `/bin/forge-wayland-session`, set or preserve the safe shell environment, verify that the compositor and `forge-shell-session` are available, and fail loudly when either dependency is missing. It must launch `forge-shell-session` inside the compositor and must not launch `forge-desktop-shell` directly.
 

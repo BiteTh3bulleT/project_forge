@@ -468,3 +468,14 @@ This is a concise status read of FORGE-K phases against the current repository. 
 - Safe defaults remain disabled by default: `forge.shellSession.enable = false`, `autoStart = false`, `safeMode = true`, `mode = "fullscreen-shell"`, `displayBackend = "wayland"`, and `compositor = "cage"`.
 - Rollback remains configuration/session rollback: select the normal desktop or TTY, disable the opt-in shell session, keep `/forge` data intact, and keep manual `nix run .#forge-shell-session` / `nix run .#forge-desktop-shell` paths available.
 - Phase G4 does not change Go/runtime code, route/API behavior, modelruntime behavior, gateway behavior, semantic memory, FORGE-H execution authority, or FORGE-K live authority.
+
+## Phase G5 Validation
+
+- Phase G5 is recorded as `FORGE-OS VIRTUALBOX GRAPHICS TEST PROFILE / TEST-ONLY / OPT-IN / TTY-LAUNCH`.
+- `nix/nixos/profiles/forge-vbox-graphics-test.nix` adds a minimal VirtualBox/minimal NixOS graphics bring-up profile for manual `forge-wayland-session` launch from a TTY.
+- The expected launch path is TTY login -> `forge-wayland-session` -> Cage -> `forge-shell-session` -> packaged `forge-desktop-shell` -> local `forge-core`.
+- `nix/nixos/profiles/README.md` marks the profile as test-only and opt-in.
+- `docs/operations/virtualbox_forge_shell_test.md` documents the VirtualBox settings, profile import, manual TTY launch, `forge-core` requirement, Cage/Wayland/Tauri troubleshooting, TTY return path, profile disable path, and NixOS generation rollback.
+- `flake.nix` exposes `nixosModules.forge-vbox-graphics-test` and `checks.x86_64-linux.forge-vbox-graphics-test`.
+- The profile keeps automatic login disabled, preserves TTY fallback, avoids full desktop environments, and installs only minimal graphics/session packages needed for the existing FORGE shell path.
+- Phase G5 does not change Go/runtime code, route/API behavior, modelruntime behavior, gateway behavior, semantic memory, FORGE-H execution authority, FORGE-K live authority, or wrapper host-control behavior.
