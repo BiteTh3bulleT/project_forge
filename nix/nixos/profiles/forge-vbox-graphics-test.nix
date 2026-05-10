@@ -1,6 +1,7 @@
 {
   config,
   lib,
+  options,
   pkgs,
   ...
 }:
@@ -13,6 +14,7 @@ let
   forgeWaylandSession = pkgs.callPackage ../../packages/forge-wayland-session.nix {
     forge-shell-session = forgeShellSession;
   };
+  notoEmoji = pkgs.noto-fonts-color-emoji or pkgs.noto-fonts-emoji;
 in
 {
   imports = [
@@ -60,14 +62,17 @@ in
     ];
   };
 
-  virtualisation.virtualbox.guest = {
-    enable = lib.mkDefault true;
-    x11 = lib.mkDefault false;
-  };
+  virtualisation.virtualbox.guest =
+    {
+      enable = lib.mkDefault true;
+    }
+    // lib.optionalAttrs (lib.hasAttrByPath [ "virtualisation" "virtualbox" "guest" "x11" ] options) {
+      x11 = lib.mkDefault false;
+    };
 
   fonts.packages = lib.mkDefault [
     pkgs.noto-fonts
-    pkgs.noto-fonts-emoji
+    notoEmoji
     pkgs.dejavu_fonts
   ];
 
@@ -82,7 +87,7 @@ in
     pkgs.xdg-desktop-portal-gtk
     pkgs.mesa-demos
     pkgs.noto-fonts
-    pkgs.noto-fonts-emoji
+    notoEmoji
     pkgs.dejavu_fonts
   ];
 
