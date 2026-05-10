@@ -36,6 +36,9 @@
           forge-wayland-session = pkgs.callPackage ./nix/packages/forge-wayland-session.nix {
             forge-shell-session = self.packages.${system}.forge-shell-session;
           };
+          forge-operator-session = pkgs.callPackage ./nix/packages/forge-operator-session.nix {
+            forge-shell-session = self.packages.${system}.forge-shell-session;
+          };
           default = self.packages.${system}.forge-core;
         };
 
@@ -55,6 +58,10 @@
           forge-wayland-session = {
             type = "app";
             program = "${self.packages.${system}.forge-wayland-session}/bin/forge-wayland-session";
+          };
+          forge-operator-session = {
+            type = "app";
+            program = "${self.packages.${system}.forge-operator-session}/bin/forge-operator-session";
           };
           default = self.apps.${system}.forge-core;
         };
@@ -78,6 +85,9 @@
           forge-wayland-session = pkgs.callPackage ./nix/checks/forge-wayland-session.nix {
             forge-wayland-session = self.packages.${system}.forge-wayland-session;
           };
+          forge-operator-session = pkgs.callPackage ./nix/checks/forge-operator-session.nix {
+            forge-operator-session = self.packages.${system}.forge-operator-session;
+          };
           forge-vbox-graphics-test = pkgs.callPackage ./nix/checks/forge-vbox-graphics-test.nix { };
           forge-shadow-env = pkgs.callPackage ./nix/checks/forge-shadow-env.nix { };
           forge-workspace-default = pkgs.callPackage ./nix/checks/forge-workspace-default.nix { };
@@ -99,6 +109,7 @@
         forge-host-kernel = import ./nix/nixos/modules/forge-host-kernel.nix;
         forge-shell-session = import ./nix/nixos/modules/forge-shell-session.nix;
         forge-vbox-graphics-test = import ./nix/nixos/profiles/forge-vbox-graphics-test.nix;
+        forge-operator-desktop = import ./nix/nixos/profiles/forge-operator-desktop.nix;
         default = self.nixosModules.forge-os;
       };
     };
