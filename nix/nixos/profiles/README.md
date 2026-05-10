@@ -27,3 +27,27 @@ TTY fallback, expose remote graphics, run host-control commands from wrappers,
 load or unload models, write semantic memory, or make FORGE-K live authority.
 
 See `docs/operations/virtualbox_forge_shell_test.md` for the operator runbook.
+
+### `forge-operator-desktop.nix`
+
+Scope: OPERATOR DESKTOP PROFILE ONLY / OPT-IN ONLY / FORGE G6 WAYLAND WINDOW SUBSTRATE.
+
+This profile adds the lightweight compositor and operator tools needed to run
+FORGE as the primary desktop surface while allowing normal app windows:
+
+```text
+TTY login
+-> forge-operator-session
+-> labwc
+-> forge-shell-session
+-> packaged forge-desktop-shell
+-> local forge-core
+```
+
+It installs terminal and file-manager support for operator-owned setup work,
+keeps the previous Cage fullscreen session as rollback, keeps TTY fallback, and
+does not install a full desktop environment, enable automatic login, run
+host-control commands from wrappers, load or unload models, write semantic
+memory, or make FORGE-K live authority.
+
+See `docs/runbooks/forge_operator_desktop_vm.md` for the G6 operator runbook.

@@ -10,4 +10,7 @@ final: prev: {
   forge-wayland-session = final.callPackage ../packages/forge-wayland-session.nix {
     forge-shell-session = final.forge-shell-session;
   };
+  forge-operator-session = final.callPackage ../packages/forge-operator-session.nix {
+    forge-shell-session = final.forge-shell-session;
+  };
 }

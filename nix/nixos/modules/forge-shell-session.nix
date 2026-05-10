@@ -32,7 +32,11 @@ let
     if cfg.wayland.sessionPackage == null || cfg.wayland.package == null || cfg.package == null then
       "${pkgs.runtimeShell} -lc \"echo 'FORGE Wayland shell session is not wired; set forge.shellSession.package, wayland.package, and wayland.sessionPackage' >&2; exit 1\""
     else
-      "env FORGE_CORE_URL=${cfg.coreURL} VITE_FORGE_API_URL=${cfg.coreURL} FORGE_SHELL_MODE=${cfg.mode} FORGE_SHELL_DISPLAY_BACKEND=${cfg.displayBackend} FORGE_SHELL_COMPOSITOR=${cfg.compositor} FORGE_SHELL_SAFE_MODE=${boolString cfg.safeMode} FORGE_SHELL_FULLSCREEN=${boolString cfg.fullscreen} FORGE_SHELL_RUNTIME_DIR=${cfg.runtimePath} ${cfg.wayland.sessionPackage}/bin/forge-wayland-session";
+      let
+        sessionBinary =
+          if cfg.mode == "operator-desktop" then "forge-operator-session" else "forge-wayland-session";
+      in
+      "env FORGE_CORE_URL=${cfg.coreURL} VITE_FORGE_API_URL=${cfg.coreURL} FORGE_SHELL_MODE=${cfg.mode} FORGE_SHELL_DISPLAY_BACKEND=${cfg.displayBackend} FORGE_SHELL_COMPOSITOR=${cfg.compositor} FORGE_SHELL_SAFE_MODE=${boolString cfg.safeMode} FORGE_SHELL_FULLSCREEN=${boolString cfg.fullscreen} FORGE_SHELL_RUNTIME_DIR=${cfg.runtimePath} ${cfg.wayland.sessionPackage}/bin/${sessionBinary}";
 in
 {
   imports = [
@@ -43,9 +47,12 @@ in
     enable = lib.mkEnableOption "FORGE graphical shell session scaffold";
 
     mode = lib.mkOption {
-      type = lib.types.enum [ "fullscreen-shell" ];
+      type = lib.types.enum [
+        "fullscreen-shell"
+        "operator-desktop"
+      ];
       default = "fullscreen-shell";
-      description = "FORGE graphical shell launch mode. Phase G4 supports fullscreen-shell.";
+      description = "FORGE graphical shell launch mode. G4 supports fullscreen-shell; G6 adds operator-desktop.";
     };
 
     package = lib.mkOption {
@@ -72,7 +79,10 @@ in
     };
 
     compositor = lib.mkOption {
-      type = lib.types.enum [ "cage" ];
+      type = lib.types.enum [
+        "cage"
+        "labwc"
+      ];
       default = "cage";
       description = "Lightweight Wayland compositor command used by the opt-in FORGE shell session.";
     };
@@ -141,8 +151,10 @@ in
   config = lib.mkIf cfg.enable {
     assertions = [
       {
-        assertion = cfg.mode == "fullscreen-shell";
-        message = "Phase G4 supports only forge.shellSession.mode = fullscreen-shell.";
+        assertion =
+          (cfg.mode == "fullscreen-shell" && cfg.compositor == "cage" && cfg.fullscreen == true)
+          || (cfg.mode == "operator-desktop" && cfg.compositor == "labwc" && cfg.fullscreen == false);
+        message = "FORGE shell session mode must use fullscreen-shell/cage/fullscreen or operator-desktop/labwc/non-fullscreen.";
       }
       {
         assertion = cfg.autoStart == false;
@@ -153,16 +165,20 @@ in
         message = "Phase G4 FORGE graphical shell session must remain in safe mode.";
       }
       {
-        assertion = cfg.fullscreen == true;
-        message = "Phase G4 FORGE graphical shell session must remain fullscreen.";
+        assertion =
+          (cfg.mode == "fullscreen-shell" && cfg.fullscreen == true)
+          || (cfg.mode == "operator-desktop" && cfg.fullscreen == false);
+        message = "FORGE graphical shell fullscreen setting must match the selected mode.";
       }
       {
         assertion = cfg.displayBackend == "wayland";
         message = "Phase G4 FORGE graphical shell session supports only the Wayland display backend.";
       }
       {
-        assertion = cfg.compositor == "cage";
-        message = "Phase G4 FORGE graphical shell session supports only the cage compositor.";
+        assertion =
+          (cfg.mode == "fullscreen-shell" && cfg.compositor == "cage")
+          || (cfg.mode == "operator-desktop" && cfg.compositor == "labwc");
+        message = "FORGE graphical shell compositor must match the selected mode.";
       }
       {
         assertion = cfg.wayland.enable == true;
