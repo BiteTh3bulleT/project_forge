@@ -46,6 +46,7 @@ go test ./internal/forgek/...
 - Phase 14A FORGE-K Operational Cutover Design: docs only, no package code
 - Phase 14B Ref Shape Validation: shared pure validation package outside this simulator at `services/core/internal/refvalidation`; live Control Lane uses it for validation only, with no simulator-service authority import
 - Phase 14C Control Lane Validation Expansion: shared pure validation packages outside this simulator at `services/core/internal/refvalidation` and `services/core/internal/semanticvalidation`; live Control Lane uses them for comparison/validation only, with no simulator-service authority import
+- Phase 14D Control Lane Validation Shadow Reporting: live-adjacent diagnostic package outside this simulator at `services/core/internal/forgekshadow`; reports are disabled by default and do not import simulator services as live authority
 
 ## Authority Boundary
 
@@ -100,6 +101,8 @@ Phase 14A is `DOCS_ONLY / LIVE_AUTHORITY_MIGRATION_DESIGN_ONLY`. It defines how 
 Phase 14B is `PARTIAL LIVE VALIDATION / CONTROL_LANE / NO_AUTHORITY_REPLACEMENT`. It adds `services/core/internal/refvalidation` outside this simulator package and live Control Lane `VALIDATE_REF_SHAPE`. This package remains simulator-only: Phase 14B does not import FORGE-K simulator services as live authority, look up object truth, admit evidence, compile context, execute retrieval/search/embeddings, write memory, call modelruntime, change routes/public APIs, or create a second authority path.
 
 Phase 14C is `PARTIAL LIVE VALIDATION / CONTROL_LANE / SHADOW_COMPARE / NO_AUTHORITY_REPLACEMENT`. It adds ref-shape comparison and semantic-operation shape validation outside this simulator package. This package remains simulator-only: Phase 14C does not execute semantic operations, admit evidence, compile context, write memory, call modelruntime, execute retrieval/search/embeddings/tools, change routes/public APIs, or create a second authority path.
+
+Phase 14D is `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / CONTROL_LANE_VALIDATION_DIAGNOSTICS` and lives outside this simulator package in `services/core/internal/forgekshadow`. It adds internal shadow report support for Control Lane validation summaries only when both `FORGE_K_SHADOW_MODE_ENABLED=true` and `FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED=true`. This package remains simulator-only: Phase 14D does not call FORGE-K simulator services from live daemon paths, change Control Lane decisions, add public routes/APIs, affect user-visible output, admit evidence, compile context, write memory, call modelruntime, execute retrieval/search/embeddings/tools, or create a second authority path.
 
 ## Future Rust Boundary
 

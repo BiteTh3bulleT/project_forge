@@ -63,6 +63,44 @@ func TestDiagnosticPersistenceEnabledWritesSafeRow(t *testing.T) {
 	}
 }
 
+func TestDiagnosticPersistenceStoresControlLaneValidationSummary(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true, ControlLaneValidationEnabled: true}, NewMemorySink(10), fixedNow)
+	input := sampleControlLaneValidationInput()
+	input.Action = "COMPARE_REF_SHAPE"
+	input.ValidationKind = "ref_shape_comparison"
+	input.Decision = "drift"
+	input.Passed = true
+	input.Match = false
+	input.AddedRefCount = 1
+	input.RemovedRefCount = 2
+	input.UnchangedRefCount = 3
+	if err := observer.ObserveControlLaneValidation(context.Background(), input); err != nil {
+		t.Fatalf("observe control lane validation: %v", err)
+	}
+	reports := observer.Reports()
+	if len(reports) != 1 {
+		t.Fatalf("expected one diagnostic report, got %d", len(reports))
+	}
+	record, err := BuildPersistedDiagnosticReport(reports[0], DiagnosticPersistenceOptions{
+		Enabled:         true,
+		RetentionDays:   30,
+		MaxPayloadBytes: 4096,
+		Now:             fixedNow,
+	})
+	if err != nil {
+		t.Fatalf("build persisted control lane validation report: %v", err)
+	}
+	if record.ReportKind != "control_lane_validation" {
+		t.Fatalf("report kind=%q, want control_lane_validation", record.ReportKind)
+	}
+	if record.SummaryJSON["action"] != "COMPARE_REF_SHAPE" || record.SummaryJSON["validation_kind"] != "ref_shape_comparison" {
+		t.Fatalf("unexpected summary identity: %#v", record.SummaryJSON)
+	}
+	if record.SummaryJSON["added_ref_count"] != 1 || record.SummaryJSON["removed_ref_count"] != 2 || record.SummaryJSON["unchanged_ref_count"] != 3 {
+		t.Fatalf("unexpected persisted drift counts: %#v", record.SummaryJSON)
+	}
+}
+
 func TestDiagnosticPersistenceRejectsUnsafeMetadata(t *testing.T) {
 	report := sampleDiagnosticReport(t)
 	report.Observation.Metadata["prompt"] = "raw prompt"

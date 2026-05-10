@@ -17,13 +17,14 @@ type ObservationInput struct {
 }
 
 type DiagnosticReport struct {
-	Observation       shadowharness.ShadowObservation
-	Comparison        shadowharness.ShadowComparisonReport
-	RouteEnvelope     *RouteEnvelopeObservation
-	ChatMetadata      *ChatMetadataObservation
-	RetrievalMetadata *RetrievalMetadataObservation
-	Advisory          *ShadowAdvisoryReport
-	StoredAt          time.Time
+	Observation           shadowharness.ShadowObservation
+	Comparison            shadowharness.ShadowComparisonReport
+	RouteEnvelope         *RouteEnvelopeObservation
+	ChatMetadata          *ChatMetadataObservation
+	RetrievalMetadata     *RetrievalMetadataObservation
+	ControlLaneValidation *ControlLaneValidationObservation
+	Advisory              *ShadowAdvisoryReport
+	StoredAt              time.Time
 }
 
 type RouteEnvelopeInput struct {
@@ -136,6 +137,64 @@ type RetrievalMetadataObservation struct {
 	DurationMS        int64          `json:"duration_ms"`
 	Warnings          []string       `json:"warnings,omitempty"`
 	Metadata          map[string]any `json:"metadata,omitempty"`
+}
+
+type ControlLaneValidationInput struct {
+	WorkspaceID            string
+	RequestID              string
+	CorrelationID          string
+	Action                 string
+	ValidationKind         string
+	Decision               string
+	Passed                 bool
+	Match                  bool
+	OperationType          string
+	NormalizedRefCount     int
+	AddedRefCount          int
+	RemovedRefCount        int
+	UnchangedRefCount      int
+	FailureCount           int
+	WarningCount           int
+	MemoryMutation         bool
+	RuntimeMutation        bool
+	ModelRuntimeCall       bool
+	EvidenceAdmission      bool
+	ContextCompilation     bool
+	UserVisibleOutput      bool
+	LiveAuthorityMigration bool
+	Duration               time.Duration
+	Warnings               []string
+	Metadata               map[string]any
+}
+
+type ControlLaneValidationObservation struct {
+	ObservationID          string         `json:"observation_id"`
+	ObservedAt             time.Time      `json:"observed_at"`
+	WorkspaceID            string         `json:"workspace_id,omitempty"`
+	RequestID              string         `json:"request_id,omitempty"`
+	CorrelationID          string         `json:"correlation_id,omitempty"`
+	Action                 string         `json:"action"`
+	ValidationKind         string         `json:"validation_kind"`
+	Decision               string         `json:"decision"`
+	Passed                 bool           `json:"passed"`
+	Match                  bool           `json:"match,omitempty"`
+	OperationType          string         `json:"operation_type,omitempty"`
+	NormalizedRefCount     int            `json:"normalized_ref_count,omitempty"`
+	AddedRefCount          int            `json:"added_ref_count,omitempty"`
+	RemovedRefCount        int            `json:"removed_ref_count,omitempty"`
+	UnchangedRefCount      int            `json:"unchanged_ref_count,omitempty"`
+	FailureCount           int            `json:"failure_count,omitempty"`
+	WarningCount           int            `json:"warning_count,omitempty"`
+	MemoryMutation         bool           `json:"memory_mutation"`
+	RuntimeMutation        bool           `json:"runtime_mutation"`
+	ModelRuntimeCall       bool           `json:"model_runtime_call"`
+	EvidenceAdmission      bool           `json:"evidence_admission"`
+	ContextCompilation     bool           `json:"context_compilation"`
+	UserVisibleOutput      bool           `json:"user_visible_output"`
+	LiveAuthorityMigration bool           `json:"live_authority_migration"`
+	DurationMS             int64          `json:"duration_ms"`
+	Warnings               []string       `json:"warnings,omitempty"`
+	Metadata               map[string]any `json:"metadata,omitempty"`
 }
 
 type ShadowAdvisoryReport struct {

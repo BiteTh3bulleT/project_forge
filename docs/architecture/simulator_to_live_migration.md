@@ -1,6 +1,6 @@
 # Simulator To Live Migration
 
-Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, and Phase 14C partial live validation expansion.
+Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, Phase 14C partial live validation expansion, and Phase 14D disabled-by-default validation shadow reporting.
 
 ## Purpose
 
@@ -15,6 +15,8 @@ Phase 14A generalizes this into the operational cutover rule: make FORGE-K opera
 Phase 14B applies the pattern to deterministic ref-shape validation. `services/core/internal/refvalidation` is shared pure validation logic, and the live Control Lane action `VALIDATE_REF_SHAPE` uses it without importing FORGE-K simulator services or mutating live memory.
 
 Phase 14C extends the same pattern with diagnostic ref-shape comparison and semantic-operation shape validation. `COMPARE_REF_SHAPE` reports match/drift between candidate and observed refs. `VALIDATE_SEMANTIC_OPERATION` validates operation shape and rejects authority claims. Both remain Control Lane validation only.
+
+Phase 14D adds a read-only internal diagnostic report shape for validation summaries under `services/core/internal/forgekshadow`. It is disabled by default, requires both global shadow mode and `FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED`, and does not change Control Lane decisions or route live mutation through FORGE-K.
 
 ## Migration Pattern
 
@@ -73,6 +75,16 @@ Phase 14C extends the same pattern with diagnostic ref-shape comparison and sema
 | Mutation posture | validation/comparison only; no object lookup, evidence admission, context compilation, retrieval, modelruntime call, tool execution, or memory write |
 | Still future | actual semantic operation execution, live Courthouse admission, live Context Compiler authority, and broader FORGE-K Kernel authority |
 
+## Phase 14D Validation Shadow Reporting Example
+
+| Concern | Decision |
+| --- | --- |
+| Diagnostic surface | internal `forgekshadow` validation summary report |
+| Flagging | `FORGE_K_SHADOW_MODE_ENABLED=true` plus `FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED=true` |
+| Captured data | bounded scalar metadata: action, validation kind, decision, pass/fail, match/drift counts, operation type, warning/failure counts, duration |
+| Mutation posture | read-only diagnostics; no Control Lane mutation, public API, route behavior change, user-visible output, memory write, modelruntime call, retrieval/search/embedding execution, evidence admission, or context compilation |
+| Still future | live hook policy for when to emit these reports from specific validation call sites and any operator-visible diagnostics surface |
+
 ## Live-Safe Shared Package Rules
 
 A shared package may be used by simulator and live code only when it:
@@ -117,6 +129,7 @@ Do not import FORGE-K Kernel, Context Compiler, KVService, Runtime Driver Bounda
 - `[PARTIAL]` Ref shape validation: live validation exists; object lookup, evidence admission, context compilation, and memory writes do not.
 - `[PARTIAL]` Ref shape shadow comparison: diagnostic comparison exists; it does not affect live output or state.
 - `[PARTIAL]` Semantic operation shape validation: operation envelope validation exists; operation execution and authority migration do not.
+- `[PARTIAL]` Control Lane validation shadow reporting: internal diagnostic report support exists; it remains disabled by default and does not affect live output or state.
 - `[FUTURE]` Context Compiler mirror: requires no-effect live comparison before any prompt authority migration.
 - `[FUTURE]` Runtime driver identity capture: requires modelruntime trace-only adapters before live reuse.
 - `[FUTURE]` Retrieval evidence admission: must go through Courthouse/control-lane boundaries, not vector-store scores.

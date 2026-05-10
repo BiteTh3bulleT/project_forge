@@ -3,12 +3,13 @@ package forgekshadow
 const DefaultMaxReports = 50
 
 type Config struct {
-	Enabled                  bool
-	ChatMetadataEnabled      bool
-	RetrievalMetadataEnabled bool
-	AdvisoryEnabled          bool
-	MaxReports               int
-	DisableSink              bool
+	Enabled                      bool
+	ChatMetadataEnabled          bool
+	RetrievalMetadataEnabled     bool
+	AdvisoryEnabled              bool
+	ControlLaneValidationEnabled bool
+	MaxReports                   int
+	DisableSink                  bool
 }
 
 func (c Config) normalized() Config {

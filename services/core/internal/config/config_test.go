@@ -87,6 +87,7 @@ func TestLoadModelRuntimeDefaultsSafe(t *testing.T) {
 	t.Setenv("FORGE_K_SHADOW_CHAT_METADATA_ENABLED", "")
 	t.Setenv("FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED", "")
 	t.Setenv("FORGE_K_SHADOW_ADVISORY_ENABLED", "")
+	t.Setenv("FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED", "")
 
 	cfg := Load()
 	expectedModelHome, err := filepath.Abs(filepath.Join(cfg.DataDir, "models"))
@@ -144,6 +145,9 @@ func TestLoadModelRuntimeDefaultsSafe(t *testing.T) {
 	}
 	if cfg.ForgeKShadowAdvisoryEnabled {
 		t.Fatalf("expected FORGE-K shadow advisory disabled by default")
+	}
+	if cfg.ForgeKShadowControlLaneValidationEnabled {
+		t.Fatalf("expected FORGE-K control lane validation shadow disabled by default")
 	}
 	if !cfg.DreamModeGPUOnlyInDeepIdle {
 		t.Fatalf("expected dream mode GPU to be deep-idle-only by default")
@@ -307,6 +311,7 @@ func TestLoadModelRuntimeOverrides(t *testing.T) {
 	t.Setenv("FORGE_K_SHADOW_CHAT_METADATA_ENABLED", "true")
 	t.Setenv("FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED", "true")
 	t.Setenv("FORGE_K_SHADOW_ADVISORY_ENABLED", "true")
+	t.Setenv("FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED", "true")
 
 	cfg := Load()
 	expectedModelHome, err := filepath.Abs("./test-models")
@@ -468,6 +473,9 @@ func TestLoadModelRuntimeOverrides(t *testing.T) {
 	if !cfg.ForgeKShadowAdvisoryEnabled {
 		t.Fatalf("expected FORGE-K shadow advisory enabled from env")
 	}
+	if !cfg.ForgeKShadowControlLaneValidationEnabled {
+		t.Fatalf("expected FORGE-K control lane validation shadow enabled from env")
+	}
 }
 
 func TestLoadModelRuntimeInvalidValuesFallbackToDefaults(t *testing.T) {
@@ -509,6 +517,7 @@ func TestLoadModelRuntimeInvalidValuesFallbackToDefaults(t *testing.T) {
 	t.Setenv("FORGE_K_SHADOW_CHAT_METADATA_ENABLED", "chat?")
 	t.Setenv("FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED", "retrieval?")
 	t.Setenv("FORGE_K_SHADOW_ADVISORY_ENABLED", "advisory?")
+	t.Setenv("FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED", "control?")
 
 	cfg := Load()
 
@@ -526,6 +535,9 @@ func TestLoadModelRuntimeInvalidValuesFallbackToDefaults(t *testing.T) {
 	}
 	if cfg.ForgeKShadowAdvisoryEnabled {
 		t.Fatalf("expected invalid FORGE-K shadow advisory bool to fall back to false")
+	}
+	if cfg.ForgeKShadowControlLaneValidationEnabled {
+		t.Fatalf("expected invalid FORGE-K control lane validation shadow bool to fall back to false")
 	}
 	if cfg.GPUEnabled {
 		t.Fatalf("expected invalid GPU enabled bool to fall back to false")

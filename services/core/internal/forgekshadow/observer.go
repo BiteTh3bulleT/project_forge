@@ -102,7 +102,7 @@ func (o *Observer) ObserveRouteEnvelope(ctx context.Context, input RouteEnvelope
 		Path:           routePath,
 		RequestSummary: "read-only route envelope metadata",
 		Metadata:       metadata,
-	}, now, observationID, &envelope, nil, nil)
+	}, now, observationID, &envelope, nil, nil, nil)
 }
 
 func (o *Observer) ObserveChatMetadataBestEffort(ctx context.Context, input ChatMetadataInput) {
@@ -130,7 +130,7 @@ func (o *Observer) ObserveChatMetadata(ctx context.Context, input ChatMetadataIn
 		Path:           "/api/chat/threads/{id}/messages",
 		RequestSummary: "read-only chat metadata",
 		Metadata:       metadata,
-	}, now, observationID, nil, &chatMetadata, nil)
+	}, now, observationID, nil, &chatMetadata, nil, nil)
 }
 
 func (o *Observer) ObserveRetrievalMetadataBestEffort(ctx context.Context, input RetrievalMetadataInput) {
@@ -158,17 +158,45 @@ func (o *Observer) ObserveRetrievalMetadata(ctx context.Context, input Retrieval
 		Path:           "/api/retrieval/runs",
 		RequestSummary: "read-only retrieval metadata",
 		Metadata:       metadata,
-	}, now, observationID, nil, nil, &retrievalMetadata)
+	}, now, observationID, nil, nil, &retrievalMetadata, nil)
+}
+
+func (o *Observer) ObserveControlLaneValidationBestEffort(ctx context.Context, input ControlLaneValidationInput) {
+	defer func() {
+		_ = recover()
+	}()
+	_ = o.ObserveControlLaneValidation(ctx, input)
+}
+
+func (o *Observer) ObserveControlLaneValidation(ctx context.Context, input ControlLaneValidationInput) error {
+	if o == nil || !o.cfg.Enabled || !o.cfg.ControlLaneValidationEnabled {
+		return nil
+	}
+	now := o.now()
+	observationID := fmt.Sprintf("shadow-control-lane-validation-%d", o.counter.Add(1))
+	validation, metadata, err := normalizeControlLaneValidationInput(input, now, observationID)
+	if err != nil {
+		return err
+	}
+	return o.observeAt(ctx, ObservationInput{
+		WorkspaceID:    input.WorkspaceID,
+		RequestID:      input.RequestID,
+		LivePath:       "AIOS Control Lane " + validation.Action,
+		Method:         "CONTROL_LANE",
+		Path:           validation.Action,
+		RequestSummary: "read-only control lane validation metadata",
+		Metadata:       metadata,
+	}, now, observationID, nil, nil, nil, &validation)
 }
 
 func (o *Observer) observe(ctx context.Context, input ObservationInput, routeEnvelope *RouteEnvelopeObservation, chatMetadata *ChatMetadataObservation) error {
 	if o == nil || !o.cfg.Enabled {
 		return nil
 	}
-	return o.observeAt(ctx, input, o.now(), "", routeEnvelope, chatMetadata, nil)
+	return o.observeAt(ctx, input, o.now(), "", routeEnvelope, chatMetadata, nil, nil)
 }
 
-func (o *Observer) observeAt(ctx context.Context, input ObservationInput, now time.Time, observationID string, routeEnvelope *RouteEnvelopeObservation, chatMetadata *ChatMetadataObservation, retrievalMetadata *RetrievalMetadataObservation) error {
+func (o *Observer) observeAt(ctx context.Context, input ObservationInput, now time.Time, observationID string, routeEnvelope *RouteEnvelopeObservation, chatMetadata *ChatMetadataObservation, retrievalMetadata *RetrievalMetadataObservation, controlLaneValidation *ControlLaneValidationObservation) error {
 	if o == nil || !o.cfg.Enabled {
 		return nil
 	}
@@ -259,12 +287,13 @@ func (o *Observer) observeAt(ctx context.Context, input ObservationInput, now ti
 		return err
 	}
 	diagnostic := DiagnosticReport{
-		Observation:       obs,
-		Comparison:        report,
-		RouteEnvelope:     routeEnvelope,
-		ChatMetadata:      chatMetadata,
-		RetrievalMetadata: retrievalMetadata,
-		StoredAt:          now,
+		Observation:           obs,
+		Comparison:            report,
+		RouteEnvelope:         routeEnvelope,
+		ChatMetadata:          chatMetadata,
+		RetrievalMetadata:     retrievalMetadata,
+		ControlLaneValidation: controlLaneValidation,
+		StoredAt:              now,
 	}
 	if o.cfg.AdvisoryEnabled {
 		advisory, err := buildShadowAdvisory(diagnostic, now)

@@ -341,6 +341,8 @@ func typedMetadata(report DiagnosticReport) map[string]any {
 		return report.ChatMetadata.Metadata
 	case report.RetrievalMetadata != nil:
 		return report.RetrievalMetadata.Metadata
+	case report.ControlLaneValidation != nil:
+		return report.ControlLaneValidation.Metadata
 	case report.Advisory != nil:
 		return report.Advisory.Metadata
 	default:
@@ -382,6 +384,21 @@ func persistedDiagnosticSummary(report DiagnosticReport, kind string) map[string
 		summary["freshness_status"] = report.RetrievalMetadata.FreshnessStatus
 		summary["duration_ms"] = report.RetrievalMetadata.DurationMS
 	}
+	if report.ControlLaneValidation != nil {
+		summary["action"] = report.ControlLaneValidation.Action
+		summary["validation_kind"] = report.ControlLaneValidation.ValidationKind
+		summary["decision"] = report.ControlLaneValidation.Decision
+		summary["passed"] = report.ControlLaneValidation.Passed
+		summary["match"] = report.ControlLaneValidation.Match
+		summary["operation_type"] = report.ControlLaneValidation.OperationType
+		summary["normalized_ref_count"] = report.ControlLaneValidation.NormalizedRefCount
+		summary["added_ref_count"] = report.ControlLaneValidation.AddedRefCount
+		summary["removed_ref_count"] = report.ControlLaneValidation.RemovedRefCount
+		summary["unchanged_ref_count"] = report.ControlLaneValidation.UnchangedRefCount
+		summary["failure_count"] = report.ControlLaneValidation.FailureCount
+		summary["warning_count"] = report.ControlLaneValidation.WarningCount
+		summary["duration_ms"] = report.ControlLaneValidation.DurationMS
+	}
 	if report.Advisory != nil {
 		summary["route_metadata_count"] = report.Advisory.EvidenceSummary.RouteMetadataCount
 		summary["chat_metadata_count"] = report.Advisory.EvidenceSummary.ChatMetadataCount
@@ -403,6 +420,9 @@ func persistedDiagnosticWarnings(report DiagnosticReport) []string {
 	}
 	if report.RetrievalMetadata != nil {
 		warnings = append(warnings, report.RetrievalMetadata.Warnings...)
+	}
+	if report.ControlLaneValidation != nil {
+		warnings = append(warnings, report.ControlLaneValidation.Warnings...)
 	}
 	if report.Advisory != nil {
 		warnings = append(warnings, report.Advisory.Warnings...)
@@ -429,6 +449,8 @@ func diagnosticReportKind(report DiagnosticReport) string {
 		return "shadow_advisory"
 	case report.RetrievalMetadata != nil:
 		return "retrieval_metadata"
+	case report.ControlLaneValidation != nil:
+		return "control_lane_validation"
 	case report.ChatMetadata != nil:
 		return "chat_metadata"
 	case report.RouteEnvelope != nil:
@@ -483,6 +505,8 @@ func workspaceFromTypedReport(report DiagnosticReport) string {
 		return report.ChatMetadata.WorkspaceID
 	case report.RetrievalMetadata != nil:
 		return report.RetrievalMetadata.WorkspaceID
+	case report.ControlLaneValidation != nil:
+		return report.ControlLaneValidation.WorkspaceID
 	case report.Advisory != nil:
 		return report.Advisory.WorkspaceID
 	default:
@@ -498,6 +522,8 @@ func requestFromTypedReport(report DiagnosticReport) string {
 		return report.ChatMetadata.RequestID
 	case report.RetrievalMetadata != nil:
 		return report.RetrievalMetadata.RequestID
+	case report.ControlLaneValidation != nil:
+		return report.ControlLaneValidation.RequestID
 	case report.Advisory != nil:
 		return report.Advisory.RequestID
 	default:
@@ -513,6 +539,8 @@ func correlationFromTypedReport(report DiagnosticReport) string {
 		return report.ChatMetadata.CorrelationID
 	case report.RetrievalMetadata != nil:
 		return report.RetrievalMetadata.CorrelationID
+	case report.ControlLaneValidation != nil:
+		return report.ControlLaneValidation.CorrelationID
 	case report.Advisory != nil:
 		return report.Advisory.CorrelationID
 	default:
@@ -528,6 +556,8 @@ func observedAtFromTypedReport(report DiagnosticReport) time.Time {
 		return report.ChatMetadata.ObservedAt.UTC()
 	case report.RetrievalMetadata != nil:
 		return report.RetrievalMetadata.ObservedAt.UTC()
+	case report.ControlLaneValidation != nil:
+		return report.ControlLaneValidation.ObservedAt.UTC()
 	case report.Advisory != nil:
 		return report.Advisory.GeneratedAt.UTC()
 	default:

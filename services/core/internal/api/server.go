@@ -237,10 +237,11 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	var shadowDB *sql.DB
 	if cfg.ForgeKShadowModeEnabled {
 		shadowConfig := forgekshadow.Config{
-			Enabled:                  true,
-			ChatMetadataEnabled:      cfg.ForgeKShadowChatMetadataEnabled,
-			RetrievalMetadataEnabled: cfg.ForgeKShadowRetrievalMetadataEnabled,
-			AdvisoryEnabled:          cfg.ForgeKShadowAdvisoryEnabled,
+			Enabled:                      true,
+			ChatMetadataEnabled:          cfg.ForgeKShadowChatMetadataEnabled,
+			RetrievalMetadataEnabled:     cfg.ForgeKShadowRetrievalMetadataEnabled,
+			AdvisoryEnabled:              cfg.ForgeKShadowAdvisoryEnabled,
+			ControlLaneValidationEnabled: cfg.ForgeKShadowControlLaneValidationEnabled,
 		}
 		var shadowSink forgekshadow.Sink = forgekshadow.NewMemorySink(forgekshadow.DefaultMaxReports)
 		if cfg.ShadowDiagnosticPersistenceEnabled {
@@ -1336,10 +1337,11 @@ func (s *Server) reloadShadowMode(ctx context.Context) {
 	s.cfg = runtimeConfigFromSettings(s.st.DB, s.cfg)
 	if s.cfg.ForgeKShadowModeEnabled {
 		s.forgeKShadow = forgekshadow.NewObserver(forgekshadow.Config{
-			Enabled:                  true,
-			ChatMetadataEnabled:      s.cfg.ForgeKShadowChatMetadataEnabled,
-			RetrievalMetadataEnabled: s.cfg.ForgeKShadowRetrievalMetadataEnabled,
-			AdvisoryEnabled:          s.cfg.ForgeKShadowAdvisoryEnabled,
+			Enabled:                      true,
+			ChatMetadataEnabled:          s.cfg.ForgeKShadowChatMetadataEnabled,
+			RetrievalMetadataEnabled:     s.cfg.ForgeKShadowRetrievalMetadataEnabled,
+			AdvisoryEnabled:              s.cfg.ForgeKShadowAdvisoryEnabled,
+			ControlLaneValidationEnabled: s.cfg.ForgeKShadowControlLaneValidationEnabled,
 		})
 	} else {
 		s.forgeKShadow = nil
