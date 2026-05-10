@@ -3,6 +3,8 @@ package ephemeral
 import (
 	"context"
 	"errors"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -120,12 +122,86 @@ func TestMemoryStoreProgressAppendRead(t *testing.T) {
 	}
 }
 
+func TestMemoryStoreReadProgressDefaultsToBoundedLimit(t *testing.T) {
+	ctx := context.Background()
+	policy := DefaultKeyPolicy("forge")
+	store := NewMemoryStore(policy)
+	key, err := policy.Key(KeyKindProgress, "workspace-1", "job-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < maxEphemeralProgressReadEntries+1; i++ {
+		entry := ProgressEntry{ID: strconv.Itoa(i), Message: "step"}
+		if err := store.AppendProgress(ctx, key, entry, time.Minute); err != nil {
+			t.Fatalf("append progress %d failed: %v", i, err)
+		}
+	}
+	entries, err := store.ReadProgress(ctx, key, 0)
+	if err != nil {
+		t.Fatalf("read progress failed: %v", err)
+	}
+	if len(entries) != maxEphemeralProgressReadEntries {
+		t.Fatalf("expected bounded progress read length %d, got %d", maxEphemeralProgressReadEntries, len(entries))
+	}
+	if entries[0].ID != "1" {
+		t.Fatalf("expected oldest retained read entry to be 1, got %q", entries[0].ID)
+	}
+}
+
 func TestMemoryStoreRejectsUnsafeKey(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore(DefaultKeyPolicy("forge"))
 	err := store.SetCache(ctx, "forge:cache:raw-prompt", []byte("value"), time.Minute)
 	if !errors.Is(err, ErrUnsafeKey) {
 		t.Fatalf("expected unsafe key rejection, got %v", err)
+	}
+}
+
+func TestMemoryStoreRejectsOversizeValues(t *testing.T) {
+	ctx := context.Background()
+	policy := DefaultKeyPolicy("forge")
+	store := NewMemoryStore(policy)
+	oversize := make([]byte, maxEphemeralValueBytes+1)
+
+	cacheKey, err := policy.Key(KeyKindCache, "workspace-1", "job-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetCache(ctx, cacheKey, oversize, time.Minute); !errors.Is(err, ErrValueTooLarge) {
+		t.Fatalf("expected cache value size rejection, got %v", err)
+	}
+
+	queueKey, err := policy.Key(KeyKindQueue, "workspace-1", "job-events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PushQueue(ctx, queueKey, oversize); !errors.Is(err, ErrValueTooLarge) {
+		t.Fatalf("expected queue value size rejection, got %v", err)
+	}
+
+	pubsubKey, err := policy.Key(KeyKindPubSub, "workspace-1", "events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Publish(ctx, pubsubKey, oversize); !errors.Is(err, ErrValueTooLarge) {
+		t.Fatalf("expected pubsub value size rejection, got %v", err)
+	}
+
+	lockKey, err := policy.Key(KeyKindLock, "workspace-1", "job-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AcquireLock(ctx, lockKey, strings.Repeat("o", maxEphemeralValueBytes+1), time.Minute); !errors.Is(err, ErrValueTooLarge) {
+		t.Fatalf("expected lock owner size rejection, got %v", err)
+	}
+
+	progressKey, err := policy.Key(KeyKindProgress, "workspace-1", "job-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := ProgressEntry{ID: "1", Message: strings.Repeat("m", maxEphemeralValueBytes+1)}
+	if err := store.AppendProgress(ctx, progressKey, entry, time.Minute); !errors.Is(err, ErrValueTooLarge) {
+		t.Fatalf("expected progress value size rejection, got %v", err)
 	}
 }
 

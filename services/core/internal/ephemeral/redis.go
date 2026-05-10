@@ -2,7 +2,6 @@ package ephemeral
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -23,6 +22,12 @@ type RedisConfig struct {
 type RedisStore struct {
 	cfg RedisConfig
 }
+
+const (
+	maxRedisRESPBulkBytes  = 1 << 20
+	maxRedisRESPArrayItems = maxEphemeralProgressReadEntries
+	maxRedisRESPLineBytes  = 4096
+)
 
 func NewRedisStore(cfg RedisConfig) (*RedisStore, error) {
 	if !cfg.Enabled {
@@ -45,6 +50,9 @@ func (s *RedisStore) SetCache(ctx context.Context, key string, value []byte, ttl
 		return err
 	}
 	if err := validateFullyQualifiedKey(s.cfg.KeyPolicy, key); err != nil {
+		return err
+	}
+	if err := validateEphemeralValueBytes(value); err != nil {
 		return err
 	}
 	_, err := s.command(ctx, "SET", key, string(value), "PX", strconv.FormatInt(ttl.Milliseconds(), 10))
@@ -77,6 +85,9 @@ func (s *RedisStore) PushQueue(ctx context.Context, key string, value []byte) er
 		return err
 	}
 	if err := validateFullyQualifiedKey(s.cfg.KeyPolicy, key); err != nil {
+		return err
+	}
+	if err := validateEphemeralValueBytes(value); err != nil {
 		return err
 	}
 	_, err := s.command(ctx, "RPUSH", key, string(value))
@@ -112,6 +123,9 @@ func (s *RedisStore) AcquireLock(ctx context.Context, key string, owner string, 
 		return false, err
 	}
 	if err := validateFullyQualifiedKey(s.cfg.KeyPolicy, key); err != nil {
+		return false, err
+	}
+	if err := validateEphemeralValueString(owner); err != nil {
 		return false, err
 	}
 	result, err := s.command(ctx, "SET", key, owner, "NX", "PX", strconv.FormatInt(ttl.Milliseconds(), 10))
@@ -152,10 +166,16 @@ func (s *RedisStore) AppendProgress(ctx context.Context, key string, entry Progr
 	if err := validateFullyQualifiedKey(s.cfg.KeyPolicy, key); err != nil {
 		return err
 	}
+	if err := validateProgressEntryValue(entry); err != nil {
+		return err
+	}
 	if entry.ID == "" {
 		entry.ID = StableOpaqueSegment(key, entry.Message, time.Now().UTC().Format(time.RFC3339Nano))
 	}
 	value := entry.ID + "|" + strings.ReplaceAll(entry.Message, "\n", " ")
+	if err := validateEphemeralValueString(value); err != nil {
+		return err
+	}
 	if _, err := s.command(ctx, "RPUSH", key, value); err != nil {
 		return err
 	}
@@ -170,10 +190,8 @@ func (s *RedisStore) ReadProgress(ctx context.Context, key string, limit int) ([
 	if err := validateFullyQualifiedKey(s.cfg.KeyPolicy, key); err != nil {
 		return nil, err
 	}
-	start := int64(0)
-	if limit > 0 {
-		start = int64(-limit)
-	}
+	limit = normalizeProgressReadLimit(limit)
+	start := int64(-limit)
 	result, err := s.command(ctx, "LRANGE", key, strconv.FormatInt(start, 10), "-1")
 	if err != nil {
 		return nil, err
@@ -199,6 +217,9 @@ func (s *RedisStore) Publish(ctx context.Context, channel string, value []byte) 
 		return err
 	}
 	if err := validateFullyQualifiedKey(s.cfg.KeyPolicy, channel); err != nil {
+		return err
+	}
+	if err := validateEphemeralValueBytes(value); err != nil {
 		return err
 	}
 	_, err := s.command(ctx, "PUBLISH", channel, string(value))
@@ -242,13 +263,26 @@ func (s *RedisStore) command(ctx context.Context, args ...string) (any, error) {
 }
 
 func writeRESP(w io.Writer, args ...string) error {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "*%d\r\n", len(args))
 	for _, arg := range args {
-		fmt.Fprintf(&buf, "$%d\r\n%s\r\n", len(arg), arg)
+		if err := validateEphemeralValueString(arg); err != nil {
+			return err
+		}
 	}
-	_, err := w.Write(buf.Bytes())
-	return err
+	if _, err := fmt.Fprintf(w, "*%d\r\n", len(args)); err != nil {
+		return err
+	}
+	for _, arg := range args {
+		if _, err := fmt.Fprintf(w, "$%d\r\n", len(arg)); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(w, arg); err != nil {
+			return err
+		}
+		if _, err := io.WriteString(w, "\r\n"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func readRESP(r *bufio.Reader) (any, error) {
@@ -281,6 +315,9 @@ func readRESP(r *bufio.Reader) (any, error) {
 		if size < 0 {
 			return nil, nil
 		}
+		if size > maxRedisRESPBulkBytes {
+			return nil, fmt.Errorf("redis bulk response too large: %d > %d", size, maxRedisRESPBulkBytes)
+		}
 		buf := make([]byte, size+2)
 		if _, err := io.ReadFull(r, buf); err != nil {
 			return nil, err
@@ -294,6 +331,12 @@ func readRESP(r *bufio.Reader) (any, error) {
 		count, err := strconv.Atoi(line)
 		if err != nil {
 			return nil, err
+		}
+		if count < 0 {
+			return nil, fmt.Errorf("invalid redis array response size %d", count)
+		}
+		if count > maxRedisRESPArrayItems {
+			return nil, fmt.Errorf("redis array response too large: %d > %d", count, maxRedisRESPArrayItems)
 		}
 		values := make([]any, 0, count)
 		for i := 0; i < count; i++ {
@@ -310,9 +353,23 @@ func readRESP(r *bufio.Reader) (any, error) {
 }
 
 func readLine(r *bufio.Reader) (string, error) {
-	line, err := r.ReadString('\n')
-	if err != nil {
+	var buf strings.Builder
+	for {
+		chunk, err := r.ReadSlice('\n')
+		if len(chunk) > 0 {
+			if buf.Len()+len(chunk) > maxRedisRESPLineBytes {
+				return "", fmt.Errorf("redis line response too large: > %d bytes", maxRedisRESPLineBytes)
+			}
+			_, _ = buf.Write(chunk)
+		}
+		if err == nil {
+			break
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
+			continue
+		}
 		return "", err
 	}
+	line := buf.String()
 	return strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r"), nil
 }

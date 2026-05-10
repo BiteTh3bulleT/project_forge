@@ -12,6 +12,7 @@ var (
 	ErrLockHeld          = errors.New("ephemeral lock already held")
 	ErrLockNotHeld       = errors.New("ephemeral lock not held")
 	ErrQueueEmpty        = errors.New("ephemeral queue empty")
+	ErrValueTooLarge     = errors.New("ephemeral value too large")
 	ErrUnexpectedRedis   = errors.New("unexpected redis response")
 	ErrRedisUnavailable  = errors.New("redis unavailable")
 	ErrCanonicalMisuse   = errors.New("redis cannot be canonical truth")

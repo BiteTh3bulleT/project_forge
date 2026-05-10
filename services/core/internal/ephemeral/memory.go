@@ -51,6 +51,9 @@ func (s *MemoryStore) SetCache(_ context.Context, key string, value []byte, ttl 
 	if err := validateFullyQualifiedKey(s.policy, key); err != nil {
 		return err
 	}
+	if err := validateEphemeralValueBytes(value); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cache[key] = cacheRecord{value: cloneBytes(value), expiresAt: s.now().Add(ttl)}
@@ -76,6 +79,9 @@ func (s *MemoryStore) GetCache(_ context.Context, key string) ([]byte, bool, err
 
 func (s *MemoryStore) PushQueue(_ context.Context, key string, value []byte) error {
 	if err := validateFullyQualifiedKey(s.policy, key); err != nil {
+		return err
+	}
+	if err := validateEphemeralValueBytes(value); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -108,6 +114,9 @@ func (s *MemoryStore) AcquireLock(_ context.Context, key string, owner string, t
 	}
 	if owner == "" {
 		return false, ErrInvalidConfig
+	}
+	if err := validateEphemeralValueString(owner); err != nil {
+		return false, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -143,6 +152,9 @@ func (s *MemoryStore) AppendProgress(_ context.Context, key string, entry Progre
 	if err := validateFullyQualifiedKey(s.policy, key); err != nil {
 		return err
 	}
+	if err := validateProgressEntryValue(entry); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if entry.ID == "" {
@@ -173,6 +185,7 @@ func (s *MemoryStore) ReadProgress(_ context.Context, key string, limit int) ([]
 		return nil, nil
 	}
 	entries := record.entries
+	limit = normalizeProgressReadLimit(limit)
 	if limit > 0 && len(entries) > limit {
 		entries = entries[len(entries)-limit:]
 	}
@@ -183,6 +196,9 @@ func (s *MemoryStore) ReadProgress(_ context.Context, key string, limit int) ([]
 
 func (s *MemoryStore) Publish(_ context.Context, channel string, value []byte) error {
 	if err := validateFullyQualifiedKey(s.policy, channel); err != nil {
+		return err
+	}
+	if err := validateEphemeralValueBytes(value); err != nil {
 		return err
 	}
 	s.mu.Lock()
