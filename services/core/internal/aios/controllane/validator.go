@@ -60,6 +60,10 @@ func (v *DeterministicValidator) ValidatePayload(req domain.SyscallRequest, def 
 		return validateKVIdentity(req)
 	case domain.ActionValidateRefShape:
 		return validateRefShape(req)
+	case domain.ActionCompareRefShape:
+		return validateRefShapeCompare(req)
+	case domain.ActionValidateSemanticOperation:
+		return validateSemanticOperation(req)
 	default:
 		return []domain.SyscallError{errField(domain.ErrUnsupportedAction, "action", "unsupported action")}
 	}

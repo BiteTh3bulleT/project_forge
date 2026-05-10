@@ -26,6 +26,8 @@ PhaseI2 marks this as `[PARTIAL LIVE ENFORCEMENT]`: `VALIDATE_KV_IDENTITY` is ro
 
 Phase 14B adds `[PARTIAL LIVE VALIDATION]` `VALIDATE_REF_SHAPE`. It validates deterministic ref shape through the shared pure package `services/core/internal/refvalidation`, returns normalized refs and no-mutation authority flags, and does not look up live objects, admit evidence, write memory, call modelruntime, execute retrieval, change routes, or route through FORGE-K simulator services.
 
+Phase 14C adds `[PARTIAL LIVE VALIDATION]` `COMPARE_REF_SHAPE` and `VALIDATE_SEMANTIC_OPERATION`. Ref shape comparison reports diagnostic match/drift sets through `services/core/internal/refvalidation`; semantic operation validation checks operation envelope shape through `services/core/internal/semanticvalidation`. Both are non-mutating, capability-gated Control Lane validations and do not admit evidence, compile context, execute retrieval/search/embeddings, call modelruntime, write memory, execute tools, change routes, or make FORGE-K simulator services live authority.
+
 ## Kernel / user-space boundary
 
 - user space: users, adapters, internal cells, future IRIS propose semantic actions

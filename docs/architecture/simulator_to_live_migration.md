@@ -1,6 +1,6 @@
 # Simulator To Live Migration
 
-Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, and Phase 14B partial live ref-shape validation.
+Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, and Phase 14C partial live validation expansion.
 
 ## Purpose
 
@@ -13,6 +13,8 @@ PhaseI2 extends that pattern with `[PARTIAL LIVE ENFORCEMENT]`: live Control Lan
 Phase 14A generalizes this into the operational cutover rule: make FORGE-K operational by migrating one narrow authority seam at a time through the existing live owner, not by importing simulator services wholesale.
 
 Phase 14B applies the pattern to deterministic ref-shape validation. `services/core/internal/refvalidation` is shared pure validation logic, and the live Control Lane action `VALIDATE_REF_SHAPE` uses it without importing FORGE-K simulator services or mutating live memory.
+
+Phase 14C extends the same pattern with diagnostic ref-shape comparison and semantic-operation shape validation. `COMPARE_REF_SHAPE` reports match/drift between candidate and observed refs. `VALIDATE_SEMANTIC_OPERATION` validates operation shape and rejects authority claims. Both remain Control Lane validation only.
 
 ## Migration Pattern
 
@@ -58,6 +60,19 @@ Phase 14B applies the pattern to deterministic ref-shape validation. `services/c
 | Mutation posture | validation-only; no object lookup, evidence admission, context compilation, retrieval, modelruntime call, or memory write |
 | Still future | source-object authority lookup, Courthouse admission integration, live context compilation, and broader FORGE-K Kernel authority |
 
+## Phase 14C Validation Expansion Example
+
+| Concern | Decision |
+| --- | --- |
+| Ref comparison contract | `refvalidation.CompareRefShapes` |
+| Semantic operation contract | `semanticvalidation.ValidateOperation` |
+| Live caller | `services/core/internal/aios/controllane` |
+| Live actions | `COMPARE_REF_SHAPE`, `VALIDATE_SEMANTIC_OPERATION` |
+| Capabilities | `ref.shape.compare`, `semantic.operation.validate` |
+| Audit | existing Control Lane audit record with `refShapeComparison` and `semanticOperationValidation` fields |
+| Mutation posture | validation/comparison only; no object lookup, evidence admission, context compilation, retrieval, modelruntime call, tool execution, or memory write |
+| Still future | actual semantic operation execution, live Courthouse admission, live Context Compiler authority, and broader FORGE-K Kernel authority |
+
 ## Live-Safe Shared Package Rules
 
 A shared package may be used by simulator and live code only when it:
@@ -100,6 +115,8 @@ Do not import FORGE-K Kernel, Context Compiler, KVService, Runtime Driver Bounda
 
 - `[PARTIAL]` KV identity validation: live validation exists; live reuse does not.
 - `[PARTIAL]` Ref shape validation: live validation exists; object lookup, evidence admission, context compilation, and memory writes do not.
+- `[PARTIAL]` Ref shape shadow comparison: diagnostic comparison exists; it does not affect live output or state.
+- `[PARTIAL]` Semantic operation shape validation: operation envelope validation exists; operation execution and authority migration do not.
 - `[FUTURE]` Context Compiler mirror: requires no-effect live comparison before any prompt authority migration.
 - `[FUTURE]` Runtime driver identity capture: requires modelruntime trace-only adapters before live reuse.
 - `[FUTURE]` Retrieval evidence admission: must go through Courthouse/control-lane boundaries, not vector-store scores.

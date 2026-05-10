@@ -8,18 +8,20 @@ import (
 )
 
 const (
-	CapMemoryNoteCreate       = "memory.note.create"
-	CapMemoryNoteArchive      = "memory.note.archive"
-	CapMemoryLinkCreate       = "memory.link.create"
-	CapStateUpdate            = "state.update"
-	CapLoopOpen               = "loop.open"
-	CapLoopClose              = "loop.close"
-	CapMemoryContradictionReg = "memory.contradiction.register"
-	CapMemorySupersessionMark = "memory.supersession.mark"
-	CapModelDerive            = "model.derive"
-	CapContextCompile         = "context.compile"
-	CapKVIdentityValidate     = "kv.identity.validate"
-	CapRefShapeValidate       = "ref.shape.validate"
+	CapMemoryNoteCreate          = "memory.note.create"
+	CapMemoryNoteArchive         = "memory.note.archive"
+	CapMemoryLinkCreate          = "memory.link.create"
+	CapStateUpdate               = "state.update"
+	CapLoopOpen                  = "loop.open"
+	CapLoopClose                 = "loop.close"
+	CapMemoryContradictionReg    = "memory.contradiction.register"
+	CapMemorySupersessionMark    = "memory.supersession.mark"
+	CapModelDerive               = "model.derive"
+	CapContextCompile            = "context.compile"
+	CapKVIdentityValidate        = "kv.identity.validate"
+	CapRefShapeValidate          = "ref.shape.validate"
+	CapRefShapeCompare           = "ref.shape.compare"
+	CapSemanticOperationValidate = "semantic.operation.validate"
 )
 
 type ActionDefinition struct {
@@ -150,6 +152,24 @@ func NewStaticActionRegistry() *StaticActionRegistry {
 			ApprovalPossible: false,
 			TargetObjectType: "ref_shape_validation",
 			AuditEventName:   "semantic_syscall.validate_ref_shape",
+		},
+		domain.ActionCompareRefShape: {
+			Action:           domain.ActionCompareRefShape,
+			Capability:       CapRefShapeCompare,
+			Mutating:         false,
+			SupportsDryRun:   true,
+			ApprovalPossible: false,
+			TargetObjectType: "ref_shape_comparison",
+			AuditEventName:   "semantic_syscall.compare_ref_shape",
+		},
+		domain.ActionValidateSemanticOperation: {
+			Action:           domain.ActionValidateSemanticOperation,
+			Capability:       CapSemanticOperationValidate,
+			Mutating:         false,
+			SupportsDryRun:   true,
+			ApprovalPossible: false,
+			TargetObjectType: "semantic_operation_validation",
+			AuditEventName:   "semantic_syscall.validate_semantic_operation",
 		},
 	}
 	return &StaticActionRegistry{definitions: defs}

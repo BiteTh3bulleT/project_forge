@@ -194,6 +194,14 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (dom
 			decision := EnforceRefShape(req)
 			result.StateSummary = decision.ToStateSummary()
 			result.StateSummary["dryRun"] = true
+		} else if req.Action == domain.ActionCompareRefShape {
+			decision := EnforceRefShapeComparison(req)
+			result.StateSummary = decision.ToStateSummary()
+			result.StateSummary["dryRun"] = true
+		} else if req.Action == domain.ActionValidateSemanticOperation {
+			decision := EnforceSemanticOperation(req)
+			result.StateSummary = decision.ToStateSummary()
+			result.StateSummary["dryRun"] = true
 		}
 		result.Warnings = append(result.Warnings, "dry-run: request validated without commit")
 		result.AuditID = p.writeAudit(ctx, req, result)
@@ -342,22 +350,24 @@ func (p *Processor) writeAudit(ctx context.Context, req domain.SyscallRequest, r
 		return ""
 	}
 	id, _ := p.auditSink.Record(ctx, SyscallAuditRecord{
-		Timestamp:             p.nowMillis(),
-		Action:                req.Action,
-		Actor:                 req.Actor.ID,
-		Source:                req.Source,
-		WorkspaceID:           req.Scope.WorkspaceID,
-		RequestID:             req.ID,
-		CorrelationID:         req.CorrelationID,
-		TraceID:               req.TraceID,
-		DryRun:                req.DryRun,
-		Success:               result.Success,
-		ApprovalStatus:        result.ApprovalStatus,
-		ValidationIssues:      result.RejectedReasons,
-		CommittedIDs:          result.CommittedObjectIDs,
-		ErrorCode:             result.DeterministicErrCode,
-		KVIdentityEnforcement: kvIdentityAuditFields(result.StateSummary),
-		RefShapeValidation:    refShapeAuditFields(result.StateSummary),
+		Timestamp:                   p.nowMillis(),
+		Action:                      req.Action,
+		Actor:                       req.Actor.ID,
+		Source:                      req.Source,
+		WorkspaceID:                 req.Scope.WorkspaceID,
+		RequestID:                   req.ID,
+		CorrelationID:               req.CorrelationID,
+		TraceID:                     req.TraceID,
+		DryRun:                      req.DryRun,
+		Success:                     result.Success,
+		ApprovalStatus:              result.ApprovalStatus,
+		ValidationIssues:            result.RejectedReasons,
+		CommittedIDs:                result.CommittedObjectIDs,
+		ErrorCode:                   result.DeterministicErrCode,
+		KVIdentityEnforcement:       kvIdentityAuditFields(result.StateSummary),
+		RefShapeValidation:          refShapeAuditFields(result.StateSummary),
+		RefShapeComparison:          refShapeComparisonAuditFields(result.StateSummary),
+		SemanticOperationValidation: semanticOperationAuditFields(result.StateSummary),
 	})
 	return id
 }
@@ -382,6 +392,36 @@ func refShapeAuditFields(summary map[string]any) map[string]any {
 		return nil
 	}
 	fields, _ := summary["refShapeValidation"].(map[string]any)
+	if fields == nil {
+		return nil
+	}
+	out := make(map[string]any, len(fields))
+	for key, value := range fields {
+		out[key] = value
+	}
+	return out
+}
+
+func refShapeComparisonAuditFields(summary map[string]any) map[string]any {
+	if summary == nil {
+		return nil
+	}
+	fields, _ := summary["refShapeComparison"].(map[string]any)
+	if fields == nil {
+		return nil
+	}
+	out := make(map[string]any, len(fields))
+	for key, value := range fields {
+		out[key] = value
+	}
+	return out
+}
+
+func semanticOperationAuditFields(summary map[string]any) map[string]any {
+	if summary == nil {
+		return nil
+	}
+	fields, _ := summary["semanticOperationValidation"].(map[string]any)
 	if fields == nil {
 		return nil
 	}

@@ -222,18 +222,20 @@ type ContextPacket struct {
 type SemanticActionType string
 
 const (
-	ActionCreateNote         SemanticActionType = "CREATE_NOTE"
-	ActionCreateLink         SemanticActionType = "CREATE_LINK"
-	ActionUpdateState        SemanticActionType = "UPDATE_STATE"
-	ActionOpenLoop           SemanticActionType = "OPEN_LOOP"
-	ActionCloseLoop          SemanticActionType = "CLOSE_LOOP"
-	ActionMarkSuperseded     SemanticActionType = "MARK_SUPERSEDED"
-	ActionRegisterContradict SemanticActionType = "REGISTER_CONTRADICTION"
-	ActionDeriveModel        SemanticActionType = "DERIVE_MODEL"
-	ActionArchiveNote        SemanticActionType = "ARCHIVE_NOTE"
-	ActionCompileContext     SemanticActionType = "COMPILE_CONTEXT"
-	ActionValidateKVIdentity SemanticActionType = "VALIDATE_KV_IDENTITY"
-	ActionValidateRefShape   SemanticActionType = "VALIDATE_REF_SHAPE"
+	ActionCreateNote                SemanticActionType = "CREATE_NOTE"
+	ActionCreateLink                SemanticActionType = "CREATE_LINK"
+	ActionUpdateState               SemanticActionType = "UPDATE_STATE"
+	ActionOpenLoop                  SemanticActionType = "OPEN_LOOP"
+	ActionCloseLoop                 SemanticActionType = "CLOSE_LOOP"
+	ActionMarkSuperseded            SemanticActionType = "MARK_SUPERSEDED"
+	ActionRegisterContradict        SemanticActionType = "REGISTER_CONTRADICTION"
+	ActionDeriveModel               SemanticActionType = "DERIVE_MODEL"
+	ActionArchiveNote               SemanticActionType = "ARCHIVE_NOTE"
+	ActionCompileContext            SemanticActionType = "COMPILE_CONTEXT"
+	ActionValidateKVIdentity        SemanticActionType = "VALIDATE_KV_IDENTITY"
+	ActionValidateRefShape          SemanticActionType = "VALIDATE_REF_SHAPE"
+	ActionCompareRefShape           SemanticActionType = "COMPARE_REF_SHAPE"
+	ActionValidateSemanticOperation SemanticActionType = "VALIDATE_SEMANTIC_OPERATION"
 )
 
 type SyscallRequest struct {

@@ -60,6 +60,10 @@ func (p *Processor) apply(ctx context.Context, store SemanticStore, req domain.S
 		return applyValidateKVIdentity(req)
 	case domain.ActionValidateRefShape:
 		return applyValidateRefShape(req)
+	case domain.ActionCompareRefShape:
+		return applyCompareRefShape(req)
+	case domain.ActionValidateSemanticOperation:
+		return applyValidateSemanticOperation(req)
 	default:
 		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrUnsupportedAction, Field: "action", Message: "unsupported action"}}
 	}
@@ -75,6 +79,22 @@ func applyValidateKVIdentity(req domain.SyscallRequest) ([]string, map[string]an
 
 func applyValidateRefShape(req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {
 	decision := EnforceRefShape(req)
+	if !decision.Accepted {
+		return nil, nil, nil, []domain.SyscallError{decision.ToSyscallError()}
+	}
+	return nil, decision.ToStateSummary(), decision.Warnings, nil
+}
+
+func applyCompareRefShape(req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {
+	decision := EnforceRefShapeComparison(req)
+	if !decision.Accepted {
+		return nil, nil, nil, []domain.SyscallError{decision.ToSyscallError()}
+	}
+	return nil, decision.ToStateSummary(), decision.Warnings, nil
+}
+
+func applyValidateSemanticOperation(req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {
+	decision := EnforceSemanticOperation(req)
 	if !decision.Accepted {
 		return nil, nil, nil, []domain.SyscallError{decision.ToSyscallError()}
 	}
