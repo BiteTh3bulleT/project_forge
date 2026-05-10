@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"forge/projectforge/services/core/internal/config"
@@ -148,5 +149,128 @@ func TestPatchSettingsPersistsAndAppliesShadowMode(t *testing.T) {
 	}
 	if restarted.cfg.ForgeKShadowModeEnabled || restarted.forgeKShadow != nil {
 		t.Fatalf("shadow mode was not disabled on running server: cfg=%#v observer=%#v", restarted.cfg, restarted.forgeKShadow)
+	}
+}
+
+func TestGetSettingsRedactsStoredRemoteSecrets(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	ctx := t.Context()
+	secrets := map[string]string{
+		remoteAccessTokenKey: "remote-secret-value",
+		telegramBotTokenKey:  "telegram-secret-value",
+		discordBotTokenKey:   "discord-secret-value",
+		discordWebhookURLKey: "https://discord.example/webhook/secret-value",
+	}
+	for key, value := range secrets {
+		if err := upsertSetting(ctx, st.DB, key, value); err != nil {
+			t.Fatalf("seed %s: %v", key, err)
+		}
+	}
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	req := httptest.NewRequest(http.MethodGet, "/api/settings", nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("get settings status=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	body := rr.Body.String()
+	for _, secret := range secrets {
+		if strings.Contains(body, secret) {
+			t.Fatalf("settings response leaked raw secret %q in body=%s", secret, body)
+		}
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode settings: %v", err)
+	}
+	for _, field := range []string{"remoteAccessToken", "telegramBotToken", "discordBotToken", "discordWebhookUrl"} {
+		if payload[field] != "[redacted]" {
+			t.Fatalf("expected %s to be redacted placeholder, got %#v", field, payload[field])
+		}
+	}
+}
+
+func TestPatchSettingsRedactedRemoteSecretsPreserveStoredValues(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	ctx := t.Context()
+	seeded := map[string]string{
+		remoteAccessTokenKey: "remote-secret-value",
+		telegramBotTokenKey:  "telegram-secret-value",
+		discordBotTokenKey:   "discord-secret-value",
+		discordWebhookURLKey: "https://discord.example/webhook/secret-value",
+	}
+	for key, value := range seeded {
+		if err := upsertSetting(ctx, st.DB, key, value); err != nil {
+			t.Fatalf("seed %s: %v", key, err)
+		}
+	}
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	body := []byte(`{"theme":"light","remoteAccessToken":"[redacted]","telegramBotToken":"[redacted]","discordBotToken":"[redacted]","discordWebhookUrl":"[redacted]"}`)
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/settings", bytes.NewReader(body))
+	patchRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(patchRR, patchReq)
+	if patchRR.Code != http.StatusOK {
+		t.Fatalf("patch settings status=%d body=%s", patchRR.Code, patchRR.Body.String())
+	}
+
+	for key, want := range seeded {
+		if got := loadSetting(st.DB, key, ""); got != want {
+			t.Fatalf("setting %s overwritten by redacted placeholder: got %q want %q", key, got, want)
+		}
+	}
+	if got := loadSetting(st.DB, "theme", ""); got != "light" {
+		t.Fatalf("expected unrelated setting to persist, got %q", got)
+	}
+}
+
+func TestPatchSettingsExplicitRemoteSecretUpdatesStoredValue(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	ctx := t.Context()
+	if err := upsertSetting(ctx, st.DB, remoteAccessTokenKey, "old-secret"); err != nil {
+		t.Fatalf("seed remote secret: %v", err)
+	}
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	body := []byte(`{"remoteAccessToken":"new-secret"}`)
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/settings", bytes.NewReader(body))
+	patchRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(patchRR, patchReq)
+	if patchRR.Code != http.StatusOK {
+		t.Fatalf("patch settings status=%d body=%s", patchRR.Code, patchRR.Body.String())
+	}
+
+	if got := loadSetting(st.DB, remoteAccessTokenKey, ""); got != "new-secret" {
+		t.Fatalf("explicit remote secret update not stored: got %q", got)
 	}
 }

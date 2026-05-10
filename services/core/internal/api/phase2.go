@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"sort"
@@ -10,9 +11,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"forge/projectforge/services/core/internal/approvals"
 	"forge/projectforge/services/core/internal/jobs"
 	"forge/projectforge/services/core/internal/projectcontext"
 )
+
+const phase2JSONRequestBodyLimit = 1 << 20
+
+var errPhase2RequestBodyTooLarge = errors.New("phase2 json request body too large")
 
 func (s *Server) handleListJobTemplates(w http.ResponseWriter, r *http.Request) {
 	list := s.jobs.ListTemplates()
@@ -22,8 +28,8 @@ func (s *Server) handleListJobTemplates(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	var body jobs.CreateRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase2JSONBody(r, &body); err != nil {
+		writePhase2DecodeError(w, err)
 		return
 	}
 	j, err := s.jobs.Create(r.Context(), body)
@@ -61,7 +67,10 @@ func (s *Server) handleCancelJob(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Actor string `json:"actor"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := decodeOptionalPhase2JSONBody(r, &body); err != nil {
+		writePhase2DecodeError(w, err)
+		return
+	}
 	if err := s.jobs.RequestCancel(r.Context(), id, body.Actor); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -116,13 +125,42 @@ func (s *Server) handleApprovalDecision(w http.ResponseWriter, r *http.Request, 
 		Actor string `json:"actor"`
 		Note  string `json:"note"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := decodeOptionalPhase2JSONBody(r, &body); err != nil {
+		writePhase2DecodeError(w, err)
+		return
+	}
+	if decision == "approved" && s.approvals != nil {
+		ar, err := s.approvals.GetRequest(r.Context(), id)
+		if err == nil && approvalDecisionRequiresNonPublicAuthority(ar) {
+			http.Error(w, "approval request requires a non-public approval authority", http.StatusForbidden)
+			return
+		}
+	}
 	d, err := s.jobs.ApplyApprovalDecision(r.Context(), id, decision, body.Actor, body.Note)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"decision": d})
+}
+
+func approvalDecisionRequiresNonPublicAuthority(req *approvals.Request) bool {
+	if req == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(req.RequestedAction), "gateway.capability.status.update") {
+		return true
+	}
+	var scope map[string]any
+	if err := json.Unmarshal(req.ScopeSnapshot, &scope); err != nil {
+		return false
+	}
+	for _, key := range []string{"publicDecisionAllowed", "approvalPublicDecisionAllowed"} {
+		if allowed, ok := scope[key].(bool); ok && !allowed {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handleGetPacket(w http.ResponseWriter, r *http.Request) {
@@ -150,8 +188,8 @@ func (s *Server) handleGetProjectContext(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) handleImportProjectContext(w http.ResponseWriter, r *http.Request) {
 	var body projectcontext.ImportRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeOptionalPhase2JSONBody(r, &body); err != nil {
+		writePhase2DecodeError(w, err)
 		return
 	}
 	rec, err := s.projectCtx.ImportAndNormalize(r.Context(), body)
@@ -160,6 +198,50 @@ func (s *Server) handleImportProjectContext(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"record": rec})
+}
+
+func decodePhase2JSONBody(r *http.Request, target any) error {
+	raw, err := readPhase2RequestBody(r)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func decodeOptionalPhase2JSONBody(r *http.Request, target any) error {
+	raw, err := readPhase2RequestBody(r)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		return err
+	}
+	if len(strings.TrimSpace(string(raw))) == 0 {
+		return nil
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func readPhase2RequestBody(r *http.Request) ([]byte, error) {
+	if r.Body == nil {
+		return nil, io.EOF
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, phase2JSONRequestBodyLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > phase2JSONRequestBodyLimit {
+		return nil, errPhase2RequestBodyTooLarge
+	}
+	return raw, nil
+}
+
+func writePhase2DecodeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errPhase2RequestBodyTooLarge) {
+		http.Error(w, "phase2 json request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	http.Error(w, "invalid json", http.StatusBadRequest)
 }
 
 func (s *Server) handleRegenerateProjectContext(w http.ResponseWriter, r *http.Request) {

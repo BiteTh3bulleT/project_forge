@@ -66,16 +66,9 @@ curl -X POST <FORGE_PUBLIC_URL>/api/remote/discord \
   -d '{"channel_id":"<DISCORD_CHANNEL_ID>","content":"How are we looking?","author":{"id":"12345"}}'
 ```
 
-You can also send token as query:
-
-```bash
-curl -X POST "<FORGE_PUBLIC_URL>/api/remote/discord?token=<FORGE_REMOTE_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"channel_id":"<DISCORD_CHANNEL_ID>","content":"Status check"}'
-```
-
 ## Notes
 
 - Replies are sent asynchronously to the configured platform channel.
 - Remote calls are rejected if remote access is disabled.
+- Remote tokens must be sent in `X-Forge-Remote-Token` or Telegram's `X-Telegram-Bot-Api-Secret-Token` header. URL query tokens are rejected so shared secrets do not leak through URL logs, browser history, or referrers.
 - Use a dedicated thread in Forge by setting `Default thread ID`, or per platform chat/channel threads are auto-created on first message.

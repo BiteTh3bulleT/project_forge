@@ -4,10 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 )
+
+const maxRulePayloadBytes = 64 << 10
+
+var errRulePayloadTooLarge = errors.New("automation rule payload too large")
 
 type Rule struct {
 	ID            int64           `json:"id"`
@@ -130,9 +135,18 @@ func (s *Service) SaveRule(ctx context.Context, req SaveRuleRequest) (*Rule, err
 	if name == "" || trigger == "" {
 		return nil, fmt.Errorf("name and trigger are required")
 	}
-	condition, _ := json.Marshal(nonNilMap(req.Condition))
-	action, _ := json.Marshal(nonNilMap(req.Action))
-	scope, _ := json.Marshal(nonNilMap(req.Scope))
+	condition, err := marshalRulePayload("condition", req.Condition)
+	if err != nil {
+		return nil, err
+	}
+	action, err := marshalRulePayload("action", req.Action)
+	if err != nil {
+		return nil, err
+	}
+	scope, err := marshalRulePayload("scope", req.Scope)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UnixMilli()
 
 	if req.ID == nil || *req.ID <= 0 {
@@ -147,7 +161,7 @@ VALUES(?,?,?,?,?,?,?,?,?)`,
 		id, _ := res.LastInsertId()
 		return s.GetRule(ctx, id)
 	}
-	_, err := s.db.ExecContext(ctx, `
+	_, err = s.db.ExecContext(ctx, `
 UPDATE automation_rules
 SET updated_at = ?, name = ?, trigger = ?, condition_json = ?, action_json = ?, scope_json = ?, enabled = ?, dry_run_default = ?
 WHERE id = ?`,
@@ -333,6 +347,17 @@ func nonNilMap(v map[string]any) map[string]any {
 		return map[string]any{}
 	}
 	return v
+}
+
+func marshalRulePayload(label string, payload map[string]any) ([]byte, error) {
+	body, err := json.Marshal(nonNilMap(payload))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxRulePayloadBytes {
+		return nil, fmt.Errorf("%w: %s %d > %d bytes", errRulePayloadTooLarge, strings.TrimSpace(label), len(body), maxRulePayloadBytes)
+	}
+	return body, nil
 }
 
 func boolToInt(v bool) int {

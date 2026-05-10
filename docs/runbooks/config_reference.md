@@ -11,7 +11,8 @@ boot or runtime. Observed 2026-04-21._
 |---|---|---|---|
 | `FORGE_DATA_DIR` | [config.go:16](services/core/internal/config/config.go#L16) | `${XDG_CONFIG_HOME}/forge` (typically `~/.config/forge`); falls back to CWD if `UserConfigDir` errors | Location of `forge.sqlite`, `backups/`, `exports/` |
 | `FORGE_CORE_PORT` | [config.go:25](services/core/internal/config/config.go#L25) | `18492` | HTTP listen port |
-| `FORGE_WORKSPACE_DIR` | [config.go:30](services/core/internal/config/config.go#L30) | `/` | Workspace root for file-sensitive operations |
+| `FORGE_CORE_BIND_HOST` | [config.go](services/core/internal/config/config.go) | `127.0.0.1` | HTTP bind host. Use `0.0.0.0` only behind an intentional container, firewall, or reverse-proxy boundary. |
+| `FORGE_WORKSPACE_DIR` | [config.go:30](services/core/internal/config/config.go#L30) | `/` for direct Go/dev runs; managed NixOS service defaults to `/forge/workspaces/default` | Workspace root for file-sensitive operations |
 | `FORGE_K_SHADOW_MODE_ENABLED` | [config.go](services/core/internal/config/config.go) | `false` | Enables disabled-by-default FORGE-K shadow diagnostics. Can also be toggled at runtime by the dashboard through the durable `forge_k_shadow_mode_enabled` setting. |
 | `FORGE_K_SHADOW_CHAT_METADATA_ENABLED` | [config.go](services/core/internal/config/config.go) | `false` | Enables Phase 12H chat metadata diagnostics only when `FORGE_K_SHADOW_MODE_ENABLED=true`. Captures bounded metadata only, never chat content, prompts, completions, request/response bodies, tool payloads, retrieval content, memory content, auth headers, cookies, or secrets. |
 | `FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED` | [config.go](services/core/internal/config/config.go) | `false` | Enables Phase 12K-L retrieval metadata diagnostics only when `FORGE_K_SHADOW_MODE_ENABLED=true`. Captures bounded refs/counts/classes/summaries only. |
@@ -101,6 +102,7 @@ to `apps/desktop/.env.development` (or `.env.production`) to override.
 | Var | Consumer | Default | Purpose |
 |---|---|---|---|
 | `FORGE_CORE_PORT` | `scripts/forge-up.sh`, `scripts/forge-down.sh` | `18492` | Health-check target / cleanup port |
+| `FORGE_CORE_BIND_HOST` | `services/core` | `127.0.0.1` | Direct core bind host; orchestration health checks use loopback. |
 
 ## Durable settings (stored in SQLite)
 
@@ -149,5 +151,7 @@ Full list in [server.go handleGetSettings / handleUpdateSettings](services/core/
   operations) stay `approval_only` per
   [dangerous_capabilities.md](dangerous_capabilities.md).
 - Remote access stays `false` until the operator configures a token.
-- `FORGE_WORKSPACE_DIR` defaults to `/`. For anything beyond dev
-  exploration, scope it to a specific project directory.
+- Direct Go/dev `FORGE_WORKSPACE_DIR` defaults to `/`; managed NixOS
+  `forge-core` defaults to `/forge/workspaces/default`. For any real
+  project, scope it to a specific project directory or dedicated
+  workspace path instead of host root.

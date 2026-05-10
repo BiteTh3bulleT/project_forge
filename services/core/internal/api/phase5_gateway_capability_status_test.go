@@ -274,6 +274,69 @@ func TestHandleGatewayCapabilityStatusUpdateDangerousActivationWithApprovalSucce
 	}
 }
 
+func TestHandleGatewayCapabilityStatusUpdateRejectsPublicSelfApproval(t *testing.T) {
+	t.Parallel()
+	srv, st := newGatewayCapabilityStatusHarness(t)
+	body := `{"status":"active","reason":"self service activation","actor":"operator-a","actorKind":"user","correlationId":"corr-cap-status-self-approval","traceId":"trace-cap-status-self-approval"}`
+	first := withRouteParam(
+		httptest.NewRequest(http.MethodPatch, "/api/gateway/capabilities/process.spawn_process/status", bytes.NewBufferString(body)),
+		"id",
+		"process.spawn_process",
+	)
+	firstRR := httptest.NewRecorder()
+	srv.handleGatewayCapabilityStatusUpdate(firstRR, first)
+	if firstRR.Code != http.StatusAccepted {
+		t.Fatalf("expected approval request, got %d body=%s", firstRR.Code, firstRR.Body.String())
+	}
+	var firstPayload struct {
+		ApprovalRequestID *int64 `json:"approvalRequestId"`
+	}
+	if err := json.Unmarshal(firstRR.Body.Bytes(), &firstPayload); err != nil {
+		t.Fatalf("decode approval request: %v", err)
+	}
+	if firstPayload.ApprovalRequestID == nil {
+		t.Fatalf("missing approval request id")
+	}
+
+	approvalReq := withRouteParam(
+		httptest.NewRequest(http.MethodPost, "/api/approvals/"+strconv.FormatInt(*firstPayload.ApprovalRequestID, 10)+"/approve", bytes.NewBufferString(`{"actor":"operator-a","note":"self approve"}`)),
+		"id",
+		strconv.FormatInt(*firstPayload.ApprovalRequestID, 10),
+	)
+	approvalRR := httptest.NewRecorder()
+	srv.handleApproveRequest(approvalRR, approvalReq)
+	if approvalRR.Code != http.StatusForbidden {
+		t.Fatalf("expected public self-approval to be forbidden, got %d body=%s", approvalRR.Code, approvalRR.Body.String())
+	}
+
+	secondBody := body[:len(body)-1] + `,"approvalId":"` + strconv.FormatInt(*firstPayload.ApprovalRequestID, 10) + `"}`
+	second := withRouteParam(
+		httptest.NewRequest(http.MethodPatch, "/api/gateway/capabilities/process.spawn_process/status", bytes.NewBufferString(secondBody)),
+		"id",
+		"process.spawn_process",
+	)
+	secondRR := httptest.NewRecorder()
+	srv.handleGatewayCapabilityStatusUpdate(secondRR, second)
+	if secondRR.Code != http.StatusForbidden {
+		t.Fatalf("expected replay with unapproved request to be forbidden, got %d body=%s", secondRR.Code, secondRR.Body.String())
+	}
+
+	capability, ok := srv.gateway.Capability("process.spawn_process")
+	if !ok {
+		t.Fatalf("missing capability")
+	}
+	if capability.Status == "active" {
+		t.Fatalf("dangerous capability became active after public self-approval")
+	}
+	var activeOverrideCount int
+	if err := st.DB.QueryRowContext(context.Background(), `SELECT COUNT(1) FROM tool_capability_overrides WHERE capability_id = ? AND status = ?`, "process.spawn_process", "active").Scan(&activeOverrideCount); err != nil {
+		t.Fatalf("query active override count: %v", err)
+	}
+	if activeOverrideCount != 0 {
+		t.Fatalf("unexpected active override count %d", activeOverrideCount)
+	}
+}
+
 func TestHandleGatewayCapabilityStatusUpdateDeniedApprovalHasDeterministicReason(t *testing.T) {
 	t.Parallel()
 	srv, _ := newGatewayCapabilityStatusHarness(t)

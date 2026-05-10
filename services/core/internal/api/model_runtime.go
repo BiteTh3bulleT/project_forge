@@ -18,6 +18,8 @@ import (
 	"forge/projectforge/services/core/internal/modelruntime"
 )
 
+const modelRuntimeRequestBodyLimit = 1 << 20
+
 // modelRuntimeService is the API-facing abstraction for model runtime operations.
 // It is expected to be implemented by services/core/internal/modelruntime.
 type modelRuntimeService interface {
@@ -354,7 +356,7 @@ func (s *Server) handleForgeModelImport(w http.ResponseWriter, r *http.Request) 
 		LaneID        string         `json:"laneId"`
 	}
 	if err := decodeOptionalJSONBody(r, &body); err != nil {
-		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "INVALID_JSON", message: "invalid json body"}, initialMeta)
+		s.writeModelRuntimeDecodeError(w, err, initialMeta)
 		return
 	}
 	if strings.TrimSpace(body.Path) == "" {
@@ -418,7 +420,7 @@ func (s *Server) handleForgeModelsScan(w http.ResponseWriter, r *http.Request) {
 	}
 	var body modelRuntimeManagementBody
 	if err := decodeOptionalJSONBody(r, &body); err != nil {
-		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "INVALID_JSON", message: "invalid json body"}, initialMeta)
+		s.writeModelRuntimeDecodeError(w, err, initialMeta)
 		return
 	}
 	meta := requestAuditMetaForBackup(r, body.CorrelationID, body.TraceID, body.WorkspaceID, "model.runtime.scan")
@@ -534,7 +536,7 @@ func (s *Server) handleForgeModelControl(w http.ResponseWriter, r *http.Request,
 
 	var body modelRuntimeManagementBody
 	if err := decodeOptionalJSONBody(r, &body); err != nil {
-		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "INVALID_JSON", message: "invalid json body"}, initialMeta)
+		s.writeModelRuntimeDecodeError(w, err, initialMeta)
 		return
 	}
 
@@ -603,7 +605,7 @@ func (s *Server) handleForgeModelManagement(w http.ResponseWriter, r *http.Reque
 	}
 	var body modelRuntimeManagementBody
 	if err := decodeOptionalJSONBody(r, &body); err != nil {
-		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "INVALID_JSON", message: "invalid json body"}, initialMeta)
+		s.writeModelRuntimeDecodeError(w, err, initialMeta)
 		return
 	}
 	meta := requestAuditMetaForBackup(r, body.CorrelationID, body.TraceID, body.WorkspaceID, "model.runtime."+action)
@@ -703,8 +705,8 @@ func (s *Server) handleForgeModelChat(w http.ResponseWriter, r *http.Request) {
 		Provenance    map[string]any            `json:"provenance"`
 		Metadata      map[string]any            `json:"metadata"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "INVALID_JSON", message: "invalid json body"}, initialMeta)
+	if err := decodeModelRuntimeJSONBody(r, &body); err != nil {
+		s.writeModelRuntimeDecodeError(w, err, initialMeta)
 		return
 	}
 	if bodyModelID := strings.TrimSpace(body.ModelID); bodyModelID != "" && bodyModelID != pathModelID {
@@ -896,8 +898,8 @@ func (s *Server) handleV1ChatCompletions(w http.ResponseWriter, r *http.Request)
 		TraceID       string                    `json:"traceId"`
 		WorkspaceID   string                    `json:"workspaceId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "INVALID_JSON", message: "invalid json body"}, initialMeta)
+	if err := decodeModelRuntimeJSONBody(r, &body); err != nil {
+		s.writeModelRuntimeDecodeError(w, err, initialMeta)
 		return
 	}
 	modelID := strings.TrimSpace(body.Model)
@@ -1075,7 +1077,7 @@ func decodeOptionalJSONBody(r *http.Request, target any) error {
 	if r.Body == nil {
 		return nil
 	}
-	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	raw, err := readModelRuntimeRequestBody(r)
 	if err != nil {
 		return err
 	}
@@ -1086,6 +1088,44 @@ func decodeOptionalJSONBody(r *http.Request, target any) error {
 		return err
 	}
 	return nil
+}
+
+func decodeModelRuntimeJSONBody(r *http.Request, target any) error {
+	raw, err := readModelRuntimeRequestBody(r)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(raw, target); err != nil {
+		return err
+	}
+	return nil
+}
+
+func readModelRuntimeRequestBody(r *http.Request) ([]byte, error) {
+	if r.Body == nil {
+		return nil, io.EOF
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, modelRuntimeRequestBodyLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > modelRuntimeRequestBodyLimit {
+		return nil, &modelRuntimeError{
+			status:  http.StatusRequestEntityTooLarge,
+			code:    "REQUEST_BODY_TOO_LARGE",
+			message: fmt.Sprintf("model runtime request body too large: limit %d bytes", modelRuntimeRequestBodyLimit),
+		}
+	}
+	return raw, nil
+}
+
+func (s *Server) writeModelRuntimeDecodeError(w http.ResponseWriter, err error, meta ModelRuntimeRequestMeta) {
+	var runtimeErr *modelRuntimeError
+	if errors.As(err, &runtimeErr) {
+		s.writeModelRuntimeError(w, runtimeErr, meta)
+		return
+	}
+	s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "INVALID_JSON", message: "invalid json body"}, meta)
 }
 
 func validateChatMessages(messages []ModelRuntimeChatMessage) error {

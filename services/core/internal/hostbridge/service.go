@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -18,11 +19,12 @@ import (
 )
 
 const (
-	defaultProcRoot    = "/proc"
-	defaultSysRoot     = "/sys"
-	defaultStorageRoot = "/forge"
-	maxModules         = 256
-	maxThermalSensors  = 64
+	defaultProcRoot       = "/proc"
+	defaultSysRoot        = "/sys"
+	defaultStorageRoot    = "/forge"
+	maxModules            = 256
+	maxThermalSensors     = 64
+	maxHostProbeFileBytes = 1 << 20
 )
 
 type Options struct {
@@ -164,7 +166,7 @@ func (s *Service) sysPath(parts ...string) string {
 }
 
 func (s *Service) readTrimmed(snapshot *Snapshot, source, path string) string {
-	body, err := os.ReadFile(path)
+	body, err := readHostProbeFile(path)
 	if err != nil {
 		addSourceError(snapshot, source, err)
 		return ""
@@ -178,7 +180,7 @@ func (s *Service) readOSRelease(snapshot *Snapshot) string {
 		"/etc/os-release",
 	}
 	for _, path := range candidates {
-		body, err := os.ReadFile(path)
+		body, err := readHostProbeFile(path)
 		if err != nil {
 			continue
 		}
@@ -484,11 +486,30 @@ func hostname() string {
 }
 
 func readFileString(path string) string {
-	body, err := os.ReadFile(path)
+	body, err := readHostProbeFile(path)
 	if err != nil {
 		return ""
 	}
 	return string(body)
+}
+
+func readHostProbeFile(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err == nil && info.Size() > maxHostProbeFileBytes {
+		return nil, fmt.Errorf("host probe file too large: %d bytes exceeds %d byte limit", info.Size(), maxHostProbeFileBytes)
+	}
+	body, err := io.ReadAll(io.LimitReader(f, maxHostProbeFileBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxHostProbeFileBytes {
+		return nil, fmt.Errorf("host probe file too large: exceeds %d byte limit", maxHostProbeFileBytes)
+	}
+	return body, nil
 }
 
 func parseFloat(value string) float64 {

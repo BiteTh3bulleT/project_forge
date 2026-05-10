@@ -79,6 +79,9 @@
             forge-wayland-session = self.packages.${system}.forge-wayland-session;
           };
           forge-vbox-graphics-test = pkgs.callPackage ./nix/checks/forge-vbox-graphics-test.nix { };
+          forge-shadow-env = pkgs.callPackage ./nix/checks/forge-shadow-env.nix { };
+          forge-workspace-default = pkgs.callPackage ./nix/checks/forge-workspace-default.nix { };
+          forge-core-bind-host = pkgs.callPackage ./nix/checks/forge-core-bind-host.nix { };
           js-build = pkgs.callPackage ./nix/checks/js-build.nix { };
         };
 

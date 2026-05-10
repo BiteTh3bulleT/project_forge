@@ -262,6 +262,7 @@ export function ModelsPage() {
     selectedModel?.id === selectedModelId ? selectedModel : null;
   const selectedModelSummary = selectedModelDetail ?? selectedRegistryModel;
   const selectedCompatibility = selectedModelDetail ? compatibility : null;
+  const runtimeControlsDisabled = !runtimeAvailable;
 
   async function refreshOverview(
     preserveSelection = true,
@@ -342,6 +343,10 @@ export function ModelsPage() {
     gpuEnabled?: boolean;
     allowOllamaCloudModels?: boolean;
   }) {
+    if (!runtimeAvailable) {
+      setErr("Model runtime unavailable; runtime policy controls are read-only.");
+      return;
+    }
     const gpuEnabled = next?.gpuEnabled ?? runtimeGpuEnabled;
     const allowOllamaCloudModels =
       next?.allowOllamaCloudModels ?? runtimeAllowOllamaCloudModels;
@@ -408,6 +413,10 @@ export function ModelsPage() {
   }, [chatSelectedModelId]);
 
   async function handleImport() {
+    if (!runtimeAvailable) {
+      setErr("Model runtime unavailable; import controls are read-only.");
+      return;
+    }
     const path = importPath.trim();
     if (!path) {
       setErr("Import path is required.");
@@ -458,6 +467,10 @@ export function ModelsPage() {
   }
 
   async function handleScan() {
+    if (!runtimeAvailable) {
+      setErr("Model runtime unavailable; registry reconciliation is read-only.");
+      return;
+    }
     setScanBusy(true);
     try {
       const result = await api.modelRuntime.scan(modelManagementRequest());
@@ -482,6 +495,10 @@ export function ModelsPage() {
       | "load"
       | "unload",
   ) {
+    if (!runtimeAvailable) {
+      setErr("Model runtime unavailable; lifecycle controls are read-only.");
+      return;
+    }
     const busyKey = `${action}:${modelId}`;
     setActionBusy(busyKey);
     try {
@@ -780,7 +797,10 @@ export function ModelsPage() {
           >
             {runtimeAvailable ? health?.status || "runtime" : "unavailable"}
           </span>
-          <GhostButton onClick={() => void handleScan()} disabled={scanBusy}>
+          <GhostButton
+            onClick={() => void handleScan()}
+            disabled={scanBusy || runtimeControlsDisabled}
+          >
             {scanBusy ? "Scanning" : "Scan Model Home"}
           </GhostButton>
           <GhostButton
@@ -864,7 +884,7 @@ export function ModelsPage() {
               <input
                 type="checkbox"
                 checked={runtimeGpuEnabled}
-                disabled={runtimePolicyBusy}
+                disabled={runtimePolicyBusy || runtimeControlsDisabled}
                 onChange={(event) => {
                   const checked = event.target.checked;
                   setRuntimeGpuEnabled(checked);
@@ -879,7 +899,7 @@ export function ModelsPage() {
               <input
                 type="checkbox"
                 checked={runtimeAllowOllamaCloudModels}
-                disabled={runtimePolicyBusy}
+                disabled={runtimePolicyBusy || runtimeControlsDisabled}
                 onChange={(event) => {
                   const checked = event.target.checked;
                   setRuntimeAllowOllamaCloudModels(checked);
@@ -1083,6 +1103,15 @@ export function ModelsPage() {
           </span>
         </div>
         <div className="forge-ops-panel__body">
+          {!runtimeAvailable ? (
+            <div className="mb-4">
+              <EmptyState
+                title="Model runtime unavailable"
+                detail="Registration controls are read-only until modelruntime is available through the governed core status path."
+                tone="warn"
+              />
+            </div>
+          ) : null}
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(240px,0.65fr)]">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <label className="text-xs text-forge-mist">
@@ -1092,6 +1121,7 @@ export function ModelsPage() {
                   value={importPath}
                   onChange={(e) => setImportPath(e.target.value)}
                   placeholder="/models/coder.gguf"
+                  disabled={runtimeControlsDisabled}
                 />
               </label>
               <label className="text-xs text-forge-mist">
@@ -1101,6 +1131,7 @@ export function ModelsPage() {
                   value={importDisplayName}
                   onChange={(e) => setImportDisplayName(e.target.value)}
                   placeholder="Qwen Coder"
+                  disabled={runtimeControlsDisabled}
                 />
               </label>
               <label className="text-xs text-forge-mist">
@@ -1110,6 +1141,7 @@ export function ModelsPage() {
                   value={importFamily}
                   onChange={(e) => setImportFamily(e.target.value)}
                   placeholder="qwen"
+                  disabled={runtimeControlsDisabled}
                 />
               </label>
               <label className="relative z-10 overflow-visible text-xs text-forge-mist">
@@ -1118,6 +1150,7 @@ export function ModelsPage() {
                   className="forge-input relative z-20 mt-1 h-10 w-full"
                   value={importBackend}
                   onChange={(e) => setImportBackend(e.target.value)}
+                  disabled={runtimeControlsDisabled}
                 >
                   <option value="">manifest/default</option>
                   <option value="llama_cpp">llama_cpp</option>
@@ -1132,6 +1165,7 @@ export function ModelsPage() {
                   value={importCapabilities}
                   onChange={(e) => setImportCapabilities(e.target.value)}
                   placeholder="chat,completion"
+                  disabled={runtimeControlsDisabled}
                 />
               </label>
               <label className="flex items-center gap-2 self-end rounded border border-white/10 bg-black/20 px-3 py-2 text-xs text-forge-mist">
@@ -1139,6 +1173,7 @@ export function ModelsPage() {
                   type="checkbox"
                   checked={importPreferred}
                   onChange={(e) => setImportPreferred(e.target.checked)}
+                  disabled={runtimeControlsDisabled}
                 />
                 Mark as preferred
               </label>
@@ -1168,14 +1203,14 @@ export function ModelsPage() {
             <PrimaryButton
               className="min-h-11 px-4"
               onClick={() => void handleImport()}
-              disabled={importBusy}
+              disabled={importBusy || runtimeControlsDisabled}
             >
               {importBusy ? "Importing..." : "Import Model"}
             </PrimaryButton>
             <GhostButton
               className="min-h-11 px-4"
               onClick={() => void handleScan()}
-              disabled={scanBusy}
+              disabled={scanBusy || runtimeControlsDisabled}
             >
               {scanBusy ? "Scanning..." : "Reconcile Registry"}
             </GhostButton>
@@ -1306,7 +1341,7 @@ export function ModelsPage() {
                             event.stopPropagation();
                             void runAction(model.id, "verify");
                           }}
-                          disabled={isBusy}
+                          disabled={isBusy || runtimeControlsDisabled}
                         >
                           {busyPrefix === "verify" && isBusy
                             ? "Verifying..."
@@ -1319,7 +1354,7 @@ export function ModelsPage() {
                               event.stopPropagation();
                               void runAction(model.id, "enable");
                             }}
-                            disabled={isBusy}
+                            disabled={isBusy || runtimeControlsDisabled}
                           >
                             {busyPrefix === "enable" && isBusy
                               ? "Enabling..."
@@ -1332,7 +1367,7 @@ export function ModelsPage() {
                               event.stopPropagation();
                               void runAction(model.id, "disable");
                             }}
-                            disabled={isBusy}
+                            disabled={isBusy || runtimeControlsDisabled}
                           >
                             {busyPrefix === "disable" && isBusy
                               ? "Disabling..."
@@ -1346,7 +1381,7 @@ export function ModelsPage() {
                               event.stopPropagation();
                               void runAction(model.id, "unload");
                             }}
-                            disabled={isBusy}
+                            disabled={isBusy || runtimeControlsDisabled}
                           >
                             {busyPrefix === "unload" && isBusy
                               ? "Unloading..."
@@ -1361,6 +1396,7 @@ export function ModelsPage() {
                             }}
                             disabled={
                               isBusy ||
+                              runtimeControlsDisabled ||
                               normalizeStatus(model.status) === "archived"
                             }
                           >
@@ -1377,6 +1413,7 @@ export function ModelsPage() {
                           }}
                           disabled={
                             isBusy ||
+                            runtimeControlsDisabled ||
                             normalizeStatus(model.status) === "archived"
                           }
                         >
@@ -1396,7 +1433,7 @@ export function ModelsPage() {
                               return;
                             void runAction(model.id, "remove");
                           }}
-                          disabled={isBusy}
+                          disabled={isBusy || runtimeControlsDisabled}
                         >
                           {busyPrefix === "remove" && isBusy
                             ? "Removing..."
@@ -1486,8 +1523,11 @@ export function ModelsPage() {
                           void runAction(selectedModelSummary.id, "verify")
                         }
                         disabled={
-                          actionBusy?.endsWith(`:${selectedModelSummary.id}`) ??
-                          false
+                          (actionBusy?.endsWith(
+                            `:${selectedModelSummary.id}`,
+                          ) ??
+                            false) ||
+                          runtimeControlsDisabled
                         }
                       >
                         {actionBusy === `verify:${selectedModelSummary.id}`
@@ -1502,9 +1542,11 @@ export function ModelsPage() {
                             void runAction(selectedModelSummary.id, "enable")
                           }
                           disabled={
-                            actionBusy?.endsWith(
+                            (actionBusy?.endsWith(
                               `:${selectedModelSummary.id}`,
-                            ) ?? false
+                            ) ??
+                              false) ||
+                            runtimeControlsDisabled
                           }
                         >
                           {actionBusy === `enable:${selectedModelSummary.id}`
@@ -1518,9 +1560,11 @@ export function ModelsPage() {
                             void runAction(selectedModelSummary.id, "disable")
                           }
                           disabled={
-                            actionBusy?.endsWith(
+                            (actionBusy?.endsWith(
                               `:${selectedModelSummary.id}`,
-                            ) ?? false
+                            ) ??
+                              false) ||
+                            runtimeControlsDisabled
                           }
                         >
                           {actionBusy === `disable:${selectedModelSummary.id}`
@@ -1535,9 +1579,11 @@ export function ModelsPage() {
                             void runAction(selectedModelSummary.id, "unload")
                           }
                           disabled={
-                            actionBusy?.endsWith(
+                            (actionBusy?.endsWith(
                               `:${selectedModelSummary.id}`,
-                            ) ?? false
+                            ) ??
+                              false) ||
+                            runtimeControlsDisabled
                           }
                         >
                           {actionBusy === `unload:${selectedModelSummary.id}`
@@ -1555,6 +1601,7 @@ export function ModelsPage() {
                               `:${selectedModelSummary.id}`,
                             ) ??
                               false) ||
+                            runtimeControlsDisabled ||
                             normalizeStatus(selectedModelSummary.status) ===
                               "archived"
                           }
@@ -1574,6 +1621,7 @@ export function ModelsPage() {
                             `:${selectedModelSummary.id}`,
                           ) ??
                             false) ||
+                          runtimeControlsDisabled ||
                           normalizeStatus(selectedModelSummary.status) ===
                             "archived"
                         }
@@ -1594,8 +1642,11 @@ export function ModelsPage() {
                           void runAction(selectedModelSummary.id, "remove");
                         }}
                         disabled={
-                          actionBusy?.endsWith(`:${selectedModelSummary.id}`) ??
-                          false
+                          (actionBusy?.endsWith(
+                            `:${selectedModelSummary.id}`,
+                          ) ??
+                            false) ||
+                          runtimeControlsDisabled
                         }
                       >
                         {actionBusy === `remove:${selectedModelSummary.id}`

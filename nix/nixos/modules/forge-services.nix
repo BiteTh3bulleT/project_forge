@@ -37,6 +37,12 @@ in
       description = "Local HTTP port for forge-core.";
     };
 
+    bindHost = lib.mkOption {
+      type = lib.types.str;
+      default = "127.0.0.1";
+      description = "HTTP bind host for forge-core. Use 0.0.0.0 only when an enclosing network boundary intentionally exposes the service.";
+    };
+
     dataDir = lib.mkOption {
       type = lib.types.str;
       default = "${config.forge.storage.root}/data";
@@ -51,7 +57,7 @@ in
 
     workspaceDir = lib.mkOption {
       type = lib.types.str;
-      default = "/";
+      default = "${config.forge.storage.root}/workspaces/default";
       description = "Workspace root exposed to FORGE file-sensitive operations.";
     };
 
@@ -84,6 +90,7 @@ in
       environment = {
         FORGE_DATA_DIR = toString cfg.dataDir;
         FORGE_CORE_PORT = toString cfg.port;
+        FORGE_CORE_BIND_HOST = toString cfg.bindHost;
         FORGE_MODEL_HOME = toString cfg.modelHome;
         FORGE_WORKSPACE_DIR = toString cfg.workspaceDir;
         FORGE_ENABLE_MODEL_RUNTIME = boolString cfg.enableModelRuntime;
@@ -98,6 +105,7 @@ in
         FORGE_K_SHADOW_CHAT_METADATA_ENABLED = "false";
         FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED = "false";
         FORGE_K_SHADOW_ADVISORY_ENABLED = "false";
+        FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED = "false";
       } // cfg.extraEnvironment;
 
       serviceConfig = {

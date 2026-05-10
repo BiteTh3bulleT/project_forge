@@ -16,6 +16,8 @@ const (
 
 type discordIntentClass string
 
+const discordIngressTextLimit = 16 << 10
+
 const (
 	discordIntentDirectCommand   discordIntentClass = "direct_command"
 	discordIntentConversational  discordIntentClass = "conversational_input"

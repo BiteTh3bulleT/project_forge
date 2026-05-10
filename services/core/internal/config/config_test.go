@@ -17,6 +17,22 @@ func TestLoadDefaultsWorkspaceToRoot(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultsCoreBindHostToLoopback(t *testing.T) {
+	t.Setenv("FORGE_CORE_BIND_HOST", "")
+	cfg := Load()
+	if cfg.BindHost != "127.0.0.1" {
+		t.Fatalf("expected default bind host 127.0.0.1, got %q", cfg.BindHost)
+	}
+}
+
+func TestLoadRespectsCoreBindHostOverride(t *testing.T) {
+	t.Setenv("FORGE_CORE_BIND_HOST", " 0.0.0.0 ")
+	cfg := Load()
+	if cfg.BindHost != "0.0.0.0" {
+		t.Fatalf("expected bind host override 0.0.0.0, got %q", cfg.BindHost)
+	}
+}
+
 func TestLoadRespectsWorkspaceOverride(t *testing.T) {
 	t.Setenv("FORGE_WORKSPACE_DIR", "/tmp")
 	cfg := Load()

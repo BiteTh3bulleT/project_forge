@@ -35,6 +35,8 @@ There must be **no alternate execution path** that bypasses the gateway for the 
 - Kinds: see `backup.KnownKinds` (includes `portable_snapshot`, `full_backup`, domain slices like `dossiers`, `audit_history`, …).
 - API: `GET/POST /api/backup/bundles`, `DELETE .../{id}`, `POST /api/backup/restore`.
 - Restores are **conservative merges** with explicit `sections` or inferred defaults; always support `dryRun`.
+- Restore inputs must be staged under `${FORGE_DATA_DIR}/backups` or `${FORGE_DATA_DIR}/exports`; arbitrary host paths and symlinked bundle paths are rejected before bundle parsing.
+- Non-dry-run restore is a critical write operation and now requires a governed approval request. The approval fingerprint binds the exact staged path and section set; approved ids cannot be replayed for a different bundle or restore shape.
 
 ## Release readiness
 

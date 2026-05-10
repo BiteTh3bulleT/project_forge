@@ -251,9 +251,10 @@ and the Pass-1 status docs under `docs/status/`. Highlights:
   privileged operations) remain `approval_only`. Do not relax these
   defaults without operator-signed approval.
 - **Remote access** is off by default; token-gated when enabled.
-- **Workspace root** defaults to `/` — intentionally broad for
-  convenience, but for real work, scope `FORGE_WORKSPACE_DIR` to a
-  specific project directory.
+- **Workspace root** defaults to `/` for direct Go/dev runs. The managed
+  NixOS `forge-core` service defaults to `/forge/workspaces/default`.
+  For real project work, scope `FORGE_WORKSPACE_DIR` to a specific
+  project directory or dedicated workspace path.
 
 ## 9. Shutdown / reset
 

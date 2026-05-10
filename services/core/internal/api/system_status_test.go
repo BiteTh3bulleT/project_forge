@@ -47,6 +47,11 @@ func TestForgeSystemStatusReadOnlySurface(t *testing.T) {
 		}
 	}
 
+	core := asMap(t, payload["core"])
+	if core["core_url"] != "http://example.com" {
+		t.Fatalf("core.core_url=%v, want http://example.com", core["core_url"])
+	}
+
 	forgeh := asMap(t, payload["forgeh"])
 	if forgeh["advisory_only"] != true {
 		t.Fatalf("forgeh.advisory_only=%v, want true", forgeh["advisory_only"])

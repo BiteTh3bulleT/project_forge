@@ -20,6 +20,7 @@ None. All have safe defaults:
 |---|---|---|
 | `FORGE_DATA_DIR` | `~/.config/forge` | SQLite DB, backups, exports live here |
 | `FORGE_CORE_PORT` | `18492` | HTTP listen port |
+| `FORGE_CORE_BIND_HOST` | `127.0.0.1` | HTTP bind host |
 | `FORGE_WORKSPACE_DIR` | `/` | Workspace root for file/ingest operations |
 
 For an isolated dev boot, override all three:
@@ -28,6 +29,7 @@ For an isolated dev boot, override all three:
 FORGE_DATA_DIR=/tmp/forge-dev/data \
 FORGE_WORKSPACE_DIR=/tmp/forge-dev/workspace \
 FORGE_CORE_PORT=18492 \
+FORGE_CORE_BIND_HOST=127.0.0.1 \
 go run .
 ```
 

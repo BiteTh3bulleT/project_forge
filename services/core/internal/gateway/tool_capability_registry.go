@@ -386,6 +386,7 @@ func defaultToolCapabilities() []domain.ToolCapability {
 					capability.AdapterID = "gateway." + strings.ReplaceAll(v, ".", "_")
 				}
 			}
+			capability = finalizeDefaultCapabilityDescriptor(capability)
 			out = append(out, capability)
 		}
 	}
@@ -437,6 +438,17 @@ func defaultCapabilityDescriptor(domainID, primitive string) domain.ToolCapabili
 			"gatewayToolId":   gatewayToolID,
 		},
 	}
+}
+
+func finalizeDefaultCapabilityDescriptor(capability domain.ToolCapability) domain.ToolCapability {
+	capability.RequiresApprovalByDefault = capability.Risk.Rank() >= domain.ToolRiskHigh.Rank()
+	capability.AutonomyEligible = capability.Risk.Rank() <= domain.ToolRiskMedium.Rank()
+	capability.ResourceCost = domain.ToolResourceCost{
+		CostUnits: inferCostUnits(capability.Risk),
+	}
+	capability.ResourceLimits = defaultResourceLimits(capability.Domain, capability.Name, capability.Risk)
+	capability.RollbackSupport = capability.Risk.Rank() <= domain.ToolRiskMedium.Rank()
+	return capability
 }
 
 func gatewayToolIDForCapability(domainID, primitive string) string {

@@ -32,7 +32,7 @@ let
     if cfg.wayland.sessionPackage == null || cfg.wayland.package == null || cfg.package == null then
       "${pkgs.runtimeShell} -lc \"echo 'FORGE Wayland shell session is not wired; set forge.shellSession.package, wayland.package, and wayland.sessionPackage' >&2; exit 1\""
     else
-      "env FORGE_CORE_URL=${cfg.coreURL} VITE_FORGE_API_URL=${cfg.coreURL} FORGE_SHELL_MODE=${cfg.mode} FORGE_SHELL_DISPLAY_BACKEND=${cfg.displayBackend} FORGE_SHELL_COMPOSITOR=${cfg.compositor} FORGE_SHELL_SAFE_MODE=${boolString cfg.safeMode} FORGE_SHELL_FULLSCREEN=${boolString cfg.fullscreen} FORGE_SHELL_RUNTIME_DIR=${cfg.runtimePath} FORGE_WAYLAND_COMPOSITOR=${cfg.wayland.package}/bin/${cfg.compositor} FORGE_SHELL_SESSION_BINARY=${cfg.package}/bin/forge-shell-session ${cfg.wayland.sessionPackage}/bin/forge-wayland-session";
+      "env FORGE_CORE_URL=${cfg.coreURL} VITE_FORGE_API_URL=${cfg.coreURL} FORGE_SHELL_MODE=${cfg.mode} FORGE_SHELL_DISPLAY_BACKEND=${cfg.displayBackend} FORGE_SHELL_COMPOSITOR=${cfg.compositor} FORGE_SHELL_SAFE_MODE=${boolString cfg.safeMode} FORGE_SHELL_FULLSCREEN=${boolString cfg.fullscreen} FORGE_SHELL_RUNTIME_DIR=${cfg.runtimePath} ${cfg.wayland.sessionPackage}/bin/forge-wayland-session";
 in
 {
   imports = [

@@ -62,6 +62,28 @@ func TestNormalizeDiscordMessageEvent(t *testing.T) {
 	}
 }
 
+func TestNormalizeDiscordMessageEventRejectsOversizeContent(t *testing.T) {
+	t.Parallel()
+
+	msg := &discordgo.MessageCreate{
+		Message: &discordgo.Message{
+			ID:        "msg_oversize",
+			ChannelID: "channel_1",
+			Content:   strings.Repeat("a", discordIngressTextLimit+1),
+			Author: &discordgo.User{
+				ID:       "u1",
+				Username: "forge_operator",
+			},
+		},
+	}
+
+	if _, err := normalizeDiscordMessageEvent(msg); err == nil {
+		t.Fatalf("expected oversize Discord message content to be rejected")
+	} else if !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("expected too-large error, got %v", err)
+	}
+}
+
 func TestNormalizeDiscordInteractionEvent(t *testing.T) {
 	t.Parallel()
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -216,6 +217,24 @@ func TestHandleAutonomyMaintenanceSweep(t *testing.T) {
 	}
 	if len(payload.Report.Improvement.Actions) != 2 {
 		t.Fatalf("expected improvement action preview, got %+v", payload.Report.Improvement.Actions)
+	}
+}
+
+func TestHandleAutonomyMaintenanceSweepRejectsOversizeRequestBody(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{autonomy: &AutonomyMaintenanceLoop{}}
+	oversizeBody := `{"reason":"` + strings.Repeat("a", int(serverJSONRequestBodyLimit)+1) + `"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/autonomy/maintenance/sweep", bytes.NewBufferString(oversizeBody))
+	rr := httptest.NewRecorder()
+
+	s.handleAutonomyMaintenanceSweep(rr, req)
+
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status=%d want=%d body=%s", rr.Code, http.StatusRequestEntityTooLarge, rr.Body.String())
+	}
+	if !strings.Contains(strings.ToLower(rr.Body.String()), "too large") {
+		t.Fatalf("expected too-large response, got %q", rr.Body.String())
 	}
 }
 

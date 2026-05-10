@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -38,6 +39,7 @@ const (
 
 	restoreAtomicScopeDBSupported = "db-supported-sections-only"
 	restoreExportOnlyPolicyWarn   = "restore policy: VSA-derived sections are export-only; rerun VSA reindex/signals after restore"
+	maxRestoreBundleBytes         = 64 << 20
 )
 
 // BundleDoc is the on-disk JSON layout for a bundle.
@@ -102,6 +104,96 @@ func New(db *sql.DB, dataDir string) *Service {
 }
 
 func (s *Service) Dirs() (string, string) { return s.backups, s.exports }
+
+// ResolveRestorePath validates that a restore bundle path is a regular file
+// staged under this service's governed backup/export directories.
+func (s *Service) ResolveRestorePath(filePath string) (string, error) {
+	input := strings.TrimSpace(filePath)
+	if input == "" {
+		return "", errors.New("file path required")
+	}
+	targetAbs, err := filepath.Abs(input)
+	if err != nil {
+		return "", fmt.Errorf("resolve restore path: %w", err)
+	}
+	info, err := os.Lstat(targetAbs)
+	if err != nil {
+		return "", err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("restore bundle path must not be a symlink: %s", targetAbs)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("restore bundle path must be a regular file: %s", targetAbs)
+	}
+	resolvedTarget, err := filepath.EvalSymlinks(targetAbs)
+	if err != nil {
+		return "", fmt.Errorf("resolve restore path symlinks: %w", err)
+	}
+	resolvedTarget, err = filepath.Abs(resolvedTarget)
+	if err != nil {
+		return "", fmt.Errorf("resolve restore path: %w", err)
+	}
+	for _, root := range []string{s.backups, s.exports} {
+		ok, err := restorePathWithinRoot(resolvedTarget, root)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			return resolvedTarget, nil
+		}
+	}
+	return "", fmt.Errorf("restore bundle path must be under the backup or export directory")
+}
+
+func restorePathWithinRoot(target, root string) (bool, error) {
+	rootAbs, err := filepath.Abs(strings.TrimSpace(root))
+	if err != nil {
+		return false, fmt.Errorf("resolve restore root: %w", err)
+	}
+	info, err := os.Lstat(rootAbs)
+	if err != nil {
+		return false, fmt.Errorf("restore root unavailable: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return false, fmt.Errorf("restore root must not be a symlink: %s", rootAbs)
+	}
+	if !info.IsDir() {
+		return false, fmt.Errorf("restore root must be a directory: %s", rootAbs)
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(rootAbs)
+	if err != nil {
+		return false, fmt.Errorf("resolve restore root symlinks: %w", err)
+	}
+	resolvedRoot, err = filepath.Abs(resolvedRoot)
+	if err != nil {
+		return false, fmt.Errorf("resolve restore root: %w", err)
+	}
+	rel, err := filepath.Rel(resolvedRoot, target)
+	if err != nil {
+		return false, nil
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)), nil
+}
+
+func readRestoreBundleFile(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err == nil && info.Size() > maxRestoreBundleBytes {
+		return nil, fmt.Errorf("restore bundle too large: %d bytes exceeds %d byte limit", info.Size(), maxRestoreBundleBytes)
+	}
+	raw, err := io.ReadAll(io.LimitReader(f, maxRestoreBundleBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > maxRestoreBundleBytes {
+		return nil, fmt.Errorf("restore bundle too large: exceeds %d byte limit", maxRestoreBundleBytes)
+	}
+	return raw, nil
+}
 
 // CreateBundle builds a BundleDoc of the requested kind, writes it to disk,
 // records the inventory, and returns the record.
@@ -194,9 +286,10 @@ INSERT INTO backup_bundles(
 // instance. Restores are conservative: existing records are only touched for
 // the sections explicitly listed in sections (or all by default).
 type RestoreBundleRequest struct {
-	FilePath string   `json:"filePath"`
-	Sections []string `json:"sections"`
-	DryRun   bool     `json:"dryRun"`
+	FilePath   string   `json:"filePath"`
+	Sections   []string `json:"sections"`
+	DryRun     bool     `json:"dryRun"`
+	ApprovalID string   `json:"approvalId,omitempty"`
 }
 
 type RestoreResult struct {
@@ -226,10 +319,11 @@ type restoreSectionPlan struct {
 }
 
 func (s *Service) RestoreBundle(ctx context.Context, req RestoreBundleRequest) (*RestoreResult, error) {
-	if strings.TrimSpace(req.FilePath) == "" {
-		return nil, errors.New("file path required")
+	filePath, err := s.ResolveRestorePath(req.FilePath)
+	if err != nil {
+		return nil, err
 	}
-	raw, err := os.ReadFile(req.FilePath)
+	raw, err := readRestoreBundleFile(filePath)
 	if err != nil {
 		return nil, err
 	}

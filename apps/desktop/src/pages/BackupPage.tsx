@@ -30,6 +30,7 @@ export function BackupPage() {
   const [label, setLabel] = useState("");
   const [versionTag, setVersionTag] = useState("");
   const [restorePath, setRestorePath] = useState("");
+  const [restoreApprovalId, setRestoreApprovalId] = useState("");
   const [restoreDry, setRestoreDry] = useState(true);
   const [restoreResult, setRestoreResult] = useState<Record<
     string,
@@ -162,15 +163,43 @@ export function BackupPage() {
           />
           Dry run
         </label>
+        {!restoreDry ? (
+          <label className="mt-3 block text-xs text-forge-mist">
+            Approval ID
+            <input
+              className="forge-input mt-1"
+              value={restoreApprovalId}
+              onChange={(e) => setRestoreApprovalId(e.target.value)}
+              placeholder="required after approval"
+            />
+          </label>
+        ) : null}
         <div className="mt-3">
           <PrimaryButton
             onClick={async () => {
-              const r = await api.backup.restore({
+              const body: Record<string, unknown> = {
                 filePath: restorePath,
                 sections: [],
                 dryRun: restoreDry,
-              });
-              setRestoreResult(r.result);
+              };
+              if (!restoreDry && restoreApprovalId.trim()) {
+                body.approvalId = restoreApprovalId.trim();
+              }
+              const r = await api.backup.restore(body);
+              if (r.governance) {
+                setRestoreResult(r.governance);
+                const approvalId = String(
+                  r.governance.approvalRequestId ?? "",
+                );
+                if (approvalId) setRestoreApprovalId(approvalId);
+                setStatus(
+                  approvalId
+                    ? `Restore approval required (#${approvalId}).`
+                    : "Restore approval required.",
+                );
+                return;
+              }
+              setRestoreResult(r.result ?? null);
               setStatus("Restore attempted (see result).");
             }}
           >

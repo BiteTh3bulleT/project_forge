@@ -20,6 +20,9 @@ const (
 	ProviderLocalHash = "local_hash"
 	ProviderOllama    = "ollama"
 	ProviderTEI       = "tei"
+
+	embeddingProviderResponseLimit = 8 << 20
+	teiEmbeddingResponseLimit      = embeddingProviderResponseLimit
 )
 
 type Provider interface {
@@ -518,7 +521,11 @@ func (p *ollamaProvider) Embed(ctx context.Context, text string) ([]float64, err
 	var out struct {
 		Embedding []float64 `json:"embedding"`
 	}
-	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+	raw, err := readBoundedEmbeddingResponse(res.Body)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, err
 	}
 	if len(out.Embedding) == 0 {
@@ -620,7 +627,7 @@ func (p *teiProvider) EmbedTexts(ctx context.Context, texts []string) ([][]float
 	if res.StatusCode >= 300 {
 		return nil, fmt.Errorf("TEI embeddings returned %s", res.Status)
 	}
-	raw, err := io.ReadAll(res.Body)
+	raw, err := readBoundedEmbeddingResponse(res.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -647,6 +654,17 @@ func (p *teiProvider) EmbedTexts(ctx context.Context, texts []string) ([][]float
 		}
 	}
 	return nil, fmt.Errorf("invalid TEI embedding response")
+}
+
+func readBoundedEmbeddingResponse(body io.Reader) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(body, embeddingProviderResponseLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > embeddingProviderResponseLimit {
+		return nil, fmt.Errorf("embedding provider response too large: limit %d bytes", embeddingProviderResponseLimit)
+	}
+	return raw, nil
 }
 
 func settingInt(raw string, fallback int) int {

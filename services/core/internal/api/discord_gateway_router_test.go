@@ -1,6 +1,7 @@
 package api
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/bwmarrin/discordgo"
@@ -86,6 +87,40 @@ func TestRouteDiscordInteractionIntentSlashMemoryQuery(t *testing.T) {
 	}
 	if intent.ArgumentText != "context compiler timeline" {
 		t.Fatalf("argument text = %q", intent.ArgumentText)
+	}
+}
+
+func TestRouteDiscordInteractionIntentRejectsOversizeQuery(t *testing.T) {
+	t.Parallel()
+
+	envelope := discordEventEnvelope{Source: "discord", EventType: discordEventInteractionCreate}
+	ic := &discordgo.InteractionCreate{
+		Interaction: &discordgo.Interaction{
+			ID:   "175928847299117063",
+			Type: discordgo.InteractionApplicationCommand,
+			Data: discordgo.ApplicationCommandInteractionData{
+				Name: "forge",
+				Options: []*discordgo.ApplicationCommandInteractionDataOption{
+					{
+						Name: "memory",
+						Type: discordgo.ApplicationCommandOptionSubCommand,
+						Options: []*discordgo.ApplicationCommandInteractionDataOption{
+							{
+								Name:  "query",
+								Type:  discordgo.ApplicationCommandOptionString,
+								Value: strings.Repeat("a", discordIngressTextLimit+1),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if _, err := routeDiscordInteractionIntent(envelope, ic); err == nil {
+		t.Fatalf("expected oversize Discord slash query to be rejected")
+	} else if !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("expected too-large error, got %v", err)
 	}
 }
 

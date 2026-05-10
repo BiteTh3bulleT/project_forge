@@ -32,13 +32,14 @@ Start `forge-core`, then open the desktop shell and launch the System tool from 
 Expected G6 checks:
 
 - Core Status shows `forge-core` reachable when the local core is running.
+- Core Status shows the core URL, health state, and last refresh time from the read-only status route.
 - Shell Session Status shows host mutation, model mutation, semantic memory write, and FORGE-K live authority as disabled.
-- Host Diagnostics Summary shows bounded RAM/disk/GPU/thermal/source-error fields, or an honest unavailable state.
-- FORGE-H Resource Posture shows advisory pressure and recommendations when HostBridge summary data is available.
-- FORGE-H Proposals are listed read-only.
-- FORGE-H Bounded Executions shows not wired unless a governed execution ledger is available.
+- Host Diagnostics Summary shows bounded identity, RAM/disk/GPU/thermal/source-error, and degraded fields, or an honest unavailable state.
+- FORGE-H Resource Posture shows advisory pressure, disk pressure, recommendations, and warning count when HostBridge summary data is available.
+- FORGE-H Proposals are listed read-only with advisory-only status.
+- FORGE-H Bounded Executions shows not wired unless a governed execution ledger is available; when records are available, the shell shows bounded and mutation flags only.
 - Modelruntime Status shows available/unavailable without load or unload buttons.
-- Storage Status shows SQLite as truth authority and Redis/Qdrant as non-truth auxiliary roles.
+- Storage Status shows SQLite as truth authority, safe used/free disk values when available, and Redis/Qdrant as non-truth auxiliary roles.
 - Approval Queue points to the governed approvals surface and does not add local decision controls.
 
 If `forge-core` is unreachable, the System surface should show `Core unreachable` with the fetch error instead of a fake healthy state. Confirm `FORGE_CORE_URL` or `VITE_FORGE_API_URL` points at the local core URL, then retry manual refresh.
@@ -256,7 +257,7 @@ FORGE Shell session selection
 
 G5 uses the same launch path from a minimal VirtualBox TTY. When the profile is imported, `forge-wayland-session` is installed for manual launch, but the profile still keeps automatic login disabled and preserves TTY rollback.
 
-If a `forge-wayland-session` wrapper is present, it should provide `/bin/forge-wayland-session`, set or preserve the safe shell environment, verify that the compositor and `forge-shell-session` are available, and fail loudly when either dependency is missing. It must launch `forge-shell-session` inside the compositor and must not launch `forge-desktop-shell` directly.
+If a `forge-wayland-session` wrapper is present, it should provide `/bin/forge-wayland-session`, set or preserve the safe shell environment, verify that the compositor and `forge-shell-session` are available, and fail loudly when either dependency is missing. The compositor and shell wrapper executable paths are package-pinned at build time; ambient environment variables may set non-executable session metadata such as `FORGE_CORE_URL`, but must not redirect the wrapper to arbitrary compositor or shell binaries. It must launch `forge-shell-session` inside the compositor and must not launch `forge-desktop-shell` directly.
 
 When enabled through NixOS, expected operator flow is:
 

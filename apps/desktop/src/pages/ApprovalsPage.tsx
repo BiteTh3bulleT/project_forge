@@ -1,6 +1,6 @@
 import type { ApprovalRequest } from "@forge/shared";
 import { GhostButton, PrimaryButton } from "@forge/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { HumanDataView } from "../components/HumanDataView";
@@ -22,6 +22,21 @@ function riskClassName(risk: string) {
   if (normalized === "medium") return "forge-ops-status forge-ops-status--warn";
   if (normalized === "low") return "forge-ops-status forge-ops-status--ok";
   return "forge-ops-status forge-ops-status--muted";
+}
+
+function requiresNonPublicApproval(request: ApprovalRequest) {
+  if (
+    request.requestedAction.trim().toLowerCase() ===
+    "gateway.capability.status.update"
+  ) {
+    return true;
+  }
+
+  const scope = request.scopeSnapshot;
+  return (
+    scope.publicDecisionAllowed === false ||
+    scope.approvalPublicDecisionAllowed === false
+  );
 }
 
 function ApprovalMetric(props: {
@@ -58,6 +73,11 @@ export function ApprovalsPage() {
   );
   const [rows, setRows] = useState<ApprovalRequest[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const [decisionNotice, setDecisionNotice] = useState<string | null>(null);
+  const [decisionBusyById, setDecisionBusyById] = useState<
+    Record<number, boolean>
+  >({});
+  const decisionBusyRef = useRef<Set<number>>(new Set());
 
   async function refresh() {
     try {
@@ -74,6 +94,49 @@ export function ApprovalsPage() {
     const id = window.setInterval(() => void refresh(), 2000);
     return () => window.clearInterval(id);
   }, [statusFilter]);
+
+  async function decideApproval(
+    requestId: number,
+    decision: "approve" | "deny",
+  ) {
+    if (decisionBusyRef.current.has(requestId)) return;
+
+    decisionBusyRef.current.add(requestId);
+    setDecisionBusyById((prev) => ({ ...prev, [requestId]: true }));
+    setDecisionNotice(null);
+    setErr(null);
+
+    try {
+      if (decision === "approve") {
+        await api.approvals.approve(
+          requestId,
+          "Approved from approvals queue",
+        );
+        setStatus(`Approved request ${requestId}.`);
+      } else {
+        await api.approvals.deny(requestId, "Denied from approvals queue");
+        setStatus(`Denied request ${requestId}.`);
+      }
+      await refresh();
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.toLowerCase().includes("not pending")) {
+        const notice = `Request ${requestId} was already resolved.`;
+        setDecisionNotice(notice);
+        setStatus(notice);
+        await refresh();
+      } else {
+        setErr(message);
+      }
+    } finally {
+      decisionBusyRef.current.delete(requestId);
+      setDecisionBusyById((prev) => {
+        const next = { ...prev };
+        delete next[requestId];
+        return next;
+      });
+    }
+  }
 
   const pendingCount = rows.filter((row) => row.status === "pending").length;
   const writeIntentCount = rows.filter((row) => row.writeIntent).length;
@@ -174,6 +237,11 @@ export function ApprovalsPage() {
             {err}
           </div>
         ) : null}
+        {decisionNotice ? (
+          <div className="m-4 rounded border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-forge-ash">
+            {decisionNotice}
+          </div>
+        ) : null}
       </section>
 
       <section className="forge-ops-panel">
@@ -195,11 +263,13 @@ export function ApprovalsPage() {
           </div>
         ) : (
           <div className="divide-y divide-white/10">
-            {rows.map((r) => (
-              <article
-                key={r.id}
-                className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_18rem]"
-              >
+            {rows.map((r) => {
+              const nonPublicApproval = requiresNonPublicApproval(r);
+              return (
+                <article
+                  key={r.id}
+                  className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_18rem]"
+                >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="min-w-0">
@@ -265,29 +335,29 @@ export function ApprovalsPage() {
                 <aside className="rounded border border-white/10 bg-black/20 p-3">
                   {r.status === "pending" ? (
                     <div className="grid gap-2">
-                      <PrimaryButton
-                        className="w-full"
-                        onClick={async () => {
-                          await api.approvals.approve(
-                            r.id,
-                            "Approved from approvals queue",
-                          );
-                          setStatus(`Approved request ${r.id}.`);
-                          await refresh();
-                        }}
-                      >
-                        Approve
-                      </PrimaryButton>
+                      {nonPublicApproval ? (
+                        <>
+                          <PrimaryButton className="w-full" disabled>
+                            Non-public approval
+                          </PrimaryButton>
+                          <div className="rounded border border-amber-300/25 bg-amber-300/10 p-2 text-xs leading-5 text-forge-mist">
+                            This request requires a non-public approval
+                            authority.
+                          </div>
+                        </>
+                      ) : (
+                        <PrimaryButton
+                          className="w-full"
+                          disabled={decisionBusyById[r.id]}
+                          onClick={() => void decideApproval(r.id, "approve")}
+                        >
+                          Approve
+                        </PrimaryButton>
+                      )}
                       <GhostButton
                         className="w-full"
-                        onClick={async () => {
-                          await api.approvals.deny(
-                            r.id,
-                            "Denied from approvals queue",
-                          );
-                          setStatus(`Denied request ${r.id}.`);
-                          await refresh();
-                        }}
+                        disabled={decisionBusyById[r.id]}
+                        onClick={() => void decideApproval(r.id, "deny")}
                       >
                         Deny
                       </GhostButton>
@@ -310,8 +380,9 @@ export function ApprovalsPage() {
                     </div>
                   ) : null}
                 </aside>
-              </article>
-            ))}
+                </article>
+              );
+            })}
           </div>
         )}
       </section>

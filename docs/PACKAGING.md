@@ -40,6 +40,7 @@ See `docs/runbooks/docker_containerization.md`.
 - `FORGE_DATA_DIR` — SQLite and local bundles (`forge.sqlite`, `backups/`, `exports/`).
 - `FORGE_WORKSPACE_DIR` — default scope for lanes and permission read roots.
 - `FORGE_CORE_PORT` — HTTP API port (default `18492`).
+- `FORGE_CORE_BIND_HOST` — HTTP bind host (default `127.0.0.1`; Docker images set `0.0.0.0` intentionally for published ports).
 
 ## Recording a shipped artifact
 

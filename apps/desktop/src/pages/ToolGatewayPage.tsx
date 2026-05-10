@@ -76,6 +76,11 @@ type InvocationRow = {
   result: unknown;
 };
 
+type GatewayAuthorityState = {
+  status: "loading" | "fresh" | "stale" | "unavailable";
+  lastLoadedAtMs: number | null;
+};
+
 function formatTime(ms?: number | null) {
   if (!ms) return "—";
   try {
@@ -135,6 +140,11 @@ export function ToolGatewayPage() {
     Record<string, string>
   >({});
   const [statusUpdateBusy, setStatusUpdateBusy] = useState<string | null>(null);
+  const [gatewayAuthority, setGatewayAuthority] =
+    useState<GatewayAuthorityState>({
+      status: "loading",
+      lastLoadedAtMs: null,
+    });
 
   function newCorrelationId() {
     try {
@@ -169,6 +179,7 @@ export function ToolGatewayPage() {
       };
     }
   }, [inputRaw]);
+  const canUseGatewayAuthority = gatewayAuthority.status === "fresh";
   const canExecuteLocally = useMemo(() => {
     const capabilityStatus =
       selectedCapability?.status ?? selectedTool?.capabilityStatus ?? "unknown";
@@ -178,12 +189,23 @@ export function ToolGatewayPage() {
       selectedTool &&
       selectedLane &&
       selectedLane.enabled &&
+      canUseGatewayAuthority &&
       capabilityAllowed &&
       parsedInput.ok,
     );
-  }, [parsedInput.ok, selectedCapability?.status, selectedLane, selectedTool]);
+  }, [
+    canUseGatewayAuthority,
+    parsedInput.ok,
+    selectedCapability?.status,
+    selectedLane,
+    selectedTool,
+  ]);
   const preflightGates = useMemo(
     () => [
+      {
+        label: "gateway authority is fresh",
+        pass: canUseGatewayAuthority,
+      },
       { label: "if tool is selected", pass: Boolean(selectedTool) },
       { label: "and lane is selected", pass: Boolean(selectedLane) },
       { label: "and lane is enabled", pass: Boolean(selectedLane?.enabled) },
@@ -197,7 +219,13 @@ export function ToolGatewayPage() {
       },
       { label: "and request details are valid", pass: parsedInput.ok },
     ],
-    [parsedInput.ok, selectedCapability?.status, selectedLane, selectedTool],
+    [
+      canUseGatewayAuthority,
+      parsedInput.ok,
+      selectedCapability?.status,
+      selectedLane,
+      selectedTool,
+    ],
   );
 
   async function refresh() {
@@ -219,10 +247,10 @@ export function ToolGatewayPage() {
       const laneRows = (Array.isArray(l.lanes) ? l.lanes : []) as LaneRow[];
       setTools(toolRows);
       setCapabilities(capabilityRows);
-      setStatusDraftById((prev) => {
-        const next = { ...prev };
+      setStatusDraftById(() => {
+        const next: Record<string, ToolCapabilityStatus> = {};
         for (const row of capabilityRows) {
-          if (!next[row.id]) next[row.id] = row.status;
+          next[row.id] = row.status;
         }
         return next;
       });
@@ -248,8 +276,13 @@ export function ToolGatewayPage() {
         setExecutionLevel((v) => v || tool.executionLevel);
       }
       setErr(null);
+      setGatewayAuthority({ status: "fresh", lastLoadedAtMs: Date.now() });
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
+      setGatewayAuthority((current) => ({
+        status: current.lastLoadedAtMs == null ? "unavailable" : "stale",
+        lastLoadedAtMs: current.lastLoadedAtMs,
+      }));
     }
   }
 
@@ -274,7 +307,12 @@ export function ToolGatewayPage() {
       >
         {err ? (
           <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
-            {err}
+            {gatewayAuthority.status === "stale"
+              ? "Gateway authority stale"
+              : gatewayAuthority.status === "unavailable"
+                ? "Gateway authority unavailable"
+                : "Gateway error"}
+            : {err}
           </div>
         ) : null}
         <div className="mt-3 grid gap-2 text-xs text-forge-mist md:grid-cols-2">
@@ -322,6 +360,7 @@ export function ToolGatewayPage() {
                   className="forge-input mt-1"
                   value={toolId}
                   onChange={(e) => setToolId(e.target.value)}
+                  disabled={!canUseGatewayAuthority}
                 >
                   {tools.map((t) => (
                     <option key={t.id} value={t.id}>
@@ -336,6 +375,7 @@ export function ToolGatewayPage() {
                   className="forge-input mt-1"
                   value={laneId}
                   onChange={(e) => setLaneId(e.target.value)}
+                  disabled={!canUseGatewayAuthority}
                 >
                   {lanes.map((ln) => (
                     <option key={ln.id} value={ln.id}>
@@ -467,7 +507,9 @@ export function ToolGatewayPage() {
               try {
                 if (!canExecuteLocally) {
                   setErr(
-                    "Preflight gates are not satisfied. Resolve IF/AND checks before execute.",
+                    gatewayAuthority.status === "fresh"
+                      ? "Preflight gates are not satisfied. Resolve IF/AND checks before execute."
+                      : "Gateway authority is not fresh. Refresh before execute.",
                   );
                   return;
                 }
@@ -551,109 +593,133 @@ export function ToolGatewayPage() {
               No capability details available.
             </div>
           ) : null}
-          {capabilities.map((cap) => (
-            <div
-              key={cap.id}
-              className="rounded border border-forge-platinum/10 bg-black/25 px-3 py-2 text-xs text-forge-mist"
-            >
-              <div className="font-mono text-forge-ash">{cap.id}</div>
-              <div className="mt-1">
-                {cap.domain}.{cap.name} · {cap.status} · risk {cap.risk} · lane{" "}
-                {cap.lane}
-              </div>
-              <div className="mt-1">
-                effects {cap.effect.join(", ")} · intent{" "}
-                {cap.requiresIntent ? "required" : "optional"} · dry-run{" "}
-                {cap.allowedInDryRun ? "allowed" : "blocked"} · autonomy{" "}
-                {cap.autonomyEligible ? "eligible" : "not eligible"}
-              </div>
-              <div className="mt-1 text-[11px] text-forge-mist/90">
-                status reason:{" "}
-                {capabilityStatusReason(cap.status, cap.adapterId)}
-              </div>
-              <div className="mt-1">{cap.description}</div>
-              <div className="mt-2 grid gap-2 md:grid-cols-[180px,1fr,auto]">
-                <select
-                  className="forge-input"
-                  value={statusDraftById[cap.id] ?? cap.status}
-                  onChange={(e) =>
-                    setStatusDraftById((prev) => ({
-                      ...prev,
-                      [cap.id]: e.target.value as ToolCapabilityStatus,
-                    }))
-                  }
-                >
-                  {CAPABILITY_STATUS_OPTIONS.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  className="forge-input"
-                  value={statusReasonById[cap.id] ?? ""}
-                  onChange={(e) =>
-                    setStatusReasonById((prev) => ({
-                      ...prev,
-                      [cap.id]: e.target.value,
-                    }))
-                  }
-                  placeholder="Transition reason (required for status changes)"
-                />
-                <GhostButton
-                  onClick={async () => {
-                    const nextStatus = statusDraftById[cap.id] ?? cap.status;
-                    const reason = (statusReasonById[cap.id] ?? "").trim();
-                    if (
-                      nextStatus !== cap.status &&
-                      (requiresStatusReason(nextStatus) || reason === "")
-                    ) {
-                      setErr(
-                        `Status ${nextStatus} for ${cap.id} requires an explicit reason.`,
-                      );
-                      return;
+          {capabilities.map((cap) => {
+            const draftStatus = statusDraftById[cap.id] ?? cap.status;
+            const hasStatusChange = draftStatus !== cap.status;
+            return (
+              <div
+                key={cap.id}
+                className="rounded border border-forge-platinum/10 bg-black/25 px-3 py-2 text-xs text-forge-mist"
+              >
+                <div className="font-mono text-forge-ash">{cap.id}</div>
+                <div className="mt-1">
+                  {cap.domain}.{cap.name} · {cap.status} · risk {cap.risk} ·
+                  lane {cap.lane}
+                </div>
+                <div className="mt-1">
+                  effects {cap.effect.join(", ")} · intent{" "}
+                  {cap.requiresIntent ? "required" : "optional"} · dry-run{" "}
+                  {cap.allowedInDryRun ? "allowed" : "blocked"} · autonomy{" "}
+                  {cap.autonomyEligible ? "eligible" : "not eligible"}
+                </div>
+                <div className="mt-1 text-[11px] text-forge-mist/90">
+                  status reason:{" "}
+                  {capabilityStatusReason(cap.status, cap.adapterId)}
+                </div>
+                <div className="mt-1">{cap.description}</div>
+                <div className="mt-2 grid gap-2 md:grid-cols-[180px,1fr,auto]">
+                  <select
+                    className="forge-input"
+                    value={draftStatus}
+                    disabled={!canUseGatewayAuthority}
+                    onChange={(e) =>
+                      setStatusDraftById((prev) => ({
+                        ...prev,
+                        [cap.id]: e.target.value as ToolCapabilityStatus,
+                      }))
                     }
-                    setStatusUpdateBusy(cap.id);
-                    try {
-                      const res = await api.gateway.updateCapabilityStatus(
-                        cap.id,
-                        {
-                          status: nextStatus,
-                          reason: reason || undefined,
-                          actor: "operator",
-                          actorKind: "desktop",
-                          source: "desktop",
-                        },
-                      );
-                      if (res.approvalRequired && res.approvalRequestId) {
-                        setStatus(
-                          `Capability ${cap.id} status change needs approval request #${res.approvalRequestId}`,
+                  >
+                    {CAPABILITY_STATUS_OPTIONS.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="forge-input"
+                    value={statusReasonById[cap.id] ?? ""}
+                    disabled={!canUseGatewayAuthority}
+                    onChange={(e) =>
+                      setStatusReasonById((prev) => ({
+                        ...prev,
+                        [cap.id]: e.target.value,
+                      }))
+                    }
+                    placeholder="Transition reason (required for status changes)"
+                  />
+                  <GhostButton
+                    onClick={async () => {
+                      if (!canUseGatewayAuthority) {
+                        setErr(
+                          "Gateway authority is not fresh. Refresh before changing capability status.",
                         );
-                      } else if (res.capability) {
-                        setStatus(
-                          `Capability ${res.capability.id} status -> ${res.capability.status}`,
-                        );
-                      } else {
-                        setStatus(
-                          `Capability ${cap.id} status update processed`,
-                        );
+                        return;
                       }
-                      await refresh();
-                    } catch (error) {
-                      setErr(
-                        error instanceof Error ? error.message : String(error),
-                      );
-                    } finally {
-                      setStatusUpdateBusy(null);
+                      const nextStatus = statusDraftById[cap.id] ?? cap.status;
+                      const reason = (statusReasonById[cap.id] ?? "").trim();
+                      if (nextStatus === cap.status) {
+                        setStatus(`Capability ${cap.id} already ${cap.status}`);
+                        return;
+                      }
+                      if (
+                        requiresStatusReason(nextStatus) ||
+                        reason === ""
+                      ) {
+                        setErr(
+                          `Status ${nextStatus} for ${cap.id} requires an explicit reason.`,
+                        );
+                        return;
+                      }
+                      setStatusUpdateBusy(cap.id);
+                      try {
+                        const res = await api.gateway.updateCapabilityStatus(
+                          cap.id,
+                          {
+                            status: nextStatus,
+                            reason: reason || undefined,
+                            actor: "operator",
+                            actorKind: "desktop",
+                            source: "desktop",
+                          },
+                        );
+                        if (res.approvalRequired && res.approvalRequestId) {
+                          setStatus(
+                            `Capability ${cap.id} status change needs approval request #${res.approvalRequestId}`,
+                          );
+                        } else if (res.capability) {
+                          setStatus(
+                            `Capability ${res.capability.id} status -> ${res.capability.status}`,
+                          );
+                        } else {
+                          setStatus(
+                            `Capability ${cap.id} status update processed`,
+                          );
+                        }
+                        await refresh();
+                      } catch (error) {
+                        setErr(
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
+                        );
+                      } finally {
+                        setStatusUpdateBusy(null);
+                      }
+                    }}
+                    disabled={
+                      !canUseGatewayAuthority ||
+                      statusUpdateBusy === cap.id ||
+                      !hasStatusChange
                     }
-                  }}
-                  disabled={statusUpdateBusy === cap.id}
-                >
-                  {statusUpdateBusy === cap.id ? "Applying..." : "Apply status"}
-                </GhostButton>
+                  >
+                    {statusUpdateBusy === cap.id
+                      ? "Applying..."
+                      : "Apply status"}
+                  </GhostButton>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Panel>
 

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -17,6 +18,7 @@ import (
 )
 
 const ContextVersion = 1
+const maxContextSourceBytes = 8 << 20
 
 type Record struct {
 	ID                    int64           `json:"id"`
@@ -105,7 +107,7 @@ func (s *Service) ImportAndNormalize(ctx context.Context, req ImportRequest) (*R
 		return nil, err
 	}
 
-	body, err := os.ReadFile(sourcePath)
+	body, err := readContextSource(sourcePath)
 	if err != nil {
 		return nil, fmt.Errorf("read context source: %w", err)
 	}
@@ -228,6 +230,25 @@ func (s *Service) resolveSourcePath(ctx context.Context, requested string) (stri
 		return candidate, nil
 	}
 	return "", fmt.Errorf("no context source file found; pass sourcePath or place FORGE_CONTEXT.md in workspace root")
+}
+
+func readContextSource(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err == nil && info.Size() > maxContextSourceBytes {
+		return nil, fmt.Errorf("context source too large: %d bytes exceeds %d byte limit", info.Size(), maxContextSourceBytes)
+	}
+	body, err := io.ReadAll(io.LimitReader(f, maxContextSourceBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxContextSourceBytes {
+		return nil, fmt.Errorf("context source too large: exceeds %d byte limit", maxContextSourceBytes)
+	}
+	return body, nil
 }
 
 func (s *Service) getSetting(ctx context.Context, key string) string {

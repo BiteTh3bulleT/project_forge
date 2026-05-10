@@ -23,6 +23,12 @@ type SettingsView =
   | "display"
   | "diagnostics";
 
+const redactedSettingSecret = "[redacted]";
+
+function isRedactedSettingSecret(value: string) {
+  return value.trim() === redactedSettingSecret;
+}
+
 export function SettingsPage() {
   const [extensionsCsv, setExtensionsCsv] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -309,9 +315,9 @@ export function SettingsPage() {
       if (!Number.isFinite(chatId) || chatId <= 0) {
         throw new Error("Provide a valid Telegram chat ID for probe.");
       }
-      if (!remoteAccessToken.trim()) {
+      if (!remoteAccessToken.trim() || isRedactedSettingSecret(remoteAccessToken)) {
         throw new Error(
-          "Set a remote access token before probing remote ingress.",
+          "Re-enter the remote access token before probing remote ingress.",
         );
       }
       await api.remote.telegram(
@@ -345,9 +351,9 @@ export function SettingsPage() {
       if (!channelId) {
         throw new Error("Provide a Discord channel ID for probe.");
       }
-      if (!remoteAccessToken.trim()) {
+      if (!remoteAccessToken.trim() || isRedactedSettingSecret(remoteAccessToken)) {
         throw new Error(
-          "Set a remote access token before probing remote ingress.",
+          "Re-enter the remote access token before probing remote ingress.",
         );
       }
       await api.remote.discord(
@@ -1091,18 +1097,27 @@ export function SettingsPage() {
             <div className="mt-3 flex gap-2">
               <PrimaryButton
                 onClick={async () => {
-                  await api.settings.patch({
+                  const remotePatch: Record<string, unknown> = {
                     remoteAccessEnabled,
-                    remoteAccessToken,
                     remoteCrossChatContext,
                     remoteDefaultThreadId,
-                    telegramBotToken,
                     telegramDefaultChatId,
-                    discordBotToken,
                     discordDefaultChannelId,
-                    discordWebhookUrl,
                     discordCrossChatContext,
-                  });
+                  };
+                  if (!isRedactedSettingSecret(remoteAccessToken)) {
+                    remotePatch.remoteAccessToken = remoteAccessToken;
+                  }
+                  if (!isRedactedSettingSecret(telegramBotToken)) {
+                    remotePatch.telegramBotToken = telegramBotToken;
+                  }
+                  if (!isRedactedSettingSecret(discordBotToken)) {
+                    remotePatch.discordBotToken = discordBotToken;
+                  }
+                  if (!isRedactedSettingSecret(discordWebhookUrl)) {
+                    remotePatch.discordWebhookUrl = discordWebhookUrl;
+                  }
+                  await api.settings.patch(remotePatch);
                   await refreshRemoteStatuses();
                   setStatus("Remote access settings saved.");
                 }}

@@ -2,8 +2,30 @@
   lib,
   stdenv,
   forge-wayland-session,
+  callPackage,
+  writeShellApplication,
 }:
 
+let
+  fakeCage = writeShellApplication {
+    name = "cage";
+    text = ''
+      test "$1" = "--"
+      shift
+      echo "fake-cage:$FORGE_SHELL_SESSION_ENABLED:$FORGE_CORE_URL:$1:$*"
+    '';
+  };
+  fakeShellSession = writeShellApplication {
+    name = "forge-shell-session";
+    text = ''
+      echo "fake-shell-session:$*"
+    '';
+  };
+  testWaylandSession = callPackage ../packages/forge-wayland-session.nix {
+    cage = fakeCage;
+    forge-shell-session = fakeShellSession;
+  };
+in
 stdenv.mkDerivation {
   name = "forge-wayland-session-wrapper-check";
 
@@ -14,8 +36,10 @@ stdenv.mkDerivation {
   installPhase = ''
     runHook preInstall
 
-    wrapper="${forge-wayland-session}/bin/forge-wayland-session"
+    real_wrapper="${forge-wayland-session}/bin/forge-wayland-session"
+    wrapper="${testWaylandSession}/bin/forge-wayland-session"
 
+    test -x "$real_wrapper"
     test -x "$wrapper"
 
     grep -F 'FORGE_SHELL_SESSION_ENABLED=true' "$wrapper"
@@ -29,9 +53,18 @@ stdenv.mkDerivation {
     grep -F 'FORGE_SHELL_MODEL_MUTATION=false' "$wrapper"
     grep -F 'FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false' "$wrapper"
     grep -F 'FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false' "$wrapper"
-    grep -F 'FORGE_WAYLAND_COMPOSITOR' "$wrapper"
     grep -F 'forge-shell-session' "$wrapper"
     grep -F 'exec "$compositor" -- "$shell_session" "$@"' "$wrapper"
+
+    if grep -F 'FORGE_WAYLAND_COMPOSITOR' "$real_wrapper" "$wrapper"; then
+      echo "forge-wayland-session must not accept compositor executable paths from ambient environment" >&2
+      exit 1
+    fi
+
+    if grep -F 'FORGE_SHELL_SESSION_BINARY' "$real_wrapper" "$wrapper"; then
+      echo "forge-wayland-session must not accept shell executable paths from ambient environment" >&2
+      exit 1
+    fi
 
     forbidden='systemctl|nixos-rebuild|modprobe|rmmod|reboot|shutdown|apt-get|dnf|zypper|pacman|LoadModel|UnloadModel|GenerateStream|os.RemoveAll|rm -rf'
     if grep -E "$forbidden" "$wrapper"; then
@@ -39,28 +72,29 @@ stdenv.mkDerivation {
       exit 1
     fi
 
-    fake_compositor="$TMPDIR/fake-cage"
+    fake_compositor="$TMPDIR/ambient-cage"
     printf '%s\n' \
       '#!/bin/sh' \
-      'test "$1" = "--"' \
-      'shift' \
-      'echo "fake-cage:$FORGE_SHELL_SESSION_ENABLED:$FORGE_CORE_URL:$1:$*"' \
+      'echo "ambient compositor override must not run" >&2' \
+      'exit 42' \
       > "$fake_compositor"
     chmod +x "$fake_compositor"
 
+    fake_shell_session="$TMPDIR/ambient-forge-shell-session"
+    printf '%s\n' \
+      '#!/bin/sh' \
+      'echo "ambient shell override must not run" >&2' \
+      'exit 43' \
+      > "$fake_shell_session"
+    chmod +x "$fake_shell_session"
+
     FORGE_WAYLAND_COMPOSITOR="$fake_compositor" \
+      FORGE_SHELL_SESSION_BINARY="$fake_shell_session" \
       FORGE_CORE_URL=http://127.0.0.1:19994 \
       "$wrapper" arg1 arg2 > "$TMPDIR/wayland.out"
     grep -F 'fake-cage:true:http://127.0.0.1:19994:' "$TMPDIR/wayland.out"
     grep -F 'forge-shell-session' "$TMPDIR/wayland.out"
     grep -F 'arg1 arg2' "$TMPDIR/wayland.out"
-
-    set +e
-    FORGE_WAYLAND_COMPOSITOR="$TMPDIR/missing-cage" "$wrapper" > "$TMPDIR/wayland-fail.out" 2> "$TMPDIR/wayland-fail.err"
-    status=$?
-    set -e
-    test "$status" -eq 1
-    grep -F 'FORGE Wayland compositor is not executable:' "$TMPDIR/wayland-fail.err"
 
     mkdir -p "$out"
     echo "ok" > "$out/result"

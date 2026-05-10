@@ -18,7 +18,7 @@ Legend:
 | Audit write authority | `audit.Service` | none observed | official | gateway/syscall/backup/memory guards emit audit records |
 | Autonomy self-initiation | intent -> policy -> budget -> syscall/tool gateway | direct commit bypass not observed | partial | durability gate + approval escalation + propose-only fallback |
 | Rule-agent actions | rule runtime -> intent proposals | direct destructive commit | official | propose-only runtime + destructive placeholder guards in runner |
-| Backup export/restore | `/api/backup/*` -> `backup.Service` | manual DB/file copies | partial | restore is DB-transactional across supported sections (`atomic/applied/rolledBack`), explicit `atomicScope=db-supported-sections-only`, explicit `unsupported` + warnings, non-destructive upserts |
+| Backup export/restore | `/api/backup/*` -> `backup.Service` + `approvals.Service` for non-dry-run restore | manual DB/file copies | partial | restore is DB-transactional across supported sections (`atomic/applied/rolledBack`), explicit `atomicScope=db-supported-sections-only`, explicit `unsupported` + warnings, non-destructive upserts; restore reads only staged backup/export bundle paths and non-dry-run API restore requires an approval fingerprint for the exact path/sections |
 | Desktop mutation | desktop `fetch` -> backend `/api/*` | client-side DB bypass not observed | official | backend validation remains in path |
 
 ## Convergence notes

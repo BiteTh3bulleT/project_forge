@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -24,6 +26,10 @@ import (
 	"forge/projectforge/services/core/internal/retrieval"
 	"forge/projectforge/services/core/internal/reviews"
 )
+
+const phase3JSONRequestBodyLimit = 1 << 20
+
+var errPhase3RequestBodyTooLarge = errors.New("phase3 json request body too large")
 
 type optionalInt64 struct {
 	Value *int64
@@ -96,8 +102,8 @@ func (s *Server) handleReembed(w http.ResponseWriter, r *http.Request) {
 		Provider string        `json:"provider"`
 		Model    string        `json:"model"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase3JSONBody(r, &body); err != nil {
+		writePhase3DecodeError(w, err)
 		return
 	}
 	var (
@@ -137,8 +143,8 @@ func (s *Server) handleCreateRetrievalRun(w http.ResponseWriter, r *http.Request
 		PacketID        optionalInt64 `json:"packetId"`
 		Notes           string        `json:"notes"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase3JSONBody(r, &body); err != nil {
+		writePhase3DecodeError(w, err)
 		return
 	}
 	started := time.Now()
@@ -325,8 +331,8 @@ func (s *Server) handleMarkRetrievalUsefulness(w http.ResponseWriter, r *http.Re
 		JobID    *string       `json:"jobId"`
 		PacketID optionalInt64 `json:"packetId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase3JSONBody(r, &body); err != nil {
+		writePhase3DecodeError(w, err)
 		return
 	}
 	if err := s.retrieval.MarkUsefulness(r.Context(), resultID, body.Label, body.Note, body.JobID, body.PacketID.Value); err != nil {
@@ -338,8 +344,8 @@ func (s *Server) handleMarkRetrievalUsefulness(w http.ResponseWriter, r *http.Re
 
 func (s *Server) handleCreateDossier(w http.ResponseWriter, r *http.Request) {
 	var body dossiers.CreateRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase3JSONBody(r, &body); err != nil {
+		writePhase3DecodeError(w, err)
 		return
 	}
 	d, err := s.dossiers.Create(r.Context(), body)
@@ -381,8 +387,8 @@ func (s *Server) handleUpdateDossier(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body dossiers.UpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase3JSONBody(r, &body); err != nil {
+		writePhase3DecodeError(w, err)
 		return
 	}
 	d, err := s.dossiers.Update(r.Context(), id, body)
@@ -402,7 +408,10 @@ func (s *Server) handleGenerateDossierBrief(w http.ResponseWriter, r *http.Reque
 	var body struct {
 		Notes string `json:"notes"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := decodeOptionalPhase3JSONBody(r, &body); err != nil {
+		writePhase3DecodeError(w, err)
+		return
+	}
 	brief, err := s.dossiers.GenerateBrief(r.Context(), id, body.Notes)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -422,8 +431,8 @@ func (s *Server) handleGenerateDossierBrief(w http.ResponseWriter, r *http.Reque
 
 func (s *Server) handleCreateEvaluation(w http.ResponseWriter, r *http.Request) {
 	var body evaluations.SaveRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase3JSONBody(r, &body); err != nil {
+		writePhase3DecodeError(w, err)
 		return
 	}
 	rec, err := s.evals.Save(r.Context(), body)
@@ -498,6 +507,11 @@ func (s *Server) cloneJobWithRelation(w http.ResponseWriter, r *http.Request, re
 		http.Error(w, "job id required", http.StatusBadRequest)
 		return
 	}
+	var body cloneRequest
+	if err := decodeOptionalPhase3JSONBody(r, &body); err != nil {
+		writePhase3DecodeError(w, err)
+		return
+	}
 	parent, err := s.jobs.Get(r.Context(), parentID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
@@ -508,9 +522,6 @@ func (s *Server) cloneJobWithRelation(w http.ResponseWriter, r *http.Request, re
 		http.Error(w, "job metadata decode failed", http.StatusBadRequest)
 		return
 	}
-	var body cloneRequest
-	_ = json.NewDecoder(r.Body).Decode(&body)
-
 	req := jobs.CreateRequest{
 		TemplateID:             nonEmpty(body.TemplateID, meta.TemplateID),
 		Title:                  nonEmpty(body.Title, parent.Title+" ("+relation+")"),
@@ -590,8 +601,8 @@ func (s *Server) handleJobLineage(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCreateImportedExecution(w http.ResponseWriter, r *http.Request) {
 	var body imports.CreateRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase3JSONBody(r, &body); err != nil {
+		writePhase3DecodeError(w, err)
 		return
 	}
 	rec, err := s.imports.Create(r.Context(), body)
@@ -654,7 +665,10 @@ func (s *Server) handleGenerateInsights(w http.ResponseWriter, r *http.Request) 
 	var body struct {
 		DossierID optionalInt64 `json:"dossierId"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := decodeOptionalPhase3JSONBody(r, &body); err != nil {
+		writePhase3DecodeError(w, err)
+		return
+	}
 	rows, err := s.insights.Generate(r.Context(), insights.GenerateRequest{DossierID: body.DossierID.Value})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -720,4 +734,48 @@ func nonEmpty(v, def string) string {
 		return def
 	}
 	return strings.TrimSpace(v)
+}
+
+func decodePhase3JSONBody(r *http.Request, target any) error {
+	raw, err := readPhase3RequestBody(r)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func decodeOptionalPhase3JSONBody(r *http.Request, target any) error {
+	raw, err := readPhase3RequestBody(r)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		return err
+	}
+	if len(strings.TrimSpace(string(raw))) == 0 {
+		return nil
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func readPhase3RequestBody(r *http.Request) ([]byte, error) {
+	if r.Body == nil {
+		return nil, io.EOF
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, phase3JSONRequestBodyLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > phase3JSONRequestBodyLimit {
+		return nil, errPhase3RequestBodyTooLarge
+	}
+	return raw, nil
+}
+
+func writePhase3DecodeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errPhase3RequestBodyTooLarge) {
+		http.Error(w, "phase3 json request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	http.Error(w, "invalid json", http.StatusBadRequest)
 }

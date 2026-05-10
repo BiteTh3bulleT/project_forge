@@ -37,6 +37,7 @@ HTTP endpoints on the core service.
 |---|---|---|
 | `FORGE_DATA_DIR` | `~/.config/forge` (fallback: `./` if `UserConfigDir` fails) | [config.go:16](services/core/internal/config/config.go#L16) |
 | `FORGE_CORE_PORT` | `18492` | [config.go:25](services/core/internal/config/config.go#L25) |
+| `FORGE_CORE_BIND_HOST` | `127.0.0.1` | [config.go](services/core/internal/config/config.go) |
 | `FORGE_WORKSPACE_DIR` | `/` | [config.go:30](services/core/internal/config/config.go#L30) |
 | `FORGE_TELEGRAM_GATEWAY_ENABLED` | `true` (but token absence is the effective kill-switch) | [telegram_gateway_server.go](services/core/internal/api/telegram_gateway_server.go) |
 | `FORGE_TELEGRAM_BOT_TOKEN` | unset (gateway stays off) | same |
@@ -56,7 +57,7 @@ repointed to a different core without rebuilding.
 
 | Port | Who | Configurable |
 |---|---|---|
-| `18492` | core HTTP | via `FORGE_CORE_PORT` |
+| `18492` | core HTTP | via `FORGE_CORE_PORT`; binds to `FORGE_CORE_BIND_HOST` |
 | `5173` | Vite dev server | `strictPort: true` in `vite.config.ts` — must be free |
 
 ### Local directories created during boot
@@ -121,7 +122,7 @@ The phase defines four progressively-wider bring-up targets:
 
 ### T1 — minimal core up
 
-`cd services/core && go run .` produces an HTTP server on `:18492`.
+`cd services/core && go run .` produces an HTTP server on `127.0.0.1:18492`.
 `GET /health` returns `{"ok":true,"service":"forge-core"}`. **Verified
 2026-04-21.** No warnings or errors in boot log.
 

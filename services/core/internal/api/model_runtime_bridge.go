@@ -30,6 +30,19 @@ type modelRuntimeBridge struct {
 	dreamModeGPUOnlyInDeepIdle           bool
 }
 
+const modelRuntimeDiscoveryResponseLimit = 8 << 20
+
+func readModelRuntimeDiscoveryResponse(body io.Reader, label string) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(body, modelRuntimeDiscoveryResponseLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > modelRuntimeDiscoveryResponseLimit {
+		return nil, fmt.Errorf("%s response too large: limit %d bytes", label, modelRuntimeDiscoveryResponseLimit)
+	}
+	return raw, nil
+}
+
 func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service, telemetry ...any) modelRuntimeService {
 	var gpuTelemetry *gpu.Service
 	if len(telemetry) > 0 {
@@ -398,7 +411,7 @@ func discoverLocalOllamaModels(ctx context.Context, endpoint string, includeClou
 	if resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("ollama model discovery: endpoint returned %s", resp.Status)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	body, err := readModelRuntimeDiscoveryResponse(resp.Body, "ollama model discovery")
 	if err != nil {
 		return nil, fmt.Errorf("ollama model discovery: read body: %w", err)
 	}
@@ -544,7 +557,7 @@ func discoverOpenAICompatibleEndpoint(ctx context.Context, endpoint, apiKey stri
 		return nil, fmt.Errorf("openai compat model discovery: endpoint returned %s", resp.Status)
 	}
 
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	body, err := readModelRuntimeDiscoveryResponse(resp.Body, "openai compat model discovery")
 	if err != nil {
 		return nil, fmt.Errorf("openai compat model discovery: read body: %w", err)
 	}
@@ -1217,6 +1230,8 @@ func mapModelRuntimeBridgeError(err error) error {
 		return nil
 	}
 	switch {
+	case errors.Is(err, modelruntime.ErrModelIDInvalid):
+		return &modelRuntimeError{status: 400, code: "MODEL_ID_INVALID", message: err.Error()}
 	case errors.Is(err, modelruntime.ErrModelNotFound):
 		return &modelRuntimeError{status: 404, code: "MODEL_NOT_FOUND", message: "model not found"}
 	case errors.Is(err, modelruntime.ErrModelNotLoaded):

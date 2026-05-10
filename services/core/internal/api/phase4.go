@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,6 +21,10 @@ import (
 	"forge/projectforge/services/core/internal/reviews"
 	"forge/projectforge/services/core/internal/strategies"
 )
+
+const phase4JSONRequestBodyLimit = 1 << 20
+
+var errPhase4RequestBodyTooLarge = errors.New("phase4 json request body too large")
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	summary, err := s.dashboard.Summary(r.Context())
@@ -42,8 +48,8 @@ func (s *Server) handleListStrategies(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSaveStrategy(w http.ResponseWriter, r *http.Request) {
 	var body strategies.SaveRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase4JSONBody(r, &body); err != nil {
+		writePhase4DecodeError(w, err)
 		return
 	}
 	item, err := s.strategies.Save(r.Context(), body)
@@ -72,8 +78,8 @@ func (s *Server) handleSaveApprovalPreset(w http.ResponseWriter, r *http.Request
 		Profile     map[string]any `json:"profile"`
 		Editable    bool           `json:"editable"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase4JSONBody(r, &body); err != nil {
+		writePhase4DecodeError(w, err)
 		return
 	}
 	item, err := s.policy.SaveApprovalPreset(r.Context(), body.ID, body.Name, body.Description, body.Profile, body.Editable)
@@ -97,8 +103,8 @@ func (s *Server) handleSetGlobalPreset(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		PresetID string `json:"presetId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase4JSONBody(r, &body); err != nil {
+		writePhase4DecodeError(w, err)
 		return
 	}
 	if err := s.policy.SetGlobalApprovalPreset(r.Context(), body.PresetID); err != nil {
@@ -129,8 +135,8 @@ func (s *Server) handleSaveDossierProfile(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var body policy.SaveDossierProfileRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase4JSONBody(r, &body); err != nil {
+		writePhase4DecodeError(w, err)
 		return
 	}
 	body.DossierID = id
@@ -144,8 +150,8 @@ func (s *Server) handleSaveDossierProfile(w http.ResponseWriter, r *http.Request
 
 func (s *Server) handlePolicyRecommend(w http.ResponseWriter, r *http.Request) {
 	var body policy.RecommendRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase4JSONBody(r, &body); err != nil {
+		writePhase4DecodeError(w, err)
 		return
 	}
 	item, err := s.policy.Recommend(r.Context(), body)
@@ -180,8 +186,8 @@ func (s *Server) handleListAutomationRules(w http.ResponseWriter, r *http.Reques
 
 func (s *Server) handleSaveAutomationRule(w http.ResponseWriter, r *http.Request) {
 	var body automation.SaveRuleRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase4JSONBody(r, &body); err != nil {
+		writePhase4DecodeError(w, err)
 		return
 	}
 	item, err := s.automation.SaveRule(r.Context(), body)
@@ -204,8 +210,8 @@ func (s *Server) handleAutomationHistory(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) handleRunAutomationRule(w http.ResponseWriter, r *http.Request) {
 	var body automation.RunRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase4JSONBody(r, &body); err != nil {
+		writePhase4DecodeError(w, err)
 		return
 	}
 	out, err := s.automation.Run(r.Context(), body, func(ctx context.Context, action map[string]any, scope map[string]any, dryRun bool) (map[string]any, error) {
@@ -288,8 +294,8 @@ func (s *Server) handleAnalyzePacketGuidance(w http.ResponseWriter, r *http.Requ
 		JobID     *string `json:"jobId"`
 		DossierID *int64  `json:"dossierId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase4JSONBody(r, &body); err != nil {
+		writePhase4DecodeError(w, err)
 		return
 	}
 	item, err := s.packetOpt.AnalyzePacket(r.Context(), packetopt.AnalyzeRequest{
@@ -336,8 +342,8 @@ func (s *Server) handleSaveImportReconciliation(w http.ResponseWriter, r *http.R
 		return
 	}
 	var body reconciliation.SaveRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase4JSONBody(r, &body); err != nil {
+		writePhase4DecodeError(w, err)
 		return
 	}
 	body.ImportID = importID
@@ -362,8 +368,8 @@ func (s *Server) handleListReconciliations(w http.ResponseWriter, r *http.Reques
 
 func (s *Server) handleCreateReview(w http.ResponseWriter, r *http.Request) {
 	var body reviews.CreateRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase4JSONBody(r, &body); err != nil {
+		writePhase4DecodeError(w, err)
 		return
 	}
 	rec, err := s.reviews.Create(r.Context(), body)
@@ -392,8 +398,8 @@ func (s *Server) handleUpdateReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body reviews.UpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase4JSONBody(r, &body); err != nil {
+		writePhase4DecodeError(w, err)
 		return
 	}
 	rec, err := s.reviews.Update(r.Context(), id, body)
@@ -409,7 +415,10 @@ func (s *Server) handleAnalyzeFailurePatterns(w http.ResponseWriter, r *http.Req
 		DossierID *int64 `json:"dossierId"`
 		Lookback  int    `json:"lookback"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := decodeOptionalPhase4JSONBody(r, &body); err != nil {
+		writePhase4DecodeError(w, err)
+		return
+	}
 	rows, err := s.failures.Analyze(r.Context(), failurepatterns.AnalyzeRequest{
 		DossierID: body.DossierID,
 		Lookback:  body.Lookback,
@@ -468,4 +477,48 @@ func readStringAny(m map[string]any, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(s)
+}
+
+func decodePhase4JSONBody(r *http.Request, target any) error {
+	raw, err := readPhase4RequestBody(r)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func decodeOptionalPhase4JSONBody(r *http.Request, target any) error {
+	raw, err := readPhase4RequestBody(r)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		return err
+	}
+	if len(strings.TrimSpace(string(raw))) == 0 {
+		return nil
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func readPhase4RequestBody(r *http.Request) ([]byte, error) {
+	if r.Body == nil {
+		return nil, io.EOF
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, phase4JSONRequestBodyLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > phase4JSONRequestBodyLimit {
+		return nil, errPhase4RequestBodyTooLarge
+	}
+	return raw, nil
+}
+
+func writePhase4DecodeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errPhase4RequestBodyTooLarge) {
+		http.Error(w, "phase4 json request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	http.Error(w, "invalid json", http.StatusBadRequest)
 }

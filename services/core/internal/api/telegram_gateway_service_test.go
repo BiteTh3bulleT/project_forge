@@ -1,6 +1,13 @@
 package api
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+)
 
 func TestNormalizeWakeCommand(t *testing.T) {
 	tests := []struct {
@@ -39,5 +46,39 @@ func TestParseMAC(t *testing.T) {
 	}
 	if _, err := parseMAC("xyz"); err == nil {
 		t.Fatalf("parseMAC invalid input expected error")
+	}
+}
+
+func TestProcessWakeCommandRejectsOversizeText(t *testing.T) {
+	g := &TelegramGateway{cfg: telegramGatewayConfig{EnableWakeCommands: true}}
+	msg := &telegramMessage{Text: strings.Repeat("a", remoteInboundTextLimit+1)}
+
+	handled, err := g.processWakeCommandIfPresent(context.Background(), remoteConfig{}, msg)
+	if !handled {
+		t.Fatalf("expected oversize wake-command text to be handled as rejected")
+	}
+	if !errors.Is(err, errRemoteMessageTooLarge) {
+		t.Fatalf("expected oversize wake-command text error, got %v", err)
+	}
+}
+
+func TestTelegramGatewayFetchUpdatesRejectsOversizeResponse(t *testing.T) {
+	g := &TelegramGateway{
+		cfg: telegramGatewayConfig{BotToken: "token", PollTimeoutS: 1, MaxBatchItems: 1},
+		client: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			body := `{"ok":true,"result":[]}` + strings.Repeat(" ", telegramPollResponseBodyLimit+1)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Status:     "200 OK",
+				Body:       io.NopCloser(strings.NewReader(body)),
+				Header:     make(http.Header),
+				Request:    r,
+			}, nil
+		})},
+	}
+
+	_, err := g.fetchUpdates(context.Background(), 0)
+	if err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("expected response too large error, got %v", err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -14,6 +15,10 @@ import (
 // approval request stays actionable. Requests past this TTL are swept into the
 // "expired" terminal state by Expire.
 const DefaultRequestTTL = 24 * time.Hour
+
+const maxApprovalScopeSnapshotBytes = 128 << 10
+
+var errApprovalScopeSnapshotTooLarge = errors.New("approval scope snapshot too large")
 
 type Request struct {
 	ID               int64           `json:"id"`
@@ -79,7 +84,10 @@ func (s *Service) OpenRequestForJob(ctx context.Context, jobID string, in Create
 		return existing, nil
 	}
 
-	scopeJSON, _ := json.Marshal(nonNilMap(in.ScopeSnapshot))
+	scopeJSON, err := marshalScopeSnapshot(in.ScopeSnapshot)
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UnixMilli()
 	ttl := in.TTL
 	if ttl <= 0 {
@@ -391,6 +399,17 @@ func nonNilMap(v map[string]any) map[string]any {
 		return map[string]any{}
 	}
 	return v
+}
+
+func marshalScopeSnapshot(scope map[string]any) ([]byte, error) {
+	body, err := json.Marshal(nonNilMap(scope))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxApprovalScopeSnapshotBytes {
+		return nil, fmt.Errorf("%w: %d > %d bytes", errApprovalScopeSnapshotTooLarge, len(body), maxApprovalScopeSnapshotBytes)
+	}
+	return body, nil
 }
 
 func nonEmpty(v, def string) string {

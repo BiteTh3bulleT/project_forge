@@ -7,9 +7,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"forge/projectforge/services/core/internal/config"
+	"forge/projectforge/services/core/internal/modelruntime"
 )
 
 func TestInitModelRuntimeServiceAutoEnablesForOpenAICompatEndpoint(t *testing.T) {
@@ -62,6 +64,54 @@ func TestInitModelRuntimeServiceAutoEnablesForOpenAICompatEndpoint(t *testing.T)
 	}
 	if !hasModelID(models, "remote-qwen") {
 		t.Fatalf("expected discovered remote model to survive scan, got=%#v", models)
+	}
+}
+
+func TestModelRuntimeDiscoveryRejectsOversizeResponses(t *testing.T) {
+	t.Run("ollama", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/tags" {
+				http.NotFound(w, r)
+				return
+			}
+			_, _ = w.Write(make([]byte, modelRuntimeDiscoveryResponseLimit+1))
+		}))
+		defer server.Close()
+
+		_, err := discoverLocalOllamaModels(context.Background(), server.URL, false)
+		if err == nil || !strings.Contains(err.Error(), "response too large") {
+			t.Fatalf("discoverLocalOllamaModels error = %v, want size error", err)
+		}
+	})
+
+	t.Run("openai compat", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/v1/models" {
+				http.NotFound(w, r)
+				return
+			}
+			_, _ = w.Write(make([]byte, modelRuntimeDiscoveryResponseLimit+1))
+		}))
+		defer server.Close()
+
+		_, err := discoverOpenAICompatibleEndpoint(context.Background(), server.URL, "", modelruntime.BackendOpenAICompat)
+		if err == nil || !strings.Contains(err.Error(), "response too large") {
+			t.Fatalf("discoverOpenAICompatibleEndpoint error = %v, want size error", err)
+		}
+	})
+}
+
+func TestMapModelRuntimeBridgeErrorRejectsUnsafeModelIDAsBadRequest(t *testing.T) {
+	err := mapModelRuntimeBridgeError(modelruntime.ErrModelIDInvalid)
+	runtimeErr, ok := err.(*modelRuntimeError)
+	if !ok {
+		t.Fatalf("mapped error=%T %[1]v, want *modelRuntimeError", err)
+	}
+	if runtimeErr.StatusCode() != http.StatusBadRequest {
+		t.Fatalf("status=%d want %d", runtimeErr.StatusCode(), http.StatusBadRequest)
+	}
+	if runtimeErr.ErrorCode() != "MODEL_ID_INVALID" {
+		t.Fatalf("code=%q want MODEL_ID_INVALID", runtimeErr.ErrorCode())
 	}
 }
 

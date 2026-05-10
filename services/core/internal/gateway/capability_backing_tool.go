@@ -41,12 +41,265 @@ var (
 	capabilityTimers    = map[string]time.Time{}
 )
 
+const (
+	gatewayProcStatusReadLimit             = 64 << 10
+	gatewayWorkspaceSearchReadLimit        = 256 << 10
+	gatewayEncryptionKeyReadLimit          = 4 << 10
+	maxCodeEvalInputBytes                  = 128 << 10
+	maxTestOutputInputBytes                = 512 << 10
+	maxCapabilityMemoryTextBytes           = 256 << 10
+	maxCapabilityMemoryIDBytes             = 512
+	maxCapabilityMemoryPayloadBytes        = 768 << 10
+	maxConfiguredCommandArgsBytes          = 64 << 10
+	maxIdentityMessageBytes                = 256 << 10
+	maxIdentitySignatureBytes              = 4 << 10
+	maxCapabilitySearchQueryBytes          = 8 << 10
+	maxSecretPlaintextBytes                = 64 << 10
+	maxSecretCiphertextBytes               = 128 << 10
+	maxCapabilityConfigKeyBytes            = 512
+	maxCapabilityConfigValueBytes          = 64 << 10
+	maxIdentityTokenInputBytes             = 8 << 10
+	maxIdentityTokenIDBytes                = 256
+	maxAlertRuleNameBytes                  = 512
+	maxAlertRuleExpressionBytes            = 8 << 10
+	maxScheduleIDBytes                     = 512
+	maxSchedulePayloadBytes                = 64 << 10
+	maxDesktopBridgeRequestBodyBytes       = 64 << 10
+	maxCapabilityResultInputFields         = 32
+	maxCapabilityResultInputFieldNameBytes = 128
+	maxCapabilityResultInputSummaryBytes   = 8 << 10
+)
+
+var errCodeEvalTooLarge = errors.New("code.eval_code input too large")
+
+var errTestOutputTooLarge = errors.New("code.parse_test_results output too large")
+
+var errCapabilityMemoryTextTooLarge = errors.New("capability memory text too large")
+
+var errCapabilityMemoryIDTooLarge = errors.New("capability memory id too large")
+
+var errCapabilityMemoryPayloadTooLarge = errors.New("capability memory payload too large")
+
+var errConfiguredCommandArgsTooLarge = errors.New("configured command args too large")
+
+var errIdentityMessageTooLarge = errors.New("identity message too large")
+
+var errIdentitySignatureTooLarge = errors.New("identity signature too large")
+
+var errCapabilitySearchQueryTooLarge = errors.New("capability search query too large")
+
+var errSecretPlaintextTooLarge = errors.New("secret plaintext too large")
+
+var errSecretCiphertextTooLarge = errors.New("secret ciphertext too large")
+
+var errCapabilityConfigKeyTooLarge = errors.New("capability config key too large")
+
+var errCapabilityConfigValueTooLarge = errors.New("capability config value too large")
+
+var errIdentityTokenInputTooLarge = errors.New("identity token input too large")
+
+var errIdentityTokenIDTooLarge = errors.New("identity token id too large")
+
+var errAlertRuleNameTooLarge = errors.New("alert rule name too large")
+
+var errAlertRuleExpressionTooLarge = errors.New("alert rule expression too large")
+
+var errScheduleIDTooLarge = errors.New("schedule id too large")
+
+var errSchedulePayloadTooLarge = errors.New("schedule payload too large")
+
+var errDesktopBridgeRequestBodyTooLarge = errors.New("desktop bridge request body too large")
+
 type capabilityBackingTool struct {
 	capability domain.ToolCapability
 	toolID     string
 	workspace  string
 	dataDir    string
 	db         *sql.DB
+}
+
+func readCapabilityFileBounded(path, label string, limit int64) ([]byte, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("%s read limit must be positive", label)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err == nil && info.Mode().IsRegular() && info.Size() > limit {
+		return nil, fmt.Errorf("%s too large: %d bytes exceeds %d byte limit", label, info.Size(), limit)
+	}
+	body, err := io.ReadAll(io.LimitReader(f, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > limit {
+		return nil, fmt.Errorf("%s too large: exceeds %d byte limit", label, limit)
+	}
+	return body, nil
+}
+
+func normalizeCodeEvalInput(raw string) (string, error) {
+	code := strings.TrimSpace(raw)
+	if code == "" {
+		return "", errors.New("code.eval_code requires input.code")
+	}
+	if len(code) > maxCodeEvalInputBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errCodeEvalTooLarge, len(code), maxCodeEvalInputBytes)
+	}
+	return code, nil
+}
+
+func normalizeTestOutputInput(raw string) (string, error) {
+	output := strings.TrimSpace(raw)
+	if len(output) > maxTestOutputInputBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errTestOutputTooLarge, len(output), maxTestOutputInputBytes)
+	}
+	return output, nil
+}
+
+func normalizeCapabilityMemoryText(raw, field string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if len(value) > maxCapabilityMemoryTextBytes {
+		return "", fmt.Errorf("%w: %s %d > %d bytes", errCapabilityMemoryTextTooLarge, field, len(value), maxCapabilityMemoryTextBytes)
+	}
+	return value, nil
+}
+
+func normalizeCapabilityMemoryID(raw string) (string, error) {
+	id := strings.TrimSpace(raw)
+	if len(id) > maxCapabilityMemoryIDBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errCapabilityMemoryIDTooLarge, len(id), maxCapabilityMemoryIDBytes)
+	}
+	return id, nil
+}
+
+func marshalCapabilityMemoryPayload(input map[string]any) (string, error) {
+	payload, err := json.Marshal(nonNilMap(input))
+	if err != nil {
+		return "", err
+	}
+	if len(payload) > maxCapabilityMemoryPayloadBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errCapabilityMemoryPayloadTooLarge, len(payload), maxCapabilityMemoryPayloadBytes)
+	}
+	return string(payload), nil
+}
+
+func normalizeConfiguredCommandArgs(raw string) ([]string, error) {
+	normalized := strings.TrimSpace(raw)
+	if normalized == "" {
+		return nil, nil
+	}
+	if len(normalized) > maxConfiguredCommandArgsBytes {
+		return nil, fmt.Errorf("%w: %d > %d bytes", errConfiguredCommandArgsTooLarge, len(normalized), maxConfiguredCommandArgsBytes)
+	}
+	return strings.Fields(normalized), nil
+}
+
+func normalizeIdentityMessage(raw string) ([]byte, error) {
+	message := []byte(strings.TrimSpace(raw))
+	if len(message) > maxIdentityMessageBytes {
+		return nil, fmt.Errorf("%w: %d > %d bytes", errIdentityMessageTooLarge, len(message), maxIdentityMessageBytes)
+	}
+	return message, nil
+}
+
+func normalizeIdentitySignature(raw string) (string, error) {
+	signature := strings.TrimSpace(raw)
+	if len(signature) > maxIdentitySignatureBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errIdentitySignatureTooLarge, len(signature), maxIdentitySignatureBytes)
+	}
+	return signature, nil
+}
+
+func normalizeCapabilitySearchQuery(raw, label string) (string, error) {
+	query := strings.TrimSpace(raw)
+	if len(query) > maxCapabilitySearchQueryBytes {
+		return "", fmt.Errorf("%w: %s %d > %d bytes", errCapabilitySearchQueryTooLarge, label, len(query), maxCapabilitySearchQueryBytes)
+	}
+	return query, nil
+}
+
+func normalizeSecretPlaintext(raw string) (string, error) {
+	if len(raw) > maxSecretPlaintextBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errSecretPlaintextTooLarge, len(raw), maxSecretPlaintextBytes)
+	}
+	return raw, nil
+}
+
+func normalizeSecretCiphertext(raw string) (string, error) {
+	ciphertext := strings.TrimSpace(raw)
+	if len(ciphertext) > maxSecretCiphertextBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errSecretCiphertextTooLarge, len(ciphertext), maxSecretCiphertextBytes)
+	}
+	return ciphertext, nil
+}
+
+func normalizeCapabilityConfigKey(raw string) (string, error) {
+	key := strings.TrimSpace(raw)
+	if len(key) > maxCapabilityConfigKeyBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errCapabilityConfigKeyTooLarge, len(key), maxCapabilityConfigKeyBytes)
+	}
+	return key, nil
+}
+
+func normalizeCapabilityConfigValue(raw string) (string, error) {
+	if len(raw) > maxCapabilityConfigValueBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errCapabilityConfigValueTooLarge, len(raw), maxCapabilityConfigValueBytes)
+	}
+	return raw, nil
+}
+
+func normalizeIdentityTokenInput(raw string) (string, error) {
+	token := strings.TrimSpace(raw)
+	if len(token) > maxIdentityTokenInputBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errIdentityTokenInputTooLarge, len(token), maxIdentityTokenInputBytes)
+	}
+	return token, nil
+}
+
+func normalizeIdentityTokenID(raw string) (string, error) {
+	tokenID := strings.TrimSpace(raw)
+	if len(tokenID) > maxIdentityTokenIDBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errIdentityTokenIDTooLarge, len(tokenID), maxIdentityTokenIDBytes)
+	}
+	return tokenID, nil
+}
+
+func normalizeAlertRuleName(raw string) (string, error) {
+	name := strings.TrimSpace(raw)
+	if len(name) > maxAlertRuleNameBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errAlertRuleNameTooLarge, len(name), maxAlertRuleNameBytes)
+	}
+	return name, nil
+}
+
+func normalizeAlertRuleExpression(raw string) (string, error) {
+	expression := strings.TrimSpace(raw)
+	if len(expression) > maxAlertRuleExpressionBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errAlertRuleExpressionTooLarge, len(expression), maxAlertRuleExpressionBytes)
+	}
+	return expression, nil
+}
+
+func normalizeScheduleID(raw string) (string, error) {
+	id := strings.TrimSpace(raw)
+	if len(id) > maxScheduleIDBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errScheduleIDTooLarge, len(id), maxScheduleIDBytes)
+	}
+	return id, nil
+}
+
+func marshalSchedulePayload(input map[string]any) (string, error) {
+	payload, err := json.Marshal(nonNilMap(input))
+	if err != nil {
+		return "", err
+	}
+	if len(payload) > maxSchedulePayloadBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errSchedulePayloadTooLarge, len(payload), maxSchedulePayloadBytes)
+	}
+	return string(payload), nil
 }
 
 func (t *capabilityBackingTool) ID() string     { return t.toolID }
@@ -131,7 +384,7 @@ func (t *capabilityBackingTool) executeFilesystem(ctx context.Context, req Reque
 		}
 		return capabilityOK("glob completed", map[string]any{"matches": rows, "count": len(rows)}), nil
 	case "get_permissions":
-		target, err := firstPath(req.Paths, t.workspace)
+		target, err := firstWorkspacePath(req.Paths, t.workspace)
 		if err != nil {
 			return Result{}, err
 		}
@@ -158,7 +411,10 @@ func (t *capabilityBackingTool) executeFilesystem(ctx context.Context, req Reque
 		}
 		return capabilityOK("archive extracted", map[string]any{"destination": dst}), nil
 	case "query_semantic_fs":
-		query := inputString(req.Input, "query")
+		query, err := normalizeCapabilitySearchQuery(inputString(req.Input, "query"), "filesystem.query_semantic_fs")
+		if err != nil {
+			return Result{}, err
+		}
 		rows, err := searchWorkspaceFiles(t.workspace, query, 50)
 		if err != nil {
 			return Result{}, err
@@ -177,7 +433,7 @@ func (t *capabilityBackingTool) executeFilesystem(ctx context.Context, req Reque
 		}
 		return t.runConfiguredCommand(ctx, req, "FORGE_UMOUNT_BIN", "umount")
 	case "watch_path":
-		target, err := firstPath(req.Paths, t.workspace)
+		target, err := firstWorkspacePath(req.Paths, t.workspace)
 		if err != nil {
 			return Result{}, err
 		}
@@ -267,21 +523,21 @@ func (t *capabilityBackingTool) executeProcess(ctx context.Context, req Request)
 	case "inspect_process":
 		pid := inputInt(req.Input, "pid", os.Getpid())
 		data := map[string]any{"pid": pid}
-		if b, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid)); err == nil {
+		if b, err := readCapabilityFileBounded(fmt.Sprintf("/proc/%d/status", pid), "process status", gatewayProcStatusReadLimit); err == nil {
 			data["status"] = string(b)
 		} else {
 			data["status"] = "process inspection is limited on " + runtime.GOOS
 		}
 		return capabilityOK("process inspected", data), nil
 	case "run_job", "fork_context":
-		return capabilityOK("job request materialized", map[string]any{"input": nonNilMap(req.Input), "note": "job service bridge can enqueue this template from API wiring"}), nil
+		return capabilityOK("job request materialized", map[string]any{"input": capabilityInputSummary(req.Input), "note": "job service bridge can enqueue this template from API wiring"}), nil
 	case "checkpoint_process", "restore_process":
 		if os.Getenv("FORGE_CRIU_BIN") == "" {
 			return Result{}, errors.New("process checkpoint/restore requires FORGE_CRIU_BIN")
 		}
 		return t.runConfiguredCommand(ctx, req, "FORGE_CRIU_BIN", "criu")
 	case "set_resource_limits":
-		return capabilityOK("resource limit request validated", map[string]any{"limits": nonNilMap(req.Input), "scope": "spawned children"}), nil
+		return capabilityOK("resource limit request validated", map[string]any{"limits": capabilityInputSummary(req.Input), "scope": "spawned children"}), nil
 	default:
 		return capabilityOK("process capability backed", map[string]any{"capabilityId": t.capability.ID}), nil
 	}
@@ -291,7 +547,10 @@ func (t *capabilityBackingTool) executeCode(ctx context.Context, req Request) (R
 	switch t.capability.Name {
 	case "eval_code":
 		lang := strings.ToLower(nonEmpty(inputString(req.Input, "language"), "python"))
-		code := inputString(req.Input, "code")
+		code, err := normalizeCodeEvalInput(inputString(req.Input, "code"))
+		if err != nil {
+			return Result{}, err
+		}
 		if lang != "python" {
 			return Result{}, fmt.Errorf("code.eval_code currently supports python via python3, got %q", lang)
 		}
@@ -303,24 +562,30 @@ func (t *capabilityBackingTool) executeCode(ctx context.Context, req Request) (R
 	case "run_tests":
 		return runCommand(ctx, t.workspace, "go", "test", "./...")
 	case "parse_test_results":
-		raw := inputString(req.Input, "output")
+		raw, err := normalizeTestOutputInput(inputString(req.Input, "output"))
+		if err != nil {
+			return Result{}, err
+		}
 		return capabilityOK("test output parsed", map[string]any{"passed": !strings.Contains(raw, "FAIL"), "bytes": len(raw)}), nil
 	case "lint":
 		return runCommand(ctx, t.workspace, "go", "vet", "./...")
 	case "format":
 		return runCommand(ctx, t.workspace, "gofmt", "-l", ".")
 	case "patch_code":
-		patch := inputString(req.Input, "patch")
-		if strings.TrimSpace(patch) == "" {
-			return Result{}, errors.New("code.patch_code requires input.patch")
+		patch, err := normalizeGitPatchInput(inputString(req.Input, "patch"), "code.patch_code")
+		if err != nil {
+			return Result{}, err
 		}
 		cmd := exec.CommandContext(ctx, "git", "apply", "--check", "-")
 		cmd.Dir = t.workspace
 		cmd.Stdin = strings.NewReader(patch)
-		out, err := cmd.CombinedOutput()
-		return capabilityOK("patch validated", map[string]any{"output": string(out)}), err
+		out, err := boundedCombinedOutput(cmd)
+		return capabilityOK("patch validated", map[string]any{"output": out}), err
 	case "search_code":
-		query := inputString(req.Input, "query")
+		query, err := normalizeCapabilitySearchQuery(inputString(req.Input, "query"), "code.search_code")
+		if err != nil {
+			return Result{}, err
+		}
 		if query == "" {
 			return Result{}, errors.New("code.search_code requires input.query")
 		}
@@ -380,13 +645,24 @@ func (t *capabilityBackingTool) executeIdentity(ctx context.Context, req Request
 		}
 		return capabilityOK("token issued", map[string]any{"tokenId": tokenID, "token": token}), nil
 	case "verify_token":
-		tokenID := sha256Hex(inputString(req.Input, "token"))
+		token, err := normalizeIdentityTokenInput(inputString(req.Input, "token"))
+		if err != nil {
+			return Result{}, err
+		}
+		tokenID := sha256Hex(token)
 		status, err := t.scalarSettingOrTable(ctx, `SELECT status FROM identity_tokens WHERE token_id = ? OR token_hash = ?`, tokenID, tokenID)
 		return capabilityOK("token verified", map[string]any{"tokenId": tokenID, "valid": err == nil && status == "active", "status": status}), nil
 	case "revoke_token":
-		tokenID := inputString(req.Input, "tokenId")
+		tokenID, err := normalizeIdentityTokenID(inputString(req.Input, "tokenId"))
+		if err != nil {
+			return Result{}, err
+		}
 		if tokenID == "" {
-			tokenID = sha256Hex(inputString(req.Input, "token"))
+			token, err := normalizeIdentityTokenInput(inputString(req.Input, "token"))
+			if err != nil {
+				return Result{}, err
+			}
+			tokenID = sha256Hex(token)
 		}
 		return capabilityOK("token revoked", map[string]any{"tokenId": tokenID}), t.execDB(ctx, `UPDATE identity_tokens SET status = 'revoked', revoked_at = ? WHERE token_id = ? OR token_hash = ?`, time.Now().UnixMilli(), tokenID, tokenID)
 	case "sign", "verify_signature":
@@ -394,20 +670,27 @@ func (t *capabilityBackingTool) executeIdentity(ctx context.Context, req Request
 	case "audit_log_read":
 		return t.queryRows(ctx, `SELECT id, created_at, category, action, actor, outcome, summary FROM audit_records ORDER BY id DESC LIMIT 50`)
 	case "check_policy", "set_policy", "sudo", "switch_user":
-		return capabilityOK("identity policy request captured", map[string]any{"action": t.capability.Name, "input": nonNilMap(req.Input)}), nil
+		return capabilityOK("identity policy request captured", map[string]any{"action": t.capability.Name, "input": capabilityInputSummary(req.Input)}), nil
 	default:
 		return capabilityOK("identity capability backed", map[string]any{"capabilityId": t.capability.ID}), nil
 	}
 }
 
 func (t *capabilityBackingTool) executeConfig(ctx context.Context, req Request) (Result, error) {
-	key := inputString(req.Input, "key")
+	key, err := normalizeCapabilityConfigKey(inputString(req.Input, "key"))
+	if err != nil {
+		return Result{}, err
+	}
 	switch t.capability.Name {
 	case "get_config":
 		value, err := t.settingGet(ctx, key)
 		return capabilityOK("config read", map[string]any{"key": key, "value": value, "found": err == nil}), nil
 	case "set_config":
-		return capabilityOK("config written", map[string]any{"key": key}), t.settingSet(ctx, key, inputString(req.Input, "value"))
+		value, err := normalizeCapabilityConfigValue(inputString(req.Input, "value"))
+		if err != nil {
+			return Result{}, err
+		}
+		return capabilityOK("config written", map[string]any{"key": key}), t.settingSet(ctx, key, value)
 	case "diff_config":
 		return capabilityOK("config diff", map[string]any{"key": key, "note": "settings history is not versioned; current value returned"}), nil
 	case "watch_config":
@@ -415,14 +698,22 @@ func (t *capabilityBackingTool) executeConfig(ctx context.Context, req Request) 
 	case "get_env":
 		return capabilityOK("env read", map[string]any{"key": key, "value": os.Getenv(key)}), nil
 	case "set_env":
-		return capabilityOK("env set for current process", map[string]any{"key": key}), os.Setenv(key, inputString(req.Input, "value"))
+		value, err := normalizeCapabilityConfigValue(inputString(req.Input, "value"))
+		if err != nil {
+			return Result{}, err
+		}
+		return capabilityOK("env set for current process", map[string]any{"key": key}), os.Setenv(key, value)
 	case "feature_flag_read":
 		value, err := t.scalarSettingOrTable(ctx, `SELECT value FROM feature_flags WHERE key = ?`, key)
 		return capabilityOK("feature flag read", map[string]any{"key": key, "value": value, "found": err == nil}), nil
 	case "feature_flag_set":
-		return capabilityOK("feature flag set", map[string]any{"key": key}), t.execDB(ctx, `INSERT INTO feature_flags(key, value, updated_at, actor) VALUES(?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at, actor=excluded.actor`, key, inputString(req.Input, "value"), time.Now().UnixMilli(), req.Initiator)
+		value, err := normalizeCapabilityConfigValue(inputString(req.Input, "value"))
+		if err != nil {
+			return Result{}, err
+		}
+		return capabilityOK("feature flag set", map[string]any{"key": key}), t.execDB(ctx, `INSERT INTO feature_flags(key, value, updated_at, actor) VALUES(?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at, actor=excluded.actor`, key, value, time.Now().UnixMilli(), req.Initiator)
 	case "backup", "restore", "migrate_schema":
-		return capabilityOK("config operation captured", map[string]any{"operation": t.capability.Name, "input": nonNilMap(req.Input)}), nil
+		return capabilityOK("config operation captured", map[string]any{"operation": t.capability.Name, "input": capabilityInputSummary(req.Input)}), nil
 	default:
 		return capabilityOK("config capability backed", map[string]any{"capabilityId": t.capability.ID}), nil
 	}
@@ -435,7 +726,10 @@ func (t *capabilityBackingTool) executeObservability(ctx context.Context, req Re
 		runtime.ReadMemStats(&mem)
 		return capabilityOK("metrics captured", map[string]any{"goroutines": runtime.NumGoroutine(), "alloc": mem.Alloc, "sys": mem.Sys}), nil
 	case "get_traces":
-		corr := inputString(req.Input, "correlationId")
+		corr, err := normalizeCorrelationID(inputString(req.Input, "correlationId"))
+		if err != nil {
+			return Result{}, err
+		}
 		if corr == "" {
 			corr = req.CorrelationID
 		}
@@ -443,10 +737,20 @@ func (t *capabilityBackingTool) executeObservability(ctx context.Context, req Re
 	case "tail_stream":
 		return t.queryRows(ctx, `SELECT id, created_at, type, payload_json FROM events ORDER BY id DESC LIMIT 50`)
 	case "create_alert":
-		name := inputString(req.Input, "name")
-		return capabilityOK("alert rule created", map[string]any{"name": name}), t.execDB(ctx, `INSERT INTO alert_rules(name, expression, status, created_at, updated_at) VALUES(?,?,?,?,?)`, name, inputString(req.Input, "expression"), "active", time.Now().UnixMilli(), time.Now().UnixMilli())
+		name, err := normalizeAlertRuleName(inputString(req.Input, "name"))
+		if err != nil {
+			return Result{}, err
+		}
+		expression, err := normalizeAlertRuleExpression(inputString(req.Input, "expression"))
+		if err != nil {
+			return Result{}, err
+		}
+		return capabilityOK("alert rule created", map[string]any{"name": name}), t.execDB(ctx, `INSERT INTO alert_rules(name, expression, status, created_at, updated_at) VALUES(?,?,?,?,?)`, name, expression, "active", time.Now().UnixMilli(), time.Now().UnixMilli())
 	case "silence_alert":
-		name := inputString(req.Input, "name")
+		name, err := normalizeAlertRuleName(inputString(req.Input, "name"))
+		if err != nil {
+			return Result{}, err
+		}
 		return capabilityOK("alert silenced", map[string]any{"name": name}), t.execDB(ctx, `UPDATE alert_rules SET status='silenced', silenced_until=?, updated_at=? WHERE name=?`, time.Now().Add(time.Hour).UnixMilli(), time.Now().UnixMilli(), name)
 	case "profile_process":
 		out := filepath.Join(nonEmpty(t.dataDir, os.TempDir()), "profiles", fmt.Sprintf("cpu-%d.pprof", time.Now().UnixMilli()))
@@ -503,12 +807,12 @@ func (t *capabilityBackingTool) executeDevice(ctx context.Context, req Request) 
 		if os.Getenv("FORGE_GPIO_ENABLED") != "true" {
 			return Result{}, errors.New("GPIO access requires FORGE_GPIO_ENABLED=true")
 		}
-		return capabilityOK("gpio request captured", map[string]any{"input": nonNilMap(req.Input)}), nil
+		return capabilityOK("gpio request captured", map[string]any{"input": capabilityInputSummary(req.Input)}), nil
 	case "bluetooth_scan", "bluetooth_connect":
 		if os.Getenv("FORGE_BLUETOOTH_ENABLED") != "true" {
 			return Result{}, errors.New("bluetooth access requires FORGE_BLUETOOTH_ENABLED=true")
 		}
-		return capabilityOK("bluetooth request captured", map[string]any{"input": nonNilMap(req.Input)}), nil
+		return capabilityOK("bluetooth request captured", map[string]any{"input": capabilityInputSummary(req.Input)}), nil
 	case "set_display":
 		return t.callDesktopBridge(ctx, req)
 	default:
@@ -519,17 +823,29 @@ func (t *capabilityBackingTool) executeDevice(ctx context.Context, req Request) 
 func (t *capabilityBackingTool) executeTime(ctx context.Context, req Request) (Result, error) {
 	switch t.capability.Name {
 	case "schedule_once", "schedule_recurring", "set_alarm", "set_deadline", "defer_until":
-		id := nonEmpty(inputString(req.Input, "id"), "schedule-"+newCorrelationID())
-		payload, _ := json.Marshal(nonNilMap(req.Input))
-		if err := t.execDB(ctx, `INSERT INTO scheduled_tasks(id, kind, payload_json, status, created_at, updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET payload_json=excluded.payload_json, status=excluded.status, updated_at=excluded.updated_at`, id, t.capability.Name, string(payload), "scheduled", time.Now().UnixMilli(), time.Now().UnixMilli()); err != nil {
+		id, err := normalizeScheduleID(nonEmpty(inputString(req.Input, "id"), "schedule-"+newCorrelationID()))
+		if err != nil {
+			return Result{}, err
+		}
+		payload, err := marshalSchedulePayload(req.Input)
+		if err != nil {
+			return Result{}, err
+		}
+		if err := t.execDB(ctx, `INSERT INTO scheduled_tasks(id, kind, payload_json, status, created_at, updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET payload_json=excluded.payload_json, status=excluded.status, updated_at=excluded.updated_at`, id, t.capability.Name, payload, "scheduled", time.Now().UnixMilli(), time.Now().UnixMilli()); err != nil {
 			return Result{}, err
 		}
 		return capabilityOK("schedule stored", map[string]any{"id": id, "kind": t.capability.Name}), nil
 	case "cancel_schedule":
-		id := inputString(req.Input, "id")
+		id, err := normalizeScheduleID(inputString(req.Input, "id"))
+		if err != nil {
+			return Result{}, err
+		}
 		return capabilityOK("schedule cancelled", map[string]any{"id": id}), t.execDB(ctx, `UPDATE scheduled_tasks SET status='cancelled', updated_at=? WHERE id=?`, time.Now().UnixMilli(), id)
 	case "measure_duration":
-		id := nonEmpty(inputString(req.Input, "id"), "default")
+		id, err := normalizeScheduleID(nonEmpty(inputString(req.Input, "id"), "default"))
+		if err != nil {
+			return Result{}, err
+		}
 		capabilityTimersMu.Lock()
 		start, ok := capabilityTimers[id]
 		if !ok || inputBool(req.Input, "start") {
@@ -566,22 +882,36 @@ func (t *capabilityBackingTool) executeExternal(ctx context.Context, req Request
 }
 
 func (t *capabilityBackingTool) executeMemory(ctx context.Context, req Request) (Result, error) {
-	key := "memory." + nonEmpty(inputString(req.Input, "id"), sha256Hex(inputString(req.Input, "content")+inputString(req.Input, "query")))
+	content, err := normalizeCapabilityMemoryText(inputString(req.Input, "content"), "content")
+	if err != nil {
+		return Result{}, err
+	}
+	query, err := normalizeCapabilityMemoryText(inputString(req.Input, "query"), "query")
+	if err != nil {
+		return Result{}, err
+	}
+	id, err := normalizeCapabilityMemoryID(inputString(req.Input, "id"))
+	if err != nil {
+		return Result{}, err
+	}
+	key := "memory." + nonEmpty(id, sha256Hex(content+query))
 	switch t.capability.Name {
 	case "remember", "upsert_fact":
-		payload, _ := json.Marshal(nonNilMap(req.Input))
-		return capabilityOK("memory stored", map[string]any{"id": key}), t.settingSet(ctx, key, string(payload))
+		payload, err := marshalCapabilityMemoryPayload(req.Input)
+		if err != nil {
+			return Result{}, err
+		}
+		return capabilityOK("memory stored", map[string]any{"id": key}), t.settingSet(ctx, key, payload)
 	case "recall", "semantic_search":
-		query := inputString(req.Input, "query")
 		rows, err := searchWorkspaceFiles(t.workspace, query, 20)
 		return capabilityOK("memory recall completed", map[string]any{"query": query, "results": rows}), err
 	case "forget", "retract_fact":
 		return capabilityOK("memory supersession marker stored", map[string]any{"id": key}), t.settingSet(ctx, key+".status", "superseded")
 	case "embed_content":
-		sum := sha256.Sum256([]byte(inputString(req.Input, "content")))
+		sum := sha256.Sum256([]byte(content))
 		return capabilityOK("content embedded deterministically", map[string]any{"sha256": hex.EncodeToString(sum[:])}), nil
 	case "cross_reference", "rank_relevance", "diff_knowledge", "summarize_context":
-		return capabilityOK("memory analysis completed", map[string]any{"operation": t.capability.Name, "input": nonNilMap(req.Input)}), nil
+		return capabilityOK("memory analysis completed", map[string]any{"operation": t.capability.Name, "input": capabilityInputSummary(req.Input)}), nil
 	default:
 		return capabilityOK("memory capability backed", map[string]any{"capabilityId": t.capability.ID}), nil
 	}
@@ -590,18 +920,18 @@ func (t *capabilityBackingTool) executeMemory(ctx context.Context, req Request) 
 func (t *capabilityBackingTool) executeAgent(ctx context.Context, req Request) (Result, error) {
 	switch t.capability.Name {
 	case "request_approval":
-		return capabilityOK("approval request payload prepared", map[string]any{"input": nonNilMap(req.Input)}), nil
+		return capabilityOK("approval request payload prepared", map[string]any{"input": capabilityInputSummary(req.Input)}), nil
 	case "observe_agent":
 		return t.queryRows(ctx, `SELECT id, created_at, type, payload_json FROM events ORDER BY id DESC LIMIT 50`)
 	case "spawn_agent", "delegate_task", "send_message", "broadcast", "merge_results", "escalate", "kill_agent":
-		return capabilityOK("agent operation materialized", map[string]any{"operation": t.capability.Name, "input": nonNilMap(req.Input)}), nil
+		return capabilityOK("agent operation materialized", map[string]any{"operation": t.capability.Name, "input": capabilityInputSummary(req.Input)}), nil
 	default:
 		return capabilityOK("agent capability backed", map[string]any{"capabilityId": t.capability.ID}), nil
 	}
 }
 
 func (t *capabilityBackingTool) executeBackup(ctx context.Context, req Request) (Result, error) {
-	return capabilityOK("backup operation captured", map[string]any{"operation": t.capability.Name, "input": nonNilMap(req.Input)}), nil
+	return capabilityOK("backup operation captured", map[string]any{"operation": t.capability.Name, "input": capabilityInputSummary(req.Input)}), nil
 }
 
 func capabilityHasEffect(capability domain.ToolCapability, effect domain.ToolEffect) bool {
@@ -622,6 +952,66 @@ func capabilityOKWithArtifacts(message string, data map[string]any, artifacts []
 		data = map[string]any{}
 	}
 	return Result{Status: StatusOK, Message: message, Data: data, Artifacts: artifacts}
+}
+
+func capabilityInputSummary(input map[string]any) map[string]any {
+	fieldCount := len(input)
+	fields := []string{}
+	truncatedFields := false
+	truncatedFieldNames := false
+	hasSensitiveFields := false
+	if fieldCount > 0 {
+		keys := make([]string, 0, fieldCount)
+		for key := range input {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			if len(fields) >= maxCapabilityResultInputFields {
+				truncatedFields = true
+				break
+			}
+			name := strings.TrimSpace(key)
+			if name == "" {
+				name = "<empty>"
+			}
+			if len(name) > maxCapabilityResultInputFieldNameBytes {
+				name = name[:maxCapabilityResultInputFieldNameBytes]
+				truncatedFieldNames = true
+			}
+			if capabilityInputFieldLooksSensitive(key) {
+				hasSensitiveFields = true
+			}
+			fields = append(fields, name)
+		}
+	}
+	summary := map[string]any{
+		"fieldCount":          fieldCount,
+		"fields":              fields,
+		"truncatedFields":     truncatedFields,
+		"truncatedFieldNames": truncatedFieldNames,
+		"hasSensitiveFields":  hasSensitiveFields,
+	}
+	for len(fields) > 0 {
+		body, err := json.Marshal(summary)
+		if err != nil || len(body) <= maxCapabilityResultInputSummaryBytes {
+			break
+		}
+		fields = fields[:len(fields)-1]
+		summary["fields"] = fields
+		summary["truncatedFields"] = true
+	}
+	return summary
+}
+
+func capabilityInputFieldLooksSensitive(key string) bool {
+	name := strings.ToLower(strings.TrimSpace(key))
+	for _, marker := range []string{"secret", "token", "password", "passwd", "credential", "plaintext", "ciphertext", "signature", "private"} {
+		if strings.Contains(name, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func inputString(input map[string]any, key string) string {
@@ -673,6 +1063,12 @@ func workspaceGlob(root, pattern string) ([]string, error) {
 		if err != nil {
 			return nil
 		}
+		if d.Type()&os.ModeSymlink != 0 {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		rel, _ := filepath.Rel(root, path)
 		rel = filepath.ToSlash(rel)
 		if rel == "." {
@@ -709,13 +1105,19 @@ func searchWorkspaceFiles(root, query string, limit int) ([]map[string]any, erro
 		if err != nil || d.IsDir() {
 			return nil
 		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		if err := validateWorkspacePath(root, path); err != nil {
+			return nil
+		}
 		rel, _ := filepath.Rel(root, path)
 		score := 0
 		if query == "" || strings.Contains(strings.ToLower(rel), query) {
 			score += 2
 		}
 		if score == 0 {
-			if b, err := os.ReadFile(path); err == nil && len(b) <= 256*1024 && strings.Contains(strings.ToLower(string(b)), query) {
+			if b, err := readCapabilityFileBounded(path, "workspace search file", gatewayWorkspaceSearchReadLimit); err == nil && strings.Contains(strings.ToLower(string(b)), query) {
 				score++
 			}
 		}
@@ -732,14 +1134,25 @@ func searchWorkspaceFiles(root, query string, limit int) ([]map[string]any, erro
 
 func (t *capabilityBackingTool) createTarGZ(req Request) (string, error) {
 	out := inputString(req.Input, "output")
+	outputProvided := out != ""
 	if out == "" {
 		out = filepath.Join(nonEmpty(t.dataDir, os.TempDir()), "snapshots", fmt.Sprintf("%s-%d.tar.gz", strings.ReplaceAll(t.capability.ID, ".", "-"), time.Now().UnixMilli()))
 	}
 	if !filepath.IsAbs(out) {
 		out = filepath.Join(t.workspace, out)
 	}
+	if outputProvided {
+		if err := validateWorkspacePath(t.workspace, out); err != nil {
+			return "", err
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 		return "", err
+	}
+	if outputProvided {
+		if err := validateWorkspacePath(t.workspace, out); err != nil {
+			return "", err
+		}
 	}
 	f, err := os.Create(out)
 	if err != nil {
@@ -755,12 +1168,9 @@ func (t *capabilityBackingTool) createTarGZ(req Request) (string, error) {
 		paths = []string{"."}
 	}
 	for _, raw := range paths {
-		target, err := firstPath([]string{raw}, t.workspace)
+		target, err := firstWorkspacePath([]string{raw}, t.workspace)
 		if err != nil {
 			return "", err
-		}
-		if !pathContains(t.workspace, target) {
-			return "", fmt.Errorf("archive target %q outside workspace", target)
 		}
 		if err := addPathToTar(tw, t.workspace, target); err != nil {
 			return "", err
@@ -772,6 +1182,12 @@ func (t *capabilityBackingTool) createTarGZ(req Request) (string, error) {
 func addPathToTar(tw *tar.Writer, root, target string) error {
 	return filepath.Walk(target, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			return err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("archive target %q includes symlink path", path)
+		}
+		if err := validateWorkspacePath(root, path); err != nil {
 			return err
 		}
 		header, err := tar.FileInfoHeader(info, "")
@@ -834,6 +1250,9 @@ func extractTarGZ(src, dst string) error {
 		return err
 	}
 	defer gz.Close()
+	if err := prepareArchiveDestination(dst); err != nil {
+		return err
+	}
 	tr := tar.NewReader(gz)
 	for {
 		header, err := tr.Next()
@@ -844,16 +1263,22 @@ func extractTarGZ(src, dst string) error {
 			return err
 		}
 		target := filepath.Join(dst, filepath.Clean(header.Name))
-		if !pathContains(dst, target) {
-			return fmt.Errorf("archive entry %q escapes destination", header.Name)
+		if err := validateArchiveEntryTarget(dst, target, header.Name); err != nil {
+			return err
+		}
+		if header.FileInfo().Mode()&os.ModeType != 0 && !header.FileInfo().IsDir() {
+			return fmt.Errorf("archive entry %q has unsupported file type", header.Name)
 		}
 		if header.FileInfo().IsDir() {
-			if err := os.MkdirAll(target, 0o755); err != nil {
+			if err := safeMkdirAllForArchive(dst, target); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		if err := safeMkdirAllForArchive(dst, filepath.Dir(target)); err != nil {
+			return err
+		}
+		if err := validateArchiveEntryTarget(dst, target, header.Name); err != nil {
 			return err
 		}
 		out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, header.FileInfo().Mode())
@@ -877,18 +1302,27 @@ func extractZip(src, dst string) error {
 		return err
 	}
 	defer zr.Close()
+	if err := prepareArchiveDestination(dst); err != nil {
+		return err
+	}
 	for _, file := range zr.File {
 		target := filepath.Join(dst, filepath.Clean(file.Name))
-		if !pathContains(dst, target) {
-			return fmt.Errorf("archive entry %q escapes destination", file.Name)
+		if err := validateArchiveEntryTarget(dst, target, file.Name); err != nil {
+			return err
+		}
+		if file.FileInfo().Mode()&os.ModeType != 0 && !file.FileInfo().IsDir() {
+			return fmt.Errorf("archive entry %q has unsupported file type", file.Name)
 		}
 		if file.FileInfo().IsDir() {
-			if err := os.MkdirAll(target, 0o755); err != nil {
+			if err := safeMkdirAllForArchive(dst, target); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		if err := safeMkdirAllForArchive(dst, filepath.Dir(target)); err != nil {
+			return err
+		}
+		if err := validateArchiveEntryTarget(dst, target, file.Name); err != nil {
 			return err
 		}
 		in, err := file.Open()
@@ -913,11 +1347,91 @@ func extractZip(src, dst string) error {
 	return nil
 }
 
+func prepareArchiveDestination(root string) error {
+	if info, err := os.Lstat(root); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("archive destination %q is a symlink", root)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("archive destination %q is not a directory", root)
+		}
+		return validateArchiveEntryTarget(root, root, root)
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	parent := filepath.Dir(filepath.Clean(root))
+	resolvedParent, err := filepath.EvalSymlinks(parent)
+	if err != nil {
+		return err
+	}
+	absParent, err := filepath.Abs(parent)
+	if err != nil {
+		absParent = parent
+	}
+	if filepath.Clean(resolvedParent) != filepath.Clean(absParent) {
+		return fmt.Errorf("archive destination parent %q resolves through a symlink", parent)
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return err
+	}
+	return validateArchiveEntryTarget(root, root, root)
+}
+
+func safeMkdirAllForArchive(root, target string) error {
+	if err := validateArchiveEntryTarget(root, target, target); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		return err
+	}
+	return validateArchiveEntryTarget(root, target, target)
+}
+
+func validateArchiveEntryTarget(root, target, entryName string) error {
+	if !pathContains(root, target) {
+		return fmt.Errorf("archive entry %q escapes destination", entryName)
+	}
+	if info, err := os.Lstat(target); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("archive entry %q targets a symlink path", entryName)
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	existing, err := nearestExistingPath(target)
+	if err != nil {
+		return err
+	}
+	resolved, err := filepath.EvalSymlinks(existing)
+	if err != nil {
+		return err
+	}
+	if !pathContains(root, resolved) {
+		return fmt.Errorf("archive entry %q escapes destination through symlink path", entryName)
+	}
+	return nil
+}
+
+func nearestExistingPath(path string) (string, error) {
+	current := filepath.Clean(path)
+	for {
+		if _, err := os.Lstat(current); err == nil {
+			return current, nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		next := filepath.Dir(current)
+		if next == current {
+			return "", fmt.Errorf("no existing parent for archive target %q", path)
+		}
+		current = next
+	}
+}
+
 func (t *capabilityBackingTool) runConfiguredCommand(ctx context.Context, req Request, envName, fallback string) (Result, error) {
 	bin := nonEmpty(os.Getenv(envName), fallback)
-	args := []string{}
-	if raw := inputString(req.Input, "args"); raw != "" {
-		args = strings.Fields(raw)
+	args, err := normalizeConfiguredCommandArgs(inputString(req.Input, "args"))
+	if err != nil {
+		return Result{}, err
 	}
 	return runCommand(ctx, t.workspace, bin, args...)
 }
@@ -928,8 +1442,8 @@ func runCommand(ctx context.Context, dir, bin string, args ...string) (Result, e
 	}
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	return capabilityOK("command completed", map[string]any{"command": append([]string{bin}, args...), "output": string(out)}), err
+	out, err := boundedCombinedOutput(cmd)
+	return capabilityOK("command completed", map[string]any{"command": append([]string{bin}, args...), "output": out}), err
 }
 
 func fetchURL(ctx context.Context, rawURL, method string) (Result, error) {
@@ -939,16 +1453,23 @@ func fetchURL(ctx context.Context, rawURL, method string) (Result, error) {
 	if method == "" {
 		method = http.MethodGet
 	}
-	req, err := http.NewRequestWithContext(ctx, method, rawURL, nil)
+	parsed, err := validateOutboundHTTPURL(ctx, rawURL, nil)
 	if err != nil {
 		return Result{}, err
 	}
-	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
+	req, err := http.NewRequestWithContext(ctx, method, parsed.String(), nil)
+	if err != nil {
+		return Result{}, err
+	}
+	resp, err := newGuardedOutboundHTTPClient(ctx, nil).Do(req)
 	if err != nil {
 		return Result{}, err
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
+	body, err := readGatewayHTTPResponseBody(resp.Body, "capability http request", gatewayCapabilityHTTPResponseBodyLimit)
+	if err != nil {
+		return Result{}, err
+	}
 	return capabilityOK("http request completed", map[string]any{"status": resp.Status, "statusCode": resp.StatusCode, "body": string(body)}), nil
 }
 
@@ -965,7 +1486,10 @@ func (t *capabilityBackingTool) callDesktopBridge(ctx context.Context, req Reque
 	if port == "" || token == "" {
 		return Result{}, errors.New("desktop bridge requires FORGE_DESKTOP_BRIDGE_PORT and FORGE_DESKTOP_BRIDGE_TOKEN")
 	}
-	body, _ := json.Marshal(map[string]any{"capability": t.capability.ID, "input": nonNilMap(req.Input), "paths": req.Paths})
+	body, err := t.marshalDesktopBridgePayload(req)
+	if err != nil {
+		return Result{}, err
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://127.0.0.1:"+port+"/forge/desktop-bridge/tool", strings.NewReader(string(body)))
 	if err != nil {
 		return Result{}, err
@@ -977,7 +1501,10 @@ func (t *capabilityBackingTool) callDesktopBridge(ctx context.Context, req Reque
 		return Result{}, err
 	}
 	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	respBody, err := readGatewayHTTPResponseBody(resp.Body, "desktop bridge", gatewayDesktopBridgeResponseBodyLimit)
+	if err != nil {
+		return Result{}, err
+	}
 	if resp.StatusCode >= 300 {
 		return Result{}, fmt.Errorf("desktop bridge returned %s: %s", resp.Status, string(respBody))
 	}
@@ -988,16 +1515,29 @@ func (t *capabilityBackingTool) callDesktopBridge(ctx context.Context, req Reque
 	return capabilityOK("desktop bridge completed", payload), nil
 }
 
+func (t *capabilityBackingTool) marshalDesktopBridgePayload(req Request) (string, error) {
+	body, err := json.Marshal(map[string]any{"capability": t.capability.ID, "input": nonNilMap(req.Input), "paths": req.Paths})
+	if err != nil {
+		return "", err
+	}
+	if len(body) > maxDesktopBridgeRequestBodyBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errDesktopBridgeRequestBodyTooLarge, len(body), maxDesktopBridgeRequestBodyBytes)
+	}
+	return string(body), nil
+}
+
 func (t *capabilityBackingTool) encryptionKey() ([]byte, error) {
 	keyPath := strings.TrimSpace(os.Getenv("FORGE_ENCRYPTION_KEY_PATH"))
 	if keyPath == "" {
 		keyPath = filepath.Join(nonEmpty(t.dataDir, os.TempDir()), "secrets", "master.key")
 	}
-	if b, err := os.ReadFile(keyPath); err == nil {
+	if b, err := readCapabilityFileBounded(keyPath, "encryption key file", gatewayEncryptionKeyReadLimit); err == nil {
 		decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(b)))
 		if err == nil && len(decoded) == 32 {
 			return decoded, nil
 		}
+	} else if !os.IsNotExist(err) {
+		return nil, err
 	}
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
@@ -1013,6 +1553,10 @@ func (t *capabilityBackingTool) encryptionKey() ([]byte, error) {
 }
 
 func (t *capabilityBackingTool) encryptSecret(value string) (string, error) {
+	value, err := normalizeSecretPlaintext(value)
+	if err != nil {
+		return "", err
+	}
 	key, err := t.encryptionKey()
 	if err != nil {
 		return "", err
@@ -1034,11 +1578,15 @@ func (t *capabilityBackingTool) encryptSecret(value string) (string, error) {
 }
 
 func (t *capabilityBackingTool) decryptSecret(ciphertext string) (string, error) {
+	ciphertext, err := normalizeSecretCiphertext(ciphertext)
+	if err != nil {
+		return "", err
+	}
 	key, err := t.encryptionKey()
 	if err != nil {
 		return "", err
 	}
-	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(ciphertext))
+	raw, err := base64.StdEncoding.DecodeString(ciphertext)
 	if err != nil {
 		return "", err
 	}
@@ -1075,12 +1623,19 @@ func (t *capabilityBackingTool) signOrVerify(req Request) (Result, error) {
 	seed := sha256.Sum256([]byte(nonEmpty(os.Getenv("FORGE_IDENTITY_SIGNING_SEED"), "forge-local-signing-key")))
 	priv := ed25519.NewKeyFromSeed(seed[:])
 	pub := priv.Public().(ed25519.PublicKey)
-	message := []byte(inputString(req.Input, "message"))
+	message, err := normalizeIdentityMessage(inputString(req.Input, "message"))
+	if err != nil {
+		return Result{}, err
+	}
 	if t.capability.Name == "sign" {
 		sig := ed25519.Sign(priv, message)
 		return capabilityOK("message signed", map[string]any{"publicKey": base64.StdEncoding.EncodeToString(pub), "signature": base64.StdEncoding.EncodeToString(sig)}), nil
 	}
-	sig, err := base64.StdEncoding.DecodeString(inputString(req.Input, "signature"))
+	signature, err := normalizeIdentitySignature(inputString(req.Input, "signature"))
+	if err != nil {
+		return Result{}, err
+	}
+	sig, err := base64.StdEncoding.DecodeString(signature)
 	if err != nil {
 		return Result{}, err
 	}

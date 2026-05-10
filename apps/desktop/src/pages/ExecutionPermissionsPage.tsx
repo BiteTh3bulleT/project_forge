@@ -25,6 +25,11 @@ export type PermissionProfile = {
   active: boolean;
 };
 
+type AuthorityState = {
+  status: "loading" | "fresh" | "stale" | "unavailable";
+  lastLoadedAtMs: number | null;
+};
+
 function linesToList(s: string): string[] {
   return s
     .split(/[\n,]+/)
@@ -102,6 +107,10 @@ export function ExecutionPermissionsPage() {
   const [active, setActive] = useState<PermissionProfile | null>(null);
   const [summary, setSummary] = useState<Record<string, unknown> | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [authority, setAuthority] = useState<AuthorityState>({
+    status: "loading",
+    lastLoadedAtMs: null,
+  });
   const [form, setForm] =
     useState<Record<string, string | boolean | number>>(emptyForm);
   const [editingExistingId, setEditingExistingId] = useState<string | null>(
@@ -115,8 +124,13 @@ export function ExecutionPermissionsPage() {
       setActive(r.active as PermissionProfile | null);
       setSummary(r.summary);
       setErr(null);
+      setAuthority({ status: "fresh", lastLoadedAtMs: Date.now() });
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
+      setAuthority((current) => ({
+        status: current.lastLoadedAtMs == null ? "unavailable" : "stale",
+        lastLoadedAtMs: current.lastLoadedAtMs,
+      }));
     }
   }, []);
 
@@ -124,18 +138,39 @@ export function ExecutionPermissionsPage() {
     void refresh();
   }, [refresh]);
 
+  const canMutateAuthority = authority.status === "fresh";
+  const authorityLabel = authorityStatusLabel(authority, active);
+  const authorityTone =
+    authority.status === "fresh" && active
+      ? "ok"
+      : authority.status === "loading" || authority.status === "stale"
+        ? "warn"
+        : "bad";
+
   function startNew() {
+    if (!canMutateAuthority) {
+      setErr("Permission authority is not fresh; refresh before editing.");
+      return;
+    }
     setEditingExistingId(null);
     setForm(emptyForm());
     setStatus("New profile form — set id and paths, then Save.");
   }
 
   function startEdit(p: PermissionProfile) {
+    if (!canMutateAuthority) {
+      setErr("Permission authority is not fresh; refresh before editing.");
+      return;
+    }
     setEditingExistingId(p.id);
     setForm(profileToForm(p));
   }
 
   async function saveProfile() {
+    if (!canMutateAuthority) {
+      setErr("Permission authority is not fresh; refresh before saving.");
+      return;
+    }
     const id = String(form.id).trim();
     if (!id) {
       setErr("Profile id is required.");
@@ -159,6 +194,10 @@ export function ExecutionPermissionsPage() {
   }
 
   async function deleteProfile(p: PermissionProfile) {
+    if (!canMutateAuthority) {
+      setErr("Permission authority is not fresh; refresh before deleting.");
+      return;
+    }
     if (!p.editable) {
       setErr("Cannot delete a non-editable profile.");
       return;
@@ -195,14 +234,23 @@ export function ExecutionPermissionsPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className={statusPillClass(active ? "ok" : "bad")}>
-            {active ? active.id : "no active profile"}
+          <span className={statusPillClass(authorityTone)}>
+            {authorityLabel}
           </span>
           <GhostButton onClick={() => void refresh()}>Refresh</GhostButton>
         </div>
       </header>
 
-      {err ? (
+      {authority.status === "unavailable" || authority.status === "stale" ? (
+        <div className="forge-ops-panel border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
+          {authority.status === "stale"
+            ? "Permission authority stale"
+            : "Permission authority unavailable"}
+          {err ? `: ${err}` : ""}
+        </div>
+      ) : null}
+
+      {err && authority.status === "fresh" ? (
         <div className="forge-ops-panel border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
           {err}
         </div>
@@ -217,20 +265,48 @@ export function ExecutionPermissionsPage() {
         />
         <MetricTile
           label="Active"
-          value={active ? "1" : "0"}
-          detail={active?.name ?? "none"}
-          tone={active ? "ok" : "bad"}
+          value={authority.status === "unavailable" ? "unknown" : active ? "1" : "0"}
+          detail={
+            authority.status === "unavailable"
+              ? "authority unavailable"
+              : active?.name ?? "none"
+          }
+          tone={authority.status === "fresh" && active ? "ok" : "bad"}
         />
         <MetricTile
           label="Network"
-          value={active?.allowNetwork ? "allowed" : "denied"}
-          detail="active profile"
-          tone={active?.allowNetwork ? "warn" : "ok"}
+          value={
+            authority.status === "unavailable"
+              ? "unknown"
+              : active?.allowNetwork
+                ? "allowed"
+                : "denied"
+          }
+          detail={
+            authority.status === "fresh"
+              ? "active profile"
+              : "authority not fresh"
+          }
+          tone={
+            authority.status === "fresh"
+              ? active?.allowNetwork
+                ? "warn"
+                : "ok"
+              : "bad"
+          }
         />
         <MetricTile
           label="Max Write"
-          value={String(active?.maxBytesPerWrite ?? 0)}
-          detail="bytes per write"
+          value={
+            authority.status === "unavailable"
+              ? "unknown"
+              : String(active?.maxBytesPerWrite ?? 0)
+          }
+          detail={
+            authority.status === "fresh"
+              ? "bytes per write"
+              : "authority not fresh"
+          }
           tone="muted"
         />
       </section>
@@ -269,10 +345,16 @@ export function ExecutionPermissionsPage() {
             <button
               type="button"
               className="text-xs text-forge-emberSoft underline"
+              disabled={!canMutateAuthority}
               onClick={() => startEdit(active)}
             >
               Edit in form below
             </button>
+          </div>
+        ) : authority.status !== "fresh" ? (
+          <div className="text-sm text-forge-emberSoft">
+            Permission authority {authority.status} — refresh before relying on
+            profile state.
           </div>
         ) : (
           <div className="text-sm text-forge-emberSoft">
@@ -295,7 +377,9 @@ export function ExecutionPermissionsPage() {
                 "Set an id, limits, and path boundaries before saving."}
             </div>
           </div>
-          <GhostButton onClick={startNew}>New profile</GhostButton>
+          <GhostButton onClick={startNew} disabled={!canMutateAuthority}>
+            New profile
+          </GhostButton>
         </div>
         <div className="forge-ops-card p-3">
           <div className="grid gap-3 md:grid-cols-2">
@@ -305,7 +389,7 @@ export function ExecutionPermissionsPage() {
                 className="forge-input mt-1 font-mono text-xs"
                 value={String(form.id)}
                 onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
-                disabled={editingExistingId != null}
+                disabled={editingExistingId != null || !canMutateAuthority}
               />
             </label>
             <label className="block text-xs font-semibold tracking-wide text-forge-mist">
@@ -316,6 +400,7 @@ export function ExecutionPermissionsPage() {
                 onChange={(e) =>
                   setForm((f) => ({ ...f, name: e.target.value }))
                 }
+                disabled={!canMutateAuthority}
               />
             </label>
           </div>
@@ -327,6 +412,7 @@ export function ExecutionPermissionsPage() {
               onChange={(e) =>
                 setForm((f) => ({ ...f, description: e.target.value }))
               }
+              disabled={!canMutateAuthority}
             />
           </label>
           <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -338,6 +424,7 @@ export function ExecutionPermissionsPage() {
                 onChange={(e) =>
                   setForm((f) => ({ ...f, allowedReadPaths: e.target.value }))
                 }
+                disabled={!canMutateAuthority}
               />
             </label>
             <label className="block text-xs font-semibold tracking-wide text-forge-mist">
@@ -348,6 +435,7 @@ export function ExecutionPermissionsPage() {
                 onChange={(e) =>
                   setForm((f) => ({ ...f, allowedWritePaths: e.target.value }))
                 }
+                disabled={!canMutateAuthority}
               />
             </label>
             <label className="block text-xs font-semibold tracking-wide text-forge-mist">
@@ -361,6 +449,7 @@ export function ExecutionPermissionsPage() {
                     allowedExecutePaths: e.target.value,
                   }))
                 }
+                disabled={!canMutateAuthority}
               />
             </label>
             <label className="block text-xs font-semibold tracking-wide text-forge-mist">
@@ -371,6 +460,7 @@ export function ExecutionPermissionsPage() {
                 onChange={(e) =>
                   setForm((f) => ({ ...f, forbiddenPaths: e.target.value }))
                 }
+                disabled={!canMutateAuthority}
               />
             </label>
             <label className="block text-xs font-semibold tracking-wide text-forge-mist md:col-span-2">
@@ -381,6 +471,7 @@ export function ExecutionPermissionsPage() {
                 onChange={(e) =>
                   setForm((f) => ({ ...f, allowedTools: e.target.value }))
                 }
+                disabled={!canMutateAuthority}
               />
             </label>
             <label className="block text-xs font-semibold tracking-wide text-forge-mist md:col-span-2">
@@ -395,6 +486,7 @@ export function ExecutionPermissionsPage() {
                   }))
                 }
                 placeholder="read_only, safe_write, scoped_execute, privileged, dangerous — one per line"
+                disabled={!canMutateAuthority}
               />
             </label>
           </div>
@@ -407,6 +499,7 @@ export function ExecutionPermissionsPage() {
                 onChange={(e) =>
                   setForm((f) => ({ ...f, maxBytesPerWrite: e.target.value }))
                 }
+                disabled={!canMutateAuthority}
               />
             </label>
             <label className="flex items-center gap-2 text-xs text-forge-mist">
@@ -416,6 +509,7 @@ export function ExecutionPermissionsPage() {
                 onChange={(e) =>
                   setForm((f) => ({ ...f, allowNetwork: e.target.checked }))
                 }
+                disabled={!canMutateAuthority}
               />
               Allow network
             </label>
@@ -426,6 +520,7 @@ export function ExecutionPermissionsPage() {
                 onChange={(e) =>
                   setForm((f) => ({ ...f, active: e.target.checked }))
                 }
+                disabled={!canMutateAuthority}
               />
               Set active on save
             </label>
@@ -434,6 +529,7 @@ export function ExecutionPermissionsPage() {
             <PrimaryButton
               className="w-full sm:w-auto"
               onClick={() => void saveProfile()}
+              disabled={!canMutateAuthority}
             >
               Save profile
             </PrimaryButton>
@@ -447,8 +543,16 @@ export function ExecutionPermissionsPage() {
       >
         {profiles.length === 0 ? (
           <EmptyState
-            title="No permission profiles"
-            detail="Create a profile to define gateway path, network, tool, and write limits."
+            title={
+              authority.status === "fresh"
+                ? "No permission profiles"
+                : "Permission profiles unavailable"
+            }
+            detail={
+              authority.status === "fresh"
+                ? "Create a profile to define gateway path, network, tool, and write limits."
+                : "Refresh after core permission authority is reachable before creating or editing profiles."
+            }
           />
         ) : (
           <div className="space-y-3">
@@ -477,7 +581,9 @@ export function ExecutionPermissionsPage() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <PrimaryButton
+                    disabled={!canMutateAuthority}
                     onClick={async () => {
+                      if (!canMutateAuthority) return;
                       await api.executionPermissions.activateProfile(p.id);
                       setStatus(`Activated ${p.id}`);
                       await refresh();
@@ -487,13 +593,13 @@ export function ExecutionPermissionsPage() {
                   </PrimaryButton>
                   <GhostButton
                     onClick={() => startEdit(p)}
-                    disabled={!p.editable}
+                    disabled={!canMutateAuthority || !p.editable}
                   >
                     Edit
                   </GhostButton>
                   <GhostButton
                     onClick={() => void deleteProfile(p)}
-                    disabled={!p.editable || p.active}
+                    disabled={!canMutateAuthority || !p.editable || p.active}
                   >
                     Delete
                   </GhostButton>
@@ -560,6 +666,22 @@ function EmptyState(props: { title: string; detail: string }) {
       </div>
     </div>
   );
+}
+
+function authorityStatusLabel(
+  authority: AuthorityState,
+  active: PermissionProfile | null,
+) {
+  switch (authority.status) {
+    case "loading":
+      return "authority loading";
+    case "unavailable":
+      return "authority unavailable";
+    case "stale":
+      return "authority stale";
+    case "fresh":
+      return active ? active.id : "no active profile";
+  }
 }
 
 function statusPillClass(status: string) {

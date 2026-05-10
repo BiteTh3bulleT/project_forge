@@ -147,10 +147,40 @@ const (
 	StatusUnsupported = "unsupported"
 	StatusDisabled    = "disabled"
 
+	maxCorrelationIDBytes                 = 256
+	maxGatewayRequestMetadataBytes        = 512
+	maxGatewayInvocationInputJSONBytes    = 256 << 10
+	maxApprovalFingerprintStringBytes     = 4 << 10
+	maxApprovalFingerprintFieldNameBytes  = 128
+	maxApprovalFingerprintCollectionItems = 64
+
 	OutcomeAllow           = "allow"
 	OutcomeRequireApproval = "require_approval"
 	OutcomeDeny            = "deny"
 )
+
+var errCorrelationIDTooLarge = errors.New("correlation id too large")
+
+var errGatewayRequestMetadataTooLarge = errors.New("gateway request metadata too large")
+
+func normalizeCorrelationID(raw string) (string, error) {
+	correlationID := strings.TrimSpace(raw)
+	if len(correlationID) > maxCorrelationIDBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errCorrelationIDTooLarge, len(correlationID), maxCorrelationIDBytes)
+	}
+	return correlationID, nil
+}
+
+func normalizeGatewayRequestMetadata(raw, label string, limit int) (string, error) {
+	value := strings.TrimSpace(raw)
+	if limit <= 0 {
+		return "", fmt.Errorf("%s limit must be positive", label)
+	}
+	if len(value) > limit {
+		return "", fmt.Errorf("%w: %s %d > %d bytes", errGatewayRequestMetadataTooLarge, label, len(value), limit)
+	}
+	return value, nil
+}
 
 func New(opts Options) *Gateway {
 	registry := opts.CapabilityRegistry
@@ -285,7 +315,7 @@ func (g *Gateway) Tools() []ToolInfo {
 			CapabilityStatus:          capabilityStatus,
 			CapabilityRisk:            capabilityRisk,
 			AdapterID:                 adapterID,
-			RequiresApprovalByDefault: requiresApprovalByDefault,
+			RequiresApprovalByDefault: requiresApprovalByDefault || gatewayToolIntrinsicApprovalReason(t, t.RiskClass(), t.ExecutionLevel()) != "",
 			AutonomyEligible:          autonomyEligible,
 			AllowedInDryRun:           allowedInDryRun,
 		})
@@ -479,20 +509,82 @@ func appendUniqueString(rows []string, value string) []string {
 // Execute runs the full pipeline: lane resolution, permission check,
 // invocation record, tool execution, artifact capture, audit write.
 func (g *Gateway) Execute(ctx context.Context, req Request) (*Result, error) {
-	if strings.TrimSpace(req.CorrelationID) == "" {
+	correlationID, err := normalizeCorrelationID(req.CorrelationID)
+	if err != nil {
+		return nil, err
+	}
+	req.CorrelationID = correlationID
+	if req.CorrelationID == "" {
 		req.CorrelationID = newCorrelationID()
 	}
-	if strings.TrimSpace(req.Initiator) == "" {
+	initiator, err := normalizeGatewayRequestMetadata(req.Initiator, "initiator", maxGatewayRequestMetadataBytes)
+	if err != nil {
+		return nil, err
+	}
+	req.Initiator = initiator
+	if req.Initiator == "" {
 		req.Initiator = "operator"
 	}
-	if strings.TrimSpace(req.Source) == "" {
+	source, err := normalizeGatewayRequestMetadata(req.Source, "source", maxGatewayRequestMetadataBytes)
+	if err != nil {
+		return nil, err
+	}
+	req.Source = source
+	if req.Source == "" {
 		req.Source = "user"
 	}
-	if strings.TrimSpace(req.WorkspaceID) == "" {
+	traceID, err := normalizeGatewayRequestMetadata(req.TraceID, "traceId", maxGatewayRequestMetadataBytes)
+	if err != nil {
+		return nil, err
+	}
+	req.TraceID = traceID
+	workspaceID, err := normalizeGatewayRequestMetadata(req.WorkspaceID, "workspaceId", maxGatewayRequestMetadataBytes)
+	if err != nil {
+		return nil, err
+	}
+	req.WorkspaceID = workspaceID
+	if req.WorkspaceID == "" {
 		req.WorkspaceID = workspaceIDFromPath(g.workspace)
 	}
-	if strings.TrimSpace(req.ProvenanceActor) == "" {
+	provenanceActor, err := normalizeGatewayRequestMetadata(req.ProvenanceActor, "provenanceActor", maxGatewayRequestMetadataBytes)
+	if err != nil {
+		return nil, err
+	}
+	req.ProvenanceActor = provenanceActor
+	if req.ProvenanceActor == "" {
 		req.ProvenanceActor = req.Initiator
+	}
+	provenanceActorType, err := normalizeGatewayRequestMetadata(req.ProvenanceActorType, "provenanceActorType", maxGatewayRequestMetadataBytes)
+	if err != nil {
+		return nil, err
+	}
+	req.ProvenanceActorType = provenanceActorType
+	intentID, err := normalizeGatewayRequestMetadata(req.IntentID, "intentId", maxGatewayRequestMetadataBytes)
+	if err != nil {
+		return nil, err
+	}
+	req.IntentID = intentID
+	charterID, err := normalizeGatewayRequestMetadata(req.CharterID, "charterId", maxGatewayRequestMetadataBytes)
+	if err != nil {
+		return nil, err
+	}
+	req.CharterID = charterID
+	budgetID, err := normalizeGatewayRequestMetadata(req.BudgetID, "budgetId", maxGatewayRequestMetadataBytes)
+	if err != nil {
+		return nil, err
+	}
+	req.BudgetID = budgetID
+	approvalID, err := normalizeGatewayRequestMetadata(req.ApprovalID, "approvalId", maxGatewayRequestMetadataBytes)
+	if err != nil {
+		return nil, err
+	}
+	req.ApprovalID = approvalID
+	if req.JobID != nil {
+		jobID, err := normalizeGatewayRequestMetadata(*req.JobID, "jobId", maxGatewayRequestMetadataBytes)
+		if err != nil {
+			return nil, err
+		}
+		req.JobID = &jobID
 	}
 	if strings.TrimSpace(req.ProvenanceActorType) == "" {
 		req.ProvenanceActorType = "service"
@@ -619,7 +711,8 @@ func (g *Gateway) Execute(ctx context.Context, req Request) (*Result, error) {
 		return g.deniedWith(ctx, req, lane.ID, tool.ID(), risk, profileID, decision.Reason)
 	}
 
-	requiresApproval := decision.RequiresApproval || lane.RequiresApproval || metadataBool(req.Metadata, "policyApprovalRequired")
+	intrinsicApprovalReason := gatewayToolIntrinsicApprovalReason(tool, risk, level)
+	requiresApproval := decision.RequiresApproval || lane.RequiresApproval || metadataBool(req.Metadata, "policyApprovalRequired") || intrinsicApprovalReason != ""
 	policyApprovalReason := metadataString(req.Metadata, "policyApprovalReason")
 	if req.DryRun {
 		return g.recordDryRun(ctx, req, lane, tool, risk, level, profileID)
@@ -661,6 +754,13 @@ func (g *Gateway) Execute(ctx context.Context, req Request) (*Result, error) {
 				needsApprovalReason = policyApprovalReason + "; " + needsApprovalReason
 			} else {
 				needsApprovalReason = policyApprovalReason
+			}
+		}
+		if strings.TrimSpace(intrinsicApprovalReason) != "" {
+			if needsApprovalReason != "" {
+				needsApprovalReason = intrinsicApprovalReason + "; " + needsApprovalReason
+			} else {
+				needsApprovalReason = intrinsicApprovalReason
 			}
 		}
 		return g.recordNeedsApproval(ctx, req, lane, tool, risk, level, profileID, needsApprovalReason)
@@ -898,14 +998,16 @@ func (g *Gateway) openInvocation(ctx context.Context, req Request, lane *lanes.L
 		"traceId":     req.TraceID,
 	}
 	scopeBytes, _ := json.Marshal(scope)
-	inputPayload := cloneToolOutput(nonNilMap(req.Input))
-	inputPayload["_metadata"] = mergeGatewayMetadata(req.Metadata, map[string]any{
+	inputMetadata := mergeGatewayMetadata(req.Metadata, map[string]any{
 		"approvalId":          req.ApprovalID,
 		"provenanceActor":     req.ProvenanceActor,
 		"provenanceActorType": req.ProvenanceActorType,
 		"capabilityId":        capabilityIDFromRequest(req),
 	})
-	inputBytes, _ := json.Marshal(inputPayload)
+	inputBytes, err := marshalGatewayInvocationInput(req.Input, inputMetadata)
+	if err != nil {
+		return 0, err
+	}
 	now := time.Now().UnixMilli()
 	writeIntent := 0
 	if tool.WriteIntent() {
@@ -945,7 +1047,10 @@ func (g *Gateway) deniedWith(ctx context.Context, req Request, laneID, toolID, r
 		"budgetId":     req.BudgetID,
 		"capabilityId": capabilityIDFromRequest(req),
 	})
-	inputBytes, _ := json.Marshal(nonNilMap(req.Input))
+	inputBytes, err := marshalGatewayInvocationInput(req.Input, nil)
+	if err != nil {
+		return nil, err
+	}
 	var laneVal any
 	if laneID != "" {
 		laneVal = laneID
@@ -1425,7 +1530,10 @@ func (g *Gateway) recordCapabilityTerminal(ctx context.Context, req Request, cap
 		"budgetId":     req.BudgetID,
 		"traceId":      req.TraceID,
 	})
-	inputBytes, _ := json.Marshal(nonNilMap(req.Input))
+	inputBytes, err := marshalGatewayInvocationInput(req.Input, nil)
+	if err != nil {
+		return nil, err
+	}
 	status := policy.Status
 	if strings.TrimSpace(status) == "" {
 		status = StatusDenied
@@ -1668,7 +1776,7 @@ func (t *readFileTool) UsesNetwork() bool      { return false }
 func (t *readFileTool) WriteIntent() bool      { return false }
 func (t *readFileTool) Description() string    { return "Read a file from the workspace" }
 func (t *readFileTool) Execute(ctx context.Context, req Request) (Result, error) {
-	target, err := firstPath(req.Paths, t.workspace)
+	target, err := firstWorkspacePath(req.Paths, t.workspace)
 	if err != nil {
 		return Result{}, err
 	}
@@ -1678,6 +1786,9 @@ func (t *readFileTool) Execute(ctx context.Context, req Request) (Result, error)
 	}
 	if info.IsDir() {
 		return Result{}, fmt.Errorf("target %q is a directory, use fs.list", target)
+	}
+	if !info.Mode().IsRegular() {
+		return Result{}, fmt.Errorf("target %q is not a regular file", target)
 	}
 	if info.Size() > 2*1024*1024 {
 		return Result{}, fmt.Errorf("file too large (%d bytes)", info.Size())
@@ -1714,7 +1825,7 @@ func (t *listDirTool) UsesNetwork() bool      { return false }
 func (t *listDirTool) WriteIntent() bool      { return false }
 func (t *listDirTool) Description() string    { return "List a directory inside the workspace" }
 func (t *listDirTool) Execute(ctx context.Context, req Request) (Result, error) {
-	target, err := firstPath(req.Paths, t.workspace)
+	target, err := firstWorkspacePath(req.Paths, t.workspace)
 	if err != nil {
 		return Result{}, err
 	}
@@ -1758,11 +1869,9 @@ func (t *repoInspectTool) UsesNetwork() bool      { return false }
 func (t *repoInspectTool) WriteIntent() bool      { return false }
 func (t *repoInspectTool) Description() string    { return "Return a shallow workspace inspection report" }
 func (t *repoInspectTool) Execute(ctx context.Context, req Request) (Result, error) {
-	target := t.workspace
-	if len(req.Paths) > 0 {
-		if p, err := firstPath(req.Paths, t.workspace); err == nil {
-			target = p
-		}
+	target, err := workspaceDirFromRequest(req.Paths, t.workspace)
+	if err != nil {
+		return Result{}, err
 	}
 	entries, err := os.ReadDir(target)
 	if err != nil {
@@ -1809,23 +1918,21 @@ func (t *gitStatusTool) UsesNetwork() bool      { return false }
 func (t *gitStatusTool) WriteIntent() bool      { return false }
 func (t *gitStatusTool) Description() string    { return "Return git status --short for the workspace" }
 func (t *gitStatusTool) Execute(ctx context.Context, req Request) (Result, error) {
-	dir := t.workspace
-	if len(req.Paths) > 0 {
-		if p, err := firstPath(req.Paths, t.workspace); err == nil {
-			dir = p
-		}
+	dir, err := workspaceDirFromRequest(req.Paths, t.workspace)
+	if err != nil {
+		return Result{}, err
 	}
 	cmd := exec.CommandContext(ctx, "git", "status", "--short", "--branch")
 	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
+	out, err := boundedCombinedOutput(cmd)
 	if err != nil {
-		return Result{Data: map[string]any{"path": dir, "available": false, "error": err.Error(), "output": string(out)}}, nil
+		return Result{Data: map[string]any{"path": dir, "available": false, "error": err.Error(), "output": out}}, nil
 	}
 	return Result{
 		Data: map[string]any{
 			"path":      dir,
 			"available": true,
-			"output":    string(out),
+			"output":    out,
 		},
 		Message: "git status captured",
 	}, nil
@@ -1843,23 +1950,21 @@ func (t *gitDiffTool) UsesNetwork() bool      { return false }
 func (t *gitDiffTool) WriteIntent() bool      { return false }
 func (t *gitDiffTool) Description() string    { return "Return `git diff --stat` for the workspace" }
 func (t *gitDiffTool) Execute(ctx context.Context, req Request) (Result, error) {
-	dir := t.workspace
-	if len(req.Paths) > 0 {
-		if p, err := firstPath(req.Paths, t.workspace); err == nil {
-			dir = p
-		}
+	dir, err := workspaceDirFromRequest(req.Paths, t.workspace)
+	if err != nil {
+		return Result{}, err
 	}
 	cmd := exec.CommandContext(ctx, "git", "diff", "--stat")
 	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
+	out, err := boundedCombinedOutput(cmd)
 	if err != nil {
-		return Result{Data: map[string]any{"path": dir, "available": false, "error": err.Error(), "output": string(out)}}, nil
+		return Result{Data: map[string]any{"path": dir, "available": false, "error": err.Error(), "output": out}}, nil
 	}
 	return Result{
 		Data: map[string]any{
 			"path":      dir,
 			"available": true,
-			"output":    string(out),
+			"output":    out,
 		},
 		Message: "git diff --stat captured",
 	}, nil
@@ -1880,7 +1985,7 @@ func (t *writeFileTool) Execute(ctx context.Context, req Request) (Result, error
 	if rawFiles, ok := req.Input["files"]; ok {
 		return t.executeBatch(ctx, req, rawFiles)
 	}
-	target, err := firstPath(req.Paths, t.workspace)
+	target, err := firstWorkspacePath(req.Paths, t.workspace)
 	if err != nil {
 		return Result{}, err
 	}
@@ -1889,6 +1994,9 @@ func (t *writeFileTool) Execute(ctx context.Context, req Request) (Result, error
 		return Result{}, errors.New("fs.write requires input.contents")
 	}
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return Result{}, err
+	}
+	if err := validateWorkspacePath(t.workspace, target); err != nil {
 		return Result{}, err
 	}
 	if err := os.WriteFile(target, []byte(contents), 0o644); err != nil {
@@ -1924,11 +2032,14 @@ func (t *writeFileTool) executeBatch(ctx context.Context, req Request, rawFiles 
 		if contents == "" {
 			return Result{}, fmt.Errorf("fs.write batch file %d requires contents", i)
 		}
-		target, err := firstPath([]string{req.Paths[i]}, t.workspace)
+		target, err := firstWorkspacePath([]string{req.Paths[i]}, t.workspace)
 		if err != nil {
 			return Result{}, err
 		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return Result{}, err
+		}
+		if err := validateWorkspacePath(t.workspace, target); err != nil {
 			return Result{}, err
 		}
 		if err := os.WriteFile(target, []byte(contents), 0o644); err != nil {
@@ -2047,11 +2158,14 @@ func (t *mkdirTool) UsesNetwork() bool      { return false }
 func (t *mkdirTool) WriteIntent() bool      { return true }
 func (t *mkdirTool) Description() string    { return "Create a directory" }
 func (t *mkdirTool) Execute(ctx context.Context, req Request) (Result, error) {
-	target, err := firstPath(req.Paths, t.workspace)
+	target, err := firstWorkspacePath(req.Paths, t.workspace)
 	if err != nil {
 		return Result{}, err
 	}
 	if err := os.MkdirAll(target, 0o755); err != nil {
+		return Result{}, err
+	}
+	if err := validateWorkspacePath(t.workspace, target); err != nil {
 		return Result{}, err
 	}
 	return Result{Data: map[string]any{"path": target}, Message: "directory created"}, nil
@@ -2072,11 +2186,11 @@ func (t *renameTool) Execute(ctx context.Context, req Request) (Result, error) {
 	if len(req.Paths) < 2 {
 		return Result{}, errors.New("fs.rename requires source and destination paths")
 	}
-	src, err := firstPath(req.Paths[:1], t.workspace)
+	src, err := firstWorkspacePath(req.Paths[:1], t.workspace)
 	if err != nil {
 		return Result{}, err
 	}
-	dst, err := firstPath(req.Paths[1:], t.workspace)
+	dst, err := firstWorkspacePath(req.Paths[1:], t.workspace)
 	if err != nil {
 		return Result{}, err
 	}
@@ -2098,7 +2212,7 @@ func (t *deleteTool) UsesNetwork() bool      { return false }
 func (t *deleteTool) WriteIntent() bool      { return true }
 func (t *deleteTool) Description() string    { return "Delete a file or directory recursively" }
 func (t *deleteTool) Execute(ctx context.Context, req Request) (Result, error) {
-	target, err := firstPath(req.Paths, t.workspace)
+	target, err := firstWorkspacePath(req.Paths, t.workspace)
 	if err != nil {
 		return Result{}, err
 	}
@@ -2123,11 +2237,11 @@ func (t *copyTool) Execute(ctx context.Context, req Request) (Result, error) {
 	if len(req.Paths) < 2 {
 		return Result{}, errors.New("fs.copy requires source and destination paths")
 	}
-	src, err := firstPath(req.Paths[:1], t.workspace)
+	src, err := firstWorkspacePath(req.Paths[:1], t.workspace)
 	if err != nil {
 		return Result{}, err
 	}
-	dst, err := firstPath(req.Paths[1:], t.workspace)
+	dst, err := firstWorkspacePath(req.Paths[1:], t.workspace)
 	if err != nil {
 		return Result{}, err
 	}
@@ -2137,6 +2251,9 @@ func (t *copyTool) Execute(ctx context.Context, req Request) (Result, error) {
 	}
 	defer in.Close()
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return Result{}, err
+	}
+	if err := validateWorkspacePath(t.workspace, dst); err != nil {
 		return Result{}, err
 	}
 	out, err := os.Create(dst)
@@ -2153,6 +2270,21 @@ func (t *copyTool) Execute(ctx context.Context, req Request) (Result, error) {
 
 type chmodTool struct{ workspace string }
 
+func normalizeChmodMode(raw string) (string, uint32, error) {
+	modeRaw := strings.TrimSpace(raw)
+	if modeRaw == "" {
+		modeRaw = "0644"
+	}
+	v, err := strconv.ParseUint(modeRaw, 8, 32)
+	if err != nil {
+		return "", 0, fmt.Errorf("invalid mode %q", modeRaw)
+	}
+	if v > 0o777 {
+		return "", 0, fmt.Errorf("mode %q sets unsupported special bits", modeRaw)
+	}
+	return modeRaw, uint32(v), nil
+}
+
 func (t *chmodTool) ID() string             { return "fs.chmod" }
 func (t *chmodTool) Domain() string         { return "filesystem" }
 func (t *chmodTool) Action() string         { return "chmod" }
@@ -2163,18 +2295,13 @@ func (t *chmodTool) UsesNetwork() bool      { return false }
 func (t *chmodTool) WriteIntent() bool      { return true }
 func (t *chmodTool) Description() string    { return "Change file mode for a path" }
 func (t *chmodTool) Execute(ctx context.Context, req Request) (Result, error) {
-	target, err := firstPath(req.Paths, t.workspace)
+	target, err := firstWorkspacePath(req.Paths, t.workspace)
 	if err != nil {
 		return Result{}, err
 	}
-	modeRaw, _ := req.Input["mode"].(string)
-	modeRaw = strings.TrimSpace(modeRaw)
-	if modeRaw == "" {
-		modeRaw = "0644"
-	}
-	v, err := strconv.ParseUint(modeRaw, 8, 32)
+	modeRaw, v, err := normalizeChmodMode(inputString(req.Input, "mode"))
 	if err != nil {
-		return Result{}, fmt.Errorf("invalid mode %q", modeRaw)
+		return Result{}, err
 	}
 	if err := os.Chmod(target, os.FileMode(v)); err != nil {
 		return Result{}, err
@@ -2183,6 +2310,76 @@ func (t *chmodTool) Execute(ctx context.Context, req Request) (Result, error) {
 }
 
 type processRunTool struct{ workspace string }
+
+const (
+	defaultProcessRunTimeoutMs = 30_000
+	maxProcessRunTimeoutMs     = 120_000
+	maxProcessRunOutputBytes   = 1 << 20
+	maxProcessRunCommandBytes  = 64 << 10
+)
+
+var errProcessRunCommandTooLarge = errors.New("proc.run command too large")
+
+type boundedOutputBuffer struct {
+	buf       bytes.Buffer
+	limit     int
+	truncated bool
+}
+
+func newBoundedOutputBuffer(limit int) *boundedOutputBuffer {
+	return &boundedOutputBuffer{limit: limit}
+}
+
+func (b *boundedOutputBuffer) Write(p []byte) (int, error) {
+	if b.limit <= 0 {
+		if len(p) > 0 {
+			b.truncated = true
+		}
+		return len(p), nil
+	}
+	remaining := b.limit - b.buf.Len()
+	if remaining > 0 {
+		if len(p) > remaining {
+			_, _ = b.buf.Write(p[:remaining])
+			b.truncated = true
+		} else {
+			_, _ = b.buf.Write(p)
+		}
+	} else if len(p) > 0 {
+		b.truncated = true
+	}
+	return len(p), nil
+}
+
+func (b *boundedOutputBuffer) String() string {
+	return b.buf.String()
+}
+
+func (b *boundedOutputBuffer) Truncated() bool {
+	return b.truncated
+}
+
+func normalizeProcessRunTimeoutMs(input map[string]any) int {
+	timeoutMs := int(readFloat(input, "timeoutMs", defaultProcessRunTimeoutMs))
+	if timeoutMs <= 0 {
+		return defaultProcessRunTimeoutMs
+	}
+	if timeoutMs > maxProcessRunTimeoutMs {
+		return maxProcessRunTimeoutMs
+	}
+	return timeoutMs
+}
+
+func normalizeProcessRunCommand(input map[string]any) (string, error) {
+	command := strings.TrimSpace(inputString(input, "command"))
+	if command == "" {
+		return "", errors.New("proc.run requires input.command")
+	}
+	if len(command) > maxProcessRunCommandBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errProcessRunCommandTooLarge, len(command), maxProcessRunCommandBytes)
+	}
+	return command, nil
+}
 
 func (t *processRunTool) ID() string             { return "proc.run" }
 func (t *processRunTool) Domain() string         { return "process" }
@@ -2196,31 +2393,26 @@ func (t *processRunTool) Description() string {
 	return "Run a command with timeout and captured stdout/stderr"
 }
 func (t *processRunTool) Execute(ctx context.Context, req Request) (Result, error) {
-	command, _ := req.Input["command"].(string)
-	command = strings.TrimSpace(command)
-	if command == "" {
-		return Result{}, errors.New("proc.run requires input.command")
+	command, err := normalizeProcessRunCommand(req.Input)
+	if err != nil {
+		return Result{}, err
 	}
-	timeoutMs := 30_000
-	if v, ok := req.Input["timeoutMs"].(float64); ok && v > 0 {
-		timeoutMs = int(v)
-	}
+	timeoutMs := normalizeProcessRunTimeoutMs(req.Input)
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
 	cmd := exec.CommandContext(runCtx, "bash", "-lc", command)
-	if len(req.Paths) > 0 {
-		cwd, err := firstPath(req.Paths, t.workspace)
-		if err == nil {
-			cmd.Dir = cwd
-		}
-	} else {
-		cmd.Dir = t.workspace
+	cwd, err := workspaceDirFromRequest(req.Paths, t.workspace)
+	if err != nil {
+		return Result{}, err
 	}
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
+	cmd.Dir = cwd
+	stdout := newBoundedOutputBuffer(maxProcessRunOutputBytes)
+	stderr := newBoundedOutputBuffer(maxProcessRunOutputBytes)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	startedAt := time.Now()
+	err = cmd.Run()
+	endedAt := time.Now()
 	exitCode := 0
 	if err != nil {
 		var exitErr *exec.ExitError
@@ -2232,22 +2424,43 @@ func (t *processRunTool) Execute(ctx context.Context, req Request) (Result, erro
 	}
 	return Result{
 		Data: map[string]any{
-			"command":     command,
-			"cwd":         cmd.Dir,
-			"timeoutMs":   timeoutMs,
-			"exitCode":    exitCode,
-			"ok":          err == nil,
-			"stdout":      stdout.String(),
-			"stderr":      stderr.String(),
-			"timedOut":    errors.Is(runCtx.Err(), context.DeadlineExceeded),
-			"startedAtMs": time.Now().Add(-time.Duration(timeoutMs) * time.Millisecond).UnixMilli(),
-			"endedAtMs":   time.Now().UnixMilli(),
+			"command":         command,
+			"cwd":             cmd.Dir,
+			"timeoutMs":       timeoutMs,
+			"exitCode":        exitCode,
+			"ok":              err == nil,
+			"stdout":          stdout.String(),
+			"stderr":          stderr.String(),
+			"stdoutLimit":     maxProcessRunOutputBytes,
+			"stderrLimit":     maxProcessRunOutputBytes,
+			"stdoutTruncated": stdout.Truncated(),
+			"stderrTruncated": stderr.Truncated(),
+			"timedOut":        errors.Is(runCtx.Err(), context.DeadlineExceeded),
+			"startedAtMs":     startedAt.UnixMilli(),
+			"endedAtMs":       endedAt.UnixMilli(),
 		},
 		Message: "process execution completed",
 	}, nil
 }
 
 type processTerminateTool struct{}
+
+func normalizeTerminatePID(raw float64) (int, error) {
+	if raw != float64(int(raw)) {
+		return 0, errors.New("pid must be an integer")
+	}
+	pid := int(raw)
+	if pid <= 0 {
+		return 0, errors.New("pid must be positive")
+	}
+	if pid == 1 {
+		return 0, errors.New("refusing to terminate pid 1")
+	}
+	if pid == os.Getpid() {
+		return 0, errors.New("refusing to terminate current process")
+	}
+	return pid, nil
+}
 
 func (t *processTerminateTool) ID() string             { return "proc.terminate" }
 func (t *processTerminateTool) Domain() string         { return "process" }
@@ -2259,13 +2472,13 @@ func (t *processTerminateTool) UsesNetwork() bool      { return false }
 func (t *processTerminateTool) WriteIntent() bool      { return true }
 func (t *processTerminateTool) Description() string    { return "Terminate a process by PID (SIGTERM)" }
 func (t *processTerminateTool) Execute(ctx context.Context, req Request) (Result, error) {
-	pid := int(readFloat(req.Input, "pid", 0))
-	if pid <= 0 {
+	pid, err := normalizeTerminatePID(readFloat(req.Input, "pid", 0))
+	if err != nil {
 		return Result{}, errors.New("proc.terminate requires input.pid")
 	}
 	cmd := exec.CommandContext(ctx, "kill", strconv.Itoa(pid))
-	out, err := cmd.CombinedOutput()
-	return Result{Data: map[string]any{"pid": pid, "output": string(out), "ok": err == nil}, Message: "terminate attempted"}, nil
+	out, err := boundedCombinedOutput(cmd)
+	return Result{Data: map[string]any{"pid": pid, "output": out, "ok": err == nil}, Message: "terminate attempted"}, nil
 }
 
 type gitBranchTool struct{ workspace string }
@@ -2280,17 +2493,27 @@ func (t *gitBranchTool) UsesNetwork() bool      { return false }
 func (t *gitBranchTool) WriteIntent() bool      { return false }
 func (t *gitBranchTool) Description() string    { return "List git branches" }
 func (t *gitBranchTool) Execute(ctx context.Context, req Request) (Result, error) {
-	dir := t.workspace
-	if len(req.Paths) > 0 {
-		if p, err := firstPath(req.Paths, t.workspace); err == nil {
-			dir = p
-		}
+	dir, err := workspaceDirFromRequest(req.Paths, t.workspace)
+	if err != nil {
+		return Result{}, err
 	}
 	out, err := runCmd(ctx, dir, "git", "branch", "--all", "--verbose")
 	return Result{Data: map[string]any{"path": dir, "output": out, "ok": err == nil}, Message: "git branch captured"}, nil
 }
 
 type gitCommitTool struct{ workspace string }
+
+const maxGitMessageInputBytes = 16 << 10
+
+var errGitMessageTooLarge = errors.New("git message input too large")
+
+func normalizeGitMessageInput(raw, toolID string) (string, error) {
+	message := strings.TrimSpace(raw)
+	if len(message) > maxGitMessageInputBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errGitMessageTooLarge, len(message), maxGitMessageInputBytes)
+	}
+	return message, nil
+}
 
 func (t *gitCommitTool) ID() string             { return "git.commit" }
 func (t *gitCommitTool) Domain() string         { return "git" }
@@ -2302,14 +2525,14 @@ func (t *gitCommitTool) UsesNetwork() bool      { return false }
 func (t *gitCommitTool) WriteIntent() bool      { return true }
 func (t *gitCommitTool) Description() string    { return "Create git commit with provided message" }
 func (t *gitCommitTool) Execute(ctx context.Context, req Request) (Result, error) {
-	dir := t.workspace
-	if len(req.Paths) > 0 {
-		if p, err := firstPath(req.Paths, t.workspace); err == nil {
-			dir = p
-		}
+	dir, err := workspaceDirFromRequest(req.Paths, t.workspace)
+	if err != nil {
+		return Result{}, err
 	}
-	message, _ := req.Input["message"].(string)
-	message = strings.TrimSpace(message)
+	message, err := normalizeGitMessageInput(inputString(req.Input, "message"), t.ID())
+	if err != nil {
+		return Result{}, err
+	}
 	if message == "" {
 		message = "FORGE gateway commit"
 	}
@@ -2318,6 +2541,29 @@ func (t *gitCommitTool) Execute(ctx context.Context, req Request) (Result, error
 }
 
 type gitCheckoutTool struct{ workspace string }
+
+var gitCheckoutRefPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/@+^~-]*$`)
+
+func normalizeGitCheckoutRef(raw string) (string, error) {
+	ref := strings.TrimSpace(raw)
+	if ref == "" {
+		return "", errors.New("git checkout ref required")
+	}
+	if len(ref) > 256 {
+		return "", errors.New("git checkout ref too long")
+	}
+	if strings.HasPrefix(ref, "-") {
+		return "", errors.New("git checkout ref must not start with '-'")
+	}
+	if strings.Contains(ref, "..") ||
+		strings.Contains(ref, "@{") ||
+		strings.Contains(ref, `\`) ||
+		strings.HasSuffix(ref, ".lock") ||
+		!gitCheckoutRefPattern.MatchString(ref) {
+		return "", errors.New("git checkout ref contains unsafe characters")
+	}
+	return ref, nil
+}
 
 func (t *gitCheckoutTool) ID() string             { return "git.checkout" }
 func (t *gitCheckoutTool) Domain() string         { return "git" }
@@ -2329,15 +2575,12 @@ func (t *gitCheckoutTool) UsesNetwork() bool      { return false }
 func (t *gitCheckoutTool) WriteIntent() bool      { return true }
 func (t *gitCheckoutTool) Description() string    { return "Git checkout branch/ref" }
 func (t *gitCheckoutTool) Execute(ctx context.Context, req Request) (Result, error) {
-	dir := t.workspace
-	if len(req.Paths) > 0 {
-		if p, err := firstPath(req.Paths, t.workspace); err == nil {
-			dir = p
-		}
+	dir, err := workspaceDirFromRequest(req.Paths, t.workspace)
+	if err != nil {
+		return Result{}, err
 	}
-	ref, _ := req.Input["ref"].(string)
-	ref = strings.TrimSpace(ref)
-	if ref == "" {
+	ref, err := normalizeGitCheckoutRef(inputString(req.Input, "ref"))
+	if err != nil {
 		return Result{}, errors.New("git.checkout requires input.ref")
 	}
 	out, err := runCmd(ctx, dir, "git", "checkout", ref)
@@ -2345,6 +2588,19 @@ func (t *gitCheckoutTool) Execute(ctx context.Context, req Request) (Result, err
 }
 
 type gitStashTool struct{ workspace string }
+
+func normalizeGitStashMode(raw string) (string, error) {
+	mode := strings.TrimSpace(strings.ToLower(raw))
+	if mode == "" {
+		return "push", nil
+	}
+	switch mode {
+	case "push", "pop", "list":
+		return mode, nil
+	default:
+		return "", errors.New("git.stash supports mode=push|pop|list")
+	}
+}
 
 func (t *gitStashTool) ID() string             { return "git.stash" }
 func (t *gitStashTool) Domain() string         { return "git" }
@@ -2356,21 +2612,22 @@ func (t *gitStashTool) UsesNetwork() bool      { return false }
 func (t *gitStashTool) WriteIntent() bool      { return true }
 func (t *gitStashTool) Description() string    { return "Git stash push/pop/list" }
 func (t *gitStashTool) Execute(ctx context.Context, req Request) (Result, error) {
-	dir := t.workspace
-	if len(req.Paths) > 0 {
-		if p, err := firstPath(req.Paths, t.workspace); err == nil {
-			dir = p
-		}
+	dir, err := workspaceDirFromRequest(req.Paths, t.workspace)
+	if err != nil {
+		return Result{}, err
 	}
-	mode, _ := req.Input["mode"].(string)
-	mode = strings.TrimSpace(strings.ToLower(mode))
-	if mode == "" {
-		mode = "push"
+	mode, err := normalizeGitStashMode(inputString(req.Input, "mode"))
+	if err != nil {
+		return Result{}, err
 	}
 	args := []string{"stash", mode}
 	if mode == "push" {
-		if msg, _ := req.Input["message"].(string); strings.TrimSpace(msg) != "" {
-			args = append(args, "-m", strings.TrimSpace(msg))
+		msg, err := normalizeGitMessageInput(inputString(req.Input, "message"), t.ID())
+		if err != nil {
+			return Result{}, err
+		}
+		if msg != "" {
+			args = append(args, "-m", msg)
 		}
 	}
 	out, err := runCmd(ctx, dir, append([]string{"git"}, args...)...)
@@ -2378,6 +2635,21 @@ func (t *gitStashTool) Execute(ctx context.Context, req Request) (Result, error)
 }
 
 type gitApplyPatchTool struct{ workspace string }
+
+const maxGitPatchInputBytes = 2 << 20
+
+var errGitPatchTooLarge = errors.New("git patch input too large")
+
+func normalizeGitPatchInput(raw, toolID string) (string, error) {
+	patch := strings.TrimSpace(raw)
+	if patch == "" {
+		return "", fmt.Errorf("%s requires input.patch", toolID)
+	}
+	if len(patch) > maxGitPatchInputBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errGitPatchTooLarge, len(patch), maxGitPatchInputBytes)
+	}
+	return patch, nil
+}
 
 func (t *gitApplyPatchTool) ID() string             { return "git.apply_patch" }
 func (t *gitApplyPatchTool) Domain() string         { return "git" }
@@ -2389,25 +2661,57 @@ func (t *gitApplyPatchTool) UsesNetwork() bool      { return false }
 func (t *gitApplyPatchTool) WriteIntent() bool      { return true }
 func (t *gitApplyPatchTool) Description() string    { return "Apply git patch from input.patch" }
 func (t *gitApplyPatchTool) Execute(ctx context.Context, req Request) (Result, error) {
-	dir := t.workspace
-	if len(req.Paths) > 0 {
-		if p, err := firstPath(req.Paths, t.workspace); err == nil {
-			dir = p
-		}
+	dir, err := workspaceDirFromRequest(req.Paths, t.workspace)
+	if err != nil {
+		return Result{}, err
 	}
-	patch, _ := req.Input["patch"].(string)
-	patch = strings.TrimSpace(patch)
-	if patch == "" {
-		return Result{}, errors.New("git.apply_patch requires input.patch")
+	patch, err := normalizeGitPatchInput(inputString(req.Input, "patch"), t.ID())
+	if err != nil {
+		return Result{}, err
 	}
 	cmd := exec.CommandContext(ctx, "git", "apply", "-")
 	cmd.Dir = dir
 	cmd.Stdin = strings.NewReader(patch)
-	out, err := cmd.CombinedOutput()
-	return Result{Data: map[string]any{"path": dir, "output": string(out), "ok": err == nil}, Message: "git apply executed"}, nil
+	out, err := boundedCombinedOutput(cmd)
+	return Result{Data: map[string]any{"path": dir, "output": out, "ok": err == nil}, Message: "git apply executed"}, nil
 }
 
 type serviceStatusTool struct{}
+
+var systemdUnitNamePattern = regexp.MustCompile(`^[A-Za-z0-9_.:@\\-]+$`)
+
+const (
+	defaultJournalTailLines = 100
+	maxJournalTailLines     = 500
+)
+
+func normalizeSystemdUnitName(raw string) (string, error) {
+	name := strings.TrimSpace(raw)
+	if name == "" {
+		return "", errors.New("systemd unit name required")
+	}
+	if len(name) > 256 {
+		return "", errors.New("systemd unit name too long")
+	}
+	if strings.HasPrefix(name, "-") {
+		return "", errors.New("systemd unit name must not start with '-'")
+	}
+	if strings.Contains(name, "..") || !systemdUnitNamePattern.MatchString(name) {
+		return "", errors.New("systemd unit name contains unsafe characters")
+	}
+	return name, nil
+}
+
+func normalizeJournalTailLines(input map[string]any) int {
+	lines := int(readFloat(input, "lines", defaultJournalTailLines))
+	if lines <= 0 {
+		return defaultJournalTailLines
+	}
+	if lines > maxJournalTailLines {
+		return maxJournalTailLines
+	}
+	return lines
+}
 
 func (t *serviceStatusTool) ID() string             { return "system.service_status" }
 func (t *serviceStatusTool) Domain() string         { return "system" }
@@ -2419,12 +2723,11 @@ func (t *serviceStatusTool) UsesNetwork() bool      { return false }
 func (t *serviceStatusTool) WriteIntent() bool      { return false }
 func (t *serviceStatusTool) Description() string    { return "Inspect system service status (systemctl)" }
 func (t *serviceStatusTool) Execute(ctx context.Context, req Request) (Result, error) {
-	name, _ := req.Input["service"].(string)
-	name = strings.TrimSpace(name)
-	if name == "" {
+	name, err := normalizeSystemdUnitName(inputString(req.Input, "service"))
+	if err != nil {
 		return Result{}, errors.New("system.service_status requires input.service")
 	}
-	out, err := runCmd(ctx, "", "systemctl", "status", "--no-pager", name)
+	out, err := runCmd(ctx, "", "systemctl", "status", "--no-pager", "--", name)
 	return Result{Data: map[string]any{"service": name, "output": out, "ok": err == nil}, Message: "service status checked"}, nil
 }
 
@@ -2440,14 +2743,13 @@ func (t *serviceControlTool) UsesNetwork() bool      { return false }
 func (t *serviceControlTool) WriteIntent() bool      { return true }
 func (t *serviceControlTool) Description() string    { return "Start/stop/restart a service (systemctl)" }
 func (t *serviceControlTool) Execute(ctx context.Context, req Request) (Result, error) {
-	name, _ := req.Input["service"].(string)
+	name, nameErr := normalizeSystemdUnitName(inputString(req.Input, "service"))
 	action, _ := req.Input["control"].(string)
-	name = strings.TrimSpace(name)
 	action = strings.TrimSpace(strings.ToLower(action))
-	if name == "" || (action != "start" && action != "stop" && action != "restart") {
+	if nameErr != nil || (action != "start" && action != "stop" && action != "restart") {
 		return Result{}, errors.New("system.service_control requires input.service and control=start|stop|restart")
 	}
-	out, err := runCmd(ctx, "", "systemctl", action, name)
+	out, err := runCmd(ctx, "", "systemctl", action, "--", name)
 	return Result{Data: map[string]any{"service": name, "control": action, "output": out, "ok": err == nil}, Message: "service control executed"}, nil
 }
 
@@ -2463,17 +2765,21 @@ func (t *journalTailTool) UsesNetwork() bool      { return false }
 func (t *journalTailTool) WriteIntent() bool      { return false }
 func (t *journalTailTool) Description() string    { return "Tail journal/service logs" }
 func (t *journalTailTool) Execute(ctx context.Context, req Request) (Result, error) {
-	service, _ := req.Input["service"].(string)
-	lines := int(readFloat(req.Input, "lines", 100))
-	if lines <= 0 {
-		lines = 100
+	service := ""
+	if strings.TrimSpace(inputString(req.Input, "service")) != "" {
+		normalized, err := normalizeSystemdUnitName(inputString(req.Input, "service"))
+		if err != nil {
+			return Result{}, errors.New("system.logs input.service must be a safe systemd unit name")
+		}
+		service = normalized
 	}
+	lines := normalizeJournalTailLines(req.Input)
 	args := []string{"-n", strconv.Itoa(lines), "--no-pager"}
-	if strings.TrimSpace(service) != "" {
-		args = append(args, "-u", strings.TrimSpace(service))
+	if service != "" {
+		args = append(args, "-u", service)
 	}
 	out, err := runCmd(ctx, "", append([]string{"journalctl"}, args...)...)
-	return Result{Data: map[string]any{"service": strings.TrimSpace(service), "lines": lines, "output": out, "ok": err == nil}, Message: "logs fetched"}, nil
+	return Result{Data: map[string]any{"service": service, "lines": lines, "output": out, "ok": err == nil}, Message: "logs fetched"}, nil
 }
 
 type desktopNotifyTool struct{}
@@ -2514,7 +2820,7 @@ func (t *desktopOpenTool) Description() string {
 }
 func (t *desktopOpenTool) Execute(ctx context.Context, req Request) (Result, error) {
 	if len(req.Paths) > 0 {
-		target, err := firstPath(req.Paths, t.workspace)
+		target, err := firstWorkspacePath(req.Paths, t.workspace)
 		if err != nil {
 			return Result{}, err
 		}
@@ -2543,12 +2849,9 @@ func (t *desktopOpenTool) Execute(ctx context.Context, req Request) (Result, err
 	}
 
 	if desktopLooksLikePath(appHint) {
-		target, err := firstPath([]string{appHint}, t.workspace)
+		target, err := firstWorkspacePath([]string{appHint}, t.workspace)
 		if err != nil {
 			return Result{}, err
-		}
-		if !pathContains(t.workspace, target) {
-			return Result{}, errors.New("desktop.open input.path must resolve inside workspace")
 		}
 		pid, out, err := desktopOpenTarget(ctx, target)
 		return Result{
@@ -3011,6 +3314,21 @@ func (t *networkInterfacesTool) Execute(ctx context.Context, req Request) (Resul
 
 type networkConnectivityTool struct{}
 
+const maxConnectivityTargetBytes = 512
+
+var errConnectivityTargetTooLarge = errors.New("net.connectivity target too large")
+
+func normalizeConnectivityTarget(raw string) (string, error) {
+	target := strings.TrimSpace(raw)
+	if target == "" {
+		return "1.1.1.1:53", nil
+	}
+	if len(target) > maxConnectivityTargetBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errConnectivityTargetTooLarge, len(target), maxConnectivityTargetBytes)
+	}
+	return target, nil
+}
+
 func (t *networkConnectivityTool) ID() string             { return "net.connectivity" }
 func (t *networkConnectivityTool) Domain() string         { return "network" }
 func (t *networkConnectivityTool) Action() string         { return "test_connectivity" }
@@ -3021,10 +3339,9 @@ func (t *networkConnectivityTool) UsesNetwork() bool      { return true }
 func (t *networkConnectivityTool) WriteIntent() bool      { return false }
 func (t *networkConnectivityTool) Description() string    { return "Check TCP connectivity to host:port" }
 func (t *networkConnectivityTool) Execute(ctx context.Context, req Request) (Result, error) {
-	target, _ := req.Input["target"].(string)
-	target = strings.TrimSpace(target)
-	if target == "" {
-		target = "1.1.1.1:53"
+	target, err := normalizeConnectivityTarget(inputString(req.Input, "target"))
+	if err != nil {
+		return Result{}, err
 	}
 	timeoutMs := int(readFloat(req.Input, "timeoutMs", 5000))
 	if timeoutMs <= 0 {
@@ -3040,6 +3357,21 @@ func (t *networkConnectivityTool) Execute(ctx context.Context, req Request) (Res
 
 type networkDNSLookupTool struct{}
 
+const maxDNSLookupHostBytes = 253
+
+var errDNSLookupHostTooLarge = errors.New("net.dns_lookup host too large")
+
+func normalizeDNSLookupHost(raw string) (string, error) {
+	host := strings.TrimSpace(raw)
+	if host == "" {
+		return "", errors.New("net.dns_lookup requires input.host")
+	}
+	if len(host) > maxDNSLookupHostBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errDNSLookupHostTooLarge, len(host), maxDNSLookupHostBytes)
+	}
+	return host, nil
+}
+
 func (t *networkDNSLookupTool) ID() string             { return "net.dns_lookup" }
 func (t *networkDNSLookupTool) Domain() string         { return "network" }
 func (t *networkDNSLookupTool) Action() string         { return "dns_lookup" }
@@ -3050,10 +3382,9 @@ func (t *networkDNSLookupTool) UsesNetwork() bool      { return true }
 func (t *networkDNSLookupTool) WriteIntent() bool      { return false }
 func (t *networkDNSLookupTool) Description() string    { return "Resolve DNS name to IP addresses" }
 func (t *networkDNSLookupTool) Execute(ctx context.Context, req Request) (Result, error) {
-	host, _ := req.Input["host"].(string)
-	host = strings.TrimSpace(host)
-	if host == "" {
-		return Result{}, errors.New("net.dns_lookup requires input.host")
+	host, err := normalizeDNSLookupHost(inputString(req.Input, "host"))
+	if err != nil {
+		return Result{}, err
 	}
 	addrs, err := net.LookupHost(host)
 	return Result{Data: map[string]any{"host": host, "addresses": addrs, "ok": err == nil, "error": errString(err)}, Message: "dns lookup complete"}, nil
@@ -3076,20 +3407,24 @@ func (t *networkFetchTool) Execute(ctx context.Context, req Request) (Result, er
 	if raw == "" {
 		return Result{}, errors.New("net.fetch requires input.url")
 	}
-	parsed, err := url.Parse(raw)
+	parsed, err := validateOutboundHTTPURL(ctx, raw, nil)
 	if err != nil {
 		return Result{}, err
 	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return Result{}, errors.New("only http/https URLs are allowed")
+	client := newGuardedOutboundHTTPClient(ctx, nil)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return Result{}, err
 	}
-	client := &http.Client{Timeout: 20 * time.Second}
-	resp, err := client.Get(parsed.String())
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		return Result{}, err
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
+	body, err := readGatewayHTTPResponseBody(resp.Body, "net.fetch", gatewayNetFetchResponseBodyLimit)
+	if err != nil {
+		return Result{}, err
+	}
 	return Result{
 		Data: map[string]any{
 			"url":        parsed.String(),
@@ -3101,7 +3436,142 @@ func (t *networkFetchTool) Execute(ctx context.Context, req Request) (Result, er
 	}, nil
 }
 
+type outboundHTTPResolver interface {
+	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
+}
+
+const maxOutboundHTTPURLBytes = 8 << 10
+
+var errOutboundHTTPURLTooLarge = errors.New("outbound HTTP URL too large")
+
+func validateOutboundHTTPURL(ctx context.Context, raw string, resolver outboundHTTPResolver) (*url.URL, error) {
+	normalized := strings.TrimSpace(raw)
+	if len(normalized) > maxOutboundHTTPURLBytes {
+		return nil, fmt.Errorf("%w: %d > %d bytes", errOutboundHTTPURLTooLarge, len(normalized), maxOutboundHTTPURLBytes)
+	}
+	parsed, err := url.Parse(normalized)
+	if err != nil {
+		return nil, err
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, errors.New("only http/https URLs are allowed")
+	}
+	if parsed.User != nil {
+		return nil, errors.New("URL userinfo is not allowed")
+	}
+	host := parsed.Hostname()
+	if strings.TrimSpace(host) == "" {
+		return nil, errors.New("URL host is required")
+	}
+	if resolver == nil {
+		resolver = net.DefaultResolver
+	}
+	if _, err := resolveAllowedOutboundIPs(ctx, host, resolver); err != nil {
+		return nil, err
+	}
+	return parsed, nil
+}
+
+func resolveAllowedOutboundIPs(ctx context.Context, host string, resolver outboundHTTPResolver) ([]net.IP, error) {
+	if resolver == nil {
+		resolver = net.DefaultResolver
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if blockedOutboundIP(ip) {
+			return nil, fmt.Errorf("blocked outbound target: %s", host)
+		}
+		return []net.IP{ip}, nil
+	}
+	addrs, err := resolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return nil, fmt.Errorf("resolve outbound target %q: %w", host, err)
+	}
+	if len(addrs) == 0 {
+		return nil, fmt.Errorf("resolve outbound target %q: no addresses", host)
+	}
+	ips := make([]net.IP, 0, len(addrs))
+	for _, addr := range addrs {
+		if addr.IP == nil || blockedOutboundIP(addr.IP) {
+			return nil, fmt.Errorf("blocked outbound target: %s", host)
+		}
+		ips = append(ips, addr.IP)
+	}
+	return ips, nil
+}
+
+func validateOutboundHTTPRedirect(ctx context.Context, req *http.Request, resolver outboundHTTPResolver) error {
+	if req == nil || req.URL == nil {
+		return errors.New("redirect URL is required")
+	}
+	_, err := validateOutboundHTTPURL(ctx, req.URL.String(), resolver)
+	return err
+}
+
+func newGuardedOutboundHTTPClient(ctx context.Context, resolver outboundHTTPResolver) *http.Client {
+	if resolver == nil {
+		resolver = net.DefaultResolver
+	}
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
+	transport.DialContext = func(dialCtx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, err
+		}
+		ips, err := resolveAllowedOutboundIPs(dialCtx, host, resolver)
+		if err != nil {
+			return nil, err
+		}
+		var lastErr error
+		for _, ip := range ips {
+			conn, err := dialer.DialContext(dialCtx, network, net.JoinHostPort(ip.String(), port))
+			if err == nil {
+				return conn, nil
+			}
+			lastErr = err
+		}
+		if lastErr != nil {
+			return nil, lastErr
+		}
+		return nil, fmt.Errorf("resolve outbound target %q: no addresses", host)
+	}
+	return &http.Client{
+		Timeout:   20 * time.Second,
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return validateOutboundHTTPRedirect(ctx, req, resolver)
+		},
+	}
+}
+
+func blockedOutboundIP(ip net.IP) bool {
+	return ip == nil ||
+		ip.IsLoopback() ||
+		ip.IsPrivate() ||
+		ip.IsUnspecified() ||
+		ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() ||
+		ip.IsInterfaceLocalMulticast() ||
+		ip.IsMulticast()
+}
+
 type webSearchTool struct{}
+
+const maxWebSearchQueryBytes = 2 << 10
+
+var errWebSearchQueryTooLarge = errors.New("web.search query too large")
+
+func normalizeWebSearchQuery(raw string) (string, error) {
+	query := strings.TrimSpace(raw)
+	if query == "" {
+		return "", errors.New("web.search requires input.query")
+	}
+	if len(query) > maxWebSearchQueryBytes {
+		return "", fmt.Errorf("%w: %d > %d bytes", errWebSearchQueryTooLarge, len(query), maxWebSearchQueryBytes)
+	}
+	return query, nil
+}
 
 func (t *webSearchTool) ID() string             { return "web.search" }
 func (t *webSearchTool) Domain() string         { return "network" }
@@ -3115,10 +3585,9 @@ func (t *webSearchTool) Description() string {
 	return "Search the public web and return compact result titles, URLs, and snippets"
 }
 func (t *webSearchTool) Execute(ctx context.Context, req Request) (Result, error) {
-	query, _ := req.Input["query"].(string)
-	query = strings.TrimSpace(query)
-	if query == "" {
-		return Result{}, errors.New("web.search requires input.query")
+	query, err := normalizeWebSearchQuery(inputString(req.Input, "query"))
+	if err != nil {
+		return Result{}, err
 	}
 	limit := 5
 	if v, ok := req.Input["limit"].(float64); ok && v > 0 {
@@ -3141,7 +3610,10 @@ func (t *webSearchTool) Execute(ctx context.Context, req Request) (Result, error
 		return Result{}, err
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512*1024))
+	body, err := readGatewayHTTPResponseBody(resp.Body, "web.search", gatewayWebSearchResponseBodyLimit)
+	if err != nil {
+		return Result{}, err
+	}
 	results := parseDuckDuckGoHTMLResults(string(body), limit)
 	return Result{
 		Data: map[string]any{
@@ -3366,6 +3838,49 @@ func firstPath(paths []string, workspace string) (string, error) {
 	return filepath.Clean(abs), nil
 }
 
+func firstWorkspacePath(paths []string, workspace string) (string, error) {
+	target, err := firstPath(paths, workspace)
+	if err != nil {
+		return "", err
+	}
+	if err := validateWorkspacePath(workspace, target); err != nil {
+		return "", err
+	}
+	return target, nil
+}
+
+func workspaceDirFromRequest(paths []string, workspace string) (string, error) {
+	if len(paths) == 0 {
+		return workspace, nil
+	}
+	return firstWorkspacePath(paths, workspace)
+}
+
+func validateWorkspacePath(workspace, target string) error {
+	if strings.TrimSpace(workspace) == "" {
+		return errors.New("workspace path is required")
+	}
+	if !pathContains(workspace, target) {
+		return fmt.Errorf("path %q is outside workspace", target)
+	}
+	resolvedWorkspace, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		return fmt.Errorf("resolve workspace %q: %w", workspace, err)
+	}
+	existing, err := nearestExistingPath(target)
+	if err != nil {
+		return err
+	}
+	resolvedExisting, err := filepath.EvalSymlinks(existing)
+	if err != nil {
+		return fmt.Errorf("resolve path %q: %w", existing, err)
+	}
+	if !pathContains(resolvedWorkspace, resolvedExisting) {
+		return fmt.Errorf("path %q escapes workspace through symlink path", target)
+	}
+	return nil
+}
+
 func expandUserPath(p string) string {
 	p = strings.TrimSpace(p)
 	if p == "" {
@@ -3529,6 +4044,36 @@ func cloneToolOutput(in map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
+}
+
+func marshalGatewayInvocationInput(input map[string]any, metadata map[string]any) ([]byte, error) {
+	payload := cloneToolOutput(nonNilMap(input))
+	if len(metadata) > 0 {
+		payload["_metadata"] = cloneToolOutput(metadata)
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	if len(body) <= maxGatewayInvocationInputJSONBytes {
+		return body, nil
+	}
+	summary := map[string]any{
+		"_inputOmitted": true,
+		"_reason":       "gateway invocation input exceeded persisted JSON limit",
+		"_inputSummary": capabilityInputSummary(input),
+	}
+	if len(metadata) > 0 {
+		summary["_metadataSummary"] = capabilityInputSummary(metadata)
+	}
+	body, err = json.Marshal(summary)
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxGatewayInvocationInputJSONBytes {
+		return nil, fmt.Errorf("gateway invocation input summary too large: %d > %d bytes", len(body), maxGatewayInvocationInputJSONBytes)
+	}
+	return body, nil
 }
 
 func toolErrorFromGatewayResult(result *Result) *domain.ToolExecutionError {
@@ -3738,24 +4283,106 @@ func normalizedApprovalPaths(paths []string) []string {
 func normalizeApprovalFingerprintValue(v any) any {
 	switch typed := v.(type) {
 	case map[string]any:
-		out := make(map[string]any, len(typed))
-		for k, item := range typed {
-			out[k] = normalizeApprovalFingerprintValue(item)
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		out := make(map[string]any, minInt(len(keys), maxApprovalFingerprintCollectionItems)+2)
+		truncatedFields := false
+		truncatedFieldNames := false
+		for i, key := range keys {
+			if i >= maxApprovalFingerprintCollectionItems {
+				truncatedFields = true
+				break
+			}
+			normalizedKey, truncatedName := normalizeApprovalFingerprintFieldName(key)
+			if truncatedName {
+				truncatedFieldNames = true
+			}
+			out[normalizedKey] = normalizeApprovalFingerprintValue(typed[key])
+		}
+		if truncatedFields {
+			out["_truncated"] = true
+		}
+		if truncatedFieldNames {
+			out["_truncatedFieldNames"] = true
 		}
 		return out
 	case []any:
-		out := make([]any, 0, len(typed))
-		for _, item := range typed {
+		limit := minInt(len(typed), maxApprovalFingerprintCollectionItems)
+		out := make([]any, 0, limit)
+		for _, item := range typed[:limit] {
 			out = append(out, normalizeApprovalFingerprintValue(item))
+		}
+		if len(typed) > maxApprovalFingerprintCollectionItems {
+			return map[string]any{"items": out, "count": len(typed), "truncated": true}
 		}
 		return out
 	case []string:
 		out := append([]string(nil), typed...)
 		sort.Strings(out)
+		if len(out) > maxApprovalFingerprintCollectionItems {
+			items := make([]any, 0, maxApprovalFingerprintCollectionItems)
+			for _, item := range out[:maxApprovalFingerprintCollectionItems] {
+				items = append(items, normalizeApprovalFingerprintValue(item))
+			}
+			return map[string]any{"items": items, "count": len(out), "truncated": true}
+		}
+		normalized := make([]any, 0, len(out))
+		changed := false
+		for _, item := range out {
+			value := normalizeApprovalFingerprintString(item)
+			if _, ok := value.(string); !ok {
+				changed = true
+			}
+			normalized = append(normalized, value)
+		}
+		if changed {
+			return normalized
+		}
 		return out
+	case string:
+		return normalizeApprovalFingerprintString(typed)
 	default:
 		return typed
 	}
+}
+
+func normalizeApprovalFingerprintString(value string) any {
+	if len(value) <= maxApprovalFingerprintStringBytes {
+		return value
+	}
+	sum := sha256.Sum256([]byte(value))
+	return map[string]any{
+		"omitted": true,
+		"bytes":   len(value),
+		"sha256":  "sha256:" + hex.EncodeToString(sum[:]),
+	}
+}
+
+func normalizeApprovalFingerprintFieldName(key string) (string, bool) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return "<empty>", false
+	}
+	if len(key) <= maxApprovalFingerprintFieldNameBytes {
+		return key, false
+	}
+	sum := sha256.Sum256([]byte(key))
+	digest := hex.EncodeToString(sum[:])[:16]
+	prefixBytes := maxApprovalFingerprintFieldNameBytes - len(digest) - 1
+	if prefixBytes < 1 {
+		return digest, true
+	}
+	return key[:prefixBytes] + "#" + digest, true
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (g *Gateway) jobApprovalGranted(ctx context.Context, jobID *string) (bool, error) {
@@ -3930,6 +4557,27 @@ func executionLevelFromRisk(risk string) string {
 	}
 }
 
+func gatewayToolIntrinsicApprovalReason(tool Tool, risk, level string) string {
+	if tool == nil {
+		return ""
+	}
+	normalizedRisk := strings.TrimSpace(strings.ToLower(risk))
+	if normalizedRisk == "" {
+		normalizedRisk = strings.TrimSpace(strings.ToLower(tool.RiskClass()))
+	}
+	normalizedLevel := normalizeExecutionLevel(level)
+	if normalizedLevel == "" {
+		normalizedLevel = normalizeExecutionLevel(tool.ExecutionLevel())
+	}
+	if normalizedLevel == "" {
+		normalizedLevel = executionLevelFromRisk(normalizedRisk)
+	}
+	if levelRank(normalizedLevel) >= levelRank("L3") || normalizedRisk == "privileged" || normalizedRisk == "dangerous" {
+		return fmt.Sprintf("tool %q is intrinsically privileged and requires approval", tool.ID())
+	}
+	return ""
+}
+
 func legacyRiskClass(risk string) string {
 	switch strings.TrimSpace(strings.ToLower(risk)) {
 	case "read_only":
@@ -3996,8 +4644,7 @@ func runCmd(ctx context.Context, dir string, parts ...string) (string, error) {
 	if strings.TrimSpace(dir) != "" {
 		cmd.Dir = dir
 	}
-	out, err := cmd.CombinedOutput()
-	return string(out), err
+	return boundedCombinedOutput(cmd)
 }
 
 func runDetachedCmd(dir string, parts ...string) (int, error) {

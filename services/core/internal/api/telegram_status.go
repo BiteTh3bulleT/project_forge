@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 )
+
+const telegramAPIResponseBodyLimit = 1 << 20
 
 type telegramMeResult struct {
 	ID        int64  `json:"id"`
@@ -130,5 +133,20 @@ func telegramAPIRequest(ctx context.Context, token string, method string, out an
 	if res.StatusCode >= 300 {
 		return fmt.Errorf("telegram api returned %s", res.Status)
 	}
-	return json.NewDecoder(res.Body).Decode(out)
+	raw, err := readTelegramAPIResponseBody(res.Body)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, out)
+}
+
+func readTelegramAPIResponseBody(body io.Reader) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(body, telegramAPIResponseBodyLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > telegramAPIResponseBodyLimit {
+		return nil, fmt.Errorf("telegram api response too large: limit %d bytes", telegramAPIResponseBodyLimit)
+	}
+	return raw, nil
 }

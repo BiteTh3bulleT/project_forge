@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,6 +27,68 @@ type IntelService struct {
 	zeInfoPath string
 	gpuTopPath string
 	timeout    time.Duration
+}
+
+const intelToolOutputLimit = 1 << 20
+
+var errIntelGPUTopOutputTooLarge = errors.New("intel_gpu_top output too large")
+
+type boundedToolOutput struct {
+	buf       bytes.Buffer
+	limit     int
+	truncated bool
+}
+
+func newBoundedToolOutput(limit int) *boundedToolOutput {
+	return &boundedToolOutput{limit: limit}
+}
+
+func (b *boundedToolOutput) Write(p []byte) (int, error) {
+	if b.limit <= 0 {
+		b.truncated = true
+		return len(p), nil
+	}
+	remaining := b.limit - b.buf.Len()
+	if remaining <= 0 {
+		b.truncated = true
+		return len(p), nil
+	}
+	if len(p) > remaining {
+		_, _ = b.buf.Write(p[:remaining])
+		b.truncated = true
+		return len(p), nil
+	}
+	_, _ = b.buf.Write(p)
+	return len(p), nil
+}
+
+func (b *boundedToolOutput) String() string {
+	out := b.buf.String()
+	if b.truncated {
+		out += fmt.Sprintf("\n[forge: Intel telemetry tool output truncated at %d bytes]", b.limit)
+	}
+	return out
+}
+
+type limitedToolReader struct {
+	r         io.Reader
+	remaining int64
+}
+
+func newLimitedToolReader(r io.Reader, limit int64) *limitedToolReader {
+	return &limitedToolReader{r: r, remaining: limit}
+}
+
+func (r *limitedToolReader) Read(p []byte) (int, error) {
+	if r.remaining <= 0 {
+		return 0, errIntelGPUTopOutputTooLarge
+	}
+	if int64(len(p)) > r.remaining {
+		p = p[:r.remaining]
+	}
+	n, err := r.r.Read(p)
+	r.remaining -= int64(n)
+	return n, err
 }
 
 func NewIntel(opts IntelOptions) *IntelService {
@@ -133,9 +197,11 @@ func runTool(ctx context.Context, timeout time.Duration, path string, args ...st
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(runCtx, path, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
+	stdout := newBoundedToolOutput(intelToolOutputLimit)
+	stderr := newBoundedToolOutput(intelToolOutputLimit)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+	err := cmd.Run()
 	if runCtx.Err() != nil {
 		return "", runCtx.Err()
 	}
@@ -146,7 +212,7 @@ func runTool(ctx context.Context, timeout time.Duration, path string, args ...st
 		}
 		return "", err
 	}
-	return string(out), nil
+	return stdout.String(), nil
 }
 
 func parseZEInfo(raw string) []DeviceTelemetry {
@@ -191,14 +257,14 @@ func runIntelGPUTop(ctx context.Context, timeout time.Duration, path string) (ma
 	if err != nil {
 		return nil, err
 	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	stderr := newBoundedToolOutput(intelToolOutputLimit)
+	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
 
 	var sample map[string]any
-	decodeErr := json.NewDecoder(stdout).Decode(&sample)
+	decodeErr := json.NewDecoder(newLimitedToolReader(stdout, intelToolOutputLimit)).Decode(&sample)
 	if cmd.Process != nil {
 		_ = cmd.Process.Kill()
 	}

@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -25,6 +27,32 @@ type restoreOutcomeFeedbackRequest struct {
 	TraceID           string         `json:"traceId,omitempty"`
 	UpdatedBy         string         `json:"updatedBy,omitempty"`
 	Metadata          map[string]any `json:"metadata,omitempty"`
+}
+
+const restoreOutcomeFeedbackRequestBodyLimit int64 = 1 << 20
+
+var errRestoreOutcomeFeedbackRequestBodyTooLarge = errors.New("restore outcome feedback request body too large")
+
+func decodeRestoreOutcomeFeedbackJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, restoreOutcomeFeedbackRequestBodyLimit))
+	if err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			return errRestoreOutcomeFeedbackRequestBodyTooLarge
+		}
+		return err
+	}
+	if err := json.Unmarshal(body, dst); err != nil {
+		return err
+	}
+	return nil
+}
+
+func writeRestoreOutcomeFeedbackDecodeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errRestoreOutcomeFeedbackRequestBodyTooLarge) {
+		http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	http.Error(w, "invalid json", http.StatusBadRequest)
 }
 
 func (s *Server) handleRestoreOutcomeList(w http.ResponseWriter, r *http.Request) {
@@ -74,8 +102,8 @@ func (s *Server) handleRestoreOutcomeGet(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) handleRestoreOutcomeFeedback(w http.ResponseWriter, r *http.Request) {
 	var body restoreOutcomeFeedbackRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeRestoreOutcomeFeedbackJSONBody(w, r, &body); err != nil {
+		writeRestoreOutcomeFeedbackDecodeError(w, err)
 		return
 	}
 	workspaceID := strings.TrimSpace(firstNonEmptyTrimmed(body.WorkspaceID, r.URL.Query().Get("workspaceId")))

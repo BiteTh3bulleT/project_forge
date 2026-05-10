@@ -3,6 +3,8 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +13,10 @@ import (
 
 	"forge/projectforge/services/core/internal/memory"
 )
+
+const memoryMutationRequestBodyLimit = 1 << 20
+
+var errMemoryRequestBodyTooLarge = errors.New("memory request body too large")
 
 func (s *Server) handleListMemoryObservations(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -52,8 +58,8 @@ func (s *Server) handleCreateMemoryObservation(w http.ResponseWriter, r *http.Re
 		OriginID          string        `json:"originId"`
 		ObservedAtMs      int64         `json:"observedAtMs"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeMemoryJSONBody(r, &body); err != nil {
+		writeMemoryDecodeError(w, err)
 		return
 	}
 	obs, err := s.memory.RecordObservation(r.Context(), memory.RecordObservationRequest{
@@ -124,8 +130,8 @@ func (s *Server) handlePatchMemoryObservation(w http.ResponseWriter, r *http.Req
 		Tags              []string `json:"tags"`
 		RelatedFiles      []string `json:"relatedFiles"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeMemoryJSONBody(r, &body); err != nil {
+		writeMemoryDecodeError(w, err)
 		return
 	}
 	updated, err := s.memory.UpdateObservation(r.Context(), id, memory.UpdateObservationRequest{
@@ -158,8 +164,8 @@ func (s *Server) handleMarkMemoryObservationUsefulness(w http.ResponseWriter, r 
 		PacketID          optionalInt64 `json:"packetId"`
 		JobID             *string       `json:"jobId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeMemoryJSONBody(r, &body); err != nil {
+		writeMemoryDecodeError(w, err)
 		return
 	}
 	if err := s.memory.MarkObservationUsefulness(r.Context(), memory.MarkUsefulnessRequest{
@@ -268,7 +274,10 @@ func (s *Server) handleRunMemoryRepair(w http.ResponseWriter, r *http.Request) {
 		Limit      int           `json:"limit"`
 		Note       string        `json:"note"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := decodeOptionalMemoryJSONBody(r, &body); err != nil {
+		writeMemoryDecodeError(w, err)
+		return
+	}
 	detail, err := s.memory.RunRepairPass(r.Context(), memory.RunRepairRequest{
 		DossierID:  body.DossierID.Value,
 		Mode:       "manual",
@@ -294,7 +303,10 @@ func (s *Server) handleRunVSAReindex(w http.ResponseWriter, r *http.Request) {
 		StaleOnly   bool          `json:"staleOnly"`
 		Force       bool          `json:"force"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := decodeOptionalMemoryJSONBody(r, &body); err != nil {
+		writeMemoryDecodeError(w, err)
+		return
+	}
 	if strings.TrimSpace(body.Mode) == "" {
 		body.Mode = "manual"
 	}
@@ -313,6 +325,50 @@ func (s *Server) handleRunVSAReindex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"detail": detail})
+}
+
+func decodeMemoryJSONBody(r *http.Request, target any) error {
+	raw, err := readMemoryRequestBody(r)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func decodeOptionalMemoryJSONBody(r *http.Request, target any) error {
+	raw, err := readMemoryRequestBody(r)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		return err
+	}
+	if len(strings.TrimSpace(string(raw))) == 0 {
+		return nil
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func readMemoryRequestBody(r *http.Request) ([]byte, error) {
+	if r.Body == nil {
+		return nil, io.EOF
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, memoryMutationRequestBodyLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > memoryMutationRequestBodyLimit {
+		return nil, errMemoryRequestBodyTooLarge
+	}
+	return raw, nil
+}
+
+func writeMemoryDecodeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errMemoryRequestBodyTooLarge) {
+		http.Error(w, "memory request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	http.Error(w, "invalid json", http.StatusBadRequest)
 }
 
 func (s *Server) handleListVSAReindexRuns(w http.ResponseWriter, r *http.Request) {

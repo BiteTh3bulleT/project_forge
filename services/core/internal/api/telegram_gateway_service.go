@@ -32,6 +32,8 @@ type telegramPollEnvelope struct {
 	Result      []telegramPollUpdate `json:"result"`
 }
 
+const telegramPollResponseBodyLimit = 2 << 20
+
 type telegramPollUpdate struct {
 	UpdateID    int64            `json:"update_id"`
 	Message     *telegramMessage `json:"message"`
@@ -226,7 +228,11 @@ func (g *TelegramGateway) processWakeCommandIfPresent(ctx context.Context, conf 
 	if !g.cfg.EnableWakeCommands || msg == nil {
 		return false, nil
 	}
-	raw := strings.TrimSpace(remoteTrimmedText(msg.Text, msg.Caption))
+	raw, err := remoteBoundedText(msg.Text, msg.Caption)
+	if err != nil {
+		return true, err
+	}
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return false, nil
 	}
@@ -399,7 +405,10 @@ func (g *TelegramGateway) fetchUpdates(ctx context.Context, offset int64) ([]tel
 		return nil, err
 	}
 	defer res.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(res.Body, 2<<20))
+	body, err := readTelegramPollResponseBody(res.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read telegram getUpdates response: %w", err)
+	}
 	if res.StatusCode >= 300 {
 		return nil, fmt.Errorf("telegram getUpdates returned %s", res.Status)
 	}
@@ -411,6 +420,17 @@ func (g *TelegramGateway) fetchUpdates(ctx context.Context, offset int64) ([]tel
 		return nil, fmt.Errorf("telegram getUpdates failed: %s", strings.TrimSpace(parsed.Description))
 	}
 	return parsed.Result, nil
+}
+
+func readTelegramPollResponseBody(body io.Reader) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(body, telegramPollResponseBodyLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > telegramPollResponseBodyLimit {
+		return nil, fmt.Errorf("telegram getUpdates response too large: limit %d bytes", telegramPollResponseBodyLimit)
+	}
+	return raw, nil
 }
 
 func (g *TelegramGateway) loadOffset() int64 {

@@ -48,6 +48,11 @@ function formatBytes(value?: number) {
   return `${current.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
+function formatList(values?: string[]) {
+  const filtered = (values ?? []).filter(Boolean);
+  return filtered.length > 0 ? filtered.join(", ") : "none";
+}
+
 function Metric(props: { label: string; value: unknown; tone?: string }) {
   return (
     <div className="rounded border border-white/10 bg-black/20 p-3">
@@ -59,6 +64,19 @@ function Metric(props: { label: string; value: unknown; tone?: string }) {
           <span>{valueText(props.value)}</span>
         )}
       </div>
+    </div>
+  );
+}
+
+function DetailRow(props: { label: string; value: unknown; tone?: string; mono?: boolean }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <span>{props.label}</span>
+      {props.tone ? (
+        <span className={statusClass(props.tone)}>{valueText(props.value)}</span>
+      ) : (
+        <span className={props.mono ? "font-mono" : ""}>{valueText(props.value)}</span>
+      )}
     </div>
   );
 }
@@ -215,6 +233,29 @@ export function SystemPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
         <div className="space-y-4">
+          <Panel title="Core Status">
+            <div className="grid gap-3 md:grid-cols-2">
+              <Metric
+                label="Reachability"
+                value={status?.core.reachable ? "reachable" : "unreachable"}
+                tone={status?.core.reachable ? "reachable" : "unreachable"}
+              />
+              <Metric
+                label="Core health"
+                value={status?.core.health_state}
+                tone={status?.core.health_state}
+              />
+              <Metric
+                label="Core URL"
+                value={status?.core.core_url}
+              />
+              <Metric
+                label="Last core refresh"
+                value={formatTimestamp(status?.core.last_refresh_at)}
+              />
+            </div>
+          </Panel>
+
           <Panel title="Shell Session Status">
             <div className="grid gap-3 md:grid-cols-3">
               <Metric label="Shell mode" value={status?.shell_session.shell_mode} />
@@ -225,6 +266,11 @@ export function SystemPage() {
               <Metric
                 label="Compositor"
                 value={status?.shell_session.compositor_session}
+              />
+              <Metric
+                label="Safe mode"
+                value={status?.shell_session.safe_mode}
+                tone={status?.shell_session.safe_mode ? "warning" : "ok"}
               />
             </div>
             <div className="mt-3 rounded border border-white/10 bg-black/20 p-3">
@@ -278,6 +324,11 @@ export function SystemPage() {
                 value={status?.hostbridge.source_errors_count ?? 0}
                 tone={(status?.hostbridge.source_errors_count ?? 0) > 0 ? "warning" : "ok"}
               />
+              <Metric
+                label="Degraded"
+                value={status?.hostbridge.degraded}
+                tone={status?.hostbridge.degraded ? "warning" : "ok"}
+              />
             </div>
           </Panel>
 
@@ -292,6 +343,11 @@ export function SystemPage() {
                 label="Swap"
                 value={status?.forgeh.policy?.swap_pressure}
                 tone={status?.forgeh.policy?.swap_pressure}
+              />
+              <Metric
+                label="Disk"
+                value={status?.forgeh.policy?.disk_pressure}
+                tone={status?.forgeh.policy?.disk_pressure}
               />
               <Metric
                 label="VRAM"
@@ -311,6 +367,11 @@ export function SystemPage() {
                 label="Background work"
                 value={status?.forgeh.policy?.background_work_recommendation}
               />
+              <Metric
+                label="Warnings"
+                value={status?.forgeh.policy?.warnings?.length ?? 0}
+                tone={(status?.forgeh.policy?.warnings?.length ?? 0) > 0 ? "warning" : "ok"}
+              />
             </div>
           </Panel>
 
@@ -329,6 +390,7 @@ export function SystemPage() {
                       <th className="py-2 pr-3">Lane</th>
                       <th className="py-2 pr-3">Risk</th>
                       <th className="py-2 pr-3">Status</th>
+                      <th className="py-2 pr-3">Advisory only</th>
                       <th className="py-2 pr-3">Expires</th>
                     </tr>
                   </thead>
@@ -356,6 +418,9 @@ export function SystemPage() {
                           <span className={statusClass(proposal.status)}>
                             {valueText(proposal.status)}
                           </span>
+                        </td>
+                        <td className="py-2 pr-3 text-forge-mist">
+                          {valueText(proposal.advisory_only)}
                         </td>
                         <td className="py-2 pr-3 text-forge-mist">
                           {formatTimestamp(proposal.expires_at)}
@@ -392,10 +457,17 @@ export function SystemPage() {
                       {valueText(execution.execution_id)}
                     </div>
                     <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      <span>Proposal: {valueText(execution.proposal_id)}</span>
+                      <span>Action: {valueText(execution.action_type)}</span>
                       <span>Status: {valueText(execution.status)}</span>
                       <span>Result: {valueText(execution.result)}</span>
                       <span>Bounded: {valueText(execution.bounded)}</span>
                       <span>Host mutation: {valueText(execution.host_mutation)}</span>
+                      <span>Semantic memory write: {valueText(execution.semantic_memory_write)}</span>
+                      <span>Modelruntime mutation: {valueText(execution.modelruntime_mutation)}</span>
+                      <span className="sm:col-span-2">
+                        Side effects: {formatList(execution.side_effects)}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -405,51 +477,22 @@ export function SystemPage() {
 
           <Panel title="Modelruntime Status">
             <div className="space-y-2 text-xs text-forge-mist">
-              <div className="flex justify-between gap-3">
-                <span>Available</span>
-                <span>{valueText(status?.modelruntime.available)}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span>State</span>
-                <span>{valueText(status?.modelruntime.state)}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span>Backend</span>
-                <span>{valueText(status?.modelruntime.backend)}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span>Mutation disabled</span>
-                <span>{valueText(status?.modelruntime.mutation_disabled)}</span>
-              </div>
+              <DetailRow label="Available" value={status?.modelruntime.available} />
+              <DetailRow label="State" value={status?.modelruntime.state} />
+              <DetailRow label="Backend" value={status?.modelruntime.backend} />
+              <DetailRow label="Mutation disabled" value={status?.modelruntime.mutation_disabled} />
             </div>
           </Panel>
 
           <Panel title="Storage Status">
             <div className="space-y-2 text-xs text-forge-mist">
-              <div className="flex justify-between gap-3">
-                <span>Root</span>
-                <span className="font-mono">{valueText(status?.storage.root)}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span>Truth authority</span>
-                <span>{valueText(status?.storage.truth_authority)}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span>SQLite ping</span>
-                <span>{valueText(status?.storage.ping_ok)}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span>Free</span>
-                <span>{formatBytes(status?.storage.free_bytes)}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span>Redis truth</span>
-                <span>{valueText(status?.storage.redis?.truth_authority)}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span>Qdrant truth</span>
-                <span>{valueText(status?.storage.qdrant?.truth_authority)}</span>
-              </div>
+              <DetailRow label="Root" value={status?.storage.root} mono />
+              <DetailRow label="Truth authority" value={status?.storage.truth_authority} />
+              <DetailRow label="SQLite ping" value={status?.storage.ping_ok} />
+              <DetailRow label="Used" value={formatBytes(status?.storage.used_bytes)} />
+              <DetailRow label="Free" value={formatBytes(status?.storage.free_bytes)} />
+              <DetailRow label="Redis truth" value={status?.storage.redis?.truth_authority} />
+              <DetailRow label="Qdrant truth" value={status?.storage.qdrant?.truth_authority} />
             </div>
           </Panel>
 

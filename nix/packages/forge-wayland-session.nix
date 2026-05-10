@@ -30,8 +30,8 @@ writeShellApplication {
     export FORGE_SHELL_COMPOSITOR=cage
     export XDG_SESSION_TYPE=wayland
 
-    compositor="''${FORGE_WAYLAND_COMPOSITOR:-${defaultCompositor}}"
-    shell_session="''${FORGE_SHELL_SESSION_BINARY:-${shellSession}}"
+    compositor="${defaultCompositor}"
+    shell_session="${shellSession}"
 
     if [ -z "$compositor" ]; then
       echo "FORGE Wayland compositor is not configured; install or pass cage when building forge-wayland-session." >&2

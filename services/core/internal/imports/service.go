@@ -4,10 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 )
+
+const maxImportPayloadBytes = 128 << 10
+
+var errImportPayloadTooLarge = errors.New("import payload too large")
 
 type Record struct {
 	ID             int64           `json:"id"`
@@ -52,8 +57,14 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Record, error
 	if summary == "" {
 		return nil, fmt.Errorf("summary is required")
 	}
-	outputRefs, _ := json.Marshal(nonNilStringSlice(req.OutputRefs))
-	evaluation, _ := json.Marshal(nonNilMap(req.Evaluation))
+	outputRefs, err := marshalImportPayload("outputRefs", nonNilStringSlice(req.OutputRefs))
+	if err != nil {
+		return nil, err
+	}
+	evaluation, err := marshalImportPayload("evaluation", nonNilMap(req.Evaluation))
+	if err != nil {
+		return nil, err
+	}
 	now := time.Now().UnixMilli()
 
 	res, err := s.db.ExecContext(ctx, `
@@ -178,6 +189,17 @@ func nonNilMap(v map[string]any) map[string]any {
 		return map[string]any{}
 	}
 	return v
+}
+
+func marshalImportPayload(label string, payload any) ([]byte, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxImportPayloadBytes {
+		return nil, fmt.Errorf("%w: %s %d > %d bytes", errImportPayloadTooLarge, strings.TrimSpace(label), len(body), maxImportPayloadBytes)
+	}
+	return body, nil
 }
 
 func nonNilStringSlice(v []string) []string {

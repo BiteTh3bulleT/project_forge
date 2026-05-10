@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -19,6 +21,14 @@ import (
 	"forge/projectforge/services/core/internal/chat"
 	"forge/projectforge/services/core/internal/jobs"
 )
+
+const (
+	workspaceJSONRequestBodyLimit       = 1 << 20
+	chatAttachmentUploadRequestLimit    = 25 << 20
+	chatAttachmentUploadArtifactMaxSize = 20 << 20
+)
+
+var errWorkspaceRequestBodyTooLarge = errors.New("workspace json request body too large")
 
 // --- Chat ---
 
@@ -39,7 +49,10 @@ func (s *Server) handleChatThreadCreate(w http.ResponseWriter, r *http.Request) 
 		Title     string `json:"title"`
 		DossierID *int64 `json:"dossierId"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := decodeOptionalWorkspaceJSONBody(r, &body); err != nil {
+		writeWorkspaceDecodeError(w, err)
+		return
+	}
 	t, err := s.chat.CreateThread(ctx, body.Title, body.DossierID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -144,8 +157,8 @@ func (s *Server) handleChatThreadPatch(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Title string `json:"title"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeWorkspaceJSONBody(r, &body); err != nil {
+		writeWorkspaceDecodeError(w, err)
 		return
 	}
 	t, err := s.chat.UpdateThreadTitle(ctx, id, body.Title)
@@ -180,8 +193,8 @@ func (s *Server) handleChatJobCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body jobs.CreateRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeWorkspaceJSONBody(r, &body); err != nil {
+		writeWorkspaceDecodeError(w, err)
 		return
 	}
 	if strings.TrimSpace(body.InitiatingSource) == "" {
@@ -217,10 +230,18 @@ func (s *Server) handleChatAttachmentUpload(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, 25<<20) // 25MB hard request cap.
-	if err := r.ParseMultipartForm(25 << 20); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, chatAttachmentUploadRequestLimit)
+	if err := r.ParseMultipartForm(chatAttachmentUploadRequestLimit); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) || strings.Contains(strings.ToLower(err.Error()), "request body too large") {
+			http.Error(w, "chat attachment request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, "invalid multipart body", http.StatusBadRequest)
 		return
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
 	}
 	f, fh, err := r.FormFile("file")
 	if err != nil {
@@ -249,7 +270,7 @@ func (s *Server) handleChatAttachmentUpload(w http.ResponseWriter, r *http.Reque
 		Subdir:     filepath.Join("chat", fmt.Sprintf("thread-%d", threadID), now),
 		Reader:     f,
 		MimeType:   mime,
-		MaxBytes:   20 << 20,
+		MaxBytes:   chatAttachmentUploadArtifactMaxSize,
 		DefaultExt: filepath.Ext(filename),
 		Metadata: map[string]any{
 			"threadId": threadID,
@@ -323,7 +344,10 @@ func (s *Server) handleCanvasBoardCreate(w http.ResponseWriter, r *http.Request)
 		Title     string `json:"title"`
 		DossierID *int64 `json:"dossierId"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := decodeOptionalWorkspaceJSONBody(r, &body); err != nil {
+		writeWorkspaceDecodeError(w, err)
+		return
+	}
 	b, err := s.canvas.CreateBoard(ctx, body.Title, body.DossierID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -380,8 +404,8 @@ func (s *Server) handleCanvasNoteCreate(w http.ResponseWriter, r *http.Request) 
 		Width  float64 `json:"width"`
 		Height float64 `json:"height"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeWorkspaceJSONBody(r, &body); err != nil {
+		writeWorkspaceDecodeError(w, err)
 		return
 	}
 	if body.Width <= 0 {
@@ -411,8 +435,8 @@ func (s *Server) handleCanvasNotePatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body canvas.PatchNote
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeWorkspaceJSONBody(r, &body); err != nil {
+		writeWorkspaceDecodeError(w, err)
 		return
 	}
 	n, err := s.canvas.PatchNote(ctx, boardID, noteID, body)
@@ -444,15 +468,27 @@ func (s *Server) handleCanvasNoteDelete(w http.ResponseWriter, r *http.Request) 
 
 // --- Workbench (artifacts) ---
 
+var errArtifactThreadScopeRequired = errors.New("artifact requires matching chat thread scope")
+
 func (s *Server) handleArtifactsList(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	threadID, err := artifactThreadScopeFromRequest(r)
+	if err != nil {
+		http.Error(w, "bad threadId", http.StatusBadRequest)
+		return
+	}
 	job := strings.TrimSpace(r.URL.Query().Get("jobId"))
 	var jobPtr *string
 	if job != "" {
 		jobPtr = &job
 	}
 	list, err := s.artifacts.List(ctx, jobPtr, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	list, err = s.filterArtifactsForPublicList(ctx, list, threadID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -476,6 +512,19 @@ func (s *Server) handleArtifactGet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	threadID, err := artifactThreadScopeFromRequest(r)
+	if err != nil {
+		http.Error(w, "bad threadId", http.StatusBadRequest)
+		return
+	}
+	if err := s.authorizeArtifactPublicRead(ctx, a, threadID); err != nil {
+		if errors.Is(err, errArtifactThreadScopeRequired) {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	writeJSON(w, http.StatusOK, a)
 }
 
@@ -486,12 +535,30 @@ func (s *Server) handleArtifactContent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad id", http.StatusBadRequest)
 		return
 	}
-	body, art, textual, err := s.artifacts.ReadArtifactText(ctx, id)
+	art, err := s.artifacts.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	threadID, err := artifactThreadScopeFromRequest(r)
+	if err != nil {
+		http.Error(w, "bad threadId", http.StatusBadRequest)
+		return
+	}
+	if err := s.authorizeArtifactPublicRead(ctx, art, threadID); err != nil {
+		if errors.Is(err, errArtifactThreadScopeRequired) {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	body, art, textual, err := s.artifacts.ReadArtifactText(ctx, id)
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -503,10 +570,156 @@ func (s *Server) handleArtifactContent(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func artifactThreadScopeFromRequest(r *http.Request) (*int64, error) {
+	raw := strings.TrimSpace(r.URL.Query().Get("threadId"))
+	if raw == "" {
+		return nil, nil
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 {
+		return nil, fmt.Errorf("invalid threadId")
+	}
+	return &id, nil
+}
+
+func (s *Server) filterArtifactsForPublicList(ctx context.Context, list []artifacts.Artifact, threadID *int64) ([]artifacts.Artifact, error) {
+	out := make([]artifacts.Artifact, 0, len(list))
+	for _, art := range list {
+		if art.Type != "chat_attachment" {
+			out = append(out, art)
+			continue
+		}
+		if err := s.authorizeArtifactPublicRead(ctx, &art, threadID); err != nil {
+			if errors.Is(err, errArtifactThreadScopeRequired) {
+				continue
+			}
+			return nil, err
+		}
+		out = append(out, art)
+	}
+	return out, nil
+}
+
+func (s *Server) authorizeArtifactPublicRead(ctx context.Context, art *artifacts.Artifact, threadID *int64) error {
+	if art == nil || art.Type != "chat_attachment" {
+		return nil
+	}
+	if threadID == nil {
+		return errArtifactThreadScopeRequired
+	}
+	artifactThreadID, ok := artifactChatThreadID(art)
+	if !ok || artifactThreadID != *threadID {
+		return errArtifactThreadScopeRequired
+	}
+	linked, err := s.threadHasAttachment(ctx, *threadID, art.ID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errArtifactThreadScopeRequired
+		}
+		return err
+	}
+	if !linked {
+		return errArtifactThreadScopeRequired
+	}
+	return nil
+}
+
+func artifactChatThreadID(art *artifacts.Artifact) (int64, bool) {
+	if art == nil || art.Type != "chat_attachment" || len(art.Metadata) == 0 {
+		return 0, false
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(art.Metadata, &meta); err != nil {
+		return 0, false
+	}
+	return metadataInt64(meta["threadId"])
+}
+
+func metadataInt64(raw any) (int64, bool) {
+	switch v := raw.(type) {
+	case float64:
+		if v > 0 {
+			return int64(v), true
+		}
+	case int64:
+		if v > 0 {
+			return v, true
+		}
+	case int:
+		if v > 0 {
+			return int64(v), true
+		}
+	case string:
+		if n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil && n > 0 {
+			return n, true
+		}
+	}
+	return 0, false
+}
+
+func (s *Server) threadHasAttachment(ctx context.Context, threadID, artifactID int64) (bool, error) {
+	th, err := s.chat.GetThread(ctx, threadID)
+	if err != nil {
+		return false, err
+	}
+	for _, msg := range th.Messages {
+		for _, attachedID := range messageAttachmentIDs(msg.Metadata) {
+			if attachedID == artifactID {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 func workspaceIDFromPath(path string) string {
 	base := strings.TrimSpace(filepath.Base(strings.TrimSpace(path)))
 	if base == "" || base == "." || base == string(filepath.Separator) {
 		return "workspace:default"
 	}
 	return "workspace:" + base
+}
+
+func decodeWorkspaceJSONBody(r *http.Request, target any) error {
+	raw, err := readWorkspaceRequestBody(r)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func decodeOptionalWorkspaceJSONBody(r *http.Request, target any) error {
+	raw, err := readWorkspaceRequestBody(r)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil
+		}
+		return err
+	}
+	if len(strings.TrimSpace(string(raw))) == 0 {
+		return nil
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func readWorkspaceRequestBody(r *http.Request) ([]byte, error) {
+	if r.Body == nil {
+		return nil, io.EOF
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, workspaceJSONRequestBodyLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > workspaceJSONRequestBodyLimit {
+		return nil, errWorkspaceRequestBodyTooLarge
+	}
+	return raw, nil
+}
+
+func writeWorkspaceDecodeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errWorkspaceRequestBodyTooLarge) {
+		http.Error(w, "workspace json request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	http.Error(w, "invalid json", http.StatusBadRequest)
 }

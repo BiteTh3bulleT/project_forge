@@ -138,6 +138,28 @@ func TestModelRuntimeGovernanceReadOnlyAndMediumPolicy(t *testing.T) {
 	assertModelRuntimeAuditOutcome(t, st, "corr-model-scan", "model.scan", "authorized")
 }
 
+func TestModelRuntimeEndpointsRejectOversizeRequestBodies(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := newModelRuntimeHarness(t)
+	srv.modelRuntime = newFakeModelRuntime()
+	oversizeBody := `{"prompt":"` + strings.Repeat("a", modelRuntimeRequestBodyLimit+1) + `"}`
+
+	for _, path := range []string{
+		"/forge/models/import",
+		"/forge/models/mistral-7b-instruct/chat",
+		"/v1/chat/completions",
+	} {
+		req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(oversizeBody))
+		rr := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rr, req)
+		if rr.Code != http.StatusRequestEntityTooLarge {
+			t.Fatalf("%s expected 413 for oversize body, got %d body=%s", path, rr.Code, strings.TrimSpace(rr.Body.String()))
+		}
+		assertModelRuntimeErrorCode(t, rr, "REQUEST_BODY_TOO_LARGE")
+	}
+}
+
 func TestModelRuntimeHighRiskApprovalAndDryRun(t *testing.T) {
 	t.Parallel()
 

@@ -70,8 +70,12 @@ func routeDiscordInteractionIntent(envelope discordEventEnvelope, ic *discordgo.
 		for _, subOption := range option.Options {
 			if strings.EqualFold(subOption.Name, "query") {
 				if v, ok := subOption.Value.(string); ok {
-					intent.ArgumentText = strings.TrimSpace(v)
-					intent.Content = strings.TrimSpace(v)
+					text, err := normalizeDiscordIngressText(v)
+					if err != nil {
+						return discordIntent{}, err
+					}
+					intent.ArgumentText = text
+					intent.Content = text
 				}
 			}
 		}

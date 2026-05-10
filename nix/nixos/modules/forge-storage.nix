@@ -17,6 +17,7 @@ let
     "host"
     "config"
     "workspaces"
+    "workspaces/default"
   ];
 in
 {

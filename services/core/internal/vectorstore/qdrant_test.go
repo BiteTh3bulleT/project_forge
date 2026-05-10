@@ -74,6 +74,47 @@ func TestQdrantClientEnsureCollection(t *testing.T) {
 	}
 }
 
+func TestQdrantClientRejectsOversizeSuccessResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/collections/forge_shadow_embeddings/points/search" {
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"result":[]}`))
+		_, _ = w.Write([]byte(strings.Repeat(" ", qdrantResponseBodyLimit+1)))
+	}))
+	defer server.Close()
+
+	client, err := NewQdrantClient(server.URL, time.Second)
+	if err != nil {
+		t.Fatalf("new qdrant client: %v", err)
+	}
+	_, err = client.SearchVector(context.Background(), SearchRequest{
+		Collection: "forge_shadow_embeddings",
+		Vector:     []float64{0.1, 0.2, 0.3},
+		Limit:      1,
+	})
+	if err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("expected oversized response error, got %v", err)
+	}
+}
+
+func TestQdrantClientErrorResponseIsBoundedAndMarked(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(strings.Repeat("x", qdrantErrorBodyLimit+1)))
+	}))
+	defer server.Close()
+
+	client, err := NewQdrantClient(server.URL, time.Second)
+	if err != nil {
+		t.Fatalf("new qdrant client: %v", err)
+	}
+	err = client.EnsureCollection(context.Background(), CollectionSpec{Name: "forge_shadow_embeddings", VectorSize: 3})
+	if err == nil || !strings.Contains(err.Error(), "truncated") {
+		t.Fatalf("expected truncated error response, got %v", err)
+	}
+}
+
 func TestQdrantIntegrationEnvGated(t *testing.T) {
 	url := strings.TrimSpace(os.Getenv("FORGE_QDRANT_TEST_URL"))
 	if url == "" {

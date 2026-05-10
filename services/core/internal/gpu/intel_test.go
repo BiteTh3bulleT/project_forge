@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -69,5 +70,63 @@ func TestIntelGPUTopCanProvideTelemetryWithoutZEInfo(t *testing.T) {
 	}
 	if len(snap.Warnings) == 0 {
 		t.Fatalf("expected warning preserving missing ze_info diagnostic")
+	}
+}
+
+func TestIntelRunToolTruncatesLargeOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script fixture is unix-only")
+	}
+	dir := t.TempDir()
+	tool := filepath.Join(dir, "large-output")
+	if err := os.WriteFile(tool, []byte("#!/bin/sh\nyes x | head -c 1052672\n"), 0o755); err != nil {
+		t.Fatalf("write large-output fixture: %v", err)
+	}
+	out, err := runTool(context.Background(), time.Second, tool)
+	if err != nil {
+		t.Fatalf("runTool returned error: %v", err)
+	}
+	if !strings.Contains(out, "Intel telemetry tool output truncated") {
+		t.Fatalf("expected truncation marker in output")
+	}
+	if len(out) > intelToolOutputLimit+128 {
+		t.Fatalf("bounded output too large: got %d, limit %d", len(out), intelToolOutputLimit)
+	}
+}
+
+func TestIntelGPUTopBoundsStderrOnDecodeError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script fixture is unix-only")
+	}
+	dir := t.TempDir()
+	tool := filepath.Join(dir, "intel_gpu_top")
+	if err := os.WriteFile(tool, []byte("#!/bin/sh\nprintf '{'\nhead -c 1052672 /dev/zero | tr '\\0' e >&2\n"), 0o755); err != nil {
+		t.Fatalf("write intel_gpu_top fixture: %v", err)
+	}
+	_, err := runIntelGPUTop(context.Background(), time.Second, tool)
+	if err == nil {
+		t.Fatal("expected decode error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "Intel telemetry tool output truncated") {
+		t.Fatalf("expected bounded stderr truncation marker in error, got %q", msg)
+	}
+	if len(msg) > intelToolOutputLimit+512 {
+		t.Fatalf("bounded stderr error too large: got %d, limit %d", len(msg), intelToolOutputLimit)
+	}
+}
+
+func TestIntelGPUTopRejectsOversizeStdout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell script fixture is unix-only")
+	}
+	dir := t.TempDir()
+	tool := filepath.Join(dir, "intel_gpu_top")
+	if err := os.WriteFile(tool, []byte("#!/bin/sh\nprintf '{\"sample\":\"'\nhead -c 1052672 /dev/zero | tr '\\0' x\nprintf '\"}'\n"), 0o755); err != nil {
+		t.Fatalf("write intel_gpu_top fixture: %v", err)
+	}
+	_, err := runIntelGPUTop(context.Background(), time.Second, tool)
+	if err == nil || !strings.Contains(err.Error(), "intel_gpu_top output too large") {
+		t.Fatalf("runIntelGPUTop error = %v, want stdout size error", err)
 	}
 }

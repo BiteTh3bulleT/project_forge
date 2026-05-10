@@ -144,7 +144,7 @@ No adapter or automation rule may silently escalate scope.
 - **Lanes** (`internal/lanes`): `action_lanes` describe scoped, inspectable operation templates.
 - **Execution permissions** (`internal/permissions`): `permission_profiles` gate tools/paths/risk separately from routing **Policy**.
 - **Audit** (`internal/audit`): `audit_records` with correlation ids; list + trace APIs.
-- **Backup** (`internal/backup`): portable JSON bundles + restore with `dryRun`.
+- **Backup** (`internal/backup`): portable JSON bundles + restore with `dryRun`; non-dry-run restore is approval-gated and bundle files must be staged under the governed backup/export directories.
 - **Release** (`internal/release`): readiness checklist, first-run summary, `release_artifacts` bookkeeping.
 
 ### Phase 5 follow-ups (not finished here)

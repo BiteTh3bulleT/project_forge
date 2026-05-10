@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"forge/projectforge/services/core/internal/forgeh"
@@ -146,7 +147,7 @@ func (s *Server) handleForgeSystemStatus(w http.ResponseWriter, r *http.Request)
 			Reachable:     true,
 			Service:       "forge-core",
 			HealthState:   "ok",
-			CoreURL:       "",
+			CoreURL:       shellSystemCoreURL(r),
 			LastRefreshAt: now,
 		},
 		ShellSession: forgeSystemShellSession{
@@ -196,6 +197,20 @@ func (s *Server) handleForgeSystemStatus(w http.ResponseWriter, r *http.Request)
 		},
 	}
 	writeJSON(w, http.StatusOK, payload)
+}
+
+func shellSystemCoreURL(r *http.Request) string {
+	if r == nil || strings.TrimSpace(r.Host) == "" {
+		return ""
+	}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if forwarded := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))); forwarded == "http" || forwarded == "https" {
+		scheme = forwarded
+	}
+	return scheme + "://" + r.Host
 }
 
 func (s *Server) shellSystemStorageRoot() string {

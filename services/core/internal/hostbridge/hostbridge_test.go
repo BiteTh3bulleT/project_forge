@@ -90,6 +90,76 @@ func TestSnapshotSourceFailureIsolation(t *testing.T) {
 	}
 }
 
+func TestHostProbeReadsRejectOversizeFiles(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "oversize")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("create oversized probe file: %v", err)
+	}
+	if err := f.Truncate(maxHostProbeFileBytes + 1); err != nil {
+		_ = f.Close()
+		t.Fatalf("truncate oversized probe file: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close oversized probe file: %v", err)
+	}
+
+	if _, err := readHostProbeFile(path); err == nil || !strings.Contains(err.Error(), "host probe file too large") {
+		t.Fatalf("readHostProbeFile error = %v, want size error", err)
+	}
+}
+
+func TestExecRunnerRejectsOversizeCommandOutput(t *testing.T) {
+	runner := newExecRunner(2 * time.Second)
+	result, err := runner.Run(context.Background(), "sh", "-c", "i=0; while [ $i -lt 70000 ]; do printf x; i=$((i+1)); done")
+	if err == nil || !strings.Contains(err.Error(), "stdout too large") {
+		t.Fatalf("Run error = %v, want stdout size error", err)
+	}
+	if len(result.Stdout) > maxHostBridgeCommandOutputBytes {
+		t.Fatalf("stdout length = %d, want <= %d", len(result.Stdout), maxHostBridgeCommandOutputBytes)
+	}
+}
+
+func TestSnapshotReportsOversizeProcSource(t *testing.T) {
+	root := t.TempDir()
+	proc := filepath.Join(root, "proc")
+	sys := filepath.Join(root, "sys")
+	mustWrite(t, filepath.Join(proc, "version"), "Linux version test\n")
+	mustWrite(t, filepath.Join(proc, "cmdline"), "quiet\n")
+	mustWrite(t, filepath.Join(proc, "loadavg"), "0.10 0.20 0.30 1/2 3\n")
+	mustWrite(t, filepath.Join(proc, "stat"), "cpu  10 0 10 80 0 0 0 0 0 0\n")
+	mustWrite(t, filepath.Join(proc, "modules"), "loop 123 0 - Live 0x0\n")
+	meminfo := filepath.Join(proc, "meminfo")
+	if err := os.MkdirAll(filepath.Dir(meminfo), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(meminfo)
+	if err != nil {
+		t.Fatalf("create oversized meminfo: %v", err)
+	}
+	if err := f.Truncate(maxHostProbeFileBytes + 1); err != nil {
+		_ = f.Close()
+		t.Fatalf("truncate oversized meminfo: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close oversized meminfo: %v", err)
+	}
+
+	snapshot := New(Options{
+		ProcRoot:    proc,
+		SysRoot:     sys,
+		StorageRoot: root,
+		Now:         fixedNow,
+		Runner:      &fakeRunner{},
+	}).Snapshot(context.Background())
+	if snapshot.Memory.PressureLevel != PressureUnavailable {
+		t.Fatalf("expected unavailable memory pressure, got %q", snapshot.Memory.PressureLevel)
+	}
+	if !sourceErrorsContain(snapshot.SourceErrors, "proc.meminfo", "too large") {
+		t.Fatalf("expected oversized proc.meminfo source error, got %#v", snapshot.SourceErrors)
+	}
+}
+
 func TestMemoryPressureClassification(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -209,4 +279,13 @@ func mustWrite(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func sourceErrorsContain(errors []SourceError, source, text string) bool {
+	for _, item := range errors {
+		if item.Source == source && strings.Contains(item.Error, text) {
+			return true
+		}
+	}
+	return false
 }

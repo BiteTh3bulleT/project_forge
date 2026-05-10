@@ -5,8 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +29,10 @@ import (
 
 // Phase 5 handlers: tool execution gateway, action lanes, permission
 // profiles, audit traces, backup / export / import, and release readiness.
+
+const phase5JSONRequestBodyLimit int64 = 1 << 20
+
+var errPhase5RequestBodyTooLarge = errors.New("phase5 json request body too large")
 
 type gatewayInvokeBody struct {
 	ToolID              string         `json:"toolId"`
@@ -65,6 +72,36 @@ type gatewayCapabilityStatusUpdateBody struct {
 	DryRun        bool   `json:"dryRun"`
 }
 
+func decodePhase5JSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
+	body, err := readPhase5RequestBody(w, r)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(body, dst); err != nil {
+		return err
+	}
+	return nil
+}
+
+func readPhase5RequestBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, phase5JSONRequestBodyLimit))
+	if err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			return nil, errPhase5RequestBodyTooLarge
+		}
+		return nil, err
+	}
+	return body, nil
+}
+
+func writePhase5DecodeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errPhase5RequestBodyTooLarge) {
+		http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	http.Error(w, "invalid json", http.StatusBadRequest)
+}
+
 func requiresCapabilityStatusReason(status domain.ToolCapabilityStatus) bool {
 	return domain.IsKnownToolCapabilityStatus(status)
 }
@@ -80,8 +117,8 @@ func (s *Server) handleGatewayCapabilities(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleGatewayInvoke(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var body gatewayInvokeBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase5JSONBody(w, r, &body); err != nil {
+		writePhase5DecodeError(w, err)
 		return
 	}
 	result, err := s.gateway.Execute(ctx, gateway.Request{
@@ -142,8 +179,8 @@ func (s *Server) handleGatewayCapabilityStatusUpdate(w http.ResponseWriter, r *h
 		return
 	}
 	var body gatewayCapabilityStatusUpdateBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase5JSONBody(w, r, &body); err != nil {
+		writePhase5DecodeError(w, err)
 		return
 	}
 	status := strings.TrimSpace(strings.ToLower(body.Status))
@@ -493,6 +530,8 @@ func capabilityStatusApprovalScope(req capabilityStatusGovernanceRequest, shapeH
 		"reason":                     req.Reason,
 		"correlationId":              req.CorrelationID,
 		"traceId":                    req.TraceID,
+		"publicDecisionAllowed":      false,
+		"decisionAuthority":          "non_public_approval_authority_required",
 	}
 	if requestID > 0 {
 		scope["approvalRequestId"] = requestID
@@ -643,8 +682,8 @@ func (s *Server) handleListLanes(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSaveLane(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var body lanes.Lane
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase5JSONBody(w, r, &body); err != nil {
+		writePhase5DecodeError(w, err)
 		return
 	}
 	saved, err := s.lanes.Save(ctx, body)
@@ -685,8 +724,8 @@ func (s *Server) handleListPermissionProfiles(w http.ResponseWriter, r *http.Req
 func (s *Server) handleSavePermissionProfile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var body permissions.Profile
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase5JSONBody(w, r, &body); err != nil {
+		writePhase5DecodeError(w, err)
 		return
 	}
 	saved, err := s.permissions.Save(ctx, body)
@@ -788,8 +827,8 @@ func (s *Server) handleListBundles(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCreateBundle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var body backup.CreateBundleRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase5JSONBody(w, r, &body); err != nil {
+		writePhase5DecodeError(w, err)
 		return
 	}
 	body.Kind = strings.TrimSpace(body.Kind)
@@ -835,8 +874,32 @@ func (s *Server) handleDeleteBundle(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRestoreBundle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var body backup.RestoreBundleRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase5JSONBody(w, r, &body); err != nil {
+		writePhase5DecodeError(w, err)
+		return
+	}
+	resolvedPath, err := s.backup.ResolveRestorePath(body.FilePath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	body.FilePath = resolvedPath
+	meta := requestAuditMetaForBackup(r, "", "", "", "backup.bundle.restore")
+	gov, err := s.evaluateBackupRestoreGovernance(ctx, body, meta)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if gov.HTTPStatus > 0 {
+		s.auditBackupRestoreGovernance(ctx, body, gov, "denied")
+		http.Error(w, gov.ErrorMessage, gov.HTTPStatus)
+		return
+	}
+	if gov.RequiresApproval && !gov.Approved {
+		s.auditBackupRestoreGovernance(ctx, body, gov, "needs_approval")
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"governance": gov,
+		})
 		return
 	}
 	result, err := s.backup.RestoreBundle(ctx, body)
@@ -848,7 +911,6 @@ func (s *Server) handleRestoreBundle(w http.ResponseWriter, r *http.Request) {
 	if len(result.Errors) > 0 || len(result.Unsupported) > 0 {
 		outcome = "partial"
 	}
-	meta := requestAuditMetaForBackup(r, "", "", "", "backup.bundle.restore")
 	_, _ = s.auditSvc.Record(ctx, audit.CreateRequest{
 		CorrelationID: meta.CorrelationID,
 		Category:      "backup",
@@ -876,6 +938,274 @@ func (s *Server) handleRestoreBundle(w http.ResponseWriter, r *http.Request) {
 		"errors":      len(result.Errors),
 	})
 	writeJSON(w, http.StatusOK, map[string]any{"result": result})
+}
+
+type backupRestoreGovernanceDecision struct {
+	RequiresApproval  bool           `json:"requiresApproval"`
+	Approved          bool           `json:"approved"`
+	DryRun            bool           `json:"dryRun"`
+	ApprovalID        string         `json:"approvalId,omitempty"`
+	ApprovalRequestID *int64         `json:"approvalRequestId,omitempty"`
+	Reason            string         `json:"reason"`
+	Scope             map[string]any `json:"-"`
+	Fields            map[string]any `json:"-"`
+	HTTPStatus        int            `json:"-"`
+	ErrorCode         string         `json:"errorCode,omitempty"`
+	ErrorMessage      string         `json:"errorMessage,omitempty"`
+}
+
+func (s *Server) evaluateBackupRestoreGovernance(ctx context.Context, req backup.RestoreBundleRequest, meta requestAuditMeta) (backupRestoreGovernanceDecision, error) {
+	shapeHash, fields := backupRestoreApprovalFingerprint(req, 0)
+	scope := backupRestoreApprovalScope(req, meta, shapeHash, shapeHash, fields, 0)
+	decision := backupRestoreGovernanceDecision{
+		RequiresApproval: !req.DryRun,
+		Approved:         req.DryRun,
+		DryRun:           req.DryRun,
+		Reason:           "dry-run restore does not require approval",
+		Scope:            scope,
+		Fields:           fields,
+	}
+	if req.DryRun {
+		return decision, nil
+	}
+	decision.Reason = "approval required for non-dry-run backup restore"
+	if strings.TrimSpace(req.ApprovalID) == "" {
+		if s.approvals == nil {
+			decision.HTTPStatus = http.StatusForbidden
+			decision.ErrorCode = "BACKUP_RESTORE_APPROVAL_UNAVAILABLE"
+			decision.ErrorMessage = "approval service unavailable for backup restore"
+			decision.Reason = decision.ErrorMessage
+			return decision, nil
+		}
+		jobID := backupRestoreApprovalJobID(shapeHash)
+		if err := s.ensureBackupRestoreApprovalJob(ctx, jobID, req, meta); err != nil {
+			return decision, err
+		}
+		ar, err := s.approvals.OpenRequestForJob(ctx, jobID, approvals.CreateRequestInput{
+			JobID:            jobID,
+			RequestedAction:  "backup.restore",
+			RiskClass:        "critical",
+			RequestedAdapter: "backup",
+			WriteIntent:      true,
+			ScopeSnapshot:    scope,
+			RequestSummary:   "Restore FORGE backup bundle into live store",
+		})
+		if err != nil {
+			return decision, err
+		}
+		if ar != nil {
+			v := ar.ID
+			decision.ApprovalRequestID = &v
+			grantHash, grantFields := backupRestoreApprovalFingerprint(req, ar.ID)
+			scope = backupRestoreApprovalScope(req, meta, shapeHash, grantHash, grantFields, ar.ID)
+			decision.Scope = scope
+			decision.Fields = grantFields
+			if err := s.updateBackupRestoreApprovalScope(ctx, ar.ID, scope); err != nil {
+				return decision, err
+			}
+		}
+		return decision, nil
+	}
+	requestID, err := strconv.ParseInt(strings.TrimSpace(req.ApprovalID), 10, 64)
+	if err != nil || requestID <= 0 {
+		decision.HTTPStatus = http.StatusForbidden
+		decision.ErrorCode = "BACKUP_RESTORE_APPROVAL_INVALID"
+		decision.ErrorMessage = "approvalId must be a positive integer"
+		decision.Reason = decision.ErrorMessage
+		return decision, nil
+	}
+	if s.approvals == nil {
+		decision.HTTPStatus = http.StatusForbidden
+		decision.ErrorCode = "BACKUP_RESTORE_APPROVAL_UNAVAILABLE"
+		decision.ErrorMessage = "approval service unavailable for backup restore"
+		decision.Reason = decision.ErrorMessage
+		return decision, nil
+	}
+	ar, err := s.approvals.GetRequest(ctx, requestID)
+	if err != nil {
+		decision.HTTPStatus = http.StatusForbidden
+		decision.ErrorCode = "BACKUP_RESTORE_APPROVAL_NOT_FOUND"
+		decision.ErrorMessage = fmt.Sprintf("approval request %d not found", requestID)
+		decision.Reason = decision.ErrorMessage
+		return decision, nil
+	}
+	expected := backupRestoreApprovalHashFromScope(ar.ScopeSnapshot)
+	actual, _ := backupRestoreApprovalFingerprint(req, requestID)
+	if expected == "" {
+		decision.HTTPStatus = http.StatusForbidden
+		decision.ErrorCode = "BACKUP_RESTORE_APPROVAL_FINGERPRINT_MISSING"
+		decision.ErrorMessage = fmt.Sprintf("approval request %d is missing backup restore fingerprint", requestID)
+		decision.Reason = decision.ErrorMessage
+		return decision, nil
+	}
+	if actual != expected {
+		decision.HTTPStatus = http.StatusForbidden
+		decision.ErrorCode = "BACKUP_RESTORE_APPROVAL_FINGERPRINT_MISMATCH"
+		decision.ErrorMessage = fmt.Sprintf("approval request %d fingerprint mismatch", requestID)
+		decision.Reason = decision.ErrorMessage
+		return decision, nil
+	}
+	if ar.Decision == nil || !strings.EqualFold(strings.TrimSpace(ar.Decision.Decision), "approved") {
+		decision.HTTPStatus = http.StatusForbidden
+		decision.ErrorCode = "BACKUP_RESTORE_APPROVAL_REQUIRED"
+		decision.ErrorMessage = fmt.Sprintf("approval request %d is not approved", requestID)
+		decision.Reason = decision.ErrorMessage
+		return decision, nil
+	}
+	decision.ApprovalID = req.ApprovalID
+	decision.ApprovalRequestID = &requestID
+	decision.Approved = true
+	decision.Reason = "approved backup restore"
+	return decision, nil
+}
+
+func backupRestoreApprovalFingerprint(req backup.RestoreBundleRequest, approvalRequestID int64) (string, map[string]any) {
+	fields := map[string]any{
+		"version":     "backup.restore.v1",
+		"operation":   "restore",
+		"filePath":    strings.TrimSpace(req.FilePath),
+		"sections":    normalizedBackupRestoreSections(req.Sections),
+		"capability":  "backup.restore",
+		"riskClass":   "critical",
+		"writeIntent": true,
+	}
+	if approvalRequestID > 0 {
+		fields["approvalRequestId"] = approvalRequestID
+	}
+	body, _ := json.Marshal(fields)
+	sum := sha256.Sum256(body)
+	return "sha256:" + hex.EncodeToString(sum[:]), fields
+}
+
+func normalizedBackupRestoreSections(sections []string) []string {
+	out := make([]string, 0, len(sections))
+	seen := map[string]bool{}
+	for _, section := range sections {
+		section = strings.ToLower(strings.TrimSpace(section))
+		if section == "" || seen[section] {
+			continue
+		}
+		seen[section] = true
+		out = append(out, section)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func backupRestoreApprovalScope(req backup.RestoreBundleRequest, meta requestAuditMeta, shapeHash, fingerprintHash string, fields map[string]any, requestID int64) map[string]any {
+	scope := map[string]any{
+		"approvalFingerprintVersion": "backup.restore.v1",
+		"approvalShapeHash":          shapeHash,
+		"approvalFingerprintHash":    fingerprintHash,
+		"approvalFingerprintFields":  fields,
+		"filePath":                   strings.TrimSpace(req.FilePath),
+		"sections":                   normalizedBackupRestoreSections(req.Sections),
+		"riskClass":                  "critical",
+		"writeIntent":                true,
+		"correlationId":              meta.CorrelationID,
+		"traceId":                    meta.TraceID,
+		"workspaceId":                meta.WorkspaceID,
+	}
+	if requestID > 0 {
+		scope["approvalRequestId"] = requestID
+	}
+	return scope
+}
+
+func backupRestoreApprovalHashFromScope(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var scope map[string]any
+	if err := json.Unmarshal(raw, &scope); err != nil {
+		return ""
+	}
+	if v, ok := scope["approvalFingerprintHash"].(string); ok {
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+func backupRestoreApprovalJobID(shapeHash string) string {
+	clean := strings.TrimPrefix(strings.TrimSpace(shapeHash), "sha256:")
+	if len(clean) > 24 {
+		clean = clean[:24]
+	}
+	if clean == "" {
+		clean = "unknown"
+	}
+	return "backup-restore-" + clean
+}
+
+func (s *Server) ensureBackupRestoreApprovalJob(ctx context.Context, jobID string, req backup.RestoreBundleRequest, meta requestAuditMeta) error {
+	now := time.Now().UnixMilli()
+	jobMeta := map[string]any{
+		"templateId":    "backup_restore_approval",
+		"filePath":      req.FilePath,
+		"sections":      normalizedBackupRestoreSections(req.Sections),
+		"correlationId": meta.CorrelationID,
+		"traceId":       meta.TraceID,
+		"workspaceId":   meta.WorkspaceID,
+	}
+	raw, _ := json.Marshal(jobMeta)
+	_, err := s.st.DB.ExecContext(ctx, `
+INSERT OR IGNORE INTO jobs(
+  id, created_at, updated_at, queued_at,
+  title, requested_action, target_adapter, initiating_source,
+  execution_boundary, risk_class, status, approval_status, write_intent,
+  metadata_json
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		jobID,
+		now,
+		now,
+		nil,
+		"Backup restore approval",
+		"backup.restore",
+		"backup",
+		"forge_api",
+		"runtime_authority",
+		"critical",
+		"awaiting_approval",
+		"pending",
+		1,
+		string(raw),
+	)
+	if err != nil {
+		return fmt.Errorf("insert backup restore approval job: %w", err)
+	}
+	return nil
+}
+
+func (s *Server) updateBackupRestoreApprovalScope(ctx context.Context, requestID int64, scope map[string]any) error {
+	raw, err := json.Marshal(scope)
+	if err != nil {
+		return err
+	}
+	_, err = s.st.DB.ExecContext(ctx, `UPDATE approval_requests SET scope_snapshot_json = ? WHERE id = ?`, string(raw), requestID)
+	return err
+}
+
+func (s *Server) auditBackupRestoreGovernance(ctx context.Context, req backup.RestoreBundleRequest, gov backupRestoreGovernanceDecision, outcome string) {
+	_, _ = s.auditSvc.Record(ctx, audit.CreateRequest{
+		Category:    "backup",
+		Action:      "bundle.restore.governance",
+		SubjectType: "bundle",
+		SubjectID:   req.FilePath,
+		RiskClass:   "critical",
+		Outcome:     outcome,
+		Summary:     "backup restore governance " + outcome,
+		Payload: map[string]any{
+			"file":              req.FilePath,
+			"sections":          normalizedBackupRestoreSections(req.Sections),
+			"dryRun":            req.DryRun,
+			"approvalRequired":  gov.RequiresApproval,
+			"approvalRequestId": gov.ApprovalRequestID,
+			"approved":          gov.Approved,
+			"reason":            gov.Reason,
+			"errorCode":         gov.ErrorCode,
+			"errorMessage":      gov.ErrorMessage,
+		},
+	})
 }
 
 func requestAuditMetaForBackup(r *http.Request, bodyCorrelation, bodyTrace, bodyWorkspace, fallbackPrefix string) requestAuditMeta {
@@ -943,8 +1273,8 @@ func (s *Server) handleReleaseArtifacts(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleReleaseRecord(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var body release.ArtifactRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodePhase5JSONBody(w, r, &body); err != nil {
+		writePhase5DecodeError(w, err)
 		return
 	}
 	artifact, err := s.release.RecordArtifact(ctx, body)

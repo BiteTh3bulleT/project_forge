@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -59,6 +61,10 @@ import (
 	"forge/projectforge/services/core/internal/strategies"
 	"forge/projectforge/services/core/internal/watch"
 )
+
+const serverJSONRequestBodyLimit int64 = 1 << 20
+
+var errServerRequestBodyTooLarge = errors.New("server json request body too large")
 
 type Server struct {
 	st              *store.Store
@@ -117,12 +123,52 @@ type Server struct {
 	chatAssistInflight sync.Map
 }
 
+func decodeServerJSONBody(r *http.Request, target any) error {
+	if r.Body == nil {
+		return io.EOF
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, serverJSONRequestBodyLimit+1))
+	if err != nil {
+		return err
+	}
+	if int64(len(raw)) > serverJSONRequestBodyLimit {
+		return errServerRequestBodyTooLarge
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func decodeOptionalServerJSONBody(r *http.Request, target any) error {
+	if r.Body == nil {
+		return nil
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, serverJSONRequestBodyLimit+1))
+	if err != nil {
+		return err
+	}
+	if int64(len(raw)) > serverJSONRequestBodyLimit {
+		return errServerRequestBodyTooLarge
+	}
+	if len(strings.TrimSpace(string(raw))) == 0 {
+		return nil
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func writeServerDecodeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errServerRequestBodyTooLarge) {
+		http.Error(w, "server json request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	http.Error(w, "invalid json", http.StatusBadRequest)
+}
+
 func NewServer(st *store.Store, cfg config.Config) *Server {
 	bg := context.Background()
 	cfg = runtimeConfigFromSettings(st.DB, cfg)
 	ev := events.New(st.DB)
 	ext := loadSetting(st.DB, "extensions_csv", ingest.DefaultExtensionsCSV())
 	ing := ingest.New(st.DB, ev, ext)
+	ing.SetRootScope(cfg.WorkspaceDir)
 	searchSvc := search.New(st.DB)
 	embedSvc := embeddings.New(st.DB)
 	ensureEmbeddingProviderConfig(bg, st.DB, cfg)
@@ -458,6 +504,19 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+const redactedSettingSecret = "[redacted]"
+
+func redactedSettingSecretValue(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return ""
+	}
+	return redactedSettingSecret
+}
+
+func shouldPersistSettingSecret(value string) bool {
+	return strings.TrimSpace(value) != redactedSettingSecret
+}
+
 func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	ext := loadSetting(s.st.DB, "extensions_csv", ingest.DefaultExtensionsCSV())
 	theme := loadSetting(s.st.DB, "theme", "dark")
@@ -530,14 +589,18 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		"chatPersonalityPrompt":         chatPersonalityPrompt,
 		"chatPromptDefault":             defaultChatOperatorSystemPrompt(),
 		"remoteAccessEnabled":           remoteAccessEnabled,
-		"remoteAccessToken":             remoteAccessToken,
+		"remoteAccessToken":             redactedSettingSecretValue(remoteAccessToken),
+		"remoteAccessTokenConfigured":   remoteAccessToken != "",
 		"remoteCrossChatContext":        remoteCrossChatContext,
 		"remoteDefaultThreadId":         remoteDefaultThreadID,
-		"telegramBotToken":              telegramBotToken,
+		"telegramBotToken":              redactedSettingSecretValue(telegramBotToken),
+		"telegramBotTokenConfigured":    telegramBotToken != "",
 		"telegramDefaultChatId":         telegramDefaultChatID,
-		"discordBotToken":               discordBotToken,
+		"discordBotToken":               redactedSettingSecretValue(discordBotToken),
+		"discordBotTokenConfigured":     discordBotToken != "",
 		"discordDefaultChannelId":       discordDefaultChannelID,
-		"discordWebhookUrl":             discordWebhookURL,
+		"discordWebhookUrl":             redactedSettingSecretValue(discordWebhookURL),
+		"discordWebhookUrlConfigured":   discordWebhookURL != "",
 		"discordCrossChatContext":       discordCrossChatContext,
 		"dreamMode": map[string]any{
 			"enabled":                          dreamModeEnabled,
@@ -557,8 +620,8 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var body map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeServerJSONBody(r, &body); err != nil {
+		writeServerDecodeError(w, err)
 		return
 	}
 	discordConfigChanged := false
@@ -749,9 +812,11 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		telegramConfigChanged = true
 	}
 	if v, ok := body["remoteAccessToken"].(string); ok {
-		if err := upsertSetting(ctx, s.st.DB, remoteAccessTokenKey, strings.TrimSpace(v)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		if shouldPersistSettingSecret(v) {
+			if err := upsertSetting(ctx, s.st.DB, remoteAccessTokenKey, strings.TrimSpace(v)); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 	if v, ok := body["remoteCrossChatContext"]; ok {
@@ -774,11 +839,13 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if v, ok := body["telegramBotToken"].(string); ok {
-		if err := upsertSetting(ctx, s.st.DB, telegramBotTokenKey, strings.TrimSpace(v)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		if shouldPersistSettingSecret(v) {
+			if err := upsertSetting(ctx, s.st.DB, telegramBotTokenKey, strings.TrimSpace(v)); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			telegramConfigChanged = true
 		}
-		telegramConfigChanged = true
 	}
 	if v, ok := body["telegramDefaultChatId"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, telegramDefaultChatIDKey, strings.TrimSpace(v)); err != nil {
@@ -787,11 +854,13 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if v, ok := body["discordBotToken"].(string); ok {
-		if err := upsertSetting(ctx, s.st.DB, discordBotTokenKey, strings.TrimSpace(v)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		if shouldPersistSettingSecret(v) {
+			if err := upsertSetting(ctx, s.st.DB, discordBotTokenKey, strings.TrimSpace(v)); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			discordConfigChanged = true
 		}
-		discordConfigChanged = true
 	}
 	if v, ok := body["discordDefaultChannelId"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, discordDefaultChannelIDKey, strings.TrimSpace(v)); err != nil {
@@ -801,11 +870,13 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		discordConfigChanged = true
 	}
 	if v, ok := body["discordWebhookUrl"].(string); ok {
-		if err := upsertSetting(ctx, s.st.DB, discordWebhookURLKey, strings.TrimSpace(v)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+		if shouldPersistSettingSecret(v) {
+			if err := upsertSetting(ctx, s.st.DB, discordWebhookURLKey, strings.TrimSpace(v)); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			discordConfigChanged = true
 		}
-		discordConfigChanged = true
 	}
 	if v, ok := body["discordCrossChatContext"]; ok {
 		if err := upsertSetting(ctx, s.st.DB, discordGatewayCrossChatContextKey, parseRemoteBoolValue(v)); err != nil {
@@ -996,26 +1067,81 @@ type addSourceBody struct {
 	Path string `json:"path"`
 }
 
-func (s *Server) handleAddSource(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	var body addSourceBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
-		return
-	}
-	p := strings.TrimSpace(body.Path)
+func canonicalExistingDir(path string) (string, error) {
+	p := strings.TrimSpace(path)
 	if p == "" {
-		http.Error(w, "path required", http.StatusBadRequest)
-		return
+		return "", fmt.Errorf("path required")
 	}
 	abs, err := filepath.Abs(p)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		return "", err
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", err
+	}
+	resolved = filepath.Clean(resolved)
+	fi, err := os.Stat(resolved)
+	if err != nil || !fi.IsDir() {
+		return "", fmt.Errorf("not a directory")
+	}
+	if isFilesystemRoot(resolved) {
+		return "", fmt.Errorf("filesystem root cannot be indexed as a source")
+	}
+	return resolved, nil
+}
+
+func isFilesystemRoot(path string) bool {
+	clean := filepath.Clean(path)
+	parent := filepath.Dir(clean)
+	return clean == parent
+}
+
+func (s *Server) admittedSourcePath(ctx context.Context, raw string) (string, int, string) {
+	resolved, err := canonicalExistingDir(raw)
+	if err != nil {
+		if err.Error() == "path required" || err.Error() == "not a directory" {
+			return "", http.StatusBadRequest, err.Error()
+		}
+		return "", http.StatusBadRequest, err.Error()
+	}
+	decision, _, err := s.permissions.Check(ctx, permissions.CheckRequest{
+		ToolID:    "fs.read",
+		Action:    "source.index",
+		Paths:     []string{resolved},
+		Reads:     true,
+		RiskClass: "low",
+	})
+	if err != nil {
+		return "", http.StatusInternalServerError, err.Error()
+	}
+	if decision == nil || !decision.Allowed {
+		reason := "source path denied by active permission profile"
+		if decision != nil && strings.TrimSpace(decision.Reason) != "" {
+			reason = decision.Reason
+		}
+		return "", http.StatusForbidden, reason
+	}
+	if decision.RequiresApproval {
+		reason := strings.TrimSpace(decision.Reason)
+		if reason == "" {
+			reason = "source path outside active read scope"
+		}
+		return "", http.StatusForbidden, "source path outside active read scope: " + reason
+	}
+	return resolved, http.StatusOK, ""
+}
+
+func (s *Server) handleAddSource(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var body addSourceBody
+	if err := decodeServerJSONBody(r, &body); err != nil {
+		writeServerDecodeError(w, err)
 		return
 	}
-	fi, err := os.Stat(abs)
-	if err != nil || !fi.IsDir() {
-		http.Error(w, "not a directory", http.StatusBadRequest)
+	abs, status, reason := s.admittedSourcePath(ctx, body.Path)
+	if status != http.StatusOK {
+		http.Error(w, reason, status)
 		return
 	}
 	res, err := s.st.DB.ExecContext(ctx,
@@ -1172,8 +1298,8 @@ type cmdBody struct {
 func (s *Server) handleCommandExecute(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var body cmdBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeServerJSONBody(r, &body); err != nil {
+		writeServerDecodeError(w, err)
 		return
 	}
 	name := strings.TrimSpace(strings.ToLower(body.Name))

@@ -668,15 +668,36 @@ func (c CleanupRuntimeCell) Run(ctx context.Context, in CellRunContext) (CellRun
 	archiveIDs := readStringSliceAny(in.Request.Metadata, "archiveNoteIds")
 	archiveReason := readStringAny(in.Request.Metadata, "archiveReason")
 	if len(archiveIDs) > 0 && strings.TrimSpace(archiveReason) != "" {
+		skippedPlaceholders := 0
 		for _, noteID := range archiveIDs {
+			noteID = strings.TrimSpace(noteID)
+			if noteID == "" {
+				continue
+			}
+			if isPlaceholderArchiveTarget(noteID) {
+				skippedPlaceholders++
+				continue
+			}
 			out.ProposedActions = append(out.ProposedActions, newCellAction(in, c.Name(), c.Version(), domain.ActionArchiveNote, map[string]any{
 				"noteId": noteID,
 				"reason": archiveReason,
 			}))
 		}
+		if skippedPlaceholders > 0 {
+			out.Warnings = append(out.Warnings, fmt.Sprintf("skipped %d placeholder archive targets", skippedPlaceholders))
+			out.Hints["skippedPlaceholderArchiveTargets"] = skippedPlaceholders
+		}
 	}
 	out.Duration = time.Since(start)
 	return out, nil
+}
+
+func isPlaceholderArchiveTarget(id string) bool {
+	id = strings.TrimSpace(id)
+	return id == "candidate-note" ||
+		strings.HasPrefix(id, "candidate-") ||
+		strings.HasPrefix(id, "fake-") ||
+		strings.HasPrefix(id, "placeholder-")
 }
 
 func normalizeCandidateFromInference(in CellRunContext, cellName, cellVersion string, action domain.SyscallRequest) domain.SyscallRequest {

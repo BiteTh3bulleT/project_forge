@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+const (
+	qdrantResponseBodyLimit = 2 << 20
+	qdrantErrorBodyLimit    = 4096
+)
+
 type QdrantClient struct {
 	baseURL string
 	client  *http.Client
@@ -160,11 +165,45 @@ func (q *QdrantClient) doJSON(ctx context.Context, method, path string, body any
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		raw, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
-		return fmt.Errorf("qdrant request failed: %s: %s", res.Status, string(raw))
+		body, err := readQdrantErrorBody(res.Body)
+		if err != nil {
+			return fmt.Errorf("read qdrant error response: %w", err)
+		}
+		return fmt.Errorf("qdrant request failed: %s: %s", res.Status, body)
 	}
 	if out == nil {
 		return nil
 	}
-	return json.NewDecoder(res.Body).Decode(out)
+	raw, err := readQdrantResponseBody(res.Body)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, out)
+}
+
+func readQdrantResponseBody(body io.Reader) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(body, qdrantResponseBodyLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > qdrantResponseBodyLimit {
+		return nil, fmt.Errorf("qdrant response too large: limit %d bytes", qdrantResponseBodyLimit)
+	}
+	return raw, nil
+}
+
+func readQdrantErrorBody(body io.Reader) (string, error) {
+	raw, err := io.ReadAll(io.LimitReader(body, qdrantErrorBodyLimit+1))
+	if err != nil {
+		return "", err
+	}
+	text := strings.TrimSpace(string(raw))
+	if len(raw) > qdrantErrorBodyLimit {
+		text = strings.TrimSpace(string(raw[:qdrantErrorBodyLimit]))
+		if text != "" {
+			text += " "
+		}
+		text += "[truncated]"
+	}
+	return text, nil
 }

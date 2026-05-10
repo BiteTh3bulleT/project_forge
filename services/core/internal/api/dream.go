@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +12,10 @@ import (
 
 	"forge/projectforge/services/core/internal/aios/dream"
 )
+
+const dreamRunRequestBodyLimit = 1 << 20
+
+var errDreamRunRequestBodyTooLarge = errors.New("dream run request body too large")
 
 type dreamRunRequest struct {
 	Mode                             string         `json:"mode"`
@@ -34,8 +40,8 @@ func (s *Server) handleDreamRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body dreamRunRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeDreamRunJSONBody(r, &body); err != nil {
+		writeDreamRunDecodeError(w, err)
 		return
 	}
 	if strings.TrimSpace(body.WorkspaceID) == "" {
@@ -199,4 +205,26 @@ func (s *Server) loadScopedDreamReport(w http.ResponseWriter, r *http.Request) (
 		return dream.ReportRecord{}, false
 	}
 	return rec, true
+}
+
+func decodeDreamRunJSONBody(r *http.Request, target any) error {
+	if r.Body == nil {
+		return io.EOF
+	}
+	raw, err := io.ReadAll(io.LimitReader(r.Body, dreamRunRequestBodyLimit+1))
+	if err != nil {
+		return err
+	}
+	if len(raw) > dreamRunRequestBodyLimit {
+		return errDreamRunRequestBodyTooLarge
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func writeDreamRunDecodeError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errDreamRunRequestBodyTooLarge) {
+		http.Error(w, "dream run request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	http.Error(w, "invalid json", http.StatusBadRequest)
 }

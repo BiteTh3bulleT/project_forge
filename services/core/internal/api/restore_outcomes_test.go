@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -59,5 +60,27 @@ func TestRestoreOutcomeFeedbackAPIIsScopedAndNonCanonical(t *testing.T) {
 	}
 	if outcome != "operator_corrected" || correction != "use newer notes" {
 		t.Fatalf("feedback not persisted as non-canonical evidence: outcome=%q correction=%q", outcome, correction)
+	}
+}
+
+func TestRestoreOutcomeFeedbackRejectsOversizeRequestBody(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{}
+	oversizeBody := `{"workspaceId":"ws-api","outcome":"operator_corrected","operatorFeedback":"` + strings.Repeat("a", int(restoreOutcomeFeedbackRequestBodyLimit)+1) + `"}`
+	req := withRouteParam(
+		httptest.NewRequest(http.MethodPost, "/api/context/restore/outcomes/restore-outcome-api/feedback", bytes.NewReader([]byte(oversizeBody))),
+		"id",
+		"restore-outcome-api",
+	)
+	rr := httptest.NewRecorder()
+
+	s.handleRestoreOutcomeFeedback(rr, req)
+
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status=%d want=%d body=%s", rr.Code, http.StatusRequestEntityTooLarge, rr.Body.String())
+	}
+	if !strings.Contains(strings.ToLower(rr.Body.String()), "too large") {
+		t.Fatalf("expected too-large response, got %q", rr.Body.String())
 	}
 }

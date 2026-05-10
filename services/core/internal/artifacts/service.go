@@ -56,6 +56,8 @@ type Service struct {
 	baseDir string
 }
 
+const maxArtifactTextReadBytes = 2 << 20
+
 func New(db *sql.DB, dataDir string) *Service {
 	return &Service{db: db, baseDir: filepath.Join(dataDir, "artifacts")}
 }
@@ -211,7 +213,7 @@ func (s *Service) ListByJob(ctx context.Context, jobID string) ([]Artifact, erro
 }
 
 func (s *Service) ReadFile(path string) (string, error) {
-	b, err := os.ReadFile(path)
+	b, err := readBoundedArtifactText(path)
 	if err != nil {
 		return "", err
 	}
@@ -316,9 +318,28 @@ func (s *Service) ReadArtifactText(ctx context.Context, id int64) (string, *Arti
 	if !textual {
 		return "", a, false, nil
 	}
-	body, err := os.ReadFile(safe)
+	body, err := readBoundedArtifactText(safe)
 	if err != nil {
-		return "", a, false, err
+		return "", a, true, err
 	}
 	return string(body), a, true, nil
+}
+
+func readBoundedArtifactText(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	if info, err := f.Stat(); err == nil && info.Size() > maxArtifactTextReadBytes {
+		return nil, fmt.Errorf("artifact text too large: %d bytes exceeds %d byte limit", info.Size(), maxArtifactTextReadBytes)
+	}
+	body, err := io.ReadAll(io.LimitReader(f, maxArtifactTextReadBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxArtifactTextReadBytes {
+		return nil, fmt.Errorf("artifact text too large: exceeds %d byte limit", maxArtifactTextReadBytes)
+	}
+	return body, nil
 }

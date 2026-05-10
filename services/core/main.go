@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -27,7 +29,10 @@ func main() {
 	srv := api.NewServer(st, cfg)
 	defer srv.ShutdownWatch()
 
-	addr := ":" + strconv.Itoa(cfg.Port)
+	addr := coreListenAddr(cfg)
+	if isWildcardBindHost(cfg.BindHost) {
+		log.Printf("WARNING: forge-core explicitly configured to listen on wildcard host %q", cfg.BindHost)
+	}
 	httpSrv := &http.Server{
 		Addr:              addr,
 		Handler:           srv.Handler(),
@@ -35,7 +40,7 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("forge-core listening on http://127.0.0.1%s", addr)
+		log.Printf("forge-core listening on http://%s", addr)
 		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("http: %v", err)
 		}
@@ -48,4 +53,21 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	_ = httpSrv.Shutdown(shutdownCtx)
+}
+
+func coreListenAddr(cfg config.Config) string {
+	host := strings.TrimSpace(cfg.BindHost)
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	return net.JoinHostPort(host, strconv.Itoa(cfg.Port))
+}
+
+func isWildcardBindHost(host string) bool {
+	switch strings.Trim(strings.TrimSpace(host), "[]") {
+	case "0.0.0.0", "::":
+		return true
+	default:
+		return false
+	}
 }

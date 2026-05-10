@@ -27,6 +27,10 @@ Phase 13H adds Redis boundary flags for future ephemeral coordination. `FORGE_RE
 
 The Docker core enables the governed model runtime surface by default and points Ollama discovery at host Ollama through `http://host.docker.internal:11434`. If Ollama is not running or has no local models, FORGE remains healthy and the model runtime reports degraded backend health instead of disappearing from the API surface.
 
+Docker sets `FORGE_CORE_BIND_HOST=0.0.0.0` inside the core container so the published container port can reach the process. Direct Go and NixOS service runs default to `127.0.0.1`.
+
+Compose binds host-published ports to `127.0.0.1` by default through `FORGE_DOCKER_BIND_HOST`. This keeps the core, browser-served desktop, managed data services, and optional provider sidecars local to the host even though containers still communicate over the Compose network. Set `FORGE_DOCKER_BIND_HOST=0.0.0.0` only when you intentionally expose these development services through a firewall or private lab network.
+
 Optional providers such as Ollama and Hugging Face TEI can be started as sidecars, but they do not replace FORGE authority paths.
 
 On hosts with `/dev/dri/renderD128`, `npm run docker:start` automatically layers `docker-compose.igpu.yml` into the Compose invocation. That passes the Intel iGPU render devices into the core container, adds the host render/video group IDs, enables Intel telemetry, and uses the container's `intel_gpu_top` binary for utilization sampling. Intel PMU access requires the override to run the core container as root and add telemetry-only container privileges (`CAP_PERFMON`, `CAP_SYS_ADMIN`, `seccomp=unconfined`, and host user namespace mode). Set `FORGE_DOCKER_IGPU=0` to disable this override or `FORGE_DOCKER_IGPU=1` to require it.
@@ -126,6 +130,12 @@ FORGE_REDIS_PORT=16379 \
 FORGE_QDRANT_HTTP_PORT=16333 \
 FORGE_QDRANT_GRPC_PORT=16334 \
 docker compose up -d postgres redis qdrant
+```
+
+To verify the host-side published-port bindings before startup:
+
+```bash
+docker compose config | grep -E 'host_ip: 127\.0\.0\.1|published: "(18492|1420|5432|6379|6333|6334|11434|8082)"'
 ```
 
 ## Stop Without Deleting Databases

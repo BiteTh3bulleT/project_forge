@@ -64,6 +64,17 @@ func TestToolCapabilityRegistryCoverageAndDuplicateRejection(t *testing.T) {
 		if metadataString(row.Metadata, "gatewayToolId") == "" {
 			t.Fatalf("capability %s missing gatewayToolId metadata", row.ID)
 		}
+		wantRequiresApproval := row.Risk.Rank() >= domain.ToolRiskHigh.Rank()
+		if row.RequiresApprovalByDefault != wantRequiresApproval {
+			t.Fatalf("capability %s requiresApprovalByDefault=%v, want %v for risk %s", row.ID, row.RequiresApprovalByDefault, wantRequiresApproval, row.Risk)
+		}
+		wantAutonomyEligible := row.Risk.Rank() <= domain.ToolRiskMedium.Rank()
+		if row.AutonomyEligible != wantAutonomyEligible {
+			t.Fatalf("capability %s autonomyEligible=%v, want %v for risk %s", row.ID, row.AutonomyEligible, wantAutonomyEligible, row.Risk)
+		}
+		if row.ResourceCost.CostUnits != inferCostUnits(row.Risk) {
+			t.Fatalf("capability %s costUnits=%d, want %d for risk %s", row.ID, row.ResourceCost.CostUnits, inferCostUnits(row.Risk), row.Risk)
+		}
 	}
 	err := reg.Register(domain.ToolCapability{
 		ID:          "filesystem.read_file",
@@ -1110,6 +1121,65 @@ func TestGatewayApprovalOnlyCapabilityProducesNeedsApprovalAudit(t *testing.T) {
 	}
 	payload := mustAuditPayloadByActionAndCorrelation(t, st, "tool.needs_approval", correlationID)
 	assertAuditContext(t, payload, correlationID, "trace-approval-only", "workspace:test")
+}
+
+func TestGatewayPrivilegedToolRequiresApprovalWithoutCapabilityPolicy(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	gw, st, workspace := newToolSurfaceGatewayHarness(t)
+
+	laneID := "test.permissive_service_control"
+	if _, err := gw.lanes.Save(ctx, lanes.Lane{
+		ID:               laneID,
+		Name:             "Permissive service control",
+		Description:      "Regression lane that cannot lower intrinsic privileged tool risk.",
+		ActionType:       "system.service_control",
+		AllowedPaths:     []string{workspace},
+		ForbiddenPaths:   []string{},
+		WriteIntent:      true,
+		RequiresApproval: false,
+		RiskClass:        "read_only",
+		Builtin:          false,
+		Enabled:          true,
+	}); err != nil {
+		t.Fatalf("save permissive service-control lane: %v", err)
+	}
+
+	correlationID := "corr-intrinsic-privileged-approval"
+	res, err := gw.Execute(ctx, Request{
+		ToolID:              "system.service_control",
+		LaneID:              laneID,
+		CorrelationID:       correlationID,
+		TraceID:             "trace-intrinsic-privileged-approval",
+		Source:              "user",
+		WorkspaceID:         "workspace:test",
+		ProvenanceActor:     "tester",
+		ProvenanceActorType: "test",
+		Input:               map[string]any{"control": "restart"},
+		Initiator:           "tester",
+	})
+	if err != nil {
+		t.Fatalf("privileged execute error: %v", err)
+	}
+	if res.Status != StatusNeedsApprov {
+		t.Fatalf("expected privileged gateway tool to require approval, got %s (%s)", res.Status, res.DeniedReason)
+	}
+	if res.PolicyOutcome != OutcomeRequireApproval {
+		t.Fatalf("expected require_approval policy outcome, got %s", res.PolicyOutcome)
+	}
+	if res.ExecutionLevel != "L3" {
+		t.Fatalf("expected service control to remain L3, got %s", res.ExecutionLevel)
+	}
+	payload := mustAuditPayloadByActionAndCorrelation(t, st, "tool.needs_approval", correlationID)
+	assertAuditContext(t, payload, correlationID, "trace-intrinsic-privileged-approval", "workspace:test")
+
+	var errorAuditCount int
+	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM audit_records WHERE correlation_id = ? AND action = 'tool.error'`, correlationID).Scan(&errorAuditCount); err != nil {
+		t.Fatalf("query error audit count: %v", err)
+	}
+	if errorAuditCount != 0 {
+		t.Fatalf("privileged tool reached execution before approval")
+	}
 }
 
 func TestGatewayFutureIrisCannotBypassCapabilityStatusPolicy(t *testing.T) {

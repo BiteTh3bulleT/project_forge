@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -60,6 +61,55 @@ func TestTEIEmbedTexts(t *testing.T) {
 	}
 	if len(vectors) != 2 || len(vectors[0]) != 2 || vectors[0][0] != 1 || vectors[1][1] != 1 {
 		t.Fatalf("unexpected vectors: %+v", vectors)
+	}
+}
+
+func TestTEIEmbedTextsRejectsOversizeResponse(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/embed" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		_, _ = w.Write([]byte(strings.Repeat(" ", teiEmbeddingResponseLimit+1)))
+	}))
+	defer ts.Close()
+
+	provider := &teiProvider{
+		client:   ts.Client(),
+		endpoint: ts.URL,
+		model:    "tei-test",
+	}
+	_, err := provider.EmbedTexts(context.Background(), []string{"a"})
+	if err == nil {
+		t.Fatalf("expected oversize TEI embedding response to be rejected")
+	}
+	if !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("expected too-large error, got %v", err)
+	}
+}
+
+func TestOllamaEmbedRejectsOversizeResponse(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/embeddings" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"embedding":[1,0]}`))
+		_, _ = w.Write([]byte(strings.Repeat(" ", teiEmbeddingResponseLimit+1)))
+	}))
+	defer ts.Close()
+
+	provider := &ollamaProvider{
+		client:  ts.Client(),
+		baseURL: ts.URL,
+		model:   "ollama-embed-test",
+	}
+	_, err := provider.Embed(context.Background(), "a")
+	if err == nil {
+		t.Fatalf("expected oversize Ollama embedding response to be rejected")
+	}
+	if !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("expected too-large error, got %v", err)
 	}
 }
 

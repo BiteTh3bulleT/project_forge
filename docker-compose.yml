@@ -8,6 +8,7 @@ services:
     image: forge/core:local
     environment:
       FORGE_CORE_PORT: "${FORGE_CORE_PORT:-18492}"
+      FORGE_CORE_BIND_HOST: "${FORGE_CORE_BIND_HOST:-0.0.0.0}"
       FORGE_DATA_DIR: "${FORGE_DATA_DIR:-/data}"
       FORGE_MODEL_HOME: "${FORGE_MODEL_HOME:-/models}"
       FORGE_WORKSPACE_DIR: "${FORGE_WORKSPACE_DIR:-/workspace}"
@@ -40,7 +41,7 @@ services:
       FORGE_SHADOW_DIAGNOSTIC_RETENTION_DAYS: "${FORGE_SHADOW_DIAGNOSTIC_RETENTION_DAYS:-30}"
       FORGE_SHADOW_DIAGNOSTIC_MAX_PAYLOAD_BYTES: "${FORGE_SHADOW_DIAGNOSTIC_MAX_PAYLOAD_BYTES:-65536}"
     ports:
-      - "${FORGE_CORE_PORT:-18492}:${FORGE_CORE_PORT:-18492}"
+      - "${FORGE_DOCKER_BIND_HOST:-127.0.0.1}:${FORGE_CORE_PORT:-18492}:${FORGE_CORE_PORT:-18492}"
     volumes:
       - forge-data:/data
       - forge-models:/models
@@ -63,7 +64,7 @@ services:
         VITE_FORGE_API_URL: "http://127.0.0.1:${FORGE_CORE_PORT:-18492}"
     image: forge/desktop-web:local
     ports:
-      - "${FORGE_DESKTOP_PORT:-1420}:80"
+      - "${FORGE_DOCKER_BIND_HOST:-127.0.0.1}:${FORGE_DESKTOP_PORT:-1420}:80"
     depends_on:
       core:
         condition: service_healthy
@@ -76,7 +77,7 @@ services:
       POSTGRES_USER: "${FORGE_POSTGRES_USER:-forge}"
       POSTGRES_PASSWORD: "${FORGE_POSTGRES_PASSWORD:-forge_dev_password}"
     ports:
-      - "${FORGE_POSTGRES_PORT:-5432}:5432"
+      - "${FORGE_DOCKER_BIND_HOST:-127.0.0.1}:${FORGE_POSTGRES_PORT:-5432}:5432"
     volumes:
       - forge-postgres:/var/lib/postgresql/data
     healthcheck:
@@ -91,7 +92,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "${FORGE_REDIS_PORT:-6379}:6379"
+      - "${FORGE_DOCKER_BIND_HOST:-127.0.0.1}:${FORGE_REDIS_PORT:-6379}:6379"
     volumes:
       - forge-redis:/data
     healthcheck:
@@ -105,8 +106,8 @@ services:
   qdrant:
     image: qdrant/qdrant:v1.12.6
     ports:
-      - "${FORGE_QDRANT_HTTP_PORT:-6333}:6333"
-      - "${FORGE_QDRANT_GRPC_PORT:-6334}:6334"
+      - "${FORGE_DOCKER_BIND_HOST:-127.0.0.1}:${FORGE_QDRANT_HTTP_PORT:-6333}:6333"
+      - "${FORGE_DOCKER_BIND_HOST:-127.0.0.1}:${FORGE_QDRANT_GRPC_PORT:-6334}:6334"
     volumes:
       - forge-qdrant:/qdrant/storage
     healthcheck:
@@ -121,7 +122,7 @@ services:
     image: ollama/ollama:latest
     profiles: ["ollama"]
     ports:
-      - "11434:11434"
+      - "${FORGE_DOCKER_BIND_HOST:-127.0.0.1}:11434:11434"
     volumes:
       - forge-ollama:/root/.ollama
     restart: unless-stopped
@@ -130,7 +131,7 @@ services:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
     profiles: ["tei"]
     ports:
-      - "8082:80"
+      - "${FORGE_DOCKER_BIND_HOST:-127.0.0.1}:8082:80"
     volumes:
       - forge-tei:/data
     restart: unless-stopped

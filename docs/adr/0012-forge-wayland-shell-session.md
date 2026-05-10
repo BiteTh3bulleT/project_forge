@@ -34,6 +34,7 @@ The session remains disabled by default. It must not enable autologin, make FORG
 - NixOS/Linux remains responsible for boot, hardware, package management, services, display-manager plumbing, and rollback.
 - FORGE becomes a selectable graphical shell interface, not a replacement kernel, display manager, package manager, service manager, or modelruntime authority.
 - Any `forge-wayland-session` wrapper or generated session descriptor must preserve safe defaults and fail loudly if the compositor or `forge-shell-session` is unavailable.
+- The Wayland wrapper must use package-pinned compositor and `forge-shell-session` executable paths. Ambient environment may configure bounded session metadata such as `FORGE_CORE_URL`, but must not supply executable paths for the compositor or shell wrapper.
 - Rollback is session/configuration rollback: select a normal desktop or TTY, disable the opt-in shell session option, keep `/forge` data intact, and keep manual `forge-shell-session`/`forge-desktop-shell` launch paths available.
 - G4 does not authorize direct `systemctl`, `nixos-rebuild`, package-manager mutation, kernel-module commands, reboot/shutdown, modelruntime load/unload/spawn, semantic memory writes, route/API changes, gateway bypass, or FORGE-K live authority.
 

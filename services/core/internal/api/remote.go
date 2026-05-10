@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -31,7 +32,11 @@ const (
 
 	remoteAssistantTimeout = 185 * time.Second
 	remoteOutboundTimeout  = 25 * time.Second
+	remoteInboundBodyLimit = 1 << 20
+	remoteInboundTextLimit = 16 << 10
 )
+
+var errRemoteMessageTooLarge = fmt.Errorf("remote message too large")
 
 type remoteConfig struct {
 	enabled             bool
@@ -99,8 +104,8 @@ func (s *Server) handleRemoteTelegram(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var payload telegramUpdate
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeRemoteJSONBody(w, r, &payload); err != nil {
+		writeRemoteDecodeError(w, err)
 		return
 	}
 
@@ -110,6 +115,10 @@ func (s *Server) handleRemoteTelegram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.processTelegramRemoteMessage(r.Context(), conf, msg); err != nil {
+		if errors.Is(err, errRemoteMessageTooLarge) {
+			http.Error(w, err.Error(), http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -130,12 +139,20 @@ func (s *Server) handleRemoteDiscord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var payload discordMessage
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeRemoteJSONBody(w, r, &payload); err != nil {
+		writeRemoteDecodeError(w, err)
 		return
 	}
 
-	text := remoteTrimmedText(payload.Content)
+	text, err := remoteBoundedText(payload.Content)
+	if err != nil {
+		if errors.Is(err, errRemoteMessageTooLarge) {
+			http.Error(w, err.Error(), http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if text == "" {
 		http.Error(w, "content required", http.StatusBadRequest)
 		return
@@ -240,7 +257,10 @@ func (s *Server) processRemoteMessage(
 }
 
 func (s *Server) processTelegramRemoteMessage(ctx context.Context, conf remoteConfig, msg *telegramMessage) error {
-	text := remoteTrimmedText(msg.Text, msg.Caption)
+	text, err := remoteBoundedText(msg.Text, msg.Caption)
+	if err != nil {
+		return err
+	}
 	if text == "" {
 		return fmt.Errorf("content required")
 	}
@@ -342,10 +362,16 @@ func (s *Server) remoteTokenOk(r *http.Request, expected string) bool {
 	if token == "" {
 		token = strings.TrimSpace(r.Header.Get("X-Telegram-Bot-Api-Secret-Token"))
 	}
-	if token == "" {
-		token = strings.TrimSpace(r.URL.Query().Get("token"))
+	return remoteTokenMatches(token, expected)
+}
+
+func remoteTokenMatches(provided, expected string) bool {
+	provided = strings.TrimSpace(provided)
+	expected = strings.TrimSpace(expected)
+	if provided == "" || expected == "" || len(provided) != len(expected) {
+		return false
 	}
-	return token != "" && token == expected
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
 }
 
 func remoteFirstTelegramMessage(u *telegramUpdate) *telegramMessage {
@@ -492,6 +518,31 @@ func remoteTrimmedText(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func remoteBoundedText(values ...string) (string, error) {
+	text := remoteTrimmedText(values...)
+	if len(text) > remoteInboundTextLimit {
+		return "", fmt.Errorf("%w: limit %d bytes", errRemoteMessageTooLarge, remoteInboundTextLimit)
+	}
+	return text, nil
+}
+
+func decodeRemoteJSONBody(w http.ResponseWriter, r *http.Request, target any) error {
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, remoteInboundBodyLimit))
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, target)
+}
+
+func writeRemoteDecodeError(w http.ResponseWriter, err error) {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		http.Error(w, "remote request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	http.Error(w, "invalid json", http.StatusBadRequest)
 }
 
 func remoteStringID(id any) string {

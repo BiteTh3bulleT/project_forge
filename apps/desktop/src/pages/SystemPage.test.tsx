@@ -33,6 +33,7 @@ describe("SystemPage", () => {
         reachable: true,
         service: "forge-core",
         health_state: "ok",
+        core_url: "http://127.0.0.1:18492",
         last_refresh_at: "2026-05-09T12:00:00Z",
       },
       shell_session: {
@@ -86,9 +87,22 @@ describe("SystemPage", () => {
           },
         ],
         executions: {
-          available: false,
-          reason: "not exposed",
-          items: [],
+          available: true,
+          reason: "governed bounded execution ledger",
+          items: [
+            {
+              execution_id: "execution_1",
+              proposal_id: "proposal_1",
+              action_type: "warn_operator",
+              status: "completed",
+              result: "reported",
+              bounded: true,
+              host_mutation: false,
+              semantic_memory_write: false,
+              modelruntime_mutation: false,
+              side_effects: ["operator_notification"],
+            },
+          ],
         },
         advisory_only: true,
         canonical_write_committed: false,
@@ -134,13 +148,27 @@ describe("SystemPage", () => {
     expect(await screen.findByRole("heading", { name: "System Surfaces" }))
       .toBeTruthy();
     expect(screen.getByText("forge-core")).toBeTruthy();
+    expect(screen.getByText("http://127.0.0.1:18492")).toBeTruthy();
+    expect(screen.getByText("Core health")).toBeTruthy();
+    expect(screen.getByText("Last core refresh")).toBeTruthy();
+    expect(screen.getByText("Safe mode")).toBeTruthy();
     expect(screen.getByText("Host mutation disabled")).toBeTruthy();
     expect(screen.getByText("FORGE-K live authority disabled")).toBeTruthy();
+    expect(screen.getByText("Degraded")).toBeTruthy();
     expect(screen.getByText("FORGE-H Resource Posture")).toBeTruthy();
+    expect(screen.getByText("Disk")).toBeTruthy();
+    expect(screen.getByText("Warnings")).toBeTruthy();
     expect(screen.getByText("proposal_1")).toBeTruthy();
-    expect(screen.getByText("Bounded execution ledger not wired")).toBeTruthy();
+    expect(screen.getByText("Advisory only")).toBeTruthy();
+    expect(screen.getByText("execution_1")).toBeTruthy();
+    expect(screen.getByText("Proposal: proposal_1")).toBeTruthy();
+    expect(screen.getByText("Action: warn_operator")).toBeTruthy();
+    expect(screen.getByText("Semantic memory write: no")).toBeTruthy();
+    expect(screen.getByText("Modelruntime mutation: no")).toBeTruthy();
+    expect(screen.getByText("Side effects: operator_notification")).toBeTruthy();
+    expect(screen.getByText("Used")).toBeTruthy();
     expect(screen.getByText("Pending approvals")).toBeTruthy();
-    expect(screen.getByText("1")).toBeTruthy();
+    expect(screen.getAllByText("1").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByRole("button").map((button) => button.textContent))
       .toEqual(["Refresh"]);
     expect(screen.queryByRole("button", { name: /approve/i })).toBeNull();

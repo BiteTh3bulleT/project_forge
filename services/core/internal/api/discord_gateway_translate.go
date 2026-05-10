@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 var (
 	errDiscordMalformedPayload = errors.New("discord payload malformed")
+	errDiscordMessageTooLarge  = errors.New("discord message too large")
 )
 
 func normalizeDiscordMessageEvent(msg *discordgo.MessageCreate) (discordEventEnvelope, error) {
@@ -26,6 +28,10 @@ func normalizeDiscordMessageEvent(msg *discordgo.MessageCreate) (discordEventEnv
 		memberNick = strings.TrimSpace(msg.Member.Nick)
 		memberRoles = normalizeStringSlice(msg.Member.Roles)
 	}
+	content, err := normalizeDiscordIngressText(msg.Content)
+	if err != nil {
+		return discordEventEnvelope{}, err
+	}
 	envelope := discordEventEnvelope{
 		Source:      "discord",
 		EventType:   discordEventMessageCreate,
@@ -36,7 +42,7 @@ func normalizeDiscordMessageEvent(msg *discordgo.MessageCreate) (discordEventEnv
 		DisplayName: strings.TrimSpace(user.GlobalName),
 		MessageID:   strings.TrimSpace(msg.ID),
 		TimestampMs: time.Now().UnixMilli(),
-		RawContent:  strings.TrimSpace(msg.Content),
+		RawContent:  content,
 		Metadata: map[string]any{
 			"isDM":         strings.TrimSpace(msg.GuildID) == "",
 			"mentionCount": len(msg.Mentions),
@@ -59,6 +65,14 @@ func normalizeDiscordMessageEvent(msg *discordgo.MessageCreate) (discordEventEnv
 		envelope.TimestampMs = msg.Timestamp.UnixMilli()
 	}
 	return envelope, nil
+}
+
+func normalizeDiscordIngressText(raw string) (string, error) {
+	text := strings.TrimSpace(raw)
+	if len(text) > discordIngressTextLimit {
+		return "", fmt.Errorf("%w: limit %d bytes", errDiscordMessageTooLarge, discordIngressTextLimit)
+	}
+	return text, nil
 }
 
 func normalizeDiscordInteractionEvent(ic *discordgo.InteractionCreate) (discordEventEnvelope, error) {

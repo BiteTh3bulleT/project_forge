@@ -494,8 +494,8 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 		SyncAssistant         bool    `json:"syncAssistant"` // when true, block until assistant finishes (legacy)
 		AttachmentArtifactIDs []int64 `json:"attachmentArtifactIds"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid json", http.StatusBadRequest)
+	if err := decodeWorkspaceJSONBody(r, &body); err != nil {
+		writeWorkspaceDecodeError(w, err)
 		return
 	}
 	body.Content = strings.TrimSpace(body.Content)

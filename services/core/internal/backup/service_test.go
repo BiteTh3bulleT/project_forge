@@ -115,8 +115,9 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 	t.Cleanup(func() { _ = target.Close() })
 
 	dstSvc := New(target.DB, targetDir)
+	stagedBundlePath := stageBundleForRestore(t, dstSvc, bundle.FilePath)
 	restore, err := dstSvc.RestoreBundle(ctx, RestoreBundleRequest{
-		FilePath: bundle.FilePath,
+		FilePath: stagedBundlePath,
 		// Intentionally out-of-order; restore must normalize to FK-safe order.
 		Sections: []string{
 			"dossier_profiles", "dossiers",
@@ -383,7 +384,7 @@ FROM audit_records WHERE id = ?`, 604).Scan(&auditCategory, &auditAction, &audit
 	}
 
 	secondRestore, err := dstSvc.RestoreBundle(ctx, RestoreBundleRequest{
-		FilePath: bundle.FilePath,
+		FilePath: stagedBundlePath,
 		Sections: []string{"audit_records", "semantic_idempotency_keys"},
 	})
 	if err != nil {
@@ -417,8 +418,9 @@ func TestRestoreDetectsMissingDreamReportsTable(t *testing.T) {
 	t.Cleanup(func() { _ = target.Close() })
 	mustExec(t, ctx, target.DB, `DROP TABLE dream_reports`)
 
-	result, err := New(target.DB, targetDir).RestoreBundle(ctx, RestoreBundleRequest{
-		FilePath: bundle.FilePath,
+	targetSvc := New(target.DB, targetDir)
+	result, err := targetSvc.RestoreBundle(ctx, RestoreBundleRequest{
+		FilePath: stageBundleForRestore(t, targetSvc, bundle.FilePath),
 		Sections: []string{"dream_reports"},
 	})
 	if err != nil {
@@ -525,12 +527,12 @@ func TestRestoreBundleContextPacketSnapshotColumns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal bundle doc: %v", err)
 	}
-	filePath := filepath.Join(dataDir, "snapshots.json")
+	svc := New(st.DB, dataDir)
+	filePath := restoreStagingPath(t, svc, "snapshots.json")
 	if err := os.WriteFile(filePath, raw, 0o644); err != nil {
 		t.Fatalf("write bundle doc: %v", err)
 	}
 
-	svc := New(st.DB, dataDir)
 	result, err := svc.RestoreBundle(ctx, RestoreBundleRequest{
 		FilePath: filePath,
 		Sections: []string{"context_packet_snapshots"},
@@ -707,12 +709,12 @@ func TestRestoreBundleExplicitlyReportsUnsupportedSections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal bundle doc: %v", err)
 	}
-	filePath := filepath.Join(dataDir, "unsupported.json")
+	svc := New(st.DB, dataDir)
+	filePath := restoreStagingPath(t, svc, "unsupported.json")
 	if err := os.WriteFile(filePath, raw, 0o644); err != nil {
 		t.Fatalf("write bundle doc: %v", err)
 	}
 
-	svc := New(st.DB, dataDir)
 	result, err := svc.RestoreBundle(ctx, RestoreBundleRequest{
 		FilePath: filePath,
 		Sections: []string{"memory_vsa_pointers", "retrieval_result_vsa_signals", "missing_section"},
@@ -806,12 +808,12 @@ func TestRestoreBundleIntegrityDetectsMissingCriticalTable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal bundle doc: %v", err)
 	}
-	filePath := filepath.Join(dataDir, "missing-critical-table.json")
+	svc := New(st.DB, dataDir)
+	filePath := restoreStagingPath(t, svc, "missing-critical-table.json")
 	if err := os.WriteFile(filePath, raw, 0o644); err != nil {
 		t.Fatalf("write bundle doc: %v", err)
 	}
 
-	svc := New(st.DB, dataDir)
 	result, err := svc.RestoreBundle(ctx, RestoreBundleRequest{FilePath: filePath})
 	if err != nil {
 		t.Fatalf("restore bundle: %v", err)
@@ -886,12 +888,12 @@ func TestRestoreBundleRollsBackOnLateSectionFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal bundle doc: %v", err)
 	}
-	filePath := filepath.Join(dataDir, "rollback.json")
+	svc := New(st.DB, dataDir)
+	filePath := restoreStagingPath(t, svc, "rollback.json")
 	if err := os.WriteFile(filePath, raw, 0o644); err != nil {
 		t.Fatalf("write bundle doc: %v", err)
 	}
 
-	svc := New(st.DB, dataDir)
 	result, err := svc.RestoreBundle(ctx, RestoreBundleRequest{
 		FilePath: filePath,
 		Sections: []string{"approval_requests", "dossiers"},
@@ -927,6 +929,87 @@ func TestRestoreBundleRollsBackOnLateSectionFailure(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("expected rolled back approval request to be absent, got count=%d", count)
+	}
+}
+
+func TestRestoreBundleRejectsFilesOutsideBundleDirs(t *testing.T) {
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	outside := filepath.Join(t.TempDir(), "outside.json")
+	if err := os.WriteFile(outside, []byte(`{"schema":1}`), 0o644); err != nil {
+		t.Fatalf("write outside bundle: %v", err)
+	}
+
+	_, err = New(st.DB, dataDir).RestoreBundle(ctx, RestoreBundleRequest{FilePath: outside, DryRun: true})
+	if err == nil {
+		t.Fatalf("expected outside restore path to be rejected")
+	}
+	if !strings.Contains(err.Error(), "backup or export directory") {
+		t.Fatalf("expected bundle dir rejection, got %v", err)
+	}
+}
+
+func TestRestoreBundleRejectsSymlinkEscapingBundleDirs(t *testing.T) {
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	svc := New(st.DB, dataDir)
+	backupDir, _ := svc.Dirs()
+
+	outside := filepath.Join(t.TempDir(), "outside.json")
+	if err := os.WriteFile(outside, []byte(`{"schema":1}`), 0o644); err != nil {
+		t.Fatalf("write outside bundle: %v", err)
+	}
+	linkPath := filepath.Join(backupDir, "outside-link.json")
+	if err := os.Symlink(outside, linkPath); err != nil {
+		t.Fatalf("create symlink: %v", err)
+	}
+
+	_, err = svc.RestoreBundle(ctx, RestoreBundleRequest{FilePath: linkPath, DryRun: true})
+	if err == nil {
+		t.Fatalf("expected symlink restore path to be rejected")
+	}
+	if !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("expected symlink rejection, got %v", err)
+	}
+}
+
+func TestRestoreBundleRejectsOversizeBundleFile(t *testing.T) {
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	svc := New(st.DB, dataDir)
+	backupDir, _ := svc.Dirs()
+	bundlePath := filepath.Join(backupDir, "oversize.json")
+	f, err := os.Create(bundlePath)
+	if err != nil {
+		t.Fatalf("create oversized bundle: %v", err)
+	}
+	if err := f.Truncate(maxRestoreBundleBytes + 1); err != nil {
+		_ = f.Close()
+		t.Fatalf("truncate oversized bundle: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close oversized bundle: %v", err)
+	}
+
+	_, err = svc.RestoreBundle(ctx, RestoreBundleRequest{FilePath: bundlePath, DryRun: true})
+	if err == nil || !strings.Contains(err.Error(), "restore bundle too large") {
+		t.Fatalf("RestoreBundle error = %v, want size error", err)
 	}
 }
 
@@ -1146,4 +1229,24 @@ func mustExec(t *testing.T, ctx context.Context, db *sql.DB, query string, args 
 	if _, err := db.ExecContext(ctx, query, args...); err != nil {
 		t.Fatalf("exec query failed: %v\nquery=%s", err, query)
 	}
+}
+
+func stageBundleForRestore(t *testing.T, svc *Service, sourcePath string) string {
+	t.Helper()
+	backupDir, _ := svc.Dirs()
+	raw, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatalf("read source bundle: %v", err)
+	}
+	dst := filepath.Join(backupDir, filepath.Base(sourcePath))
+	if err := os.WriteFile(dst, raw, 0o644); err != nil {
+		t.Fatalf("stage bundle: %v", err)
+	}
+	return dst
+}
+
+func restoreStagingPath(t *testing.T, svc *Service, name string) string {
+	t.Helper()
+	backupDir, _ := svc.Dirs()
+	return filepath.Join(backupDir, name)
 }

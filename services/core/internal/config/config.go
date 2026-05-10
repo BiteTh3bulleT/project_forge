@@ -13,6 +13,7 @@ import (
 type Config struct {
 	DataDir                                     string
 	Port                                        int
+	BindHost                                    string
 	WorkspaceDir                                string
 	StoreBackend                                string
 	PostgresDSN                                 string
@@ -117,6 +118,7 @@ func Load() Config {
 			port = p
 		}
 	}
+	bindHost := envStringDefault("FORGE_CORE_BIND_HOST", "127.0.0.1")
 	workspace := os.Getenv("FORGE_WORKSPACE_DIR")
 	if workspace == "" {
 		workspace = "/"
@@ -143,6 +145,7 @@ func Load() Config {
 	return Config{
 		DataDir:                    dataDir,
 		Port:                       port,
+		BindHost:                   bindHost,
 		WorkspaceDir:               workspace,
 		StoreBackend:               envStringDefault("FORGE_STORE_BACKEND", "sqlite"),
 		PostgresDSN:                strings.TrimSpace(os.Getenv("FORGE_POSTGRES_DSN")),

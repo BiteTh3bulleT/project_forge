@@ -148,6 +148,15 @@ func TestGatewayAllRegisteredToolsSmoke(t *testing.T) {
 					return
 				}
 			}
+			if gatewayToolIntrinsicApprovalReason(gw.tools[tool.ID], tool.RiskClass, tool.ExecutionLevel) != "" {
+				if res.Status != StatusNeedsApprov {
+					t.Fatalf("expected needs_approval for approval-gated tool %s, got %s (%s)", tool.ID, res.Status, res.DeniedReason)
+				}
+				if res.InvocationID <= 0 {
+					t.Fatalf("missing invocation id")
+				}
+				return
+			}
 			if res.Status == StatusDenied {
 				t.Fatalf("unexpected denied result: %s", res.DeniedReason)
 			}

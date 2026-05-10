@@ -152,7 +152,10 @@ func (s *Server) handleAutonomyMaintenanceSweep(w http.ResponseWriter, r *http.R
 		return
 	}
 	var body AutonomyMaintenanceSweepRequest
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := decodeOptionalServerJSONBody(r, &body); err != nil {
+		writeServerDecodeError(w, err)
+		return
+	}
 	report, err := s.autonomy.RunSweep(r.Context(), body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -523,8 +523,64 @@ export type AutonomyCharterRecord = {
 const base = () =>
   import.meta.env.VITE_FORGE_API_URL ?? "http://127.0.0.1:18492";
 
+const defaultRequestTimeoutMs = 120_000;
+
+const requestTimeoutMs = () => {
+  const raw = import.meta.env.VITE_FORGE_API_TIMEOUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return defaultRequestTimeoutMs;
+  }
+  return parsed;
+};
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
+  const timeoutMs = requestTimeoutMs();
+  const controller = new AbortController();
+  const upstreamSignal = init?.signal;
+  let timedOut = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const abortFromUpstream = () => {
+    controller.abort(upstreamSignal?.reason);
+  };
+
+  if (upstreamSignal?.aborted) {
+    abortFromUpstream();
+  } else {
+    upstreamSignal?.addEventListener("abort", abortFromUpstream, {
+      once: true,
+    });
+  }
+
+  timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (timedOut) {
+      throw new Error(`FORGE API request timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+    upstreamSignal?.removeEventListener("abort", abortFromUpstream);
+  }
+}
+
 async function j<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${base()}${path}`, {
+  const res = await fetchWithTimeout(`${base()}${path}`, {
     ...init,
     headers: {
       Accept: "application/json",
@@ -563,13 +619,17 @@ export type SettingsRecord = {
   chatPromptDefault: string;
   remoteAccessEnabled: boolean;
   remoteAccessToken: string;
+  remoteAccessTokenConfigured?: boolean;
   remoteCrossChatContext: boolean;
   remoteDefaultThreadId: string;
   telegramBotToken: string;
+  telegramBotTokenConfigured?: boolean;
   telegramDefaultChatId: string;
   discordBotToken: string;
+  discordBotTokenConfigured?: boolean;
   discordDefaultChannelId: string;
   discordWebhookUrl: string;
+  discordWebhookUrlConfigured?: boolean;
   discordCrossChatContext: boolean;
   dreamMode?: {
     enabled: boolean;
@@ -2160,7 +2220,10 @@ export const api = {
         method: "DELETE",
       }),
     restore: (body: Record<string, unknown>) =>
-      j<{ result: Record<string, unknown> }>("/api/backup/restore", {
+      j<{
+        result?: Record<string, unknown>;
+        governance?: Record<string, unknown>;
+      }>("/api/backup/restore", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -2227,7 +2290,7 @@ export const api = {
         const fd = new FormData();
         fd.append("file", file);
         if (title && title.trim()) fd.append("title", title.trim());
-        const res = await fetch(
+        const res = await fetchWithTimeout(
           `${base()}/api/chat/threads/${encodeURIComponent(String(id))}/attachments`,
           {
             method: "POST",
