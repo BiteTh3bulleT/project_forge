@@ -92,6 +92,7 @@ func (s *Server) mountForgeRoutes(r chi.Router) {
 		r.Get("/model-runtime/health", s.handleForgeModelRuntimeHealth)
 		r.Get("/model-runtime/queue", s.handleForgeModelRuntimeQueue)
 		r.Get("/model-runtime/loaded", s.handleForgeModelRuntimeLoaded)
+		r.Get("/system/status", s.handleForgeSystemStatus)
 	})
 }
 

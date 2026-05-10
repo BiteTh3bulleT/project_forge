@@ -479,3 +479,14 @@ This is a concise status read of FORGE-K phases against the current repository. 
 - `flake.nix` exposes `nixosModules.forge-vbox-graphics-test` and `checks.x86_64-linux.forge-vbox-graphics-test`.
 - The profile keeps automatic login disabled, preserves TTY fallback, avoids full desktop environments, and installs only minimal graphics/session packages needed for the existing FORGE shell path.
 - Phase G5 does not change Go/runtime code, route/API behavior, modelruntime behavior, gateway behavior, semantic memory, FORGE-H execution authority, FORGE-K live authority, or wrapper host-control behavior.
+
+## Phase G6 Validation
+
+- Phase G6 is recorded as `FORGE-OS SHELL SYSTEM SURFACES / READ-ONLY / OPERATOR-VISIBILITY`.
+- The desktop shell now has a System surface at `/system`.
+- `GET /forge/system/status` provides a bounded read-only status summary for core reachability, shell safety flags, HostBridge diagnostics, FORGE-H posture/proposals, bounded execution availability, modelruntime status, storage status, approval queue wiring, and recent warnings.
+- Host command-backed diagnostics are disabled for the shell status route; the route does not run `systemctl`, `nixos-rebuild`, package mutation, service control, kernel module commands, model load/unload, tool execution, retrieval execution, or semantic memory writes.
+- FORGE-H proposals and executions are displayed read-only. G6 does not add approve/reject/execute controls or expose a live execution authority surface.
+- The System surface handles core-unreachable and not-wired states explicitly and refreshes on manual action or a conservative 30 second interval.
+- Phase G6 does not introduce host mutation, service-control behavior, NixOS rebuild behavior, modelruntime mutation, semantic memory writes, public mutation routes, gateway changes, FORGE-H execution authority changes, or FORGE-K live authority.
+- Validation commands for this pass: focused `cd services/core && go test ./internal/api -run 'TestForgeSystemStatus|TestServerRouteInventoryRepresentativeCoverage' -count=1`; focused desktop `npm -w @forge/desktop run test -- SystemPage`; package checks `cd services/core && go test ./internal/api ./internal/hostbridge ./internal/forgeh -count=1`; boundary `cd services/core && go test ./internal/forgek/... -count=1`; final `npm run typecheck:desktop`, `npm run build:core`, `npm run build:desktop`, `npm run lint`, `npm test`, `npm run test:desktop`, `npm run validate:desktop`, `npm run test:forgek:parity`, `npm run test:integration:env`, and `git diff --check`.

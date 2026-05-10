@@ -1,6 +1,6 @@
 # FORGE Graphical Shell Session
 
-This runbook describes the Phase G1/G2/G3/G3.5/G4/G5 graphical shell session contract.
+This runbook describes the Phase G1/G2/G3/G3.5/G4/G5/G6 graphical shell session contract.
 
 G1 defines how an opt-in NixOS session should launch FORGE as the primary visible shell while preserving the existing FORGE authority boundaries. G2 adds a launchable `forge-shell-session` wrapper package and flake app. G3 adds the target package contract for a Nix-built desktop shell package named `forge-desktop-shell`, while preserving the G2 safe wrapper and local-binary fallback behavior.
 
@@ -9,6 +9,8 @@ G3.5 is the real Tauri Nix build phase. `packages.forge-desktop-shell` has been 
 G4 is the opt-in Wayland shell session integration lane. It should make FORGE Shell selectable or manually launchable through NixOS session plumbing and a lightweight compositor substrate, preferably Cage when cleanly available through Nixpkgs. The launch path remains compositor -> `forge-shell-session` -> packaged `forge-desktop-shell` -> local `forge-core`; G4 must not bypass `forge-shell-session`.
 
 G5 adds a test-only, opt-in VirtualBox/minimal NixOS graphics profile at `nix/nixos/profiles/forge-vbox-graphics-test.nix`. It is for manual TTY launch in a minimal VM and is documented in `docs/operations/virtualbox_forge_shell_test.md`. It does not install a full graphical desktop environment, enable automatic login, replace the user's desktop, remove TTY fallback, or grant wrappers host-control authority.
+
+G6 adds a read-only System surface inside the graphical shell. It displays bounded `forge-core`, shell-session, HostBridge, FORGE-H, modelruntime, storage, approval, and warning state through governed read-only paths. It does not add restart, shutdown, rebuild, model load/unload, proposal approval, proposal execution, cleanup, or memory-write controls.
 
 ## Operator Meaning
 
@@ -22,6 +24,26 @@ FORGE graphical shell means FORGE is the desktop shell for a FORGE-OS session:
 - governed access to `forge-core`
 
 It does not mean a browser dashboard controlling a remote or headless server.
+
+## Verify System Surfaces
+
+Start `forge-core`, then open the desktop shell and launch the System tool from the shell or route `/system`.
+
+Expected G6 checks:
+
+- Core Status shows `forge-core` reachable when the local core is running.
+- Shell Session Status shows host mutation, model mutation, semantic memory write, and FORGE-K live authority as disabled.
+- Host Diagnostics Summary shows bounded RAM/disk/GPU/thermal/source-error fields, or an honest unavailable state.
+- FORGE-H Resource Posture shows advisory pressure and recommendations when HostBridge summary data is available.
+- FORGE-H Proposals are listed read-only.
+- FORGE-H Bounded Executions shows not wired unless a governed execution ledger is available.
+- Modelruntime Status shows available/unavailable without load or unload buttons.
+- Storage Status shows SQLite as truth authority and Redis/Qdrant as non-truth auxiliary roles.
+- Approval Queue points to the governed approvals surface and does not add local decision controls.
+
+If `forge-core` is unreachable, the System surface should show `Core unreachable` with the fetch error instead of a fake healthy state. Confirm `FORGE_CORE_URL` or `VITE_FORGE_API_URL` points at the local core URL, then retry manual refresh.
+
+The System surface refreshes on manual action and a conservative 30 second interval. It should not aggressively poll the core.
 
 ## Desktop Shell Discovery
 

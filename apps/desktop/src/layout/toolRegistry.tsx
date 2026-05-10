@@ -30,6 +30,7 @@ import { SettingsPage } from "../pages/SettingsPage";
 import { SourcesPage } from "../pages/SourcesPage";
 import { StartPage } from "../pages/StartPage";
 import { StrategiesPage } from "../pages/StrategiesPage";
+import { SystemPage } from "../pages/SystemPage";
 import { ToolGatewayPage } from "../pages/ToolGatewayPage";
 import { WorkbenchPage } from "../pages/WorkbenchPage";
 import { WorkspaceLayoutsPage } from "../pages/WorkspaceLayoutsPage";
@@ -46,6 +47,7 @@ type ToolComponent = ComponentType<Record<string, never>>;
 export const TOOL_COMPONENTS: Partial<Record<ShellToolId, ToolComponent>> = {
   start: StartPage,
   dashboard: DashboardPage,
+  system: SystemPage,
   command: CommandPage,
   chat: ChatPage,
   workbench: WorkbenchPage,

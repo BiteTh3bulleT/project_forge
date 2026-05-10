@@ -50,6 +50,7 @@ import { InsightsPage } from "./pages/InsightsPage";
 import { InspectorsPage } from "./pages/InspectorsPage";
 import { SourcesPage } from "./pages/SourcesPage";
 import { StrategiesPage } from "./pages/StrategiesPage";
+import { SystemPage } from "./pages/SystemPage";
 import { WorkspaceLayoutsPage } from "./pages/WorkspaceLayoutsPage";
 import { useDesktopShellStore } from "./stores/desktopShellStore";
 import { useWorkspaceLayoutStore } from "./stores/workspaceLayoutStore";
@@ -66,6 +67,7 @@ function RoutedViews() {
         <Route path="/" element={null} />
         <Route path="/start" element={<StartPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/system" element={<SystemPage />} />
         <Route path="/chat" element={<ChatPage />} />
         <Route path="/workbench" element={<WorkbenchPage />} />
         <Route path="/canvas" element={<CanvasPage />} />

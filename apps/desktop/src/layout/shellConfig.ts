@@ -12,6 +12,7 @@ export type ShellToolId =
   | "logs"
   | "start"
   | "dashboard"
+  | "system"
   | "command"
   | "memory"
   | "project-context"
@@ -150,6 +151,15 @@ const secondaryShellTools: readonly ShellToolDefinition[] = [
     route: "/dashboard",
     description:
       "Kernel status, active work, autonomy, gateway, and correlation telemetry.",
+    primary: false,
+  },
+  {
+    id: "system",
+    label: "System",
+    shortLabel: "SY",
+    route: "/system",
+    description:
+      "Read-only shell, host, resource posture, storage, and runtime status.",
     primary: false,
   },
   {

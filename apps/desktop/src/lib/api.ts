@@ -769,10 +769,129 @@ export type ForgeHealth = {
   [key: string]: unknown;
 };
 
+export type ForgeSystemStatus = {
+  generated_at?: string;
+  core: {
+    reachable: boolean;
+    service?: string;
+    health_state?: string;
+    core_url?: string;
+    last_refresh_at?: string;
+  };
+  shell_session: {
+    shell_mode?: string;
+    display_backend?: string;
+    compositor_session?: string;
+    safe_mode?: boolean;
+    host_mutation_disabled?: boolean;
+    model_mutation_disabled?: boolean;
+    semantic_memory_write_disabled?: boolean;
+    forge_k_live_authority_disabled?: boolean;
+    context_compiler_required_for_llm?: boolean;
+  };
+  hostbridge: {
+    wired: boolean;
+    reason?: string;
+    snapshot_id?: string;
+    captured_at?: string;
+    host_identity?: string;
+    architecture?: string;
+    ram_pressure?: string;
+    disk_pressure?: string;
+    gpu_available?: boolean;
+    thermal_available?: boolean;
+    source_errors_count?: number;
+    degraded?: boolean;
+  };
+  forgeh: {
+    wired: boolean;
+    policy?: {
+      policy_id?: string;
+      overall_posture?: string;
+      ram_pressure?: string;
+      swap_pressure?: string;
+      disk_pressure?: string;
+      vram_pressure?: string;
+      thermal_pressure?: string;
+      model_load_recommendation?: string;
+      background_work_recommendation?: string;
+      warnings?: string[];
+      advisory_only?: boolean;
+    };
+    proposals?: Array<{
+      proposal_id?: string;
+      action_type?: string;
+      target_lane?: string;
+      risk_level?: string;
+      status?: string;
+      expires_at?: string;
+      advisory_only?: boolean;
+    }>;
+    executions?: {
+      available?: boolean;
+      reason?: string;
+      items?: Array<{
+        execution_id?: string;
+        proposal_id?: string;
+        action_type?: string;
+        status?: string;
+        result?: string;
+        bounded?: boolean;
+        host_mutation?: boolean;
+        semantic_memory_write?: boolean;
+        modelruntime_mutation?: boolean;
+        side_effects?: string[];
+      }>;
+    };
+    advisory_only?: boolean;
+    canonical_write_committed?: boolean;
+  };
+  modelruntime: {
+    available: boolean;
+    state?: string;
+    backend?: string;
+    runtime_enabled?: boolean;
+    gpu_aware?: boolean;
+    mutation_disabled?: boolean;
+    warnings?: string[];
+    errors?: string[];
+  };
+  storage: {
+    root?: string;
+    data_dir?: string;
+    db_path?: string;
+    truth_authority?: string;
+    ping_ok?: boolean;
+    total_bytes?: number;
+    used_bytes?: number;
+    free_bytes?: number;
+    pressure_level?: string;
+    redis?: {
+      enabled?: boolean;
+      truth_authority?: boolean;
+      role?: string;
+    };
+    qdrant?: {
+      enabled?: boolean;
+      truth_authority?: boolean;
+      role?: string;
+    };
+  };
+  approval_queue: {
+    wired?: boolean;
+    reason?: string;
+  };
+  warnings?: string[];
+  errors?: string[];
+};
+
 export const api = {
   health: () => j<ForgeHealth>("/health"),
   meta: () =>
     j<{ dataDir: string; dbPath: string; workspaceDir: string }>("/api/meta"),
+  system: {
+    status: () => j<ForgeSystemStatus>("/forge/system/status"),
+  },
   settings: {
     get: () => j<SettingsRecord>("/api/settings"),
     patch: (body: Record<string, unknown>) =>

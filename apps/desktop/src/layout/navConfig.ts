@@ -34,6 +34,12 @@ export const navGroups: readonly NavGroup[] = [
         blurb: "Kernel status, active work, autonomy, and gateway telemetry.",
         mode: "both",
       },
+      {
+        to: "/system",
+        label: "System",
+        blurb: "Read-only shell, host, resource, storage, and runtime status.",
+        mode: "metrics",
+      },
     ],
   },
   {
@@ -255,6 +261,10 @@ export const routeHelp: Record<string, { title: string; text: string }> = {
   "/dashboard": {
     title: "Command Deck",
     text: "Kernel dashboard for active work, autonomy pulse, capability status, and memory correlation.",
+  },
+  "/system": {
+    title: "System",
+    text: "Read-only shell and governed core status surfaces.",
   },
   "/chat": {
     title: "Chat",

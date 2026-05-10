@@ -1,12 +1,14 @@
 # FORGE Graphical Shell
 
-Phase G1 defines FORGE as the graphical shell session for a NixOS-based FORGE-OS machine. Phase G2 adds a manually launchable Nix wrapper for that shell session. Phase G3 defines the Nix-packaged desktop shell target while preserving the same safe session boundaries. Phase G3.5 is the real Tauri Nix build phase. Phase G4 is the opt-in Wayland shell session integration lane. Phase G5 adds a test-only VirtualBox/minimal NixOS graphics profile for manual TTY launch.
+Phase G1 defines FORGE as the graphical shell session for a NixOS-based FORGE-OS machine. Phase G2 adds a manually launchable Nix wrapper for that shell session. Phase G3 defines the Nix-packaged desktop shell target while preserving the same safe session boundaries. Phase G3.5 is the real Tauri Nix build phase. Phase G4 is the opt-in Wayland shell session integration lane. Phase G5 adds a test-only VirtualBox/minimal NixOS graphics profile for manual TTY launch. Phase G6 adds read-only system surfaces inside the graphical shell.
 
 Current G3.5 status: `packages.forge-desktop-shell` and `apps.forge-desktop-shell` now point at a real Tauri build derivation and the package advertises `passthru.containsTauriBinary = true`. `nix build .#forge-desktop-shell` succeeds on Linux and produces both the stable `forge-desktop-shell` wrapper and the underlying `forge_desktop` binary.
 
 Current G4 status: the intended integration is a selectable Wayland session, not a desktop replacement by default. The target flow is display-manager/session selection -> lightweight Wayland compositor substrate, preferably Cage when cleanly available through Nixpkgs -> `forge-shell-session` -> packaged `forge-desktop-shell` -> local `forge-core`. `forge-shell-session` remains in the path because it owns safe shell environment defaults and binary selection.
 
 Current G5 status: `nix/nixos/profiles/forge-vbox-graphics-test.nix` is an opt-in test profile for minimal Oracle VirtualBox NixOS graphics bring-up. The target flow is TTY login -> `forge-wayland-session` -> Cage -> `forge-shell-session` -> packaged `forge-desktop-shell` -> local `forge-core`. The profile is not a general desktop profile and must not install a full desktop environment, enable automatic login, remove TTY fallback, or expose remote graphics by default.
+
+Current G6 status: the desktop shell has a read-only System surface at `/system` backed by `GET /forge/system/status`. It displays core reachability, shell/session safety flags, bounded HostBridge diagnostics, FORGE-H resource posture/proposals, bounded execution availability, modelruntime availability, storage posture, approval queue wiring, and recent warnings. It does not expose mutation controls, execute tools, run host commands, load/unload models, write semantic memory, or make FORGE-K live authority.
 
 This is not a web dashboard controlling a headless server. FORGE is intended to become the visible operating interface: the desktop shell, launcher, workspace surface, command center, approval surface, and system context surface. NixOS remains the boot, hardware, graphics, service, and host configuration substrate.
 
@@ -31,6 +33,8 @@ G1 defines the shell session contract and an inert NixOS module foundation. G2 a
 G4 adds the documentation/status lane for the real session integration contract: a NixOS-provided, disabled-by-default Wayland session that can be selected manually without removing the user's normal desktop. It may introduce a `forge-wayland-session` wrapper or a module-generated Wayland session descriptor, but it must launch the existing `forge-shell-session` wrapper inside the compositor instead of bypassing it.
 
 G5 adds a minimal VM graphics test profile. The profile is active only when an operator imports it into a NixOS configuration or uses its flake module output. It installs the existing FORGE shell wrappers and minimal graphics/session support for TTY launch; it does not make FORGE the compositor, implement a custom compositor, replace the display manager, or change the authority model.
+
+G6 adds operator visibility surfaces to the existing desktop shell. The shell reads bounded summaries from `forge-core`; it does not query host state directly, run system commands, approve proposals, execute FORGE-H actions, load or unload models, or write memory. Missing data must be shown as unavailable or not wired rather than represented as healthy.
 
 The only G1/G2/G3/G3.5 launch mode is `fullscreen-shell`. Future modes may include:
 
@@ -66,6 +70,8 @@ G4 must preserve the same authority boundaries. It may add selectable Wayland se
 - make FORGE-K live authority
 
 G5 must preserve the same boundaries. It may provide a test profile for VirtualBox graphics bring-up, but it must not enable automatic login, remove TTY fallback, install a full desktop environment, expose remote graphics by default, mutate host state from wrappers, load or unload models, write semantic memory, or bypass gateway, permissions, lanes, audit, controllane, memory, modelruntime, FORGE-H, or FORGE-K authority.
+
+G6 must preserve the same boundaries. It may add read-only API and UI surfaces, but it must not add public mutation routes, restart/shutdown/rebuild controls, model load/unload controls, cleanup/delete controls, raw log dumps, raw memory exports, shell-side host commands, direct retrieval execution, semantic memory writes, or FORGE-K live authority.
 
 ## Shell Responsibilities
 
@@ -143,6 +149,8 @@ FORGE_SHELL_BINARY="$PWD/apps/desktop/src-tauri/target/release/forge_desktop" ni
 
 The shell talks to `forge-core` through governed local APIs/interfaces. It may render structured state and submit user requests, but it does not own truth authority, command authority, approval authority, memory authority, modelruntime authority, or FORGE-K authority.
 
+G6 introduces `GET /forge/system/status` as a bounded read-only status route for the shell. The route composes core/session metadata, SQLite storage posture, HostBridge summary data, FORGE-H advisory policy/proposals, modelruntime health, and approval queue wiring. Command-backed HostBridge probes are disabled for this route, so the shell does not become a service-control or host-command path.
+
 Allowed shell behavior:
 
 - read host diagnostics through existing safe/internal paths when available
@@ -150,6 +158,7 @@ Allowed shell behavior:
 - show service and resource status
 - show approval queues when existing APIs support them
 - show shell-safe placeholders when APIs are not available yet
+- refresh status on a conservative manual or 30 second interval
 - submit operator requests through gateway, permission, lane, approval, audit, and controllane paths
 
 Forbidden shell behavior:
@@ -169,6 +178,8 @@ Forbidden shell behavior:
 - direct mutation of host configuration
 - treating model output as canonical state
 - treating FORGE-K simulator code as live daemon authority
+
+G6 specifically forbids approval, rejection, execution, model load/unload, cleanup, restart, shutdown, rebuild, and package mutation controls on the System surface.
 
 ## System Context Principle
 
