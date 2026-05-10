@@ -135,9 +135,13 @@ func (s *ModelStore) SetPreferred(ctx context.Context, modelID string, preferred
 
 func (s *ModelStore) Archive(ctx context.Context, modelID string) (StoredModel, error) {
 	_ = ctx
-	rec, err := s.loadFromRoot(strings.TrimSpace(modelID), false)
+	id, err := safeModelIDSegment(modelID)
 	if err != nil {
-		if archivedRec, archivedErr := s.loadFromRoot(strings.TrimSpace(modelID), true); archivedErr == nil {
+		return StoredModel{}, err
+	}
+	rec, err := s.loadFromRoot(id, false)
+	if err != nil {
+		if archivedRec, archivedErr := s.loadFromRoot(id, true); archivedErr == nil {
 			return archivedRec, nil
 		}
 		return StoredModel{}, err
@@ -164,9 +168,9 @@ func (s *ModelStore) Archive(ctx context.Context, modelID string) (StoredModel, 
 
 func (s *ModelStore) RemoveRegistration(ctx context.Context, modelID string) (string, error) {
 	_ = ctx
-	id := strings.TrimSpace(modelID)
-	if id == "" {
-		return "", fmt.Errorf("%w: empty id", ErrModelNotFound)
+	id, err := safeModelIDSegment(modelID)
+	if err != nil {
+		return "", err
 	}
 	rec, err := s.Load(context.Background(), id)
 	if err != nil {
@@ -201,6 +205,10 @@ func (s *ModelStore) importFile(inputPath string, opts ImportModelOptions) (Impo
 		return ImportModelResult{}, fmt.Errorf("stat import file: %w", err)
 	}
 	id := stableImportedModelID(inputPath, checksum, opts.ID)
+	id, err = safeModelIDSegment(id)
+	if err != nil {
+		return ImportModelResult{}, err
+	}
 	modelRoot, err := s.ensureNamedRoot("models")
 	if err != nil {
 		return ImportModelResult{}, err
@@ -257,9 +265,9 @@ func (s *ModelStore) importDirectory(inputPath string, opts ImportModelOptions) 
 	if err != nil {
 		return ImportModelResult{}, err
 	}
-	id := strings.TrimSpace(manifest.ID)
-	if id == "" {
-		return ImportModelResult{}, fmt.Errorf("%w: id", ErrManifestMissingRequired)
+	id, err := safeModelIDSegment(manifest.ID)
+	if err != nil {
+		return ImportModelResult{}, err
 	}
 	modelRoot, err := s.ensureNamedRoot("models")
 	if err != nil {

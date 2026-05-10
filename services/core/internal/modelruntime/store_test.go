@@ -150,6 +150,19 @@ func TestModelStoreScanRejectsInvalidManifest(t *testing.T) {
 	}
 }
 
+func TestModelStoreRejectsUnsafeModelIDLookup(t *testing.T) {
+	t.Parallel()
+
+	store := NewModelStore(t.TempDir(), ModelStoreOptions{})
+	for _, unsafeID := range []string{"../outside", `nested\outside`, "nested/outside", ".", ".."} {
+		if _, err := store.Load(context.Background(), unsafeID); err == nil {
+			t.Fatalf("Load(%q) succeeded, want unsafe model id error", unsafeID)
+		} else if !errors.Is(err, ErrModelIDInvalid) {
+			t.Fatalf("Load(%q) error=%v, want ErrModelIDInvalid", unsafeID, err)
+		}
+	}
+}
+
 func mustWriteModelFile(t *testing.T, modelHome, modelID, fileName, content string) string {
 	t.Helper()
 	modelDir := filepath.Join(modelHome, "models", modelID)

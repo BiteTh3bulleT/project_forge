@@ -30,6 +30,8 @@ type LlamaCppOptions struct {
 	HealthPath     string
 }
 
+const llamaCppResponseBodyLimit = 8 << 20
+
 type LlamaCppBackend struct {
 	endpoint        string
 	client          *http.Client
@@ -426,11 +428,25 @@ func (b *LlamaCppBackend) postJSON(ctx context.Context, path string, payload map
 		return nil, err
 	}
 	defer resp.Body.Close()
-	responseBody, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	responseBody, err := readLlamaCppResponseBody(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read llama.cpp response: %w", err)
+	}
 	if resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("llama.cpp returned %s: %s", resp.Status, strings.TrimSpace(string(responseBody)))
 	}
 	return responseBody, nil
+}
+
+func readLlamaCppResponseBody(body io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(body, llamaCppResponseBodyLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > llamaCppResponseBodyLimit {
+		return nil, fmt.Errorf("response too large: limit %d bytes", llamaCppResponseBodyLimit)
+	}
+	return data, nil
 }
 
 func mergeParameters(payload map[string]any, params map[string]any, blocked map[string]struct{}) {

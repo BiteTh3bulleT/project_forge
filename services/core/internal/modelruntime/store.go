@@ -25,6 +25,7 @@ var (
 	ErrChecksumMismatch = errors.New("model checksum mismatch")
 	ErrModelFileMissing = errors.New("model file missing")
 	ErrModelIDMismatch  = errors.New("model id mismatch")
+	ErrModelIDInvalid   = errors.New("model id invalid")
 )
 
 // ModelStoreOptions tunes checksum behavior.
@@ -158,9 +159,9 @@ func (s *ModelStore) Scan(ctx context.Context) ([]StoredModel, error) {
 // Load loads a single model by id from disk.
 func (s *ModelStore) Load(ctx context.Context, modelID string) (StoredModel, error) {
 	_ = ctx
-	id := strings.TrimSpace(modelID)
-	if id == "" {
-		return StoredModel{}, fmt.Errorf("%w: empty id", ErrModelNotFound)
+	id, err := safeModelIDSegment(modelID)
+	if err != nil {
+		return StoredModel{}, err
 	}
 	if rec, err := s.loadFromRoot(id, false); err == nil {
 		return rec, nil
@@ -171,6 +172,10 @@ func (s *ModelStore) Load(ctx context.Context, modelID string) (StoredModel, err
 }
 
 func (s *ModelStore) loadFromRoot(modelID string, archived bool) (StoredModel, error) {
+	id, err := safeModelIDSegment(modelID)
+	if err != nil {
+		return StoredModel{}, err
+	}
 	root, err := s.modelsRoot()
 	if archived {
 		root, err = s.archivesRoot(true)
@@ -178,14 +183,31 @@ func (s *ModelStore) loadFromRoot(modelID string, archived bool) (StoredModel, e
 	if err != nil {
 		return StoredModel{}, err
 	}
-	modelDir := filepath.Join(root, modelID)
+	modelDir := filepath.Join(root, id)
 	if _, err := os.Stat(modelDir); err != nil {
 		if os.IsNotExist(err) {
-			return StoredModel{}, fmt.Errorf("%w: %s", ErrModelNotFound, modelID)
+			return StoredModel{}, fmt.Errorf("%w: %s", ErrModelNotFound, id)
 		}
 		return StoredModel{}, fmt.Errorf("stat model dir: %w", err)
 	}
 	return s.readModelDir(modelDir, archived)
+}
+
+func safeModelIDSegment(raw string) (string, error) {
+	id := strings.TrimSpace(raw)
+	if id == "" {
+		return "", fmt.Errorf("%w: empty model id", ErrModelIDInvalid)
+	}
+	if id == "." || id == ".." {
+		return "", fmt.Errorf("%w: model id must be a path segment", ErrModelIDInvalid)
+	}
+	if strings.ContainsAny(id, `/\`) {
+		return "", fmt.Errorf("%w: model id must not contain path separators", ErrModelIDInvalid)
+	}
+	if filepath.Clean(id) != id || filepath.Base(id) != id {
+		return "", fmt.Errorf("%w: model id must be a stable path segment", ErrModelIDInvalid)
+	}
+	return id, nil
 }
 
 func (s *ModelStore) readModelDir(modelDir string, archived bool) (StoredModel, error) {
@@ -349,7 +371,7 @@ func checksumLookupKeys(m ModelManifest, modelDir, modelFilePath string) []strin
 }
 
 func readChecksumsFile(path string) (map[string]string, error) {
-	body, err := os.ReadFile(path)
+	body, err := readRuntimeJSONFile(path, "checksums file")
 	if err != nil {
 		return nil, fmt.Errorf("read checksums file: %w", err)
 	}

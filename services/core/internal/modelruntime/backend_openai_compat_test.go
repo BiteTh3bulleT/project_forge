@@ -172,6 +172,79 @@ func TestOpenAICompatBackendGenerateStreamEmitsContentDeltas(t *testing.T) {
 	}
 }
 
+func TestOpenAICompatBackendGenerateRejectsOversizeResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			_, _ = w.Write([]byte(strings.Repeat("x", openAICompatResponseBodyLimit+1)))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	backend := NewOpenAICompatBackend(OpenAICompatOptions{
+		Endpoint:       server.URL,
+		Kind:           BackendOpenAICompat,
+		RequestTimeout: 2000000000,
+	})
+	_, err := backend.Load(context.Background(), ModelManifest{
+		ID:           "remote-model",
+		Backend:      BackendOpenAICompat,
+		Format:       ModelFormatUnknown,
+		Capabilities: []ModelCapability{CapabilityChat},
+	})
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	_, err = backend.Generate(context.Background(), GenerateRequest{
+		ModelID:  "remote-model",
+		Messages: []GenerateMessage{{Role: "user", Content: "hello"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "response too large") {
+		t.Fatalf("expected response too large error, got %v", err)
+	}
+}
+
+func TestOpenAICompatBackendStreamRejectsOversizeErrorResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte(strings.Repeat("x", openAICompatResponseBodyLimit+1)))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	backend := NewOpenAICompatBackend(OpenAICompatOptions{
+		Endpoint:       server.URL,
+		Kind:           BackendOpenAICompat,
+		RequestTimeout: 2000000000,
+	})
+	_, err := backend.Load(context.Background(), ModelManifest{
+		ID:           "remote-model",
+		Backend:      BackendOpenAICompat,
+		Format:       ModelFormatUnknown,
+		Capabilities: []ModelCapability{CapabilityChat},
+	})
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	_, err = backend.GenerateStream(context.Background(), GenerateRequest{
+		ModelID:  "remote-model",
+		Messages: []GenerateMessage{{Role: "user", Content: "hello"}},
+	}, func(TokenEvent) error {
+		return nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "response too large") {
+		t.Fatalf("expected response too large error, got %v", err)
+	}
+}
+
 func generateWithOpenAICompatResponse(t *testing.T, response map[string]any) GenerateResult {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

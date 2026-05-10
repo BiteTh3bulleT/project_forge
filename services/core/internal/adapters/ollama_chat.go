@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -85,12 +84,15 @@ func (o Ollama) ollamaChatWithModel(ctx context.Context, baseURL, model string, 
 	}
 	defer res.Body.Close()
 
-	body, _ := io.ReadAll(io.LimitReader(res.Body, 4<<20))
 	if res.StatusCode >= 300 {
-		return nil, fmt.Errorf("ollama /api/chat returned %s: %s", res.Status, strings.TrimSpace(string(body)))
+		body, err := readOllamaErrorBody(res.Body)
+		if err != nil {
+			return nil, fmt.Errorf("read /api/chat error response: %w", err)
+		}
+		return nil, fmt.Errorf("ollama /api/chat returned %s: %s", res.Status, body)
 	}
 	var out map[string]any
-	if err := json.Unmarshal(body, &out); err != nil {
+	if err := decodeOllamaJSONBody(res.Body, &out); err != nil {
 		return nil, fmt.Errorf("decode /api/chat: %w", err)
 	}
 	return out, nil
@@ -122,8 +124,11 @@ func (o Ollama) streamChatWithModel(ctx context.Context, baseURL, model string, 
 	defer res.Body.Close()
 
 	if res.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(res.Body, 2048))
-		return "", nil, fmt.Errorf("ollama /api/chat stream returned %s: %s", res.Status, strings.TrimSpace(string(body)))
+		body, err := readOllamaErrorBody(res.Body)
+		if err != nil {
+			return "", nil, fmt.Errorf("read /api/chat stream error response: %w", err)
+		}
+		return "", nil, fmt.Errorf("ollama /api/chat stream returned %s: %s", res.Status, body)
 	}
 
 	var acc strings.Builder

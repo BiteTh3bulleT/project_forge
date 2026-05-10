@@ -152,6 +152,23 @@ func TestLlamaCppBackend_UnavailableEndpoint(t *testing.T) {
 	}
 }
 
+func TestLlamaCppBackendRejectsOversizeResponse(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", llamaCppResponseBodyLimit+1)))
+	}))
+	defer ts.Close()
+
+	backend := NewLlamaCppBackend(LlamaCppOptions{Endpoint: ts.URL, RequestTimeout: time.Second})
+	if _, err := backend.Load(context.Background(), ModelManifest{ID: "oversize", Format: ModelFormatGGUF, Backend: BackendLlamaCpp}); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	_, err := backend.Generate(context.Background(), GenerateRequest{ModelID: "oversize", Prompt: "hi"})
+	if err == nil || !strings.Contains(err.Error(), "response too large") {
+		t.Fatalf("expected response too large error, got %v", err)
+	}
+}
+
 func TestLlamaCppBackend_SpawnDeferred(t *testing.T) {
 	backend := NewLlamaCppBackend(LlamaCppOptions{AllowSpawn: true, Endpoint: "http://127.0.0.1:8080"})
 	_, err := backend.Load(context.Background(), ModelManifest{ID: "spawn", Format: ModelFormatGGUF, Backend: BackendLlamaCpp})

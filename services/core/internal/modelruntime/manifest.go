@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -40,7 +39,7 @@ func ParseManifest(raw []byte) (ModelManifest, error) {
 
 // ReadManifest reads and validates a manifest file path.
 func ReadManifest(path string) (ModelManifest, error) {
-	body, err := os.ReadFile(path)
+	body, err := readRuntimeJSONFile(path, "model manifest")
 	if err != nil {
 		return ModelManifest{}, fmt.Errorf("%w: read %s: %v", ErrManifestInvalid, path, err)
 	}

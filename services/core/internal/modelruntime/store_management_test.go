@@ -113,3 +113,53 @@ func TestModelStoreImportManifestBackedDirectory(t *testing.T) {
 		t.Fatalf("expected sourcePath metadata to be preserved, got %+v", result.Model.Manifest.Metadata)
 	}
 }
+
+func TestModelStoreImportManifestBackedDirectoryRejectsUnsafeIDBeforeCopy(t *testing.T) {
+	modelHome := t.TempDir()
+	store := NewModelStore(modelHome, ModelStoreOptions{StrictChecksum: true})
+	if _, err := store.ensureNamedRoot("models"); err != nil {
+		t.Fatalf("ensure models root: %v", err)
+	}
+
+	sourceDir := filepath.Join(t.TempDir(), "unsafe-manifest-model")
+	if err := os.MkdirAll(sourceDir, 0o755); err != nil {
+		t.Fatalf("mkdir source dir: %v", err)
+	}
+	modelFile := filepath.Join(sourceDir, "model.gguf")
+	if err := os.WriteFile(modelFile, []byte("unsafe-id"), 0o644); err != nil {
+		t.Fatalf("write model file: %v", err)
+	}
+	checksum, err := fileSHA256(modelFile)
+	if err != nil {
+		t.Fatalf("hash model file: %v", err)
+	}
+	manifest := ModelManifest{
+		SchemaVersion: "forge.model/v1",
+		ID:            "../escaped-model",
+		DisplayName:   "Unsafe Manifest Model",
+		Family:        "manifest",
+		Format:        ModelFormatGGUF,
+		Backend:       BackendLlamaCpp,
+		FilePath:      "model.gguf",
+		SHA256:        checksum,
+		SizeBytes:     int64(len("unsafe-id")),
+		Quantization:  "q4",
+		ContextLength: 4096,
+		Capabilities:  []ModelCapability{CapabilityChat, CapabilityCompletion},
+		License:       "apache-2.0",
+	}
+	if err := writeManifest(filepath.Join(sourceDir, ManifestFilename), manifest); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	_, err = store.Import(context.Background(), sourceDir, ImportModelOptions{})
+	if err == nil {
+		t.Fatal("expected unsafe manifest id import to fail")
+	}
+	if !strings.Contains(err.Error(), "model id") {
+		t.Fatalf("expected model id error, got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(modelHome, "escaped-model")); !os.IsNotExist(statErr) {
+		t.Fatalf("unsafe import created escaped destination, stat err=%v", statErr)
+	}
+}

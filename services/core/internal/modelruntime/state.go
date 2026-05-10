@@ -76,7 +76,7 @@ func stateStatusOrDefault(state ModelState, fallback ModelStatus) ModelStatus {
 }
 
 func readModelState(path string) (ModelState, error) {
-	body, err := os.ReadFile(path)
+	body, err := readRuntimeJSONFile(path, "model state")
 	if err != nil {
 		if os.IsNotExist(err) {
 			return ModelState{}, nil

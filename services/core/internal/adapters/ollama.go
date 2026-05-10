@@ -15,6 +15,11 @@ import (
 	"time"
 )
 
+const (
+	ollamaResponseBodyLimit = 4 << 20
+	ollamaErrorBodyLimit    = 2048
+)
+
 type Ollama struct {
 	db     *sql.DB
 	client *http.Client
@@ -202,7 +207,7 @@ func (o Ollama) fetchTags(ctx context.Context, baseURL string, timeout time.Dura
 		return ollamaTags{}, fmt.Errorf("ollama /api/tags returned %s", res.Status)
 	}
 	var out ollamaTags
-	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+	if err := decodeOllamaJSONBody(res.Body, &out); err != nil {
 		return ollamaTags{}, fmt.Errorf("decode /api/tags: %w", err)
 	}
 	return out, nil
@@ -234,7 +239,7 @@ func (o Ollama) generate(ctx context.Context, baseURL, model, prompt string, tim
 	}
 
 	var out map[string]any
-	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+	if err := decodeOllamaJSONBody(res.Body, &out); err != nil {
 		return "", nil, fmt.Errorf("decode /api/generate: %w", err)
 	}
 	response := readString(out, "response")
@@ -273,7 +278,10 @@ func (o Ollama) StreamGenerate(ctx context.Context, baseURL, model, prompt strin
 	}
 	defer res.Body.Close()
 	if res.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(res.Body, 2048))
+		body, err := readOllamaErrorBody(res.Body)
+		if err != nil {
+			return "", nil, fmt.Errorf("read /api/generate stream error response: %w", err)
+		}
 		return "", nil, fmt.Errorf("ollama /api/generate stream returned %s: %s", res.Status, strings.TrimSpace(string(body)))
 	}
 
@@ -314,6 +322,33 @@ func (o Ollama) StreamGenerate(ctx context.Context, baseURL, model, prompt strin
 		return acc.String(), lastMeta, err
 	}
 	return acc.String(), lastMeta, nil
+}
+
+func decodeOllamaJSONBody(body io.Reader, out any) error {
+	raw, err := io.ReadAll(io.LimitReader(body, ollamaResponseBodyLimit+1))
+	if err != nil {
+		return err
+	}
+	if len(raw) > ollamaResponseBodyLimit {
+		return fmt.Errorf("ollama response too large: limit %d bytes", ollamaResponseBodyLimit)
+	}
+	return json.Unmarshal(raw, out)
+}
+
+func readOllamaErrorBody(body io.Reader) (string, error) {
+	raw, err := io.ReadAll(io.LimitReader(body, ollamaErrorBodyLimit+1))
+	if err != nil {
+		return "", err
+	}
+	text := strings.TrimSpace(string(raw))
+	if len(raw) > ollamaErrorBodyLimit {
+		text = strings.TrimSpace(string(raw[:ollamaErrorBodyLimit]))
+		if text != "" {
+			text += " "
+		}
+		text += "[truncated]"
+	}
+	return text, nil
 }
 
 func classifyNetErr(err error) string {

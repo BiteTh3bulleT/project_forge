@@ -27,6 +27,8 @@ type OpenAICompatOptions struct {
 	ModelsPath      string
 }
 
+const openAICompatResponseBodyLimit = 4 << 20
+
 type OpenAICompatBackend struct {
 	name            string
 	kind            ModelBackendKind
@@ -496,7 +498,7 @@ func (b *OpenAICompatBackend) postJSON(ctx context.Context, path string, payload
 		return nil, WrapBackendUnavailable(err, b.name)
 	}
 	defer resp.Body.Close()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	respBody, err := readOpenAICompatResponseBody(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
@@ -526,11 +528,22 @@ func (b *OpenAICompatBackend) postStream(ctx context.Context, path string, paylo
 	}
 	if resp.StatusCode >= 300 {
 		defer resp.Body.Close()
-		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+		respBody, readErr := readOpenAICompatResponseBody(resp.Body)
 		if readErr != nil {
 			return nil, fmt.Errorf("read error response: %w", readErr)
 		}
 		return nil, fmt.Errorf("%w: %s returned %s: %s", ErrBackendUnavailable, b.name, resp.Status, strings.TrimSpace(string(respBody)))
 	}
 	return resp, nil
+}
+
+func readOpenAICompatResponseBody(body io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(body, openAICompatResponseBodyLimit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > openAICompatResponseBodyLimit {
+		return nil, fmt.Errorf("response too large: limit %d bytes", openAICompatResponseBodyLimit)
+	}
+	return data, nil
 }
