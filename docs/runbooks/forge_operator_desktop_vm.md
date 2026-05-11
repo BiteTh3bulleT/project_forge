@@ -4,6 +4,9 @@ Status: Phase G6 operator desktop bring-up
 
 Last verified: 2026-05-11 on VirtualBox VM `FORGE-OS`.
 
+In-repo evidence record:
+[docs/evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md](../evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md)
+
 ## Purpose
 
 This runbook starts the opt-in FORGE operator desktop session in a NixOS VM. FORGE remains the primary desktop surface, while `labwc` provides the window-management substrate needed for terminal, file-manager, and other operator app windows.
@@ -111,6 +114,11 @@ Expected result:
 - FORGE desktop shell opens as the primary surface.
 - FORGE core status shows online.
 - Other operator apps can open as normal windows.
+
+After a successful VM run, update the evidence record with the exact repo
+commit mounted at `/projectforge`, the session log, `/health`, `/api/meta`, and
+a screenshot artifact. Do not mark a new VM boot as verified from static Nix or
+Go tests alone.
 
 If the compositor opens to a black screen with only a cursor, inspect the log
 for `Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display`.

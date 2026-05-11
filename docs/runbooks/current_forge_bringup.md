@@ -112,6 +112,11 @@ desktop profile from `/projectforge/nix/nixos/profiles/forge-operator-desktop.ni
 The host checkout is mounted in the guest at `/projectforge`; FORGE data is
 stored in the guest at `/forge`.
 
+Manual VM evidence is tracked in
+[docs/evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md](../evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md).
+That artifact is operator validation evidence only; it does not grant the shell
+service-control or rebuild authority.
+
 Current verified state:
 
 - NixOS generation:
