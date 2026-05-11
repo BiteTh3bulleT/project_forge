@@ -51,7 +51,7 @@ func TestCompareRefShapeReportsDriftWithoutLiveMutation(t *testing.T) {
 
 func TestCompareRefShapeRejectsInvalidObservedRefs(t *testing.T) {
 	ctx := context.Background()
-	k, store, _ := newTestKernel()
+	k, store, auditSink := newTestKernel()
 	req := validRefShapeCompareRequest()
 	req.ID = "ref-compare-bad"
 	req.IdempotencyKey = "ref-compare-bad"
@@ -71,6 +71,7 @@ func TestCompareRefShapeRejectsInvalidObservedRefs(t *testing.T) {
 	if _, ok := store.GetIdempotency(req.IdempotencyKey); ok {
 		t.Fatal("failed comparison must not persist idempotency state")
 	}
+	assertRefShapeComparisonRejectedWithoutEffects(t, res, auditSink)
 }
 
 func validRefShapeCompareRequest() domain.SyscallRequest {
@@ -88,4 +89,44 @@ func validRefShapeCompareRequest() domain.SyscallRequest {
 		},
 	}
 	return req
+}
+
+func assertRefShapeComparisonRejectedWithoutEffects(t *testing.T, res domain.SyscallResult, auditSink *InMemoryAuditSink) {
+	t.Helper()
+	if len(res.CommittedObjectIDs) != 0 {
+		t.Fatalf("rejected comparison committed ids: %v", res.CommittedObjectIDs)
+	}
+	if res.StateSummary["memoryMutation"] != false || res.StateSummary["runtimeMutation"] != false || res.StateSummary["liveAuthorityMigration"] != false {
+		t.Fatalf("rejected comparison claimed mutation/authority migration: %#v", res.StateSummary)
+	}
+	assertForgeKValidationContract(t, string(domain.ActionCompareRefShape), res.StateSummary)
+	nested, ok := res.StateSummary["refShapeComparison"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing nested refShapeComparison summary: %#v", res.StateSummary)
+	}
+	assertForgeKValidationContract(t, string(domain.ActionCompareRefShape), nested)
+	if nested["accepted"] != false || nested["decision"] != RefShapeCompareDecisionRejected {
+		t.Fatalf("expected rejected nested decision, got %#v", nested)
+	}
+	if nested["memoryMutation"] != false || nested["runtimeMutation"] != false || nested["liveAuthorityMigration"] != false {
+		t.Fatalf("nested comparison claimed mutation/authority migration: %#v", nested)
+	}
+	if len(auditSink.Records) == 0 {
+		t.Fatal("expected rejected comparison audit record")
+	}
+	auditRecord := auditSink.Records[len(auditSink.Records)-1]
+	if auditRecord.Success {
+		t.Fatalf("expected rejected audit record, got %#v", auditRecord)
+	}
+	auditDecision := auditRecord.RefShapeComparison
+	if auditDecision == nil {
+		t.Fatalf("audit missing ref shape comparison summary: %#v", auditRecord)
+	}
+	assertForgeKValidationContract(t, string(domain.ActionCompareRefShape), auditDecision)
+	if auditDecision["accepted"] != false || auditDecision["decision"] != RefShapeCompareDecisionRejected {
+		t.Fatalf("expected rejected audit decision, got %#v", auditDecision)
+	}
+	if auditDecision["memoryMutation"] != false || auditDecision["runtimeMutation"] != false || auditDecision["liveAuthorityMigration"] != false {
+		t.Fatalf("audit comparison claimed mutation/authority migration: %#v", auditDecision)
+	}
 }
