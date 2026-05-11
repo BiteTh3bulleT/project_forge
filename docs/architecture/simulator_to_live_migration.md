@@ -1,6 +1,6 @@
 # Simulator To Live Migration
 
-Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, Phase 14C partial live validation expansion, Phase 14D disabled-by-default validation shadow reporting, Phase 14E disabled-by-default validation shadow emission, and Phase 14F explicit Control Lane partial live enforcement metadata.
+Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, Phase 14C partial live validation expansion, Phase 14D disabled-by-default validation shadow reporting, Phase 14E disabled-by-default validation shadow emission, Phase 14F explicit Control Lane partial live enforcement metadata, and Phase 14G Control Lane validation contract-matrix hardening.
 
 ## Purpose
 
@@ -21,6 +21,8 @@ Phase 14D adds a read-only internal diagnostic report shape for validation summa
 Phase 14E wires live Control Lane validation results into that observer through an optional best-effort processor dependency. The emission happens after a syscall result exists, is bounded to scalar summaries, and cannot affect validation decisions, memory, routes, retrieval, modelruntime, gateway behavior, or live authority.
 
 Phase 14F turns on the first explicit `[PARTIAL LIVE ENFORCEMENT]` FORGE-K activation mode through the live Control Lane. It adds activation/no-effect metadata to existing validation actions and keeps authority in `services/core/internal/aios/controllane`. It does not import FORGE-K simulator services into live authority, route semantic writes through `forgek.Kernel`, enable live KV reuse, call modelruntime, execute tools, run retrieval/search/embeddings, or write memory outside existing governed paths.
+
+Phase 14G hardens Phase 14F with a Control Lane validation contract matrix. The tests prove every existing live validation action exposes the same activation/no-effect metadata in syscall state summaries and audit summaries. This remains hardening only: no new validation action, simulator service import, public API, route behavior change, live KV reuse, modelruntime call, retrieval/search/embedding execution, evidence admission, context compilation, or semantic memory write is added.
 
 ## Migration Pattern
 

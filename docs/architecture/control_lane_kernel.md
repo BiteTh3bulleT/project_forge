@@ -34,6 +34,8 @@ Phase 14E wires those disabled-by-default diagnostic summaries into the live Con
 
 Phase 14F adds explicit FORGE-K partial live enforcement metadata to Control Lane validation actions. `VALIDATE_REF_SHAPE`, `COMPARE_REF_SHAPE`, `VALIDATE_SEMANTIC_OPERATION`, and `VALIDATE_KV_IDENTITY` now expose activation mode and no-effect summaries while keeping the live owner as Control Lane. This is not full FORGE-K live authority and does not import simulator services, enable live KV reuse, execute tools, call modelruntime, execute retrieval/search/embeddings, admit evidence, compile context, or write memory outside existing governed paths.
 
+Phase 14G adds a contract matrix test for the partial-enforcement validation actions. The matrix checks `VALIDATE_KV_IDENTITY`, `VALIDATE_REF_SHAPE`, `COMPARE_REF_SHAPE`, and `VALIDATE_SEMANTIC_OPERATION` through the live processor and audit path, proving the activation/no-effect posture is consistent across state and audit summaries.
+
 ## FORGE-K Partial Enforcement
 
 Control Lane validation actions now expose FORGE-K partial live enforcement metadata. This means deterministic doctrine is enforced by the current live Control Lane owner, not by importing the simulator Kernel. Validation summaries include the activation mode and no-effect posture so callers and operator surfaces can distinguish partial enforcement from full live authority.
