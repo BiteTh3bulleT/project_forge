@@ -44,20 +44,30 @@ func (s *Service) ListObservations(ctx context.Context, req ListObservationsRequ
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []Observation{}
+	ids := []int64{}
 	for rows.Next() {
 		var id int64
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	out := make([]Observation, 0, len(ids))
+	for _, id := range ids {
 		obs, err := s.GetObservation(ctx, id)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, obs.Observation)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Service) RecordObservation(ctx context.Context, req RecordObservationRequest) (*Observation, error) {
