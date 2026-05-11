@@ -3028,9 +3028,12 @@ html[data-effects="subtle"] .forge-context-card:hover {
   position: relative;
   z-index: 30;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) minmax(4.8rem, auto);
   align-items: center;
   gap: 0.7rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: 0.55rem 0.95rem;
   border-top: 1px solid rgba(var(--forge-border-strong-rgb), 0.16);
   background:
@@ -3094,6 +3097,7 @@ html[data-effects="subtle"] .forge-context-card:hover {
   display: flex;
   align-items: center;
   gap: 0.35rem;
+  min-width: 0;
   overflow-x: auto;
   padding: 0.3rem;
   border-radius: 14px;
@@ -3210,8 +3214,11 @@ html[data-effects="subtle"] .forge-context-card:hover {
   align-content: center;
   justify-items: end;
   gap: 0.1rem;
+  min-width: 4.8rem;
+  max-width: 5.4rem;
   min-height: 2.4rem;
-  padding: 0.2rem 0.85rem;
+  overflow: hidden;
+  padding: 0.2rem 0.58rem;
   border-radius: 12px;
   border: 1px solid rgba(var(--forge-border-strong-rgb), 0.13);
   background: rgba(255, 255, 255, 0.035);
@@ -3220,6 +3227,12 @@ html[data-effects="subtle"] .forge-context-card:hover {
   line-height: 1.2;
   text-align: right;
   white-space: nowrap;
+}
+
+.forge-os-taskbar__system > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @media (max-width: 720px) {

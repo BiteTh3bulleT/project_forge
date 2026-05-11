@@ -108,6 +108,7 @@ in
     VITE_FORGE_API_URL = lib.mkDefault "http://127.0.0.1:18492";
     XDG_SESSION_TYPE = "wayland";
     GDK_BACKEND = "wayland,x11";
+    WEBKIT_DISABLE_DMABUF_RENDERER = "1";
   };
 
   assertions = [

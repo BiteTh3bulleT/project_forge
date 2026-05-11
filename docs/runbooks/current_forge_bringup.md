@@ -105,6 +105,40 @@ starts desktop in the background. Logs at `.forge/logs/core.log` and
 compiling. On cold caches, the Tauri window takes 30–120 s to appear.
 Tail `.forge/logs/desktop.log` if you think something went wrong.
 
+## 3a. Current NixOS VM checkpoint (2026-05-11)
+
+The `FORGE-OS` VirtualBox VM is installed and running the opt-in operator
+desktop profile from `/projectforge/nix/nixos/profiles/forge-operator-desktop.nix`.
+The host checkout is mounted in the guest at `/projectforge`; FORGE data is
+stored in the guest at `/forge`.
+
+Current verified state:
+
+- NixOS generation:
+  `/nix/store/iy4v4h28zl65x0a5nw64332cvllfxx5v-nixos-system-forge-os-vm-25.11.10470.0c88e1f2bdb9`
+- VM network: NAT with host SSH forwarding on `127.0.0.1:2222`.
+- Launch path:
+  `TTY -> forge-operator-session -> labwc -> forge-shell-session -> forge-desktop-shell -> forge-core`
+- Display: VirtualBox VMSVGA, 128 MiB VRAM, 3D acceleration enabled.
+- Session compatibility: `WEBKIT_DISABLE_DMABUF_RENDERER=1` is set for the
+  operator desktop to avoid VirtualBox Wayland/dmabuf protocol failures.
+- Shell fit: the Tauri default window is `1180x680`, the locked operator
+  session maximizes without an external titlebar, and the taskbar clock/date
+  stays inside the right edge on the current `1294x727` VM viewport.
+- Core health: `curl -fsS http://127.0.0.1:18492/health` returns `ok: true`.
+- Storage meta: `/api/meta` returns `/forge/data`, `/forge/data/forge.sqlite`,
+  and `/forge/workspaces/default`.
+
+Start from VM TTY:
+
+```sh
+mkdir -p "$HOME/forge-session-logs"
+forge-operator-session >"$HOME/forge-session-logs/forge-operator-session.log" 2>&1
+```
+
+Do not run shell UI service-control actions. VM rebuilds remain operator setup
+actions from a terminal, not FORGE shell authority.
+
 ## 4. Verify what is up
 
 ### Health

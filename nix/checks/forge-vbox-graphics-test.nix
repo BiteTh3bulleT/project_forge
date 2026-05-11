@@ -32,6 +32,7 @@ stdenv.mkDerivation {
     grep -F 'services.displayManager.autoLogin.enable = lib.mkDefault false;' "$profile"
     grep -F 'enable = lib.mkDefault true;' "$profile"
     grep -F 'autoStart = lib.mkDefault false;' "$profile"
+    grep -F 'WEBKIT_DISABLE_DMABUF_RENDERER = "1"' "$profile"
     grep -F 'environment.systemPackages' "$profile"
 
     grep -F 'nix run .#forge-wayland-session' "$runbook"

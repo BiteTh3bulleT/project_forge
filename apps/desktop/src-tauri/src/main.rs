@@ -85,7 +85,7 @@ const OPERATOR_APPS: &[OperatorAppDefinition] = &[
         executable: "foot",
         category: "Workspace",
         desktop_ids: &["foot.desktop"],
-        launch_args: &["--working-directory=/mnt/projectforge"],
+        launch_args: &["--working-directory=/projectforge"],
     },
     OperatorAppDefinition {
         id: "files",
@@ -94,7 +94,7 @@ const OPERATOR_APPS: &[OperatorAppDefinition] = &[
         executable: "pcmanfm",
         category: "Workspace",
         desktop_ids: &["pcmanfm.desktop"],
-        launch_args: &["/mnt/projectforge"],
+        launch_args: &["/projectforge"],
     },
     OperatorAppDefinition {
         id: "browser",

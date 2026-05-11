@@ -683,7 +683,6 @@ export function AppShell(props: AppShellProps) {
               {now.toLocaleDateString([], {
                 day: "numeric",
                 month: "short",
-                year: "numeric",
               })}
             </span>
           </div>

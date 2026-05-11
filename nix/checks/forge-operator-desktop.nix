@@ -20,10 +20,11 @@ runCommand "forge-operator-desktop-profile-check" {
   grep -F 'autoStart = lib.mkDefault false' "$profile"
   grep -F 'autoLogin.enable = lib.mkDefault false' "$profile"
   grep -F 'FORGE_SHELL_FORGE_K_LIVE_AUTHORITY = "false"' "$profile"
+  grep -F 'WEBKIT_DISABLE_DMABUF_RENDERER = "1"' "$profile"
 
   grep -F 'operator-desktop' "$module"
   grep -F 'forge-operator-session' "$module"
-  grep -F '/mnt/projectforge' "$runbook"
+  grep -F '/projectforge/nix/nixos/profiles/forge-operator-desktop.nix' "$runbook"
 
   forbidden='(^|[^A-Za-z])(kde|KDE|plasma|Plasma|gnome|GNOME|xfce|XFCE)([^A-Za-z]|$)|autologin = true|autoLogin.enable = true|xrdp|vnc|systemctl|nixos-rebuild|modprobe|rmmod|reboot|shutdown|LoadModel|UnloadModel|GenerateStream|semantic memory write|os.RemoveAll|rm -rf'
   if grep -RE "$forbidden" "$profile"; then
