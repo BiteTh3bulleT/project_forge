@@ -37,6 +37,19 @@ func TestValidateRefShapeLiveSyscallSucceedsWithoutMemoryMutation(t *testing.T) 
 	if res.StateSummary["memoryMutation"] != false || res.StateSummary["runtimeMutation"] != false || res.StateSummary["liveAuthorityMigration"] != false {
 		t.Fatalf("ref validation claimed mutation/authority migration: %#v", res.StateSummary)
 	}
+	activation, ok := res.StateSummary["forgeKActivation"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing forgeKActivation summary: %#v", res.StateSummary)
+	}
+	if activation["mode"] != ForgeKActivationModePartialLiveEnforcement ||
+		activation["action"] != string(domain.ActionValidateRefShape) ||
+		activation["liveOwner"] != ForgeKActivationOwnerControlLane {
+		t.Fatalf("unexpected activation summary: %#v", activation)
+	}
+	noEffect, ok := res.StateSummary["forgeKNoEffect"].(map[string]any)
+	if !ok || noEffect["memoryMutation"] != false || noEffect["modelRuntimeCall"] != false || noEffect["gatewayExecution"] != false {
+		t.Fatalf("unexpected no-effect summary: %#v", res.StateSummary["forgeKNoEffect"])
+	}
 	refs, ok := res.StateSummary["normalizedRefs"].([]map[string]string)
 	if !ok || len(refs) != 2 || refs[0]["ref_id"] != "note-a" || refs[1]["ref_id"] != "note-b" {
 		t.Fatalf("expected deterministic normalized refs, got %#v", res.StateSummary["normalizedRefs"])
@@ -47,6 +60,10 @@ func TestValidateRefShapeLiveSyscallSucceedsWithoutMemoryMutation(t *testing.T) 
 	auditDecision := auditSink.Records[len(auditSink.Records)-1].RefShapeValidation
 	if auditDecision["decision"] != RefShapeDecisionAccepted || auditDecision["liveAuthorityMigration"] != false {
 		t.Fatalf("audit missing ref shape decision: %#v", auditDecision)
+	}
+	auditActivation := auditSink.Records[len(auditSink.Records)-1].RefShapeValidation["forgeKActivation"].(map[string]any)
+	if auditActivation["mode"] != ForgeKActivationModePartialLiveEnforcement {
+		t.Fatalf("audit activation summary missing partial enforcement: %#v", auditActivation)
 	}
 }
 
