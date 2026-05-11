@@ -90,6 +90,38 @@ func TestControlLaneValidationObserverCalledForRejectedMalformedValidation(t *te
 	assertControlLaneValidationInputNoForbiddenEffects(t, input)
 }
 
+func TestControlLaneValidationObserverCalledForSemanticOperationValidation(t *testing.T) {
+	ctx := context.Background()
+	observer := &captureControlLaneValidationObserver{}
+	k := newTestKernelWithControlLaneValidationObserver(observer)
+	req := validSemanticOperationRequest()
+	req.ID = "shadow-semantic-operation"
+	req.DryRun = true
+	req.IdempotencyKey = ""
+
+	res, err := k.Process(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.Success {
+		t.Fatalf("expected semantic operation validation success, got %#v", res)
+	}
+	if len(observer.inputs) != 1 {
+		t.Fatalf("observer calls=%d, want 1", len(observer.inputs))
+	}
+	input := observer.inputs[0]
+	if input.Action != string(domain.ActionValidateSemanticOperation) || input.ValidationKind != "semantic_operation" {
+		t.Fatalf("unexpected observer action/kind: %#v", input)
+	}
+	if !input.Passed || input.Decision != SemanticOperationDecisionAccepted {
+		t.Fatalf("unexpected observer decision: %#v", input)
+	}
+	if input.OperationType != "derive" {
+		t.Fatalf("operation type=%q, want derive", input.OperationType)
+	}
+	assertControlLaneValidationInputNoForbiddenEffects(t, input)
+}
+
 func TestControlLaneValidationObserverNotCalledForNormalSemanticWrite(t *testing.T) {
 	ctx := context.Background()
 	observer := &captureControlLaneValidationObserver{}
