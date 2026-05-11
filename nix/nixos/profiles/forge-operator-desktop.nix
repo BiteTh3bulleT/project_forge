@@ -81,6 +81,7 @@ in
     pkgs.cage
     pkgs.foot
     fileManager
+    pkgs.firefox
     pkgs.dbus
     pkgs.xdg-utils
     pkgs.xdg-desktop-portal

@@ -32,6 +32,37 @@ function SearchChangeHarness() {
 const desktopMocks = vi.hoisted(() => ({
   isTauriDesktop: vi.fn(() => true),
   listForgeWindows: vi.fn(() => new Promise<never>(() => {})),
+  listOperatorApps: vi.fn(() =>
+    Promise.resolve([
+      {
+        id: "terminal",
+        label: "Terminal",
+        description: "Open a Foot terminal.",
+        executable: "foot",
+        category: "Workspace",
+        iconName: "foot",
+        iconPath:
+          "/run/current-system/sw/share/icons/hicolor/48x48/apps/foot.png",
+        desktopFile: "/run/current-system/sw/share/applications/foot.desktop",
+        native: true,
+      },
+      {
+        id: "files",
+        label: "Files",
+        description: "Open the file manager.",
+        executable: "pcmanfm",
+        category: "Workspace",
+        iconName: "system-file-manager",
+        iconPath:
+          "/run/current-system/sw/share/icons/hicolor/48x48/apps/system-file-manager.png",
+        desktopFile:
+          "/run/current-system/sw/share/applications/pcmanfm.desktop",
+        native: true,
+      },
+    ]),
+  ),
+  launchOperatorApp: vi.fn(),
+  iconAssetUrl: vi.fn((path: string) => `asset://${path}`),
 }));
 
 vi.mock("../lib/desktop", () => ({
@@ -41,6 +72,9 @@ vi.mock("../lib/desktop", () => ({
     (label.startsWith("forge-") && !label.startsWith("forge-app-")),
   isTauriDesktop: desktopMocks.isTauriDesktop,
   listForgeWindows: desktopMocks.listForgeWindows,
+  listOperatorApps: desktopMocks.listOperatorApps,
+  launchOperatorApp: desktopMocks.launchOperatorApp,
+  iconAssetUrl: desktopMocks.iconAssetUrl,
   monitorSignature: (monitors: Array<{ id: string }>) =>
     monitors.map((monitor) => monitor.id).join(";"),
 }));
@@ -66,6 +100,9 @@ describe("AppShell confined Tauri tool surfaces", () => {
     desktopMocks.listForgeWindows.mockImplementation(
       () => new Promise<never>(() => {}),
     );
+    desktopMocks.listOperatorApps.mockClear();
+    desktopMocks.launchOperatorApp.mockClear();
+    desktopMocks.iconAssetUrl.mockClear();
     useDesktopWindowStore.setState({
       pinned: ["chat", "jobs", "memory", "models", "approvals", "settings"],
       windows: [
@@ -242,5 +279,45 @@ describe("AppShell confined Tauri tool surfaces", () => {
     fireEvent.click(screen.getByRole("button", { name: "Change search" }));
 
     expect(screen.getByRole("dialog", { name: "FORGE Start" })).toBeTruthy();
+  });
+
+  it("shows categorized native operator apps in Start with installed icons", async () => {
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+
+    expect(await screen.findByText("Native Apps")).toBeTruthy();
+    expect(screen.getAllByText("Workspace").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole("button", { name: /Terminal/ })).toBeTruthy();
+    expect(
+      screen.getByRole("img", { name: "Terminal icon" }).getAttribute("src"),
+    ).toBe(
+      "asset:///run/current-system/sw/share/icons/hicolor/48x48/apps/foot.png",
+    );
+    expect(screen.queryByPlaceholderText(/command|path/i)).toBeNull();
+  });
+
+  it("loads native operator apps when the shell runtime probe is unavailable", async () => {
+    desktopMocks.isTauriDesktop.mockReturnValue(false);
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+
+    expect(await screen.findByText("Native Apps")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Terminal/ })).toBeTruthy();
+    expect(desktopMocks.listOperatorApps).toHaveBeenCalled();
   });
 });

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   isTauriDesktop,
+  iconAssetUrl,
   launchOperatorApp,
   listOperatorApps,
   type OperatorApp,
@@ -14,6 +15,11 @@ const FALLBACK_OPERATOR_APPS: OperatorApp[] = [
     label: "Terminal",
     description: "Open a Foot terminal in the current FORGE operator session.",
     executable: "foot",
+    category: "Workspace",
+    iconName: "foot",
+    iconPath: null,
+    desktopFile: null,
+    native: false,
   },
   {
     id: "files",
@@ -21,6 +27,11 @@ const FALLBACK_OPERATOR_APPS: OperatorApp[] = [
     description:
       "Open the PCManFM file manager in the current FORGE operator session.",
     executable: "pcmanfm",
+    category: "Workspace",
+    iconName: "system-file-manager",
+    iconPath: null,
+    desktopFile: null,
+    native: false,
   },
 ];
 
@@ -105,37 +116,95 @@ export function OperatorAppsPage() {
           {status}
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {apps.map((app) => (
-            <div
-              key={app.id}
-              className="rounded border border-forge-platinum/10 bg-black/25 p-4"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-forge-ash">
-                    {app.label}
-                  </h2>
-                  <p className="mt-1 text-xs leading-5 text-forge-mist/75">
-                    {app.description}
-                  </p>
-                </div>
-                <span className="rounded border border-forge-platinum/10 bg-black/30 px-2 py-1 font-mono text-[11px] text-forge-mist">
-                  {app.executable}
-                </span>
+        <div className="mt-4 space-y-4">
+          {groupAppsByCategory(apps).map((group) => (
+            <section key={group.category} className="space-y-2">
+              <h2 className="text-xs font-semibold uppercase tracking-[0.14em] text-forge-mist">
+                {group.category}
+              </h2>
+              <div className="grid gap-3 md:grid-cols-2">
+                {group.items.map((app) => (
+                  <div
+                    key={app.id}
+                    className="rounded border border-forge-platinum/10 bg-black/25 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <OperatorAppIcon app={app} />
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-semibold text-forge-ash">
+                            {app.label}
+                          </h3>
+                          <p className="mt-1 text-xs leading-5 text-forge-mist/75">
+                            {app.description}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <span className="rounded border border-forge-platinum/10 bg-black/30 px-2 py-1 font-mono text-[11px] text-forge-mist">
+                          {app.executable}
+                        </span>
+                        {app.native ? (
+                          <span className="rounded border border-forge-electric/25 bg-forge-electric/10 px-2 py-1 text-[11px] text-forge-mist">
+                            Native
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <PrimaryButton
+                        disabled={!tauriAvailable || busyAppId !== null}
+                        onClick={() => void launch(app)}
+                      >
+                        {busyAppId === app.id
+                          ? "Launching"
+                          : `Launch ${app.label}`}
+                      </PrimaryButton>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="mt-4">
-                <PrimaryButton
-                  disabled={!tauriAvailable || busyAppId !== null}
-                  onClick={() => void launch(app)}
-                >
-                  {busyAppId === app.id ? "Launching" : `Launch ${app.label}`}
-                </PrimaryButton>
-              </div>
-            </div>
+            </section>
           ))}
         </div>
       </Panel>
     </div>
+  );
+}
+
+function groupAppsByCategory(apps: OperatorApp[]) {
+  const groups = new Map<string, OperatorApp[]>();
+  for (const app of apps) {
+    const category = app.category?.trim() || "Tools";
+    groups.set(category, [...(groups.get(category) ?? []), app]);
+  }
+  return Array.from(groups, ([category, items]) => ({ category, items }));
+}
+
+function OperatorAppIcon(props: { app: OperatorApp }) {
+  if (props.app.iconPath) {
+    return (
+      <img
+        src={iconAssetUrl(props.app.iconPath)}
+        alt={`${props.app.label} icon`}
+        className="h-9 w-9 shrink-0 rounded border border-forge-platinum/10 bg-black/30 object-contain p-1"
+        draggable={false}
+      />
+    );
+  }
+  const short = props.app.label
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+  return (
+    <span
+      role="img"
+      aria-label={`${props.app.label} icon`}
+      className="grid h-9 w-9 shrink-0 place-items-center rounded border border-forge-electric/25 bg-forge-electric/10 font-mono text-xs font-bold text-forge-electric"
+    >
+      {short || "AP"}
+    </span>
   );
 }

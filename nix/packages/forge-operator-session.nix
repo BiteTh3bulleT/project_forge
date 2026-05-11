@@ -32,6 +32,7 @@ writeShellApplication {
 
     compositor="${defaultCompositor}"
     shell_session="${shellSession}"
+    labwc_config_dir="''${XDG_RUNTIME_DIR:-/tmp}/forge-operator-labwc"
 
     if [ -z "$compositor" ]; then
       echo "FORGE operator compositor is not configured; install or pass labwc when building forge-operator-session." >&2
@@ -48,7 +49,33 @@ writeShellApplication {
       exit 1
     fi
 
-    exec "$compositor" --startup "$shell_session" "$@"
+    mkdir -p "$labwc_config_dir"
+    export FORGE_OPERATOR_LABWC_CONFIG_DIR="$labwc_config_dir"
+    export FORGE_OPERATOR_DESKTOP_LOCKED=true
+    cat > "$labwc_config_dir/rc.xml" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<labwc_config>
+  <core>
+    <decoration>server</decoration>
+  </core>
+  <applications>
+    <application identifier="dev.forge.workshop">
+      <decor>no</decor>
+      <maximized>yes</maximized>
+      <focus>yes</focus>
+      <skip_taskbar>yes</skip_taskbar>
+    </application>
+    <application title="FORGE">
+      <decor>no</decor>
+      <maximized>yes</maximized>
+      <focus>yes</focus>
+      <skip_taskbar>yes</skip_taskbar>
+    </application>
+  </applications>
+</labwc_config>
+EOF
+
+    exec "$compositor" --config "$labwc_config_dir" --startup "$shell_session" "$@"
   '';
 
   meta = with lib; {

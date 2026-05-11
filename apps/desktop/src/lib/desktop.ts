@@ -10,7 +10,7 @@ import {
   type Monitor,
   type Window,
 } from "@tauri-apps/api/window";
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
 export const WORKSPACE_LAYOUT_EVENT = "forge://workspace-layouts-updated";
 export const WORKSPACE_NAVIGATE_EVENT = "forge://workspace-navigate";
@@ -72,6 +72,11 @@ export type OperatorApp = {
   label: string;
   description: string;
   executable: string;
+  category: string;
+  iconName?: string | null;
+  iconPath?: string | null;
+  desktopFile?: string | null;
+  native: boolean;
 };
 
 export type OperatorAppLaunchResult = {
@@ -85,6 +90,10 @@ export type OperatorAppLaunchResult = {
 
 export function isTauriDesktop() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+export function iconAssetUrl(path: string) {
+  return convertFileSrc(path);
 }
 
 export function isShellHostWindowLabel(label: string | null | undefined) {
@@ -479,6 +488,26 @@ function parseOperatorAppPayload(raw: unknown): OperatorApp | null {
     label: value.label,
     description: value.description,
     executable: value.executable,
+    category: typeof value.category === "string" ? value.category : "Tools",
+    iconName:
+      typeof value.iconName === "string"
+        ? value.iconName
+        : typeof value.icon_name === "string"
+          ? value.icon_name
+          : null,
+    iconPath:
+      typeof value.iconPath === "string"
+        ? value.iconPath
+        : typeof value.icon_path === "string"
+          ? value.icon_path
+          : null,
+    desktopFile:
+      typeof value.desktopFile === "string"
+        ? value.desktopFile
+        : typeof value.desktop_file === "string"
+          ? value.desktop_file
+          : null,
+    native: typeof value.native === "boolean" ? value.native : false,
   };
 }
 
@@ -668,20 +697,21 @@ export async function getDesktopSystemDiagnostics(): Promise<DesktopSystemDiagno
 }
 
 export async function listOperatorApps(): Promise<OperatorApp[]> {
-  if (!isTauriDesktop()) return [];
-  const apps = await invoke("list_operator_apps");
-  if (!Array.isArray(apps)) return [];
-  return apps
-    .map((app) => parseOperatorAppPayload(app))
-    .filter((app): app is OperatorApp => Boolean(app));
+  try {
+    const apps = await invoke("list_operator_apps");
+    if (!Array.isArray(apps)) return [];
+    return apps
+      .map((app) => parseOperatorAppPayload(app))
+      .filter((app): app is OperatorApp => Boolean(app));
+  } catch (error) {
+    if (!isTauriDesktop()) return [];
+    throw error;
+  }
 }
 
 export async function launchOperatorApp(
   appId: string,
 ): Promise<OperatorAppLaunchResult> {
-  if (!isTauriDesktop()) {
-    throw new Error("operator apps require the Tauri desktop runtime");
-  }
   const result = await invoke("launch_operator_app", { appId });
   const parsed = parseOperatorAppLaunchResultPayload(result);
   if (!parsed) {

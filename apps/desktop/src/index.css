@@ -3340,6 +3340,15 @@ html[data-effects="subtle"] .forge-context-card:hover {
   border-bottom: 1px solid rgba(var(--forge-border-strong-rgb), 0.08);
 }
 
+.forge-os-startmenu__section--native:not(:last-child) {
+  flex: 0 0 auto;
+  max-height: min(16rem, 42vh);
+}
+
+.forge-os-startmenu__section--native .forge-os-startmenu__list {
+  overflow: visible;
+}
+
 .forge-os-startmenu__section:last-child {
   flex: 1 1 0;
   min-height: 0;
@@ -3426,6 +3435,32 @@ html[data-effects="subtle"] .forge-context-card:hover {
   overscroll-behavior: contain;
 }
 
+.forge-os-startmenu__section:not(:last-child) .forge-os-startmenu__list {
+  flex: 0 1 auto;
+}
+
+.forge-os-startmenu__list--native {
+  gap: 0.35rem;
+}
+
+.forge-os-startmenu__group {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.forge-os-startmenu__group + .forge-os-startmenu__group {
+  margin-top: 0.45rem;
+}
+
+.forge-os-startmenu__group-label {
+  padding: 0.35rem 0.55rem 0.2rem;
+  color: rgba(var(--forge-muted-rgb), 0.62);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .forge-os-startmenu__row {
   display: flex;
   align-items: center;
@@ -3464,6 +3499,23 @@ html[data-effects="subtle"] .forge-context-card:hover {
   font-weight: 800;
 }
 
+.forge-os-startmenu__app-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 7px;
+  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.16);
+  background: rgba(0, 0, 0, 0.24);
+  color: rgb(var(--forge-cyan-rgb));
+  object-fit: contain;
+  padding: 0.18rem;
+  font-family: theme(fontFamily.mono);
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
 .forge-os-startmenu__row-label {
   display: block;
   font-size: 0.82rem;
@@ -3476,6 +3528,28 @@ html[data-effects="subtle"] .forge-context-card:hover {
   margin-top: 0.1rem;
   font-size: 0.7rem;
   color: rgba(var(--forge-muted-rgb), 0.7);
+}
+
+.forge-os-startmenu__native-badge {
+  flex: 0 0 auto;
+  align-self: center;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--forge-cyan-rgb), 0.22);
+  background: rgba(var(--forge-cyan-rgb), 0.08);
+  padding: 0.18rem 0.45rem;
+  color: rgba(var(--forge-muted-rgb), 0.75);
+  font-size: 0.62rem;
+  line-height: 1;
+}
+
+.forge-os-startmenu__status {
+  margin-top: 0.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.12);
+  background: rgba(0, 0, 0, 0.22);
+  padding: 0.45rem 0.55rem;
+  color: rgba(var(--forge-muted-rgb), 0.82);
+  font-size: 0.7rem;
 }
 
 .forge-os-startmenu__empty {

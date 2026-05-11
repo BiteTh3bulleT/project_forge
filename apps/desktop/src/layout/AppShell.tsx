@@ -14,9 +14,13 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   DETACHED_TAURI_TOOL_WINDOWS,
+  iconAssetUrl,
   isShellHostWindowLabel,
   isTauriDesktop,
+  launchOperatorApp,
   listForgeWindows,
+  listOperatorApps,
+  type OperatorApp,
 } from "../lib/desktop";
 import { useUiStore } from "../stores/uiStore";
 import { useWorkspaceLayoutStore } from "../stores/workspaceLayoutStore";
@@ -50,6 +54,41 @@ type AttentionLevel = "none" | "low" | "medium" | "high";
 const HOME_ROUTE = "/";
 const MIN_WINDOW_W = 360;
 const MIN_WINDOW_H = 280;
+const FALLBACK_OPERATOR_APPS: OperatorApp[] = [
+  {
+    id: "terminal",
+    label: "Foot",
+    description: "A Wayland native terminal emulator",
+    executable: "foot",
+    category: "Workspace",
+    iconName: "foot",
+    iconPath: "/run/current-system/sw/share/icons/hicolor/48x48/apps/foot.png",
+    desktopFile: "/run/current-system/sw/share/applications/foot.desktop",
+    native: true,
+  },
+  {
+    id: "files",
+    label: "PCMan File Manager",
+    description: "Browse the file system and manage files",
+    executable: "pcmanfm",
+    category: "Workspace",
+    iconName: "system-file-manager",
+    iconPath: null,
+    desktopFile: "/run/current-system/sw/share/applications/pcmanfm.desktop",
+    native: true,
+  },
+  {
+    id: "browser",
+    label: "Firefox",
+    description: "Open local docs, web consoles, and model tooling",
+    executable: "firefox",
+    category: "Internet",
+    iconName: "firefox",
+    iconPath: "/run/current-system/sw/share/icons/hicolor/128x128/apps/firefox.png",
+    desktopFile: "/run/current-system/sw/share/applications/firefox.desktop",
+    native: true,
+  },
+];
 
 function corePill(core: "online" | "offline" | "unknown") {
   if (core === "online") return "forge-chip--ok";
@@ -124,6 +163,12 @@ export function AppShell(props: AppShellProps) {
   const [shellErr, setShellErr] = useState<string | null>(null);
   const [startOpen, setStartOpen] = useState(false);
   const [startQuery, setStartQuery] = useState("");
+  const [operatorApps, setOperatorApps] = useState<OperatorApp[]>(
+    FALLBACK_OPERATOR_APPS,
+  );
+  const [operatorAppStatus, setOperatorAppStatus] = useState<string | null>(
+    null,
+  );
   const [now, setNow] = useState(() => new Date());
   const [contextMenu, setContextMenu] = useState<DockContextMenu | null>(null);
   const isMainWindow = props.isMainWindow;
@@ -213,6 +258,27 @@ export function AppShell(props: AppShellProps) {
   }, [isMainWindow]);
 
   useEffect(() => {
+    if (!isMainWindow) return;
+    let cancelled = false;
+    async function loadOperatorApps() {
+      try {
+        const apps = await listOperatorApps();
+        if (cancelled) return;
+        setOperatorApps(apps.length > 0 ? apps : FALLBACK_OPERATOR_APPS);
+        setOperatorAppStatus(null);
+      } catch (error) {
+        if (cancelled) return;
+        setOperatorApps(FALLBACK_OPERATOR_APPS);
+        setOperatorAppStatus(error instanceof Error ? error.message : String(error));
+      }
+    }
+    void loadOperatorApps();
+    return () => {
+      cancelled = true;
+    };
+  }, [isMainWindow]);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
@@ -262,6 +328,20 @@ export function AppShell(props: AppShellProps) {
     // rehydrate the matching in-shell window.
     if (!detachedTauriShell) {
       navigate(tool.route);
+    }
+  }
+
+  async function launchNativeApp(app: OperatorApp) {
+    setStartOpen(false);
+    try {
+      const result = await launchOperatorApp(app.id);
+      setOperatorAppStatus(
+        result.pid
+          ? `${result.label} launch requested. PID ${result.pid}.`
+          : result.message,
+      );
+    } catch (error) {
+      setOperatorAppStatus(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -636,6 +716,9 @@ export function AppShell(props: AppShellProps) {
           workspaceLabel={workspaceLabel}
           uiMode={uiMode}
           pinnedIds={pinned}
+          operatorApps={operatorApps}
+          operatorAppStatus={operatorAppStatus}
+          onLaunchOperatorApp={(app) => void launchNativeApp(app)}
         />
       ) : null}
 
@@ -940,16 +1023,26 @@ function StartMenu(props: {
   workspaceLabel: string;
   uiMode: "cognitive" | "metrics";
   pinnedIds: ShellToolId[];
+  operatorApps: OperatorApp[];
+  operatorAppStatus: string | null;
+  onLaunchOperatorApp: (app: OperatorApp) => void;
 }) {
   const query = props.query.trim().toLowerCase();
-  const filteredAll = useMemo(() => {
-    if (!query) return allShellTools;
+  const filteredTools = useMemo(() => {
     return allShellTools.filter((tool) => {
       const haystack = `${tool.label} ${tool.shortLabel} ${tool.description}`
         .toLowerCase();
-      return haystack.includes(query);
+      return !query || haystack.includes(query);
     });
   }, [query]);
+  const filteredApps = useMemo(() => {
+    return props.operatorApps.filter((app) => {
+      const haystack =
+        `${app.label} ${app.description} ${app.executable} ${app.category} ${app.iconName ?? ""}`
+          .toLowerCase();
+      return !query || haystack.includes(query);
+    });
+  }, [props.operatorApps, query]);
 
   const pinnedTools = useMemo(() => {
     const map = new Map<ShellToolId, ShellToolDefinition>(
@@ -959,6 +1052,14 @@ function StartMenu(props: {
       .map((id) => map.get(id))
       .filter((t): t is ShellToolDefinition => Boolean(t));
   }, [props.pinnedIds]);
+  const toolGroups = useMemo(
+    () => groupToolsByCategory(filteredTools),
+    [filteredTools],
+  );
+  const appGroups = useMemo(
+    () => groupAppsByCategory(filteredApps),
+    [filteredApps],
+  );
 
   return (
     <>
@@ -1033,16 +1134,71 @@ function StartMenu(props: {
         ) : null}
 
         <div className="forge-os-startmenu__section">
-          <div className="forge-os-startmenu__section-label">
-            {query ? "Results" : "All apps"}
-          </div>
-          <div className="forge-os-startmenu__list">
-            {filteredAll.length === 0 ? (
+          <div className="forge-os-startmenu__section-label">Native Apps</div>
+          <div className="forge-os-startmenu__list forge-os-startmenu__list--native">
+            {appGroups.length === 0 ? (
               <div className="forge-os-startmenu__empty">
-                No surfaces match "{props.query}".
+                {query
+                  ? `No native apps match "${props.query}".`
+                  : "No native operator apps are available."}
               </div>
             ) : (
-              filteredAll.map((tool) => (
+              appGroups.map((group) => (
+                <div key={group.category} className="forge-os-startmenu__group">
+                  <div className="forge-os-startmenu__group-label">
+                    {group.category}
+                  </div>
+                  {group.items.map((app) => (
+                    <button
+                      key={app.id}
+                      type="button"
+                      onClick={() => props.onLaunchOperatorApp(app)}
+                      className="forge-os-startmenu__row"
+                    >
+                      <OperatorAppIcon
+                        app={app}
+                        className="forge-os-startmenu__app-icon"
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="forge-os-startmenu__row-label">
+                          {app.label}
+                        </span>
+                        <span className="forge-os-startmenu__row-desc">
+                          {app.description}
+                        </span>
+                      </span>
+                      <span className="forge-os-startmenu__native-badge">
+                        Native
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+          {props.operatorAppStatus ? (
+            <div className="forge-os-startmenu__status">
+              {props.operatorAppStatus}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="forge-os-startmenu__section forge-os-startmenu__section--native">
+          <div className="forge-os-startmenu__section-label">
+            {query ? "FORGE Results" : "FORGE Surfaces"}
+          </div>
+          <div className="forge-os-startmenu__list">
+            {toolGroups.length === 0 ? (
+              <div className="forge-os-startmenu__empty">
+                No FORGE surfaces match "{props.query}".
+              </div>
+            ) : (
+              toolGroups.map((group) => (
+                <div key={group.category} className="forge-os-startmenu__group">
+                  <div className="forge-os-startmenu__group-label">
+                    {group.category}
+                  </div>
+                  {group.items.map((tool) => (
                 <button
                   key={tool.id}
                   type="button"
@@ -1066,12 +1222,77 @@ function StartMenu(props: {
                     </span>
                   </span>
                 </button>
+                  ))}
+                </div>
               ))
             )}
           </div>
         </div>
       </section>
     </>
+  );
+}
+
+function groupToolsByCategory(tools: ShellToolDefinition[]) {
+  const groups = new Map<string, ShellToolDefinition[]>();
+  for (const tool of tools) {
+    const category = shellToolCategory(tool.id);
+    groups.set(category, [...(groups.get(category) ?? []), tool]);
+  }
+  return Array.from(groups, ([category, items]) => ({ category, items }));
+}
+
+function groupAppsByCategory(apps: OperatorApp[]) {
+  const groups = new Map<string, OperatorApp[]>();
+  for (const app of apps) {
+    const category = app.category?.trim() || "Tools";
+    groups.set(category, [...(groups.get(category) ?? []), app]);
+  }
+  return Array.from(groups, ([category, items]) => ({ category, items }));
+}
+
+function shellToolCategory(id: ShellToolId) {
+  if (["chat", "system", "settings", "approvals"].includes(id)) {
+    return "Core";
+  }
+  if (["jobs", "memory", "project-context", "sources", "layouts"].includes(id)) {
+    return "Workspace";
+  }
+  if (["gateway", "models", "adapters", "events", "command"].includes(id)) {
+    return "Development";
+  }
+  if (
+    ["audit", "backup", "policy", "strategies", "execution-permissions"].includes(
+      id,
+    )
+  ) {
+    return "Operations";
+  }
+  return "Tools";
+}
+
+function OperatorAppIcon(props: { app: OperatorApp; className?: string }) {
+  const iconPath = props.app.iconPath?.trim();
+  if (iconPath) {
+    return (
+      <img
+        src={iconAssetUrl(iconPath)}
+        alt={`${props.app.label} icon`}
+        className={props.className}
+        draggable={false}
+      />
+    );
+  }
+  const short = props.app.label
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+  return (
+    <span className={cx("forge-os-startmenu__app-icon", props.className)}>
+      {short || "AP"}
+    </span>
   );
 }
 

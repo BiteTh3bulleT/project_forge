@@ -10,6 +10,13 @@ let
   fakeLabwc = writeShellApplication {
     name = "labwc";
     text = ''
+      test "$1" = "--config"
+      config_dir="$2"
+      test -f "$config_dir/rc.xml"
+      grep -F '<application identifier="dev.forge.workshop">' "$config_dir/rc.xml"
+      grep -F '<decor>no</decor>' "$config_dir/rc.xml"
+      grep -F '<maximized>yes</maximized>' "$config_dir/rc.xml"
+      shift 2
       test "$1" = "--startup"
       shift
       echo "fake-labwc:$FORGE_SHELL_SESSION_ENABLED:$FORGE_SHELL_MODE:$FORGE_CORE_URL:$1:$*"
@@ -51,7 +58,12 @@ stdenv.mkDerivation {
     grep -F 'FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false' "$wrapper"
     grep -F 'FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false' "$wrapper"
     grep -F 'FORGE_SHELL_COMPOSITOR=labwc' "$wrapper"
-    grep -F 'exec "$compositor" --startup "$shell_session" "$@"' "$wrapper"
+    grep -F 'FORGE_OPERATOR_LABWC_CONFIG_DIR=' "$wrapper"
+    grep -F 'FORGE_OPERATOR_DESKTOP_LOCKED=true' "$wrapper"
+    grep -F '<application identifier="dev.forge.workshop">' "$wrapper"
+    grep -F '<decor>no</decor>' "$wrapper"
+    grep -F '<maximized>yes</maximized>' "$wrapper"
+    grep -F 'exec "$compositor" --config "$labwc_config_dir" --startup "$shell_session" "$@"' "$wrapper"
 
     if grep -F 'FORGE_OPERATOR_COMPOSITOR' "$real_wrapper" "$wrapper"; then
       echo "forge-operator-session must not accept compositor executable paths from ambient environment" >&2
