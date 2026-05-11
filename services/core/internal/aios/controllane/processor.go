@@ -194,6 +194,16 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 		return p.reject(ctx, req, result, "payload_validation", payloadIssues), nil
 	}
 
+	var semanticOperationDecision SemanticOperationValidationDecision
+	if req.Action == domain.ActionValidateSemanticOperation {
+		semanticOperationDecision = EnforceSemanticOperation(req)
+		if !semanticOperationDecision.Accepted {
+			result.StateSummary = semanticOperationDecision.ToStateSummary()
+			return p.reject(ctx, req, result, "semantic_operation_validation", []domain.SyscallError{semanticOperationDecision.ToSyscallError()}), nil
+		}
+		result.ValidationDetails = append(result.ValidationDetails, detailFor("semantic_operation_validation", nil))
+	}
+
 	if req.DryRun {
 		result.Success = true
 		result.StateSummary["dryRun"] = true
@@ -210,8 +220,10 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 			result.StateSummary = decision.ToStateSummary()
 			result.StateSummary["dryRun"] = true
 		} else if req.Action == domain.ActionValidateSemanticOperation {
-			decision := EnforceSemanticOperation(req)
-			result.StateSummary = decision.ToStateSummary()
+			if semanticOperationDecision.Decision == "" {
+				semanticOperationDecision = EnforceSemanticOperation(req)
+			}
+			result.StateSummary = semanticOperationDecision.ToStateSummary()
 			result.StateSummary["dryRun"] = true
 		}
 		result.Warnings = append(result.Warnings, "dry-run: request validated without commit")
