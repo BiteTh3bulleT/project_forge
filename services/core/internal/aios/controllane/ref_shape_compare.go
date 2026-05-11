@@ -115,6 +115,8 @@ func (d RefShapeComparisonDecision) ToStateSummary() map[string]any {
 		"memoryMutation":         d.MemoryMutation,
 		"runtimeMutation":        d.RuntimeMutation,
 		"liveAuthorityMigration": d.LiveAuthorityMigration,
+		"forgeKActivation":       forgeKActivationSummary(string(domain.ActionCompareRefShape)),
+		"forgeKNoEffect":         forgeKNoEffectSummary(),
 	}
 }
 
@@ -130,11 +132,15 @@ func (d RefShapeComparisonDecision) ToAuditFields() map[string]any {
 		"unchangedRefCount":      len(d.UnchangedRefs),
 		"failures":               append([]refvalidation.ValidationFailure{}, d.Failures...),
 		"warnings":               append([]string{}, d.Warnings...),
+		"failureCount":           len(d.Failures),
+		"warningCount":           len(d.Warnings),
 		"memoryMutation":         d.MemoryMutation,
 		"runtimeMutation":        d.RuntimeMutation,
 		"liveAuthorityMigration": d.LiveAuthorityMigration,
 		"validatorVersion":       d.ValidatorVersion,
 		"policyVersion":          d.PolicyVersion,
+		"forgeKActivation":       forgeKActivationSummary(string(domain.ActionCompareRefShape)),
+		"forgeKNoEffect":         forgeKNoEffectSummary(),
 	}
 }
 

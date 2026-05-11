@@ -27,9 +27,25 @@ func TestCompareRefShapeReportsDriftWithoutLiveMutation(t *testing.T) {
 		res.StateSummary["liveAuthorityMigration"] != false {
 		t.Fatalf("unexpected comparison summary: %#v", res.StateSummary)
 	}
+	activation, ok := res.StateSummary["forgeKActivation"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing forgeKActivation summary: %#v", res.StateSummary)
+	}
+	if activation["mode"] != ForgeKActivationModePartialLiveEnforcement ||
+		activation["action"] != string(domain.ActionCompareRefShape) {
+		t.Fatalf("unexpected activation summary: %#v", activation)
+	}
+	noEffect, ok := res.StateSummary["forgeKNoEffect"].(map[string]any)
+	if !ok || noEffect["memoryMutation"] != false || noEffect["retrievalExecution"] != false {
+		t.Fatalf("unexpected no-effect summary: %#v", res.StateSummary["forgeKNoEffect"])
+	}
 	auditDecision := auditSink.Records[len(auditSink.Records)-1].RefShapeComparison
 	if auditDecision["decision"] != RefShapeCompareDecisionDrift || auditDecision["liveAuthorityMigration"] != false {
 		t.Fatalf("audit missing ref shape comparison decision: %#v", auditDecision)
+	}
+	auditActivation := auditSink.Records[len(auditSink.Records)-1].RefShapeComparison["forgeKActivation"].(map[string]any)
+	if auditActivation["mode"] != ForgeKActivationModePartialLiveEnforcement {
+		t.Fatalf("audit activation summary missing partial enforcement: %#v", auditActivation)
 	}
 }
 
