@@ -67,6 +67,17 @@ func TestForgeSystemStatusReadOnlySurface(t *testing.T) {
 		t.Fatalf("forgeh.executions.items=%#v, want empty list", executions["items"])
 	}
 
+	kernel := asMap(t, payload["kernel_activation"])
+	if kernel["status"] != "partial_live_validation_ready" {
+		t.Fatalf("kernel_activation.status=%v, want partial_live_validation_ready", kernel["status"])
+	}
+	if kernel["live_kernel_authority"] != false ||
+		kernel["simulator_authority"] != false ||
+		kernel["live_authority_migration"] != false ||
+		kernel["mutation_controls_available"] != false {
+		t.Fatalf("kernel_activation claimed forbidden authority or mutation controls: %#v", kernel)
+	}
+
 	storage := asMap(t, payload["storage"])
 	if storage["truth_authority"] != "sqlite" {
 		t.Fatalf("storage.truth_authority=%v, want sqlite", storage["truth_authority"])

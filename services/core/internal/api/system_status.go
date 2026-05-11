@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"forge/projectforge/services/core/internal/aios/controllane"
 	"forge/projectforge/services/core/internal/forgeh"
 	"forge/projectforge/services/core/internal/hostbridge"
 )
@@ -16,16 +17,17 @@ import (
 const shellSystemStatusProposalLimit = 12
 
 type forgeSystemStatusResponse struct {
-	GeneratedAt   time.Time                   `json:"generated_at"`
-	Core          forgeSystemCoreStatus       `json:"core"`
-	ShellSession  forgeSystemShellSession     `json:"shell_session"`
-	HostBridge    forgeSystemHostBridgeStatus `json:"hostbridge"`
-	ForgeH        forgeSystemForgeHStatus     `json:"forgeh"`
-	ModelRuntime  forgeSystemModelRuntime     `json:"modelruntime"`
-	Storage       forgeSystemStorageStatus    `json:"storage"`
-	ApprovalQueue forgeSystemApprovalQueue    `json:"approval_queue"`
-	Warnings      []string                    `json:"warnings,omitempty"`
-	Errors        []string                    `json:"errors,omitempty"`
+	GeneratedAt   time.Time                                   `json:"generated_at"`
+	Core          forgeSystemCoreStatus                       `json:"core"`
+	ShellSession  forgeSystemShellSession                     `json:"shell_session"`
+	HostBridge    forgeSystemHostBridgeStatus                 `json:"hostbridge"`
+	ForgeH        forgeSystemForgeHStatus                     `json:"forgeh"`
+	Kernel        controllane.ForgeKActivationReadinessReport `json:"kernel_activation"`
+	ModelRuntime  forgeSystemModelRuntime                     `json:"modelruntime"`
+	Storage       forgeSystemStorageStatus                    `json:"storage"`
+	ApprovalQueue forgeSystemApprovalQueue                    `json:"approval_queue"`
+	Warnings      []string                                    `json:"warnings,omitempty"`
+	Errors        []string                                    `json:"errors,omitempty"`
 }
 
 type forgeSystemCoreStatus struct {
@@ -187,6 +189,7 @@ func (s *Server) handleForgeSystemStatus(w http.ResponseWriter, r *http.Request)
 			},
 			CanonicalWriteCommitted: false,
 		},
+		Kernel:        s.forgeKActivationReadiness(now),
 		ModelRuntime:  s.shellSystemModelRuntime(r),
 		Storage:       s.shellSystemStorage(snapshot),
 		ApprovalQueue: forgeSystemApprovalQueue{Wired: true, Reason: "use governed approvals surface for decisions; G6 status is read-only"},

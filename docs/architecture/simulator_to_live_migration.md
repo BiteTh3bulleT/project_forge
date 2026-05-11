@@ -1,6 +1,6 @@
 # Simulator To Live Migration
 
-Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, Phase 14C partial live validation expansion, Phase 14D disabled-by-default validation shadow reporting, Phase 14E disabled-by-default validation shadow emission, Phase 14F explicit Control Lane partial live enforcement metadata, Phase 14G Control Lane validation contract-matrix hardening, Phase 14H semantic-operation lane closure, Phase 14I ref-shape lane closure, and Phase 14J ref-shape comparison lane closure.
+Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, Phase 14C partial live validation expansion, Phase 14D disabled-by-default validation shadow reporting, Phase 14E disabled-by-default validation shadow emission, Phase 14F explicit Control Lane partial live enforcement metadata, Phase 14G Control Lane validation contract-matrix hardening, Phase 14H semantic-operation lane closure, Phase 14I ref-shape lane closure, Phase 14J ref-shape comparison lane closure, and Phase 14K read-only activation readiness surface.
 
 ## Purpose
 
@@ -29,6 +29,8 @@ Phase 14H closes the `VALIDATE_SEMANTIC_OPERATION` validation lane in the narrow
 Phase 14I closes the `VALIDATE_REF_SHAPE` validation lane in the same narrow Control Lane sense: the lane is connected through the live owner, exposes a canonical allowed ref-type contract, rejects invalid ref shapes before commit, preserves no-effect metadata on rejected refs, and remains validation-only. Closed does not mean object truth lookup, evidence admission or rejection authority, Context Compiler authority, retrieval/search/embedding authority, semantic memory write authority, modelruntime authority, gateway/tool execution, or FORGE-K simulator live authority.
 
 Phase 14J closes the `COMPARE_REF_SHAPE` diagnostic lane in the same narrow Control Lane sense: the lane is connected through the live owner, reuses canonical ref-shape validation for candidate and observed refs, accepts match and drift as diagnostic outcomes, rejects invalid comparisons before commit, and preserves no-effect metadata on rejected comparisons. Closed does not mean object truth lookup, evidence admission or rejection authority, Context Compiler authority, retrieval/search/embedding authority, semantic memory write authority, modelruntime authority, gateway/tool execution, or FORGE-K simulator live authority.
+
+Phase 14K exposes a live-owned, read-only activation readiness report for the already connected validation lanes. The report is produced by `services/core/internal/aios/controllane`, surfaced through `GET /forge/kernel/status`, included in `GET /forge/system/status` as `kernel_activation`, and rendered in the desktop System page. It reports whether the Control Lane validation seams are registered, non-mutating, audit/capability-backed, and still bounded by no-effect guarantees. It does not import FORGE-K simulator services, enable live Kernel authority, add mutation controls, execute semantic operations, write memory, load models, call retrieval/search/embeddings, or change gateway/tool authority.
 
 ## Migration Pattern
 
@@ -123,6 +125,18 @@ Phase 14J closes the `COMPARE_REF_SHAPE` diagnostic lane in the same narrow Cont
 | Rejected posture | invalid candidate or observed refs fail closed with no-effect state and audit metadata |
 | Mutation posture | diagnostic/validation-only; no object truth lookup, evidence admission or rejection, context compilation, retrieval/search/embedding execution, semantic memory write, gateway/tool execution, modelruntime call, route/API change, or FORGE-K simulator live authority |
 | Still future | source-object authority lookup, evidence admission, live context compilation, semantic writes based on comparison output, and any broader FORGE-K authority migration |
+
+## Phase 14K Activation Readiness Surface Example
+
+| Concern | Decision |
+| --- | --- |
+| Readiness owner | live Control Lane package `services/core/internal/aios/controllane` |
+| Read-only API | `GET /forge/kernel/status` |
+| Shell composition | `kernel_activation` in `GET /forge/system/status` |
+| Required actions | `VALIDATE_KV_IDENTITY`, `VALIDATE_REF_SHAPE`, `COMPARE_REF_SHAPE`, `VALIDATE_SEMANTIC_OPERATION` |
+| Operator surface | desktop System page `FORGE-K Activation Readiness` panel |
+| Mutation posture | read-only status only; no approval buttons, execution buttons, semantic operation execution, semantic memory write, gateway/tool execution, modelruntime mutation, retrieval/search/embedding execution, host mutation, or FORGE-K simulator live authority |
+| Still future | explicit live Kernel authority migration, Courthouse admission integration, source-object authority lookup, context compilation authority, governed semantic mutation routing, and rollback/observability gates |
 
 ## Phase 14D Validation Shadow Reporting Example
 

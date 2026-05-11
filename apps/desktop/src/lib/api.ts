@@ -906,6 +906,44 @@ export type ForgeSystemStatus = {
     advisory_only?: boolean;
     canonical_write_committed?: boolean;
   };
+  kernel_activation?: {
+    generated_at?: string;
+    phase?: string;
+    status?: string;
+    summary?: string;
+    mode?: string;
+    live_owner?: string;
+    policy_version?: string;
+    kernel_runtime_state?: string;
+    closed_validation_lanes?: number;
+    total_validation_lanes?: number;
+    validation_actions?: Array<{
+      action?: string;
+      capability?: string;
+      registered?: boolean;
+      mutating?: boolean;
+      approval_possible?: boolean;
+      supports_dry_run?: boolean;
+      audit_event_name?: string;
+      closed?: boolean;
+      mode?: string;
+      live_owner?: string;
+      simulator_authority?: boolean;
+      live_kernel_authority?: boolean;
+    }>;
+    gates?: Array<{
+      name?: string;
+      passed?: boolean;
+      reason?: string;
+    }>;
+    no_effect?: Record<string, boolean>;
+    simulator_authority?: boolean;
+    live_kernel_authority?: boolean;
+    live_authority_migration?: boolean;
+    shadow_authoritative?: boolean;
+    mutation_controls_available?: boolean;
+    notes?: string[];
+  };
   modelruntime: {
     available: boolean;
     state?: string;
@@ -951,6 +989,7 @@ export const api = {
     j<{ dataDir: string; dbPath: string; workspaceDir: string }>("/api/meta"),
   system: {
     status: () => j<ForgeSystemStatus>("/forge/system/status"),
+    kernelStatus: () => j<NonNullable<ForgeSystemStatus["kernel_activation"]>>("/forge/kernel/status"),
   },
   settings: {
     get: () => j<SettingsRecord>("/api/settings"),

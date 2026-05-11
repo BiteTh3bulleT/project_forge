@@ -107,6 +107,66 @@ describe("SystemPage", () => {
         advisory_only: true,
         canonical_write_committed: false,
       },
+      kernel_activation: {
+        phase: "14K",
+        status: "partial_live_validation_ready",
+        summary:
+          "FORGE-K is active only as live Control Lane validation metadata.",
+        mode: "partial-live-enforcement",
+        live_owner: "aios.controllane",
+        policy_version: "phase-14f-control-lane-enforcement-v1",
+        kernel_runtime_state: "partial_live_validation",
+        closed_validation_lanes: 4,
+        total_validation_lanes: 4,
+        validation_actions: [
+          {
+            action: "VALIDATE_KV_IDENTITY",
+            capability: "kv.identity.validate",
+            registered: true,
+            mutating: false,
+            approval_possible: false,
+            supports_dry_run: true,
+            closed: true,
+            live_owner: "aios.controllane",
+            simulator_authority: false,
+            live_kernel_authority: false,
+          },
+          {
+            action: "VALIDATE_REF_SHAPE",
+            capability: "ref.shape.validate",
+            registered: true,
+            mutating: false,
+            approval_possible: false,
+            supports_dry_run: true,
+            closed: true,
+            live_owner: "aios.controllane",
+            simulator_authority: false,
+            live_kernel_authority: false,
+          },
+        ],
+        gates: [
+          {
+            name: "live_owner_explicit",
+            passed: true,
+            reason: "live owner remains aios.controllane",
+          },
+        ],
+        no_effect: {
+          memoryMutation: false,
+          runtimeMutation: false,
+          modelRuntimeCall: false,
+          evidenceAdmission: false,
+          contextCompilation: false,
+          gatewayExecution: false,
+          retrievalExecution: false,
+          liveAuthorityMigration: false,
+        },
+        simulator_authority: false,
+        live_kernel_authority: false,
+        live_authority_migration: false,
+        shadow_authoritative: false,
+        mutation_controls_available: false,
+      },
       modelruntime: {
         available: false,
         state: "unavailable",
@@ -154,6 +214,17 @@ describe("SystemPage", () => {
     expect(screen.getByText("Safe mode")).toBeTruthy();
     expect(screen.getByText("Host mutation disabled")).toBeTruthy();
     expect(screen.getByText("FORGE-K live authority disabled")).toBeTruthy();
+    expect(screen.getByText("FORGE-K Activation Readiness")).toBeTruthy();
+    expect(screen.getAllByText("partial_live_validation_ready").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("4/4")).toBeTruthy();
+    expect(screen.getByText("Simulator authority disabled")).toBeTruthy();
+    expect(screen.getByText("Live Kernel authority disabled")).toBeTruthy();
+    expect(screen.getByText("Mutation controls absent")).toBeTruthy();
+    expect(screen.getByText("VALIDATE_KV_IDENTITY")).toBeTruthy();
+    expect(screen.getByText("ref.shape.validate")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /approve/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /reject/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /execute/i })).toBeNull();
     expect(screen.getByText("Degraded")).toBeTruthy();
     expect(screen.getByText("FORGE-H Resource Posture")).toBeTruthy();
     expect(screen.getByText("Disk")).toBeTruthy();

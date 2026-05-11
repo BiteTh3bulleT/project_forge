@@ -18,10 +18,16 @@ function statusClass(status?: string) {
   if (["ok", "normal", "available", "healthy", "reachable"].includes(normalized)) {
     return "forge-ops-status forge-ops-status--ok";
   }
+  if (normalized === "partial_live_validation_ready") {
+    return "forge-ops-status forge-ops-status--ok";
+  }
   if (["degraded", "elevated", "constrained", "warning", "proposed"].includes(normalized)) {
     return "forge-ops-status forge-ops-status--warn";
   }
   if (["critical", "failed", "unreachable", "error"].includes(normalized)) {
+    return "forge-ops-status forge-ops-status--bad";
+  }
+  if (normalized === "blocked") {
     return "forge-ops-status forge-ops-status--bad";
   }
   return "forge-ops-status forge-ops-status--muted";
@@ -159,6 +165,7 @@ export function SystemPage() {
 
   const proposalRows = status?.forgeh.proposals ?? [];
   const executionRows = status?.forgeh.executions?.items ?? [];
+  const kernelActivation = status?.kernel_activation;
   const warnings = useMemo(() => {
     const values = [
       ...(status?.warnings ?? []),
@@ -208,11 +215,16 @@ export function SystemPage() {
         </div>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Metric
           label="Core Status"
           value={status?.core.service ?? "forge-core"}
           tone={status?.core.reachable ? "ok" : "unreachable"}
+        />
+        <Metric
+          label="Kernel"
+          value={kernelActivation?.status}
+          tone={kernelActivation?.status}
         />
         <Metric
           label="FORGE-H Posture"
@@ -290,6 +302,92 @@ export function SystemPage() {
                 label="FORGE-K live authority disabled"
                 enabled={status?.shell_session.forge_k_live_authority_disabled}
               />
+            </div>
+          </Panel>
+
+          <Panel
+            title="FORGE-K Activation Readiness"
+            detail={kernelActivation?.summary}
+          >
+            <div className="grid gap-3 md:grid-cols-4">
+              <Metric
+                label="Phase"
+                value={kernelActivation?.phase}
+              />
+              <Metric
+                label="Status"
+                value={kernelActivation?.status}
+                tone={kernelActivation?.status}
+              />
+              <Metric
+                label="Runtime state"
+                value={kernelActivation?.kernel_runtime_state}
+              />
+              <Metric
+                label="Closed lanes"
+                value={
+                  kernelActivation
+                    ? `${kernelActivation.closed_validation_lanes ?? 0}/${kernelActivation.total_validation_lanes ?? 0}`
+                    : undefined
+                }
+              />
+            </div>
+            <div className="mt-3 rounded border border-white/10 bg-black/20 p-3">
+              <BoundaryFlag
+                label="Simulator authority disabled"
+                enabled={kernelActivation ? !kernelActivation.simulator_authority : false}
+              />
+              <BoundaryFlag
+                label="Live Kernel authority disabled"
+                enabled={kernelActivation ? !kernelActivation.live_kernel_authority : false}
+              />
+              <BoundaryFlag
+                label="Live authority migration disabled"
+                enabled={kernelActivation ? !kernelActivation.live_authority_migration : false}
+              />
+              <BoundaryFlag
+                label="Mutation controls absent"
+                enabled={kernelActivation ? !kernelActivation.mutation_controls_available : false}
+              />
+            </div>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[640px] text-left text-xs">
+                <thead className="text-forge-mist/70">
+                  <tr>
+                    <th className="py-2 pr-3">Action</th>
+                    <th className="py-2 pr-3">Capability</th>
+                    <th className="py-2 pr-3">Closed</th>
+                    <th className="py-2 pr-3">Mutating</th>
+                    <th className="py-2 pr-3">Owner</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(kernelActivation?.validation_actions ?? []).map((action) => (
+                    <tr
+                      key={action.action ?? action.capability}
+                      className="border-t border-white/10"
+                    >
+                      <td className="py-2 pr-3 font-mono text-forge-ash">
+                        {valueText(action.action)}
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-forge-mist">
+                        {valueText(action.capability)}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <span className={statusClass(action.closed ? "ok" : "blocked")}>
+                          {valueText(action.closed)}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-3 text-forge-mist">
+                        {valueText(action.mutating)}
+                      </td>
+                      <td className="py-2 pr-3 text-forge-mist">
+                        {valueText(action.live_owner)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </Panel>
 
