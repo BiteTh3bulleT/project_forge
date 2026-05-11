@@ -14,6 +14,7 @@ export type ShellToolId =
   | "dashboard"
   | "system"
   | "command"
+  | "operator-apps"
   | "memory"
   | "project-context"
   | "models"
@@ -168,6 +169,14 @@ const secondaryShellTools: readonly ShellToolDefinition[] = [
     shortLabel: "CM",
     route: "/command",
     description: "Template launch surface for system commands.",
+    primary: false,
+  },
+  {
+    id: "operator-apps",
+    label: "Operator Apps",
+    shortLabel: "OA",
+    route: "/operator-apps",
+    description: "Allowlisted terminal and file manager launch surface.",
     primary: false,
   },
   {

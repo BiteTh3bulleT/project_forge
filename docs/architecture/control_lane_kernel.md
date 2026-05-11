@@ -30,6 +30,8 @@ Phase 14C adds `[PARTIAL LIVE VALIDATION]` `COMPARE_REF_SHAPE` and `VALIDATE_SEM
 
 Phase 14D adds disabled-by-default internal shadow reporting support for Control Lane validation summaries through `services/core/internal/forgekshadow`. It records bounded scalar diagnostics only when global shadow mode and `FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED` are both enabled. The reports do not alter Control Lane decisions, change routes, expose a public API, affect user-visible output, admit evidence, compile context, write memory, execute retrieval/search/embeddings, call modelruntime, execute tools, or make FORGE-K simulator services live authority.
 
+Phase 14E wires those disabled-by-default diagnostic summaries into the live Control Lane processor through an optional best-effort observer. The observer receives bounded validation result metadata after a syscall result exists and cannot change the returned result. The live Control Lane remains the authority; FORGE-K simulator services remain outside the live authority path.
+
 ## Kernel / user-space boundary
 
 - user space: users, adapters, internal cells, future IRIS propose semantic actions

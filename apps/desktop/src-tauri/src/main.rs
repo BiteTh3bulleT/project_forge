@@ -42,6 +42,39 @@ struct HostDiagnostics {
     disks: Vec<HostDisk>,
 }
 
+#[derive(Serialize, Clone)]
+struct OperatorApp {
+    id: &'static str,
+    label: &'static str,
+    description: &'static str,
+    executable: &'static str,
+}
+
+#[derive(Serialize)]
+struct OperatorAppLaunchResult {
+    app_id: String,
+    label: String,
+    executable: String,
+    launched: bool,
+    pid: Option<u32>,
+    message: String,
+}
+
+const OPERATOR_APPS: &[OperatorApp] = &[
+    OperatorApp {
+        id: "terminal",
+        label: "Terminal",
+        description: "Open a Foot terminal in the current FORGE operator session.",
+        executable: "foot",
+    },
+    OperatorApp {
+        id: "files",
+        label: "Files",
+        description: "Open the PCManFM file manager in the current FORGE operator session.",
+        executable: "pcmanfm",
+    },
+];
+
 #[tauri::command]
 fn read_system_diagnostics() -> Result<HostDiagnostics, String> {
     let mut system = System::new_all();
@@ -62,18 +95,16 @@ fn read_system_diagnostics() -> Result<HostDiagnostics, String> {
     let available_swap_bytes = system.free_swap();
     let used_swap_bytes = total_swap_bytes.saturating_sub(available_swap_bytes);
 
-    let process = sysinfo::get_current_pid()
-        .ok()
-        .and_then(|pid: Pid| {
-            system.process(pid).map(|proc| HostProcess {
-                pid: pid.as_u32(),
-                name: proc.name().to_string_lossy().into_owned(),
-                memory_bytes: proc.memory(),
-                virtual_memory_bytes: proc.virtual_memory(),
-                cpu_usage_percent: proc.cpu_usage(),
-                run_time_seconds: proc.run_time(),
-            })
-        });
+    let process = sysinfo::get_current_pid().ok().and_then(|pid: Pid| {
+        system.process(pid).map(|proc| HostProcess {
+            pid: pid.as_u32(),
+            name: proc.name().to_string_lossy().into_owned(),
+            memory_bytes: proc.memory(),
+            virtual_memory_bytes: proc.virtual_memory(),
+            cpu_usage_percent: proc.cpu_usage(),
+            run_time_seconds: proc.run_time(),
+        })
+    });
 
     let mut disks = Vec::new();
     for disk in Disks::new_with_refreshed_list().list() {
@@ -108,9 +139,39 @@ fn read_system_diagnostics() -> Result<HostDiagnostics, String> {
     })
 }
 
+#[tauri::command]
+fn list_operator_apps() -> Vec<OperatorApp> {
+    OPERATOR_APPS.to_vec()
+}
+
+#[tauri::command]
+fn launch_operator_app(app_id: String) -> Result<OperatorAppLaunchResult, String> {
+    let app = OPERATOR_APPS
+        .iter()
+        .find(|candidate| candidate.id == app_id.trim())
+        .ok_or_else(|| "operator app is not allowlisted".to_string())?;
+
+    let child = std::process::Command::new(app.executable)
+        .spawn()
+        .map_err(|err| format!("failed to launch {}: {}", app.label, err))?;
+
+    Ok(OperatorAppLaunchResult {
+        app_id: app.id.to_string(),
+        label: app.label.to_string(),
+        executable: app.executable.to_string(),
+        launched: true,
+        pid: Some(child.id()),
+        message: format!("{} launch requested", app.label),
+    })
+}
+
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![read_system_diagnostics])
+        .invoke_handler(tauri::generate_handler![
+            read_system_diagnostics,
+            list_operator_apps,
+            launch_operator_app
+        ])
         .run(tauri::generate_context!())
         .expect("error while running FORGE desktop");
 }

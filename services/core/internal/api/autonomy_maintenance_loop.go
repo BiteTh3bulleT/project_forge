@@ -1351,7 +1351,7 @@ func (l *AutonomyMaintenanceLoop) emit(kind string, payload map[string]any) erro
 	return l.events.Emit(context.Background(), kind, payload)
 }
 
-func newDefaultAutonomyMaintenanceLoop(db *sql.DB, cfg config.Config, ev *events.Logger, memorySvc *memory.Service) *AutonomyMaintenanceLoop {
+func newDefaultAutonomyMaintenanceLoop(db *sql.DB, cfg config.Config, ev *events.Logger, memorySvc *memory.Service, controlLaneValidationObserver controllane.ControlLaneValidationObserver) *AutonomyMaintenanceLoop {
 	if db == nil {
 		return nil
 	}
@@ -1378,14 +1378,15 @@ func newDefaultAutonomyMaintenanceLoop(db *sql.DB, cfg config.Config, ev *events
 	supersessionRepo := controllane.NewSQLiteSupersessionRepository(db)
 	txRunner := controllane.NewSQLiteTransactionRunner(db)
 	kernel := controllane.NewProcessor(controllane.ProcessorOptions{
-		Registry:     controllane.NewStaticActionRegistry(),
-		Validator:    controllane.NewDeterministicValidator(),
-		Capabilities: controllane.NewStaticCapabilityService(),
-		ApprovalGate: controllane.NewStaticApprovalGate(),
-		TxRunner:     txRunner,
-		AuditSink:    controllane.NewCoreAuditSink(audit.New(db)),
-		RuleEngine:   rulecells.MustStaticEngine(),
-		NowMillis:    nowFn,
+		Registry:                      controllane.NewStaticActionRegistry(),
+		Validator:                     controllane.NewDeterministicValidator(),
+		Capabilities:                  controllane.NewStaticCapabilityService(),
+		ApprovalGate:                  controllane.NewStaticApprovalGate(),
+		TxRunner:                      txRunner,
+		AuditSink:                     controllane.NewCoreAuditSink(audit.New(db)),
+		RuleEngine:                    rulecells.MustStaticEngine(),
+		NowMillis:                     nowFn,
+		ControlLaneValidationObserver: controlLaneValidationObserver,
 	})
 	truthEngine := truth.NewEngine(truth.EngineOptions{
 		Kernel: kernel,

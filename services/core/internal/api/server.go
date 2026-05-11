@@ -226,8 +226,38 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	ruleEngine := rulecells.MustStaticEngine()
 	dreamSvc := dream.NewService(st.DB)
 	dreamSvc.SetRuleEngine(ruleEngine)
+	var shadowObserver *forgekshadow.Observer
+	var shadowDB *sql.DB
+	if cfg.ForgeKShadowModeEnabled {
+		shadowConfig := forgekshadow.Config{
+			Enabled:                      true,
+			ChatMetadataEnabled:          cfg.ForgeKShadowChatMetadataEnabled,
+			RetrievalMetadataEnabled:     cfg.ForgeKShadowRetrievalMetadataEnabled,
+			AdvisoryEnabled:              cfg.ForgeKShadowAdvisoryEnabled,
+			ControlLaneValidationEnabled: cfg.ForgeKShadowControlLaneValidationEnabled,
+		}
+		var shadowSink forgekshadow.Sink = forgekshadow.NewMemorySink(forgekshadow.DefaultMaxReports)
+		if cfg.ShadowDiagnosticPersistenceEnabled {
+			if err := cfg.ValidateShadowDiagnosticPersistence(); err != nil {
+				log.Printf("forge-k shadow diagnostic persistence disabled: %v", err)
+			} else if db, err := sql.Open("pgx", cfg.PostgresDSN); err != nil {
+				log.Printf("forge-k shadow diagnostic postgres open failed: %v", err)
+			} else if err := store.NewPostgresMigrationRunner(store.PostgresMigrations()).Run(context.Background(), db); err != nil {
+				_ = db.Close()
+				log.Printf("forge-k shadow diagnostic postgres migrations failed: %v", err)
+			} else {
+				shadowDB = db
+				shadowSink = forgekshadow.NewDiagnosticPersistenceSink(shadowSink, forgekshadow.NewPostgresDiagnosticRepository(db), forgekshadow.DiagnosticPersistenceOptions{
+					Enabled:         true,
+					RetentionDays:   cfg.ShadowDiagnosticRetentionDays,
+					MaxPayloadBytes: cfg.ShadowDiagnosticMaxPayloadBytes,
+				})
+			}
+		}
+		shadowObserver = forgekshadow.NewObserverWithSink(shadowConfig, shadowSink, nil)
+	}
 	var autonomyLoop *AutonomyMaintenanceLoop
-	if loop := newDefaultAutonomyMaintenanceLoop(st.DB, cfg, ev, memorySvc); loop != nil {
+	if loop := newDefaultAutonomyMaintenanceLoop(st.DB, cfg, ev, memorySvc, shadowObserver); loop != nil {
 		autonomyLoop = loop
 	}
 	capabilityRegistry, err := gateway.NewToolCapabilityRegistryWithStore(bg, &gateway.SQLiteOverrideStore{DB: st.DB})
@@ -278,36 +308,6 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	}
 	if autonomyLoop != nil {
 		go autonomyLoop.Run(ctx)
-	}
-	var shadowObserver *forgekshadow.Observer
-	var shadowDB *sql.DB
-	if cfg.ForgeKShadowModeEnabled {
-		shadowConfig := forgekshadow.Config{
-			Enabled:                      true,
-			ChatMetadataEnabled:          cfg.ForgeKShadowChatMetadataEnabled,
-			RetrievalMetadataEnabled:     cfg.ForgeKShadowRetrievalMetadataEnabled,
-			AdvisoryEnabled:              cfg.ForgeKShadowAdvisoryEnabled,
-			ControlLaneValidationEnabled: cfg.ForgeKShadowControlLaneValidationEnabled,
-		}
-		var shadowSink forgekshadow.Sink = forgekshadow.NewMemorySink(forgekshadow.DefaultMaxReports)
-		if cfg.ShadowDiagnosticPersistenceEnabled {
-			if err := cfg.ValidateShadowDiagnosticPersistence(); err != nil {
-				log.Printf("forge-k shadow diagnostic persistence disabled: %v", err)
-			} else if db, err := sql.Open("pgx", cfg.PostgresDSN); err != nil {
-				log.Printf("forge-k shadow diagnostic postgres open failed: %v", err)
-			} else if err := store.NewPostgresMigrationRunner(store.PostgresMigrations()).Run(context.Background(), db); err != nil {
-				_ = db.Close()
-				log.Printf("forge-k shadow diagnostic postgres migrations failed: %v", err)
-			} else {
-				shadowDB = db
-				shadowSink = forgekshadow.NewDiagnosticPersistenceSink(shadowSink, forgekshadow.NewPostgresDiagnosticRepository(db), forgekshadow.DiagnosticPersistenceOptions{
-					Enabled:         true,
-					RetentionDays:   cfg.ShadowDiagnosticRetentionDays,
-					MaxPayloadBytes: cfg.ShadowDiagnosticMaxPayloadBytes,
-				})
-			}
-		}
-		shadowObserver = forgekshadow.NewObserverWithSink(shadowConfig, shadowSink, nil)
 	}
 	srv := &Server{
 		st:             st,

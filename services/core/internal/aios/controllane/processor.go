@@ -6,34 +6,41 @@ import (
 
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/aios/rulecells"
+	"forge/projectforge/services/core/internal/forgekshadow"
 )
 
 type ForgeKernelProcessor interface {
 	Process(ctx context.Context, req domain.SyscallRequest) (domain.SyscallResult, error)
 }
 
+type ControlLaneValidationObserver interface {
+	ObserveControlLaneValidationBestEffort(ctx context.Context, input forgekshadow.ControlLaneValidationInput)
+}
+
 type ProcessorOptions struct {
-	Registry          ActionRegistry
-	Validator         SemanticActionValidator
-	Capabilities      CapabilityService
-	ApprovalGate      ApprovalGate
-	TxRunner          TransactionRunner
-	AuditSink         AuditSink
-	NowMillis         func() int64
-	RuleEngine        RuleEngine
-	KVIdentityMetrics KVIdentityEnforcementMetrics
+	Registry                      ActionRegistry
+	Validator                     SemanticActionValidator
+	Capabilities                  CapabilityService
+	ApprovalGate                  ApprovalGate
+	TxRunner                      TransactionRunner
+	AuditSink                     AuditSink
+	NowMillis                     func() int64
+	RuleEngine                    RuleEngine
+	KVIdentityMetrics             KVIdentityEnforcementMetrics
+	ControlLaneValidationObserver ControlLaneValidationObserver
 }
 
 type Processor struct {
-	registry          ActionRegistry
-	validator         SemanticActionValidator
-	capabilities      CapabilityService
-	approvalGate      ApprovalGate
-	txRunner          TransactionRunner
-	auditSink         AuditSink
-	nowMillis         func() int64
-	ruleEngine        RuleEngine
-	kvIdentityMetrics KVIdentityEnforcementMetrics
+	registry                      ActionRegistry
+	validator                     SemanticActionValidator
+	capabilities                  CapabilityService
+	approvalGate                  ApprovalGate
+	txRunner                      TransactionRunner
+	auditSink                     AuditSink
+	nowMillis                     func() int64
+	ruleEngine                    RuleEngine
+	kvIdentityMetrics             KVIdentityEnforcementMetrics
+	controlLaneValidationObserver ControlLaneValidationObserver
 }
 
 type RuleEngine interface {
@@ -71,19 +78,20 @@ func NewProcessor(opts ProcessorOptions) *Processor {
 		tx = NewInMemoryTransactionRunner(store)
 	}
 	return &Processor{
-		registry:          reg,
-		validator:         validator,
-		capabilities:      caps,
-		approvalGate:      approval,
-		txRunner:          tx,
-		auditSink:         opts.AuditSink,
-		nowMillis:         nowFn,
-		ruleEngine:        opts.RuleEngine,
-		kvIdentityMetrics: opts.KVIdentityMetrics,
+		registry:                      reg,
+		validator:                     validator,
+		capabilities:                  caps,
+		approvalGate:                  approval,
+		txRunner:                      tx,
+		auditSink:                     opts.AuditSink,
+		nowMillis:                     nowFn,
+		ruleEngine:                    opts.RuleEngine,
+		kvIdentityMetrics:             opts.KVIdentityMetrics,
+		controlLaneValidationObserver: opts.ControlLaneValidationObserver,
 	}
 }
 
-func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (domain.SyscallResult, error) {
+func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out domain.SyscallResult, err error) {
 	req = p.normalize(req)
 	result := domain.SyscallResult{
 		Success:            false,
@@ -100,6 +108,9 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (dom
 		ValidationDetails:  []domain.ValidationDetail{},
 		StateSummary:       map[string]any{},
 	}
+	defer func() {
+		p.observeControlLaneValidation(ctx, req, out)
+	}()
 
 	def, ok := p.registry.Get(req.Action)
 	if !ok {

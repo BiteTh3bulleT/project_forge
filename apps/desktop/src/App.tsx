@@ -39,6 +39,7 @@ import { LineagePage } from "./pages/LineagePage";
 import { MemoryDetailPage } from "./pages/MemoryDetailPage";
 import { MemoryPage } from "./pages/MemoryPage";
 import { ModelsPage } from "./pages/ModelsPage";
+import { OperatorAppsPage } from "./pages/OperatorAppsPage";
 import { DossiersPage } from "./pages/DossiersPage";
 import { ProjectContextPage } from "./pages/ProjectContextPage";
 import { ReleasePage } from "./pages/ReleasePage";
@@ -72,6 +73,7 @@ function RoutedViews() {
         <Route path="/workbench" element={<WorkbenchPage />} />
         <Route path="/canvas" element={<CanvasPage />} />
         <Route path="/command" element={<CommandPage />} />
+        <Route path="/operator-apps" element={<OperatorAppsPage />} />
         <Route path="/memory" element={<MemoryPage />} />
         <Route path="/memory/chunk/:id" element={<MemoryDetailPage />} />
         <Route path="/project-context" element={<ProjectContextPage />} />

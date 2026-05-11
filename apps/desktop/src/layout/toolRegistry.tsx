@@ -21,6 +21,7 @@ import { JobsPage } from "../pages/JobsPage";
 import { LineagePage } from "../pages/LineagePage";
 import { MemoryPage } from "../pages/MemoryPage";
 import { ModelsPage } from "../pages/ModelsPage";
+import { OperatorAppsPage } from "../pages/OperatorAppsPage";
 import { PolicyPage } from "../pages/PolicyPage";
 import { ProjectContextPage } from "../pages/ProjectContextPage";
 import { ReleasePage } from "../pages/ReleasePage";
@@ -49,6 +50,7 @@ export const TOOL_COMPONENTS: Partial<Record<ShellToolId, ToolComponent>> = {
   dashboard: DashboardPage,
   system: SystemPage,
   command: CommandPage,
+  "operator-apps": OperatorAppsPage,
   chat: ChatPage,
   workbench: WorkbenchPage,
   canvas: CanvasPage,

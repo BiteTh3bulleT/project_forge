@@ -1,6 +1,6 @@
 # Simulator To Live Migration
 
-Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, Phase 14C partial live validation expansion, and Phase 14D disabled-by-default validation shadow reporting.
+Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, Phase 14C partial live validation expansion, Phase 14D disabled-by-default validation shadow reporting, and Phase 14E disabled-by-default validation shadow emission.
 
 ## Purpose
 
@@ -17,6 +17,8 @@ Phase 14B applies the pattern to deterministic ref-shape validation. `services/c
 Phase 14C extends the same pattern with diagnostic ref-shape comparison and semantic-operation shape validation. `COMPARE_REF_SHAPE` reports match/drift between candidate and observed refs. `VALIDATE_SEMANTIC_OPERATION` validates operation shape and rejects authority claims. Both remain Control Lane validation only.
 
 Phase 14D adds a read-only internal diagnostic report shape for validation summaries under `services/core/internal/forgekshadow`. It is disabled by default, requires both global shadow mode and `FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED`, and does not change Control Lane decisions or route live mutation through FORGE-K.
+
+Phase 14E wires live Control Lane validation results into that observer through an optional best-effort processor dependency. The emission happens after a syscall result exists, is bounded to scalar summaries, and cannot affect validation decisions, memory, routes, retrieval, modelruntime, gateway behavior, or live authority.
 
 ## Migration Pattern
 

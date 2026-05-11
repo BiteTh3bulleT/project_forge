@@ -301,7 +301,7 @@ func buildOperationalAutonomyLoop(t *testing.T, st *store.Store, now int64) *Aut
 		DataDir:      t.TempDir(),
 		WorkspaceDir: filepath.Join(t.TempDir(), "workspace"),
 	}
-	loop := newDefaultAutonomyMaintenanceLoop(st.DB, cfg, events.New(st.DB), nil)
+	loop := newDefaultAutonomyMaintenanceLoop(st.DB, cfg, events.New(st.DB), nil, nil)
 	if loop == nil {
 		t.Fatalf("expected default autonomy loop")
 	}
