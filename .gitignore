@@ -12,7 +12,7 @@ target/
 *.log
 data/
 apps/desktop/src-tauri/gen/
-.forge/run/
+.forge/
 .claude/settings.local.json
 .claude/worktrees/
 .worktrees/
