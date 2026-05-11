@@ -102,7 +102,7 @@ func UnknownIntent(id, rejectedReason string, warnings []string) Intent {
 }
 
 func SupportsNoModelRoute(intent Intent) bool {
-	if intent.RequiresModel {
+	if intent.RequiresModel || intent.RequiresGateway {
 		return false
 	}
 	switch intent.Route {
