@@ -1,6 +1,6 @@
 # Simulator To Live Migration
 
-Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, Phase 14C partial live validation expansion, Phase 14D disabled-by-default validation shadow reporting, Phase 14E disabled-by-default validation shadow emission, Phase 14F explicit Control Lane partial live enforcement metadata, Phase 14G Control Lane validation contract-matrix hardening, and Phase 14H semantic-operation lane closure.
+Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, Phase 14C partial live validation expansion, Phase 14D disabled-by-default validation shadow reporting, Phase 14E disabled-by-default validation shadow emission, Phase 14F explicit Control Lane partial live enforcement metadata, Phase 14G Control Lane validation contract-matrix hardening, Phase 14H semantic-operation lane closure, and Phase 14I ref-shape lane closure.
 
 ## Purpose
 
@@ -25,6 +25,8 @@ Phase 14F turns on the first explicit `[PARTIAL LIVE ENFORCEMENT]` FORGE-K activ
 Phase 14G hardens Phase 14F with a Control Lane validation contract matrix. The tests prove every existing live validation action exposes the same activation/no-effect metadata in syscall state summaries and audit summaries. This remains hardening only: no new validation action, simulator service import, public API, route behavior change, live KV reuse, modelruntime call, retrieval/search/embedding execution, evidence admission, context compilation, or semantic memory write is added.
 
 Phase 14H closes the `VALIDATE_SEMANTIC_OPERATION` validation lane in the narrow Control Lane sense: the lane is connected through the live owner, rejects a canonical normalized authority-claim set, preserves no-effect metadata on rejected claims, and remains validation-only. Closed does not mean semantic operation execution, memory write authority, evidence admission authority, Context Compiler authority, modelruntime authority, retrieval/gateway execution, or FORGE-K simulator live authority.
+
+Phase 14I closes the `VALIDATE_REF_SHAPE` validation lane in the same narrow Control Lane sense: the lane is connected through the live owner, exposes a canonical allowed ref-type contract, rejects invalid ref shapes before commit, preserves no-effect metadata on rejected refs, and remains validation-only. Closed does not mean object truth lookup, evidence admission or rejection authority, Context Compiler authority, retrieval/search/embedding authority, semantic memory write authority, modelruntime authority, gateway/tool execution, or FORGE-K simulator live authority.
 
 ## Migration Pattern
 
@@ -94,6 +96,18 @@ Phase 14H closes the `VALIDATE_SEMANTIC_OPERATION` validation lane in the narrow
 | Rejected posture | fail closed with no-effect state and audit metadata |
 | Mutation posture | validation-only; no semantic execution, memory write, evidence admission, context compilation, retrieval/search/embedding execution, gateway/tool execution, modelruntime call, route/API change, or FORGE-K simulator live authority |
 | Still future | actual semantic operation execution and any broader FORGE-K authority migration |
+
+## Phase 14I Ref Shape Lane Closure Example
+
+| Concern | Decision |
+| --- | --- |
+| Closed lane | `VALIDATE_REF_SHAPE` validation only |
+| Shared pure package | `services/core/internal/refvalidation` |
+| Live caller | `services/core/internal/aios/controllane` |
+| Canonical guard | copied allowed ref-type list plus fail-closed shape/safety/scope gates |
+| Rejected posture | fail closed with no-effect state and audit metadata |
+| Mutation posture | validation-only; no object truth lookup, evidence admission or rejection, context compilation, retrieval/search/embedding execution, semantic memory write, gateway/tool execution, modelruntime call, route/API change, or FORGE-K simulator live authority |
+| Still future | source-object authority lookup, evidence admission, live context compilation, semantic writes based on refs, and any broader FORGE-K authority migration |
 
 ## Phase 14D Validation Shadow Reporting Example
 
