@@ -97,6 +97,24 @@ const OPERATOR_APPS: &[OperatorAppDefinition] = &[
         launch_args: &["/projectforge"],
     },
     OperatorAppDefinition {
+        id: "editor",
+        label: "Editor",
+        description: "Open the fixed operator text editor wrapper for the FORGE workspace.",
+        executable: "foot",
+        category: "Workspace",
+        desktop_ids: &[],
+        launch_args: &["-e", "forge-operator-editor"],
+    },
+    OperatorAppDefinition {
+        id: "archive-manager",
+        label: "Archive Manager",
+        description: "Open Xarchiver for inspecting and unpacking local archives.",
+        executable: "xarchiver",
+        category: "Workspace",
+        desktop_ids: &["xarchiver.desktop"],
+        launch_args: &[],
+    },
+    OperatorAppDefinition {
         id: "browser",
         label: "Browser",
         description: "Open Firefox for local docs, web consoles, and model tooling.",
@@ -104,6 +122,97 @@ const OPERATOR_APPS: &[OperatorAppDefinition] = &[
         category: "Internet",
         desktop_ids: &["firefox.desktop"],
         launch_args: &[],
+    },
+    OperatorAppDefinition {
+        id: "api-health",
+        label: "API Health",
+        description: "Run a fixed FORGE core health probe in a terminal.",
+        executable: "foot",
+        category: "Internet",
+        desktop_ids: &[],
+        launch_args: &["-e", "forge-operator-core-status"],
+    },
+    OperatorAppDefinition {
+        id: "ollama-status",
+        label: "Ollama Status",
+        description:
+            "Show local Ollama process and model status without loading or unloading models.",
+        executable: "foot",
+        category: "AI Runtime",
+        desktop_ids: &[],
+        launch_args: &["-e", "forge-operator-ollama-status"],
+    },
+    OperatorAppDefinition {
+        id: "modelruntime-status",
+        label: "Modelruntime Status",
+        description: "Show governed FORGE modelruntime status through the local core API.",
+        executable: "foot",
+        category: "AI Runtime",
+        desktop_ids: &[],
+        launch_args: &["-e", "forge-operator-models"],
+    },
+    OperatorAppDefinition {
+        id: "system-monitor",
+        label: "System Monitor",
+        description: "Open the fixed btop/htop process monitor wrapper.",
+        executable: "foot",
+        category: "System",
+        desktop_ids: &[],
+        launch_args: &["-e", "forge-operator-btop"],
+    },
+    OperatorAppDefinition {
+        id: "core-logs",
+        label: "Core Logs",
+        description: "Show recent forge-core journal logs through a fixed read-only wrapper.",
+        executable: "foot",
+        category: "System",
+        desktop_ids: &[],
+        launch_args: &["-e", "forge-operator-core-logs"],
+    },
+    OperatorAppDefinition {
+        id: "network-diagnostics",
+        label: "Network Diagnostics",
+        description: "Show fixed read-only address, route, socket, and DNS diagnostics.",
+        executable: "foot",
+        category: "System",
+        desktop_ids: &[],
+        launch_args: &["-e", "forge-operator-network-diagnostics"],
+    },
+    OperatorAppDefinition {
+        id: "hardware-diagnostics",
+        label: "Hardware Diagnostics",
+        description: "Show fixed read-only PCI, USB, and process file diagnostics.",
+        executable: "foot",
+        category: "System",
+        desktop_ids: &[],
+        launch_args: &["-e", "forge-operator-hardware-diagnostics"],
+    },
+    OperatorAppDefinition {
+        id: "sqlite-browser",
+        label: "SQLite Browser",
+        description: "Open DB Browser for SQLite for local database inspection.",
+        executable: "sqlitebrowser",
+        category: "Developer",
+        desktop_ids: &["sqlitebrowser.desktop"],
+        launch_args: &[],
+    },
+    OperatorAppDefinition {
+        id: "lazygit",
+        label: "Git UI",
+        description: "Open lazygit in the FORGE workspace through a fixed terminal wrapper.",
+        executable: "foot",
+        category: "Developer",
+        desktop_ids: &[],
+        launch_args: &["-e", "forge-operator-lazygit"],
+    },
+    OperatorAppDefinition {
+        id: "forge-status",
+        label: "FORGE Status",
+        description: "Show local forge-core health through a fixed read-only wrapper.",
+        executable: "foot",
+        category: "FORGE",
+        desktop_ids: &[],
+        launch_args: &["-e", "forge-operator-core-status"],
     },
 ];
 
@@ -314,12 +423,16 @@ fn list_operator_apps() -> Vec<OperatorApp> {
     OPERATOR_APPS.iter().map(enrich_operator_app).collect()
 }
 
-#[tauri::command]
-fn launch_operator_app(app_id: String) -> Result<OperatorAppLaunchResult, String> {
-    let app = OPERATOR_APPS
+fn resolve_operator_app(app_id: &str) -> Result<&'static OperatorAppDefinition, String> {
+    OPERATOR_APPS
         .iter()
         .find(|candidate| candidate.id == app_id.trim())
-        .ok_or_else(|| "operator app is not allowlisted".to_string())?;
+        .ok_or_else(|| "operator app is not allowlisted".to_string())
+}
+
+#[tauri::command]
+fn launch_operator_app(app_id: String) -> Result<OperatorAppLaunchResult, String> {
+    let app = resolve_operator_app(&app_id)?;
 
     let child = std::process::Command::new(app.executable)
         .args(app.launch_args)
@@ -364,4 +477,112 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running FORGE desktop");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn operator_apps_cover_toolbelt_categories() {
+        let categories: std::collections::BTreeSet<&str> =
+            OPERATOR_APPS.iter().map(|app| app.category).collect();
+        for category in [
+            "Workspace",
+            "Internet",
+            "AI Runtime",
+            "System",
+            "Developer",
+            "FORGE",
+        ] {
+            assert!(
+                categories.contains(category),
+                "missing operator app category {category}"
+            );
+        }
+    }
+
+    #[test]
+    fn operator_cli_apps_use_fixed_forge_wrappers() {
+        for app_id in [
+            "editor",
+            "ollama-status",
+            "modelruntime-status",
+            "system-monitor",
+            "lazygit",
+            "core-logs",
+            "network-diagnostics",
+            "hardware-diagnostics",
+            "forge-status",
+        ] {
+            let app = OPERATOR_APPS
+                .iter()
+                .find(|candidate| candidate.id == app_id)
+                .unwrap_or_else(|| panic!("missing operator app {app_id}"));
+            assert_eq!(app.executable, "foot");
+            assert!(app.launch_args.contains(&"-e"));
+            assert!(
+                app.launch_args
+                    .iter()
+                    .any(|arg| arg.starts_with("forge-operator-")),
+                "CLI launcher {app_id} must use a fixed forge-operator-* wrapper"
+            );
+        }
+    }
+
+    #[test]
+    fn operator_wrapper_apps_cover_all_toolbelt_wrappers() {
+        for wrapper in [
+            "forge-operator-editor",
+            "forge-operator-ollama-status",
+            "forge-operator-models",
+            "forge-operator-btop",
+            "forge-operator-lazygit",
+            "forge-operator-core-logs",
+            "forge-operator-core-status",
+            "forge-operator-network-diagnostics",
+            "forge-operator-hardware-diagnostics",
+        ] {
+            assert!(
+                OPERATOR_APPS
+                    .iter()
+                    .any(|app| app.executable == "foot"
+                        && app.launch_args == &["-e", wrapper]),
+                "missing fixed operator launcher for {wrapper}"
+            );
+        }
+    }
+
+    #[test]
+    fn operator_app_resolution_rejects_unknown_ids() {
+        assert_eq!(
+            resolve_operator_app("not-real")
+                .err()
+                .expect("unknown app id should fail"),
+            "operator app is not allowlisted"
+        );
+        assert_eq!(
+            resolve_operator_app("  api-health  ")
+                .expect("trimmed app id should resolve")
+                .id,
+            "api-health"
+        );
+    }
+
+    #[test]
+    fn operator_launcher_does_not_expose_shell_injection_surface() {
+        for app in OPERATOR_APPS {
+            assert_ne!(app.executable, "sh");
+            assert_ne!(app.executable, "bash");
+            assert_ne!(app.executable, "systemctl");
+            assert_ne!(app.executable, "nixos-rebuild");
+            for arg in app.launch_args {
+                assert!(!arg.contains("{}"), "placeholder arg found in {}", app.id);
+                assert!(!arg.contains("$1"), "positional arg found in {}", app.id);
+                assert!(!arg.contains(";"), "shell separator found in {}", app.id);
+                assert!(!arg.contains("&&"), "shell separator found in {}", app.id);
+                assert!(!arg.contains("|"), "pipe found in {}", app.id);
+            }
+        }
+    }
 }

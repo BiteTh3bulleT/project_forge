@@ -34,6 +34,11 @@ writeShellApplication {
     export FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false
     export FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false
 
+    if [ "$FORGE_SHELL_MODE" = "operator-desktop" ] && [ -n "''${FORGE_SHELL_BINARY:-}" ]; then
+      echo "FORGE_SHELL_BINARY is disabled for operator-desktop sessions; use the Nix-packaged forge-desktop-shell." >&2
+      exit 1
+    fi
+
     if [ -n "''${FORGE_SHELL_BINARY:-}" ]; then
       if [ -x "$FORGE_SHELL_BINARY" ]; then
         exec "$FORGE_SHELL_BINARY" "$@"
@@ -48,6 +53,11 @@ writeShellApplication {
         exec "$nix_desktop_shell" "$@"
       fi
       echo "Nix-provided FORGE desktop shell is not executable: $nix_desktop_shell" >&2
+      exit 1
+    fi
+
+    if [ "$FORGE_SHELL_MODE" = "operator-desktop" ]; then
+      echo "operator-desktop sessions require a Nix-packaged forge-desktop-shell; local binary fallback is disabled." >&2
       exit 1
     fi
 

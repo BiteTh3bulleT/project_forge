@@ -184,6 +184,58 @@ func TestDreamRunReportPersistenceAndScopedReadAPI(t *testing.T) {
 	}
 }
 
+func TestDreamRunAcademyRequestShapeIsEvidenceOnly(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	before := countRows(t, st, "memory_notes")
+	body := []byte(`{"workspaceId":"ws-dream","laneId":"control.semantic","purpose":"academy_promotion_candidate","skillId":"skill.gateway-policy","examId":"exam.gateway-policy","allowSkillPromotion":true,"requireOperatorReviewForSkillPromotion":false,"persistReport":true}`)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/api/dream/run", bytes.NewReader(body)))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("academy dream run status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var runResp struct {
+		Persisted               bool `json:"persisted"`
+		NonCanonicalEvidence    bool `json:"nonCanonicalEvidence"`
+		CanonicalWriteCommitted bool `json:"canonicalWriteCommitted"`
+		Report                  struct {
+			Purpose            string         `json:"purpose"`
+			SkillID            string         `json:"skillId"`
+			ExamID             string         `json:"examId"`
+			PromotionCandidate bool           `json:"promotionCandidate"`
+			ReviewRequired     bool           `json:"reviewRequired"`
+			Trace              map[string]any `json:"trace"`
+		} `json:"report"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&runResp); err != nil {
+		t.Fatalf("decode academy run response: %v", err)
+	}
+	if !runResp.Persisted || !runResp.NonCanonicalEvidence || runResp.CanonicalWriteCommitted {
+		t.Fatalf("academy run response must be persisted non-canonical evidence: %+v", runResp)
+	}
+	if runResp.Report.Purpose != "academy_promotion_candidate" || runResp.Report.SkillID != "skill.gateway-policy" || runResp.Report.ExamID != "exam.gateway-policy" {
+		t.Fatalf("academy identifiers not preserved: %+v", runResp.Report)
+	}
+	if !runResp.Report.PromotionCandidate || !runResp.Report.ReviewRequired {
+		t.Fatalf("academy promotion candidate must remain review-bound: %+v", runResp.Report)
+	}
+	if runResp.Report.Trace["canonical_write_committed"] != false || runResp.Report.Trace["academy_promotion_candidate_non_canonical"] != true {
+		t.Fatalf("academy trace must prove non-canonical candidate evidence: %+v", runResp.Report.Trace)
+	}
+	if got := countRows(t, st, "memory_notes"); got != before {
+		t.Fatalf("academy API run mutated canonical memory_notes: before=%d after=%d", before, got)
+	}
+}
+
 func seedDreamAPIFixture(t *testing.T, st *store.Store) {
 	t.Helper()
 	now := time.Now().UnixMilli()

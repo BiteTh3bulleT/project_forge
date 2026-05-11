@@ -51,3 +51,16 @@ host-control commands from wrappers, load or unload models, write semantic
 memory, or make FORGE-K live authority.
 
 See `docs/runbooks/forge_operator_desktop_vm.md` for the G6 operator runbook.
+
+### Canonical Operator VM
+
+The Nix-first VM target is exposed as:
+
+```bash
+nix build .#nixosConfigurations.forge-operator-vm.config.system.build.vm
+```
+
+This is the preferred local bring-up path for the full operator desktop because
+it composes `forge-os`, `forge-operator-desktop`, the packaged shell, and the
+operator toolbelt into one NixOS VM closure. Manual VirtualBox installs remain
+operator-debugging paths, not the primary packaging contract.

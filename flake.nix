@@ -39,6 +39,9 @@
           forge-operator-session = pkgs.callPackage ./nix/packages/forge-operator-session.nix {
             forge-shell-session = self.packages.${system}.forge-shell-session;
           };
+          forge-operator-toolbelt = pkgs.callPackage ./nix/packages/forge-operator-toolbelt.nix {
+            inherit pkgs;
+          };
           default = self.packages.${system}.forge-core;
         };
 
@@ -88,7 +91,11 @@
           forge-operator-session = pkgs.callPackage ./nix/checks/forge-operator-session.nix {
             forge-operator-session = self.packages.${system}.forge-operator-session;
           };
+          forge-operator-toolbelt = pkgs.callPackage ./nix/checks/forge-operator-toolbelt.nix {
+            forgeOperatorToolbelt = self.packages.${system}.forge-operator-toolbelt;
+          };
           forge-operator-desktop = pkgs.callPackage ./nix/checks/forge-operator-desktop.nix { };
+          forge-operator-vm = pkgs.callPackage ./nix/checks/forge-operator-vm.nix { };
           forge-vbox-graphics-test = pkgs.callPackage ./nix/checks/forge-vbox-graphics-test.nix { };
           forge-shadow-env = pkgs.callPackage ./nix/checks/forge-shadow-env.nix { };
           forge-workspace-default = pkgs.callPackage ./nix/checks/forge-workspace-default.nix { };
@@ -112,6 +119,19 @@
         forge-vbox-graphics-test = import ./nix/nixos/profiles/forge-vbox-graphics-test.nix;
         forge-operator-desktop = import ./nix/nixos/profiles/forge-operator-desktop.nix;
         default = self.nixosModules.forge-os;
+      };
+
+      nixosConfigurations = {
+        forge-operator-vm = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          modules = [
+            {
+              nixpkgs.overlays = overlays;
+              nixpkgs.config.allowUnfree = false;
+            }
+            ./nix/nixos/configurations/forge-operator-vm.nix
+          ];
+        };
       };
     };
 }

@@ -11,6 +11,42 @@ In-repo evidence record:
 
 This runbook starts the opt-in FORGE operator desktop session in a NixOS VM. FORGE remains the primary desktop surface, while `labwc` provides the window-management substrate needed for terminal, file-manager, and other operator app windows.
 
+## Canonical Nix VM Target
+
+The Nix-first operator VM target is:
+
+```bash
+nix build .#nixosConfigurations.forge-operator-vm.config.system.build.vm
+```
+
+Run the VM script produced by that build:
+
+```bash
+./result/bin/run-forge-operator-vm-vm
+```
+
+This target imports:
+
+- `nix/nixos/modules/forge-os.nix`
+- `nix/nixos/profiles/forge-operator-desktop.nix`
+
+It includes `forge-core`, the packaged desktop shell, `forge-operator-session`,
+the operator toolbelt, `/forge` storage layout, local-only core binding, and
+safe shell flags. It is the preferred reproducible bring-up path. Manual ISO
+installation and VirtualBox shared-folder profiles are fallback/operator
+debugging paths.
+
+Default local VM login:
+
+```text
+user: operator
+password: forge
+```
+
+The VM keeps SSH disabled by default and does not enable autologin. Change the
+local password before exposing the VM beyond the host-only/local development
+boundary.
+
 ## Boundaries
 
 - Do not enable autologin.
@@ -18,6 +54,8 @@ This runbook starts the opt-in FORGE operator desktop session in a NixOS VM. FOR
 - Do not remove the Cage fullscreen rollback session.
 - Do not treat FORGE-K as live authority.
 - Do not launch arbitrary commands from FORGE UI surfaces in this phase.
+- Do not add `curl | sh` installers; Ollama and operator tools come from Nix.
+- Do not add model load/unload, service restart, or rebuild controls to the UI.
 
 ## Start FORGE Core
 
@@ -54,7 +92,12 @@ fileSystems."/projectforge" = {
 };
 ```
 
-## Current VM Install State
+## Legacy Manual VirtualBox VM State
+
+This section records the hand-built `FORGE-OS` VirtualBox VM used during
+bring-up. It is useful evidence, but it is not the canonical Nix VM default.
+The canonical target above keeps SSH disabled unless a reviewed configuration
+changes that default.
 
 The `FORGE-OS` VM was reinstalled from the NixOS minimal ISO on 2026-05-11.
 Only the guest disk exposed inside the VM as `/dev/sda` was partitioned and
@@ -78,8 +121,8 @@ Installed layout:
 - Host shared folder: `projectforge` mounted at `/projectforge`.
 - FORGE storage root: `/forge`, owned by the `forge` service account.
 - Operator user: `operator`, in `wheel`, `networkmanager`, `video`, `render`, and `vboxsf`.
-- SSH is enabled for key-based access.
-- Current host access uses VirtualBox NAT forwarding: `ssh -p 2222 operator@127.0.0.1`.
+- This manual VM has SSH enabled for key-based access.
+- Manual VM host access uses VirtualBox NAT forwarding: `ssh -p 2222 operator@127.0.0.1`.
 - Automatic login remains disabled.
 - ISO is detached and disk is first in the VirtualBox boot order.
 - The packaged Tauri shell defaults to `1180x680` as a fallback, and the locked
@@ -94,6 +137,11 @@ command -v forge-operator-session
 command -v forge-wayland-session
 command -v forge_desktop
 command -v forge-desktop-shell
+command -v forge-operator-ollama-status
+command -v forge-operator-models
+command -v forge-operator-btop
+command -v forge-operator-lazygit
+command -v ollama
 findmnt /projectforge
 sudo ls -ld /forge /forge/data /forge/models /forge/workspaces/default /forge/runtime
 curl -fsS http://127.0.0.1:18492/health
@@ -134,7 +182,11 @@ foot &
 pcmanfm &
 ```
 
-Use the terminal for operator-owned setup work such as Ollama installation, model downloads, and NixOS configuration changes.
+The terminal is for local inspection and ordinary operator work. Ollama CLI
+availability comes from Nix. Model lifecycle, service lifecycle, and NixOS
+configuration changes must stay in reviewed configuration or existing governed
+FORGE paths; the shell UI must not provide install, load/unload, restart, or
+rebuild controls.
 
 ## Host Health Check
 

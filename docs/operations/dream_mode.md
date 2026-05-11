@@ -13,6 +13,7 @@ curl -sS http://127.0.0.1:18492/api/dream/run \
 Useful request fields:
 
 - `mode`: `microdream`, `nap`, or `deep_dream`
+- `purpose`: optional; defaults to `memory_hygiene`
 - `workspaceId`: required
 - `laneId`: optional
 - `windowHours`: optional override
@@ -21,7 +22,20 @@ Useful request fields:
 - `allowLongTermPromotion`: defaults to `false`
 - `requireOperatorReviewForLongTerm`: defaults to review-required unless long-term is explicitly allowed
 - `allowCommits`: ignored in v0; output remains dry-run
+- `skillId`, `lessonId`, `labId`, `examId`: optional Academy identifiers
+- `allowSkillPromotion`: defaults to `false`
+- `requireOperatorReviewForSkillPromotion`: defaults to `true`; Academy promotion candidates remain review-bound
 - `persistReport`: optional; when `true`, stores the dry-run report in `dream_reports` as non-canonical evidence
+
+Supported purposes:
+
+- `memory_hygiene`
+- `replay`
+- `academy_study`
+- `academy_lab`
+- `academy_exam`
+- `academy_refresh`
+- `academy_promotion_candidate`
 
 Persist a report for later operator review:
 
@@ -30,6 +44,40 @@ curl -sS http://127.0.0.1:18492/api/dream/run \
   -H 'Content-Type: application/json' \
   -d '{"workspaceId":"default","laneId":"control.semantic","mode":"nap","persistReport":true}'
 ```
+
+Study an Academy skill:
+
+```bash
+curl -sS http://127.0.0.1:18492/api/dream/run \
+  -H 'Content-Type: application/json' \
+  -d '{"workspaceId":"default","laneId":"control.semantic","purpose":"academy_study","skillId":"skill.control-lane","lessonId":"lesson.semantic-syscalls"}'
+```
+
+Run an Academy lab dry-run:
+
+```bash
+curl -sS http://127.0.0.1:18492/api/dream/run \
+  -H 'Content-Type: application/json' \
+  -d '{"workspaceId":"default","laneId":"control.semantic","purpose":"academy_lab","skillId":"skill.hostbridge","labId":"lab.hostbridge-diagnostics"}'
+```
+
+Take an Academy exam dry-run:
+
+```bash
+curl -sS http://127.0.0.1:18492/api/dream/run \
+  -H 'Content-Type: application/json' \
+  -d '{"workspaceId":"default","laneId":"control.semantic","purpose":"academy_exam","skillId":"skill.memory-governance","examId":"exam.memory-governance"}'
+```
+
+Persist a promotion candidate for review:
+
+```bash
+curl -sS http://127.0.0.1:18492/api/dream/run \
+  -H 'Content-Type: application/json' \
+  -d '{"workspaceId":"default","laneId":"control.semantic","purpose":"academy_promotion_candidate","skillId":"skill.gateway-policy","examId":"exam.gateway-policy","allowSkillPromotion":true,"persistReport":true}'
+```
+
+Academy Dream reports are evidence only. They can mark `promotionCandidate=true`, but they cannot mark a skill promoted, write canonical memory, bypass Courthouse/operator review, or bypass Control Lane.
 
 List persisted reports for a workspace:
 
@@ -63,6 +111,8 @@ Safe-mode notes:
 - No vector retrieval result is treated as truth.
 - No canonical memory/state/loop/journal rows are written by Dream Mode v0.
 - Persisted Dream reports are evidence rows only; they are not canonical memory or state.
+- Academy study/lab/exam reports are non-canonical learning evidence only.
+- Failed or ungraded Academy exams create remediation evidence, not promoted skill memory.
 - Embedding refresh actions are proposals only; TEI/vector rebuilds are not run or committed by Dream Mode v0.
 
 Validation:

@@ -18,20 +18,27 @@ const dreamRunRequestBodyLimit = 1 << 20
 var errDreamRunRequestBodyTooLarge = errors.New("dream run request body too large")
 
 type dreamRunRequest struct {
-	Mode                             string         `json:"mode"`
-	WorkspaceID                      string         `json:"workspaceId"`
-	LaneID                           string         `json:"laneId,omitempty"`
-	WindowHours                      int            `json:"windowHours,omitempty"`
-	MaxCandidates                    int            `json:"maxCandidates,omitempty"`
-	DryRun                           *bool          `json:"dryRun,omitempty"`
-	AllowLongTermPromotion           bool           `json:"allowLongTermPromotion,omitempty"`
-	RequireOperatorReviewForLongTerm bool           `json:"requireOperatorReviewForLongTerm"`
-	AllowCommits                     bool           `json:"allowCommits,omitempty"`
-	PersistReport                    bool           `json:"persistReport,omitempty"`
-	CorrelationID                    string         `json:"correlationId,omitempty"`
-	TraceID                          string         `json:"traceId,omitempty"`
-	ProposedBy                       string         `json:"proposedBy,omitempty"`
-	Metadata                         map[string]any `json:"metadata,omitempty"`
+	Mode                                   string         `json:"mode"`
+	Purpose                                string         `json:"purpose,omitempty"`
+	WorkspaceID                            string         `json:"workspaceId"`
+	LaneID                                 string         `json:"laneId,omitempty"`
+	WindowHours                            int            `json:"windowHours,omitempty"`
+	MaxCandidates                          int            `json:"maxCandidates,omitempty"`
+	DryRun                                 *bool          `json:"dryRun,omitempty"`
+	AllowLongTermPromotion                 bool           `json:"allowLongTermPromotion,omitempty"`
+	RequireOperatorReviewForLongTerm       bool           `json:"requireOperatorReviewForLongTerm"`
+	AllowCommits                           bool           `json:"allowCommits,omitempty"`
+	SkillID                                string         `json:"skillId,omitempty"`
+	LessonID                               string         `json:"lessonId,omitempty"`
+	LabID                                  string         `json:"labId,omitempty"`
+	ExamID                                 string         `json:"examId,omitempty"`
+	AllowSkillPromotion                    bool           `json:"allowSkillPromotion,omitempty"`
+	RequireOperatorReviewForSkillPromotion bool           `json:"requireOperatorReviewForSkillPromotion"`
+	PersistReport                          bool           `json:"persistReport,omitempty"`
+	CorrelationID                          string         `json:"correlationId,omitempty"`
+	TraceID                                string         `json:"traceId,omitempty"`
+	ProposedBy                             string         `json:"proposedBy,omitempty"`
+	Metadata                               map[string]any `json:"metadata,omitempty"`
 }
 
 func (s *Server) handleDreamRun(w http.ResponseWriter, r *http.Request) {
@@ -49,17 +56,24 @@ func (s *Server) handleDreamRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	report, err := s.dream.Run(r.Context(), dream.RunRequest{
-		Mode:                             dream.Mode(strings.TrimSpace(body.Mode)),
-		WorkspaceID:                      strings.TrimSpace(body.WorkspaceID),
-		LaneID:                           strings.TrimSpace(body.LaneID),
-		WindowHours:                      body.WindowHours,
-		MaxCandidates:                    body.MaxCandidates,
-		DryRun:                           body.DryRun,
-		AllowLongTermPromotion:           body.AllowLongTermPromotion,
-		RequireOperatorReviewForLongTerm: body.RequireOperatorReviewForLongTerm,
-		AllowCommits:                     body.AllowCommits,
-		CorrelationID:                    strings.TrimSpace(body.CorrelationID),
-		TraceID:                          strings.TrimSpace(body.TraceID),
+		Mode:                                   dream.Mode(strings.TrimSpace(body.Mode)),
+		Purpose:                                dream.Purpose(strings.TrimSpace(body.Purpose)),
+		WorkspaceID:                            strings.TrimSpace(body.WorkspaceID),
+		LaneID:                                 strings.TrimSpace(body.LaneID),
+		WindowHours:                            body.WindowHours,
+		MaxCandidates:                          body.MaxCandidates,
+		DryRun:                                 body.DryRun,
+		AllowLongTermPromotion:                 body.AllowLongTermPromotion,
+		RequireOperatorReviewForLongTerm:       body.RequireOperatorReviewForLongTerm,
+		AllowCommits:                           body.AllowCommits,
+		SkillID:                                strings.TrimSpace(body.SkillID),
+		LessonID:                               strings.TrimSpace(body.LessonID),
+		LabID:                                  strings.TrimSpace(body.LabID),
+		ExamID:                                 strings.TrimSpace(body.ExamID),
+		AllowSkillPromotion:                    body.AllowSkillPromotion,
+		RequireOperatorReviewForSkillPromotion: body.RequireOperatorReviewForSkillPromotion,
+		CorrelationID:                          strings.TrimSpace(body.CorrelationID),
+		TraceID:                                strings.TrimSpace(body.TraceID),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

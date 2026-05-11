@@ -19,7 +19,7 @@ let
       shift 2
       test "$1" = "--startup"
       shift
-      echo "fake-labwc:$FORGE_SHELL_SESSION_ENABLED:$FORGE_SHELL_MODE:$FORGE_CORE_URL:$1:$*"
+      echo "fake-labwc:$FORGE_SHELL_SESSION_ENABLED:$FORGE_SHELL_MODE:$FORGE_CORE_URL:''${FORGE_SHELL_BINARY:-unset}:$1:$*"
     '';
   };
   fakeShellSession = writeShellApplication {
@@ -59,6 +59,8 @@ stdenv.mkDerivation {
     grep -F 'FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false' "$wrapper"
     grep -F 'FORGE_SHELL_COMPOSITOR=labwc' "$wrapper"
     grep -F 'WEBKIT_DISABLE_DMABUF_RENDERER="''${WEBKIT_DISABLE_DMABUF_RENDERER:-1}"' "$wrapper"
+    grep -F 'unset FORGE_SHELL_BINARY' "$wrapper"
+    grep -F 'unset FORGE_REPO_ROOT' "$wrapper"
     grep -F 'FORGE_OPERATOR_LABWC_CONFIG_DIR=' "$wrapper"
     grep -F 'FORGE_OPERATOR_DESKTOP_LOCKED=true' "$wrapper"
     grep -F 'labwc_config_file="$labwc_config_dir/rc.xml"' "$wrapper"
@@ -79,9 +81,10 @@ stdenv.mkDerivation {
     fi
 
     FORGE_OPERATOR_COMPOSITOR="$TMPDIR/must-not-run" \
+      FORGE_SHELL_BINARY="$TMPDIR/must-not-run" \
       FORGE_CORE_URL=http://127.0.0.1:19994 \
       "$wrapper" arg1 arg2 > "$TMPDIR/operator.out"
-    grep -F 'fake-labwc:true:operator-desktop:http://127.0.0.1:19994:' "$TMPDIR/operator.out"
+    grep -F 'fake-labwc:true:operator-desktop:http://127.0.0.1:19994:unset:' "$TMPDIR/operator.out"
     grep -F 'forge-shell-session' "$TMPDIR/operator.out"
     grep -F 'arg1 arg2' "$TMPDIR/operator.out"
 

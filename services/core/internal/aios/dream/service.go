@@ -22,6 +22,18 @@ const (
 	ModeDeepDream  Mode = "deep_dream"
 )
 
+type Purpose string
+
+const (
+	PurposeMemoryHygiene             Purpose = "memory_hygiene"
+	PurposeReplay                    Purpose = "replay"
+	PurposeAcademyStudy              Purpose = "academy_study"
+	PurposeAcademyLab                Purpose = "academy_lab"
+	PurposeAcademyExam               Purpose = "academy_exam"
+	PurposeAcademyRefresh            Purpose = "academy_refresh"
+	PurposeAcademyPromotionCandidate Purpose = "academy_promotion_candidate"
+)
+
 type Service struct {
 	db         *sql.DB
 	clock      func() time.Time
@@ -49,17 +61,24 @@ func (s *Service) SetRuleEngine(engine RuleEngine) {
 func (s *Service) Close() error { return nil }
 
 type RunRequest struct {
-	Mode                             Mode   `json:"mode"`
-	WorkspaceID                      string `json:"workspaceId"`
-	LaneID                           string `json:"laneId,omitempty"`
-	WindowHours                      int    `json:"windowHours,omitempty"`
-	MaxCandidates                    int    `json:"maxCandidates,omitempty"`
-	DryRun                           *bool  `json:"dryRun,omitempty"`
-	AllowLongTermPromotion           bool   `json:"allowLongTermPromotion,omitempty"`
-	RequireOperatorReviewForLongTerm bool   `json:"requireOperatorReviewForLongTerm"`
-	AllowCommits                     bool   `json:"allowCommits,omitempty"`
-	CorrelationID                    string `json:"correlationId,omitempty"`
-	TraceID                          string `json:"traceId,omitempty"`
+	Mode                                   Mode    `json:"mode"`
+	Purpose                                Purpose `json:"purpose,omitempty"`
+	WorkspaceID                            string  `json:"workspaceId"`
+	LaneID                                 string  `json:"laneId,omitempty"`
+	WindowHours                            int     `json:"windowHours,omitempty"`
+	MaxCandidates                          int     `json:"maxCandidates,omitempty"`
+	DryRun                                 *bool   `json:"dryRun,omitempty"`
+	AllowLongTermPromotion                 bool    `json:"allowLongTermPromotion,omitempty"`
+	RequireOperatorReviewForLongTerm       bool    `json:"requireOperatorReviewForLongTerm"`
+	AllowCommits                           bool    `json:"allowCommits,omitempty"`
+	SkillID                                string  `json:"skillId,omitempty"`
+	LessonID                               string  `json:"lessonId,omitempty"`
+	LabID                                  string  `json:"labId,omitempty"`
+	ExamID                                 string  `json:"examId,omitempty"`
+	AllowSkillPromotion                    bool    `json:"allowSkillPromotion,omitempty"`
+	RequireOperatorReviewForSkillPromotion bool    `json:"requireOperatorReviewForSkillPromotion"`
+	CorrelationID                          string  `json:"correlationId,omitempty"`
+	TraceID                                string  `json:"traceId,omitempty"`
 }
 
 type DreamRun struct {
@@ -140,6 +159,7 @@ type RoutingProposal struct {
 
 type DreamReport struct {
 	Run                               DreamRun          `json:"run"`
+	Purpose                           Purpose           `json:"purpose,omitempty"`
 	Candidates                        []ReplayCandidate `json:"candidates"`
 	SalienceScores                    []SalienceScore   `json:"salience_scores"`
 	ProposedTierRouting               []RoutingProposal `json:"proposed_tier_routing"`
@@ -156,6 +176,20 @@ type DreamReport struct {
 	NoOpReasons                       []string          `json:"no_op_reasons"`
 	Warnings                          []string          `json:"warnings"`
 	Trace                             map[string]any    `json:"trace"`
+	SkillID                           string            `json:"skillId,omitempty"`
+	LessonID                          string            `json:"lessonId,omitempty"`
+	LabID                             string            `json:"labId,omitempty"`
+	ExamID                            string            `json:"examId,omitempty"`
+	SourcesStudied                    []string          `json:"sourcesStudied,omitempty"`
+	StudySummary                      string            `json:"studySummary,omitempty"`
+	OperationalRules                  []string          `json:"operationalRules,omitempty"`
+	SafetyRules                       []string          `json:"safetyRules,omitempty"`
+	LabResults                        []string          `json:"labResults,omitempty"`
+	ExamAnswers                       []string          `json:"examAnswers,omitempty"`
+	Score                             float64           `json:"score,omitempty"`
+	Confidence                        float64           `json:"confidence,omitempty"`
+	PromotionCandidate                bool              `json:"promotionCandidate"`
+	ReviewRequired                    bool              `json:"reviewRequired"`
 }
 
 type PersistReportRequest struct {
@@ -198,6 +232,21 @@ type ReportRecord struct {
 	EvidenceClass            string            `json:"evidenceClass"`
 	NonCanonicalEvidence     bool              `json:"nonCanonicalEvidence"`
 	CanonicalWriteCommitted  bool              `json:"canonicalWriteCommitted"`
+	Purpose                  Purpose           `json:"purpose,omitempty"`
+	SkillID                  string            `json:"skillId,omitempty"`
+	LessonID                 string            `json:"lessonId,omitempty"`
+	LabID                    string            `json:"labId,omitempty"`
+	ExamID                   string            `json:"examId,omitempty"`
+	SourcesStudied           []string          `json:"sourcesStudied,omitempty"`
+	StudySummary             string            `json:"studySummary,omitempty"`
+	OperationalRules         []string          `json:"operationalRules,omitempty"`
+	SafetyRules              []string          `json:"safetyRules,omitempty"`
+	LabResults               []string          `json:"labResults,omitempty"`
+	ExamAnswers              []string          `json:"examAnswers,omitempty"`
+	Score                    float64           `json:"score,omitempty"`
+	Confidence               float64           `json:"confidence,omitempty"`
+	PromotionCandidate       bool              `json:"promotionCandidate"`
+	ReviewRequired           bool              `json:"reviewRequired"`
 }
 
 func (r ReportRecord) ReviewItems() []RoutingProposal {
@@ -261,6 +310,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (DreamReport, error) 
 			CorrelationID:        req.CorrelationID,
 			TraceID:              req.TraceID,
 		},
+		Purpose:               req.Purpose,
 		Candidates:            candidates,
 		SalienceScores:        scores,
 		ProposedTierRouting:   routing,
@@ -272,8 +322,10 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (DreamReport, error) 
 			"canonical_write_committed": false,
 			"window_hours":              req.WindowHours,
 			"max_candidates":            req.MaxCandidates,
+			"purpose":                   req.Purpose,
 		},
 	}
+	applyAcademyEvidence(&report, req)
 	if len(ruleTrace) > 0 {
 		report.Trace["rule_cells"] = ruleTrace
 	}
@@ -342,6 +394,7 @@ func (s *Service) PersistReport(ctx context.Context, req PersistReportRequest) (
 	}
 	summaryJSON := mustJSON(map[string]any{
 		"summary":                     report.Run.Summary,
+		"purpose":                     report.Purpose,
 		"itemsRequiringReview":        report.ItemsRequiringReview,
 		"proposedRestoreScoreUpdates": report.ProposedRestoreScoreUpdates,
 		"proposedEmbeddingRefresh":    report.ProposedEmbeddingRefreshActions,
@@ -349,6 +402,7 @@ func (s *Service) PersistReport(ctx context.Context, req PersistReportRequest) (
 		"noOpReasons":                 report.NoOpReasons,
 		"nonCanonicalEvidence":        true,
 		"canonicalWriteCommitted":     false,
+		"academy":                     reportAcademySummary(report),
 	})
 	_, err := s.db.ExecContext(ctx, `INSERT INTO dream_reports(
   id, created_at, completed_at, workspace_id, lane_id, mode, dry_run, status,
@@ -457,6 +511,7 @@ ORDER BY created_at DESC LIMIT ?`, strings.TrimSpace(req.WorkspaceID), strings.T
 }
 
 func normalizeRequest(req RunRequest) RunRequest {
+	req.Purpose = normalizePurpose(req.Purpose)
 	if req.Mode == "" {
 		req.Mode = ModeMicrodream
 	}
@@ -494,7 +549,106 @@ func normalizeRequest(req RunRequest) RunRequest {
 	if !req.AllowLongTermPromotion {
 		req.RequireOperatorReviewForLongTerm = true
 	}
+	if isAcademyPurpose(req.Purpose) || !req.AllowSkillPromotion {
+		req.RequireOperatorReviewForSkillPromotion = true
+	}
+	req.SkillID = strings.TrimSpace(req.SkillID)
+	req.LessonID = strings.TrimSpace(req.LessonID)
+	req.LabID = strings.TrimSpace(req.LabID)
+	req.ExamID = strings.TrimSpace(req.ExamID)
 	return req
+}
+
+func normalizePurpose(p Purpose) Purpose {
+	switch p {
+	case "", PurposeMemoryHygiene:
+		return PurposeMemoryHygiene
+	case PurposeReplay, PurposeAcademyStudy, PurposeAcademyLab, PurposeAcademyExam, PurposeAcademyRefresh, PurposeAcademyPromotionCandidate:
+		return p
+	default:
+		return PurposeMemoryHygiene
+	}
+}
+
+func isAcademyPurpose(p Purpose) bool {
+	switch p {
+	case PurposeAcademyStudy, PurposeAcademyLab, PurposeAcademyExam, PurposeAcademyRefresh, PurposeAcademyPromotionCandidate:
+		return true
+	default:
+		return false
+	}
+}
+
+func applyAcademyEvidence(report *DreamReport, req RunRequest) {
+	if report == nil || !isAcademyPurpose(req.Purpose) {
+		return
+	}
+	report.SkillID = req.SkillID
+	report.LessonID = req.LessonID
+	report.LabID = req.LabID
+	report.ExamID = req.ExamID
+	report.ReviewRequired = true
+	report.OperationalRules = []string{
+		"Academy owns curriculum; Dream Mode produces dry-run learning evidence only.",
+		"Promotion candidates require Courthouse/operator review and Control Lane promotion.",
+	}
+	report.SafetyRules = []string{
+		"Dream Mode must not write canonical memory directly.",
+		"Dream Mode must not mark a skill promoted by itself.",
+	}
+	report.Trace["academy"] = true
+	report.Trace["academy_purpose"] = req.Purpose
+	report.Trace["academy_allow_skill_promotion"] = req.AllowSkillPromotion
+	report.Trace["academy_require_operator_review_for_skill_promotion"] = true
+	report.Trace["academy_promotion_candidate_non_canonical"] = false
+
+	switch req.Purpose {
+	case PurposeAcademyStudy:
+		report.StudySummary = "academy study dry-run recorded; no wired curriculum source was available to study"
+		report.Warnings = append(report.Warnings, "academy curriculum source not wired; no lesson source was studied")
+	case PurposeAcademyLab:
+		report.StudySummary = "academy lab dry-run recorded; lab execution source is not wired"
+		report.LabResults = []string{"lab not executed; academy lab runner not wired"}
+		report.Warnings = append(report.Warnings, "academy lab source not wired; no lab was executed")
+	case PurposeAcademyExam:
+		report.StudySummary = "academy exam dry-run recorded; exam grading source is not wired"
+		report.ExamAnswers = []string{}
+		report.Score = 0
+		report.Confidence = 0
+		report.PromotionCandidate = false
+		report.Warnings = append(report.Warnings, "academy exam ungraded; create remediation candidate instead of promoted skill")
+	case PurposeAcademyRefresh:
+		report.StudySummary = "academy refresh dry-run recorded; curriculum refresh source is not wired"
+		report.Warnings = append(report.Warnings, "academy refresh source not wired; no curriculum refresh evidence was loaded")
+	case PurposeAcademyPromotionCandidate:
+		report.StudySummary = "academy promotion candidate dry-run recorded; candidate is non-canonical evidence for review"
+		report.PromotionCandidate = req.AllowSkillPromotion
+		report.Trace["academy_promotion_candidate_non_canonical"] = report.PromotionCandidate
+		if !req.AllowSkillPromotion {
+			report.Warnings = append(report.Warnings, "allowSkillPromotion=false; no skill promotion candidate generated")
+		} else {
+			report.Warnings = append(report.Warnings, "academy promotion candidate requires Courthouse/operator review and Control Lane promotion")
+		}
+	}
+}
+
+func reportAcademySummary(report DreamReport) map[string]any {
+	return map[string]any{
+		"skillId":            report.SkillID,
+		"lessonId":           report.LessonID,
+		"labId":              report.LabID,
+		"examId":             report.ExamID,
+		"sourcesStudied":     report.SourcesStudied,
+		"studySummary":       report.StudySummary,
+		"operationalRules":   report.OperationalRules,
+		"safetyRules":        report.SafetyRules,
+		"labResults":         report.LabResults,
+		"examAnswers":        report.ExamAnswers,
+		"score":              report.Score,
+		"confidence":         report.Confidence,
+		"promotionCandidate": report.PromotionCandidate,
+		"reviewRequired":     report.ReviewRequired,
+	}
 }
 
 func (s *Service) SelectReplayCandidates(ctx context.Context, req RunRequest, since, until int64) ([]ReplayCandidate, error) {
@@ -1212,7 +1366,51 @@ func scanReport(row reportScanner) (ReportRecord, error) {
 	rec.EvidenceClass = "non_canonical_evidence"
 	rec.NonCanonicalEvidence = true
 	rec.CanonicalWriteCommitted = false
+	applyReportRecordAcademySummary(&rec, summaryJSON)
 	return rec, nil
+}
+
+func applyReportRecordAcademySummary(rec *ReportRecord, summaryJSON string) {
+	if rec == nil {
+		return
+	}
+	var summary struct {
+		Purpose Purpose `json:"purpose"`
+		Academy struct {
+			SkillID            string   `json:"skillId"`
+			LessonID           string   `json:"lessonId"`
+			LabID              string   `json:"labId"`
+			ExamID             string   `json:"examId"`
+			SourcesStudied     []string `json:"sourcesStudied"`
+			StudySummary       string   `json:"studySummary"`
+			OperationalRules   []string `json:"operationalRules"`
+			SafetyRules        []string `json:"safetyRules"`
+			LabResults         []string `json:"labResults"`
+			ExamAnswers        []string `json:"examAnswers"`
+			Score              float64  `json:"score"`
+			Confidence         float64  `json:"confidence"`
+			PromotionCandidate bool     `json:"promotionCandidate"`
+			ReviewRequired     bool     `json:"reviewRequired"`
+		} `json:"academy"`
+	}
+	if err := json.Unmarshal([]byte(nonEmptyJSON(summaryJSON, "{}")), &summary); err != nil {
+		return
+	}
+	rec.Purpose = summary.Purpose
+	rec.SkillID = summary.Academy.SkillID
+	rec.LessonID = summary.Academy.LessonID
+	rec.LabID = summary.Academy.LabID
+	rec.ExamID = summary.Academy.ExamID
+	rec.SourcesStudied = summary.Academy.SourcesStudied
+	rec.StudySummary = summary.Academy.StudySummary
+	rec.OperationalRules = summary.Academy.OperationalRules
+	rec.SafetyRules = summary.Academy.SafetyRules
+	rec.LabResults = summary.Academy.LabResults
+	rec.ExamAnswers = summary.Academy.ExamAnswers
+	rec.Score = summary.Academy.Score
+	rec.Confidence = summary.Academy.Confidence
+	rec.PromotionCandidate = summary.Academy.PromotionCandidate
+	rec.ReviewRequired = summary.Academy.ReviewRequired
 }
 
 func mustJSON(v any) string {

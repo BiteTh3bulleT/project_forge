@@ -14,6 +14,9 @@ let
   forgeOperatorSession = pkgs.callPackage ../../packages/forge-operator-session.nix {
     forge-shell-session = forgeShellSession;
   };
+  forgeOperatorToolbelt = pkgs.callPackage ../../packages/forge-operator-toolbelt.nix {
+    inherit pkgs;
+  };
   forgeWaylandSession = pkgs.callPackage ../../packages/forge-wayland-session.nix {
     forge-shell-session = forgeShellSession;
   };
@@ -54,6 +57,7 @@ in
 
   xdg.portal = {
     enable = lib.mkDefault true;
+    config.common.default = lib.mkDefault "gtk";
     extraPortals = lib.mkDefault [
       pkgs.xdg-desktop-portal-gtk
     ];
@@ -77,6 +81,7 @@ in
     forgeWaylandSession
     forgeShellSession
     forgeDesktopShell
+    forgeOperatorToolbelt
     pkgs.labwc
     pkgs.cage
     pkgs.foot

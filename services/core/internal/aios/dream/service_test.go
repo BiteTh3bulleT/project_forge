@@ -253,6 +253,130 @@ func TestDreamReportPersistenceIsNonCanonicalEvidence(t *testing.T) {
 	}
 }
 
+func TestAcademyDreamRunsAreDryRunEvidenceOnlyByDefault(t *testing.T) {
+	ctx := context.Background()
+	st, svc, _ := newDreamHarness(t)
+	before := tableCounts(t, st)
+
+	report, err := svc.Run(ctx, RunRequest{
+		Purpose:     PurposeAcademyStudy,
+		WorkspaceID: "ws-dream",
+		LaneID:      "control.semantic",
+		SkillID:     "skill.control-lane",
+		LessonID:    "lesson.semantic-syscalls",
+	})
+	if err != nil {
+		t.Fatalf("academy dream run: %v", err)
+	}
+	if report.Purpose != PurposeAcademyStudy || report.SkillID != "skill.control-lane" || report.LessonID != "lesson.semantic-syscalls" {
+		t.Fatalf("academy report identifiers not preserved: %+v", report)
+	}
+	if !report.Run.DryRun || report.PromotionCandidate || !report.ReviewRequired {
+		t.Fatalf("academy study must be dry-run, non-promoting, and review-bound by default: %+v", report)
+	}
+	if report.Trace["academy_allow_skill_promotion"] != false || report.Trace["academy_require_operator_review_for_skill_promotion"] != true {
+		t.Fatalf("academy trace must expose safe promotion defaults, got %+v", report.Trace)
+	}
+	if report.Trace["canonical_write_committed"] != false {
+		t.Fatalf("academy dream trace must remain non-canonical, got %+v", report.Trace)
+	}
+	if got := tableCounts(t, st); got != before {
+		t.Fatalf("academy dream run mutated canonical tables: before=%v after=%v", before, got)
+	}
+}
+
+func TestAcademyPromotionCandidateRequiresReviewAndDoesNotCommit(t *testing.T) {
+	ctx := context.Background()
+	st, svc, _ := newDreamHarness(t)
+	before := tableCounts(t, st)
+
+	report, err := svc.Run(ctx, RunRequest{
+		Purpose:                                PurposeAcademyPromotionCandidate,
+		WorkspaceID:                            "ws-dream",
+		LaneID:                                 "control.semantic",
+		SkillID:                                "skill.gateway-policy",
+		ExamID:                                 "exam.gateway-policy",
+		AllowSkillPromotion:                    true,
+		RequireOperatorReviewForSkillPromotion: false,
+	})
+	if err != nil {
+		t.Fatalf("academy promotion candidate dream run: %v", err)
+	}
+	if !report.PromotionCandidate || !report.ReviewRequired {
+		t.Fatalf("promotion candidate must be marked for review, got %+v", report)
+	}
+	if report.Trace["academy_promotion_candidate_non_canonical"] != true || report.Trace["canonical_write_committed"] != false {
+		t.Fatalf("promotion candidate must be non-canonical evidence, got trace %+v", report.Trace)
+	}
+	if got := tableCounts(t, st); got != before {
+		t.Fatalf("academy promotion candidate mutated canonical tables: before=%v after=%v", before, got)
+	}
+}
+
+func TestAcademyFailedExamDoesNotCreatePromotedSkill(t *testing.T) {
+	ctx := context.Background()
+	st, svc, _ := newDreamHarness(t)
+	before := tableCounts(t, st)
+
+	report, err := svc.Run(ctx, RunRequest{
+		Purpose:             PurposeAcademyExam,
+		WorkspaceID:         "ws-dream",
+		LaneID:              "control.semantic",
+		SkillID:             "skill.memory-governance",
+		ExamID:              "exam.memory-governance",
+		AllowSkillPromotion: true,
+	})
+	if err != nil {
+		t.Fatalf("academy exam dream run: %v", err)
+	}
+	if report.PromotionCandidate {
+		t.Fatalf("exam without governed passing grade must not produce promoted skill candidate: %+v", report)
+	}
+	if report.Score != 0 || report.Confidence != 0 || !report.ReviewRequired {
+		t.Fatalf("ungraded academy exam must remain failed/remediation evidence, got %+v", report)
+	}
+	if len(report.Warnings) == 0 || !strings.Contains(strings.Join(report.Warnings, "\n"), "remediation") {
+		t.Fatalf("failed/ungraded academy exam should produce remediation warning, got %+v", report.Warnings)
+	}
+	if got := tableCounts(t, st); got != before {
+		t.Fatalf("academy exam mutated canonical tables: before=%v after=%v", before, got)
+	}
+}
+
+func TestPersistedAcademyReportRemainsNonCanonicalEvidence(t *testing.T) {
+	ctx := context.Background()
+	st, svc, _ := newDreamHarness(t)
+	before := tableCounts(t, st)
+
+	report, err := svc.Run(ctx, RunRequest{
+		Purpose:     PurposeAcademyLab,
+		WorkspaceID: "ws-dream",
+		LaneID:      "control.semantic",
+		SkillID:     "skill.hostbridge",
+		LabID:       "lab.hostbridge-diagnostics",
+	})
+	if err != nil {
+		t.Fatalf("academy lab dream run: %v", err)
+	}
+	id, err := svc.PersistReport(ctx, PersistReportRequest{Report: report, ProposedBy: "test.academy"})
+	if err != nil {
+		t.Fatalf("persist academy report: %v", err)
+	}
+	rec, err := svc.GetReport(ctx, id, "ws-dream", "control.semantic")
+	if err != nil {
+		t.Fatalf("get academy report: %v", err)
+	}
+	if rec.Purpose != PurposeAcademyLab || rec.SkillID != "skill.hostbridge" || rec.LabID != "lab.hostbridge-diagnostics" {
+		t.Fatalf("persisted academy fields missing: %+v", rec)
+	}
+	if !rec.NonCanonicalEvidence || rec.CanonicalWriteCommitted || rec.PromotionCandidate {
+		t.Fatalf("persisted academy report authority flags wrong: %+v", rec)
+	}
+	if got := tableCounts(t, st); got != before {
+		t.Fatalf("persisted academy report mutated canonical tables: before=%v after=%v", before, got)
+	}
+}
+
 func TestDreamRuleCellsBoostCorrectionAndTracePackVersion(t *testing.T) {
 	ctx := context.Background()
 	st, svc, now := newDreamHarness(t)

@@ -38,6 +38,61 @@ describe("OperatorAppsPage", () => {
         desktopFile: "/run/current-system/sw/share/applications/pcmanfm.desktop",
         native: true,
       },
+      {
+        id: "browser",
+        label: "Browser",
+        description: "Open docs and web consoles.",
+        executable: "firefox",
+        category: "Internet",
+        iconName: "firefox",
+        iconPath: null,
+        desktopFile: "/run/current-system/sw/share/applications/firefox.desktop",
+        native: true,
+      },
+      {
+        id: "ollama-status",
+        label: "Ollama Status",
+        description: "Show local Ollama status.",
+        executable: "foot",
+        category: "AI Runtime",
+        iconName: "utilities-terminal",
+        iconPath: null,
+        desktopFile: null,
+        native: false,
+      },
+      {
+        id: "system-monitor",
+        label: "System Monitor",
+        description: "Open btop.",
+        executable: "foot",
+        category: "System",
+        iconName: "utilities-system-monitor",
+        iconPath: null,
+        desktopFile: null,
+        native: false,
+      },
+      {
+        id: "lazygit",
+        label: "Git UI",
+        description: "Open lazygit.",
+        executable: "foot",
+        category: "Developer",
+        iconName: "git",
+        iconPath: null,
+        desktopFile: null,
+        native: false,
+      },
+      {
+        id: "core-logs",
+        label: "Core Logs",
+        description: "Show forge-core logs.",
+        executable: "foot",
+        category: "FORGE",
+        iconName: "text-x-log",
+        iconPath: null,
+        desktopFile: null,
+        native: false,
+      },
     ]);
     desktop.launchOperatorApp.mockReset();
     desktop.iconAssetUrl.mockClear();
@@ -61,8 +116,13 @@ describe("OperatorAppsPage", () => {
     render(<OperatorAppsPage />);
 
     expect(await screen.findByText("Workspace")).toBeTruthy();
-    expect(screen.getByText("foot")).toBeTruthy();
-    expect(screen.getAllByText("Native")).toHaveLength(2);
+    expect(screen.getByText("Internet")).toBeTruthy();
+    expect(screen.getByText("AI Runtime")).toBeTruthy();
+    expect(screen.getByText("System")).toBeTruthy();
+    expect(screen.getByText("Developer")).toBeTruthy();
+    expect(screen.getByText("FORGE")).toBeTruthy();
+    expect(screen.getAllByText("foot").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Native")).toHaveLength(3);
     expect(screen.getByRole("img", { name: "Terminal icon" })).toBeTruthy();
   });
 });
