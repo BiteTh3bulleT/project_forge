@@ -17,6 +17,19 @@ func TestKVIdentityEnforcementAcceptsValidClaim(t *testing.T) {
 	if decision.AccelerationOnly != true || decision.MemoryMutation != false || decision.RuntimeMutation != false || decision.LiveKVReuse != false {
 		t.Fatalf("unexpected authority flags: %#v", decision)
 	}
+	summary := decision.ToStateSummary()
+	activation, ok := summary["forgeKActivation"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing forgeKActivation summary: %#v", summary)
+	}
+	if activation["mode"] != ForgeKActivationModePartialLiveEnforcement ||
+		activation["action"] != string(domain.ActionValidateKVIdentity) {
+		t.Fatalf("unexpected activation summary: %#v", activation)
+	}
+	noEffect, ok := summary["forgeKNoEffect"].(map[string]any)
+	if !ok || noEffect["memoryMutation"] != false || noEffect["runtimeMutation"] != false {
+		t.Fatalf("unexpected no-effect summary: %#v", summary["forgeKNoEffect"])
+	}
 }
 
 func TestKVIdentityEnforcementRejectsInvalidClaim(t *testing.T) {

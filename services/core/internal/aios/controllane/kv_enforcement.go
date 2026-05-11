@@ -141,6 +141,8 @@ func (d KVIdentityEnforcementDecision) ToStateSummary() map[string]any {
 		"memoryMutation":        d.MemoryMutation,
 		"runtimeMutation":       d.RuntimeMutation,
 		"liveKVReuse":           d.LiveKVReuse,
+		"forgeKActivation":      forgeKActivationSummary(string(domain.ActionValidateKVIdentity)),
+		"forgeKNoEffect":        forgeKNoEffectSummary(),
 	}
 }
 
@@ -154,12 +156,16 @@ func (d KVIdentityEnforcementDecision) ToAuditFields() map[string]any {
 		"identityHash":     d.IdentityHash,
 		"failedGates":      append([]string{}, d.FailedGates...),
 		"warnings":         append([]string{}, d.Warnings...),
+		"failureCount":     len(d.FailedGates),
+		"warningCount":     len(d.Warnings),
 		"accelerationOnly": d.AccelerationOnly,
 		"memoryMutation":   d.MemoryMutation,
 		"runtimeMutation":  d.RuntimeMutation,
 		"liveKVReuse":      d.LiveKVReuse,
 		"validatorVersion": d.ValidatorVersion,
 		"policyVersion":    d.PolicyVersion,
+		"forgeKActivation": forgeKActivationSummary(string(domain.ActionValidateKVIdentity)),
+		"forgeKNoEffect":   forgeKNoEffectSummary(),
 	}
 }
 
