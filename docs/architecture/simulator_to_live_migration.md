@@ -1,6 +1,6 @@
 # Simulator To Live Migration
 
-Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, Phase 14C partial live validation expansion, Phase 14D disabled-by-default validation shadow reporting, Phase 14E disabled-by-default validation shadow emission, Phase 14F explicit Control Lane partial live enforcement metadata, Phase 14G Control Lane validation contract-matrix hardening, Phase 14H semantic-operation lane closure, and Phase 14I ref-shape lane closure.
+Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, Phase 14C partial live validation expansion, Phase 14D disabled-by-default validation shadow reporting, Phase 14E disabled-by-default validation shadow emission, Phase 14F explicit Control Lane partial live enforcement metadata, Phase 14G Control Lane validation contract-matrix hardening, Phase 14H semantic-operation lane closure, Phase 14I ref-shape lane closure, and Phase 14J ref-shape comparison lane closure.
 
 ## Purpose
 
@@ -27,6 +27,8 @@ Phase 14G hardens Phase 14F with a Control Lane validation contract matrix. The 
 Phase 14H closes the `VALIDATE_SEMANTIC_OPERATION` validation lane in the narrow Control Lane sense: the lane is connected through the live owner, rejects a canonical normalized authority-claim set, preserves no-effect metadata on rejected claims, and remains validation-only. Closed does not mean semantic operation execution, memory write authority, evidence admission authority, Context Compiler authority, modelruntime authority, retrieval/gateway execution, or FORGE-K simulator live authority.
 
 Phase 14I closes the `VALIDATE_REF_SHAPE` validation lane in the same narrow Control Lane sense: the lane is connected through the live owner, exposes a canonical allowed ref-type contract, rejects invalid ref shapes before commit, preserves no-effect metadata on rejected refs, and remains validation-only. Closed does not mean object truth lookup, evidence admission or rejection authority, Context Compiler authority, retrieval/search/embedding authority, semantic memory write authority, modelruntime authority, gateway/tool execution, or FORGE-K simulator live authority.
+
+Phase 14J closes the `COMPARE_REF_SHAPE` diagnostic lane in the same narrow Control Lane sense: the lane is connected through the live owner, reuses canonical ref-shape validation for candidate and observed refs, accepts match and drift as diagnostic outcomes, rejects invalid comparisons before commit, and preserves no-effect metadata on rejected comparisons. Closed does not mean object truth lookup, evidence admission or rejection authority, Context Compiler authority, retrieval/search/embedding authority, semantic memory write authority, modelruntime authority, gateway/tool execution, or FORGE-K simulator live authority.
 
 ## Migration Pattern
 
@@ -108,6 +110,19 @@ Phase 14I closes the `VALIDATE_REF_SHAPE` validation lane in the same narrow Con
 | Rejected posture | fail closed with no-effect state and audit metadata |
 | Mutation posture | validation-only; no object truth lookup, evidence admission or rejection, context compilation, retrieval/search/embedding execution, semantic memory write, gateway/tool execution, modelruntime call, route/API change, or FORGE-K simulator live authority |
 | Still future | source-object authority lookup, evidence admission, live context compilation, semantic writes based on refs, and any broader FORGE-K authority migration |
+
+## Phase 14J Ref Shape Comparison Lane Closure Example
+
+| Concern | Decision |
+| --- | --- |
+| Closed lane | `COMPARE_REF_SHAPE` diagnostic comparison only |
+| Shared pure package | `services/core/internal/refvalidation` |
+| Live caller | `services/core/internal/aios/controllane` |
+| Canonical guard | candidate and observed refs validated through the canonical ref-shape validator |
+| Accepted posture | match and drift are accepted diagnostic outcomes only |
+| Rejected posture | invalid candidate or observed refs fail closed with no-effect state and audit metadata |
+| Mutation posture | diagnostic/validation-only; no object truth lookup, evidence admission or rejection, context compilation, retrieval/search/embedding execution, semantic memory write, gateway/tool execution, modelruntime call, route/API change, or FORGE-K simulator live authority |
+| Still future | source-object authority lookup, evidence admission, live context compilation, semantic writes based on comparison output, and any broader FORGE-K authority migration |
 
 ## Phase 14D Validation Shadow Reporting Example
 
