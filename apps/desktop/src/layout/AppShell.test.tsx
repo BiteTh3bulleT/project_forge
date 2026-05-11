@@ -59,6 +59,18 @@ const desktopMocks = vi.hoisted(() => ({
           "/run/current-system/sw/share/applications/pcmanfm.desktop",
         native: true,
       },
+      {
+        id: "browser",
+        label: "Browser",
+        description: "Open Firefox.",
+        executable: "firefox",
+        category: "Internet",
+        iconName: "firefox",
+        iconPath:
+          "/run/current-system/sw/share/icons/hicolor/128x128/apps/firefox.png",
+        desktopFile: "/run/current-system/sw/share/applications/firefox.desktop",
+        native: true,
+      },
     ]),
   ),
   launchOperatorApp: vi.fn(),
@@ -295,6 +307,13 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(await screen.findByText("Native Apps")).toBeTruthy();
     expect(screen.getAllByText("Workspace").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole("button", { name: /Terminal/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Browser/ })).toBeTruthy();
+    expect(
+      screen
+        .getByText("Native Apps")
+        .closest(".forge-os-startmenu__section")
+        ?.classList.contains("forge-os-startmenu__section--native"),
+    ).toBe(true);
     expect(
       screen.getByRole("img", { name: "Terminal icon" }).getAttribute("src"),
     ).toBe(

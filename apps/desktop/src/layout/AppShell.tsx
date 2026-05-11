@@ -1133,7 +1133,7 @@ function StartMenu(props: {
           </div>
         ) : null}
 
-        <div className="forge-os-startmenu__section">
+        <div className="forge-os-startmenu__section forge-os-startmenu__section--native">
           <div className="forge-os-startmenu__section-label">Native Apps</div>
           <div className="forge-os-startmenu__list forge-os-startmenu__list--native">
             {appGroups.length === 0 ? (
@@ -1183,7 +1183,7 @@ function StartMenu(props: {
           ) : null}
         </div>
 
-        <div className="forge-os-startmenu__section forge-os-startmenu__section--native">
+        <div className="forge-os-startmenu__section">
           <div className="forge-os-startmenu__section-label">
             {query ? "FORGE Results" : "FORGE Surfaces"}
           </div>

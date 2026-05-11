@@ -3221,7 +3221,7 @@ html[data-effects="subtle"] .forge-context-card:hover {
   left: 1rem;
   bottom: 5.4rem;
   width: min(44rem, calc(100vw - 2rem));
-  height: min(36rem, calc(100vh - 8rem));
+  height: min(40rem, calc(100vh - 8rem));
   min-height: 22rem;
   display: flex;
   flex-direction: column;
@@ -3443,6 +3443,10 @@ html[data-effects="subtle"] .forge-context-card:hover {
   gap: 0.35rem;
 }
 
+.forge-os-startmenu__list--native .forge-os-startmenu__row-desc {
+  display: none;
+}
+
 .forge-os-startmenu__group {
   display: grid;
   gap: 0.2rem;
@@ -3528,6 +3532,9 @@ html[data-effects="subtle"] .forge-context-card:hover {
   margin-top: 0.1rem;
   font-size: 0.7rem;
   color: rgba(var(--forge-muted-rgb), 0.7);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .forge-os-startmenu__native-badge {
