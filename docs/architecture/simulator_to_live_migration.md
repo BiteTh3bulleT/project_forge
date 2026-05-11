@@ -1,6 +1,6 @@
 # Simulator To Live Migration
 
-Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, Phase 14C partial live validation expansion, Phase 14D disabled-by-default validation shadow reporting, Phase 14E disabled-by-default validation shadow emission, Phase 14F explicit Control Lane partial live enforcement metadata, Phase 14G Control Lane validation contract-matrix hardening, Phase 14H semantic-operation lane closure, Phase 14I ref-shape lane closure, Phase 14J ref-shape comparison lane closure, and Phase 14K read-only activation readiness surface.
+Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, Phase 14C partial live validation expansion, Phase 14D disabled-by-default validation shadow reporting, Phase 14E disabled-by-default validation shadow emission, Phase 14F explicit Control Lane partial live enforcement metadata, Phase 14G Control Lane validation contract-matrix hardening, Phase 14H semantic-operation lane closure, Phase 14I ref-shape lane closure, Phase 14J ref-shape comparison lane closure, Phase 14K read-only activation readiness surface, and Phase 14L read-only authority gate matrix.
 
 ## Purpose
 
@@ -31,6 +31,8 @@ Phase 14I closes the `VALIDATE_REF_SHAPE` validation lane in the same narrow Con
 Phase 14J closes the `COMPARE_REF_SHAPE` diagnostic lane in the same narrow Control Lane sense: the lane is connected through the live owner, reuses canonical ref-shape validation for candidate and observed refs, accepts match and drift as diagnostic outcomes, rejects invalid comparisons before commit, and preserves no-effect metadata on rejected comparisons. Closed does not mean object truth lookup, evidence admission or rejection authority, Context Compiler authority, retrieval/search/embedding authority, semantic memory write authority, modelruntime authority, gateway/tool execution, or FORGE-K simulator live authority.
 
 Phase 14K exposes a live-owned, read-only activation readiness report for the already connected validation lanes. The report is produced by `services/core/internal/aios/controllane`, surfaced through `GET /forge/kernel/status`, included in `GET /forge/system/status` as `kernel_activation`, and rendered in the desktop System page. It reports whether the Control Lane validation seams are registered, non-mutating, audit/capability-backed, and still bounded by no-effect guarantees. It does not import FORGE-K simulator services, enable live Kernel authority, add mutation controls, execute semantic operations, write memory, load models, call retrieval/search/embeddings, or change gateway/tool authority.
+
+Phase 14L extends that read-only readiness report with an authority gate matrix. The matrix marks the connected Control Lane validation/enforcement gate as ready and keeps source-object authority lookup, Courthouse admission integration, live Context Compiler authority, governed semantic mutation routing, and runtime driver authority blocked. It is operator visibility only and grants no mutation authority, approval controls, simulator authority, live Kernel authority, semantic writes, retrieval/search/embedding execution, modelruntime mutation, or gateway/tool execution.
 
 ## Migration Pattern
 
@@ -126,7 +128,7 @@ Phase 14K exposes a live-owned, read-only activation readiness report for the al
 | Mutation posture | diagnostic/validation-only; no object truth lookup, evidence admission or rejection, context compilation, retrieval/search/embedding execution, semantic memory write, gateway/tool execution, modelruntime call, route/API change, or FORGE-K simulator live authority |
 | Still future | source-object authority lookup, evidence admission, live context compilation, semantic writes based on comparison output, and any broader FORGE-K authority migration |
 
-## Phase 14K Activation Readiness Surface Example
+## Phase 14K/14L Activation Readiness Surface Example
 
 | Concern | Decision |
 | --- | --- |
@@ -134,8 +136,9 @@ Phase 14K exposes a live-owned, read-only activation readiness report for the al
 | Read-only API | `GET /forge/kernel/status` |
 | Shell composition | `kernel_activation` in `GET /forge/system/status` |
 | Required actions | `VALIDATE_KV_IDENTITY`, `VALIDATE_REF_SHAPE`, `COMPARE_REF_SHAPE`, `VALIDATE_SEMANTIC_OPERATION` |
-| Operator surface | desktop System page `FORGE-K Activation Readiness` panel |
-| Mutation posture | read-only status only; no approval buttons, execution buttons, semantic operation execution, semantic memory write, gateway/tool execution, modelruntime mutation, retrieval/search/embedding execution, host mutation, or FORGE-K simulator live authority |
+| Operator surface | desktop System page `FORGE-K Activation Readiness` panel with readiness and authority-gate sections |
+| Authority gates | ready: `control_lane_validation_enforcement`; blocked: `source_object_authority_lookup`, `courthouse_admission_integration`, `live_context_compiler_authority`, `governed_semantic_mutation_routing`, `runtime_driver_authority_boundary` |
+| Mutation posture | read-only status only; authority gates grant no mutation authority; no approval buttons, execution buttons, semantic operation execution, semantic memory write, gateway/tool execution, modelruntime mutation, retrieval/search/embedding execution, host mutation, or FORGE-K simulator live authority |
 | Still future | explicit live Kernel authority migration, Courthouse admission integration, source-object authority lookup, context compilation authority, governed semantic mutation routing, and rollback/observability gates |
 
 ## Phase 14D Validation Shadow Reporting Example
@@ -193,6 +196,7 @@ Do not import FORGE-K Kernel, Context Compiler, KVService, Runtime Driver Bounda
 - `[PARTIAL]` Ref shape shadow comparison: diagnostic comparison exists; it does not affect live output or state.
 - `[PARTIAL]` Semantic operation shape validation: operation envelope validation exists; operation execution and authority migration do not.
 - `[PARTIAL]` Control Lane validation shadow reporting: internal diagnostic report support exists; it remains disabled by default and does not affect live output or state.
+- `[PARTIAL]` FORGE-K authority gate matrix: operator-visible blockers exist; blocked gates do not authorize live authority.
 - `[FUTURE]` Context Compiler mirror: requires no-effect live comparison before any prompt authority migration.
 - `[FUTURE]` Runtime driver identity capture: requires modelruntime trace-only adapters before live reuse.
 - `[FUTURE]` Retrieval evidence admission: must go through Courthouse/control-lane boundaries, not vector-store scores.

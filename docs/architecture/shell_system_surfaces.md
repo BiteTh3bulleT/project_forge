@@ -16,7 +16,7 @@ The endpoint is read-only and bounded. It returns summaries for:
 - FORGE-H resource posture and advisory proposals
 - bounded execution availability
 - modelruntime availability
-- FORGE-K activation readiness
+- FORGE-K activation readiness and authority gate blockers
 - storage posture
 - approval queue wiring
 - recent warnings
@@ -34,7 +34,7 @@ It does not expose request bodies, prompts, model outputs, raw host logs, raw me
 | FORGE-H proposals | Generated advisory proposals | Empty list when none | Shows advisory-only flag; no approve/reject/execute controls |
 | FORGE-H executions | Execution ledger availability | Not wired unless governed store exists | Shows bounded/mutation/side-effect fields when available; no execution from shell |
 | Modelruntime | Existing runtime health path when configured | Unavailable/degraded | No load/unload controls |
-| FORGE-K activation readiness | Live Control Lane readiness report via `kernel_activation` | Show unavailable/error if core status is unavailable | Shows validation lane readiness and disabled authority flags; no Kernel authority migration |
+| FORGE-K activation readiness | Live Control Lane readiness report via `kernel_activation` | Show unavailable/error if core status is unavailable | Shows validation lane readiness, authority gate blockers, and disabled authority flags; no Kernel authority migration |
 | Storage | SQLite/data-root status and disk summary | Unavailable pressure if stat fails | Shows used/free when safely available; SQLite remains live truth authority |
 | Approval queue | Existing approvals surface wiring | Placeholder when unavailable | Decisions stay in governed approvals UI |
 

@@ -47,6 +47,26 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 			t.Fatalf("validation action is not read-only closed: %#v", action)
 		}
 	}
+
+	if payload["authority_ready_gates"] != float64(1) || payload["authority_blocked_gates"] != float64(5) {
+		t.Fatalf("unexpected authority gate counts: %#v", payload)
+	}
+	gates, ok := payload["authority_gates"].([]any)
+	if !ok || len(gates) != 6 {
+		t.Fatalf("expected six authority gates, got %#v", payload["authority_gates"])
+	}
+	for _, raw := range gates {
+		gate, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected authority gate shape: %#v", raw)
+		}
+		if gate["mutation_authority"] != false {
+			t.Fatalf("authority readiness gate granted mutation authority: %#v", gate)
+		}
+		if gate["status"] == "blocked" && gate["next_step"] == "" {
+			t.Fatalf("blocked authority gate lacks next step: %#v", gate)
+		}
+	}
 }
 
 func TestForgeKernelStatusDoesNotExposeMutationMethod(t *testing.T) {

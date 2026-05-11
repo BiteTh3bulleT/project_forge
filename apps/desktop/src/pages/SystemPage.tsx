@@ -18,7 +18,7 @@ function statusClass(status?: string) {
   if (["ok", "normal", "available", "healthy", "reachable"].includes(normalized)) {
     return "forge-ops-status forge-ops-status--ok";
   }
-  if (normalized === "partial_live_validation_ready") {
+  if (normalized === "partial_live_validation_ready" || normalized === "ready") {
     return "forge-ops-status forge-ops-status--ok";
   }
   if (["degraded", "elevated", "constrained", "warning", "proposed"].includes(normalized)) {
@@ -349,6 +349,56 @@ export function SystemPage() {
                 label="Mutation controls absent"
                 enabled={kernelActivation ? !kernelActivation.mutation_controls_available : false}
               />
+            </div>
+            <div className="mt-3 rounded border border-white/10 bg-black/20 p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-semibold text-forge-ash">
+                  Kernel Authority Gates
+                </div>
+                <div className="flex gap-2 text-xs">
+                  <span className={statusClass("ready")}>
+                    Ready: {kernelActivation?.authority_ready_gates ?? 0}
+                  </span>
+                  <span className={statusClass((kernelActivation?.authority_blocked_gates ?? 0) > 0 ? "blocked" : "ok")}>
+                    Blocked: {kernelActivation?.authority_blocked_gates ?? 0}
+                  </span>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[760px] text-left text-xs">
+                  <thead className="text-forge-mist/70">
+                    <tr>
+                      <th className="py-2 pr-3">Gate</th>
+                      <th className="py-2 pr-3">Status</th>
+                      <th className="py-2 pr-3">Owner</th>
+                      <th className="py-2 pr-3">Next step</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(kernelActivation?.authority_gates ?? []).map((gate) => (
+                      <tr
+                        key={gate.name}
+                        className="border-t border-white/10"
+                      >
+                        <td className="py-2 pr-3 font-mono text-forge-ash">
+                          {valueText(gate.name)}
+                        </td>
+                        <td className="py-2 pr-3">
+                          <span className={statusClass(gate.status)}>
+                            {valueText(gate.status)}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-3 font-mono text-forge-mist">
+                          {valueText(gate.live_owner)}
+                        </td>
+                        <td className="py-2 pr-3 text-forge-mist">
+                          {valueText(gate.next_step)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-xs">

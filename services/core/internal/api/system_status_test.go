@@ -77,6 +77,9 @@ func TestForgeSystemStatusReadOnlySurface(t *testing.T) {
 		kernel["mutation_controls_available"] != false {
 		t.Fatalf("kernel_activation claimed forbidden authority or mutation controls: %#v", kernel)
 	}
+	if kernel["authority_ready_gates"] != float64(1) || kernel["authority_blocked_gates"] != float64(5) {
+		t.Fatalf("kernel_activation authority gate counts unexpected: %#v", kernel)
+	}
 
 	storage := asMap(t, payload["storage"])
 	if storage["truth_authority"] != "sqlite" {

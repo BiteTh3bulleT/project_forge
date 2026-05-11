@@ -931,6 +931,17 @@ export type ForgeSystemStatus = {
       simulator_authority?: boolean;
       live_kernel_authority?: boolean;
     }>;
+    authority_ready_gates?: number;
+    authority_blocked_gates?: number;
+    authority_gates?: Array<{
+      name?: string;
+      status?: string;
+      live_owner?: string;
+      required_for_live_authority?: boolean;
+      mutation_authority?: boolean;
+      reason?: string;
+      next_step?: string;
+    }>;
     gates?: Array<{
       name?: string;
       passed?: boolean;

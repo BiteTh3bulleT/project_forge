@@ -6,7 +6,7 @@ import (
 	"forge/projectforge/services/core/internal/aios/domain"
 )
 
-const ForgeKActivationReadinessPhase = "14K"
+const ForgeKActivationReadinessPhase = "14L"
 
 type ForgeKActivationReadinessReport struct {
 	GeneratedAt               time.Time                         `json:"generated_at"`
@@ -20,6 +20,9 @@ type ForgeKActivationReadinessReport struct {
 	ClosedValidationLanes     int                               `json:"closed_validation_lanes"`
 	TotalValidationLanes      int                               `json:"total_validation_lanes"`
 	ValidationActions         []ForgeKActivationActionReadiness `json:"validation_actions"`
+	AuthorityReadyGates       int                               `json:"authority_ready_gates"`
+	AuthorityBlockedGates     int                               `json:"authority_blocked_gates"`
+	AuthorityGates            []ForgeKAuthorityGateReadiness    `json:"authority_gates"`
 	Gates                     []ForgeKActivationReadinessGate   `json:"gates"`
 	NoEffect                  map[string]any                    `json:"no_effect"`
 	SimulatorAuthority        bool                              `json:"simulator_authority"`
@@ -49,6 +52,16 @@ type ForgeKActivationReadinessGate struct {
 	Name   string `json:"name"`
 	Passed bool   `json:"passed"`
 	Reason string `json:"reason"`
+}
+
+type ForgeKAuthorityGateReadiness struct {
+	Name                     string `json:"name"`
+	Status                   string `json:"status"`
+	LiveOwner                string `json:"live_owner"`
+	RequiredForLiveAuthority bool   `json:"required_for_live_authority"`
+	MutationAuthority        bool   `json:"mutation_authority"`
+	Reason                   string `json:"reason"`
+	NextStep                 string `json:"next_step"`
 }
 
 func ForgeKActivationReadiness(reg ActionRegistry, now time.Time) ForgeKActivationReadinessReport {
@@ -111,6 +124,8 @@ func ForgeKActivationReadiness(reg ActionRegistry, now time.Time) ForgeKActivati
 	if !ready {
 		status = "blocked"
 	}
+	authorityGates := forgeKAuthorityGateReadiness(ready)
+	authorityReady, authorityBlocked := countForgeKAuthorityGates(authorityGates)
 
 	return ForgeKActivationReadinessReport{
 		GeneratedAt:           now,
@@ -124,6 +139,9 @@ func ForgeKActivationReadiness(reg ActionRegistry, now time.Time) ForgeKActivati
 		ClosedValidationLanes: closed,
 		TotalValidationLanes:  len(required),
 		ValidationActions:     actions,
+		AuthorityReadyGates:   authorityReady,
+		AuthorityBlockedGates: authorityBlocked,
+		AuthorityGates:        authorityGates,
 		Gates: []ForgeKActivationReadinessGate{
 			{Name: "live_owner_explicit", Passed: true, Reason: "live owner remains aios.controllane"},
 			{Name: "validation_actions_registered", Passed: registered, Reason: "required validation actions are registered in the live Control Lane registry"},
@@ -144,6 +162,88 @@ func ForgeKActivationReadiness(reg ActionRegistry, now time.Time) ForgeKActivati
 			"partial live validation is running through the existing Control Lane owner",
 			"this is not full FORGE-K Kernel live authority",
 			"semantic writes, retrieval, gateway execution, modelruntime calls, and evidence admission remain outside this surface",
+		},
+	}
+}
+
+func countForgeKAuthorityGates(gates []ForgeKAuthorityGateReadiness) (ready int, blocked int) {
+	for _, gate := range gates {
+		switch gate.Status {
+		case "ready":
+			ready++
+		case "blocked":
+			blocked++
+		default:
+			blocked++
+		}
+	}
+	return ready, blocked
+}
+
+func forgeKAuthorityGateReadiness(validationReady bool) []ForgeKAuthorityGateReadiness {
+	controlLaneStatus := "blocked"
+	controlLaneReason := "required live validation actions are not all closed"
+	controlLaneNext := "close missing live Control Lane validation actions before considering broader authority migration"
+	if validationReady {
+		controlLaneStatus = "ready"
+		controlLaneReason = "validation-only Control Lane enforcement is connected and non-mutating"
+		controlLaneNext = "keep validation-only enforcement in the live Control Lane while later gates are designed"
+	}
+
+	return []ForgeKAuthorityGateReadiness{
+		{
+			Name:                     "control_lane_validation_enforcement",
+			Status:                   controlLaneStatus,
+			LiveOwner:                ForgeKActivationOwnerControlLane,
+			RequiredForLiveAuthority: true,
+			MutationAuthority:        false,
+			Reason:                   controlLaneReason,
+			NextStep:                 controlLaneNext,
+		},
+		{
+			Name:                     "source_object_authority_lookup",
+			Status:                   "blocked",
+			LiveOwner:                "future.live_authority_owner",
+			RequiredForLiveAuthority: true,
+			MutationAuthority:        false,
+			Reason:                   "ref-shape validation does not prove source object existence or authority",
+			NextStep:                 "design source-object lookup through existing governed stores with fail-closed tests and no simulator import",
+		},
+		{
+			Name:                     "courthouse_admission_integration",
+			Status:                   "blocked",
+			LiveOwner:                "future.live_authority_owner",
+			RequiredForLiveAuthority: true,
+			MutationAuthority:        false,
+			Reason:                   "live evidence admission is not routed through a governed FORGE-K Courthouse boundary",
+			NextStep:                 "map live evidence records to an admission boundary without making simulator Courthouse services live authority",
+		},
+		{
+			Name:                     "live_context_compiler_authority",
+			Status:                   "blocked",
+			LiveOwner:                "future.live_authority_owner",
+			RequiredForLiveAuthority: true,
+			MutationAuthority:        false,
+			Reason:                   "live prompt/context assembly remains outside FORGE-K Context Compiler authority",
+			NextStep:                 "add a read-only mirror and parity tests before any context compilation authority migration",
+		},
+		{
+			Name:                     "governed_semantic_mutation_routing",
+			Status:                   "blocked",
+			LiveOwner:                "future.live_authority_owner",
+			RequiredForLiveAuthority: true,
+			MutationAuthority:        false,
+			Reason:                   "semantic operation validation does not execute governed semantic mutations",
+			NextStep:                 "design explicit semantic mutation routing through existing syscall, audit, approval, and rollback boundaries",
+		},
+		{
+			Name:                     "runtime_driver_authority_boundary",
+			Status:                   "blocked",
+			LiveOwner:                "future.live_authority_owner",
+			RequiredForLiveAuthority: true,
+			MutationAuthority:        false,
+			Reason:                   "live modelruntime remains outside FORGE-K runtime driver authority",
+			NextStep:                 "add trace-only runtime driver identity capture before any modelruntime authority migration",
 		},
 	}
 }

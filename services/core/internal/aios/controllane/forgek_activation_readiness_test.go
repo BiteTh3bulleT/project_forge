@@ -10,8 +10,8 @@ import (
 func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	report := ForgeKActivationReadiness(NewStaticActionRegistry(), time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC))
 
-	if report.Phase != "14K" {
-		t.Fatalf("phase=%q, want 14K", report.Phase)
+	if report.Phase != "14L" {
+		t.Fatalf("phase=%q, want 14L", report.Phase)
 	}
 	if report.Status != "partial_live_validation_ready" {
 		t.Fatalf("status=%q, want partial_live_validation_ready", report.Status)
@@ -30,6 +30,9 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	}
 	if report.ClosedValidationLanes != 4 || report.TotalValidationLanes != 4 {
 		t.Fatalf("validation lane counts = %d/%d, want 4/4", report.ClosedValidationLanes, report.TotalValidationLanes)
+	}
+	if report.AuthorityReadyGates != 1 || report.AuthorityBlockedGates != 5 {
+		t.Fatalf("authority gate counts = ready %d blocked %d, want 1/5", report.AuthorityReadyGates, report.AuthorityBlockedGates)
 	}
 
 	actions := map[domain.SemanticActionType]ForgeKActivationActionReadiness{}
@@ -56,6 +59,33 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 			t.Fatalf("gate %s failed unexpectedly: %#v", gate.Name, gate)
 		}
 	}
+	authorityGates := map[string]ForgeKAuthorityGateReadiness{}
+	for _, gate := range report.AuthorityGates {
+		authorityGates[gate.Name] = gate
+		if gate.MutationAuthority {
+			t.Fatalf("readiness gate must not grant mutation authority: %#v", gate)
+		}
+		if gate.Status == "blocked" && gate.NextStep == "" {
+			t.Fatalf("blocked gate lacks next step: %#v", gate)
+		}
+	}
+	if authorityGates["control_lane_validation_enforcement"].Status != "ready" {
+		t.Fatalf("control lane validation gate not ready: %#v", authorityGates["control_lane_validation_enforcement"])
+	}
+	for _, name := range []string{
+		"source_object_authority_lookup",
+		"courthouse_admission_integration",
+		"live_context_compiler_authority",
+		"governed_semantic_mutation_routing",
+		"runtime_driver_authority_boundary",
+	} {
+		if authorityGates[name].Status != "blocked" {
+			t.Fatalf("authority gate %s status=%q, want blocked", name, authorityGates[name].Status)
+		}
+		if !authorityGates[name].RequiredForLiveAuthority {
+			t.Fatalf("authority gate %s should be required for live authority: %#v", name, authorityGates[name])
+		}
+	}
 	for _, key := range []string{
 		"memoryMutation",
 		"runtimeMutation",
@@ -80,6 +110,9 @@ func TestForgeKActivationReadinessFailsClosedWhenActionMissing(t *testing.T) {
 	}
 	if report.ClosedValidationLanes != 0 || report.TotalValidationLanes != 4 {
 		t.Fatalf("validation lane counts = %d/%d, want 0/4", report.ClosedValidationLanes, report.TotalValidationLanes)
+	}
+	if report.AuthorityReadyGates != 0 || report.AuthorityBlockedGates != 6 {
+		t.Fatalf("authority gate counts = ready %d blocked %d, want 0/6", report.AuthorityReadyGates, report.AuthorityBlockedGates)
 	}
 	if report.LiveKernelAuthority || report.LiveAuthorityMigration || report.SimulatorAuthority {
 		t.Fatalf("blocked report claimed forbidden authority: %#v", report)

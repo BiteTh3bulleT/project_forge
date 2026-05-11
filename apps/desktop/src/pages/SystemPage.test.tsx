@@ -108,7 +108,7 @@ describe("SystemPage", () => {
         canonical_write_committed: false,
       },
       kernel_activation: {
-        phase: "14K",
+        phase: "14L",
         status: "partial_live_validation_ready",
         summary:
           "FORGE-K is active only as live Control Lane validation metadata.",
@@ -149,6 +149,28 @@ describe("SystemPage", () => {
             name: "live_owner_explicit",
             passed: true,
             reason: "live owner remains aios.controllane",
+          },
+        ],
+        authority_ready_gates: 1,
+        authority_blocked_gates: 5,
+        authority_gates: [
+          {
+            name: "control_lane_validation_enforcement",
+            status: "ready",
+            live_owner: "aios.controllane",
+            required_for_live_authority: true,
+            mutation_authority: false,
+            reason: "validation-only Control Lane enforcement is connected",
+            next_step: "keep validation-only",
+          },
+          {
+            name: "source_object_authority_lookup",
+            status: "blocked",
+            live_owner: "future.live_authority_owner",
+            required_for_live_authority: true,
+            mutation_authority: false,
+            reason: "source object truth lookup is not wired",
+            next_step: "design lookup through existing governed stores",
           },
         ],
         no_effect: {
@@ -220,6 +242,11 @@ describe("SystemPage", () => {
     expect(screen.getByText("Simulator authority disabled")).toBeTruthy();
     expect(screen.getByText("Live Kernel authority disabled")).toBeTruthy();
     expect(screen.getByText("Mutation controls absent")).toBeTruthy();
+    expect(screen.getByText("Kernel Authority Gates")).toBeTruthy();
+    expect(screen.getByText("Ready: 1")).toBeTruthy();
+    expect(screen.getByText("Blocked: 5")).toBeTruthy();
+    expect(screen.getByText("source_object_authority_lookup")).toBeTruthy();
+    expect(screen.getByText("design lookup through existing governed stores")).toBeTruthy();
     expect(screen.getByText("VALIDATE_KV_IDENTITY")).toBeTruthy();
     expect(screen.getByText("ref.shape.validate")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /approve/i })).toBeNull();
