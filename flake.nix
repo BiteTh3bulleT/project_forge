@@ -88,6 +88,7 @@
           forge-operator-session = pkgs.callPackage ./nix/checks/forge-operator-session.nix {
             forge-operator-session = self.packages.${system}.forge-operator-session;
           };
+          forge-operator-desktop = pkgs.callPackage ./nix/checks/forge-operator-desktop.nix { };
           forge-vbox-graphics-test = pkgs.callPackage ./nix/checks/forge-vbox-graphics-test.nix { };
           forge-shadow-env = pkgs.callPackage ./nix/checks/forge-shadow-env.nix { };
           forge-workspace-default = pkgs.callPackage ./nix/checks/forge-workspace-default.nix { };

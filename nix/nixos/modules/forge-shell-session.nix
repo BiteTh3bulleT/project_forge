@@ -135,10 +135,16 @@ in
 
     sessionPackage = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
-      default = if pkgs ? forge-wayland-session then pkgs.forge-wayland-session else null;
-      defaultText = lib.literalExpression "pkgs.forge-wayland-session if available, otherwise null";
+      default =
+        if cfg.mode == "operator-desktop" then
+          if pkgs ? forge-operator-session then pkgs.forge-operator-session else null
+        else if pkgs ? forge-wayland-session then
+          pkgs.forge-wayland-session
+        else
+          null;
+      defaultText = lib.literalExpression "pkgs.forge-operator-session for operator-desktop, otherwise pkgs.forge-wayland-session if available";
       example = lib.literalExpression "pkgs.forge-wayland-session";
-      description = "Package providing /bin/forge-wayland-session.";
+      description = "Package providing /bin/forge-wayland-session or /bin/forge-operator-session for operator-desktop mode.";
     };
 
     sessionName = lib.mkOption {
@@ -183,6 +189,14 @@ in
       {
         assertion = cfg.wayland.enable == true;
         message = "Phase G4 FORGE graphical shell session requires forge.shellSession.wayland.enable = true when forge.shellSession.enable is true.";
+      }
+      {
+        assertion = cfg.mode != "operator-desktop" || cfg.wayland.sessionPackage != null;
+        message = "FORGE operator-desktop mode requires forge.shellSession.wayland.sessionPackage = pkgs.forge-operator-session.";
+      }
+      {
+        assertion = cfg.mode != "operator-desktop" || sessionPackageName == "forge-operator-session";
+        message = "FORGE operator-desktop mode must use the forge-operator-session package, not the fullscreen forge-wayland-session package.";
       }
     ];
 

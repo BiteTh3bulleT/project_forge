@@ -23,6 +23,18 @@ systemctl is-active forge-core
 curl -fsS http://127.0.0.1:18492/health
 ```
 
+## Rebuild-Safe Profile Import
+
+Keep the VM NixOS import pointed at the mounted main checkout:
+
+```nix
+/mnt/projectforge/nix/nixos/profiles/forge-operator-desktop.nix
+```
+
+Do not import operator desktop profiles from `.worktrees/*` paths. Worktree paths are temporary implementation sandboxes and can disappear or lag behind main, which makes VM rebuilds non-repeatable.
+
+If `/etc/nixos/configuration.nix` references a `.worktrees/*` checkout, replace that import with the `/mnt/projectforge/...` path above before rebuilding.
+
 ## Start Operator Desktop
 
 From a TTY login:
