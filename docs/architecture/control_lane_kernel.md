@@ -32,6 +32,12 @@ Phase 14D adds disabled-by-default internal shadow reporting support for Control
 
 Phase 14E wires those disabled-by-default diagnostic summaries into the live Control Lane processor through an optional best-effort observer. The observer receives bounded validation result metadata after a syscall result exists and cannot change the returned result. The live Control Lane remains the authority; FORGE-K simulator services remain outside the live authority path.
 
+Phase 14F adds explicit FORGE-K partial live enforcement metadata to Control Lane validation actions. `VALIDATE_REF_SHAPE`, `COMPARE_REF_SHAPE`, `VALIDATE_SEMANTIC_OPERATION`, and `VALIDATE_KV_IDENTITY` now expose activation mode and no-effect summaries while keeping the live owner as Control Lane. This is not full FORGE-K live authority and does not import simulator services, enable live KV reuse, execute tools, call modelruntime, execute retrieval/search/embeddings, admit evidence, compile context, or write memory outside existing governed paths.
+
+## FORGE-K Partial Enforcement
+
+Control Lane validation actions now expose FORGE-K partial live enforcement metadata. This means deterministic doctrine is enforced by the current live Control Lane owner, not by importing the simulator Kernel. Validation summaries include the activation mode and no-effect posture so callers and operator surfaces can distinguish partial enforcement from full live authority.
+
 ## Kernel / user-space boundary
 
 - user space: users, adapters, internal cells, future IRIS propose semantic actions

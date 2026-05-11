@@ -1,6 +1,6 @@
 # FORGE-K Operational Cutover Design
 
-Status: Phase 14A implemented as `DOCS_ONLY / LIVE_AUTHORITY_MIGRATION_DESIGN_ONLY`; Phase 14B implemented the first narrow `PARTIAL LIVE VALIDATION / CONTROL_LANE / NO_AUTHORITY_REPLACEMENT` seam.
+Status: Phase 14A implemented as `DOCS_ONLY / LIVE_AUTHORITY_MIGRATION_DESIGN_ONLY`; Phase 14B implemented the first narrow `PARTIAL LIVE VALIDATION / CONTROL_LANE / NO_AUTHORITY_REPLACEMENT` seam; Phase 14F marks existing Control Lane validation seams with explicit `[PARTIAL LIVE ENFORCEMENT]` metadata.
 
 Date: 2026-05-09.
 
@@ -170,3 +170,9 @@ Phase 14B selected deterministic ref-shape validation as the first operational s
 It extracts `services/core/internal/refvalidation` as a shared pure package and invokes it from live Control Lane action `VALIDATE_REF_SHAPE`. This follows the Phase i1/I2 pattern and does not migrate live memory, retrieval, gateway, modelruntime, API routes, or FORGE-K Kernel authority.
 
 The next operational phase must continue the same rule: choose one narrow contract, keep the existing live owner, prove no unauthorized mutation, and preserve rollback before any broader live authority migration.
+
+## Phase 14F Implemented Seam
+
+Phase 14F marks Control Lane validation as the first explicit FORGE-K partial live enforcement mode. The live owner remains `services/core/internal/aios/controllane`; shared pure validators provide deterministic doctrine, and summaries expose activation/no-effect metadata for operators and tests.
+
+This remains partial enforcement, not full FORGE-K live authority. It does not import simulator services, replace the Control Lane, enable live KV reuse, admit evidence through the simulator Courthouse, compile live prompts through the simulator Context Compiler, call modelruntime, execute tools, run retrieval/search/embeddings, or write semantic memory directly.
