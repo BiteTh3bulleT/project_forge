@@ -3167,6 +3167,29 @@ html[data-effects="subtle"] .forge-context-card:hover {
   background: rgba(var(--forge-cyan-rgb), 0.55);
 }
 
+.forge-os-taskbar__item--native {
+  border-color: rgba(var(--forge-border-strong-rgb), 0.14);
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(var(--forge-text-rgb), 0.9);
+}
+
+.forge-os-taskbar__native-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.18);
+  background: rgba(0, 0, 0, 0.3);
+  color: rgb(var(--forge-cyan-rgb));
+  object-fit: contain;
+  padding: 0.12rem;
+  font-family: theme(fontFamily.mono);
+  font-size: 0.56rem;
+  font-weight: 800;
+}
+
 .forge-os-taskbar__short {
   display: grid;
   place-items: center;
@@ -3185,6 +3208,12 @@ html[data-effects="subtle"] .forge-context-card:hover {
 .forge-os-taskbar__name {
   font-weight: 600;
   letter-spacing: 0.02em;
+}
+
+.forge-os-taskbar__pid {
+  color: rgba(var(--forge-muted-rgb), 0.6);
+  font-family: theme(fontFamily.mono);
+  font-size: 0.62rem;
 }
 
 .forge-os-taskbar__search {

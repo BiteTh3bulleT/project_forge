@@ -368,4 +368,35 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(screen.getByRole("button", { name: /Terminal/ })).toBeTruthy();
     expect(desktopMocks.listOperatorApps).toHaveBeenCalled();
   });
+
+  it("keeps launched native apps visible on the taskbar", async () => {
+    desktopMocks.launchOperatorApp.mockResolvedValue({
+      appId: "terminal",
+      label: "Terminal",
+      executable: "foot",
+      launched: true,
+      pid: 4242,
+      message: "Terminal launch requested",
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Terminal/ }));
+
+    await waitFor(() => {
+      expect(desktopMocks.launchOperatorApp).toHaveBeenCalledWith("terminal");
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Terminal native app" }),
+    ).toBeTruthy();
+    expect(screen.getByText("PID 4242")).toBeTruthy();
+  });
 });

@@ -50,6 +50,11 @@ type AppShellProps = {
 };
 
 type AttentionLevel = "none" | "low" | "medium" | "high";
+type RunningOperatorApp = {
+  app: OperatorApp;
+  pid: number | null;
+  launchedAtMs: number;
+};
 
 const HOME_ROUTE = "/";
 const MIN_WINDOW_W = 360;
@@ -224,6 +229,9 @@ export function AppShell(props: AppShellProps) {
   const [operatorAppStatus, setOperatorAppStatus] = useState<string | null>(
     null,
   );
+  const [runningOperatorApps, setRunningOperatorApps] = useState<
+    RunningOperatorApp[]
+  >([]);
   const [now, setNow] = useState(() => new Date());
   const [contextMenu, setContextMenu] = useState<DockContextMenu | null>(null);
   const isMainWindow = props.isMainWindow;
@@ -390,6 +398,14 @@ export function AppShell(props: AppShellProps) {
     setStartOpen(false);
     try {
       const result = await launchOperatorApp(app.id);
+      setRunningOperatorApps((items) => {
+        const next: RunningOperatorApp = {
+          app,
+          pid: result.pid ?? null,
+          launchedAtMs: Date.now(),
+        };
+        return [next, ...items.filter((item) => item.app.id !== app.id)];
+      });
       setOperatorAppStatus(
         result.pid
           ? `${result.label} launch requested. PID ${result.pid}.`
@@ -725,6 +741,41 @@ export function AppShell(props: AppShellProps) {
                 </button>
               );
             })}
+            {runningOperatorApps.map((item) => (
+              <button
+                key={item.app.id}
+                type="button"
+                onClick={() => void launchNativeApp(item.app)}
+                onAuxClick={(event) => {
+                  if (event.button === 1) {
+                    event.preventDefault();
+                    setRunningOperatorApps((items) =>
+                      items.filter((candidate) => candidate.app.id !== item.app.id),
+                    );
+                  }
+                }}
+                className="forge-os-taskbar__item forge-os-taskbar__item--native forge-os-taskbar__item--open"
+                aria-label={`${item.app.label} native app`}
+                title={
+                  item.pid
+                    ? `${item.app.label} native app · PID ${item.pid}`
+                    : `${item.app.label} native app`
+                }
+              >
+                <OperatorAppIcon
+                  app={item.app}
+                  className="forge-os-taskbar__native-icon"
+                />
+                <span className="forge-os-taskbar__name">
+                  {item.app.label}
+                </span>
+                {item.pid ? (
+                  <span className="forge-os-taskbar__pid">
+                    PID {item.pid}
+                  </span>
+                ) : null}
+              </button>
+            ))}
           </div>
 
           <div className="forge-os-taskbar__system">
