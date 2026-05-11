@@ -1,10 +1,11 @@
 {
   lib,
   runCommand,
-  src ? ../..,
 }:
 
-runCommand "forge-operator-desktop-profile-check" { } ''
+runCommand "forge-operator-desktop-profile-check" {
+  src = lib.cleanSource ../..;
+} ''
   set -euo pipefail
   profile="$src/nix/nixos/profiles/forge-operator-desktop.nix"
   module="$src/nix/nixos/modules/forge-shell-session.nix"
