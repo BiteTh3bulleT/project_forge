@@ -19,9 +19,11 @@ stdenv.mkDerivation {
 
     wrapper="${forge-shell-session}/bin/forge-shell-session"
     module="$src/nix/nixos/modules/forge-shell-session.nix"
+    desktop_main="$src/apps/desktop/src-tauri/src/main.rs"
 
     test -x "$wrapper"
     test -f "$module"
+    test -f "$desktop_main"
 
     grep -F 'FORGE_SHELL_SESSION_ENABLED=true' "$wrapper"
     grep -F 'FORGE_SHELL_MODE="''${FORGE_SHELL_MODE:-fullscreen-shell}"' "$wrapper"
@@ -58,6 +60,13 @@ stdenv.mkDerivation {
     grep -F 'FORGE graphical shell fullscreen setting must match the selected mode.' "$module"
     grep -F 'FORGE graphical shell compositor must match the selected mode.' "$module"
     grep -F 'assertion = cfg.wayland.enable == true;' "$module"
+
+    grep -F 'fn fit_operator_desktop_window' "$desktop_main"
+    grep -F '.current_monitor()' "$desktop_main"
+    grep -F 'window.available_monitors()' "$desktop_main"
+    grep -F 'window.set_position(PhysicalPosition::new' "$desktop_main"
+    grep -F 'window.set_size(PhysicalSize::new' "$desktop_main"
+    grep -F 'window.set_resizable(true)' "$desktop_main"
 
     forbidden='systemctl|nixos-rebuild|modprobe|rmmod|reboot|shutdown|apt-get|dnf|zypper|pacman|LoadModel|UnloadModel|GenerateStream|semantic memory write|os.RemoveAll|rm -rf'
     if grep -E "$forbidden" "$wrapper"; then

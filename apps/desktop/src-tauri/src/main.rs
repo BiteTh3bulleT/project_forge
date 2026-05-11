@@ -3,7 +3,7 @@
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use sysinfo::{Disks, Pid, System};
-use tauri::Manager;
+use tauri::{Manager, PhysicalPosition, PhysicalSize};
 
 #[derive(Serialize)]
 struct HostProcess {
@@ -224,6 +224,27 @@ fn operator_desktop_locked() -> bool {
         .unwrap_or(false)
 }
 
+fn fit_operator_desktop_window(window: &tauri::WebviewWindow) {
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.available_monitors().ok()?.into_iter().next());
+
+    let Some(monitor) = monitor else {
+        return;
+    };
+
+    let position = monitor.position();
+    let size = monitor.size();
+    if size.width < 640 || size.height < 360 {
+        return;
+    }
+
+    let _ = window.set_position(PhysicalPosition::new(position.x, position.y));
+    let _ = window.set_size(PhysicalSize::new(size.width, size.height));
+}
+
 #[tauri::command]
 fn read_system_diagnostics() -> Result<HostDiagnostics, String> {
     let mut system = System::new_all();
@@ -328,8 +349,10 @@ fn main() {
             if operator_desktop_locked() {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.set_decorations(false);
+                    let _ = window.set_resizable(true);
+                    fit_operator_desktop_window(&window);
                     let _ = window.maximize();
-                    let _ = window.set_resizable(false);
+                    let _ = window.set_focus();
                 }
             }
             Ok(())

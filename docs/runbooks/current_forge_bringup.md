@@ -122,9 +122,9 @@ Current verified state:
 - Display: VirtualBox VMSVGA, 128 MiB VRAM, 3D acceleration enabled.
 - Session compatibility: `WEBKIT_DISABLE_DMABUF_RENDERER=1` is set for the
   operator desktop to avoid VirtualBox Wayland/dmabuf protocol failures.
-- Shell fit: the Tauri default window is `1180x680`, the locked operator
-  session maximizes without an external titlebar, and the taskbar clock/date
-  stays inside the right edge on the current `1294x727` VM viewport.
+- Shell fit: the Tauri default window remains `1180x680` as a fallback, but the
+  locked operator session explicitly fits the shell window to the detected
+  monitor bounds before maximizing without an external titlebar.
 - Core health: `curl -fsS http://127.0.0.1:18492/health` returns `ok: true`.
 - Storage meta: `/api/meta` returns `/forge/data`, `/forge/data/forge.sqlite`,
   and `/forge/workspaces/default`.

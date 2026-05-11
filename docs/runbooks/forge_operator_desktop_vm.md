@@ -79,8 +79,9 @@ Installed layout:
 - Current host access uses VirtualBox NAT forwarding: `ssh -p 2222 operator@127.0.0.1`.
 - Automatic login remains disabled.
 - ISO is detached and disk is first in the VirtualBox boot order.
-- The packaged Tauri shell defaults to `1180x680` so the maximized operator
-  shell fits smaller VirtualBox viewer viewports without hiding the taskbar.
+- The packaged Tauri shell defaults to `1180x680` as a fallback, and the locked
+  operator session fits the shell window to the detected monitor bounds before
+  maximizing so VirtualBox viewer size changes do not leave the desktop offset.
 
 Verified installed paths:
 
