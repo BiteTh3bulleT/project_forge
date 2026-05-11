@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net"
 	"net/http"
@@ -19,6 +20,9 @@ import (
 
 func main() {
 	cfg := config.Load()
+	if err := validateCoreListenConfig(cfg); err != nil {
+		log.Fatalf("config: %v", err)
+	}
 
 	st, err := store.Open(cfg.DataDir)
 	if err != nil {
@@ -30,9 +34,6 @@ func main() {
 	defer srv.ShutdownWatch()
 
 	addr := coreListenAddr(cfg)
-	if isWildcardBindHost(cfg.BindHost) {
-		log.Printf("WARNING: forge-core explicitly configured to listen on wildcard host %q", cfg.BindHost)
-	}
 	httpSrv := &http.Server{
 		Addr:              addr,
 		Handler:           srv.Handler(),
@@ -53,6 +54,15 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	_ = httpSrv.Shutdown(shutdownCtx)
+}
+
+var errWildcardBindRequiresOptIn = errors.New("wildcard bind host requires FORGE_ALLOW_WILDCARD_BIND=true")
+
+func validateCoreListenConfig(cfg config.Config) error {
+	if isWildcardBindHost(cfg.BindHost) && !cfg.AllowWildcardBind {
+		return errWildcardBindRequiresOptIn
+	}
+	return nil
 }
 
 func coreListenAddr(cfg config.Config) string {

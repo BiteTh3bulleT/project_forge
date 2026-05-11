@@ -33,6 +33,22 @@ func TestLoadRespectsCoreBindHostOverride(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultsWildcardBindOptInDisabled(t *testing.T) {
+	t.Setenv("FORGE_ALLOW_WILDCARD_BIND", "")
+	cfg := Load()
+	if cfg.AllowWildcardBind {
+		t.Fatal("expected wildcard bind opt-in to default false")
+	}
+}
+
+func TestLoadRespectsWildcardBindOptIn(t *testing.T) {
+	t.Setenv("FORGE_ALLOW_WILDCARD_BIND", "true")
+	cfg := Load()
+	if !cfg.AllowWildcardBind {
+		t.Fatal("expected wildcard bind opt-in true")
+	}
+}
+
 func TestLoadRespectsWorkspaceOverride(t *testing.T) {
 	t.Setenv("FORGE_WORKSPACE_DIR", "/tmp")
 	cfg := Load()

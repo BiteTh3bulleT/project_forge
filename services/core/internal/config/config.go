@@ -14,6 +14,7 @@ type Config struct {
 	DataDir                                     string
 	Port                                        int
 	BindHost                                    string
+	AllowWildcardBind                           bool
 	WorkspaceDir                                string
 	StoreBackend                                string
 	PostgresDSN                                 string
@@ -146,6 +147,7 @@ func Load() Config {
 		DataDir:                    dataDir,
 		Port:                       port,
 		BindHost:                   bindHost,
+		AllowWildcardBind:          envBool("FORGE_ALLOW_WILDCARD_BIND", false),
 		WorkspaceDir:               workspace,
 		StoreBackend:               envStringDefault("FORGE_STORE_BACKEND", "sqlite"),
 		PostgresDSN:                strings.TrimSpace(os.Getenv("FORGE_POSTGRES_DSN")),

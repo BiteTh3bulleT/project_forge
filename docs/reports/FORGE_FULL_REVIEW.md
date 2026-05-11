@@ -19,7 +19,7 @@ The biggest weaknesses are also concrete: [services/core/internal/gateway/servic
 **Coherence:** Yes — strong architectural backbone, consistent doctrine, repeatable migration pattern.
 **Architecture visible in code:** Yes — semantic syscalls, kernel commit gate, forbidden-imports fences, capability registry, gateway tool registry, journal/audit chain are all present and tested.
 **Biggest strength:** Build-time enforcement of doctrine (commit chokepoint, import fences, Nix safe-mode literals).
-**Biggest problems:** Two monolithic Go files, thin tests on three load-bearing packages, ADR numbering collision, ~20 packages with no tests, doc surface area outruns reading capacity.
+**Biggest remaining problems:** Two monolithic Go files, thin tests on three load-bearing packages, ~20 packages with no tests, doc surface area outruns reading capacity.
 **Highest-leverage next move:** Split `gateway/service.go` along the existing capability-category lines (filesystem, command, http, git, identity, …) — every other refactor gets easier afterwards.
 
 ---
@@ -78,7 +78,7 @@ Verified against code:
 
 ## 4. How FORGE Works
 
-**Startup.** `services/core/main.go` loads config, opens the store, builds an `api.Server`, and starts an HTTP listener with a 10-second header timeout. A SIGINT/SIGTERM handler triggers `Shutdown` with an 8-second grace window. A warning is logged when bound to a wildcard host.
+**Startup.** `services/core/main.go` loads config, opens the store, builds an `api.Server`, and starts an HTTP listener with a 10-second header timeout. A SIGINT/SIGTERM handler triggers `Shutdown` with an 8-second grace window. Wildcard binds now fail closed unless `FORGE_ALLOW_WILDCARD_BIND=true` is explicitly set.
 
 **Server construction.** `api.NewServer(st, cfg)` in [services/core/internal/api/server.go](services/core/internal/api/server.go) (1,589 lines) wires all subsystem services: gateway, modelruntime, controllane, approvals, audit, jobs, memory, retrieval, embeddings, backup, automation, autonomy, dream, hostbridge, forgeh, forgekshadow, and others. The server then mounts route groups via `routes.go`.
 
@@ -120,7 +120,7 @@ ProjectForge/
 ├── README.md                       # Public-facing project description — 295 lines
 ├── FORGE_CONTEXT.md                # Source-of-truth context generator output
 ├── Full-Code-Review.md             # This review's brief
-├── Operator-Toolbelt.txt           # EMPTY file — clutter, should delete or fill
+├── Operator-Toolbelt.txt           # deleted after review; was an empty tracked placeholder
 ├── package.json                    # npm workspace root, scripts
 ├── flake.nix                       # Nix flake — packages/apps/checks/devShells
 ├── flake.lock
@@ -166,15 +166,15 @@ ProjectForge/
 │   ├── diagrams/                   # Mermaid diagrams
 │   └── glossary.md
 ├── .forge/                         # Runtime data (logs, nix-results, run, vm) — gitignored
-├── .vm-build-core.log              # VM build log — clutter, should gitignore
-├── .vm-nix-store/                  # VM artifact — clutter
-└── .vm-nix-tmp/                    # VM artifact — clutter
+├── .vm-build-core.log              # VM build log — ignored after review
+├── .vm-nix-store/                  # VM artifact — ignored after review
+└── .vm-nix-tmp/                    # VM artifact — ignored after review
 ```
 
 **Flagged:**
-- **Empty:** `Operator-Toolbelt.txt` (0 bytes).
-- **Clutter to gitignore:** `.vm-build-core.log`, `.vm-nix-store/`, `.vm-nix-tmp/`.
-- **Numbering collision:** Two ADRs named `0001-*`. The `forge-is-ai-os` and `forge-k-is-a-cognitive-microkernel` ADRs cannot both be 0001.
+- **Resolved after review:** `Operator-Toolbelt.txt` was deleted.
+- **Resolved after review:** `.vm-build-core.log`, `.vm-nix-store/`, `.vm-nix-tmp/`, and related `.vm-*` artifacts are gitignored.
+- **Resolved after review:** ADR numbering collision was removed by renumbering the AI-OS baseline ADR to `0000-forge-is-ai-os.md`.
 - **Doc proliferation:** 28+ files in `docs/reviews/` is approaching read-fatigue territory. Older phase reviews (12A through 13H) could be moved to `docs/reviews/archive/`.
 - **Forward-vision file with present-tense language:** `CODEX.md` has a `[FUTURE]` self-disclaimer at the top, good — but the body still reads as a current spec in some sections. Audit one more time for tense.
 
@@ -627,7 +627,7 @@ The README mentions Windows launch parity work; smoke script is bash. Section 31
 
 ### Problems
 
-- **ADR numbering collision.** Two ADRs are 0001 (`forge-is-ai-os.md` and `forge-k-is-a-cognitive-microkernel.md`). Renumber one.
+- **Resolved after review:** The ADR numbering collision was removed by renumbering `forge-is-ai-os.md` to `0000-forge-is-ai-os.md`.
 - **CODEX.md** is 594 lines and reads as a forward-vision document. It has a self-disclaimer at the top now (good), but the body still uses present-tense language in places that could confuse a reader who skims.
 - **Doc surface outruns review capacity.** 40+ arch docs + 33 status docs + 28+ review docs + 11 ADRs + 7 runbooks = a lot. Some review docs (12A through 13H phase reviews) could be archived.
 - **Multiple "full review" docs.** `docs/reviews/full_project_forge_review.md`, `full_project_review.md`, `full_project_review_checklist.md`, `forge_full_system_review_20260425/` — overlap.
@@ -711,7 +711,7 @@ docs/
 
 ### Localhost assumptions
 
-- Default bind is `127.0.0.1`. Wildcard bind logs a `WARNING`. Good — should arguably be a hard refuse without `FORGE_ALLOW_WILDCARD_BIND=true`.
+- Default bind is `127.0.0.1`. Wildcard binds now hard-refuse unless `FORGE_ALLOW_WILDCARD_BIND=true`.
 
 ### Dangerous defaults
 
@@ -857,7 +857,7 @@ Low. The forbidden-imports tests enforce this directly.
 
 ### Dead code
 
-- `Operator-Toolbelt.txt` (empty).
+- `Operator-Toolbelt.txt` was empty and has been deleted after review.
 - Old `phaseN.go` files in `api/` — verify all are still routed before retiring.
 
 ### Comments
@@ -924,7 +924,7 @@ Evidence by file:
 
 This is unusually short — the repo is clean.
 
-- **`Operator-Toolbelt.txt`** — empty file at repo root.
+- **`Operator-Toolbelt.txt`** — was an empty file at repo root; deleted after review.
 - **FORGE-H adapter interfaces** (`OperatorNotifier`, `LanePolicyWriter`, `ModelPolicyWriter`, `DegradedModeWriter` in `services/core/internal/forgeh/executor.go`) — defined as interfaces with no concrete implementations in-tree. Intentional but worth noting as planned work.
 - **Hyperlane core package** — has `intent.go` with enums and a `ParserVersion`, no tests, classifier not routed live.
 - **Aios/rulecells** — scaffolded; deterministic reflex substrate documented as concept, code is placeholder.
@@ -947,20 +947,21 @@ Nothing currently failing. Tests pass, vet clean, smoke green. The items below a
 **Suggested Fix:** Add a manual-validation artifact (screenshot + commit hash + date) to `docs/runbooks/forge_operator_desktop_vm.md`. Consider a `nix run` smoke for the operator session that boots a headless Wayland and probes that the FORGE window opens.
 **Difficulty:** Easy.
 
-### Issue: Wildcard bind only warns
+### Issue: Wildcard bind only warns [resolved after review]
 
 **Location:** [services/core/main.go:29-32](services/core/main.go)
 **Problem:** Binding to `0.0.0.0`/`::` logs a `WARNING` but proceeds. For a local-first service, this is a footgun.
 **Impact:** Operator misconfiguration could expose the daemon to the network.
 **Suggested Fix:** Refuse to bind unless `FORGE_ALLOW_WILDCARD_BIND=true` is also set.
+**Follow-up Resolution:** `forge-core` now fails closed for wildcard binds unless `FORGE_ALLOW_WILDCARD_BIND=true`; Docker/Compose opt in explicitly for container reachability.
 **Difficulty:** Easy.
 
-### Issue: ADR numbering collision
+### Issue: ADR numbering collision [resolved after review]
 
-**Location:** [docs/adr/0001-forge-is-ai-os.md](docs/adr/0001-forge-is-ai-os.md) + [docs/adr/0001-forge-k-is-a-cognitive-microkernel.md](docs/adr/0001-forge-k-is-a-cognitive-microkernel.md)
+**Location:** [docs/adr/0000-forge-is-ai-os.md](docs/adr/0000-forge-is-ai-os.md) (renumbered from `0001-forge-is-ai-os.md` after this review) + [docs/adr/0001-forge-k-is-a-cognitive-microkernel.md](docs/adr/0001-forge-k-is-a-cognitive-microkernel.md)
 **Problem:** Two ADRs share number 0001.
 **Impact:** Cross-references in README, AGENTS.md, and elsewhere become ambiguous.
-**Suggested Fix:** Renumber the older one (`forge-is-ai-os.md`) to 0000 or move FORGE-K to a fresh number.
+**Suggested Fix:** Renumber the older one (`forge-is-ai-os.md`) to 0000 or move FORGE-K to a fresh number. Follow-up resolution: the AI-OS ADR now uses `0000`.
 **Difficulty:** Easy.
 
 ### Issue: `chat_assistant_gateway.go` may have prompt-injection → effector paths
@@ -971,12 +972,13 @@ Nothing currently failing. Tests pass, vet clean, smoke green. The items below a
 **Suggested Fix:** Dedicated audit pass: trace every assignment from a model response field to (a) command args, (b) file paths, (c) URLs, (d) capability inputs. Confirm validator coverage.
 **Difficulty:** Medium.
 
-### Issue: VM artifacts and empty file in repo root
+### Issue: VM artifacts and empty file in repo root [resolved after review]
 
 **Location:** `/.vm-build-core.log`, `/.vm-nix-store/`, `/.vm-nix-tmp/`, `/Operator-Toolbelt.txt`
 **Problem:** Untracked but not gitignored. `Operator-Toolbelt.txt` is 0 bytes.
 **Impact:** Pollutes `git status`. Possible accidental commit later.
 **Suggested Fix:** Add to `.gitignore`. Delete or fill `Operator-Toolbelt.txt`.
+**Follow-up Resolution:** `.vm-*` artifacts and Nix `result*` outputs are ignored; `Operator-Toolbelt.txt` was deleted.
 **Difficulty:** Trivial.
 
 ### Issue: `npm run smoke` is bash; CI uses Linux. Windows parity claim in README.
@@ -1004,7 +1006,7 @@ Nothing currently failing. Tests pass, vet clean, smoke green. The items below a
 - **Multiple architecture docs near the same concept:** `forge_ai_os.md`, `forge_k_overview.md`, `core_doctrine.md`, `control_lane_kernel.md` all touch the same kernel idea from different angles. Add a top-of-file `Read this if you want X` note to each, or consolidate into a single "kernel architecture" doc with sections.
 - **CODEX.md vs AGENTS.md vs README.md vs CLAUDE.md** — four doctrine surfaces. AGENTS.md is the operator/agent doctrine; CLAUDE.md is a 20-line pointer; CODEX.md is forward vision (tagged `[FUTURE]`); README.md is public-facing. The tagging is now correct, but a reader's first question "which one do I read first?" deserves a `docs/onboarding.md` answer.
 - **Phase planning files vs phase review files:** Plans live in `docs/superpowers/specs/` and `docs/archive/phases/`; reviews live in `docs/reviews/`. The mapping is mostly clean but could be cross-linked.
-- **Empty placeholder files:** `Operator-Toolbelt.txt`.
+- **Resolved empty placeholder:** `Operator-Toolbelt.txt` was deleted after review.
 - **Old phase reviews accumulating in `docs/reviews/`:** Move 12A-13H phase reviews to `docs/reviews/archive/` to keep the active surface readable.
 
 ---
@@ -1089,7 +1091,7 @@ Ordered low-risk, high-impact first.
 ### Refactor Item: Renumber the duplicate 0001 ADR
 
 **Why:** Cross-references are ambiguous.
-**Files Affected:** [docs/adr/0001-forge-is-ai-os.md](docs/adr/0001-forge-is-ai-os.md) → `0000-forge-is-ai-os.md` (or new number). Update all cross-references.
+**Files Affected:** [docs/adr/0000-forge-is-ai-os.md](docs/adr/0000-forge-is-ai-os.md) now holds the AI-OS baseline ADR; FORGE-K remains [docs/adr/0001-forge-k-is-a-cognitive-microkernel.md](docs/adr/0001-forge-k-is-a-cognitive-microkernel.md).
 **Risk:** Low — text refactor.
 **Difficulty:** Easy.
 
@@ -1375,7 +1377,7 @@ docs/
 Specific moves:
 - Move `docs/reviews/phase_12*.md`, `phase_13*.md` to `docs/reviews/archive/`.
 - Delete or archive `full_project_forge_review.md`, `full_project_review.md`, `full_project_review_checklist.md`; keep the dated review folder.
-- Renumber `docs/adr/0001-forge-is-ai-os.md`.
+- Verify ADR numbering remains unique after `docs/adr/0000-forge-is-ai-os.md` renumbering.
 - Add `docs/onboarding.md` as the single answer to "where do I start?"
 - Add `docs/api/routes.md` generated from chi route inventory.
 
@@ -1448,8 +1450,8 @@ Already strong: `npm test`. Recommend `npm run validate:all` that runs the full 
 | P0 | Audit `chat_assistant_gateway.go` for prompt-injection → effector paths | Security | Largest LLM↔system seam, model-controlled strings could land in capability inputs | Medium |
 | P0 | Bring `memory/` test/source ratio from 6.5% to 25% | Reliability | Canonical-truth store with thinnest coverage | Medium |
 | P0 | Split `gateway/service.go` along capability-category lines | Maintainability | 4,709 lines in one file gates every future gateway change | Medium |
-| P1 | Resolve ADR 0001 numbering collision | Docs | Cross-references are ambiguous | Easy |
-| P1 | Make wildcard bind fail-closed | Security | Operator misconfiguration footgun | Easy |
+| P1 done | Resolve ADR 0001 numbering collision | Docs | AI-OS ADR renumbered to 0000 | Easy |
+| P1 done | Make wildcard bind fail-closed | Security | Requires explicit `FORGE_ALLOW_WILDCARD_BIND=true` | Easy |
 | P1 | Add VM boot evidence to operator-desktop runbook | Reliability | Static checks don't catch runtime regressions | Easy |
 | P1 | Coverage triage on `aios/controllane/processor.go` to 30% | Reliability | The kernel commit gate deserves better tests | Medium |
 | P1 | Hyperlane core package: add tests + start routing live traffic | Runtime | Intent classifier sitting unused | Medium |
@@ -1469,17 +1471,17 @@ Already strong: `npm test`. Recommend `npm run validate:all` that runs the full 
 | P3 | Theme system + design system primitives | UI | Long-term consistency | Medium |
 | P3 | Onboarding doc | DX | "Where do I start as a new dev?" answer | Easy |
 | P3 | Renumber and tag superseded ADRs explicitly | Docs | Clarity | Easy |
-| P3 | Delete or fill `Operator-Toolbelt.txt`; gitignore VM artifacts | Hygiene | Repo cleanliness | Trivial |
+| P3 done | Delete or fill `Operator-Toolbelt.txt`; gitignore VM artifacts | Hygiene | Empty file deleted; `.vm-*`/`result*` ignored | Trivial |
 
 ---
 
 ## 32. Difficulty-Ranked Fix List
 
 ### Easy Fixes
-- Resolve ADR 0001 numbering collision.
-- Make wildcard bind fail-closed (`FORGE_ALLOW_WILDCARD_BIND` required).
-- `.gitignore` the VM artifacts (`.vm-*`, `.vm-nix-store/`, `.vm-nix-tmp/`).
-- Delete or fill `Operator-Toolbelt.txt`.
+- Done: Resolve ADR 0001 numbering collision.
+- Done: Make wildcard bind fail-closed (`FORGE_ALLOW_WILDCARD_BIND` required).
+- Done: `.gitignore` the VM artifacts (`.vm-*`, `.vm-nix-store/`, `.vm-nix-tmp/`) and Nix `result*` outputs.
+- Done: Delete `Operator-Toolbelt.txt`.
 - Lazy-load tier-2 desktop pages.
 - Add `/metrics` endpoint behind config flag.
 - Add `/health/detailed` with per-service rollup.

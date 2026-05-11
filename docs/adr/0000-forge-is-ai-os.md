@@ -1,4 +1,4 @@
-# ADR 0001 - FORGE Is the AI-OS
+# ADR 0000 - FORGE Is the AI-OS
 
 - Date: 2026-04-18
 - Status: accepted
@@ -78,4 +78,3 @@ FORGE responsibilities:
 - write canonical state and audit records
 
 Any IRIS output that should affect durable state must be converted into a FORGE contract (packet/job/syscall request) and committed through FORGE-owned paths.
-

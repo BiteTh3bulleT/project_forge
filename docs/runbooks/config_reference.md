@@ -11,7 +11,8 @@ boot or runtime. Observed 2026-04-21._
 |---|---|---|---|
 | `FORGE_DATA_DIR` | [config.go:16](services/core/internal/config/config.go#L16) | `${XDG_CONFIG_HOME}/forge` (typically `~/.config/forge`); falls back to CWD if `UserConfigDir` errors | Location of `forge.sqlite`, `backups/`, `exports/` |
 | `FORGE_CORE_PORT` | [config.go:25](services/core/internal/config/config.go#L25) | `18492` | HTTP listen port |
-| `FORGE_CORE_BIND_HOST` | [config.go](services/core/internal/config/config.go) | `127.0.0.1` | HTTP bind host. Use `0.0.0.0` only behind an intentional container, firewall, or reverse-proxy boundary. |
+| `FORGE_CORE_BIND_HOST` | [config.go](services/core/internal/config/config.go) | `127.0.0.1` | HTTP bind host. Wildcard hosts (`0.0.0.0`, `::`) fail closed unless `FORGE_ALLOW_WILDCARD_BIND=true` is also set. |
+| `FORGE_ALLOW_WILDCARD_BIND` | [config.go](services/core/internal/config/config.go) + [main.go](services/core/main.go) | `false` | Explicit opt-in required before `forge-core` may bind every interface. Docker sets this to `true` inside the container while host-published ports still default to loopback. |
 | `FORGE_WORKSPACE_DIR` | [config.go:30](services/core/internal/config/config.go#L30) | `/` for direct Go/dev runs; managed NixOS service defaults to `/forge/workspaces/default` | Workspace root for file-sensitive operations |
 | `FORGE_K_SHADOW_MODE_ENABLED` | [config.go](services/core/internal/config/config.go) | `false` | Enables disabled-by-default FORGE-K shadow diagnostics. Can also be toggled at runtime by the dashboard through the durable `forge_k_shadow_mode_enabled` setting. |
 | `FORGE_K_SHADOW_CHAT_METADATA_ENABLED` | [config.go](services/core/internal/config/config.go) | `false` | Enables Phase 12H chat metadata diagnostics only when `FORGE_K_SHADOW_MODE_ENABLED=true`. Captures bounded metadata only, never chat content, prompts, completions, request/response bodies, tool payloads, retrieval content, memory content, auth headers, cookies, or secrets. |
@@ -103,6 +104,7 @@ to `apps/desktop/.env.development` (or `.env.production`) to override.
 |---|---|---|---|
 | `FORGE_CORE_PORT` | `scripts/forge-up.sh`, `scripts/forge-down.sh` | `18492` | Health-check target / cleanup port |
 | `FORGE_CORE_BIND_HOST` | `services/core` | `127.0.0.1` | Direct core bind host; orchestration health checks use loopback. |
+| `FORGE_ALLOW_WILDCARD_BIND` | `services/core` | `false` | Required only when intentionally binding `FORGE_CORE_BIND_HOST` to `0.0.0.0` or `::`. |
 
 ## Durable settings (stored in SQLite)
 

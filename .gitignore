@@ -1,6 +1,8 @@
 node_modules/
 dist/
 target/
+result
+result-*
 *.sqlite
 *.sqlite-*
 *.db
@@ -13,6 +15,8 @@ target/
 data/
 apps/desktop/src-tauri/gen/
 .forge/
+.vm-*/
+.vm-*
 .claude/settings.local.json
 .claude/worktrees/
 .worktrees/

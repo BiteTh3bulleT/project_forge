@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"testing"
 
 	"forge/projectforge/services/core/internal/config"
@@ -42,6 +43,33 @@ func TestWildcardBindHostDetection(t *testing.T) {
 	for _, tc := range cases {
 		if got := isWildcardBindHost(tc.host); got != tc.want {
 			t.Fatalf("isWildcardBindHost(%q) = %v, want %v", tc.host, got, tc.want)
+		}
+	}
+}
+
+func TestValidateCoreListenConfigRejectsWildcardWithoutOptIn(t *testing.T) {
+	for _, host := range []string{"0.0.0.0", "::", "[::]", " 0.0.0.0 "} {
+		err := validateCoreListenConfig(config.Config{BindHost: host})
+		if !errors.Is(err, errWildcardBindRequiresOptIn) {
+			t.Fatalf("host %q error = %v, want %v", host, err, errWildcardBindRequiresOptIn)
+		}
+	}
+}
+
+func TestValidateCoreListenConfigAllowsWildcardWithExplicitOptIn(t *testing.T) {
+	for _, host := range []string{"0.0.0.0", "::", "[::]"} {
+		err := validateCoreListenConfig(config.Config{BindHost: host, AllowWildcardBind: true})
+		if err != nil {
+			t.Fatalf("host %q unexpected error: %v", host, err)
+		}
+	}
+}
+
+func TestValidateCoreListenConfigAllowsLoopbackWithoutOptIn(t *testing.T) {
+	for _, host := range []string{"127.0.0.1", "localhost", ""} {
+		err := validateCoreListenConfig(config.Config{BindHost: host})
+		if err != nil {
+			t.Fatalf("host %q unexpected error: %v", host, err)
 		}
 	}
 }

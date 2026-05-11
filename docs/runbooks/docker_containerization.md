@@ -27,7 +27,7 @@ Phase 13H adds Redis boundary flags for future ephemeral coordination. `FORGE_RE
 
 The Docker core enables the governed model runtime surface by default and points Ollama discovery at host Ollama through `http://host.docker.internal:11434`. If Ollama is not running or has no local models, FORGE remains healthy and the model runtime reports degraded backend health instead of disappearing from the API surface.
 
-Docker sets `FORGE_CORE_BIND_HOST=0.0.0.0` inside the core container so the published container port can reach the process. Direct Go and NixOS service runs default to `127.0.0.1`.
+Docker sets `FORGE_CORE_BIND_HOST=0.0.0.0` and `FORGE_ALLOW_WILDCARD_BIND=true` inside the core container so the published container port can reach the process. Direct Go and NixOS service runs default to `127.0.0.1`, and wildcard binds fail closed unless explicitly opted in.
 
 Compose binds host-published ports to `127.0.0.1` by default through `FORGE_DOCKER_BIND_HOST`. This keeps the core, browser-served desktop, managed data services, and optional provider sidecars local to the host even though containers still communicate over the Compose network. Set `FORGE_DOCKER_BIND_HOST=0.0.0.0` only when you intentionally expose these development services through a firewall or private lab network.
 
