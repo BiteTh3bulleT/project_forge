@@ -2724,6 +2724,9 @@ html[data-effects="subtle"] .forge-context-card:hover {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
   padding: 0.5rem 1.1rem;
   font-size: 0.72rem;
   letter-spacing: 0.08em;
@@ -2743,9 +2746,13 @@ html[data-effects="subtle"] .forge-context-card:hover {
   min-width: 0;
 }
 
+.forge-os-statusbar__left {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
 .forge-os-statusbar__right {
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: none;
 }
 
 .forge-os-statusbar__crumb {
@@ -2762,6 +2769,25 @@ html[data-effects="subtle"] .forge-context-card:hover {
 
 .forge-os-statusbar__sep {
   color: rgba(var(--forge-muted-rgb), 0.4);
+}
+
+@media (max-aspect-ratio: 17 / 10) and (orientation: landscape) {
+  .forge-os-wallpaper__art img {
+    object-fit: contain;
+  }
+}
+
+@media (max-width: 1360px) and (orientation: landscape) {
+  .forge-os-statusbar {
+    gap: 0.6rem;
+    padding-inline: 0.75rem;
+    font-size: 0.66rem;
+  }
+
+  .forge-os-statusbar__left {
+    flex-basis: 18rem;
+  }
+
 }
 
 .forge-os-stage {

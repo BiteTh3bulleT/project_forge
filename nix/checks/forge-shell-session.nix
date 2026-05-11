@@ -24,10 +24,10 @@ stdenv.mkDerivation {
     test -f "$module"
 
     grep -F 'FORGE_SHELL_SESSION_ENABLED=true' "$wrapper"
-    grep -F 'FORGE_SHELL_MODE=fullscreen-shell' "$wrapper"
+    grep -F 'FORGE_SHELL_MODE="''${FORGE_SHELL_MODE:-fullscreen-shell}"' "$wrapper"
     grep -F 'http://127.0.0.1:18492' "$wrapper"
     grep -F 'FORGE_SHELL_SAFE_MODE=true' "$wrapper"
-    grep -F 'FORGE_SHELL_FULLSCREEN=true' "$wrapper"
+    grep -F 'FORGE_SHELL_FULLSCREEN="''${FORGE_SHELL_FULLSCREEN:-true}"' "$wrapper"
     grep -F 'FORGE_SHELL_HOST_MUTATION=false' "$wrapper"
     grep -F 'FORGE_SHELL_DIRECT_SYSTEM_CONTROL=false' "$wrapper"
     grep -F 'FORGE_SHELL_MODEL_MUTATION=false' "$wrapper"
@@ -73,6 +73,12 @@ stdenv.mkDerivation {
     chmod +x "$fake"
     FORGE_SHELL_BINARY="$fake" FORGE_CORE_URL=http://127.0.0.1:19997 "$wrapper" override path > "$TMPDIR/shell-override.out"
     grep -F 'fake-shell:true:http://127.0.0.1:19997:override path' "$TMPDIR/shell-override.out"
+
+    FORGE_SHELL_BINARY="$fake" \
+      FORGE_SHELL_MODE=operator-desktop \
+      FORGE_SHELL_FULLSCREEN=false \
+      "$wrapper" preserved mode > "$TMPDIR/shell-preserve-env.out"
+    grep -F 'fake-shell:true:http://127.0.0.1:18492:preserved mode' "$TMPDIR/shell-preserve-env.out"
 
     fake_desktop="$TMPDIR/fake-forge-desktop"
     printf '%s\n' \

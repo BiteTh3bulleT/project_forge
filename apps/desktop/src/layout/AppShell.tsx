@@ -529,7 +529,7 @@ export function AppShell(props: AppShellProps) {
               Queue:{" "}
               {level === "none" ? "clear" : `attention ${attentionCount}`}
             </span>
-            <span className="forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
+            <span className="forge-os-statusbar__mode forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
               Mode: {uiMode}
             </span>
           </div>

@@ -23,11 +23,11 @@ writeShellApplication {
     set -euo pipefail
 
     export FORGE_SHELL_SESSION_ENABLED=true
-    export FORGE_SHELL_MODE=fullscreen-shell
+    export FORGE_SHELL_MODE="''${FORGE_SHELL_MODE:-fullscreen-shell}"
     export FORGE_CORE_URL="''${FORGE_CORE_URL:-http://127.0.0.1:18492}"
     export VITE_FORGE_API_URL="''${VITE_FORGE_API_URL:-$FORGE_CORE_URL}"
     export FORGE_SHELL_SAFE_MODE=true
-    export FORGE_SHELL_FULLSCREEN=true
+    export FORGE_SHELL_FULLSCREEN="''${FORGE_SHELL_FULLSCREEN:-true}"
     export FORGE_SHELL_HOST_MUTATION=false
     export FORGE_SHELL_DIRECT_SYSTEM_CONTROL=false
     export FORGE_SHELL_MODEL_MUTATION=false
