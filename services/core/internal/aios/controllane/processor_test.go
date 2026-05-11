@@ -166,6 +166,81 @@ func TestProcessorSupportedSyscalls(t *testing.T) {
 	}
 }
 
+func TestProcessorOpenLoopUpdatePreservesTransitionRules(t *testing.T) {
+	ctx := context.Background()
+	k, store, _ := newTestKernel()
+	mustCreateNote(ctx, k, "note-a", "note a")
+	mustCreateNote(ctx, k, "note-b", "note b")
+	mustCreateNote(ctx, k, "note-c", "note c")
+
+	create := validBaseRequest(domain.ActionOpenLoop)
+	create.ID = "open-loop-update-create"
+	create.Payload = map[string]any{
+		"id":           "loop-update-1",
+		"title":        "Initial loop",
+		"state":        string(domain.LoopOpen),
+		"priority":     "low",
+		"owner":        "operator-a",
+		"nextAction":   "inspect",
+		"relatedNotes": []string{"note-a"},
+	}
+	res, err := k.Process(ctx, create)
+	if err != nil || !res.Success {
+		t.Fatalf("create open loop failed: err=%v res=%+v", err, res)
+	}
+
+	update := validBaseRequest(domain.ActionOpenLoop)
+	update.ID = "open-loop-update-valid"
+	update.Payload = map[string]any{
+		"id":           "loop-update-1",
+		"title":        "Updated loop",
+		"state":        string(domain.LoopInProgress),
+		"priority":     "high",
+		"owner":        "operator-b",
+		"blocker":      "none",
+		"nextAction":   "finish",
+		"relatedNotes": []string{"note-b", "note-c"},
+	}
+	res, err = k.Process(ctx, update)
+	if err != nil || !res.Success {
+		t.Fatalf("update open loop failed: err=%v res=%+v", err, res)
+	}
+	if len(res.CommittedObjectIDs) != 1 || res.CommittedObjectIDs[0] != "loop-update-1" {
+		t.Fatalf("committed ids = %v", res.CommittedObjectIDs)
+	}
+	loop, ok := store.FindLoop("loop-update-1")
+	if !ok {
+		t.Fatalf("expected loop-update-1 to exist")
+	}
+	if loop.Title != "Updated loop" || loop.State != domain.LoopInProgress || loop.Priority != "high" || loop.Owner != "operator-b" || loop.Blocker != "none" || loop.NextAction != "finish" {
+		t.Fatalf("loop update did not persist expected fields: %+v", loop)
+	}
+	if len(loop.RelatedNotes) != 2 || loop.RelatedNotes[0] != "note-b" || loop.RelatedNotes[1] != "note-c" {
+		t.Fatalf("related notes = %v", loop.RelatedNotes)
+	}
+
+	invalid := validBaseRequest(domain.ActionOpenLoop)
+	invalid.ID = "open-loop-update-invalid"
+	invalid.Payload = map[string]any{
+		"id":    "loop-update-1",
+		"state": string(domain.LoopOpen),
+	}
+	res, err = k.Process(ctx, invalid)
+	if err != nil {
+		t.Fatalf("invalid transition returned unexpected error: %v", err)
+	}
+	if res.Success {
+		t.Fatalf("expected invalid transition to fail")
+	}
+	if res.DeterministicErrCode != domain.ErrInvalidStateTransition {
+		t.Fatalf("deterministic error = %q, want %q", res.DeterministicErrCode, domain.ErrInvalidStateTransition)
+	}
+	loop, ok = store.FindLoop("loop-update-1")
+	if !ok || loop.State != domain.LoopInProgress {
+		t.Fatalf("invalid transition should not mutate loop, exists=%v loop=%+v", ok, loop)
+	}
+}
+
 func TestProcessorInvalidAndUnauthorizedPaths(t *testing.T) {
 	ctx := context.Background()
 	k, store, _ := newTestKernel()
