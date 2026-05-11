@@ -14,6 +14,27 @@ const (
 	GateScope     = "ref_workspace_scope"
 )
 
+var allowedRefTypes = []string{
+	"memory_note",
+	"semantic_link",
+	"state_item",
+	"open_loop",
+	"context_block",
+	"context_bundle",
+	"snapshot",
+	"restore_seed",
+	"kv_manifest",
+	"runtime_manifest",
+	"case_packet",
+	"exhibit",
+	"palace_route",
+	"semantic_object",
+	"semantic_operation",
+	"diagnostic_report",
+}
+
+var allowedRefTypeSet = buildAllowedRefTypeSet(allowedRefTypes)
+
 type ObjectRef struct {
 	RefType     string `json:"ref_type"`
 	RefID       string `json:"ref_id"`
@@ -40,6 +61,12 @@ type ValidationResult struct {
 	NormalizedRefs []ObjectRef         `json:"normalized_refs"`
 	Failures       []ValidationFailure `json:"failures,omitempty"`
 	Warnings       []string            `json:"warnings,omitempty"`
+}
+
+func AllowedRefTypes() []string {
+	out := make([]string, len(allowedRefTypes))
+	copy(out, allowedRefTypes)
+	return out
 }
 
 func ValidateRefs(req ValidationRequest) ValidationResult {
@@ -116,27 +143,20 @@ func normalizeRef(raw ObjectRef, workspaceID string) ObjectRef {
 }
 
 func allowedRefType(refType string) bool {
-	switch strings.TrimSpace(refType) {
-	case "memory_note",
-		"semantic_link",
-		"state_item",
-		"open_loop",
-		"context_block",
-		"context_bundle",
-		"snapshot",
-		"restore_seed",
-		"kv_manifest",
-		"runtime_manifest",
-		"case_packet",
-		"exhibit",
-		"palace_route",
-		"semantic_object",
-		"semantic_operation",
-		"diagnostic_report":
-		return true
-	default:
-		return false
+	_, ok := allowedRefTypeSet[strings.ToLower(strings.TrimSpace(refType))]
+	return ok
+}
+
+func buildAllowedRefTypeSet(types []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(types))
+	for _, refType := range types {
+		normalized := strings.ToLower(strings.TrimSpace(refType))
+		if normalized == "" {
+			continue
+		}
+		out[normalized] = struct{}{}
 	}
+	return out
 }
 
 func safeRefID(refID string) bool {
