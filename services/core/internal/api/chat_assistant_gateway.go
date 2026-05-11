@@ -25,6 +25,8 @@ const (
 	modelRuntimePlainChatMaxOutputToken = 384
 	modelRuntimePlainChatTimeoutMs      = 30000
 	modelRuntimePlainChatMaxAttempts    = 1
+	chatToolArgumentMaxBytes            = 32 << 10
+	chatToolArgumentStageMaxBytes       = 4 << 10
 	assistantStreamFlushChars           = 160
 	assistantStreamFlushIntervalMs      = 24
 )
@@ -769,13 +771,14 @@ func (s *Server) completeAssistantWithGatewayTools(
 			default:
 				argsStr = ""
 			}
-			pushStage("tool_args", map[string]any{"turn": turn, "index": idx, "name": name, "arguments": argsStr})
+			argsForStage := trimSummary(argsStr, chatToolArgumentStageMaxBytes)
+			pushStage("tool_args", map[string]any{"turn": turn, "index": idx, "name": name, "arguments": argsForStage})
 			if emit != nil {
 				emit("tool_call", map[string]any{
 					"turn":      turn,
 					"index":     idx,
 					"modelName": name,
-					"arguments": argsStr,
+					"arguments": argsForStage,
 				})
 			}
 
@@ -1004,6 +1007,22 @@ func (s *Server) dispatchToolCall(ctx context.Context, corr string, threadID int
 
 	var args map[string]any
 	if strings.TrimSpace(argsStr) != "" {
+		if len(argsStr) > chatToolArgumentMaxBytes {
+			pushStage("tool_args_too_large", map[string]any{
+				"bytes": len(argsStr),
+				"max":   chatToolArgumentMaxBytes,
+			})
+			return toolDispatchResult{
+				args:          map[string]any{},
+				state:         "error",
+				text:          "Tool call arguments were too large.",
+				failureReason: fmt.Sprintf("tool arguments too large: %d > %d bytes", len(argsStr), chatToolArgumentMaxBytes),
+				executionResult: map[string]any{
+					"argumentBytes": len(argsStr),
+					"maxBytes":      chatToolArgumentMaxBytes,
+				},
+			}
+		}
 		if err := json.Unmarshal([]byte(argsStr), &args); err != nil {
 			pushStage("tool_args_error", map[string]any{"error": err.Error()})
 			return toolDispatchResult{

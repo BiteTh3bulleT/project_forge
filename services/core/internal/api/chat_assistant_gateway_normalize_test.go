@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"forge/projectforge/services/core/internal/gateway"
@@ -115,6 +116,34 @@ func TestDispatchSuppressesCompositeMkdirBeforeGateway(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(home, "Downloads", "PeanutButterJellyTime")); !os.IsNotExist(err) {
 		t.Fatalf("expected suppressed mkdir to leave no directory, stat err=%v", err)
 	}
+}
+
+func TestDispatchRejectsOversizedModelToolArgumentsBeforeGateway(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
+
+	var stages []string
+	got := srv.dispatchToolCall(
+		context.Background(),
+		"corr-oversized-tool-args",
+		0,
+		gateway.ChatModelName("fs.list"),
+		`{"input":{"query":"`+strings.Repeat("A", 40<<10)+`"}}`,
+		"list files",
+		func(stage string, _ map[string]any) {
+			stages = append(stages, stage)
+		},
+	)
+
+	if got.state != "error" {
+		t.Fatalf("expected oversized arguments to fail before gateway, got state=%q text=%q", got.state, got.text)
+	}
+	if !strings.Contains(got.failureReason, "tool arguments too large") {
+		t.Fatalf("failureReason=%q", got.failureReason)
+	}
+	if !containsStage(stages, "tool_args_too_large") {
+		t.Fatalf("expected tool_args_too_large stage, got %v", stages)
+	}
+	assertGatewayInvocationCount(t, st, 0)
 }
 
 func containsStage(stages []string, want string) bool {
