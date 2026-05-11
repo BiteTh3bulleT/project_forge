@@ -195,6 +195,15 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 	}
 
 	var semanticOperationDecision SemanticOperationValidationDecision
+	var refShapeDecision RefShapeValidationDecision
+	if req.Action == domain.ActionValidateRefShape {
+		refShapeDecision = EnforceRefShape(req)
+		if !refShapeDecision.Accepted {
+			result.StateSummary = refShapeDecision.ToStateSummary()
+			return p.reject(ctx, req, result, "ref_shape_validation", []domain.SyscallError{refShapeDecision.ToSyscallError()}), nil
+		}
+		result.ValidationDetails = append(result.ValidationDetails, detailFor("ref_shape_validation", nil))
+	}
 	if req.Action == domain.ActionValidateSemanticOperation {
 		semanticOperationDecision = EnforceSemanticOperation(req)
 		if !semanticOperationDecision.Accepted {
@@ -212,8 +221,10 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 			result.StateSummary["dryRun"] = true
 			p.recordKVIdentityDecision(kvIdentityDecision)
 		} else if req.Action == domain.ActionValidateRefShape {
-			decision := EnforceRefShape(req)
-			result.StateSummary = decision.ToStateSummary()
+			if refShapeDecision.Decision == "" {
+				refShapeDecision = EnforceRefShape(req)
+			}
+			result.StateSummary = refShapeDecision.ToStateSummary()
 			result.StateSummary["dryRun"] = true
 		} else if req.Action == domain.ActionCompareRefShape {
 			decision := EnforceRefShapeComparison(req)
