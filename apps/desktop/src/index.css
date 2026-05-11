@@ -3259,12 +3259,12 @@ html[data-effects="subtle"] .forge-context-card:hover {
   z-index: 50;
   left: 1rem;
   bottom: 5.4rem;
-  width: min(44rem, calc(100vw - 2rem));
-  height: min(40rem, calc(100vh - 8rem));
+  width: min(58rem, calc(100vw - 2rem));
+  height: min(42rem, calc(100vh - 8rem));
   min-height: 22rem;
   display: flex;
   flex-direction: column;
-  border-radius: 22px;
+  border-radius: 18px;
   border: 1px solid rgba(var(--forge-border-strong-rgb), 0.18);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 60%),
@@ -3373,25 +3373,19 @@ html[data-effects="subtle"] .forge-context-card:hover {
   overflow: hidden;
 }
 
-.forge-os-startmenu__section:not(:last-child) {
-  flex: 0 1 auto;
-  max-height: min(13rem, 34vh);
+.forge-os-startmenu__section--pinned {
+  flex: 0 0 auto;
+  max-height: min(8.4rem, 24vh);
   border-bottom: 1px solid rgba(var(--forge-border-strong-rgb), 0.08);
 }
 
-.forge-os-startmenu__section--native:not(:last-child) {
-  flex: 0 0 auto;
-  max-height: min(16rem, 42vh);
-}
-
-.forge-os-startmenu__section--native .forge-os-startmenu__list {
-  overflow: visible;
-}
-
-.forge-os-startmenu__section:last-child {
+.forge-os-startmenu__body {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.9fr) minmax(20rem, 1.1fr);
+  gap: 0.85rem;
   flex: 1 1 0;
   min-height: 0;
-  overflow: hidden;
+  padding: 0.85rem 1.1rem 1rem;
 }
 
 .forge-os-startmenu__section-label {
@@ -3404,11 +3398,45 @@ html[data-effects="subtle"] .forge-context-card:hover {
   margin-bottom: 0.55rem;
 }
 
+.forge-os-startmenu__panel {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.1);
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.forge-os-startmenu__panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2.4rem;
+  padding: 0.7rem 0.8rem 0.45rem;
+  border-bottom: 1px solid rgba(var(--forge-border-strong-rgb), 0.07);
+}
+
+.forge-os-startmenu__panel-head .forge-os-startmenu__section-label {
+  margin-bottom: 0;
+}
+
+.forge-os-startmenu__panel-meta,
+.forge-os-startmenu__group-count {
+  flex: 0 0 auto;
+  color: rgba(var(--forge-muted-rgb), 0.62);
+  font-size: 0.65rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .forge-os-startmenu__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
-  gap: 0.5rem;
-  max-height: 8.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(8.25rem, 1fr));
+  gap: 0.45rem;
+  max-height: 5rem;
   overflow-y: auto;
   min-height: 0;
   padding-right: 0.2rem;
@@ -3417,11 +3445,10 @@ html[data-effects="subtle"] .forge-context-card:hover {
 
 .forge-os-startmenu__tile {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.45rem;
-  padding: 0.7rem 0.75rem;
-  border-radius: 14px;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
   border: 1px solid rgba(var(--forge-border-strong-rgb), 0.12);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 70%),
@@ -3447,9 +3474,9 @@ html[data-effects="subtle"] .forge-context-card:hover {
 .forge-os-startmenu__tile-short {
   display: grid;
   place-items: center;
-  width: 1.85rem;
-  height: 1.85rem;
-  border-radius: 8px;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 7px;
   border: 1px solid rgba(var(--forge-cyan-rgb), 0.32);
   background: rgba(var(--forge-cyan-rgb), 0.12);
   color: rgb(var(--forge-cyan-rgb));
@@ -3461,6 +3488,9 @@ html[data-effects="subtle"] .forge-context-card:hover {
 .forge-os-startmenu__tile-label {
   font-size: 0.78rem;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .forge-os-startmenu__list {
@@ -3470,12 +3500,8 @@ html[data-effects="subtle"] .forge-context-card:hover {
   overflow-y: auto;
   flex: 1 1 0;
   min-height: 0;
-  padding-right: 0.25rem;
+  padding: 0.35rem 0.45rem 0.5rem;
   overscroll-behavior: contain;
-}
-
-.forge-os-startmenu__section:not(:last-child) .forge-os-startmenu__list {
-  flex: 0 1 auto;
 }
 
 .forge-os-startmenu__list--native {
@@ -3492,11 +3518,18 @@ html[data-effects="subtle"] .forge-context-card:hover {
 }
 
 .forge-os-startmenu__group + .forge-os-startmenu__group {
-  margin-top: 0.45rem;
+  margin-top: 0.3rem;
+}
+
+.forge-os-startmenu__group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.3rem 0.45rem 0.18rem;
 }
 
 .forge-os-startmenu__group-label {
-  padding: 0.35rem 0.55rem 0.2rem;
   color: rgba(var(--forge-muted-rgb), 0.62);
   font-size: 0.66rem;
   font-weight: 700;
@@ -3577,15 +3610,7 @@ html[data-effects="subtle"] .forge-context-card:hover {
 }
 
 .forge-os-startmenu__native-badge {
-  flex: 0 0 auto;
-  align-self: center;
-  border-radius: 999px;
-  border: 1px solid rgba(var(--forge-cyan-rgb), 0.22);
-  background: rgba(var(--forge-cyan-rgb), 0.08);
-  padding: 0.18rem 0.45rem;
-  color: rgba(var(--forge-muted-rgb), 0.75);
-  font-size: 0.62rem;
-  line-height: 1;
+  display: none;
 }
 
 .forge-os-startmenu__status {
@@ -3596,6 +3621,8 @@ html[data-effects="subtle"] .forge-context-card:hover {
   padding: 0.45rem 0.55rem;
   color: rgba(var(--forge-muted-rgb), 0.82);
   font-size: 0.7rem;
+  margin-inline: 0.45rem;
+  margin-bottom: 0.5rem;
 }
 
 .forge-os-startmenu__empty {
@@ -3624,8 +3651,8 @@ html[data-effects="subtle"] .forge-context-card:hover {
     padding: 0.6rem 0.9rem;
   }
 
-  .forge-os-startmenu__section:not(:last-child) {
-    max-height: 7rem;
+  .forge-os-startmenu__section--pinned {
+    max-height: 5.8rem;
   }
 
   .forge-os-startmenu__section-label {
@@ -3633,7 +3660,7 @@ html[data-effects="subtle"] .forge-context-card:hover {
   }
 
   .forge-os-startmenu__grid {
-    max-height: 4.6rem;
+    max-height: 3.8rem;
     grid-template-columns: repeat(auto-fill, minmax(6.6rem, 1fr));
   }
 
@@ -3644,6 +3671,12 @@ html[data-effects="subtle"] .forge-context-card:hover {
 
   .forge-os-startmenu__row {
     padding: 0.48rem 0.55rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .forge-os-startmenu__body {
+    grid-template-columns: 1fr;
   }
 }
 

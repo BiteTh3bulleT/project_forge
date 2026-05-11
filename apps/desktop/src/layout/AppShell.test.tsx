@@ -311,8 +311,8 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(
       screen
         .getByText("Native Apps")
-        .closest(".forge-os-startmenu__section")
-        ?.classList.contains("forge-os-startmenu__section--native"),
+        .closest(".forge-os-startmenu__panel")
+        ?.classList.contains("forge-os-startmenu__panel--native"),
     ).toBe(true);
     expect(
       screen.getByRole("img", { name: "Terminal icon" }).getAttribute("src"),
@@ -320,6 +320,35 @@ describe("AppShell confined Tauri tool surfaces", () => {
       "asset:///run/current-system/sw/share/icons/hicolor/48x48/apps/foot.png",
     );
     expect(screen.queryByPlaceholderText(/command|path/i)).toBeNull();
+  });
+
+  it("organizes Start into launcher columns with counted native categories", async () => {
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+
+    expect(await screen.findByText("Native Apps")).toBeTruthy();
+    expect(screen.getByText("FORGE Surfaces")).toBeTruthy();
+    expect(screen.getByText("Knowledge")).toBeTruthy();
+    expect(screen.getByText("Governance")).toBeTruthy();
+    expect(
+      screen
+        .getByText("Native Apps")
+        .closest(".forge-os-startmenu__panel"),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByText("FORGE Surfaces")
+        .closest(".forge-os-startmenu__panel"),
+    ).toBeTruthy();
+    expect(screen.getAllByText(/\d+ apps?/).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Native")).toBeNull();
   });
 
   it("loads native operator apps when the shell runtime probe is unavailable", async () => {

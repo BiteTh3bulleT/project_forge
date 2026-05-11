@@ -1159,8 +1159,10 @@ function StartMenu(props: {
         </header>
 
         {!query && pinnedTools.length > 0 ? (
-          <div className="forge-os-startmenu__section">
-            <div className="forge-os-startmenu__section-label">Pinned</div>
+          <div className="forge-os-startmenu__section forge-os-startmenu__section--pinned">
+            <div className="forge-os-startmenu__section-label">
+              Quick Launch
+            </div>
             <div className="forge-os-startmenu__grid">
               {pinnedTools.map((tool) => (
                 <button
@@ -1187,99 +1189,131 @@ function StartMenu(props: {
           </div>
         ) : null}
 
-        <div className="forge-os-startmenu__section forge-os-startmenu__section--native">
-          <div className="forge-os-startmenu__section-label">Native Apps</div>
-          <div className="forge-os-startmenu__list forge-os-startmenu__list--native">
-            {appGroups.length === 0 ? (
-              <div className="forge-os-startmenu__empty">
-                {query
-                  ? `No native apps match "${props.query}".`
-                  : "No native operator apps are available."}
+        <div className="forge-os-startmenu__body">
+          <div className="forge-os-startmenu__panel forge-os-startmenu__panel--native">
+            <div className="forge-os-startmenu__panel-head">
+              <div className="forge-os-startmenu__section-label">
+                Native Apps
               </div>
-            ) : (
-              appGroups.map((group) => (
-                <div key={group.category} className="forge-os-startmenu__group">
-                  <div className="forge-os-startmenu__group-label">
-                    {group.category}
-                  </div>
-                  {group.items.map((app) => (
-                    <button
-                      key={app.id}
-                      type="button"
-                      onClick={() => props.onLaunchOperatorApp(app)}
-                      className="forge-os-startmenu__row"
-                    >
-                      <OperatorAppIcon
-                        app={app}
-                        className="forge-os-startmenu__app-icon"
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="forge-os-startmenu__row-label">
-                          {app.label}
-                        </span>
-                        <span className="forge-os-startmenu__row-desc">
-                          {app.description}
-                        </span>
-                      </span>
-                      <span className="forge-os-startmenu__native-badge">
-                        Native
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ))
-            )}
-          </div>
-          {props.operatorAppStatus ? (
-            <div className="forge-os-startmenu__status">
-              {props.operatorAppStatus}
+              <div className="forge-os-startmenu__panel-meta">
+                {filteredApps.length} {filteredApps.length === 1 ? "app" : "apps"}
+              </div>
             </div>
-          ) : null}
-        </div>
-
-        <div className="forge-os-startmenu__section">
-          <div className="forge-os-startmenu__section-label">
-            {query ? "FORGE Results" : "FORGE Surfaces"}
-          </div>
-          <div className="forge-os-startmenu__list">
-            {toolGroups.length === 0 ? (
-              <div className="forge-os-startmenu__empty">
-                No FORGE surfaces match "{props.query}".
-              </div>
-            ) : (
-              toolGroups.map((group) => (
-                <div key={group.category} className="forge-os-startmenu__group">
-                  <div className="forge-os-startmenu__group-label">
-                    {group.category}
-                  </div>
-                  {group.items.map((tool) => (
-                <button
-                  key={tool.id}
-                  type="button"
-                  onClick={() => props.onLaunch(tool)}
-                  onContextMenu={(event) => props.onContextMenu(event, tool)}
-                  className={cx(
-                    "forge-os-startmenu__row",
-                    props.activeTool?.id === tool.id &&
-                      "forge-os-startmenu__row--active",
-                  )}
-                >
-                  <span className="forge-os-startmenu__row-short">
-                    {tool.shortLabel}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="forge-os-startmenu__row-label">
-                      {tool.label}
-                    </span>
-                    <span className="forge-os-startmenu__row-desc">
-                      {tool.description}
-                    </span>
-                  </span>
-                </button>
-                  ))}
+            <div className="forge-os-startmenu__list forge-os-startmenu__list--native">
+              {appGroups.length === 0 ? (
+                <div className="forge-os-startmenu__empty">
+                  {query
+                    ? `No native apps match "${props.query}".`
+                    : "No native operator apps are available."}
                 </div>
-              ))
-            )}
+              ) : (
+                appGroups.map((group) => (
+                  <div
+                    key={group.category}
+                    className="forge-os-startmenu__group"
+                  >
+                    <div className="forge-os-startmenu__group-head">
+                      <div className="forge-os-startmenu__group-label">
+                        {group.category}
+                      </div>
+                      <div className="forge-os-startmenu__group-count">
+                        {group.items.length}{" "}
+                        {group.items.length === 1 ? "app" : "apps"}
+                      </div>
+                    </div>
+                    {group.items.map((app) => (
+                      <button
+                        key={app.id}
+                        type="button"
+                        onClick={() => props.onLaunchOperatorApp(app)}
+                        className="forge-os-startmenu__row"
+                      >
+                        <OperatorAppIcon
+                          app={app}
+                          className="forge-os-startmenu__app-icon"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="forge-os-startmenu__row-label">
+                            {app.label}
+                          </span>
+                          <span className="forge-os-startmenu__row-desc">
+                            {app.description}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
+            {props.operatorAppStatus ? (
+              <div className="forge-os-startmenu__status">
+                {props.operatorAppStatus}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="forge-os-startmenu__panel forge-os-startmenu__panel--surfaces">
+            <div className="forge-os-startmenu__panel-head">
+              <div className="forge-os-startmenu__section-label">
+                {query ? "FORGE Results" : "FORGE Surfaces"}
+              </div>
+              <div className="forge-os-startmenu__panel-meta">
+                {filteredTools.length}{" "}
+                {filteredTools.length === 1 ? "surface" : "surfaces"}
+              </div>
+            </div>
+            <div className="forge-os-startmenu__list">
+              {toolGroups.length === 0 ? (
+                <div className="forge-os-startmenu__empty">
+                  No FORGE surfaces match "{props.query}".
+                </div>
+              ) : (
+                toolGroups.map((group) => (
+                  <div
+                    key={group.category}
+                    className="forge-os-startmenu__group"
+                  >
+                    <div className="forge-os-startmenu__group-head">
+                      <div className="forge-os-startmenu__group-label">
+                        {group.category}
+                      </div>
+                      <div className="forge-os-startmenu__group-count">
+                        {group.items.length}{" "}
+                        {group.items.length === 1 ? "item" : "items"}
+                      </div>
+                    </div>
+                    {group.items.map((tool) => (
+                      <button
+                        key={tool.id}
+                        type="button"
+                        onClick={() => props.onLaunch(tool)}
+                        onContextMenu={(event) =>
+                          props.onContextMenu(event, tool)
+                        }
+                        className={cx(
+                          "forge-os-startmenu__row",
+                          props.activeTool?.id === tool.id &&
+                            "forge-os-startmenu__row--active",
+                        )}
+                      >
+                        <span className="forge-os-startmenu__row-short">
+                          {tool.shortLabel}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="forge-os-startmenu__row-label">
+                            {tool.label}
+                          </span>
+                          <span className="forge-os-startmenu__row-desc">
+                            {tool.description}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       </section>
@@ -1306,20 +1340,52 @@ function groupAppsByCategory(apps: OperatorApp[]) {
 }
 
 function shellToolCategory(id: ShellToolId) {
-  if (["chat", "system", "settings", "approvals"].includes(id)) {
-    return "Core";
-  }
-  if (["jobs", "memory", "project-context", "sources", "layouts"].includes(id)) {
-    return "Workspace";
-  }
-  if (["gateway", "models", "adapters", "events", "command"].includes(id)) {
-    return "Development";
-  }
   if (
-    ["audit", "backup", "policy", "strategies", "execution-permissions"].includes(
+    ["chat", "start", "dashboard", "system", "settings", "operator-apps"].includes(
       id,
     )
   ) {
+    return "Core";
+  }
+  if (["workbench", "canvas", "dossiers", "jobs", "reviews", "layouts"].includes(id)) {
+    return "Workspace";
+  }
+  if (
+    [
+      "memory",
+      "project-context",
+      "sources",
+      "insights",
+      "lineage",
+      "retrieval-runs",
+      "evaluations",
+    ].includes(id)
+  ) {
+    return "Knowledge";
+  }
+  if (
+    ["models", "gateway", "adapters", "command", "action-lanes", "automation"].includes(
+      id,
+    )
+  ) {
+    return "Runtime";
+  }
+  if (
+    [
+      "approvals",
+      "autonomy",
+      "audit",
+      "policy",
+      "strategies",
+      "execution-permissions",
+      "inspectors",
+    ].includes(
+      id,
+    )
+  ) {
+    return "Governance";
+  }
+  if (["logs", "backup", "release"].includes(id)) {
     return "Operations";
   }
   return "Tools";
