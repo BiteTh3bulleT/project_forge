@@ -36,6 +36,8 @@ Phase 14F adds explicit FORGE-K partial live enforcement metadata to Control Lan
 
 Phase 14G adds a contract matrix test for the partial-enforcement validation actions. The matrix checks `VALIDATE_KV_IDENTITY`, `VALIDATE_REF_SHAPE`, `COMPARE_REF_SHAPE`, and `VALIDATE_SEMANTIC_OPERATION` through the live processor and audit path, proving the activation/no-effect posture is consistent across state and audit summaries.
 
+Phase 14H closes the `VALIDATE_SEMANTIC_OPERATION` lane as `LANE_CLOSED / VALIDATION_ONLY / NO_AUTHORITY_EXPANSION`. The shared validator owns a canonical normalized forbidden authority-claim list, the live Control Lane rejects truthy authority claims before commit, rejected claims preserve no-effect state/audit metadata, and false/non-truthy claims do not reject by themselves. This lane closure still does not execute semantic operations, write memory, admit evidence, compile context, call modelruntime, execute retrieval/search/embeddings, execute tools, change routes/APIs, or make FORGE-K simulator services live authority.
+
 ## FORGE-K Partial Enforcement
 
 Control Lane validation actions now expose FORGE-K partial live enforcement metadata. This means deterministic doctrine is enforced by the current live Control Lane owner, not by importing the simulator Kernel. Validation summaries include the activation mode and no-effect posture so callers and operator surfaces can distinguish partial enforcement from full live authority.

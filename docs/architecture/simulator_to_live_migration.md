@@ -1,6 +1,6 @@
 # Simulator To Live Migration
 
-Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, Phase 14C partial live validation expansion, Phase 14D disabled-by-default validation shadow reporting, Phase 14E disabled-by-default validation shadow emission, Phase 14F explicit Control Lane partial live enforcement metadata, and Phase 14G Control Lane validation contract-matrix hardening.
+Status: Phase i1/PhaseI2 partial live KV validation/enforcement pattern, Phase 14A operational cutover design guidance, Phase 14B partial live ref-shape validation, Phase 14C partial live validation expansion, Phase 14D disabled-by-default validation shadow reporting, Phase 14E disabled-by-default validation shadow emission, Phase 14F explicit Control Lane partial live enforcement metadata, Phase 14G Control Lane validation contract-matrix hardening, and Phase 14H semantic-operation lane closure.
 
 ## Purpose
 
@@ -23,6 +23,8 @@ Phase 14E wires live Control Lane validation results into that observer through 
 Phase 14F turns on the first explicit `[PARTIAL LIVE ENFORCEMENT]` FORGE-K activation mode through the live Control Lane. It adds activation/no-effect metadata to existing validation actions and keeps authority in `services/core/internal/aios/controllane`. It does not import FORGE-K simulator services into live authority, route semantic writes through `forgek.Kernel`, enable live KV reuse, call modelruntime, execute tools, run retrieval/search/embeddings, or write memory outside existing governed paths.
 
 Phase 14G hardens Phase 14F with a Control Lane validation contract matrix. The tests prove every existing live validation action exposes the same activation/no-effect metadata in syscall state summaries and audit summaries. This remains hardening only: no new validation action, simulator service import, public API, route behavior change, live KV reuse, modelruntime call, retrieval/search/embedding execution, evidence admission, context compilation, or semantic memory write is added.
+
+Phase 14H closes the `VALIDATE_SEMANTIC_OPERATION` validation lane in the narrow Control Lane sense: the lane is connected through the live owner, rejects a canonical normalized authority-claim set, preserves no-effect metadata on rejected claims, and remains validation-only. Closed does not mean semantic operation execution, memory write authority, evidence admission authority, Context Compiler authority, modelruntime authority, retrieval/gateway execution, or FORGE-K simulator live authority.
 
 ## Migration Pattern
 
@@ -80,6 +82,18 @@ Phase 14G hardens Phase 14F with a Control Lane validation contract matrix. The 
 | Audit | existing Control Lane audit record with `refShapeComparison` and `semanticOperationValidation` fields |
 | Mutation posture | validation/comparison only; no object lookup, evidence admission, context compilation, retrieval, modelruntime call, tool execution, or memory write |
 | Still future | actual semantic operation execution, live Courthouse admission, live Context Compiler authority, and broader FORGE-K Kernel authority |
+
+## Phase 14H Semantic Operation Lane Closure Example
+
+| Concern | Decision |
+| --- | --- |
+| Closed lane | `VALIDATE_SEMANTIC_OPERATION` validation only |
+| Shared pure package | `services/core/internal/semanticvalidation` |
+| Live caller | `services/core/internal/aios/controllane` |
+| Canonical guard | normalized forbidden authority claims |
+| Rejected posture | fail closed with no-effect state and audit metadata |
+| Mutation posture | validation-only; no semantic execution, memory write, evidence admission, context compilation, retrieval/search/embedding execution, gateway/tool execution, modelruntime call, route/API change, or FORGE-K simulator live authority |
+| Still future | actual semantic operation execution and any broader FORGE-K authority migration |
 
 ## Phase 14D Validation Shadow Reporting Example
 
