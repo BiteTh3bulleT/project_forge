@@ -22,9 +22,17 @@ func TestCanonicalCognitiveWritesStayBounded(t *testing.T) {
 	internalRoot := filepath.Join(repoRoot, "services", "core", "internal")
 
 	allowed := map[string]struct{}{
-		filepath.Join("services", "core", "internal", "aios", "controllane", "sqlite_store.go"): {},
-		filepath.Join("services", "core", "internal", "backup", "service.go"):                   {},
-		filepath.Join("services", "core", "internal", "store", "migrate.go"):                    {},
+		filepath.Join("services", "core", "internal", "aios", "controllane", "sqlite_store.go"):         {},
+		filepath.Join("services", "core", "internal", "aios", "controllane", "sqlite_store_compat.go"):  {},
+		filepath.Join("services", "core", "internal", "aios", "controllane", "sqlite_store_context.go"): {},
+		filepath.Join("services", "core", "internal", "aios", "controllane", "sqlite_store_helpers.go"): {},
+		filepath.Join("services", "core", "internal", "aios", "controllane", "sqlite_store_journal.go"): {},
+		filepath.Join("services", "core", "internal", "aios", "controllane", "sqlite_store_notes.go"):   {},
+		filepath.Join("services", "core", "internal", "aios", "controllane", "sqlite_store_objects.go"): {},
+		filepath.Join("services", "core", "internal", "aios", "controllane", "sqlite_store_state.go"):   {},
+		filepath.Join("services", "core", "internal", "backup", "service.go"):                           {},
+		filepath.Join("services", "core", "internal", "store", "migrate_columns.go"):                    {},
+		filepath.Join("services", "core", "internal", "store", "migrate.go"):                            {},
 	}
 
 	// Canonical cognitive filesystem tables that must remain kernel-governed.
