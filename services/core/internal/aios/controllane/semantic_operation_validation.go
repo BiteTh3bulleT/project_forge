@@ -126,6 +126,8 @@ func (d SemanticOperationValidationDecision) ToStateSummary() map[string]any {
 		"evidenceAdmission":           d.EvidenceAdmission,
 		"contextCompilation":          d.ContextCompilation,
 		"liveAuthorityMigration":      d.LiveAuthorityMigration,
+		"forgeKActivation":            forgeKActivationSummary(string(domain.ActionValidateSemanticOperation)),
+		"forgeKNoEffect":              forgeKNoEffectSummary(),
 	}
 }
 
@@ -138,6 +140,8 @@ func (d SemanticOperationValidationDecision) ToAuditFields() map[string]any {
 		"operationType":          d.OperationType,
 		"failures":               append([]semanticvalidation.ValidationFailure{}, d.Failures...),
 		"warnings":               append([]string{}, d.Warnings...),
+		"failureCount":           len(d.Failures),
+		"warningCount":           len(d.Warnings),
 		"memoryMutation":         d.MemoryMutation,
 		"modelRuntimeCall":       d.ModelRuntimeCall,
 		"evidenceAdmission":      d.EvidenceAdmission,
@@ -145,6 +149,8 @@ func (d SemanticOperationValidationDecision) ToAuditFields() map[string]any {
 		"liveAuthorityMigration": d.LiveAuthorityMigration,
 		"validatorVersion":       d.ValidatorVersion,
 		"policyVersion":          d.PolicyVersion,
+		"forgeKActivation":       forgeKActivationSummary(string(domain.ActionValidateSemanticOperation)),
+		"forgeKNoEffect":         forgeKNoEffectSummary(),
 	}
 }
 
