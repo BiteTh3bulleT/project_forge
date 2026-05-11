@@ -14,6 +14,46 @@ const (
 	GateNoAuthorityClaim = "no_authority_claim"
 )
 
+var forbiddenAuthorityClaims = []string{
+	"execute",
+	"commit",
+	"admit_evidence",
+	"reject_evidence",
+	"write_memory",
+	"semantic_memory_write",
+	"memory_mutation",
+	"call_model",
+	"call_modelruntime",
+	"modelruntime_call",
+	"modelruntime_mutation",
+	"runtime_mutation",
+	"load_model",
+	"unload_model",
+	"execute_tool",
+	"gateway_execution",
+	"run_retrieval",
+	"retrieval_execution",
+	"run_search",
+	"search_execution",
+	"run_embeddings",
+	"embedding_execution",
+	"compile_context",
+	"context_compilation",
+	"live_kv_reuse",
+	"simulator_authority",
+	"live_kernel_authority",
+	"forge_k_live_authority",
+	"live_authority_migration",
+}
+
+var forbiddenAuthorityClaimSet = buildForbiddenAuthorityClaimSet(forbiddenAuthorityClaims)
+
+func ForbiddenAuthorityClaims() []string {
+	out := make([]string, len(forbiddenAuthorityClaims))
+	copy(out, forbiddenAuthorityClaims)
+	return out
+}
+
 type OperationRequest struct {
 	ResultID       string                    `json:"result_id"`
 	WorkspaceID    string                    `json:"workspace_id"`
@@ -148,22 +188,18 @@ func allowedOperationType(operationType string) bool {
 }
 
 func forbiddenAuthorityClaim(claim string) bool {
-	switch strings.ToLower(strings.TrimSpace(claim)) {
-	case "execute",
-		"commit",
-		"admit_evidence",
-		"reject_evidence",
-		"write_memory",
-		"call_model",
-		"call_modelruntime",
-		"execute_tool",
-		"run_retrieval",
-		"run_search",
-		"run_embeddings",
-		"compile_context",
-		"live_authority_migration":
-		return true
-	default:
-		return false
+	_, ok := forbiddenAuthorityClaimSet[normalizeClaimName(claim)]
+	return ok
+}
+
+func buildForbiddenAuthorityClaimSet(claims []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(claims))
+	for _, claim := range claims {
+		out[normalizeClaimName(claim)] = struct{}{}
 	}
+	return out
+}
+
+func normalizeClaimName(claim string) string {
+	return strings.ToLower(strings.TrimSpace(claim))
 }

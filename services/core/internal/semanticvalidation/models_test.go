@@ -1,6 +1,7 @@
 package semanticvalidation
 
 import (
+	"strings"
 	"testing"
 
 	"forge/projectforge/services/core/internal/refvalidation"
@@ -52,6 +53,52 @@ func TestValidateOperationRejectsForbiddenClaimsAndMissingSources(t *testing.T) 
 	}
 	if !hasFailure(res.Failures, GateNoAuthorityClaim) {
 		t.Fatalf("missing no-authority failure: %#v", res.Failures)
+	}
+}
+
+func TestForbiddenAuthorityClaimsRejectAfterNormalization(t *testing.T) {
+	for _, claim := range ForbiddenAuthorityClaims() {
+		t.Run(claim, func(t *testing.T) {
+			res := ValidateOperation(OperationRequest{
+				ResultID:      "result-a",
+				WorkspaceID:   "ws-main",
+				OperationType: "derive",
+				SourceRefs: []refvalidation.ObjectRef{
+					{RefType: "semantic_object", RefID: "obj-a"},
+				},
+				Claims: map[string]bool{
+					"  " + strings.ToUpper(claim) + "  ": true,
+				},
+			})
+			if res.Passed {
+				t.Fatalf("expected forbidden claim %q to fail", claim)
+			}
+			if !hasFailure(res.Failures, GateNoAuthorityClaim) {
+				t.Fatalf("missing no-authority failure for %q: %#v", claim, res.Failures)
+			}
+			if res.MemoryMutation || res.ModelRuntimeCall || res.EvidenceAdmission || res.ContextCompilation || res.LiveAuthorityMigration {
+				t.Fatalf("validator claimed forbidden side effect for %q: %#v", claim, res)
+			}
+		})
+	}
+}
+
+func TestForbiddenAuthorityClaimsFalseValuesDoNotReject(t *testing.T) {
+	claims := map[string]bool{}
+	for _, claim := range ForbiddenAuthorityClaims() {
+		claims[claim] = false
+	}
+	res := ValidateOperation(OperationRequest{
+		ResultID:      "result-a",
+		WorkspaceID:   "ws-main",
+		OperationType: "derive",
+		SourceRefs: []refvalidation.ObjectRef{
+			{RefType: "semantic_object", RefID: "obj-a"},
+		},
+		Claims: claims,
+	})
+	if !res.Passed {
+		t.Fatalf("false forbidden claims must not reject by themselves: %#v", res.Failures)
 	}
 }
 
