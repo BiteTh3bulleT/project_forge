@@ -36,7 +36,8 @@ boot or runtime. Observed 2026-04-21._
 | `FORGE_MODEL_DEFAULT_ID` | model selection | unset | Preferred default model id. |
 | `FORGE_LLAMA_CPP_ENDPOINT`, `FORGE_LLAMA_CPP_BINARY_PATH`, `FORGE_ALLOW_LLAMA_CPP_SPAWN` | llama.cpp backend | unset / `false` | Endpoint or explicitly allowed local backend process path. |
 | `FORGE_MODEL_OPENAI_COMPAT_ENDPOINT`, `FORGE_MODEL_OPENAI_COMPAT_API_KEY` | OpenAI-compatible backend | unset | Remote-compatible backend endpoint and optional bearer token. |
-| `FORGE_MODEL_VLLM_ENDPOINT`, `FORGE_MODEL_VLLM_API_KEY` | vLLM-compatible backend | unset | vLLM-compatible backend endpoint and optional bearer token. |
+| `FORGE_VLLM_BASE_URL`, `FORGE_VLLM_API_KEY` | vLLM-compatible backend | unset | Canonical M4 vLLM-compatible backend endpoint and optional bearer token. This selects the governed `interactive_vllm` backend profile and remains disabled when unset. |
+| `FORGE_MODEL_VLLM_ENDPOINT`, `FORGE_MODEL_VLLM_API_KEY` | vLLM-compatible backend | unset | Legacy aliases for the vLLM-compatible endpoint and optional bearer token. Canonical `FORGE_VLLM_*` values win when both are set. |
 | `FORGE_MODEL_MAX_PROMPT_TOKENS`, `FORGE_MODEL_MAX_OUTPUT_TOKENS`, `FORGE_MODEL_MAX_RESPONSE_BYTES` | runtime limits | `8192` / `1024` / `262144` | Request and response bounds. |
 | `FORGE_MODEL_REQUEST_TIMEOUT_MS`, `FORGE_MODEL_LOAD_TIMEOUT_MS`, `FORGE_MODEL_UNLOAD_TIMEOUT_MS`, `FORGE_MODEL_IDLE_UNLOAD_MS` | runtime lifecycle | `30000` / `120000` / `30000` / `0` | Runtime request/load/unload/idle timing. |
 | `FORGE_MODEL_MAX_LOADED_MODELS` | runtime lifecycle | `1` | Loaded-model cap. |

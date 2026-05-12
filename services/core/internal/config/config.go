@@ -187,8 +187,8 @@ func Load() Config {
 		ModelLlamaCppBinary:                      llamaBinary,
 		ModelOpenAICompatEndpoint:                strings.TrimSpace(os.Getenv("FORGE_MODEL_OPENAI_COMPAT_ENDPOINT")),
 		ModelOpenAICompatAPIKey:                  strings.TrimSpace(os.Getenv("FORGE_MODEL_OPENAI_COMPAT_API_KEY")),
-		ModelVLLMEndpoint:                        strings.TrimSpace(os.Getenv("FORGE_MODEL_VLLM_ENDPOINT")),
-		ModelVLLMAPIKey:                          strings.TrimSpace(os.Getenv("FORGE_MODEL_VLLM_API_KEY")),
+		ModelVLLMEndpoint:                        envStringFirst("FORGE_VLLM_BASE_URL", "FORGE_MODEL_VLLM_ENDPOINT"),
+		ModelVLLMAPIKey:                          envStringFirst("FORGE_VLLM_API_KEY", "FORGE_MODEL_VLLM_API_KEY"),
 		EmbeddingProvider:                        strings.TrimSpace(os.Getenv("FORGE_EMBEDDING_PROVIDER")),
 		EmbeddingModel:                           strings.TrimSpace(os.Getenv("FORGE_EMBEDDING_MODEL")),
 		EmbeddingDims:                            envInt("FORGE_EMBEDDING_DIMS", 128, 1),
@@ -283,6 +283,15 @@ func envStringDefault(key, defaultValue string) string {
 		return defaultValue
 	}
 	return raw
+}
+
+func envStringFirst(keys ...string) string {
+	for _, key := range keys {
+		if raw := strings.TrimSpace(os.Getenv(key)); raw != "" {
+			return raw
+		}
+	}
+	return ""
 }
 
 func envBool(key string, defaultValue bool) bool {

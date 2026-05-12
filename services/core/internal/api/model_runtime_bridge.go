@@ -187,6 +187,7 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service, telemet
 				Kind:            modelruntime.BackendVLLM,
 				Endpoint:        cfg.ModelVLLMEndpoint,
 				APIKey:          cfg.ModelVLLMAPIKey,
+				Profile:         "interactive_vllm",
 				RequestTimeout:  time.Duration(cfg.ModelRequestTimeoutMs) * time.Millisecond,
 				MaxOutputTokens: cfg.ModelMaxOutputTokens,
 			}))

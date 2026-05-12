@@ -1,10 +1,10 @@
-# Model Runtime Status (M3)
+# Model Runtime Status (M3/M4 Runtime Profile)
 
-Snapshot date: 2026-04-22.
+Snapshot date: 2026-05-12.
 
 ## Executive Status
 
-Model Runtime M3 is implemented in this branch. FORGE now treats models as managed runtime assets instead of loose local manifests: local GGUF or manifest-backed imports can be registered into FORGE model home, persistent model state is tracked across import/verify/disable/archive/remove-registration operations, runtime selection spans multiple pluggable backends, and the service exposes management, compatibility, usage, backend, queue, loaded, and health views while keeping inference policy-governed, auditable, and non-authoritative over semantic truth.
+Model Runtime M3 is implemented in this branch. M4 closes the external vLLM-compatible backend profile as a governed, disabled-by-default modelruntime profile. FORGE now treats models as managed runtime assets instead of loose local manifests: local GGUF or manifest-backed imports can be registered into FORGE model home, persistent model state is tracked across import/verify/disable/archive/remove-registration operations, runtime selection spans multiple pluggable backends, and the service exposes management, compatibility, usage, backend, queue, loaded, and health views while keeping inference policy-governed, auditable, and non-authoritative over semantic truth.
 
 ## Implemented
 
@@ -21,7 +21,7 @@ Model Runtime M3 is implemented in this branch. FORGE now treats models as manag
 | Fake backend for tests | real | `services/core/internal/modelruntime/backend_fake.go`, `backend_fake_test.go` |
 | llama.cpp backend adapter (endpoint mode) | real | `services/core/internal/modelruntime/backend_llama_cpp.go`, `backend_llama_cpp_test.go` |
 | OpenAI-compatible backend adapter | real | `services/core/internal/modelruntime/backend_openai_compat.go`, `backend_openai_compat_test.go` |
-| vLLM-compatible endpoint path | partial | `services/core/internal/api/model_runtime_bridge.go`, `backend_openai_compat.go` |
+| vLLM-compatible endpoint path | partial/live external profile | `services/core/internal/api/model_runtime_bridge.go`, `backend_openai_compat.go`, `docs/architecture/nix_rust_vllm_runtime.md` |
 | Runtime scheduler and queue admission | real | `services/core/internal/modelruntime/service.go`, `service_test.go` |
 | Runtime compatibility / usage / backend inspection | real | `services/core/internal/modelruntime/management.go`, `model_runtime_m3_test.go` |
 | Internal FORGE model management API | real | `services/core/internal/api/model_runtime.go`, `server.go` |
@@ -48,6 +48,8 @@ Model Runtime M3 is implemented in this branch. FORGE now treats models as manag
 - `llama_cpp` remains the first real local-runtime backend.
 - `openai_compat` is now a real endpoint-backed adapter.
 - `vllm` can be targeted through the same OpenAI-compatible transport path when configured.
+- `FORGE_VLLM_BASE_URL` and `FORGE_VLLM_API_KEY` are the canonical M4 vLLM env vars; older `FORGE_MODEL_VLLM_*` names remain compatibility aliases.
+- vLLM backend health/status appears through `/forge/model-runtime/backends` and carries `interactive_vllm` backend profile metadata when the endpoint is configured and reachable.
 - Explicit backend overrides are validated; incompatible overrides fail deterministically.
 - If no model id is supplied, selection is deterministic: explicit default/preferred model first, then an unambiguous compatible candidate.
 
@@ -121,8 +123,10 @@ Runtime flags in `services/core/internal/config/config.go` now include:
 - `FORGE_ALLOW_LLAMA_CPP_SPAWN` default `false`
 - `FORGE_MODEL_OPENAI_COMPAT_ENDPOINT`
 - `FORGE_MODEL_OPENAI_COMPAT_API_KEY`
-- `FORGE_MODEL_VLLM_ENDPOINT`
-- `FORGE_MODEL_VLLM_API_KEY`
+- `FORGE_VLLM_BASE_URL`
+- `FORGE_VLLM_API_KEY`
+- `FORGE_MODEL_VLLM_ENDPOINT` legacy alias
+- `FORGE_MODEL_VLLM_API_KEY` legacy alias
 - `FORGE_MODEL_MAX_PROMPT_TOKENS` default `8192`
 - `FORGE_MODEL_MAX_OUTPUT_TOKENS` default `1024`
 - `FORGE_MODEL_MAX_RESPONSE_BYTES` default `262144`
@@ -155,7 +159,7 @@ Safe default posture:
 | Verify / enable / disable / archive / remove-registration | real | File deletion remains separate and deferred. |
 | Preferred/default model selection | real | Deterministic within current runtime scope. |
 | OpenAI-compatible backend adapter | real | Endpoint-backed path is implemented. |
-| vLLM-compatible backend path | partial | Uses the OpenAI-compatible transport shape; no separate deep vLLM integration. |
+| vLLM-compatible backend path | partial/live external profile | Uses the OpenAI-compatible transport shape, is disabled when unset, and exposes backend status through modelruntime. No separate managed vLLM service or deep vLLM orchestration is added. |
 | Streaming responses | deferred | Service/API remain intentionally non-streaming. |
 | llama.cpp spawn mode | deferred | Spawn flag exists; runtime returns structured unsupported behavior. |
 | Destructive model file deletion | deferred | Approval-required design target; not implemented. |
@@ -163,7 +167,7 @@ Safe default posture:
 | Gateway `model.*` capability registration | partial | Runtime APIs are real; gateway registry aliasing remains follow-up work. |
 | Advanced batching/load balancing/distributed scheduling | deferred | FIFO single-active-per-backend scheduler only. |
 
-## What Blocks M4
+## Remaining Modelruntime Work Beyond M4 External vLLM Profile
 
 - streaming support
 - stronger backend/process supervision for llama.cpp and remote backends
@@ -171,3 +175,5 @@ Safe default posture:
 - destructive model file delete flow with explicit approval posture
 - deeper multi-backend routing/load balancing beyond deterministic selection
 - embeddings/rerank/vision execution paths
+
+M4 does not make vLLM a host-managed service, does not require GPU packages for Nix evaluation, does not run `systemctl`, does not run `nixos-rebuild`, and does not let vLLM or modelruntime mutate canonical semantic memory.

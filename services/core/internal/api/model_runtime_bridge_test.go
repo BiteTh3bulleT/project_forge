@@ -67,6 +67,54 @@ func TestInitModelRuntimeServiceAutoEnablesForOpenAICompatEndpoint(t *testing.T)
 	}
 }
 
+func TestInitModelRuntimeServiceAutoEnablesForVLLMBaseURL(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{"id": "vllm-qwen", "name": "vLLM Qwen"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	t.Setenv("FORGE_ENABLE_MODEL_RUNTIME", "false")
+	t.Setenv("FORGE_ENABLE_OPENAI_COMPAT_API", "false")
+	t.Setenv("FORGE_MODEL_OPENAI_COMPAT_ENDPOINT", "")
+	t.Setenv("FORGE_VLLM_BASE_URL", server.URL)
+	t.Setenv("FORGE_VLLM_API_KEY", "")
+	t.Setenv("FORGE_MODEL_POLICY_REQUIRE_WORKSPACE_SCOPE", "false")
+	t.Setenv("FORGE_MODEL_HOME", t.TempDir())
+
+	svc := initModelRuntimeService(config.Load(), nil)
+	if svc == nil {
+		t.Fatalf("expected model runtime service to auto-enable when vLLM base URL is configured")
+	}
+	models, err := svc.ListModels(context.Background(), ModelRuntimeListRequest{})
+	if err != nil {
+		t.Fatalf("list models: %v", err)
+	}
+	if !hasModelID(models, "vllm-qwen") {
+		t.Fatalf("expected discovered vLLM model in initial list, got=%#v", models)
+	}
+	backends, err := svc.Backends(context.Background(), ModelRuntimeRequestMeta{})
+	if err != nil {
+		t.Fatalf("backends: %v", err)
+	}
+	for _, backend := range backends {
+		if backend.Kind == "vllm" {
+			if backend.Meta["profile"] != "interactive_vllm" {
+				t.Fatalf("expected vLLM backend profile metadata, got=%#v", backend.Meta)
+			}
+			return
+		}
+	}
+	t.Fatalf("expected vLLM backend status, got=%#v", backends)
+}
+
 func TestModelRuntimeDiscoveryRejectsOversizeResponses(t *testing.T) {
 	t.Run("ollama", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

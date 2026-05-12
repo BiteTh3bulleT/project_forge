@@ -1,6 +1,6 @@
 # FORGE Model Runtime Architecture
 
-Status date: 2026-04-22 (code-verified M3 branch snapshot).
+Status date: 2026-05-12 (M3 plus M4 external vLLM profile snapshot).
 
 ## Intent
 
@@ -103,8 +103,14 @@ Current backend posture:
 
 - llama.cpp endpoint mode is supported
 - OpenAI-compatible remote inference is supported behind runtime policy and config
-- vLLM-compatible endpoint use is supported through the same transport shape, without deep vLLM-specific orchestration
+- vLLM-compatible endpoint use is supported through the same transport shape as the disabled-by-default `interactive_vllm` profile, without deep vLLM-specific orchestration
 - spawn/process management remains explicitly out of current scope except for structured unsupported/error behavior
+
+### vLLM Profile Boundary
+
+M4 treats vLLM as an external governed backend endpoint. Operators configure it with `FORGE_VLLM_BASE_URL` and optional `FORGE_VLLM_API_KEY`; legacy `FORGE_MODEL_VLLM_*` aliases remain supported. FORGE does not install, start, stop, or supervise vLLM in this phase, and Nix evaluation must not require vLLM, CUDA, or GPU hardware.
+
+The profile is visible through modelruntime health/status APIs. The desktop may display that state, but it must not expose model load/unload or host mutation controls outside the existing governed modelruntime surfaces.
 
 ## Runtime Service
 

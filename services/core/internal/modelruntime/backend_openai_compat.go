@@ -25,6 +25,7 @@ type OpenAICompatOptions struct {
 	MaxOutputTokens int
 	ChatPath        string
 	ModelsPath      string
+	Profile         string
 }
 
 const openAICompatResponseBodyLimit = 4 << 20
@@ -39,6 +40,7 @@ type OpenAICompatBackend struct {
 	maxOutputTokens int
 	chatPath        string
 	modelsPath      string
+	profile         string
 
 	mu     sync.RWMutex
 	loaded map[string]LoadedModel
@@ -75,6 +77,7 @@ func NewOpenAICompatBackend(opts OpenAICompatOptions) *OpenAICompatBackend {
 		maxOutputTokens: opts.MaxOutputTokens,
 		chatPath:        withLeadingSlash(chatPath),
 		modelsPath:      withLeadingSlash(modelsPath),
+		profile:         strings.TrimSpace(opts.Profile),
 		loaded:          map[string]LoadedModel{},
 	}
 }
@@ -470,7 +473,11 @@ func (b *OpenAICompatBackend) Health(ctx context.Context) (BackendHealth, error)
 	b.mu.RLock()
 	loadedCount := len(b.loaded)
 	b.mu.RUnlock()
-	return BackendHealth{Name: b.name, Kind: b.kind, Healthy: true, Detail: "openai-compatible backend reachable", Meta: map[string]any{"loaded": loadedCount}}, nil
+	meta := map[string]any{"loaded": loadedCount}
+	if b.profile != "" {
+		meta["profile"] = b.profile
+	}
+	return BackendHealth{Name: b.name, Kind: b.kind, Healthy: true, Detail: "openai-compatible backend reachable", Meta: meta}, nil
 }
 
 func (b *OpenAICompatBackend) Inspect(_ context.Context, modelID string) (BackendInspectResult, error) {

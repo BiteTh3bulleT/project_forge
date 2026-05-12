@@ -675,8 +675,8 @@ func TestLoadModelRuntimeInvalidValuesFallbackToDefaults(t *testing.T) {
 func TestLoadModelRuntimeRemoteBackendOverrides(t *testing.T) {
 	t.Setenv("FORGE_MODEL_OPENAI_COMPAT_ENDPOINT", "https://openai-compat.example")
 	t.Setenv("FORGE_MODEL_OPENAI_COMPAT_API_KEY", "sk-test")
-	t.Setenv("FORGE_MODEL_VLLM_ENDPOINT", "http://127.0.0.1:8000")
-	t.Setenv("FORGE_MODEL_VLLM_API_KEY", "vllm-key")
+	t.Setenv("FORGE_VLLM_BASE_URL", "http://127.0.0.1:8000")
+	t.Setenv("FORGE_VLLM_API_KEY", "vllm-key")
 
 	cfg := Load()
 	if cfg.ModelOpenAICompatEndpoint != "https://openai-compat.example" {
@@ -690,5 +690,33 @@ func TestLoadModelRuntimeRemoteBackendOverrides(t *testing.T) {
 	}
 	if cfg.ModelVLLMAPIKey != "vllm-key" {
 		t.Fatalf("expected vllm api key override, got %q", cfg.ModelVLLMAPIKey)
+	}
+}
+
+func TestLoadModelRuntimeLegacyVLLMOverrides(t *testing.T) {
+	t.Setenv("FORGE_MODEL_VLLM_ENDPOINT", "http://127.0.0.1:8001")
+	t.Setenv("FORGE_MODEL_VLLM_API_KEY", "legacy-vllm-key")
+
+	cfg := Load()
+	if cfg.ModelVLLMEndpoint != "http://127.0.0.1:8001" {
+		t.Fatalf("expected legacy vllm endpoint override, got %q", cfg.ModelVLLMEndpoint)
+	}
+	if cfg.ModelVLLMAPIKey != "legacy-vllm-key" {
+		t.Fatalf("expected legacy vllm api key override, got %q", cfg.ModelVLLMAPIKey)
+	}
+}
+
+func TestLoadModelRuntimeCanonicalVLLMOverridesLegacy(t *testing.T) {
+	t.Setenv("FORGE_VLLM_BASE_URL", "http://127.0.0.1:8000")
+	t.Setenv("FORGE_MODEL_VLLM_ENDPOINT", "http://127.0.0.1:8001")
+	t.Setenv("FORGE_VLLM_API_KEY", "canonical-key")
+	t.Setenv("FORGE_MODEL_VLLM_API_KEY", "legacy-key")
+
+	cfg := Load()
+	if cfg.ModelVLLMEndpoint != "http://127.0.0.1:8000" {
+		t.Fatalf("expected canonical vllm endpoint to win, got %q", cfg.ModelVLLMEndpoint)
+	}
+	if cfg.ModelVLLMAPIKey != "canonical-key" {
+		t.Fatalf("expected canonical vllm api key to win, got %q", cfg.ModelVLLMAPIKey)
 	}
 }
