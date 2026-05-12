@@ -276,6 +276,58 @@ func (s *Service) BuildTranscript(messages []Message, maxMessages int) string {
 	return strings.TrimSpace(b.String())
 }
 
+func (s *Service) BuildBoundedTranscript(messages []Message, maxMessages, maxMessageRunes, maxTotalRunes int) string {
+	if maxMessages <= 0 {
+		maxMessages = 24
+	}
+	if maxMessageRunes <= 0 {
+		maxMessageRunes = 1200
+	}
+	if maxTotalRunes <= 0 {
+		maxTotalRunes = maxMessages * maxMessageRunes
+	}
+	start := 0
+	if len(messages) > maxMessages {
+		start = len(messages) - maxMessages
+	}
+	selected := messages[start:]
+	lines := make([]string, 0, len(selected))
+	remaining := maxTotalRunes
+	for i := len(selected) - 1; i >= 0; i-- {
+		if remaining <= 0 {
+			break
+		}
+		m := selected[i]
+		role := strings.ToUpper(strings.TrimSpace(m.Role))
+		if role == "" {
+			role = "MESSAGE"
+		}
+		content := boundedRunes(strings.TrimSpace(m.Content), maxMessageRunes)
+		line := role + ": " + content + "\n\n"
+		if utf8.RuneCountInString(line) > remaining {
+			line = boundedRunes(line, remaining)
+		}
+		lines = append(lines, line)
+		remaining -= utf8.RuneCountInString(line)
+	}
+	var b strings.Builder
+	for i := len(lines) - 1; i >= 0; i-- {
+		b.WriteString(lines[i])
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func boundedRunes(value string, max int) string {
+	if max <= 0 || utf8.RuneCountInString(value) <= max {
+		return value
+	}
+	runes := []rune(value)
+	if max <= len("... (truncated)") {
+		return string(runes[:max])
+	}
+	return string(runes[:max-len("... (truncated)")]) + "... (truncated)"
+}
+
 func (s *Service) DeleteThread(ctx context.Context, id int64) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM chat_threads WHERE id = ?`, id)
 	return err

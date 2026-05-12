@@ -25,7 +25,7 @@ type modelRuntimePromptBudget struct {
 }
 
 func (s *Server) buildChatLLMMessages(ctx context.Context, th *chat.ThreadDetail) (system string, user string) {
-	transcript := s.chat.BuildTranscript(th.Messages, chatTranscriptTurns)
+	transcript := s.chat.BuildBoundedTranscript(th.Messages, chatTranscriptTurns, chatPromptTranscriptMessageRunes, chatPromptTranscriptTotalRunes)
 	sys := s.chatOperatorSystemPrompt()
 	if s.gateway != nil {
 		sys += "\n\n" + s.gateway.ChatSystemSupplement()

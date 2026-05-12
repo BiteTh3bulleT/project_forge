@@ -4,14 +4,12 @@ import type {
   TaskPacket,
 } from "@forge/shared";
 import { GhostButton, PrimaryButton } from "@forge/ui";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { FoldSection } from "../components/FoldSection";
-import { HumanDataView } from "../components/HumanDataView";
 import {
   api,
-  type AuditTraceLookupReport,
   type AuditTraceLookupResponse,
   type ContextSnapshotInspectorDetail,
   type ContextSnapshotInspectorSummary,
@@ -19,410 +17,24 @@ import {
   type DreamReportSummary,
   type ProcessHealthTraceResponse,
   type ProcessHealthCorrelationReport,
-  type ProcessHealthInvocation,
 } from "../lib/api";
 import { formatTime } from "../lib/format";
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (value && typeof value === "object" && !Array.isArray(value))
-    return value as Record<string, unknown>;
-  return null;
-}
-
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
-function asString(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
-function asNumber(value: unknown): number {
-  if (typeof value === "number") return value;
-  if (typeof value === "string") {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
-}
-
-function asStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter(
-      (item): item is string =>
-        typeof item === "string" && item.trim().length > 0,
-    )
-    .map((item) => item.trim());
-}
-
-type RestoreScoreCandidate = {
-  snapshotId: string;
-  createdAt: number;
-  snapshotKind: string;
-  queryScore: number;
-  scopeScore: number;
-  kindScore: number;
-  lineageScore: number;
-  stateOverlapScore: number;
-  loopOverlapScore: number;
-  artifactOverlapScore: number;
-  nodeOverlapScore: number;
-  edgeOverlapScore: number;
-  recencyScore: number;
-  fingerprintBonus: number;
-  preferredHintBonus: number;
-  contradictionPenalty: number;
-  stalenessPenalty: number;
-  headerOnlyPenalty: number;
-  total: number;
-  explain: string[];
-  selected?: boolean;
-};
-
-type RestoreScoreSummary = {
-  hasStructured: boolean;
-  decision: string;
-  threshold: number;
-  candidateCount: number;
-  topScore: number;
-  selectedIndex: number;
-  selectedSnapshotId: string;
-  topCandidateId: string;
-  candidates: RestoreScoreCandidate[];
-};
-
-type ResumeHintSummary = {
-  hasStructured: boolean;
-  nextAction: string;
-  topBlockers: string[];
-  dominantStateKeys: string[];
-  dominantLoopIds: string[];
-  recommendedEvidenceIds: string[];
-  restoreConfidence: number;
-  requiresFreshCompile: boolean;
-  preferredSnapshotId: string;
-  candidateCount: number;
-};
-
-function parseRestoreScoreCandidate(
-  value: unknown,
-): RestoreScoreCandidate | null {
-  const raw = asRecord(value);
-  if (!raw) return null;
-  const candidate: RestoreScoreCandidate = {
-    snapshotId: asString(raw.snapshot_id || raw.snapshotId),
-    createdAt: asNumber(raw.created_at ?? raw.createdAt),
-    snapshotKind: asString(raw.snapshot_kind || raw.snapshotKind),
-    queryScore: asNumber(raw.query_score ?? raw.queryScore),
-    scopeScore: asNumber(raw.scope_score ?? raw.scopeScore),
-    kindScore: asNumber(raw.kind_score ?? raw.kindScore),
-    lineageScore: asNumber(raw.lineage_score ?? raw.lineageScore),
-    stateOverlapScore: asNumber(
-      raw.state_overlap_score ?? raw.stateOverlapScore,
-    ),
-    loopOverlapScore: asNumber(raw.loop_overlap_score ?? raw.loopOverlapScore),
-    artifactOverlapScore: asNumber(
-      raw.artifact_overlap_score ?? raw.artifactOverlapScore,
-    ),
-    nodeOverlapScore: asNumber(raw.node_overlap_score ?? raw.nodeOverlapScore),
-    edgeOverlapScore: asNumber(raw.edge_overlap_score ?? raw.edgeOverlapScore),
-    recencyScore: asNumber(raw.recency_score ?? raw.recencyScore),
-    fingerprintBonus: asNumber(raw.fingerprint_bonus ?? raw.fingerprintBonus),
-    preferredHintBonus: asNumber(
-      raw.preferred_hint_bonus ?? raw.preferredHintBonus,
-    ),
-    contradictionPenalty: asNumber(
-      raw.contradiction_penalty ?? raw.contradictionPenalty,
-    ),
-    stalenessPenalty: asNumber(raw.staleness_penalty ?? raw.stalenessPenalty),
-    headerOnlyPenalty: asNumber(
-      raw.header_only_penalty ?? raw.headerOnlyPenalty,
-    ),
-    total: asNumber(raw.total ?? raw.totalScore),
-    explain: asStringArray(raw.explain),
-    selected: Boolean(raw.selected),
-  };
-  if (!candidate.snapshotId) return null;
-  return candidate;
-}
-
-function parseRestoreScoreSummary(raw: unknown): RestoreScoreSummary {
-  const record = asRecord(raw);
-  if (!record) {
-    return {
-      hasStructured: false,
-      decision: "",
-      threshold: 0,
-      candidateCount: 0,
-      topScore: 0,
-      selectedIndex: -1,
-      selectedSnapshotId: "",
-      topCandidateId: "",
-      candidates: [],
-    };
-  }
-  const scoreRows =
-    asArray(record.scores).length > 0
-      ? asArray(record.scores)
-      : asArray(record.score_breakdown ?? record.scoreBreakdown);
-  const candidates = scoreRows
-    .map(parseRestoreScoreCandidate)
-    .filter((item): item is RestoreScoreCandidate => item != null);
-  return {
-    hasStructured: candidates.length > 0,
-    decision: asString(record.decision),
-    threshold: asNumber(record.threshold),
-    candidateCount:
-      candidates.length ||
-      asNumber(record.candidate_count ?? record.candidateCount),
-    topScore: asNumber(record.top_score ?? record.topScore),
-    selectedIndex: Number(record.selected_index ?? record.selectedIndex ?? -1),
-    selectedSnapshotId: asString(
-      record.selected_snapshot_id ?? record.selectedSnapshotId,
-    ),
-    topCandidateId: asString(record.top_candidate_id ?? record.topCandidateId),
-    candidates,
-  };
-}
-
-function parseResumeHintSummary(raw: unknown): ResumeHintSummary {
-  const record = asRecord(raw);
-  if (!record) {
-    return {
-      hasStructured: false,
-      nextAction: "",
-      topBlockers: [],
-      dominantStateKeys: [],
-      dominantLoopIds: [],
-      recommendedEvidenceIds: [],
-      restoreConfidence: 0,
-      requiresFreshCompile: false,
-      preferredSnapshotId: "",
-      candidateCount: 0,
-    };
-  }
-  const candidateCount = asNumber(
-    record.candidate_count ?? record.candidateCount,
-  );
-  return {
-    hasStructured:
-      candidateCount > 0 ||
-      asString(record.next_action || record.nextAction).length > 0,
-    nextAction: asString(
-      record.next_action || record.nextAction || "fresh_compile",
-    ),
-    topBlockers: asStringArray(record.top_blockers || record.topBlockers),
-    dominantStateKeys: asStringArray(
-      record.dominant_state_keys || record.dominantStateKeys,
-    ),
-    dominantLoopIds: asStringArray(
-      record.dominant_loop_ids || record.dominantLoopIds,
-    ),
-    recommendedEvidenceIds: asStringArray(
-      record.recommended_evidence_ids || record.recommendedEvidenceIds,
-    ),
-    restoreConfidence: asNumber(
-      record.restore_confidence ?? record.restoreConfidence,
-    ),
-    requiresFreshCompile: Boolean(
-      record.requires_fresh_compile || record.requiresFreshCompile,
-    ),
-    preferredSnapshotId: asString(
-      record.preferred_snapshot_id || record.preferredSnapshotId,
-    ),
-    candidateCount: Math.max(candidateCount, 0),
-  };
-}
-
-function parseProcessRuntimeLine(items: ProcessHealthInvocation[]) {
-  const parseMs = (value: number | undefined) =>
-    value == null || value <= 0 ? "—" : `${value}ms`;
-  return items.map((invocation) => (
-    <tr
-      key={invocation.invocationId}
-      className="border-b border-white/10 last:border-b-0"
-    >
-      <td className="px-2 py-1.5 text-[11px]">{invocation.invocationId}</td>
-      <td className="px-2 py-1.5 text-[11px]">{invocation.toolId}</td>
-      <td className="px-2 py-1.5 text-[11px]">{invocation.action}</td>
-      <td className="px-2 py-1.5 text-[11px]">{invocation.domain}</td>
-      <td className="px-2 py-1.5 text-[11px]">{invocation.status}</td>
-      <td className="px-2 py-1.5 text-[11px]">{invocation.policyOutcome}</td>
-      <td className="px-2 py-1.5 text-[11px]">
-        {parseMs(invocation.durationMs)}
-      </td>
-      <td className="px-2 py-1.5 text-[11px]">{invocation.traceId || "—"}</td>
-    </tr>
-  ));
-}
-
-function Panel(props: {
-  title: string;
-  subtitle?: string;
-  actions?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className="forge-ops-panel min-w-0">
-      <div className="forge-ops-panel__head flex-col items-stretch sm:flex-row sm:items-center">
-        <div className="min-w-0">
-          <div className="forge-ops-title break-words">{props.title}</div>
-          {props.subtitle ? (
-            <div className="mt-1 max-w-3xl break-words text-xs leading-5 text-forge-mist/65">
-              {props.subtitle}
-            </div>
-          ) : null}
-        </div>
-        {props.actions ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {props.actions}
-          </div>
-        ) : null}
-      </div>
-      <div className="forge-ops-panel__body">{props.children}</div>
-    </section>
-  );
-}
-
-function EmptyState(props: {
-  title: string;
-  detail: string;
-  tone?: "muted" | "bad";
-}) {
-  const toneClass =
-    props.tone === "bad"
-      ? "border-forge-ember/30 bg-forge-ember/10"
-      : "border-forge-platinum/10 bg-black/20";
-  return (
-    <div className={["rounded border border-dashed p-4", toneClass].join(" ")}>
-      <div className="text-sm font-semibold text-forge-ash">{props.title}</div>
-      <div className="mt-1 break-words text-xs leading-5 text-forge-mist/75">
-        {props.detail}
-      </div>
-    </div>
-  );
-}
-
-function JsonBlock(props: {
-  value: unknown;
-  empty?: string;
-  maxHeightClass?: string;
-}) {
-  if (
-    props.value == null ||
-    (Array.isArray(props.value) && props.value.length === 0) ||
-    (typeof props.value === "object" &&
-      props.value !== null &&
-      Object.keys(props.value as Record<string, unknown>).length === 0)
-  ) {
-    return (
-      <div className="text-xs text-forge-mist/75">
-        {props.empty ?? "No recorded evidence."}
-      </div>
-    );
-  }
-  return (
-    <div
-      className={[
-        "overflow-auto rounded border border-forge-platinum/10 bg-black/25 p-3 text-[11px] text-forge-mist",
-        props.maxHeightClass ?? "max-h-[360px]",
-      ].join(" ")}
-    >
-      <HumanDataView value={props.value} compact />
-    </div>
-  );
-}
-
-function MetricChip(props: { label: string; value: string | number }) {
-  return (
-    <div className="min-w-0 rounded border border-forge-platinum/10 bg-black/20 px-3 py-2">
-      <div className="forge-ops-label">{props.label}</div>
-      <div className="mt-1 break-words text-sm font-semibold text-forge-ash">
-        {props.value}
-      </div>
-    </div>
-  );
-}
-
-function SummaryLink(props: { to: string; label: string }) {
-  return (
-    <Link
-      to={props.to}
-      className="min-w-0 break-all rounded border border-forge-platinum/10 bg-black/20 px-2.5 py-1 text-[11px] leading-5 text-forge-mist transition hover:border-forge-ember/30 hover:text-forge-ash"
-    >
-      {props.label}
-    </Link>
-  );
-}
-
-function OperatorStepCard(props: {
-  step: string;
-  title: string;
-  detail: string;
-}) {
-  return (
-    <div className="forge-ops-card min-w-0 p-3">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-forge-emberSoft">
-        {props.step}
-      </div>
-      <div className="mt-1 break-words text-sm font-semibold text-forge-ash">
-        {props.title}
-      </div>
-      <div className="mt-1 break-words text-xs leading-5 text-forge-mist/80">
-        {props.detail}
-      </div>
-    </div>
-  );
-}
-
-function CountPill(props: { label: string; value: string | number }) {
-  return (
-    <div className="max-w-full rounded border border-forge-platinum/10 bg-black/20 px-2.5 py-1 text-left text-[11px] leading-5 text-forge-mist">
-      <span className="text-forge-mist/65">{props.label}</span>{" "}
-      <span className="min-w-0 break-all">{props.value}</span>
-    </div>
-  );
-}
-
-function InspectorMetric(props: {
-  label: string;
-  value: string | number;
-  detail: string;
-  tone: "ok" | "warn" | "bad" | "muted";
-}) {
-  return (
-    <div className="forge-ops-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="forge-ops-label">{props.label}</div>
-          <div className="mt-2 break-words text-2xl font-semibold tracking-normal text-forge-ash">
-            {props.value}
-          </div>
-        </div>
-        <span className={`forge-ops-status forge-ops-status--${props.tone}`}>
-          {props.tone}
-        </span>
-      </div>
-      <div className="mt-3 break-words text-xs leading-5 text-forge-mist/65">
-        {props.detail}
-      </div>
-    </div>
-  );
-}
-
-function parseInspectorReportSummary(report: AuditTraceLookupReport | null) {
-  const raw = asRecord(report?.report);
-  return {
-    gatewayInvocations: asArray(raw?.gatewayInvocations),
-    auditRecords: asArray(raw?.auditRecords),
-    artifactRecords: asArray(raw?.artifactRecords),
-    provenanceRecords: asArray(raw?.provenanceRecords),
-    journalEvents: asArray(raw?.journalEvents),
-    artifactRefs: asArray(raw?.artifactRefs),
-    links: asRecord(raw?.links) ?? {},
-  };
-}
+import { InspectorMetricsOverview } from "./InspectorsPage/InspectorMetricsOverview";
+import {
+  CountPill,
+  EmptyState,
+  JsonBlock,
+  MetricChip,
+  OperatorStepCard,
+  Panel,
+  SummaryLink,
+  parseProcessRuntimeLine,
+} from "./InspectorsPage/shared";
+import {
+  parseInspectorReportSummary,
+  parseRestoreScoreSummary,
+  parseResumeHintSummary,
+} from "./InspectorsPage/inspectorsParsing";
 
 export function InspectorsPage() {
   const [params, setParams] = useSearchParams();
@@ -893,50 +505,35 @@ export function InspectorsPage() {
         </div>
       </header>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <InspectorMetric
-          label="Snapshots"
-          value={snapshots.length}
-          detail={selectedSnapshotId || "none selected"}
-          tone={snapshotErr ? "bad" : snapshotBusy ? "warn" : "muted"}
-        />
-        <InspectorMetric
-          label="Dream Reports"
-          value={dreamReports.length}
-          detail={selectedDreamReportId || "workspace scoped"}
-          tone={dreamErr ? "bad" : dreamBusy ? "warn" : "muted"}
-        />
-        <InspectorMetric
-          label="Packet"
-          value={packet?.id ?? "none"}
-          detail={`${packetRetrievedCount} retrieved / ${packetReferenceCount} refs`}
-          tone={
-            packetErr ? "bad" : packetBusy ? "warn" : packet ? "ok" : "muted"
-          }
-        />
-        <InspectorMetric
-          label="Trace Reports"
-          value={traceReportCount}
-          detail={traceLookup?.mode ?? "idle"}
-          tone={
-            traceErr ? "bad" : traceBusy ? "warn" : traceLookup ? "ok" : "muted"
-          }
-        />
-        <InspectorMetric
-          label="Process"
-          value={processReportCount}
-          detail={processLookup?.runtime?.state || "runtime unknown"}
-          tone={
-            processErr
-              ? "bad"
-              : processBusy
-                ? "warn"
-                : processLookup
-                  ? "ok"
-                  : "muted"
-          }
-        />
-      </section>
+      <InspectorMetricsOverview
+        snapshotsCount={snapshots.length}
+        selectedSnapshotId={selectedSnapshotId}
+        snapshotTone={snapshotErr ? "bad" : snapshotBusy ? "warn" : "muted"}
+        dreamReportsCount={dreamReports.length}
+        selectedDreamReportId={selectedDreamReportId}
+        dreamTone={dreamErr ? "bad" : dreamBusy ? "warn" : "muted"}
+        packetId={packet?.id ?? "none"}
+        packetDetail={`${packetRetrievedCount} retrieved / ${packetReferenceCount} refs`}
+        packetTone={
+          packetErr ? "bad" : packetBusy ? "warn" : packet ? "ok" : "muted"
+        }
+        traceReportCount={traceReportCount}
+        traceMode={traceLookup?.mode ?? "idle"}
+        traceTone={
+          traceErr ? "bad" : traceBusy ? "warn" : traceLookup ? "ok" : "muted"
+        }
+        processReportCount={processReportCount}
+        processRuntimeState={processLookup?.runtime?.state || "runtime unknown"}
+        processTone={
+          processErr
+            ? "bad"
+            : processBusy
+              ? "warn"
+              : processLookup
+                ? "ok"
+                : "muted"
+        }
+      />
 
       <Panel
         title="Inspector Scope"

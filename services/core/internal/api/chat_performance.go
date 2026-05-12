@@ -440,7 +440,7 @@ func apiMaxInt(a, b int) int {
 	return b
 }
 
-func (s *Server) modelRuntimeChatPreflight(ctx context.Context, meta ModelRuntimeRequestMeta) (map[string]any, string) {
+func (s *Server) modelRuntimeChatPreflight(ctx context.Context, meta ModelRuntimeRequestMeta, modelID string) (map[string]any, string) {
 	if s.modelRuntime == nil {
 		return nil, "model runtime is unavailable"
 	}
@@ -460,5 +460,101 @@ func (s *Server) modelRuntimeChatPreflight(ctx context.Context, meta ModelRuntim
 		trace["runtime_policy_state"] = queue.PolicyState
 		return trace, "model runtime queue is saturated"
 	}
+	if reason := s.modelRuntimeLoadedPreflight(ctx, meta, strings.TrimSpace(modelID), queue, trace); reason != "" {
+		return trace, reason
+	}
 	return trace, ""
+}
+
+func (s *Server) modelRuntimeLoadedPreflight(ctx context.Context, meta ModelRuntimeRequestMeta, modelID string, queue ModelRuntimeQueueStatus, trace map[string]any) string {
+	if modelID == "" {
+		return ""
+	}
+	model, err := s.modelRuntime.GetModel(ctx, modelID, meta)
+	if err != nil {
+		_, code, message := mapModelRuntimeError(err)
+		if strings.TrimSpace(code) != "" {
+			return message + " (" + code + ")"
+		}
+		return message
+	}
+	trace["runtime_model_id"] = model.ID
+	trace["runtime_model_status"] = model.Status
+	trace["runtime_model_backend"] = model.Backend
+	health, err := s.modelRuntime.Health(ctx, meta)
+	if err != nil {
+		_, code, message := mapModelRuntimeError(err)
+		if strings.TrimSpace(code) != "" {
+			return message + " (" + code + ")"
+		}
+		return message
+	}
+	trace["runtime_health_status"] = health.Status
+	trace["runtime_health_ok"] = health.OK
+	if backend := strings.TrimSpace(model.Backend); backend != "" {
+		if !modelRuntimeBackendHealthy(health, backend) {
+			return "model runtime backend unavailable: " + backend
+		}
+	}
+	if strings.EqualFold(strings.TrimSpace(model.Status), "loaded") {
+		return ""
+	}
+	backend := strings.TrimSpace(model.Backend)
+	if backend != "" {
+		if activeID := strings.TrimSpace(queue.Active[backend]); activeID != "" {
+			trace["runtime_active_model_id"] = activeID
+			if strings.EqualFold(activeID, modelID) {
+				return ""
+			}
+		}
+	}
+	loaded, err := s.modelRuntime.LoadedStatus(ctx, meta)
+	if err != nil {
+		_, code, message := mapModelRuntimeError(err)
+		if strings.TrimSpace(code) != "" {
+			return message + " (" + code + ")"
+		}
+		return message
+	}
+	trace["runtime_loaded_count"] = loaded.Count
+	for _, item := range loaded.Models {
+		if !strings.EqualFold(strings.TrimSpace(item.ModelID), modelID) {
+			continue
+		}
+		trace["runtime_loaded_status"] = item.Status
+		if strings.EqualFold(strings.TrimSpace(item.Status), "loaded") {
+			return ""
+		}
+	}
+	return ""
+}
+
+func modelRuntimeBackendHealthy(health ModelRuntimeHealth, backend string) bool {
+	if strings.TrimSpace(backend) == "" {
+		return true
+	}
+	details := health.Details
+	if details == nil {
+		return true
+	}
+	rawBackends, ok := details["backends"].(map[string]map[string]any)
+	if !ok {
+		if generic, genericOK := details["backends"].(map[string]any); genericOK {
+			if entry, entryOK := generic[backend].(map[string]any); entryOK {
+				if healthy, present := entry["healthy"].(bool); present {
+					return healthy
+				}
+			}
+		}
+		return true
+	}
+	entry, ok := rawBackends[backend]
+	if !ok {
+		return true
+	}
+	healthy, ok := entry["healthy"].(bool)
+	if !ok {
+		return true
+	}
+	return healthy
 }

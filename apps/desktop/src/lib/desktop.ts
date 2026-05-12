@@ -203,6 +203,9 @@ export async function spanCurrentWindowAcrossMonitors(
   if (!bounds) return false;
   try {
     const appWindow = getCurrentWindow();
+    if (await appWindow.isMaximized().catch(() => false)) {
+      await appWindow.unmaximize().catch(() => undefined);
+    }
     await appWindow.setPosition(new LogicalPosition(bounds.x, bounds.y));
     await appWindow.setSize(new LogicalSize(bounds.width, bounds.height));
     await appWindow.setFocus().catch(() => undefined);

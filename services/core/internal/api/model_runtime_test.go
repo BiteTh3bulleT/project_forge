@@ -23,6 +23,7 @@ type fakeModelRuntime struct {
 	loaded      map[string]bool
 	chatErr     error
 	chatContent string
+	health      *ModelRuntimeHealth
 	healthErr   error
 	queueStatus ModelRuntimeQueueStatus
 	queueErr    error
@@ -257,6 +258,9 @@ func (f *fakeModelRuntime) Health(_ context.Context, req ModelRuntimeRequestMeta
 	f.lastMeta = req
 	if f.healthErr != nil {
 		return ModelRuntimeHealth{}, f.healthErr
+	}
+	if f.health != nil {
+		return *f.health, nil
 	}
 	return ModelRuntimeHealth{
 		OK:      true,

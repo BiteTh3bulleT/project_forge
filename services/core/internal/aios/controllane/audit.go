@@ -28,6 +28,7 @@ type SyscallAuditRecord struct {
 	KVIdentityEnforcement       map[string]any
 	RefShapeValidation          map[string]any
 	RefShapeComparison          map[string]any
+	SourceObjectAuthority       map[string]any
 	SemanticOperationValidation map[string]any
 }
 
@@ -88,6 +89,7 @@ func (s *CoreAuditSink) Record(ctx context.Context, rec SyscallAuditRecord) (str
 			"kvIdentityEnforcement":       rec.KVIdentityEnforcement,
 			"refShapeValidation":          rec.RefShapeValidation,
 			"refShapeComparison":          rec.RefShapeComparison,
+			"sourceObjectAuthority":       rec.SourceObjectAuthority,
 			"semanticOperationValidation": rec.SemanticOperationValidation,
 		},
 	})

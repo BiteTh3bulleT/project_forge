@@ -65,6 +65,8 @@ func controlLaneValidationShadowKind(action domain.SemanticActionType) (string, 
 		return "ref_shape", "refShapeValidation", true
 	case domain.ActionCompareRefShape:
 		return "ref_shape_comparison", "refShapeComparison", true
+	case domain.ActionValidateSourceObject:
+		return "source_object_authority", "sourceObjectAuthorityValidation", true
 	case domain.ActionValidateSemanticOperation:
 		return "semantic_operation", "semanticOperationValidation", true
 	default:

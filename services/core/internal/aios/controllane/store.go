@@ -69,6 +69,8 @@ type CommitMetadata struct {
 
 type SemanticReadStore interface {
 	FindNote(id string) (domain.MemoryNote, bool)
+	FindLink(id string) (domain.SemanticLink, bool)
+	FindState(id string) (domain.StateItem, bool)
 	FindLoop(id string) (domain.OpenLoop, bool)
 	FindModel(id string) (domain.AdaptivePolicyModel, bool)
 	ExistsObject(id string) bool
@@ -202,6 +204,20 @@ func (s *InMemorySemanticStore) FindNote(id string) (domain.MemoryNote, bool) {
 	defer s.mu.RUnlock()
 	note, ok := s.state.notes[id]
 	return note, ok
+}
+
+func (s *InMemorySemanticStore) FindLink(id string) (domain.SemanticLink, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	link, ok := s.state.links[id]
+	return link, ok
+}
+
+func (s *InMemorySemanticStore) FindState(id string) (domain.StateItem, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	state, ok := s.state.states[id]
+	return state, ok
 }
 
 func (s *InMemorySemanticStore) FindLoop(id string) (domain.OpenLoop, bool) {
@@ -629,6 +645,16 @@ type TransactionalSemanticStore struct {
 
 func (s *TransactionalSemanticStore) FindNote(id string) (domain.MemoryNote, bool) {
 	v, ok := s.state.notes[id]
+	return v, ok
+}
+
+func (s *TransactionalSemanticStore) FindLink(id string) (domain.SemanticLink, bool) {
+	v, ok := s.state.links[id]
+	return v, ok
+}
+
+func (s *TransactionalSemanticStore) FindState(id string) (domain.StateItem, bool) {
+	v, ok := s.state.states[id]
 	return v, ok
 }
 

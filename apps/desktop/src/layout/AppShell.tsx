@@ -40,6 +40,9 @@ import {
   type ShellToolId,
 } from "./shellConfig";
 import {
+  buildDesktopHosts,
+  globalToHostPoint,
+  hostToGlobalPoint,
   projectDesktopWindowToHost,
   resolveDesktopHostPlacement,
   type DesktopPlacement,
@@ -201,6 +204,7 @@ export function AppShell(props: AppShellProps) {
   const meta = useWorkspaceStore((s) => s.meta);
   const lastErr = useWorkspaceStore((s) => s.lastCoreError);
   const fallbackNotice = useWorkspaceLayoutStore((s) => s.fallbackNotice);
+  const monitors = useWorkspaceLayoutStore((s) => s.monitors);
   const runtimeWindows = useWorkspaceLayoutStore((s) => s.runtimeWindows);
   const clearFallbackNotice = useWorkspaceLayoutStore(
     (s) => s.clearFallbackNotice,
@@ -220,6 +224,9 @@ export function AppShell(props: AppShellProps) {
   const move = useDesktopWindowStore((s) => s.move);
   const moveToHost = useDesktopWindowStore((s) => s.moveToHost);
   const resize = useDesktopWindowStore((s) => s.resize);
+  const reconcileHostAvailability = useDesktopWindowStore(
+    (s) => s.reconcileHostAvailability,
+  );
   const pin = useDesktopWindowStore((s) => s.pin);
   const unpin = useDesktopWindowStore((s) => s.unpin);
 
@@ -241,28 +248,58 @@ export function AppShell(props: AppShellProps) {
   const [contextMenu, setContextMenu] = useState<DockContextMenu | null>(null);
   const isMainWindow = props.isMainWindow;
   const hostLabel = props.hostLabel?.trim() || "main";
+  const desktopHosts = useMemo(
+    () =>
+      buildDesktopHosts(
+        monitors.map((monitor) => ({
+          id: monitor.id,
+          ordinal: monitor.ordinal,
+          workArea: monitor.workArea,
+        })),
+        runtimeWindows,
+      ),
+    [monitors, runtimeWindows],
+  );
+  const currentDesktopHost =
+    desktopHosts.find((host) => host.hostLabel === hostLabel) ?? null;
+  const currentHostMonitorId =
+    currentDesktopHost?.monitorId ??
+    runtimeWindows.find((window_) => window_.runtimeLabel === hostLabel)
+      ?.monitorId ??
+    null;
+
+  useEffect(() => {
+    if (desktopHosts.length === 0) return;
+    reconcileHostAvailability(
+      desktopHosts.map((host) => ({
+        hostLabel: host.hostLabel,
+        monitorId: host.monitorId,
+        primary: host.role === "main",
+      })),
+    );
+  }, [desktopHosts, reconcileHostAvailability]);
 
   const isHome = pathname === HOME_ROUTE;
 
-  // Deep links open confined in-shell desktop windows. The disabled detached
-  // Tauri compatibility path owns tool routes in separate webviews.
+  // Deep links open confined in-shell desktop windows for every monitor host.
+  // The disabled detached Tauri compatibility path owns tool routes in
+  // separate webviews.
   useEffect(() => {
     if (detachedTauriShell) return;
     if (isHome) return;
-    if (!isMainWindow) return;
     const tool = currentTool;
     if (tool.id === "other" || tool.id === "job-detail") return;
     const existing = windows.find(
       (w) => w.toolId === tool.id && (w.hostLabel || "main") === hostLabel,
     );
     if (!existing) {
-      void openWindow(tool.id, { hostLabel });
+      void openWindow(tool.id, { hostLabel, monitorId: currentHostMonitorId });
     } else if (existing.minimized || focusedId !== existing.id) {
       void restore(existing.id);
     }
     // intentionally omit windows / focusedId: this effect only reacts to route changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, isMainWindow, isHome, detachedTauriShell, hostLabel]);
+  }, [pathname, isHome, detachedTauriShell, hostLabel]);
 
   // Detached Tauri compatibility only: reconcile the desktop window store
   // against real Tauri windows. Normal Tauri uses confined in-shell windows.
@@ -408,7 +445,7 @@ export function AppShell(props: AppShellProps) {
 
   function launchTool(tool: ShellToolDefinition) {
     setStartOpen(false);
-    void openWindow(tool.id, { hostLabel });
+    void openWindow(tool.id, { hostLabel, monitorId: currentHostMonitorId });
     // Confined shell mode navigates after opening so deep links and reloads
     // rehydrate the matching in-shell window.
     if (!detachedTauriShell) {
@@ -462,7 +499,32 @@ export function AppShell(props: AppShellProps) {
   ) {
     const transferred = resolveTransferredWindow(win, nextX, nextY);
     if (transferred.hostLabel !== (win.hostLabel || "main")) {
-      moveToHost(win.id, transferred.hostLabel, transferred.x, transferred.y);
+      const targetHost =
+        desktopHosts.find((host) => host.hostLabel === transferred.hostLabel) ??
+        null;
+      const targetMonitorId =
+        targetHost?.monitorId ??
+        runtimeWindows.find(
+          (window_) => window_.runtimeLabel === transferred.hostLabel,
+        )?.monitorId ??
+        null;
+      const targetPlacement =
+        targetHost && currentDesktopHost
+          ? globalToHostPoint(
+              targetHost,
+              hostToGlobalPoint(currentDesktopHost, {
+                x: nextX,
+                y: nextY,
+              }),
+            )
+          : { x: transferred.x, y: transferred.y };
+      moveToHost(
+        win.id,
+        transferred.hostLabel,
+        targetPlacement.x,
+        targetPlacement.y,
+        targetMonitorId,
+      );
       return;
     }
     move(win.id, transferred.x, transferred.y);
@@ -498,32 +560,60 @@ export function AppShell(props: AppShellProps) {
   const runtimeState =
     core === "offline" ? "offline" : shellErr ? "degraded" : "online";
 
-  // Dock = pinned tools (in pinned order) + any open windows whose tool
-  // isn't pinned (in open order).
+  // Dock = pinned tools (in pinned order) + global open windows. Hosts render
+  // only their local desktop windows, but the taskbar remains globally aware.
   const dockTiles = useMemo<DockTile[]>(() => {
     const toolMap = new Map<ShellToolId, ShellToolDefinition>(
       allShellTools.map((t) => [t.id, t] as const),
     );
     const tiles: DockTile[] = [];
+    const representedWindowIds = new Set<string>();
     for (const toolId of pinned) {
       const tool = toolMap.get(toolId);
       if (!tool) continue;
       const window_ =
+        (focusedId
+          ? windows.find((w) => w.id === focusedId && w.toolId === toolId)
+          : null) ??
         windows.find(
           (w) => w.toolId === toolId && (w.hostLabel || "main") === hostLabel,
-        ) ?? null;
-      tiles.push({ kind: "tile", tool, window: window_, pinned: true });
+        ) ??
+        windows.find((w) => w.toolId === toolId) ??
+        null;
+      if (window_) representedWindowIds.add(window_.id);
+      tiles.push({
+        kind: "tile",
+        key: `pinned:${tool.id}`,
+        tool,
+        window: window_,
+        pinned: true,
+      });
     }
     const pinnedSet = new Set(pinned);
     for (const window_ of windows) {
-      if ((window_.hostLabel || "main") !== hostLabel) continue;
-      if (pinnedSet.has(window_.toolId)) continue;
+      if (representedWindowIds.has(window_.id)) continue;
       const tool = toolMap.get(window_.toolId);
       if (!tool) continue;
-      tiles.push({ kind: "tile", tool, window: window_, pinned: false });
+      if (pinnedSet.has(window_.toolId)) {
+        tiles.push({
+          kind: "tile",
+          key: `window:${window_.id}`,
+          tool,
+          window: window_,
+          pinned: true,
+        });
+        continue;
+      }
+      tiles.push({
+        kind: "tile",
+        key: `window:${window_.id}`,
+        tool,
+        window: window_,
+        pinned: false,
+      });
     }
     return tiles;
-  }, [hostLabel, pinned, windows]);
+  }, [focusedId, hostLabel, pinned, windows]);
 
   // Active foreground tool (focused, non-minimized).
   const focusedWindow = useMemo<DesktopWindow | null>(() => {
@@ -549,6 +639,7 @@ export function AppShell(props: AppShellProps) {
     () =>
       sortedWindows.flatMap((window_) => {
         if (window_.minimized) return [];
+        if ((window_.hostLabel || "main") !== hostLabel) return [];
         const placement = projectDesktopWindowToHost(
           runtimeWindows,
           hostLabel,
@@ -701,167 +792,176 @@ export function AppShell(props: AppShellProps) {
         </main>
       </div>
 
-      {isMainWindow ? (
-        <footer className="forge-os-taskbar">
-          <button
-            type="button"
-            onClick={() => setStartOpen((value) => !value)}
-            className={cx(
-              "forge-os-taskbar__start",
-              startOpen && "forge-os-taskbar__start--active",
-            )}
-            aria-label="Open Start menu"
-            aria-expanded={startOpen}
-          >
-            <img
-              className="forge-os-taskbar__anvil"
-              src="/brand/forge-start-button.png"
-              alt=""
-              draggable={false}
-            />
-            <span className="forge-os-taskbar__label">FORGE</span>
-          </button>
+      <footer className="forge-os-taskbar">
+        <button
+          type="button"
+          onClick={() => setStartOpen((value) => !value)}
+          className={cx(
+            "forge-os-taskbar__start",
+            startOpen && "forge-os-taskbar__start--active",
+          )}
+          aria-label="Open Start menu"
+          aria-expanded={startOpen}
+        >
+          <img
+            className="forge-os-taskbar__anvil"
+            src="/brand/forge-start-button.png"
+            alt=""
+            draggable={false}
+          />
+          <span className="forge-os-taskbar__label">FORGE</span>
+        </button>
 
-          <div className="forge-os-taskbar__items">
-            {dockTiles.map((tile) => {
-              const isActive =
-                tile.window != null &&
-                !tile.window.minimized &&
-                focusedId === tile.window.id;
-              const isOpen = tile.window != null;
-              const isMinimized = tile.window?.minimized ?? false;
-              return (
-                <button
-                  key={tile.tool.id}
-                  type="button"
-                  onClick={() => {
-                    if (tile.window) {
-                      focusFromDock(tile.window);
-                    } else {
-                      launchTool(tile.tool);
-                    }
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    setContextMenu({
-                      x: event.clientX,
-                      y: event.clientY,
-                      tool: tile.tool,
-                      pinned: tile.pinned,
-                      open: isOpen,
-                    });
-                  }}
-                  onAuxClick={(event) => {
-                    if (event.button === 1 && tile.window) {
-                      event.preventDefault();
-                      void closeWindow(tile.window.id);
-                    }
-                  }}
-                  className={cx(
-                    "forge-os-taskbar__item",
-                    isActive && "forge-os-taskbar__item--active",
-                    !isActive && isOpen && "forge-os-taskbar__item--open",
-                    isMinimized && "forge-os-taskbar__item--minimized",
-                  )}
-                  aria-current={isActive ? "page" : undefined}
-                  title={
-                    isActive
-                      ? detachedTauriShell
-                        ? `${tile.tool.label} (active)`
-                        : `${tile.tool.label} (click to minimize)`
-                      : isMinimized
-                        ? `${tile.tool.label} (minimized)`
-                        : isOpen
-                          ? `${tile.tool.label} (open)`
-                          : tile.tool.label
-                  }
-                >
-                  <span className="forge-os-taskbar__short">
-                    {tile.tool.shortLabel}
-                  </span>
-                  <span className="forge-os-taskbar__name">
-                    {tile.tool.label}
-                  </span>
-                </button>
-              );
-            })}
-            {linuxWindows.map((window_) => (
+        <div className="forge-os-taskbar__items">
+          {dockTiles.map((tile) => {
+            const isActive =
+              tile.window != null &&
+              !tile.window.minimized &&
+              focusedId === tile.window.id;
+            const isOpen = tile.window != null;
+            const isMinimized = tile.window?.minimized ?? false;
+            return (
               <button
-                key={window_.id}
+                key={tile.key}
                 type="button"
-                onClick={() => void focusLinuxWindow(window_.id)}
-                className={cx(
-                  "forge-os-taskbar__item",
-                  "forge-os-taskbar__item--native",
-                  "forge-os-taskbar__item--open",
-                  window_.focused && "forge-os-taskbar__item--active",
-                  window_.minimized && "forge-os-taskbar__item--minimized",
-                )}
-                aria-label={`${window_.title} linux app`}
-                title={
-                  window_.appId
-                    ? `${window_.title} · ${window_.appId}`
-                    : window_.title
-                }
-              >
-                <LinuxWindowIcon
-                  window={window_}
-                  className="forge-os-taskbar__native-icon"
-                />
-                <span className="forge-os-taskbar__name">{window_.title}</span>
-              </button>
-            ))}
-            {pendingOperatorApps.map((item) => (
-              <button
-                key={item.app.id}
-                type="button"
-                onClick={() => void launchNativeApp(item.app)}
-                onAuxClick={(event) => {
-                  if (event.button === 1) {
-                    event.preventDefault();
-                    setRunningOperatorApps((items) =>
-                      items.filter(
-                        (candidate) => candidate.app.id !== item.app.id,
-                      ),
-                    );
+                onClick={() => {
+                  if (tile.window) {
+                    focusFromDock(tile.window);
+                  } else {
+                    launchTool(tile.tool);
                   }
                 }}
-                className="forge-os-taskbar__item forge-os-taskbar__item--native forge-os-taskbar__item--open"
-                aria-label={`${item.app.label} native app`}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  setContextMenu({
+                    x: event.clientX,
+                    y: event.clientY,
+                    tool: tile.tool,
+                    window: tile.window,
+                    pinned: tile.pinned,
+                    open: isOpen,
+                  });
+                }}
+                onAuxClick={(event) => {
+                  if (event.button === 1 && tile.window) {
+                    event.preventDefault();
+                    void closeWindow(tile.window.id);
+                  }
+                }}
+                className={cx(
+                  "forge-os-taskbar__item",
+                  isActive && "forge-os-taskbar__item--active",
+                  !isActive && isOpen && "forge-os-taskbar__item--open",
+                  isMinimized && "forge-os-taskbar__item--minimized",
+                )}
+                aria-current={isActive ? "page" : undefined}
                 title={
-                  item.pid
-                    ? `${item.app.label} native app · PID ${item.pid}`
-                    : `${item.app.label} native app`
+                  isActive
+                    ? detachedTauriShell
+                      ? `${tile.tool.label} (active)`
+                      : `${tile.tool.label} (click to minimize)`
+                    : isMinimized
+                      ? `${tile.tool.label} (minimized)`
+                      : isOpen
+                        ? `${tile.tool.label} (open)`
+                        : tile.tool.label
                 }
               >
-                <OperatorAppIcon
-                  app={item.app}
-                  className="forge-os-taskbar__native-icon"
-                />
-                <span className="forge-os-taskbar__name">{item.app.label}</span>
-                {item.pid ? (
-                  <span className="forge-os-taskbar__pid">PID {item.pid}</span>
-                ) : null}
+                <span className="forge-os-taskbar__short">
+                  {tile.tool.shortLabel}
+                </span>
+                <span className="forge-os-taskbar__name">
+                  {tile.tool.label}
+                </span>
               </button>
-            ))}
-          </div>
+            );
+          })}
+          {isMainWindow
+            ? linuxWindows.map((window_) => (
+                <button
+                  key={window_.id}
+                  type="button"
+                  onClick={() => void focusLinuxWindow(window_.id)}
+                  className={cx(
+                    "forge-os-taskbar__item",
+                    "forge-os-taskbar__item--native",
+                    "forge-os-taskbar__item--open",
+                    window_.focused && "forge-os-taskbar__item--active",
+                    window_.minimized && "forge-os-taskbar__item--minimized",
+                  )}
+                  aria-label={`${window_.title} linux app`}
+                  title={
+                    window_.appId
+                      ? `${window_.title} · ${window_.appId}`
+                      : window_.title
+                  }
+                >
+                  <LinuxWindowIcon
+                    window={window_}
+                    className="forge-os-taskbar__native-icon"
+                  />
+                  <span className="forge-os-taskbar__name">
+                    {window_.title}
+                  </span>
+                </button>
+              ))
+            : null}
+          {isMainWindow
+            ? pendingOperatorApps.map((item) => (
+                <button
+                  key={item.app.id}
+                  type="button"
+                  onClick={() => void launchNativeApp(item.app)}
+                  onAuxClick={(event) => {
+                    if (event.button === 1) {
+                      event.preventDefault();
+                      setRunningOperatorApps((items) =>
+                        items.filter(
+                          (candidate) => candidate.app.id !== item.app.id,
+                        ),
+                      );
+                    }
+                  }}
+                  className="forge-os-taskbar__item forge-os-taskbar__item--native forge-os-taskbar__item--open"
+                  aria-label={`${item.app.label} native app`}
+                  title={
+                    item.pid
+                      ? `${item.app.label} native app · PID ${item.pid}`
+                      : `${item.app.label} native app`
+                  }
+                >
+                  <OperatorAppIcon
+                    app={item.app}
+                    className="forge-os-taskbar__native-icon"
+                  />
+                  <span className="forge-os-taskbar__name">
+                    {item.app.label}
+                  </span>
+                  {item.pid ? (
+                    <span className="forge-os-taskbar__pid">
+                      PID {item.pid}
+                    </span>
+                  ) : null}
+                </button>
+              ))
+            : null}
+        </div>
 
-          <div className="forge-os-taskbar__system">
-            <span>
-              {now.toLocaleTimeString([], {
-                hour: "numeric",
-                minute: "2-digit",
-              })}
-            </span>
-            <span>
-              {now.toLocaleDateString([], {
-                day: "numeric",
-                month: "short",
-              })}
-            </span>
-          </div>
-        </footer>
-      ) : null}
+        <div className="forge-os-taskbar__system">
+          <span>
+            {now.toLocaleTimeString([], {
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </span>
+          <span>
+            {now.toLocaleDateString([], {
+              day: "numeric",
+              month: "short",
+            })}
+          </span>
+        </div>
+      </footer>
 
       {startOpen ? (
         <StartMenu
@@ -875,14 +975,20 @@ export function AppShell(props: AppShellProps) {
           onContextMenu={(event, tool) => {
             event.preventDefault();
             const isPinned = pinned.includes(tool.id);
-            const isOpen = windows.some((w) => w.toolId === tool.id);
+            const openWindow =
+              windows.find(
+                (w) => w.toolId === tool.id && (w.hostLabel || "main") === hostLabel,
+              ) ??
+              windows.find((w) => w.toolId === tool.id) ??
+              null;
             setStartOpen(false);
             setContextMenu({
               x: event.clientX,
               y: event.clientY,
               tool,
+              window: openWindow,
               pinned: isPinned,
-              open: isOpen,
+              open: openWindow != null,
             });
           }}
           activeTool={focusedTool}
@@ -902,9 +1008,17 @@ export function AppShell(props: AppShellProps) {
           onAction={(action) => {
             const tool = contextMenu.tool;
             if (action === "open") {
-              launchTool(tool);
+              if (contextMenu.window) {
+                focusFromDock(contextMenu.window);
+              } else {
+                launchTool(tool);
+              }
             } else if (action === "close") {
-              void closeByTool(tool.id);
+              if (contextMenu.window) {
+                void closeWindow(contextMenu.window.id);
+              } else {
+                void closeByTool(tool.id);
+              }
             } else if (action === "pin") {
               pin(tool.id);
             } else if (action === "unpin") {
@@ -920,6 +1034,7 @@ export function AppShell(props: AppShellProps) {
 
 type DockTile = {
   kind: "tile";
+  key: string;
   tool: ShellToolDefinition;
   window: DesktopWindow | null;
   pinned: boolean;
@@ -929,6 +1044,7 @@ type DockContextMenu = {
   x: number;
   y: number;
   tool: ShellToolDefinition;
+  window: DesktopWindow | null;
   pinned: boolean;
   open: boolean;
 };

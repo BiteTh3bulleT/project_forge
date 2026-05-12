@@ -31,6 +31,7 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 		CapKVIdentityValidate,
 		CapRefShapeValidate,
 		CapRefShapeCompare,
+		CapSourceObjectValidate,
 		CapSemanticOperationValidate,
 	)
 	return &StaticCapabilityService{
@@ -52,6 +53,7 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 				CapKVIdentityValidate,
 				CapRefShapeValidate,
 				CapRefShapeCompare,
+				CapSourceObjectValidate,
 				CapSemanticOperationValidate,
 			),
 			domain.SourceAdapter: setOf(
@@ -61,6 +63,7 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 				CapKVIdentityValidate,
 				CapRefShapeValidate,
 				CapRefShapeCompare,
+				CapSourceObjectValidate,
 				CapSemanticOperationValidate,
 			),
 			domain.SourceFutureIRIS: setOf(

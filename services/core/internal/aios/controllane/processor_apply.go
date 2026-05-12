@@ -62,6 +62,8 @@ func (p *Processor) apply(ctx context.Context, store SemanticStore, req domain.S
 		return applyValidateRefShape(req)
 	case domain.ActionCompareRefShape:
 		return applyCompareRefShape(req)
+	case domain.ActionValidateSourceObject:
+		return applyValidateSourceObjectAuthority(store, req)
 	case domain.ActionValidateSemanticOperation:
 		return applyValidateSemanticOperation(req)
 	default:
@@ -87,6 +89,14 @@ func applyValidateRefShape(req domain.SyscallRequest) ([]string, map[string]any,
 
 func applyCompareRefShape(req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {
 	decision := EnforceRefShapeComparison(req)
+	if !decision.Accepted {
+		return nil, nil, nil, []domain.SyscallError{decision.ToSyscallError()}
+	}
+	return nil, decision.ToStateSummary(), decision.Warnings, nil
+}
+
+func applyValidateSourceObjectAuthority(store SemanticReadStore, req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {
+	decision := EnforceSourceObjectAuthority(req, store)
 	if !decision.Accepted {
 		return nil, nil, nil, []domain.SyscallError{decision.ToSyscallError()}
 	}

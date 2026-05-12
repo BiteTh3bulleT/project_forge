@@ -62,6 +62,8 @@ func (v *DeterministicValidator) ValidatePayload(req domain.SyscallRequest, def 
 		return validateRefShape(req)
 	case domain.ActionCompareRefShape:
 		return validateRefShapeCompare(req)
+	case domain.ActionValidateSourceObject:
+		return validateSourceObjectAuthority(req)
 	case domain.ActionValidateSemanticOperation:
 		return validateSemanticOperation(req)
 	default:

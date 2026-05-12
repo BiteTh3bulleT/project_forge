@@ -1,3 +1,7 @@
+import { hostLabelForMonitorOrdinal } from "../lib/desktopHostLabels";
+
+export { hostLabelForMonitorOrdinal } from "../lib/desktopHostLabels";
+
 export type DesktopRect = {
   x: number;
   y: number;
@@ -7,7 +11,23 @@ export type DesktopRect = {
 
 export type DesktopHostBounds = {
   runtimeLabel: string;
+  monitorId?: string | null;
   bounds: DesktopRect | null;
+};
+
+export type DesktopMonitorBounds = {
+  id: string;
+  ordinal: number;
+  workArea: DesktopRect;
+};
+
+export type DesktopHost = {
+  hostLabel: string;
+  monitorId: string;
+  monitorIndex: number;
+  bounds: DesktopRect;
+  role: "main" | "secondary";
+  active: boolean;
 };
 
 export type DesktopWindowGeometry = {
@@ -29,6 +49,86 @@ function containsPoint(bounds: DesktopRect, x: number, y: number) {
     y >= bounds.y &&
     y < bounds.y + bounds.height
   );
+}
+
+export function buildDesktopHosts(
+  monitors: DesktopMonitorBounds[],
+  runtimeWindows: DesktopHostBounds[] = [],
+): DesktopHost[] {
+  return monitors
+    .filter((monitor) => monitor.workArea.width > 0 && monitor.workArea.height > 0)
+    .sort((a, b) => a.ordinal - b.ordinal)
+    .map((monitor) => {
+      const hostLabel = hostLabelForMonitorOrdinal(monitor.ordinal);
+      const runtimeWindow = runtimeWindows.find(
+        (window_) =>
+          window_.runtimeLabel === hostLabel || window_.monitorId === monitor.id,
+      );
+      return {
+        hostLabel: runtimeWindow?.runtimeLabel ?? hostLabel,
+        monitorId: monitor.id,
+        monitorIndex: monitor.ordinal,
+        bounds: runtimeWindow?.bounds ?? monitor.workArea,
+        role: monitor.ordinal === 0 ? "main" : "secondary",
+        active: Boolean(runtimeWindow),
+      };
+    });
+}
+
+export function getPrimaryDesktopHost(hosts: DesktopHost[]) {
+  return (
+    hosts.find((host) => host.role === "main") ??
+    hosts.slice().sort((a, b) => a.monitorIndex - b.monitorIndex)[0] ??
+    null
+  );
+}
+
+export function getDesktopHostForMonitor(
+  hosts: DesktopHost[],
+  monitorId: string | null | undefined,
+) {
+  if (!monitorId) return null;
+  return hosts.find((host) => host.monitorId === monitorId) ?? null;
+}
+
+export function getDesktopHostAtGlobalPoint(
+  hosts: DesktopHost[],
+  point: { x: number; y: number },
+) {
+  return (
+    hosts.find((host) => containsPoint(host.bounds, point.x, point.y)) ?? null
+  );
+}
+
+export function hostToGlobalPoint(
+  host: Pick<DesktopHost, "bounds"> | DesktopRect,
+  point: { x: number; y: number },
+) {
+  const bounds = "bounds" in host ? host.bounds : host;
+  return { x: bounds.x + point.x, y: bounds.y + point.y };
+}
+
+export function globalToHostPoint(
+  host: Pick<DesktopHost, "bounds"> | DesktopRect,
+  point: { x: number; y: number },
+) {
+  const bounds = "bounds" in host ? host.bounds : host;
+  return { x: point.x - bounds.x, y: point.y - bounds.y };
+}
+
+export function clampRectToHost(
+  host: Pick<DesktopHost, "bounds"> | DesktopRect,
+  rect: DesktopRect,
+): DesktopRect {
+  const bounds = "bounds" in host ? host.bounds : host;
+  const width = Math.min(Math.max(1, rect.width), bounds.width);
+  const height = Math.min(Math.max(1, rect.height), bounds.height);
+  return {
+    x: Math.min(Math.max(rect.x, 0), Math.max(0, bounds.width - width)),
+    y: Math.min(Math.max(rect.y, 0), Math.max(0, bounds.height - height)),
+    width,
+    height,
+  };
 }
 
 function intersectsRect(left: DesktopRect, right: DesktopRect) {

@@ -15,6 +15,7 @@ import {
   WORKSPACE_LAYOUT_EVENT,
   WORKSPACE_NAVIGATE_EVENT,
   isTauriDesktop,
+  isShellHostWindowLabel,
 } from "./lib/desktop";
 import { ActionLanesPage } from "./pages/ActionLanesPage";
 import { AdaptersPage } from "./pages/AdaptersPage";
@@ -128,7 +129,8 @@ export default function App() {
     (s) => s.currentWindowLabel,
   );
   const isPrimaryShellWindow = layoutReady && currentWindowLabel === "main";
-  const isShellHostWindow = isPrimaryShellWindow;
+  const isShellHostWindow =
+    layoutReady && isShellHostWindowLabel(currentWindowLabel || "main");
   const contrastPreference = useUiStore((s) => s.contrastPreference);
   const effectsPreference = useUiStore((s) => s.effectsPreference);
 
@@ -244,7 +246,7 @@ export default function App() {
   }
   return (
     <AppShell
-      isMainWindow={isShellHostWindow}
+      isMainWindow={isPrimaryShellWindow}
       hostLabel={currentWindowLabel || "main"}
     >
       <RoutedViews />

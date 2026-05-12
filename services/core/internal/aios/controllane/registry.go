@@ -21,6 +21,7 @@ const (
 	CapKVIdentityValidate        = "kv.identity.validate"
 	CapRefShapeValidate          = "ref.shape.validate"
 	CapRefShapeCompare           = "ref.shape.compare"
+	CapSourceObjectValidate      = "source.object.authority.validate"
 	CapSemanticOperationValidate = "semantic.operation.validate"
 )
 
@@ -161,6 +162,15 @@ func NewStaticActionRegistry() *StaticActionRegistry {
 			ApprovalPossible: false,
 			TargetObjectType: "ref_shape_comparison",
 			AuditEventName:   "semantic_syscall.compare_ref_shape",
+		},
+		domain.ActionValidateSourceObject: {
+			Action:           domain.ActionValidateSourceObject,
+			Capability:       CapSourceObjectValidate,
+			Mutating:         false,
+			SupportsDryRun:   true,
+			ApprovalPossible: false,
+			TargetObjectType: "source_object_authority_validation",
+			AuditEventName:   "semantic_syscall.validate_source_object_authority",
 		},
 		domain.ActionValidateSemanticOperation: {
 			Action:           domain.ActionValidateSemanticOperation,

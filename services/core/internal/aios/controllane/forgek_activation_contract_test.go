@@ -12,6 +12,7 @@ func TestForgeKActivationContractForControlLaneValidationActions(t *testing.T) {
 		name      string
 		action    domain.SemanticActionType
 		request   func() domain.SyscallRequest
+		setup     func(context.Context, *Processor)
 		audit     func(SyscallAuditRecord) map[string]any
 		summaryID string
 	}{
@@ -51,12 +52,27 @@ func TestForgeKActivationContractForControlLaneValidationActions(t *testing.T) {
 			},
 			summaryID: "semanticOperationValidation",
 		},
+		{
+			name:    "source object authority",
+			action:  domain.ActionValidateSourceObject,
+			request: validSourceObjectAuthorityRequest,
+			setup: func(ctx context.Context, k *Processor) {
+				mustCreateNote(ctx, k, "note-source-a", "Source A")
+			},
+			audit: func(rec SyscallAuditRecord) map[string]any {
+				return rec.SourceObjectAuthority
+			},
+			summaryID: "sourceObjectAuthorityValidation",
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
 			k, _, auditSink := newTestKernel()
+			if tc.setup != nil {
+				tc.setup(ctx, k)
+			}
 			req := tc.request()
 			req.ID = "forge-k-contract-" + string(tc.action)
 			req.IdempotencyKey = ""

@@ -260,6 +260,38 @@ FROM memory_notes WHERE id = ?`, id)
 	return note, true
 }
 
+func (s *SQLiteSemanticStore) FindLink(id string) (domain.SemanticLink, bool) {
+	row := s.exec.QueryRowContext(s.background, `
+SELECT id, type, source_id, target_id, workspace_id, lane_id, selected_paths_json, confidence, provenance_json, created_at
+FROM semantic_links WHERE id = ?`, id)
+	var link domain.SemanticLink
+	var typ, selected, provRaw string
+	if err := row.Scan(&link.ID, &typ, &link.SourceID, &link.TargetID, &link.Scope.WorkspaceID, &link.Scope.LaneID, &selected, &link.Confidence, &provRaw, &link.CreatedAt); err != nil {
+		return domain.SemanticLink{}, false
+	}
+	link.Type = domain.SemanticLinkType(typ)
+	link.Scope.SelectedPaths = decodeStringSlice(selected)
+	_ = json.Unmarshal([]byte(provRaw), &link.Provenance)
+	return link, true
+}
+
+func (s *SQLiteSemanticStore) FindState(id string) (domain.StateItem, bool) {
+	row := s.exec.QueryRowContext(s.background, `
+SELECT id, key, value_json, workspace_id, lane_id, selected_paths_json, status, derived_from_json, updated_at
+FROM state_items
+WHERE id = ?`, id)
+	var item domain.StateItem
+	var valueRaw, status, derivedRaw, selected string
+	if err := row.Scan(&item.ID, &item.Key, &valueRaw, &item.Scope.WorkspaceID, &item.Scope.LaneID, &selected, &status, &derivedRaw, &item.UpdatedAt); err != nil {
+		return domain.StateItem{}, false
+	}
+	item.Status = domain.StateItemStatus(status)
+	item.Scope.SelectedPaths = decodeStringSlice(selected)
+	_ = json.Unmarshal([]byte(valueRaw), &item.Value)
+	_ = json.Unmarshal([]byte(derivedRaw), &item.DerivedFrom)
+	return item, true
+}
+
 func (s *SQLiteSemanticStore) FindLoop(id string) (domain.OpenLoop, bool) {
 	row := s.exec.QueryRowContext(s.background, `
 SELECT id, title, state, workspace_id, lane_id, selected_paths_json, priority, owner, blocker, next_action, related_notes_json, created_from, created_at, updated_at

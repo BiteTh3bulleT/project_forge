@@ -10,8 +10,8 @@ import (
 func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	report := ForgeKActivationReadiness(NewStaticActionRegistry(), time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC))
 
-	if report.Phase != "14L" {
-		t.Fatalf("phase=%q, want 14L", report.Phase)
+	if report.Phase != "14M" {
+		t.Fatalf("phase=%q, want 14M", report.Phase)
 	}
 	if report.Status != "partial_live_validation_ready" {
 		t.Fatalf("status=%q, want partial_live_validation_ready", report.Status)
@@ -28,11 +28,11 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	if report.MutationControlsAvailable {
 		t.Fatalf("readiness report exposed mutation controls: %#v", report)
 	}
-	if report.ClosedValidationLanes != 4 || report.TotalValidationLanes != 4 {
-		t.Fatalf("validation lane counts = %d/%d, want 4/4", report.ClosedValidationLanes, report.TotalValidationLanes)
+	if report.ClosedValidationLanes != 5 || report.TotalValidationLanes != 5 {
+		t.Fatalf("validation lane counts = %d/%d, want 5/5", report.ClosedValidationLanes, report.TotalValidationLanes)
 	}
-	if report.AuthorityReadyGates != 1 || report.AuthorityBlockedGates != 5 {
-		t.Fatalf("authority gate counts = ready %d blocked %d, want 1/5", report.AuthorityReadyGates, report.AuthorityBlockedGates)
+	if report.AuthorityReadyGates != 2 || report.AuthorityBlockedGates != 4 {
+		t.Fatalf("authority gate counts = ready %d blocked %d, want 2/4", report.AuthorityReadyGates, report.AuthorityBlockedGates)
 	}
 
 	actions := map[domain.SemanticActionType]ForgeKActivationActionReadiness{}
@@ -43,6 +43,7 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 		domain.ActionValidateKVIdentity,
 		domain.ActionValidateRefShape,
 		domain.ActionCompareRefShape,
+		domain.ActionValidateSourceObject,
 		domain.ActionValidateSemanticOperation,
 	} {
 		got, ok := actions[action]
@@ -72,8 +73,10 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	if authorityGates["control_lane_validation_enforcement"].Status != "ready" {
 		t.Fatalf("control lane validation gate not ready: %#v", authorityGates["control_lane_validation_enforcement"])
 	}
+	if authorityGates["source_object_authority_lookup"].Status != "ready" {
+		t.Fatalf("source object authority gate not ready: %#v", authorityGates["source_object_authority_lookup"])
+	}
 	for _, name := range []string{
-		"source_object_authority_lookup",
 		"courthouse_admission_integration",
 		"live_context_compiler_authority",
 		"governed_semantic_mutation_routing",
@@ -108,8 +111,8 @@ func TestForgeKActivationReadinessFailsClosedWhenActionMissing(t *testing.T) {
 	if report.Status != "blocked" {
 		t.Fatalf("status=%q, want blocked", report.Status)
 	}
-	if report.ClosedValidationLanes != 0 || report.TotalValidationLanes != 4 {
-		t.Fatalf("validation lane counts = %d/%d, want 0/4", report.ClosedValidationLanes, report.TotalValidationLanes)
+	if report.ClosedValidationLanes != 0 || report.TotalValidationLanes != 5 {
+		t.Fatalf("validation lane counts = %d/%d, want 0/5", report.ClosedValidationLanes, report.TotalValidationLanes)
 	}
 	if report.AuthorityReadyGates != 0 || report.AuthorityBlockedGates != 6 {
 		t.Fatalf("authority gate counts = ready %d blocked %d, want 0/6", report.AuthorityReadyGates, report.AuthorityBlockedGates)

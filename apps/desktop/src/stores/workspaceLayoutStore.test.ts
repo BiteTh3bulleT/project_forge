@@ -161,7 +161,7 @@ describe("workspace layout hydration", () => {
     );
   });
 
-  it("spans the main desktop shell instead of creating duplicate monitor desktops", async () => {
+  it("restores secondary desktop shell windows for multi-monitor layouts", async () => {
     const secondaryWindow = {
       label: "forge-build-workbench",
       close: vi.fn(async () => undefined),
@@ -199,15 +199,19 @@ describe("workspace layout hydration", () => {
 
     await useWorkspaceLayoutStore.getState().hydrate("/");
 
-    expect(desktopMocks.createShellWindow).not.toHaveBeenCalled();
-    expect(desktopMocks.spanCurrentWindowAcrossMonitors).toHaveBeenCalled();
-    expect(secondaryWindow.close).toHaveBeenCalled();
+    expect(desktopMocks.createShellWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "forge-build-workbench",
+        route: "/chat",
+        title: "FORGE Chat",
+      }),
+    );
+    expect(desktopMocks.spanCurrentWindowAcrossMonitors).not.toHaveBeenCalled();
+    expect(secondaryWindow.close).not.toHaveBeenCalled();
     expect(staleDetachedToolWindow.close).toHaveBeenCalled();
     expect(useWorkspaceLayoutStore.getState().runtimeWindows).toEqual([
       expect.objectContaining({
         runtimeLabel: "main",
-        currentRoute: "/chat",
-        bounds: { x: 0, y: 0, width: 3840, height: 1040 },
       }),
     ]);
     expect(useWorkspaceLayoutStore.getState().fallbackNotice).toBeNull();
@@ -245,8 +249,26 @@ describe("workspace layout hydration", () => {
 
     await useWorkspaceLayoutStore.getState().hydrate("/");
 
-    expect(desktopMocks.spanCurrentWindowAcrossMonitors).toHaveBeenCalled();
-    expect(desktopMocks.tauriWindow.setPosition).not.toHaveBeenCalled();
-    expect(desktopMocks.tauriWindow.setSize).not.toHaveBeenCalled();
+    expect(desktopMocks.spanCurrentWindowAcrossMonitors).not.toHaveBeenCalled();
+    expect(desktopMocks.tauriWindow.setPosition).toHaveBeenCalled();
+    expect(desktopMocks.tauriWindow.setSize).toHaveBeenCalled();
+    expect(desktopMocks.createShellWindow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "forge-monitor-2",
+        route: "/operator-apps",
+        title: "FORGE Monitor 2",
+      }),
+    );
+    expect(useWorkspaceLayoutStore.getState().layouts[0]?.windows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runtimeLabel: "forge-monitor-2",
+          activeRoute: "/operator-apps",
+          assignedRoutes: ["/operator-apps", "/chat"],
+          targetMonitorId: "right",
+          targetMonitorRole: "secondary_1",
+        }),
+      ]),
+    );
   });
 });

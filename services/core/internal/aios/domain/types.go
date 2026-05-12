@@ -235,6 +235,7 @@ const (
 	ActionValidateKVIdentity        SemanticActionType = "VALIDATE_KV_IDENTITY"
 	ActionValidateRefShape          SemanticActionType = "VALIDATE_REF_SHAPE"
 	ActionCompareRefShape           SemanticActionType = "COMPARE_REF_SHAPE"
+	ActionValidateSourceObject      SemanticActionType = "VALIDATE_SOURCE_OBJECT_AUTHORITY"
 	ActionValidateSemanticOperation SemanticActionType = "VALIDATE_SEMANTIC_OPERATION"
 )
 

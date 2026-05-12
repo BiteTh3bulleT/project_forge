@@ -122,6 +122,39 @@ func TestControlLaneValidationObserverCalledForSemanticOperationValidation(t *te
 	assertControlLaneValidationInputNoForbiddenEffects(t, input)
 }
 
+func TestControlLaneValidationObserverCalledForSourceObjectAuthorityValidation(t *testing.T) {
+	ctx := context.Background()
+	observer := &captureControlLaneValidationObserver{}
+	k := newTestKernelWithControlLaneValidationObserver(observer)
+	mustCreateNote(ctx, k, "note-source-a", "Source A")
+	req := validSourceObjectAuthorityRequest()
+	req.ID = "shadow-source-object-authority"
+	req.DryRun = true
+	req.IdempotencyKey = ""
+
+	res, err := k.Process(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.Success {
+		t.Fatalf("expected source object authority validation success, got %#v", res)
+	}
+	if len(observer.inputs) != 1 {
+		t.Fatalf("observer calls=%d, want 1", len(observer.inputs))
+	}
+	input := observer.inputs[0]
+	if input.Action != string(domain.ActionValidateSourceObject) || input.ValidationKind != "source_object_authority" {
+		t.Fatalf("unexpected observer action/kind: %#v", input)
+	}
+	if !input.Passed || input.Decision != SourceObjectDecisionAccepted {
+		t.Fatalf("unexpected observer decision: %#v", input)
+	}
+	if input.NormalizedRefCount != 1 {
+		t.Fatalf("normalized ref count=%d, want 1", input.NormalizedRefCount)
+	}
+	assertControlLaneValidationInputNoForbiddenEffects(t, input)
+}
+
 func TestControlLaneValidationObserverNotCalledForNormalSemanticWrite(t *testing.T) {
 	ctx := context.Background()
 	observer := &captureControlLaneValidationObserver{}

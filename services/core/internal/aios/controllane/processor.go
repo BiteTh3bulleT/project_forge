@@ -213,6 +213,15 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 		}
 		result.ValidationDetails = append(result.ValidationDetails, detailFor("ref_shape_comparison", nil))
 	}
+	var sourceObjectAuthorityDecision SourceObjectAuthorityDecision
+	if req.Action == domain.ActionValidateSourceObject {
+		sourceObjectAuthorityDecision = EnforceSourceObjectAuthority(req, p.txRunner.ReadStore())
+		if !sourceObjectAuthorityDecision.Accepted {
+			result.StateSummary = sourceObjectAuthorityDecision.ToStateSummary()
+			return p.reject(ctx, req, result, "source_object_authority_validation", []domain.SyscallError{sourceObjectAuthorityDecision.ToSyscallError()}), nil
+		}
+		result.ValidationDetails = append(result.ValidationDetails, detailFor("source_object_authority_validation", nil))
+	}
 	if req.Action == domain.ActionValidateSemanticOperation {
 		semanticOperationDecision = EnforceSemanticOperation(req)
 		if !semanticOperationDecision.Accepted {
@@ -240,6 +249,12 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 				refShapeComparisonDecision = EnforceRefShapeComparison(req)
 			}
 			result.StateSummary = refShapeComparisonDecision.ToStateSummary()
+			result.StateSummary["dryRun"] = true
+		} else if req.Action == domain.ActionValidateSourceObject {
+			if sourceObjectAuthorityDecision.Decision == "" {
+				sourceObjectAuthorityDecision = EnforceSourceObjectAuthority(req, p.txRunner.ReadStore())
+			}
+			result.StateSummary = sourceObjectAuthorityDecision.ToStateSummary()
 			result.StateSummary["dryRun"] = true
 		} else if req.Action == domain.ActionValidateSemanticOperation {
 			if semanticOperationDecision.Decision == "" {
@@ -412,6 +427,7 @@ func (p *Processor) writeAudit(ctx context.Context, req domain.SyscallRequest, r
 		KVIdentityEnforcement:       kvIdentityAuditFields(result.StateSummary),
 		RefShapeValidation:          refShapeAuditFields(result.StateSummary),
 		RefShapeComparison:          refShapeComparisonAuditFields(result.StateSummary),
+		SourceObjectAuthority:       sourceObjectAuthorityAuditFields(result.StateSummary),
 		SemanticOperationValidation: semanticOperationAuditFields(result.StateSummary),
 	})
 	return id
@@ -467,6 +483,21 @@ func semanticOperationAuditFields(summary map[string]any) map[string]any {
 		return nil
 	}
 	fields, _ := summary["semanticOperationValidation"].(map[string]any)
+	if fields == nil {
+		return nil
+	}
+	out := make(map[string]any, len(fields))
+	for key, value := range fields {
+		out[key] = value
+	}
+	return out
+}
+
+func sourceObjectAuthorityAuditFields(summary map[string]any) map[string]any {
+	if summary == nil {
+		return nil
+	}
+	fields, _ := summary["sourceObjectAuthorityValidation"].(map[string]any)
 	if fields == nil {
 		return nil
 	}

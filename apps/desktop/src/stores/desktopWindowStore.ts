@@ -44,6 +44,9 @@ export type DesktopWindow = {
   id: string;
   toolId: ShellToolId;
   hostLabel: string;
+  monitorId?: string | null;
+  createdAtMs?: number;
+  updatedAtMs?: number;
   // in-shell geometry; ignored only by the disabled detached Tauri path
   x: number;
   y: number;
@@ -74,16 +77,30 @@ type DesktopWindowState = {
   focus: (id: string) => Promise<void>;
   // Geometry (browser fallback only)
   move: (id: string, x: number, y: number) => void;
-  moveToHost: (id: string, hostLabel: string, x: number, y: number) => void;
+  moveToHost: (
+    id: string,
+    hostLabel: string,
+    x: number,
+    y: number,
+    monitorId?: string | null,
+  ) => void;
   resize: (id: string, width: number, height: number) => void;
+  reconcileHostAvailability: (hosts: DesktopWindowHostTarget[]) => void;
   // Internal: rehydrate from storage
   hydrate: () => void;
   // Reconcile windows[] against Tauri's real window list
   reconcileFromTauri: (snapshots: ForgeWindowSnapshot[]) => void;
 };
 
+export type DesktopWindowHostTarget = {
+  hostLabel: string;
+  monitorId?: string | null;
+  primary?: boolean;
+};
+
 type OpenOpts = {
   hostLabel?: string;
+  monitorId?: string | null;
   x?: number;
   y?: number;
   width?: number;
@@ -225,13 +242,28 @@ function browserViewportBounds(): {
 
 function normalizeHostLabel(hostLabel: string | null | undefined): string {
   const clean = hostLabel?.trim();
-  if (DETACHED_TAURI_TOOL_WINDOWS) {
-    return clean && clean.length > 0 ? clean : "main";
-  }
-  return "main";
+  return clean && clean.length > 0 ? clean : "main";
+}
+
+function normalizeMonitorId(
+  monitorId: string | null | undefined,
+): string | null {
+  const clean = monitorId?.trim();
+  return clean && clean.length > 0 ? clean : null;
+}
+
+function validTimestamp(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 function normalizeBrowserWindow(window_: DesktopWindow): DesktopWindow {
+  const now = Date.now();
+  const createdAtMs = validTimestamp(window_.createdAtMs)
+    ? window_.createdAtMs
+    : now;
+  const updatedAtMs = validTimestamp(window_.updatedAtMs)
+    ? window_.updatedAtMs
+    : createdAtMs;
   const bounds = browserViewportBounds();
   const width = Math.min(Math.max(window_.width || 960, 420), bounds.maxWidth);
   const height = Math.min(
@@ -243,6 +275,9 @@ function normalizeBrowserWindow(window_: DesktopWindow): DesktopWindow {
   return {
     ...window_,
     hostLabel: normalizeHostLabel(window_.hostLabel),
+    monitorId: normalizeMonitorId(window_.monitorId),
+    createdAtMs,
+    updatedAtMs,
     x: Math.min(
       Math.max(Number.isFinite(window_.x) ? window_.x : 0, 0),
       maxX,
@@ -262,6 +297,20 @@ function makeId(): string {
   return `w-${Date.now().toString(36)}-${idSeq}`;
 }
 
+function withUpdatedAt(
+  window_: DesktopWindow,
+  updatedAtMs = Date.now(),
+): DesktopWindow {
+  return {
+    ...window_,
+    monitorId: normalizeMonitorId(window_.monitorId),
+    createdAtMs: validTimestamp(window_.createdAtMs)
+      ? window_.createdAtMs
+      : updatedAtMs,
+    updatedAtMs,
+  };
+}
+
 function topOf(windows: DesktopWindow[]): DesktopWindow | null {
   if (windows.length === 0) return null;
   let top = windows[0]!;
@@ -269,6 +318,16 @@ function topOf(windows: DesktopWindow[]): DesktopWindow | null {
     if (w.z > top.z) top = w;
   }
   return top;
+}
+
+function primaryHostTarget(
+  hosts: DesktopWindowHostTarget[],
+): DesktopWindowHostTarget {
+  return (
+    hosts.find((host) => host.primary) ??
+    hosts.find((host) => normalizeHostLabel(host.hostLabel) === "main") ??
+    hosts[0] ?? { hostLabel: "main", monitorId: null, primary: true }
+  );
 }
 
 function toolTitle(toolId: ShellToolId): string {
@@ -320,11 +379,21 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
       const existing = get().windows.find((w) => w.toolId === toolId);
       if (existing) {
         await focusTauriWindow(label);
+        const now = Date.now();
+        set((s) => {
+          const windows = s.windows.map((w) =>
+            w.id === existing.id ? withUpdatedAt(w, now) : w,
+          );
+          const next = { ...s, windows, focusedId: existing.id };
+          persist(next);
+          return next;
+        });
         return existing.id;
       }
       if (await focusTauriWindow(label)) {
         const id = makeId();
         const z = nextZ(get().windows);
+        const now = Date.now();
         set((s) => {
           const next = {
             ...s,
@@ -334,6 +403,9 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
                 id,
                 toolId,
                 hostLabel: "main",
+                monitorId: normalizeMonitorId(opts?.monitorId),
+                createdAtMs: now,
+                updatedAtMs: now,
                 x: 0,
                 y: 0,
                 width: 0,
@@ -368,10 +440,14 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
       // optimistically add an entry so the taskbar updates instantly.
       const id = makeId();
       const z = nextZ(get().windows);
+      const now = Date.now();
       const optimistic: DesktopWindow = {
         id,
         toolId,
         hostLabel: "main",
+        monitorId: normalizeMonitorId(opts?.monitorId),
+        createdAtMs: now,
+        updatedAtMs: now,
         x: opts?.x ?? geo.x,
         y: opts?.y ?? geo.y,
         width: opts?.width ?? geo.width,
@@ -395,15 +471,28 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
     }
     const state = get();
     const hostLabel = normalizeHostLabel(opts?.hostLabel);
+    const monitorId = normalizeMonitorId(opts?.monitorId);
     const existing = state.windows.find(
       (w) => w.toolId === toolId && (w.hostLabel || "main") === hostLabel,
     );
     if (existing) {
       const z = nextZ(state.windows);
+      const now = Date.now();
       const next: DesktopWindowState = {
         ...state,
         windows: state.windows.map((w) =>
-          w.id === existing.id ? { ...w, minimized: false, z } : w,
+          w.id === existing.id
+            ? withUpdatedAt(
+                {
+                  ...w,
+                  monitorId:
+                    opts?.monitorId === undefined ? w.monitorId : monitorId,
+                  minimized: false,
+                  z,
+                },
+                now,
+              )
+            : w,
         ),
         focusedId: existing.id,
       };
@@ -414,10 +503,14 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
     const id = makeId();
     const geo = defaultGeometry(state.windows.length);
     const z = nextZ(state.windows);
+    const now = Date.now();
     const newWindow: DesktopWindow = {
       id,
       toolId,
       hostLabel,
+      monitorId,
+      createdAtMs: now,
+      updatedAtMs: now,
       x: opts?.x ?? geo.x,
       y: opts?.y ?? geo.y,
       width: opts?.width ?? geo.width,
@@ -470,8 +563,9 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
       await minimizeTauriWindow(tauriLabelForTool(target.toolId));
     }
     set((s) => {
+      const now = Date.now();
       const windows = s.windows.map((w) =>
-        w.id === id ? { ...w, minimized: true } : w,
+        w.id === id ? withUpdatedAt({ ...w, minimized: true }, now) : w,
       );
       const focusedId =
         s.focusedId === id
@@ -491,8 +585,9 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
     }
     set((s) => {
       const z = nextZ(s.windows);
+      const now = Date.now();
       const windows = s.windows.map((w) =>
-        w.id === id ? { ...w, minimized: false, z } : w,
+        w.id === id ? withUpdatedAt({ ...w, minimized: false, z }, now) : w,
       );
       const next = { ...s, windows, focusedId: id };
       persist(next);
@@ -502,8 +597,11 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
 
   toggleMaximize: (id) =>
     set((s) => {
+      const now = Date.now();
       const windows = s.windows.map((w) =>
-        w.id === id ? { ...w, maximized: !w.maximized } : w,
+        w.id === id
+          ? withUpdatedAt({ ...w, maximized: !w.maximized }, now)
+          : w,
       );
       const next = { ...s, windows };
       persist(next);
@@ -518,8 +616,9 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
     }
     set((s) => {
       const z = nextZ(s.windows);
+      const now = Date.now();
       const windows = s.windows.map((w) =>
-        w.id === id ? { ...w, z, minimized: false } : w,
+        w.id === id ? withUpdatedAt({ ...w, z, minimized: false }, now) : w,
       );
       const next = { ...s, windows, focusedId: id };
       persist(next);
@@ -529,9 +628,10 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
 
   move: (id, x, y) =>
     set((s) => {
+      const now = Date.now();
       const windows = s.windows.map((w) => {
         if (w.id !== id) return w;
-        const nextWindow = { ...w, x, y };
+        const nextWindow = withUpdatedAt({ ...w, x, y }, now);
         return w.tauri ? nextWindow : normalizeBrowserWindow(nextWindow);
       });
       const next = { ...s, windows };
@@ -539,16 +639,24 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
       return next;
     }),
 
-  moveToHost: (id, hostLabel, x, y) =>
+  moveToHost: (id, hostLabel, x, y, monitorId) =>
     set((s) => {
       const cleanHostLabel = normalizeHostLabel(hostLabel);
+      const cleanMonitorId = normalizeMonitorId(monitorId);
+      const now = Date.now();
       const windows = s.windows.map((w) => {
         if (w.id !== id) return w;
         return normalizeBrowserWindow({
-          ...w,
-          hostLabel: cleanHostLabel,
-          x,
-          y,
+          ...withUpdatedAt(
+            {
+              ...w,
+              hostLabel: cleanHostLabel,
+              monitorId: monitorId === undefined ? w.monitorId : cleanMonitorId,
+              x,
+              y,
+            },
+            now,
+          ),
         });
       });
       const next = { ...s, windows, focusedId: id };
@@ -558,12 +666,71 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
 
   resize: (id, width, height) =>
     set((s) => {
+      const now = Date.now();
       const windows = s.windows.map((w) => {
         if (w.id !== id) return w;
-        const nextWindow = { ...w, width, height };
+        const nextWindow = withUpdatedAt({ ...w, width, height }, now);
         return w.tauri ? nextWindow : normalizeBrowserWindow(nextWindow);
       });
       const next = { ...s, windows };
+      persist(next);
+      return next;
+    }),
+
+  reconcileHostAvailability: (hosts) =>
+    set((s) => {
+      const normalizedHosts = hosts.map((host) => ({
+        ...host,
+        hostLabel: normalizeHostLabel(host.hostLabel),
+        monitorId: normalizeMonitorId(host.monitorId),
+      }));
+      const activeHostsByLabel = new Map(
+        normalizedHosts.map((host) => [host.hostLabel, host] as const),
+      );
+      const fallbackHost = primaryHostTarget(normalizedHosts);
+      const fallbackHostLabel = normalizeHostLabel(fallbackHost.hostLabel);
+      const fallbackMonitorId = normalizeMonitorId(fallbackHost.monitorId);
+      const now = Date.now();
+      let changed = false;
+      const windows = s.windows.map((w) => {
+        const ownerHostLabel = normalizeHostLabel(w.hostLabel);
+        const activeHost = activeHostsByLabel.get(ownerHostLabel) ?? null;
+        const windowMonitorId = normalizeMonitorId(w.monitorId);
+        if (
+          activeHost &&
+          (!windowMonitorId || windowMonitorId === activeHost.monitorId)
+        ) {
+          if (windowMonitorId === activeHost.monitorId) return w;
+          changed = true;
+          return withUpdatedAt(
+            {
+              ...w,
+              hostLabel: activeHost.hostLabel,
+              monitorId: activeHost.monitorId,
+            },
+            now,
+          );
+        }
+        changed = true;
+        return normalizeBrowserWindow(
+          withUpdatedAt(
+            {
+              ...w,
+              hostLabel: fallbackHostLabel,
+              monitorId: fallbackMonitorId,
+              x: Math.max(0, w.x),
+              y: Math.max(0, w.y),
+            },
+            now,
+          ),
+        );
+      });
+      if (!changed) return s;
+      const next = {
+        ...s,
+        windows,
+        focusedId: validFocusForWindows(windows, s.focusedId),
+      };
       persist(next);
       return next;
     }),
@@ -609,6 +776,7 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
         }
       }
       let z = nextZ(filtered);
+      const now = Date.now();
       for (const toolId of seenToolIds) {
         if (knownTauriTools.has(toolId)) continue;
         z += 1;
@@ -616,6 +784,9 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
           id: makeId(),
           toolId,
           hostLabel: "main",
+          monitorId: null,
+          createdAtMs: now,
+          updatedAtMs: now,
           x: 0,
           y: 0,
           width: 0,

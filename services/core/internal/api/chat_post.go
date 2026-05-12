@@ -30,6 +30,8 @@ const (
 	chatCrossThreadContextMaxRunes     = 1400
 	chatMemoryObservationMaxItems      = 5
 	chatMemoryObservationMaxRunes      = 1400
+	chatPromptTranscriptMessageRunes   = 1000
+	chatPromptTranscriptTotalRunes     = 8000
 )
 
 const chatAssistantVisibilityGuard = `
@@ -92,7 +94,7 @@ func (s *Server) chatOperatorSystemPrompt() string {
 }
 
 func (s *Server) buildChatPrompt(ctx context.Context, th *chat.ThreadDetail) string {
-	transcript := s.chat.BuildTranscript(th.Messages, chatTranscriptTurns)
+	transcript := s.chat.BuildBoundedTranscript(th.Messages, chatTranscriptTurns, chatPromptTranscriptMessageRunes, chatPromptTranscriptTotalRunes)
 	sys := s.chatOperatorSystemPrompt()
 	threadMemory := buildPersistedThreadMemoryContext(th.Messages, chatTranscriptTurns, chatThreadMemoryContextMaxMessages, chatThreadMemoryContextMaxRunes)
 	attachments := s.buildThreadAttachmentContext(ctx, th)
@@ -1191,6 +1193,43 @@ func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Reques
 			w.(http.Flusher).Flush()
 			return
 		}
+		s.writeSSEEvent(w, map[string]any{"assistantMessage": am})
+		return
+	}
+	if _, ok := s.modelRuntime.(modelRuntimeStreamingService); ok && !gateway.ShouldAttachChatTools(umContent) {
+		s.initSSE(w)
+		emitStage := func(stage string, data map[string]any) {
+			row := map[string]any{"stage": stage, "atMs": time.Now().UnixMilli()}
+			for k, v := range data {
+				row[k] = v
+			}
+			s.writeNamedSSEEvent(w, "agent_stage", row)
+		}
+		emitStage("request_received", map[string]any{"userChars": len(umContent)})
+		perf := classifyChatPerformance(umContent)
+		manifests := []map[string]any(nil)
+		if s.gateway != nil {
+			manifests = s.gateway.ChatToolManifests()
+		}
+		emit := func(event string, payload map[string]any) {
+			s.writeNamedSSEEvent(w, event, payload)
+		}
+		am, reason := s.completeAssistantWithModelRuntimeStream(ctx, threadID, userMessageID, th, umContent, "chat-tools-"+strconv.FormatInt(userMessageID, 10), manifests, nil, requestedModelID, time.Now(), perf, emit)
+		if am != nil {
+			s.writeSSEEvent(w, map[string]any{"assistantMessage": am})
+			return
+		}
+		emitStage("model_runtime_stream_unavailable", map[string]any{"reason": reason})
+		emitStage("stream_downgrade", map[string]any{"reason": "model runtime streaming unavailable; using synchronous assistant completion"})
+		emitStage("sync_completion_start", map[string]any{"threadId": threadID, "userMessageId": userMessageID})
+		am = s.completeAssistantSync(ctx, threadID, userMessageID, th, umContent, ollamaAdapter, false, requestedModelID)
+		if am == nil {
+			b, _ := json.Marshal(map[string]any{"message": "assistant reply could not be saved"})
+			fmt.Fprintf(w, "event: error\ndata: %s\n\n", string(b))
+			w.(http.Flusher).Flush()
+			return
+		}
+		emitStage("sync_completion_done", map[string]any{"messageId": am.ID})
 		s.writeSSEEvent(w, map[string]any{"assistantMessage": am})
 		return
 	}

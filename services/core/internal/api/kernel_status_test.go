@@ -35,8 +35,8 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	}
 
 	actions, ok := payload["validation_actions"].([]any)
-	if !ok || len(actions) != 4 {
-		t.Fatalf("expected four validation actions, got %#v", payload["validation_actions"])
+	if !ok || len(actions) != 5 {
+		t.Fatalf("expected five validation actions, got %#v", payload["validation_actions"])
 	}
 	for _, raw := range actions {
 		action, ok := raw.(map[string]any)
@@ -48,7 +48,7 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 		}
 	}
 
-	if payload["authority_ready_gates"] != float64(1) || payload["authority_blocked_gates"] != float64(5) {
+	if payload["authority_ready_gates"] != float64(2) || payload["authority_blocked_gates"] != float64(4) {
 		t.Fatalf("unexpected authority gate counts: %#v", payload)
 	}
 	gates, ok := payload["authority_gates"].([]any)

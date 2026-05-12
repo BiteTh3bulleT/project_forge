@@ -6,7 +6,7 @@ import (
 	"forge/projectforge/services/core/internal/aios/domain"
 )
 
-const ForgeKActivationReadinessPhase = "14L"
+const ForgeKActivationReadinessPhase = "14M"
 
 type ForgeKActivationReadinessReport struct {
 	GeneratedAt               time.Time                         `json:"generated_at"`
@@ -78,6 +78,7 @@ func ForgeKActivationReadiness(reg ActionRegistry, now time.Time) ForgeKActivati
 		domain.ActionValidateKVIdentity,
 		domain.ActionValidateRefShape,
 		domain.ActionCompareRefShape,
+		domain.ActionValidateSourceObject,
 		domain.ActionValidateSemanticOperation,
 	}
 	actions := make([]ForgeKActivationActionReadiness, 0, len(required))
@@ -202,12 +203,22 @@ func forgeKAuthorityGateReadiness(validationReady bool) []ForgeKAuthorityGateRea
 		},
 		{
 			Name:                     "source_object_authority_lookup",
-			Status:                   "blocked",
-			LiveOwner:                "future.live_authority_owner",
+			Status:                   controlLaneStatus,
+			LiveOwner:                ForgeKActivationOwnerControlLane,
 			RequiredForLiveAuthority: true,
 			MutationAuthority:        false,
-			Reason:                   "ref-shape validation does not prove source object existence or authority",
-			NextStep:                 "design source-object lookup through existing governed stores with fail-closed tests and no simulator import",
+			Reason: func() string {
+				if validationReady {
+					return "source object authority lookup is connected through the live Control Lane read store and fails closed"
+				}
+				return "source object authority lookup validation is not fully closed"
+			}(),
+			NextStep: func() string {
+				if validationReady {
+					return "keep source-object authority lookup read-only while evidence admission and mutation routing gates are designed"
+				}
+				return "close source-object authority validation with fail-closed tests and no simulator import"
+			}(),
 		},
 		{
 			Name:                     "courthouse_admission_integration",

@@ -24,11 +24,12 @@ import {
   virtualDesktopBounds,
   type MonitorSnapshot,
 } from "../lib/desktop";
+import { hostLabelForMonitorOrdinal } from "../lib/desktopHostLabels";
 
 const STORAGE_KEY = "forge.workspace.layouts.v2";
 const STORAGE_KEY_LEGACY = "forge.workspace.layouts.v1";
 const AUTO_RESTORE_TAURI_LAYOUTS = true;
-const EXTENDED_DESKTOP_SINGLE_SHELL = true;
+const EXTENDED_DESKTOP_SINGLE_SHELL = false;
 
 type WindowRole =
   | "chat"
@@ -183,6 +184,52 @@ function defaultWindowForLayout(input: {
     bounds: null,
     fallbackReason: null,
   };
+}
+
+function ensureLayoutMonitorHosts(
+  layout: LayoutPreset,
+  monitors: MonitorSnapshot[],
+  designations: MonitorDesignation,
+) {
+  if (monitors.length <= 1) return false;
+  const catalog = buildMonitorRoleCatalog(monitors, designations);
+  let changed = false;
+
+  for (const monitor of monitors) {
+    if (monitor.ordinal === 0) continue;
+    const monitorRole = catalog.roleByMonitorId[monitor.id] ?? null;
+    const hasHost = layout.windows.some((windowRecord) => {
+      if (windowRecord.targetMonitorId === monitor.id) return true;
+      if (monitorRole && windowRecord.targetMonitorRole === monitorRole) {
+        return true;
+      }
+      return (
+        !windowRecord.targetMonitorId &&
+        !windowRecord.targetMonitorRole &&
+        windowRecord.targetMonitorOrdinal === monitor.ordinal
+      );
+    });
+    if (hasHost) continue;
+
+    layout.windows.push({
+      ...defaultWindowForLayout({
+        runtimeLabel: hostLabelForMonitorOrdinal(monitor.ordinal),
+        title: `FORGE Monitor ${monitor.ordinal + 1}`,
+        role: "mixed",
+        targetMonitorOrdinal: monitor.ordinal,
+        activeRoute: "/operator-apps",
+      }),
+      assignedRoutes: ["/operator-apps", "/chat"],
+      targetMonitorId: monitor.id,
+      targetMonitorRole: monitorRole,
+    });
+    changed = true;
+  }
+
+  if (changed) {
+    layout.updatedAtMs = nowMs();
+  }
+  return changed;
 }
 
 function normalizeMonitorDesignations(raw: unknown): MonitorDesignation {
@@ -862,6 +909,7 @@ async function applyLayout(
   doc.lastMonitorSignature = monitorSignature(resolvedMonitors);
   doc.monitorDesignations = resolvedMonitorState.monitorDesignations;
   doc.lastRestoreAtMs = markRestore ? nowMs() : doc.lastRestoreAtMs;
+  ensureLayoutMonitorHosts(layout, resolvedMonitors, doc.monitorDesignations);
 
   if (EXTENDED_DESKTOP_SINGLE_SHELL && currentLabel === "main") {
     const mainRecord =

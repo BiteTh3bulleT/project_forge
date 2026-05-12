@@ -608,7 +608,6 @@ fn main() {
                     let _ = window.set_decorations(false);
                     let _ = window.set_resizable(true);
                     fit_operator_desktop_window(&window);
-                    let _ = window.maximize();
                     let _ = window.set_focus();
                 }
             }

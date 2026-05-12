@@ -108,7 +108,7 @@ describe("SystemPage", () => {
         canonical_write_committed: false,
       },
       kernel_activation: {
-        phase: "14L",
+        phase: "14M",
         status: "partial_live_validation_ready",
         summary:
           "FORGE-K is active only as live Control Lane validation metadata.",
@@ -116,8 +116,8 @@ describe("SystemPage", () => {
         live_owner: "aios.controllane",
         policy_version: "phase-14f-control-lane-enforcement-v1",
         kernel_runtime_state: "partial_live_validation",
-        closed_validation_lanes: 4,
-        total_validation_lanes: 4,
+        closed_validation_lanes: 5,
+        total_validation_lanes: 5,
         validation_actions: [
           {
             action: "VALIDATE_KV_IDENTITY",
@@ -143,6 +143,18 @@ describe("SystemPage", () => {
             simulator_authority: false,
             live_kernel_authority: false,
           },
+          {
+            action: "VALIDATE_SOURCE_OBJECT_AUTHORITY",
+            capability: "source.object.authority.validate",
+            registered: true,
+            mutating: false,
+            approval_possible: false,
+            supports_dry_run: true,
+            closed: true,
+            live_owner: "aios.controllane",
+            simulator_authority: false,
+            live_kernel_authority: false,
+          },
         ],
         gates: [
           {
@@ -151,8 +163,8 @@ describe("SystemPage", () => {
             reason: "live owner remains aios.controllane",
           },
         ],
-        authority_ready_gates: 1,
-        authority_blocked_gates: 5,
+        authority_ready_gates: 2,
+        authority_blocked_gates: 4,
         authority_gates: [
           {
             name: "control_lane_validation_enforcement",
@@ -165,12 +177,12 @@ describe("SystemPage", () => {
           },
           {
             name: "source_object_authority_lookup",
-            status: "blocked",
-            live_owner: "future.live_authority_owner",
+            status: "ready",
+            live_owner: "aios.controllane",
             required_for_live_authority: true,
             mutation_authority: false,
-            reason: "source object truth lookup is not wired",
-            next_step: "design lookup through existing governed stores",
+            reason: "source object authority lookup is connected through the live Control Lane read store and fails closed",
+            next_step: "keep source-object authority lookup read-only while evidence admission and mutation routing gates are designed",
           },
         ],
         no_effect: {
@@ -238,16 +250,17 @@ describe("SystemPage", () => {
     expect(screen.getByText("FORGE-K live authority disabled")).toBeTruthy();
     expect(screen.getByText("FORGE-K Activation Readiness")).toBeTruthy();
     expect(screen.getAllByText("partial_live_validation_ready").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("4/4")).toBeTruthy();
+    expect(screen.getByText("5/5")).toBeTruthy();
     expect(screen.getByText("Simulator authority disabled")).toBeTruthy();
     expect(screen.getByText("Live Kernel authority disabled")).toBeTruthy();
     expect(screen.getByText("Mutation controls absent")).toBeTruthy();
     expect(screen.getByText("Kernel Authority Gates")).toBeTruthy();
-    expect(screen.getByText("Ready: 1")).toBeTruthy();
-    expect(screen.getByText("Blocked: 5")).toBeTruthy();
+    expect(screen.getByText("Ready: 2")).toBeTruthy();
+    expect(screen.getByText("Blocked: 4")).toBeTruthy();
     expect(screen.getByText("source_object_authority_lookup")).toBeTruthy();
-    expect(screen.getByText("design lookup through existing governed stores")).toBeTruthy();
+    expect(screen.getByText("keep source-object authority lookup read-only while evidence admission and mutation routing gates are designed")).toBeTruthy();
     expect(screen.getByText("VALIDATE_KV_IDENTITY")).toBeTruthy();
+    expect(screen.getByText("VALIDATE_SOURCE_OBJECT_AUTHORITY")).toBeTruthy();
     expect(screen.getByText("ref.shape.validate")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /approve/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /reject/i })).toBeNull();

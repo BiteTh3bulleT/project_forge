@@ -30,10 +30,14 @@ function SearchChangeHarness() {
 }
 
 const desktopMocks = vi.hoisted(() => ({
+  closeTauriWindow: vi.fn(() => Promise.resolve(true)),
+  createShellWindow: vi.fn(() => Promise.resolve({ label: "forge-app-chat" })),
+  focusTauriWindow: vi.fn(() => Promise.resolve(true)),
   isTauriDesktop: vi.fn(() => true),
   listForgeWindows: vi.fn(() => new Promise<never>(() => {})),
   listLinuxWindows: vi.fn(() => Promise.resolve([] as unknown[])),
   focusLinuxWindow: vi.fn(() => Promise.resolve(true)),
+  minimizeTauriWindow: vi.fn(() => Promise.resolve(true)),
   listOperatorApps: vi.fn(() =>
     Promise.resolve([
       {
@@ -82,6 +86,9 @@ const desktopMocks = vi.hoisted(() => ({
 
 vi.mock("../lib/desktop", () => ({
   DETACHED_TAURI_TOOL_WINDOWS: false,
+  closeTauriWindow: desktopMocks.closeTauriWindow,
+  createShellWindow: desktopMocks.createShellWindow,
+  focusTauriWindow: desktopMocks.focusTauriWindow,
   isShellHostWindowLabel: (label: string) =>
     label === "main" ||
     (label.startsWith("forge-") && !label.startsWith("forge-app-")),
@@ -92,6 +99,7 @@ vi.mock("../lib/desktop", () => ({
   listOperatorApps: desktopMocks.listOperatorApps,
   launchOperatorApp: desktopMocks.launchOperatorApp,
   iconAssetUrl: desktopMocks.iconAssetUrl,
+  minimizeTauriWindow: desktopMocks.minimizeTauriWindow,
   monitorSignature: (monitors: Array<{ id: string }>) =>
     monitors.map((monitor) => monitor.id).join(";"),
 }));
@@ -115,6 +123,9 @@ describe("AppShell confined Tauri tool surfaces", () => {
   beforeEach(() => {
     window.localStorage.clear();
     desktopMocks.isTauriDesktop.mockReturnValue(true);
+    desktopMocks.closeTauriWindow.mockClear();
+    desktopMocks.createShellWindow.mockClear();
+    desktopMocks.focusTauriWindow.mockClear();
     desktopMocks.listForgeWindows.mockImplementation(
       () => new Promise<never>(() => {}),
     );
@@ -123,6 +134,7 @@ describe("AppShell confined Tauri tool surfaces", () => {
     desktopMocks.listOperatorApps.mockClear();
     desktopMocks.launchOperatorApp.mockClear();
     desktopMocks.iconAssetUrl.mockClear();
+    desktopMocks.minimizeTauriWindow.mockClear();
     useDesktopWindowStore.setState({
       pinned: ["chat", "jobs", "memory", "models", "approvals", "settings"],
       windows: [
@@ -242,6 +254,128 @@ describe("AppShell confined Tauri tool surfaces", () => {
     );
 
     expect(screen.getByTestId("mock-tool-content")).toBeTruthy();
+  });
+
+  it("shows global taskbar windows on secondary shell hosts", () => {
+    useDesktopWindowStore.setState({
+      windows: [
+        {
+          id: "chat-window",
+          toolId: "chat",
+          hostLabel: "main",
+          x: 100,
+          y: 92,
+          width: 960,
+          height: 640,
+          z: 1,
+          minimized: false,
+          maximized: false,
+          tauri: false,
+        },
+      ],
+      focusedId: null,
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={false} hostLabel="forge-right">
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByTestId("mock-tool-content")).toBeNull();
+    const remoteChatButton = screen.getByTitle("Chat (open)");
+    fireEvent.click(remoteChatButton);
+
+    expect(useDesktopWindowStore.getState().focusedId).toBe("chat-window");
+  });
+
+  it("opens routed surfaces inside secondary monitor hosts", async () => {
+    useDesktopWindowStore.setState({
+      windows: [],
+      focusedId: null,
+    });
+    useWorkspaceLayoutStore.setState({
+      runtimeWindows: [
+        {
+          runtimeLabel: "forge-right",
+          layoutId: "layout",
+          layoutWindowId: "window",
+          role: "mixed",
+          currentRoute: "/operator-apps",
+          title: "FORGE Monitor 2",
+          monitorId: "display-2",
+          isFocused: true,
+          bounds: { x: 1920, y: 0, width: 1200, height: 800 },
+          lastSeenAtMs: 1,
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/operator-apps"]}>
+        <AppShell isMainWindow={false} hostLabel="forge-right">
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mock-tool-content")).toBeTruthy();
+    });
+    expect(useDesktopWindowStore.getState().windows[0]).toMatchObject({
+      toolId: "operator-apps",
+      hostLabel: "forge-right",
+      monitorId: "display-2",
+    });
+  });
+
+  it("represents same-tool windows from multiple hosts on the taskbar", () => {
+    useDesktopWindowStore.setState({
+      windows: [
+        {
+          id: "chat-main",
+          toolId: "chat",
+          hostLabel: "main",
+          x: 100,
+          y: 92,
+          width: 960,
+          height: 640,
+          z: 1,
+          minimized: false,
+          maximized: false,
+          tauri: false,
+        },
+        {
+          id: "chat-right",
+          toolId: "chat",
+          hostLabel: "forge-right",
+          x: 100,
+          y: 92,
+          width: 960,
+          height: 640,
+          z: 2,
+          minimized: false,
+          maximized: false,
+          tauri: false,
+        },
+      ],
+      focusedId: null,
+    });
+
+    const { container } = render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true} hostLabel="main">
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const chatTaskbarItems = Array.from(
+      container.querySelectorAll(".forge-os-taskbar__item--open"),
+    ).filter((item) => item.textContent?.includes("Chat"));
+    expect(chatTaskbarItems).toHaveLength(2);
   });
 
   it("does not duplicate a window across simultaneously mounted shell hosts", () => {

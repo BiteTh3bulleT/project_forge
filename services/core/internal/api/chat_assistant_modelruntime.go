@@ -42,7 +42,7 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 	}
 
 	messages, promptBudget := s.buildModelRuntimePlainChatMessages(ctx, th)
-	preflightTrace, preflightReason := s.modelRuntimeChatPreflight(ctx, meta)
+	preflightTrace, preflightReason := s.modelRuntimeChatPreflight(ctx, meta, modelID)
 	if strings.TrimSpace(preflightReason) != "" {
 		return nil, preflightReason
 	}
@@ -237,7 +237,7 @@ func (s *Server) completeAssistantWithModelRuntime(
 	}
 
 	messages, promptBudget := s.buildModelRuntimePlainChatMessages(ctx, th)
-	preflightTrace, preflightReason := s.modelRuntimeChatPreflight(ctx, meta)
+	preflightTrace, preflightReason := s.modelRuntimeChatPreflight(ctx, meta, modelID)
 	if strings.TrimSpace(preflightReason) != "" {
 		return nil, preflightReason
 	}

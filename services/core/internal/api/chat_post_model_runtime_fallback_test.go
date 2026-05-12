@@ -365,6 +365,39 @@ func TestChatLLMMessagesIncludeEarlierAndRelatedChatMemory(t *testing.T) {
 	}
 }
 
+func TestChatLLMMessagesBoundTranscriptAfterLargeAssistantReply(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+
+	thread, err := srv.chat.CreateThread(context.Background(), "large assistant transcript", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	large := strings.Repeat("z", chatPromptTranscriptMessageRunes*4)
+	for i := 0; i < chatTranscriptTurns; i++ {
+		if _, err := srv.chat.AppendMessage(context.Background(), thread.ID, "assistant", large, nil); err != nil {
+			t.Fatalf("append large assistant message %d: %v", i, err)
+		}
+	}
+	if _, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "latest operator turn", nil); err != nil {
+		t.Fatalf("append latest user message: %v", err)
+	}
+
+	detail, err := srv.chat.GetThread(context.Background(), thread.ID)
+	if err != nil {
+		t.Fatalf("get thread: %v", err)
+	}
+	_, user := srv.buildChatLLMMessages(context.Background(), detail)
+	if !strings.Contains(user, "latest operator turn") {
+		t.Fatalf("expected latest user turn in prompt, got %q", user)
+	}
+	if len(user) > chatPromptTranscriptTotalRunes+chatThreadMemoryContextMaxRunes+chatCrossThreadContextMaxRunes+chatMemoryObservationMaxRunes+4096 {
+		t.Fatalf("expected bounded prompt, got %d chars", len(user))
+	}
+	if strings.Contains(user, strings.Repeat("z", chatPromptTranscriptMessageRunes+1)) {
+		t.Fatalf("expected large assistant content to be truncated")
+	}
+}
+
 func TestChatLLMMessagesIncludeMemoryObservations(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	obs, err := srv.memory.RecordObservation(context.Background(), memory.RecordObservationRequest{
@@ -1386,6 +1419,7 @@ func TestChatPostSyncSameDirectoryWebpageUsesPriorGatewayDirectory(t *testing.T)
 func TestChatPostSyncAmbiguousRequestFallsThroughToModelRuntime(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.loaded["mistral-7b-instruct"] = true
 	srv.modelRuntime = fakeRuntime
 
 	thread, err := srv.chat.CreateThread(context.Background(), "ambiguous runtime", nil)
@@ -1408,9 +1442,71 @@ func TestChatPostSyncAmbiguousRequestFallsThroughToModelRuntime(t *testing.T) {
 	}
 }
 
+func TestChatPostSkipsModelRuntimeWhenSelectedBackendIsUnhealthy(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.models["ollama-chat"] = ModelRuntimeModel{
+		ID:           "ollama-chat",
+		DisplayName:  "Ollama Chat",
+		Backend:      "ollama_compat",
+		Format:       "openai_compat",
+		Status:       "available",
+		Capabilities: []string{"chat", "completion"},
+	}
+	fakeRuntime.health = &ModelRuntimeHealth{
+		OK:     false,
+		Status: "degraded",
+		Details: map[string]any{
+			"backends": map[string]map[string]any{
+				"ollama_compat": {
+					"healthy": false,
+					"detail":  "connect: connection refused",
+				},
+			},
+		},
+	}
+	fakeRuntime.chatErr = &modelRuntimeError{
+		status:  http.StatusServiceUnavailable,
+		code:    "MODEL_CHAT_RETRY_EXHAUSTED",
+		message: "chat execution retry exhausted: model backend unavailable: ollama_compat",
+	}
+	srv.modelRuntime = fakeRuntime
+	t.Setenv("OLLAMA_MODEL", "qwen2.5-coder")
+	t.Setenv("OLLAMA_BASE_URL", "http://127.0.0.1:1")
+
+	thread, err := srv.chat.CreateThread(context.Background(), "unloaded runtime fallback", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	raw := []byte(`{"content":"That took 2 minutes.","requestAssistant":true,"syncAssistant":true,"modelId":"ollama-chat"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	if fakeRuntime.chatCalls != 0 {
+		t.Fatalf("expected preflight to skip unavailable model runtime backend, got chatCalls=%d", fakeRuntime.chatCalls)
+	}
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected fallback assistant message")
+	}
+	stages := payload.AssistantMessage.Metadata["toolPipeline"].(map[string]any)["stages"].([]any)
+	serialized, _ := json.Marshal(stages)
+	if !strings.Contains(string(serialized), "model runtime backend unavailable: ollama_compat") {
+		t.Fatalf("expected fast backend-unloaded fallback stage, got %s", serialized)
+	}
+}
+
 func TestChatPostSyncReportRequestUsesReportOutputBudget(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.loaded["mistral-7b-instruct"] = true
 	srv.modelRuntime = fakeRuntime
 
 	thread, err := srv.chat.CreateThread(context.Background(), "report budget", nil)
@@ -1577,6 +1673,58 @@ func TestChatAssistantStreamUsesModelRuntimeStreamingWhenOllamaUnavailable(t *te
 	}
 	if fakeRuntime.chatCalls != 0 {
 		t.Fatalf("expected streaming path to avoid sync chat call, got %d", fakeRuntime.chatCalls)
+	}
+}
+
+func TestChatAssistantStreamPrefersModelRuntimeStreamingOverConfiguredOllama(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
+	fakeRuntime := &fakeStreamingModelRuntime{fakeModelRuntime: newFakeModelRuntime()}
+	srv.modelRuntime = fakeRuntime
+
+	var ollamaCalled bool
+	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ollamaCalled = true
+		http.Error(w, "native ollama should not be first for runtime-streamable plain chat", http.StatusBadGateway)
+	}))
+	defer ollama.Close()
+
+	ctx := context.Background()
+	if err := upsertSetting(ctx, st.DB, "ollama_base_url", ollama.URL); err != nil {
+		t.Fatalf("set ollama base url: %v", err)
+	}
+	if err := upsertSetting(ctx, st.DB, "ollama_model", "configured-ollama"); err != nil {
+		t.Fatalf("set ollama model: %v", err)
+	}
+
+	thread, err := srv.chat.CreateThread(ctx, "runtime stream preferred", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	um, err := srv.chat.AppendMessage(ctx, thread.ID, "user", "hello via preferred runtime stream", map[string]any{"source": "operator"})
+	if err != nil {
+		t.Fatalf("append user message: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/assistant-stream?userMessageId="+strconv.FormatInt(um.ID, 10),
+		nil,
+	)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "event: token") || !strings.Contains(body, "cloud ") || !strings.Contains(body, "stream") {
+		t.Fatalf("expected runtime token events, got body=%s", body)
+	}
+	if ollamaCalled {
+		t.Fatalf("configured Ollama should not preempt available modelruntime streaming")
+	}
+	if fakeRuntime.streamCalls != 1 || fakeRuntime.chatCalls != 0 {
+		t.Fatalf("expected one runtime stream and no sync chat, stream=%d chat=%d", fakeRuntime.streamCalls, fakeRuntime.chatCalls)
 	}
 }
 
