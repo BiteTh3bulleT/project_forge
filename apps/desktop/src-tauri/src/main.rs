@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use sysinfo::{Disks, Pid, System};
 use tauri::{Manager, PhysicalPosition, PhysicalSize};
@@ -75,6 +75,33 @@ struct OperatorAppLaunchResult {
     launched: bool,
     pid: Option<u32>,
     message: String,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+struct LinuxWindowSnapshot {
+    id: String,
+    title: String,
+    app_id: String,
+    icon_name: Option<String>,
+    icon_path: Option<String>,
+    focused: bool,
+    minimized: bool,
+    native: bool,
+}
+
+#[derive(Deserialize)]
+struct LswtOutput {
+    toplevels: Vec<LswtToplevel>,
+}
+
+#[derive(Deserialize)]
+struct LswtToplevel {
+    identifier: String,
+    title: String,
+    #[serde(rename = "app-id")]
+    app_id: String,
+    activated: Option<bool>,
+    minimized: Option<bool>,
 }
 
 const OPERATOR_APPS: &[OperatorAppDefinition] = &[
@@ -298,6 +325,81 @@ fn find_icon_path(icon_name: &str) -> Option<String> {
     None
 }
 
+fn find_desktop_file_by_id(desktop_id: &str) -> Option<(PathBuf, String)> {
+    for dir in application_dirs() {
+        let candidate = dir.join(desktop_id);
+        if let Ok(contents) = std::fs::read_to_string(&candidate) {
+            return Some((candidate, contents));
+        }
+    }
+    None
+}
+
+fn resolve_linux_window_icon(app_id: &str) -> (Option<String>, Option<String>) {
+    let clean = app_id.trim();
+    if clean.is_empty() {
+        return (None, None);
+    }
+    for desktop_id in [
+        format!("{clean}.desktop"),
+        format!("{}.desktop", clean.to_ascii_lowercase()),
+    ] {
+        if let Some((_path, contents)) = find_desktop_file_by_id(&desktop_id) {
+            if let Some(icon) = parse_desktop_value(&contents, "Icon") {
+                return (Some(icon.clone()), find_icon_path(&icon));
+            }
+        }
+    }
+    (Some(clean.to_string()), find_icon_path(clean))
+}
+
+fn is_forge_shell_toplevel(app_id: &str, title: &str) -> bool {
+    let app = app_id.trim().to_ascii_lowercase();
+    let title = title.trim().to_ascii_lowercase();
+    app == "forge_desktop"
+        || app == "dev.forge.workshop"
+        || app.contains("forge_desktop")
+        || title == "forge"
+        || title.starts_with("forge build")
+}
+
+fn linux_window_from_toplevel(toplevel: LswtToplevel) -> Option<LinuxWindowSnapshot> {
+    let app_id = toplevel.app_id.trim().to_string();
+    let title = toplevel.title.trim().to_string();
+    let identifier = toplevel.identifier.trim().to_string();
+    if identifier.is_empty() || (app_id.is_empty() && title.is_empty()) {
+        return None;
+    }
+    if is_forge_shell_toplevel(&app_id, &title) {
+        return None;
+    }
+    let (icon_name, icon_path) = resolve_linux_window_icon(&app_id);
+    Some(LinuxWindowSnapshot {
+        id: identifier,
+        title: if title.is_empty() {
+            app_id.clone()
+        } else {
+            title
+        },
+        app_id,
+        icon_name,
+        icon_path,
+        focused: toplevel.activated.unwrap_or(false),
+        minimized: toplevel.minimized.unwrap_or(false),
+        native: true,
+    })
+}
+
+fn parse_linux_window_snapshots(raw: &str) -> Result<Vec<LinuxWindowSnapshot>, String> {
+    let output: LswtOutput =
+        serde_json::from_str(raw).map_err(|err| format!("failed to parse lswt output: {err}"))?;
+    Ok(output
+        .toplevels
+        .into_iter()
+        .filter_map(linux_window_from_toplevel)
+        .collect())
+}
+
 fn enrich_operator_app(app: &OperatorAppDefinition) -> OperatorApp {
     let mut enriched = OperatorApp {
         id: app.id.to_string(),
@@ -449,6 +551,48 @@ fn launch_operator_app(app_id: String) -> Result<OperatorAppLaunchResult, String
     })
 }
 
+#[tauri::command]
+fn list_linux_windows() -> Result<Vec<LinuxWindowSnapshot>, String> {
+    if !cfg!(target_os = "linux") {
+        return Ok(Vec::new());
+    }
+    let output = std::process::Command::new("lswt")
+        .arg("--json")
+        .output()
+        .map_err(|err| format!("failed to run lswt: {err}"))?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_linux_window_snapshots(&stdout)
+}
+
+#[tauri::command]
+fn focus_linux_window(window_id: String) -> Result<bool, String> {
+    let target = list_linux_windows()?
+        .into_iter()
+        .find(|window| window.id == window_id)
+        .ok_or_else(|| "linux window is no longer available".to_string())?;
+
+    let mut command = std::process::Command::new("wlrctl");
+    command.args(["toplevel", "focus"]);
+    if !target.app_id.trim().is_empty() {
+        command.arg(format!("app_id:{}", target.app_id));
+    }
+    if !target.title.trim().is_empty() {
+        command.arg(format!("title:{}", target.title));
+    }
+
+    let output = command
+        .output()
+        .map_err(|err| format!("failed to run wlrctl: {err}"))?;
+    if output.status.success() {
+        Ok(true)
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .on_window_event(|window, event| {
@@ -473,7 +617,9 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             read_system_diagnostics,
             list_operator_apps,
-            launch_operator_app
+            launch_operator_app,
+            list_linux_windows,
+            focus_linux_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running FORGE desktop");
@@ -546,8 +692,7 @@ mod tests {
             assert!(
                 OPERATOR_APPS
                     .iter()
-                    .any(|app| app.executable == "foot"
-                        && app.launch_args == &["-e", wrapper]),
+                    .any(|app| app.executable == "foot" && app.launch_args == &["-e", wrapper]),
                 "missing fixed operator launcher for {wrapper}"
             );
         }
@@ -584,5 +729,39 @@ mod tests {
                 assert!(!arg.contains("|"), "pipe found in {}", app.id);
             }
         }
+    }
+
+    #[test]
+    fn linux_window_snapshots_filter_shell_and_keep_native_apps() {
+        let raw = r#"{
+            "toplevels": [
+                {
+                    "identifier": "firefox-window",
+                    "title": "Mozilla Firefox",
+                    "app-id": "firefox"
+                },
+                {
+                    "identifier": "forge-window",
+                    "title": "FORGE Build",
+                    "app-id": "forge_desktop"
+                }
+            ]
+        }"#;
+
+        let windows = parse_linux_window_snapshots(raw).expect("valid lswt json");
+
+        assert_eq!(
+            windows,
+            vec![LinuxWindowSnapshot {
+                id: "firefox-window".to_string(),
+                title: "Mozilla Firefox".to_string(),
+                app_id: "firefox".to_string(),
+                icon_name: Some("firefox".to_string()),
+                icon_path: find_icon_path("firefox"),
+                focused: false,
+                minimized: false,
+                native: true,
+            }]
+        );
     }
 }

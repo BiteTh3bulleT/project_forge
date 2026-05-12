@@ -83,6 +83,8 @@ in
     forgeDesktopShell
     forgeOperatorToolbelt
     pkgs.labwc
+    pkgs.lswt
+    pkgs.wlrctl
     pkgs.cage
     pkgs.foot
     fileManager

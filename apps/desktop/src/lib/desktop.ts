@@ -88,6 +88,17 @@ export type OperatorAppLaunchResult = {
   message: string;
 };
 
+export type LinuxWindowSnapshot = {
+  id: string;
+  title: string;
+  appId: string;
+  iconName?: string | null;
+  iconPath?: string | null;
+  focused: boolean;
+  minimized: boolean;
+  native: boolean;
+};
+
 export function isTauriDesktop() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -102,8 +113,8 @@ export function isShellHostWindowLabel(label: string | null | undefined) {
     clean === "main" ||
     Boolean(
       clean &&
-        clean.startsWith("forge-") &&
-        !clean.startsWith(DETACHED_TOOL_WINDOW_LABEL_PREFIX),
+      clean.startsWith("forge-") &&
+      !clean.startsWith(DETACHED_TOOL_WINDOW_LABEL_PREFIX),
     )
   );
 }
@@ -536,6 +547,39 @@ function parseOperatorAppLaunchResultPayload(
   };
 }
 
+function parseLinuxWindowPayload(raw: unknown): LinuxWindowSnapshot | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  const appId = value.appId ?? value.app_id;
+  if (
+    typeof value.id !== "string" ||
+    typeof value.title !== "string" ||
+    typeof appId !== "string"
+  ) {
+    return null;
+  }
+  return {
+    id: value.id,
+    title: value.title,
+    appId,
+    iconName:
+      typeof value.iconName === "string"
+        ? value.iconName
+        : typeof value.icon_name === "string"
+          ? value.icon_name
+          : null,
+    iconPath:
+      typeof value.iconPath === "string"
+        ? value.iconPath
+        : typeof value.icon_path === "string"
+          ? value.icon_path
+          : null,
+    focused: typeof value.focused === "boolean" ? value.focused : false,
+    minimized: typeof value.minimized === "boolean" ? value.minimized : false,
+    native: typeof value.native === "boolean" ? value.native : true,
+  };
+}
+
 export async function createShellWindow(options: {
   label: string;
   route: string;
@@ -718,4 +762,33 @@ export async function launchOperatorApp(
     throw new Error("invalid operator app launch response");
   }
   return parsed;
+}
+
+export async function listLinuxWindows(): Promise<LinuxWindowSnapshot[]> {
+  if (!isTauriDesktop()) return [];
+  try {
+    const windows = await invoke("list_linux_windows");
+    if (!Array.isArray(windows)) return [];
+    return windows
+      .map((window_) => parseLinuxWindowPayload(window_))
+      .filter((window_): window_ is LinuxWindowSnapshot => Boolean(window_));
+  } catch (error) {
+    if (typeof console !== "undefined") {
+      console.error("[FORGE] failed to list Linux windows", error);
+    }
+    return [];
+  }
+}
+
+export async function focusLinuxWindow(windowId: string): Promise<boolean> {
+  if (!isTauriDesktop()) return false;
+  try {
+    const result = await invoke("focus_linux_window", { windowId });
+    return result === true;
+  } catch (error) {
+    if (typeof console !== "undefined") {
+      console.error(`[FORGE] failed to focus Linux window ${windowId}`, error);
+    }
+    return false;
+  }
 }

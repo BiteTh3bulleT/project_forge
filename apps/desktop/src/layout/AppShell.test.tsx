@@ -32,6 +32,8 @@ function SearchChangeHarness() {
 const desktopMocks = vi.hoisted(() => ({
   isTauriDesktop: vi.fn(() => true),
   listForgeWindows: vi.fn(() => new Promise<never>(() => {})),
+  listLinuxWindows: vi.fn(() => Promise.resolve([] as unknown[])),
+  focusLinuxWindow: vi.fn(() => Promise.resolve(true)),
   listOperatorApps: vi.fn(() =>
     Promise.resolve([
       {
@@ -68,7 +70,8 @@ const desktopMocks = vi.hoisted(() => ({
         iconName: "firefox",
         iconPath:
           "/run/current-system/sw/share/icons/hicolor/128x128/apps/firefox.png",
-        desktopFile: "/run/current-system/sw/share/applications/firefox.desktop",
+        desktopFile:
+          "/run/current-system/sw/share/applications/firefox.desktop",
         native: true,
       },
     ]),
@@ -84,6 +87,8 @@ vi.mock("../lib/desktop", () => ({
     (label.startsWith("forge-") && !label.startsWith("forge-app-")),
   isTauriDesktop: desktopMocks.isTauriDesktop,
   listForgeWindows: desktopMocks.listForgeWindows,
+  listLinuxWindows: desktopMocks.listLinuxWindows,
+  focusLinuxWindow: desktopMocks.focusLinuxWindow,
   listOperatorApps: desktopMocks.listOperatorApps,
   launchOperatorApp: desktopMocks.launchOperatorApp,
   iconAssetUrl: desktopMocks.iconAssetUrl,
@@ -100,9 +105,10 @@ vi.mock("../lib/api", () => ({
 }));
 
 vi.mock("./toolRegistry", () => ({
-  getToolComponent: () => function MockToolComponent() {
-    return <div data-testid="mock-tool-content">Mock tool content</div>;
-  },
+  getToolComponent: () =>
+    function MockToolComponent() {
+      return <div data-testid="mock-tool-content">Mock tool content</div>;
+    },
 }));
 
 describe("AppShell confined Tauri tool surfaces", () => {
@@ -112,6 +118,8 @@ describe("AppShell confined Tauri tool surfaces", () => {
     desktopMocks.listForgeWindows.mockImplementation(
       () => new Promise<never>(() => {}),
     );
+    desktopMocks.listLinuxWindows.mockResolvedValue([]);
+    desktopMocks.focusLinuxWindow.mockResolvedValue(true);
     desktopMocks.listOperatorApps.mockClear();
     desktopMocks.launchOperatorApp.mockClear();
     desktopMocks.iconAssetUrl.mockClear();
@@ -177,7 +185,9 @@ describe("AppShell confined Tauri tool surfaces", () => {
     );
 
     expect(container.querySelector(".forge-os-window__body")).toBeTruthy();
-    expect(container.querySelector(".forge-os-window__body--docked")).toBeNull();
+    expect(
+      container.querySelector(".forge-os-window__body--docked"),
+    ).toBeNull();
   });
 
   it("does not poll detached Tauri window state in confined shell mode", () => {
@@ -338,14 +348,10 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(screen.getByText("Knowledge")).toBeTruthy();
     expect(screen.getByText("Governance")).toBeTruthy();
     expect(
-      screen
-        .getByText("Native Apps")
-        .closest(".forge-os-startmenu__panel"),
+      screen.getByText("Native Apps").closest(".forge-os-startmenu__panel"),
     ).toBeTruthy();
     expect(
-      screen
-        .getByText("FORGE Surfaces")
-        .closest(".forge-os-startmenu__panel"),
+      screen.getByText("FORGE Surfaces").closest(".forge-os-startmenu__panel"),
     ).toBeTruthy();
     expect(screen.getAllByText(/\d+ apps?/).length).toBeGreaterThan(0);
     expect(screen.queryByText("Native")).toBeNull();
@@ -398,5 +404,42 @@ describe("AppShell confined Tauri tool surfaces", () => {
       screen.getByRole("button", { name: "Terminal native app" }),
     ).toBeTruthy();
     expect(screen.getByText("PID 4242")).toBeTruthy();
+  });
+
+  it("shows compositor-reported Linux apps on the taskbar", async () => {
+    desktopMocks.listLinuxWindows.mockResolvedValue([
+      {
+        id: "firefox-window",
+        title: "Mozilla Firefox",
+        appId: "firefox",
+        iconName: "firefox",
+        iconPath:
+          "/run/current-system/sw/share/icons/hicolor/128x128/apps/firefox.png",
+        focused: false,
+        minimized: false,
+        native: true,
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const firefox = await screen.findByRole("button", {
+      name: "Mozilla Firefox linux app",
+    });
+    expect(firefox).toBeTruthy();
+
+    fireEvent.click(firefox);
+
+    await waitFor(() => {
+      expect(desktopMocks.focusLinuxWindow).toHaveBeenCalledWith(
+        "firefox-window",
+      );
+    });
   });
 });

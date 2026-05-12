@@ -15,11 +15,14 @@ import { api } from "../lib/api";
 import {
   DETACHED_TAURI_TOOL_WINDOWS,
   iconAssetUrl,
+  focusLinuxWindow,
   isShellHostWindowLabel,
   isTauriDesktop,
   launchOperatorApp,
   listForgeWindows,
+  listLinuxWindows,
   listOperatorApps,
+  type LinuxWindowSnapshot,
   type OperatorApp,
 } from "../lib/desktop";
 import { useUiStore } from "../stores/uiStore";
@@ -100,7 +103,8 @@ const FALLBACK_OPERATOR_APPS: OperatorApp[] = [
     executable: "firefox",
     category: "Internet",
     iconName: "firefox",
-    iconPath: "/run/current-system/sw/share/icons/hicolor/128x128/apps/firefox.png",
+    iconPath:
+      "/run/current-system/sw/share/icons/hicolor/128x128/apps/firefox.png",
     desktopFile: "/run/current-system/sw/share/applications/firefox.desktop",
     native: true,
   },
@@ -232,6 +236,7 @@ export function AppShell(props: AppShellProps) {
   const [runningOperatorApps, setRunningOperatorApps] = useState<
     RunningOperatorApp[]
   >([]);
+  const [linuxWindows, setLinuxWindows] = useState<LinuxWindowSnapshot[]>([]);
   const [now, setNow] = useState(() => new Date());
   const [contextMenu, setContextMenu] = useState<DockContextMenu | null>(null);
   const isMainWindow = props.isMainWindow;
@@ -302,6 +307,22 @@ export function AppShell(props: AppShellProps) {
   }, [isMainWindow]);
 
   useEffect(() => {
+    if (!isMainWindow || !isTauriDesktop()) return;
+    let cancelled = false;
+    async function loadLinuxWindows() {
+      const nextWindows = await listLinuxWindows();
+      if (cancelled) return;
+      setLinuxWindows(nextWindows);
+    }
+    void loadLinuxWindows();
+    const id = window.setInterval(() => void loadLinuxWindows(), 1500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [isMainWindow]);
+
+  useEffect(() => {
     const onStorage = (event: StorageEvent) => {
       if (
         event.key === "forge.os.windows.v1" ||
@@ -332,7 +353,9 @@ export function AppShell(props: AppShellProps) {
       } catch (error) {
         if (cancelled) return;
         setOperatorApps(FALLBACK_OPERATOR_APPS);
-        setOperatorAppStatus(error instanceof Error ? error.message : String(error));
+        setOperatorAppStatus(
+          error instanceof Error ? error.message : String(error),
+        );
       }
     }
     void loadOperatorApps();
@@ -345,8 +368,7 @@ export function AppShell(props: AppShellProps) {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName?.toLowerCase();
-      const editing =
-        tag === "input" || tag === "textarea" || tag === "select";
+      const editing = tag === "input" || tag === "textarea" || tag === "select";
       if (event.key === "Escape") {
         if (contextMenu) {
           setContextMenu(null);
@@ -412,7 +434,9 @@ export function AppShell(props: AppShellProps) {
           : result.message,
       );
     } catch (error) {
-      setOperatorAppStatus(error instanceof Error ? error.message : String(error));
+      setOperatorAppStatus(
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 
@@ -431,7 +455,11 @@ export function AppShell(props: AppShellProps) {
     );
   }
 
-  function moveAcrossShellHosts(win: DesktopWindow, nextX: number, nextY: number) {
+  function moveAcrossShellHosts(
+    win: DesktopWindow,
+    nextX: number,
+    nextY: number,
+  ) {
     const transferred = resolveTransferredWindow(win, nextX, nextY);
     if (transferred.hostLabel !== (win.hostLabel || "main")) {
       moveToHost(win.id, transferred.hostLabel, transferred.x, transferred.y);
@@ -482,8 +510,7 @@ export function AppShell(props: AppShellProps) {
       if (!tool) continue;
       const window_ =
         windows.find(
-          (w) =>
-            w.toolId === toolId && (w.hostLabel || "main") === hostLabel,
+          (w) => w.toolId === toolId && (w.hostLabel || "main") === hostLabel,
         ) ?? null;
       tiles.push({ kind: "tile", tool, window: window_, pinned: true });
     }
@@ -537,6 +564,25 @@ export function AppShell(props: AppShellProps) {
         ? visibleWindows.filter(({ window }) => !window.tauri)
         : visibleWindows,
     [detachedTauriShell, visibleWindows],
+  );
+  const linuxWindowKeys = useMemo(
+    () =>
+      new Set(
+        linuxWindows.flatMap((window_) => [
+          window_.appId.toLowerCase(),
+          window_.title.toLowerCase(),
+        ]),
+      ),
+    [linuxWindows],
+  );
+  const pendingOperatorApps = useMemo(
+    () =>
+      runningOperatorApps.filter((item) => {
+        const appKey = item.app.executable.toLowerCase();
+        const labelKey = item.app.label.toLowerCase();
+        return !linuxWindowKeys.has(appKey) && !linuxWindowKeys.has(labelKey);
+      }),
+    [linuxWindowKeys, runningOperatorApps],
   );
 
   return (
@@ -714,9 +760,7 @@ export function AppShell(props: AppShellProps) {
                   className={cx(
                     "forge-os-taskbar__item",
                     isActive && "forge-os-taskbar__item--active",
-                    !isActive &&
-                      isOpen &&
-                      "forge-os-taskbar__item--open",
+                    !isActive && isOpen && "forge-os-taskbar__item--open",
                     isMinimized && "forge-os-taskbar__item--minimized",
                   )}
                   aria-current={isActive ? "page" : undefined}
@@ -741,7 +785,33 @@ export function AppShell(props: AppShellProps) {
                 </button>
               );
             })}
-            {runningOperatorApps.map((item) => (
+            {linuxWindows.map((window_) => (
+              <button
+                key={window_.id}
+                type="button"
+                onClick={() => void focusLinuxWindow(window_.id)}
+                className={cx(
+                  "forge-os-taskbar__item",
+                  "forge-os-taskbar__item--native",
+                  "forge-os-taskbar__item--open",
+                  window_.focused && "forge-os-taskbar__item--active",
+                  window_.minimized && "forge-os-taskbar__item--minimized",
+                )}
+                aria-label={`${window_.title} linux app`}
+                title={
+                  window_.appId
+                    ? `${window_.title} · ${window_.appId}`
+                    : window_.title
+                }
+              >
+                <LinuxWindowIcon
+                  window={window_}
+                  className="forge-os-taskbar__native-icon"
+                />
+                <span className="forge-os-taskbar__name">{window_.title}</span>
+              </button>
+            ))}
+            {pendingOperatorApps.map((item) => (
               <button
                 key={item.app.id}
                 type="button"
@@ -750,7 +820,9 @@ export function AppShell(props: AppShellProps) {
                   if (event.button === 1) {
                     event.preventDefault();
                     setRunningOperatorApps((items) =>
-                      items.filter((candidate) => candidate.app.id !== item.app.id),
+                      items.filter(
+                        (candidate) => candidate.app.id !== item.app.id,
+                      ),
                     );
                   }
                 }}
@@ -766,13 +838,9 @@ export function AppShell(props: AppShellProps) {
                   app={item.app}
                   className="forge-os-taskbar__native-icon"
                 />
-                <span className="forge-os-taskbar__name">
-                  {item.app.label}
-                </span>
+                <span className="forge-os-taskbar__name">{item.app.label}</span>
                 {item.pid ? (
-                  <span className="forge-os-taskbar__pid">
-                    PID {item.pid}
-                  </span>
+                  <span className="forge-os-taskbar__pid">PID {item.pid}</span>
                 ) : null}
               </button>
             ))}
@@ -873,11 +941,7 @@ function DesktopWallpaper() {
           media="(orientation: portrait)"
           srcSet="/brand/forge-vertical.png"
         />
-        <img
-          src="/brand/forge-horizontal.png"
-          alt=""
-          draggable={false}
-        />
+        <img src="/brand/forge-horizontal.png" alt="" draggable={false} />
       </picture>
       <div className="forge-os-wallpaper__gradient" />
       <div className="forge-os-wallpaper__grid" />
@@ -1135,16 +1199,15 @@ function StartMenu(props: {
   const query = props.query.trim().toLowerCase();
   const filteredTools = useMemo(() => {
     return allShellTools.filter((tool) => {
-      const haystack = `${tool.label} ${tool.shortLabel} ${tool.description}`
-        .toLowerCase();
+      const haystack =
+        `${tool.label} ${tool.shortLabel} ${tool.description}`.toLowerCase();
       return !query || haystack.includes(query);
     });
   }, [query]);
   const filteredApps = useMemo(() => {
     return props.operatorApps.filter((app) => {
       const haystack =
-        `${app.label} ${app.description} ${app.executable} ${app.category} ${app.iconName ?? ""}`
-          .toLowerCase();
+        `${app.label} ${app.description} ${app.executable} ${app.category} ${app.iconName ?? ""}`.toLowerCase();
       return !query || haystack.includes(query);
     });
   }, [props.operatorApps, query]);
@@ -1247,7 +1310,8 @@ function StartMenu(props: {
                 Native Apps
               </div>
               <div className="forge-os-startmenu__panel-meta">
-                {filteredApps.length} {filteredApps.length === 1 ? "app" : "apps"}
+                {filteredApps.length}{" "}
+                {filteredApps.length === 1 ? "app" : "apps"}
               </div>
             </div>
             <div className="forge-os-startmenu__list forge-os-startmenu__list--native">
@@ -1392,13 +1456,22 @@ function groupAppsByCategory(apps: OperatorApp[]) {
 
 function shellToolCategory(id: ShellToolId) {
   if (
-    ["chat", "start", "dashboard", "system", "settings", "operator-apps"].includes(
-      id,
-    )
+    [
+      "chat",
+      "start",
+      "dashboard",
+      "system",
+      "settings",
+      "operator-apps",
+    ].includes(id)
   ) {
     return "Core";
   }
-  if (["workbench", "canvas", "dossiers", "jobs", "reviews", "layouts"].includes(id)) {
+  if (
+    ["workbench", "canvas", "dossiers", "jobs", "reviews", "layouts"].includes(
+      id,
+    )
+  ) {
     return "Workspace";
   }
   if (
@@ -1415,9 +1488,14 @@ function shellToolCategory(id: ShellToolId) {
     return "Knowledge";
   }
   if (
-    ["models", "gateway", "adapters", "command", "action-lanes", "automation"].includes(
-      id,
-    )
+    [
+      "models",
+      "gateway",
+      "adapters",
+      "command",
+      "action-lanes",
+      "automation",
+    ].includes(id)
   ) {
     return "Runtime";
   }
@@ -1430,9 +1508,7 @@ function shellToolCategory(id: ShellToolId) {
       "strategies",
       "execution-permissions",
       "inspectors",
-    ].includes(
-      id,
-    )
+    ].includes(id)
   ) {
     return "Governance";
   }
@@ -1467,6 +1543,35 @@ function OperatorAppIcon(props: { app: OperatorApp; className?: string }) {
   );
 }
 
+function LinuxWindowIcon(props: {
+  window: LinuxWindowSnapshot;
+  className?: string;
+}) {
+  const iconPath = props.window.iconPath?.trim();
+  if (iconPath) {
+    return (
+      <img
+        src={iconAssetUrl(iconPath)}
+        alt={`${props.window.title} icon`}
+        className={props.className}
+        draggable={false}
+      />
+    );
+  }
+  const label = props.window.title || props.window.appId;
+  const short = label
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+  return (
+    <span className={cx("forge-os-startmenu__app-icon", props.className)}>
+      {short || "LN"}
+    </span>
+  );
+}
+
 function DockContextMenuView(props: {
   menu: DockContextMenu;
   onClose: () => void;
@@ -1490,7 +1595,9 @@ function DockContextMenuView(props: {
       style={{ left, top }}
       onMouseDown={(event) => event.stopPropagation()}
     >
-      <div className="forge-os-context-menu__title">{props.menu.tool.label}</div>
+      <div className="forge-os-context-menu__title">
+        {props.menu.tool.label}
+      </div>
       <button
         type="button"
         role="menuitem"
