@@ -55,6 +55,14 @@ dev session, and selects a non-embedding default model when available. Set
 `FORGE_DISABLE_OLLAMA_AUTODETECT=true` or any explicit runtime backend env var
 to bypass autodetect.
 
+### Ollama native chat adapter
+
+| Var | Consumer | Default | Purpose |
+|---|---|---|---|
+| `FORGE_OLLAMA_CHAT_NUM_PREDICT` | native Ollama `/api/chat` adapter | `96` | Sets Ollama `options.num_predict` for native chat and streaming chat calls. Set `0` to omit this option. |
+| `FORGE_OLLAMA_CHAT_NUM_CTX` | native Ollama `/api/chat` adapter | `1024` | Sets Ollama `options.num_ctx` for native chat and streaming chat calls. Set `0` to omit this option. |
+| `FORGE_OLLAMA_CHAT_NUM_THREAD` | native Ollama `/api/chat` adapter | unset | Sets Ollama `options.num_thread` when positive. Unset or `0` omits this option. |
+
 ### Model runtime GPU/safe-mode policy
 
 | Var | Consumer | Default | Purpose |
