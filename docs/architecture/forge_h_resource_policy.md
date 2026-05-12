@@ -8,6 +8,8 @@ FORGE-H consumes read-only Host Kernel Bridge diagnostic snapshots and produces 
 
 It gives FORGE resource judgment. It does not give FORGE host mutation authority.
 
+Phase M5 adds pure GPU work-class labels in `services/core/internal/forgeh/cuda_lane.go` for future VRAM/CUDA governance vocabulary. These labels do not allocate VRAM, launch kernels, call modelruntime, change scheduling behavior, add routes, or affect live state.
+
 ## Role
 
 FORGE-H answers operational questions such as:

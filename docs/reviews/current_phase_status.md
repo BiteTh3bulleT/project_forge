@@ -1,6 +1,6 @@
 # FORGE-K Current Phase Status
 
-Latest workstation/runtime note: M4 external vLLM profile is closed as `PARTIAL / DISABLED_BY_DEFAULT / NO_LIVE_AUTHORITY_CHANGE`, and M5 has started as `DESIGN_ONLY / READINESS_REVIEW` for the FORGE Workstation substrate, governed Nix mutation proposals, modelruntime backend profiles, FORGE-H VRAM/CUDA governance, safe-mode recovery profiles, and read-only system cockpit planning. No host mutation, `systemctl`, `nixos-rebuild`, model load/unload behavior change, semantic memory write, or FORGE-K live authority migration is introduced by M5.
+Latest workstation/runtime note: M4 external vLLM profile is closed as `PARTIAL / DISABLED_BY_DEFAULT / NO_LIVE_AUTHORITY_CHANGE`, and M5 is closed as `DESIGN_ONLY / READINESS_REVIEW / PARTIAL_PURE_LABELS / NO_LIVE_AUTHORITY_CHANGE` for the FORGE Workstation substrate, governed Nix mutation proposals, modelruntime backend profiles, FORGE-H VRAM/CUDA governance, safe-mode recovery profiles, and read-only system cockpit planning. M5 adds pure backend-profile labels under `services/core/internal/modelruntime` and pure GPU work-class labels under `services/core/internal/forgeh`; it does not add host mutation, `systemctl`, `nixos-rebuild`, shell mutation controls, model load/unload behavior change, semantic memory write, storage cutover, or FORGE-K live authority migration.
 
 Companion to `docs/reviews/full_project_review.md` (2026-05-03).
 

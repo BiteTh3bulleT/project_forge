@@ -147,6 +147,13 @@ reserve `/forge/runtime/resource-policy` and write an inert environment
 file only when explicitly enabled. They do not start services, pause
 workers, load models, unload models, or mutate the host.
 
+Phase M5 adds design documentation for a future FORGE Workstation
+substrate and governed Nix mutation proposals. It does not add a host
+apply adapter, `nixos-rebuild` path, `systemctl` path, package-manager
+path, or shell mutation control. Nix mutation proposals remain
+DESIGN_ONLY until a later phase adds durable records, build proof,
+VM smoke proof, rollback proof, approval proof, and a governed adapter.
+
 They do not migrate live authority, fork Linux, execute tools, add
 routes, mutate modelruntime behavior, or make Nix mandatory.
 
