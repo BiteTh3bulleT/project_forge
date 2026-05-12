@@ -112,11 +112,8 @@ export type {
 } from "./api/types";
 
 import type {
-  ChatThreadSummary,
-  ChatMessage,
   RemoteTelegramPayload,
   RemoteDiscordPayload,
-  ChatThreadDetail,
   CanvasBoard,
   CanvasNote,
   CanvasBoardDetail,
@@ -141,21 +138,13 @@ import type {
   SettingsRecord,
   TelegramStatusResponse,
   DiscordGatewayStatusResponse,
-  ModelRuntimeModel,
-  ModelRuntimeImportResult,
-  ModelRuntimeLoadResult,
-  ModelRuntimeManagementRequest,
-  ModelRuntimeCompatibility,
-  ModelRuntimeHealth,
-  ModelRuntimeQueueStatus,
-  ModelRuntimeLoadedStatus,
-  ModelRuntimeBackendStatus,
-  ModelRuntimeUsageSummary,
   ForgeHealth,
   ForgeSystemStatus,
 } from "./api/types";
 
-import { base, fetchWithTimeout, j } from "./api/client";
+import { j } from "./api/client";
+import { chatApi } from "./api/chat";
+import { modelRuntimeApi } from "./api/modelRuntime";
 
 export const api = {
   health: () => j<ForgeHealth>("/health"),
@@ -185,183 +174,7 @@ export const api = {
       }>(path);
     },
   },
-  modelRuntime: {
-    list: () =>
-      j<{
-        models: ModelRuntimeModel[];
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>("/forge/models"),
-    get: (id: string) =>
-      j<{
-        model: ModelRuntimeModel;
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>(`/forge/models/${encodeURIComponent(id)}`),
-    import: (body: {
-      path: string;
-      id?: string;
-      displayName?: string;
-      family?: string;
-      backend?: string;
-      capabilities?: string[];
-      license?: string;
-      quantization?: string;
-      contextLength?: number;
-      preferred?: boolean;
-      actor?: string;
-      source?: string;
-      workspaceId?: string;
-      laneId?: string;
-      capabilityId?: string;
-      approvalId?: string;
-      dryRun?: boolean;
-      metadata?: Record<string, unknown>;
-    }) =>
-      j<{
-        result: ModelRuntimeImportResult;
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>("/forge/models/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-    scan: (body?: ModelRuntimeManagementRequest) =>
-      j<{
-        models: ModelRuntimeModel[];
-        count: number;
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>("/forge/models/scan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body ?? {}),
-      }),
-    verify: (id: string, body?: ModelRuntimeManagementRequest) =>
-      j<{
-        model: ModelRuntimeModel;
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>(`/forge/models/${encodeURIComponent(id)}/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body ?? {}),
-      }),
-    enable: (id: string, body?: ModelRuntimeManagementRequest) =>
-      j<{
-        model: ModelRuntimeModel;
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>(`/forge/models/${encodeURIComponent(id)}/enable`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body ?? {}),
-      }),
-    disable: (id: string, body?: ModelRuntimeManagementRequest) =>
-      j<{
-        model: ModelRuntimeModel;
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>(`/forge/models/${encodeURIComponent(id)}/disable`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body ?? {}),
-      }),
-    archive: (id: string, body?: ModelRuntimeManagementRequest) =>
-      j<{
-        model: ModelRuntimeModel;
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>(`/forge/models/${encodeURIComponent(id)}/archive`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body ?? {}),
-      }),
-    remove: (id: string, body?: ModelRuntimeManagementRequest) =>
-      j<{
-        result: { modelId: string; removedPath?: string };
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>(`/forge/models/${encodeURIComponent(id)}/remove`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body ?? {}),
-      }),
-    load: (id: string, body?: ModelRuntimeManagementRequest) =>
-      j<{
-        result: ModelRuntimeLoadResult;
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>(`/forge/models/${encodeURIComponent(id)}/load`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body ?? {}),
-      }),
-    unload: (id: string, body?: ModelRuntimeManagementRequest) =>
-      j<{
-        result: ModelRuntimeLoadResult;
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>(`/forge/models/${encodeURIComponent(id)}/unload`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body ?? {}),
-      }),
-    compatibility: (id: string) =>
-      j<{
-        compatibility: ModelRuntimeCompatibility;
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>(`/forge/models/${encodeURIComponent(id)}/compatibility`),
-    health: () =>
-      j<{
-        health: ModelRuntimeHealth;
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>("/forge/model-runtime/health"),
-    backends: () =>
-      j<{
-        backends: ModelRuntimeBackendStatus[];
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>("/forge/model-runtime/backends"),
-    usage: () =>
-      j<{
-        usage: ModelRuntimeUsageSummary;
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>("/forge/model-runtime/usage"),
-    queue: () =>
-      j<{
-        queue: ModelRuntimeQueueStatus;
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>("/forge/model-runtime/queue"),
-    loaded: () =>
-      j<{
-        loaded: ModelRuntimeLoadedStatus;
-        correlationId?: string;
-        traceId?: string;
-        workspaceId?: string;
-      }>("/forge/model-runtime/loaded"),
-  },
+  modelRuntime: modelRuntimeApi,
   remote: {
     telegram: (body: RemoteTelegramPayload, token?: string) =>
       j<{ ok: boolean }>("/api/remote/telegram", {
@@ -1442,98 +1255,7 @@ export const api = {
         body: JSON.stringify(body),
       }),
   },
-  chat: {
-    threads: {
-      list: (limit = 80) =>
-        j<{ threads: ChatThreadSummary[] }>(
-          `/api/chat/threads?limit=${encodeURIComponent(String(limit))}`,
-        ),
-      create: (body: { title?: string; dossierId?: number }) =>
-        j<{ thread: ChatThreadSummary }>("/api/chat/threads", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-      get: (id: number) =>
-        j<ChatThreadDetail>(
-          `/api/chat/threads/${encodeURIComponent(String(id))}`,
-        ),
-      update: (id: number, body: { title: string }) =>
-        j<{ thread: ChatThreadSummary }>(
-          `/api/chat/threads/${encodeURIComponent(String(id))}`,
-          {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          },
-        ),
-      delete: (id: number) =>
-        j<void>(`/api/chat/threads/${encodeURIComponent(String(id))}`, {
-          method: "DELETE",
-        }),
-      postMessage: (
-        id: number,
-        body: {
-          content: string;
-          modelId?: string;
-          attachmentArtifactIds?: number[];
-          requestAssistant?: boolean;
-          assistantDryRun?: boolean;
-          /** When true, client opens SSE assistant-stream after POST returns. */
-          stream?: boolean;
-          /** When true, run Ollama in a background job; client polls thread. Default when not streaming/sync. */
-          asyncAssistant?: boolean;
-          /** When true, block until assistant completes (legacy). */
-          syncAssistant?: boolean;
-        },
-      ) =>
-        j<{
-          userMessage: ChatMessage;
-          assistantMessage: ChatMessage | null;
-          assistantPending?: boolean;
-          userMessageId?: number;
-          stream?: boolean;
-          asyncAssistant?: boolean;
-        }>(`/api/chat/threads/${encodeURIComponent(String(id))}/messages`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }),
-      uploadAttachment: async (id: number, file: File, title?: string) => {
-        const fd = new FormData();
-        fd.append("file", file);
-        if (title && title.trim()) fd.append("title", title.trim());
-        const res = await fetchWithTimeout(
-          `${base()}/api/chat/threads/${encodeURIComponent(String(id))}/attachments`,
-          {
-            method: "POST",
-            body: fd,
-          },
-        );
-        if (!res.ok) {
-          const t = await res.text().catch(() => "");
-          throw new Error(t || `${res.status} ${res.statusText}`);
-        }
-        return (await res.json()) as {
-          artifact: ForgeArtifact;
-          bytes: number;
-          previewText: string;
-        };
-      },
-      /** Full URL for GET SSE assistant token stream (use with EventSource). */
-      assistantStreamUrl: (threadId: number, userMessageId: number) =>
-        `${base()}/api/chat/threads/${encodeURIComponent(String(threadId))}/assistant-stream?userMessageId=${encodeURIComponent(String(userMessageId))}`,
-      queueJob: (id: number, body: Record<string, unknown>) =>
-        j<{ job: JobRecord }>(
-          `/api/chat/threads/${encodeURIComponent(String(id))}/jobs`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          },
-        ),
-    },
-  },
+  chat: chatApi,
   canvas: {
     boards: {
       list: (limit = 60) =>
