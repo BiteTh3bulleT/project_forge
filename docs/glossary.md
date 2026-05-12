@@ -169,3 +169,19 @@ Restorable semantic structure such as snapshots, routes, ContextBlocks, summarie
 ## Acceleration domain
 
 Disposable or reproducible performance artifacts such as KV cache, token hashes, and cache manifests.
+
+## Nix mutation proposal
+
+A governed advisory record that describes a proposed NixOS change, expected build/test commands, rollback posture, evidence refs, and approval refs. It is not permission to mutate the host.
+
+## Modelruntime backend profile
+
+A named runtime posture such as `cpu_safe`, `local_llama_cpp`, `interactive_vllm`, or `embedding_tei`. Profiles describe expected endpoints, resource needs, failure behavior, and safe-mode behavior; they do not grant truth authority.
+
+## VRAM lease
+
+A future FORGE-H resource-governed claim over a bounded GPU memory region. A VRAM lease is acceleration-domain state and cannot become canonical memory.
+
+## System cockpit
+
+The planned read-only workstation status surface for core, authority gates, FORGE-H, HostBridge, modelruntime, storage, Nix, safe mode, approvals, warnings, and build/test posture.

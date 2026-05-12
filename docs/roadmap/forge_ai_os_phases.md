@@ -21,7 +21,9 @@ Allowed statuses: `complete`, `mostly complete`, `partial`, `blocked`, `scaffold
 | Phase 8.1 (chat latency/efficiency) | partial | chat no-model routing, context/output budget classes, runtime queue/cooldown preflight, restore scoring cache, header-first restore posture, and latency trace fields are wired without requiring modelruntime/GPU | broaden structured no-model answer coverage and operator latency dashboards |
 | Phase M1 (model runtime foundation) | mostly complete | FORGE-native modelruntime subsystem is live (manifest/store/registry/backends/runtime service/internal API plus gated OpenAI-compatible minimum API) | keep M1 truth aligned under later governance work |
 | Phase M2 (model runtime governance) | mostly complete | FIFO scheduler, bounded admission, lifecycle controls, policy/workspace hooks, richer audit/usage accounting, runtime queue/loaded endpoints | M3 management/backend expansion now landed; gateway `model.*` aliasing and streaming remain |
-| Phase M3 (model runtime management) | partial (implemented) | import/register/reconcile flows, persistent lifecycle state, enable/disable/archive/remove-registration operations, OpenAI-compatible backend, vLLM-compatible path, compatibility/usage/backend inspection, deterministic selection | M4: streaming, delete-file approval flow, stronger backend/process supervision, deeper scheduling/load balancing, gateway `model.*` aliasing |
+| Phase M3 (model runtime management) | partial (implemented) | import/register/reconcile flows, persistent lifecycle state, enable/disable/archive/remove-registration operations, OpenAI-compatible backend, vLLM-compatible path, compatibility/usage/backend inspection, deterministic selection | broader runtime work remains: streaming, delete-file approval flow, stronger backend/process supervision, deeper scheduling/load balancing, gateway `model.*` aliasing |
+| Phase M4 (vLLM external runtime profile) | mostly complete | canonical `FORGE_VLLM_*` config, legacy alias support, governed disabled-by-default vLLM endpoint profile, modelruntime backend status metadata, Nix/Rust/vLLM boundary docs | future managed vLLM NixOS service and deeper GPU scheduling require later proposal/governance work |
+| Phase M5 (workstation substrate hardening) | partial | design docs for workstation substrate, governed Nix mutation proposals, backend profiles, FORGE-H VRAM/CUDA lane, safe-mode recovery, and system cockpit | no host mutation implementation yet; next phase should wire one read-only/proposal surface at a time |
 | Phase M3.5 (provider bolt-ons) | partial | optional NVIDIA DCGM telemetry, Intel Level Zero telemetry, and Hugging Face TEI embeddings are wired as disabled-by-default providers with health/capability diagnostics and no truth authority | next: vLLM LoRA registry, provider cost telemetry, and governed embedding refresh scheduling |
 | Phase 5.95 (runtime authority cutover) | mostly complete | authoritative mutation/tool paths are clear; legacy memory mutation endpoints are retired | improve operator trace visibility and event projection clarity |
 | Phase 5.997 (current pass) | mostly complete | convergence now includes gateway-only adapter execution ingress, retired memory mutation boundaries, deterministic restore candidate scoring metadata, and clearer authority/runtime docs | keep event projection language aligned and improve operator trace visibility |
@@ -37,10 +39,10 @@ Allowed statuses: `complete`, `mostly complete`, `partial`, `blocked`, `scaffold
 6. Model runtime authority exists as a FORGE-owned subsystem (not only adapter-level Ollama coupling).
 7. Phase 5 truth/autonomy/tool-policy claims stay aligned with code rather than with target architecture language.
 
-## M4 Preview
+## Runtime / Workstation Preview
 
 1. Stronger backend expansion and process supervision.
 2. Optional embeddings/rerank runtime paths if they become worth governing natively.
 3. Deeper governance and autonomy-policy hooks without creating a side door.
 4. Delete-file approval flow separated cleanly from remove-registration.
-5. Nix packaging remains later work, not an M4 dependency.
+5. Governed Nix mutation proposals require review, build proof, rollback proof, and a future host adapter.
