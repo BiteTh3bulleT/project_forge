@@ -104,10 +104,18 @@ func TestIndexSourceAllowsScopedSourceWhenRootScopeIsFilesystemRoot(t *testing.T
 	}
 
 	svc := New(st.DB, events.New(st.DB), DefaultExtensionsCSV())
-	svc.SetRootScope(string(filepath.Separator))
+	svc.SetRootScope(volumeRootForTest(sourceDir))
 	if err := svc.IndexSource(context.Background(), 1, sourceDir); err != nil {
 		t.Fatalf("index source with filesystem root scope: %v", err)
 	}
+}
+
+func volumeRootForTest(path string) string {
+	volume := filepath.VolumeName(path)
+	if volume == "" {
+		return string(filepath.Separator)
+	}
+	return volume + string(filepath.Separator)
 }
 
 func TestReadIngestFileRejectsOversizeFile(t *testing.T) {
