@@ -82,7 +82,7 @@ Milestone keys used in `Blocks`:
 
 | Title | Subsystem | Severity | Why it matters | Files/Modules | Scope | Minimal next fix | Blocks |
 |---|---|---|---|---|---|---|---|
-| Rule-agent set is incomplete | Deterministic maintenance | high | Only two rule agents are implemented; expected maintenance coverage is incomplete | `services/core/internal/aios/autonomy/rule_agents.go` | both | Implement missing agents or explicitly gate/defer them in runtime policy | `AUTO`, `P6` |
+| Rule-agent set is incomplete | Deterministic maintenance | medium | Only two rule agents are implemented; broader maintenance agents are explicitly deferred and must not be implied live | `services/core/internal/aios/autonomy/rule_agents.go`, `docs/architecture/rule_based_agents.md` | both | Keep narrow proposal-only runtime; add missing agents only with deterministic signal, policy, test, and trace coverage | `AUTO`, `P6` |
 | Maintain-mode defaults plus seeded charters/budgets | Autonomy governance | resolved | System starts in `observe`; default charters/budgets are inspectable assets, not auto-commit activation | `services/core/internal/api/autonomy_maintenance_loop.go`, `aios/autonomy/defaults.go` | both | Keep maintain/mission explicit operator choices | no |
 | Autonomy traceability remains partial in operator surfaces | Autonomy explainability | medium | Decisions/intents are persisted but cross-lane trace traversal is limited | `aios/autonomy/explain.go`, desktop autonomy pages | both | Add joined intent->decision->budget->syscall->audit views | `AUTO`, `DEMO` |
 
