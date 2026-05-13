@@ -76,7 +76,7 @@ func TestForgeKFixtureGoldenCanonicalJSON(t *testing.T) {
 			if err != nil {
 				t.Fatalf("read %s: %v", goldenName, err)
 			}
-			expected := strings.TrimRight(string(raw), "\n")
+			expected := strings.TrimRight(string(raw), "\r\n")
 			if actual != expected {
 				t.Fatalf("canonical JSON drift for %s", fixtureName)
 			}

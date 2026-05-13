@@ -30,7 +30,7 @@ mod tests {
         let full = format!("../../fixtures/forgek/{path}");
         std::fs::read_to_string(full)
             .unwrap()
-            .trim_end_matches('\n')
+            .trim_end_matches(['\r', '\n'])
             .to_string()
     }
 
