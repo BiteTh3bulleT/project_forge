@@ -725,6 +725,14 @@ func (b *modelRuntimeBridge) RemoveModel(ctx context.Context, modelID string, re
 	return ModelRuntimeRemoveResult{ModelID: result.ModelID, RemovedPath: result.RemovedPath}, nil
 }
 
+func (b *modelRuntimeBridge) DeleteModelFiles(ctx context.Context, modelID string, req ModelRuntimeControlRequest) (ModelRuntimeDeleteFilesResult, error) {
+	result, err := b.runtime.DeleteModelFiles(ctx, modelID, toManagementMeta(req))
+	if err != nil {
+		return ModelRuntimeDeleteFilesResult{}, mapModelRuntimeBridgeError(err)
+	}
+	return ModelRuntimeDeleteFilesResult{ModelID: result.ModelID, DeletedPath: result.DeletedPath, Deleted: result.Deleted}, nil
+}
+
 func (b *modelRuntimeBridge) LoadModel(ctx context.Context, modelID string, _ ModelRuntimeControlRequest) (ModelRuntimeLoadResult, error) {
 	loaded, err := b.runtime.Load(ctx, modelID)
 	if err != nil {

@@ -208,6 +208,46 @@ func TestModelRuntimeHighRiskApprovalAndDryRun(t *testing.T) {
 	}
 }
 
+func TestModelRuntimeDeleteFilesRequiresApproval(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := newModelRuntimeHarness(t)
+	fake := newFakeModelRuntime()
+	srv.modelRuntime = fake
+
+	body := governanceBody(map[string]any{"correlationId": "corr-delete-files"})
+	needsApproval := postModelRuntimeJSON(t, srv, "/forge/models/mistral-7b-instruct/delete-file", body)
+	if needsApproval.Code != http.StatusAccepted {
+		t.Fatalf("delete-file without approval status=%d body=%s", needsApproval.Code, strings.TrimSpace(needsApproval.Body.String()))
+	}
+	if fake.deleteCalls != 0 {
+		t.Fatalf("approval request mutated runtime, deleteCalls=%d", fake.deleteCalls)
+	}
+	approvalID := approvalIDFromGovernance(t, needsApproval)
+	approveModelGovernance(t, srv, approvalID)
+
+	body["approvalId"] = fmt.Sprintf("%d", approvalID)
+	approved := postModelRuntimeJSON(t, srv, "/forge/models/mistral-7b-instruct/delete-file", body)
+	if approved.Code != http.StatusOK {
+		t.Fatalf("approved delete-file status=%d body=%s", approved.Code, strings.TrimSpace(approved.Body.String()))
+	}
+	var payload struct {
+		Result ModelRuntimeDeleteFilesResult `json:"result"`
+	}
+	if err := json.Unmarshal(approved.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode delete-file response: %v body=%s", err, approved.Body.String())
+	}
+	if !payload.Result.Deleted || payload.Result.ModelID != "mistral-7b-instruct" {
+		t.Fatalf("unexpected delete result: %#v", payload.Result)
+	}
+	if fake.deleteCalls != 1 {
+		t.Fatalf("approved delete calls=%d want 1", fake.deleteCalls)
+	}
+	if fake.lastControl.Metadata["approvalId"] != fmt.Sprintf("%d", approvalID) {
+		t.Fatalf("approval metadata not forwarded: %#v", fake.lastControl.Metadata)
+	}
+}
+
 func TestModelRuntimeApprovalFingerprintRejectsReuse(t *testing.T) {
 	t.Parallel()
 

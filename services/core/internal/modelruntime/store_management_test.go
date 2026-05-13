@@ -64,6 +64,42 @@ func TestModelStoreImportVerifyArchiveAndRemove(t *testing.T) {
 	}
 }
 
+func TestModelStoreDeleteFilesRemovesManagedModelDirectory(t *testing.T) {
+	modelHome := t.TempDir()
+	store := NewModelStore(modelHome, ModelStoreOptions{StrictChecksum: true})
+	if _, err := store.ensureNamedRoot("models"); err != nil {
+		t.Fatalf("ensure models root: %v", err)
+	}
+
+	sourceFile := filepath.Join(t.TempDir(), "delete-me.gguf")
+	if err := os.WriteFile(sourceFile, []byte("delete-me"), 0o644); err != nil {
+		t.Fatalf("write source gguf: %v", err)
+	}
+
+	imported, err := store.Import(context.Background(), sourceFile, ImportModelOptions{ID: "delete-me"})
+	if err != nil {
+		t.Fatalf("import file: %v", err)
+	}
+	managedDir := imported.Model.ModelDir
+	if _, err := os.Stat(managedDir); err != nil {
+		t.Fatalf("expected managed dir before delete: %v", err)
+	}
+
+	deletedPath, err := store.DeleteFiles(context.Background(), imported.Model.Manifest.ID)
+	if err != nil {
+		t.Fatalf("delete files: %v", err)
+	}
+	if deletedPath != managedDir {
+		t.Fatalf("deleted path=%q want managed dir %q", deletedPath, managedDir)
+	}
+	if _, err := os.Stat(managedDir); !os.IsNotExist(err) {
+		t.Fatalf("expected managed dir to be deleted, stat err=%v", err)
+	}
+	if _, err := os.Stat(sourceFile); err != nil {
+		t.Fatalf("source file outside model home must remain, got %v", err)
+	}
+}
+
 func TestModelStoreImportManifestBackedDirectory(t *testing.T) {
 	modelHome := t.TempDir()
 	store := NewModelStore(modelHome, ModelStoreOptions{StrictChecksum: true})

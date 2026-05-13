@@ -32,6 +32,7 @@ type fakeModelRuntime struct {
 	getCalls    int
 	loadCalls   int
 	unloadCalls int
+	deleteCalls int
 	chatCalls   int
 	healthCalls int
 	queueCalls  int
@@ -156,6 +157,19 @@ func (f *fakeModelRuntime) RemoveModel(_ context.Context, modelID string, req Mo
 	delete(f.models, modelID)
 	delete(f.loaded, modelID)
 	return ModelRuntimeRemoveResult{ModelID: modelID, RemovedPath: "/tmp/removed/" + modelID}, nil
+}
+
+func (f *fakeModelRuntime) DeleteModelFiles(_ context.Context, modelID string, req ModelRuntimeControlRequest) (ModelRuntimeDeleteFilesResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.deleteCalls++
+	f.lastControl = req
+	if _, ok := f.models[modelID]; !ok {
+		return ModelRuntimeDeleteFilesResult{}, &modelRuntimeError{status: http.StatusNotFound, code: "MODEL_NOT_FOUND", message: "model not found"}
+	}
+	delete(f.models, modelID)
+	delete(f.loaded, modelID)
+	return ModelRuntimeDeleteFilesResult{ModelID: modelID, DeletedPath: "/tmp/deleted/" + modelID, Deleted: true}, nil
 }
 
 func (f *fakeModelRuntime) LoadModel(_ context.Context, modelID string, req ModelRuntimeControlRequest) (ModelRuntimeLoadResult, error) {

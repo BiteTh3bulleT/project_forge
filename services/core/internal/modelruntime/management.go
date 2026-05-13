@@ -36,6 +36,13 @@ type RemoveRegistrationResult struct {
 	CorrelationID string
 }
 
+type DeleteFilesResult struct {
+	ModelID       string
+	DeletedPath   string
+	Deleted       bool
+	CorrelationID string
+}
+
 type CompatibilityReport struct {
 	ModelID            string           `json:"modelId"`
 	Backend            ModelBackendKind `json:"backend"`
@@ -197,6 +204,23 @@ func (s *Service) RemoveModelRegistration(ctx context.Context, modelID string, m
 	s.refreshFromRegistry()
 	s.recordAudit(ctx, ModelRuntimeAuditRecord{Operation: "remove_registration", ModelID: strings.TrimSpace(modelID), WorkspaceID: strings.TrimSpace(meta.WorkspaceID), Actor: strings.TrimSpace(meta.Actor), Source: strings.TrimSpace(meta.Source), CorrelationID: strings.TrimSpace(meta.CorrelationID), TraceID: strings.TrimSpace(meta.TraceID), Outcome: "ok", Metadata: map[string]any{"removedPath": removedPath}})
 	return RemoveRegistrationResult{ModelID: strings.TrimSpace(modelID), RemovedPath: removedPath, CorrelationID: strings.TrimSpace(meta.CorrelationID)}, nil
+}
+
+func (s *Service) DeleteModelFiles(ctx context.Context, modelID string, meta ManagementRequestMeta) (DeleteFilesResult, error) {
+	if s.registry == nil {
+		return DeleteFilesResult{}, ErrManagementUnavailable
+	}
+	if err := s.Unload(ctx, modelID); err != nil && err != ErrModelNotLoaded && err != ErrModelNotFound {
+		return DeleteFilesResult{}, err
+	}
+	deletedPath, err := s.registry.DeleteFiles(ctx, modelID)
+	if err != nil {
+		s.recordAudit(ctx, ModelRuntimeAuditRecord{Operation: "delete_file", ModelID: strings.TrimSpace(modelID), WorkspaceID: strings.TrimSpace(meta.WorkspaceID), Actor: strings.TrimSpace(meta.Actor), Source: strings.TrimSpace(meta.Source), CorrelationID: strings.TrimSpace(meta.CorrelationID), TraceID: strings.TrimSpace(meta.TraceID), Outcome: "error", Error: err.Error(), Metadata: meta.Metadata})
+		return DeleteFilesResult{}, err
+	}
+	s.refreshFromRegistry()
+	s.recordAudit(ctx, ModelRuntimeAuditRecord{Operation: "delete_file", ModelID: strings.TrimSpace(modelID), WorkspaceID: strings.TrimSpace(meta.WorkspaceID), Actor: strings.TrimSpace(meta.Actor), Source: strings.TrimSpace(meta.Source), CorrelationID: strings.TrimSpace(meta.CorrelationID), TraceID: strings.TrimSpace(meta.TraceID), Outcome: "ok", Metadata: map[string]any{"deletedPath": deletedPath}})
+	return DeleteFilesResult{ModelID: strings.TrimSpace(modelID), DeletedPath: deletedPath, Deleted: true, CorrelationID: strings.TrimSpace(meta.CorrelationID)}, nil
 }
 
 func (s *Service) PreferModel(ctx context.Context, modelID string, meta ManagementRequestMeta) (ModelInfo, error) {

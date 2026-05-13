@@ -296,6 +296,20 @@ func (r *ModelRegistry) RemoveRegistration(ctx context.Context, modelID string) 
 	return removedPath, nil
 }
 
+func (r *ModelRegistry) DeleteFiles(ctx context.Context, modelID string) (string, error) {
+	if r.store == nil {
+		return "", fmt.Errorf("model store is nil")
+	}
+	deletedPath, err := r.store.DeleteFiles(ctx, modelID)
+	if err != nil {
+		return "", err
+	}
+	r.mu.Lock()
+	delete(r.models, strings.TrimSpace(modelID))
+	r.mu.Unlock()
+	return deletedPath, nil
+}
+
 func (r *ModelRegistry) PreferredModelID() (string, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

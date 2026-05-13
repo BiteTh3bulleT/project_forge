@@ -32,6 +32,7 @@ type modelRuntimeService interface {
 	DisableModel(ctx context.Context, modelID string, req ModelRuntimeControlRequest) (ModelRuntimeModel, error)
 	ArchiveModel(ctx context.Context, modelID string, req ModelRuntimeControlRequest) (ModelRuntimeModel, error)
 	RemoveModel(ctx context.Context, modelID string, req ModelRuntimeControlRequest) (ModelRuntimeRemoveResult, error)
+	DeleteModelFiles(ctx context.Context, modelID string, req ModelRuntimeControlRequest) (ModelRuntimeDeleteFilesResult, error)
 	LoadModel(ctx context.Context, modelID string, req ModelRuntimeControlRequest) (ModelRuntimeLoadResult, error)
 	UnloadModel(ctx context.Context, modelID string, req ModelRuntimeControlRequest) (ModelRuntimeLoadResult, error)
 	Chat(ctx context.Context, req ModelRuntimeChatRequest) (ModelRuntimeChatResult, error)
@@ -227,6 +228,12 @@ type ModelRuntimeImportResult struct {
 type ModelRuntimeRemoveResult struct {
 	ModelID     string `json:"modelId"`
 	RemovedPath string `json:"removedPath,omitempty"`
+}
+
+type ModelRuntimeDeleteFilesResult struct {
+	ModelID     string `json:"modelId"`
+	DeletedPath string `json:"deletedPath,omitempty"`
+	Deleted     bool   `json:"deleted"`
 }
 
 type ModelRuntimeCompatibility struct {
@@ -523,6 +530,10 @@ func (s *Server) handleForgeModelRemove(w http.ResponseWriter, r *http.Request) 
 	s.handleForgeModelManagement(w, r, "remove")
 }
 
+func (s *Server) handleForgeModelDeleteFile(w http.ResponseWriter, r *http.Request) {
+	s.handleForgeModelManagement(w, r, "delete_file")
+}
+
 func (s *Server) handleForgeModelControl(w http.ResponseWriter, r *http.Request, load bool) {
 	runtimeSvc, initialMeta, ok := s.requireModelRuntime(w, r, "model.runtime.control")
 	if !ok {
@@ -665,6 +676,13 @@ func (s *Server) handleForgeModelManagement(w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusOK, map[string]any{"model": model, "correlationId": metaReq.CorrelationID, "traceId": metaReq.TraceID, "workspaceId": metaReq.WorkspaceID})
 	case "remove":
 		result, err := runtimeSvc.RemoveModel(r.Context(), id, controlReq)
+		if err != nil {
+			s.writeModelRuntimeError(w, err, metaReq)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"result": result, "correlationId": metaReq.CorrelationID, "traceId": metaReq.TraceID, "workspaceId": metaReq.WorkspaceID})
+	case "delete_file":
+		result, err := runtimeSvc.DeleteModelFiles(r.Context(), id, controlReq)
 		if err != nil {
 			s.writeModelRuntimeError(w, err, metaReq)
 			return

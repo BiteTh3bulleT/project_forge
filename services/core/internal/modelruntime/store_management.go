@@ -187,6 +187,65 @@ func (s *ModelStore) RemoveRegistration(ctx context.Context, modelID string) (st
 	return destDir, nil
 }
 
+func (s *ModelStore) DeleteFiles(ctx context.Context, modelID string) (string, error) {
+	_ = ctx
+	id, err := safeModelIDSegment(modelID)
+	if err != nil {
+		return "", err
+	}
+	rec, err := s.Load(context.Background(), id)
+	if err != nil {
+		return "", err
+	}
+	if err := s.ensureDeletableModelDir(rec.ModelDir, id); err != nil {
+		return "", err
+	}
+	if err := os.RemoveAll(rec.ModelDir); err != nil {
+		return "", fmt.Errorf("delete model files: %w", err)
+	}
+	return rec.ModelDir, nil
+}
+
+func (s *ModelStore) ensureDeletableModelDir(targetDir, modelID string) error {
+	targetDir = filepath.Clean(strings.TrimSpace(targetDir))
+	modelID = strings.TrimSpace(modelID)
+	if targetDir == "" || modelID == "" {
+		return fmt.Errorf("%w: delete target missing", ErrModelIDInvalid)
+	}
+	if filepath.Base(targetDir) != modelID {
+		return fmt.Errorf("%w: delete target %s does not match model id %s", ErrModelIDInvalid, targetDir, modelID)
+	}
+	home, err := s.ResolveModelHome()
+	if err != nil {
+		return err
+	}
+	absHome, err := filepath.Abs(home)
+	if err != nil {
+		return fmt.Errorf("resolve model home: %w", err)
+	}
+	absTarget, err := filepath.Abs(targetDir)
+	if err != nil {
+		return fmt.Errorf("resolve model delete target: %w", err)
+	}
+	rel, err := filepath.Rel(absHome, absTarget)
+	if err != nil {
+		return fmt.Errorf("resolve model delete target relative path: %w", err)
+	}
+	if rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." || filepath.IsAbs(rel) {
+		return fmt.Errorf("%w: delete target escapes model home", ErrImportPathInvalid)
+	}
+	activeRoot, activeErr := s.modelsRoot()
+	archiveRoot, archiveErr := s.archivesRoot(false)
+	parent := filepath.Clean(filepath.Dir(absTarget))
+	if activeErr == nil && parent == filepath.Clean(activeRoot) {
+		return nil
+	}
+	if archiveErr == nil && archiveRoot != "" && parent == filepath.Clean(archiveRoot) {
+		return nil
+	}
+	return fmt.Errorf("%w: delete target must be an active or archived model directory", ErrImportPathInvalid)
+}
+
 func (s *ModelStore) Reconcile(ctx context.Context) ([]StoredModel, error) {
 	return s.Scan(ctx)
 }

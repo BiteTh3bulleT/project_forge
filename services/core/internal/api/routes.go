@@ -84,6 +84,7 @@ func (s *Server) mountForgeRoutes(r chi.Router) {
 		r.Post("/models/{id}/disable", s.handleForgeModelDisable)
 		r.Post("/models/{id}/archive", s.handleForgeModelArchive)
 		r.Post("/models/{id}/remove", s.handleForgeModelRemove)
+		r.Post("/models/{id}/delete-file", s.handleForgeModelDeleteFile)
 		r.Post("/models/{id}/load", s.handleForgeModelLoad)
 		r.Post("/models/{id}/unload", s.handleForgeModelUnload)
 		r.Post("/models/{id}/chat", s.handleForgeModelChat)
