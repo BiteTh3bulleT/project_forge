@@ -122,7 +122,9 @@ export function AuditPage() {
   const [correlation, setCorrelation] = useState(
     () => params.get("correlationId") ?? "",
   );
-  const [traceId, setTraceId] = useState(() => params.get("traceId") ?? "");
+  const [traceId, setTraceId] = useState(
+    () => params.get("traceId") ?? params.get("correlationId") ?? "",
+  );
   const [records, setRecords] = useState<AuditRecord[]>([]);
   const [trace, setTrace] = useState<AuditRecord[]>([]);
   const [err, setErr] = useState<string | null>(null);
