@@ -3,7 +3,6 @@ import type {
   AdapterInvokeRequest,
   AdapterMetric,
   ApprovalPreset,
-  ApprovalRequest,
   AutomationHistory,
   AutomationRule,
   DashboardSummary,
@@ -18,10 +17,7 @@ import type {
   ImportReconciliation,
   ImportedExecution,
   InvokeResult,
-  JobDetail,
   JobLineage,
-  JobRecord,
-  JobTemplate,
   PacketGuidance,
   PolicyRecommendation,
   ProjectContextRecord,
@@ -118,10 +114,12 @@ import type {
   ForgeSystemStatus,
 } from "./api/types";
 
+import { approvalsApi } from "./api/approvals";
 import { j } from "./api/client";
 import { canvasApi } from "./api/canvas";
 import { chatApi } from "./api/chat";
 import { contextInspectorApi, dreamReportsApi } from "./api/inspectors";
+import { jobsApi } from "./api/jobs";
 import { memoryApi } from "./api/memory";
 import { modelRuntimeApi } from "./api/modelRuntime";
 
@@ -328,74 +326,8 @@ export const api = {
       };
     },
   },
-  jobs: {
-    templates: () => j<{ templates: JobTemplate[] }>("/api/jobs/templates"),
-    list: (status = "", limit = 120) => {
-      const params = new URLSearchParams();
-      if (status) params.set("status", status);
-      params.set("limit", String(limit));
-      return j<{ jobs: JobRecord[] }>(`/api/jobs?${params.toString()}`);
-    },
-    create: (body: Record<string, unknown>) =>
-      j<{ job: JobRecord }>("/api/jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-    detail: (id: string, afterEventId = 0) =>
-      j<JobDetail>(
-        `/api/jobs/${encodeURIComponent(id)}?afterEventId=${encodeURIComponent(String(afterEventId))}`,
-      ),
-    cancel: (id: string, actor = "operator") =>
-      j<{ ok: boolean; jobId: string }>(
-        `/api/jobs/${encodeURIComponent(id)}/cancel`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ actor }),
-        },
-      ),
-    retry: (id: string, body: Record<string, unknown>) =>
-      j<{ job: JobRecord }>(`/api/jobs/${encodeURIComponent(id)}/retry`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-    replay: (id: string, body: Record<string, unknown>) =>
-      j<{ job: JobRecord }>(`/api/jobs/${encodeURIComponent(id)}/replay`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-  },
-  approvals: {
-    list: (status = "pending", limit = 100) =>
-      j<{ approvals: ApprovalRequest[] }>(
-        `/api/approvals?status=${encodeURIComponent(status)}&limit=${encodeURIComponent(String(limit))}`,
-      ),
-    get: (id: number) =>
-      j<{ approval: ApprovalRequest }>(
-        `/api/approvals/${encodeURIComponent(String(id))}`,
-      ),
-    approve: (id: number, note = "") =>
-      j<{ decision: unknown }>(`/api/approvals/${id}/approve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actor: "operator", note }),
-      }),
-    deny: (id: number, note = "") =>
-      j<{ decision: unknown }>(`/api/approvals/${id}/deny`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actor: "operator", note }),
-      }),
-    cancel: (id: number, note = "") =>
-      j<{ decision: unknown }>(`/api/approvals/${id}/cancel`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actor: "operator", note }),
-      }),
-  },
+  jobs: jobsApi,
+  approvals: approvalsApi,
   packets: {
     get: (id: number) => j<TaskPacket>(`/api/packets/${id}`),
   },

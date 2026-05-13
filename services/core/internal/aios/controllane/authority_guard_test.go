@@ -31,6 +31,7 @@ func TestCanonicalCognitiveWritesStayBounded(t *testing.T) {
 		filepath.Join("services", "core", "internal", "aios", "controllane", "sqlite_store_objects.go"): {},
 		filepath.Join("services", "core", "internal", "aios", "controllane", "sqlite_store_state.go"):   {},
 		filepath.Join("services", "core", "internal", "backup", "service.go"):                           {},
+		filepath.Join("services", "core", "internal", "backup", "section_mappings.go"):                  {},
 		filepath.Join("services", "core", "internal", "store", "migrate_columns.go"):                    {},
 		filepath.Join("services", "core", "internal", "store", "migrate.go"):                            {},
 	}
