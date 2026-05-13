@@ -23,6 +23,7 @@ Scope: branch-local validation evidence after convergence hardening pass.
 - `cd services/core && go test ./internal/api -run 'Adapter|LegacyMemory|Backup' -count=1` -> pass
 - `npm install` -> not rerun in latest pass; installed dependencies were already present
 - `npm run build` -> pass
+- `npm run validate:local` -> pass (integration env preflight, desktop validation, FORGE-K validation, Go core build)
 - `npm run smoke` -> pass
 - `npm run typecheck` -> pass
 - `npm test` -> pass (delegates to `go test ./...`)
@@ -36,7 +37,7 @@ Scope: branch-local validation evidence after convergence hardening pass.
 
 ## Frontend validation posture
 
-`npm run typecheck` now passes at root/desktop levels in this environment.
+`npm run typecheck` now passes at root/desktop levels in this environment. `npm run validate:local` is available as a local aggregate check across integration env readiness, desktop validation, FORGE-K validation, and Go core build.
 
 Remaining gap:
 - no dedicated JS/TS lint/test scripts (current root `lint`/`test` delegate to Go tooling).

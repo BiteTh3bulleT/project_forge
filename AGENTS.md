@@ -104,6 +104,7 @@ Last convergence sweep update: 2026-04-22 (branch-local status alignment).
 - Optional Go static checks: `cd services/core && go vet ./...` (root `npm run lint` runs VSA preflight first)
 - Root aggregate test command: `npm test` (delegates to Go core test suite).
 - Root lint command: `npm run lint` (delegates to Go vet/static checks).
+- Local aggregate validation: `npm run validate:local` (integration env preflight, desktop validation, FORGE-K validation, Go core build).
 - JS/TS tests: no dedicated repository JS/TS test suite is currently configured.
 - JS/TS lint: no dedicated repository JS/TS lint script is currently configured.
 

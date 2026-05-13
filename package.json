@@ -20,6 +20,7 @@
     "validate:forgek": "npm run test:rust:forgek && npm run validate:forgek-fixtures && npm run test:forgek:parity",
     "test:integration:env": "node ./scripts/check-integration-env.mjs --allow-missing",
     "test:integration": "node ./scripts/check-integration-env.mjs && cd services/core && go test ./...",
+    "validate:local": "npm run test:integration:env && npm run validate:desktop && npm run validate:forgek && npm run build:core",
     "test:core": "node ./scripts/check-vsa-files.mjs --require-tracked && cd services/core && go test ./...",
     "vet:core": "node ./scripts/check-vsa-files.mjs --require-tracked && cd services/core && go vet ./...",
     "test": "npm run test:core",
