@@ -17,6 +17,9 @@ apps/desktop/src-tauri/gen/
 .forge/
 .vm-*/
 .vm-*
+.vm-nix-store/
+.vm-nix-tmp/
+operator_toolbelt.txt
 .claude/settings.local.json
 .claude/worktrees/
 .worktrees/

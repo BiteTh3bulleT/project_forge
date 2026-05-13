@@ -327,7 +327,7 @@ Ensure:
 
 Create:
 
-- docs/reviews/phase_12mq_shadow_advisory_pipeline.md
+- docs/reviews/archive/phase_12/phase_12mq_shadow_advisory_pipeline.md
 
 Update:
 

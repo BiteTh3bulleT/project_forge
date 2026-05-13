@@ -75,7 +75,7 @@ Hardening completed:
 - disabled and enabled `/health` response equivalence tests
 - non-`/health` no-observation test
 - root FORGE-K forbidden live import test
-- Phase 12C review record in `docs/reviews/phase_12c_shadow_diagnostics_review.md`
+- Phase 12C review record in `docs/reviews/archive/phase_12/phase_12c_shadow_diagnostics_review.md`
 
 Phase 12C adds no live touchpoints, routes, public APIs, persistence, gateway behavior, modelruntime behavior, retrieval/search/embedding behavior, memory writes, controllane mutations, or user-visible output changes.
 

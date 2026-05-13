@@ -630,7 +630,7 @@ The README mentions Windows launch parity work; smoke script is bash. Section 31
 - **Resolved after review:** The ADR numbering collision was removed by renumbering `forge-is-ai-os.md` to `0000-forge-is-ai-os.md`.
 - **CODEX.md** is 594 lines and reads as a forward-vision document. It has a self-disclaimer at the top now (good), but the body still uses present-tense language in places that could confuse a reader who skims.
 - **Doc surface outruns review capacity.** 40+ arch docs + 33 status docs + 28+ review docs + 11 ADRs + 7 runbooks = a lot. Some review docs (12A through 13H phase reviews) could be archived.
-- **Multiple "full review" docs.** `docs/reviews/full_project_forge_review.md`, `full_project_review.md`, `full_project_review_checklist.md`, `forge_full_system_review_20260425/` — overlap.
+- **Multiple "full review" docs.** `docs/reviews/archive/full_project/full_project_forge_review.md`, `full_project_review.md`, `full_project_review_checklist.md`, `forge_full_system_review_20260425/` — overlap.
 - **Diagram count is low** for the architectural complexity.
 
 ### Recommended structure
@@ -853,7 +853,7 @@ Low. The forbidden-imports tests enforce this directly.
 ### Duplication
 
 - 4 components vs 46 pages on the desktop suggests page-level duplication of fetch/error/loading.
-- `docs/reviews/full_project_forge_review.md` vs `full_project_review.md` vs `full_project_review_checklist.md` — duplicate review documents.
+- `docs/reviews/archive/full_project/full_project_forge_review.md` vs `full_project_review.md` vs `full_project_review_checklist.md` — duplicate review documents.
 
 ### Dead code
 
@@ -1001,7 +1001,7 @@ Nothing currently failing. Tests pass, vet clean, smoke green. The items below a
 
 ## 24. What Is Duplicated or Confusing
 
-- **Duplicate review docs:** `docs/reviews/full_project_forge_review.md`, `full_project_review.md`, `full_project_review_checklist.md`, plus `forge_full_system_review_20260425/` and a `.zip` of same. Keep one as the canonical historical review and move others to `docs/reviews/archive/`.
+- **Duplicate review docs:** `docs/reviews/archive/full_project/full_project_forge_review.md`, `full_project_review.md`, `full_project_review_checklist.md`, plus `forge_full_system_review_20260425/` and a `.zip` of same. Keep one as the canonical historical review and move others to `docs/reviews/archive/`.
 - **ADR 0001 collision** (see §23).
 - **Multiple architecture docs near the same concept:** `forge_ai_os.md`, `forge_k_overview.md`, `core_doctrine.md`, `control_lane_kernel.md` all touch the same kernel idea from different angles. Add a top-of-file `Read this if you want X` note to each, or consolidate into a single "kernel architecture" doc with sections.
 - **CODEX.md vs AGENTS.md vs README.md vs CLAUDE.md** — four doctrine surfaces. AGENTS.md is the operator/agent doctrine; CLAUDE.md is a 20-line pointer; CODEX.md is forward vision (tagged `[FUTURE]`); README.md is public-facing. The tagging is now correct, but a reader's first question "which one do I read first?" deserves a `docs/onboarding.md` answer.
@@ -1375,7 +1375,7 @@ docs/
 ```
 
 Specific moves:
-- Move `docs/reviews/phase_12*.md`, `phase_13*.md` to `docs/reviews/archive/`.
+- Move `docs/reviews/archive/phase_12/phase_12*.md`, `phase_13*.md` to `docs/reviews/archive/`.
 - Delete or archive `full_project_forge_review.md`, `full_project_review.md`, `full_project_review_checklist.md`; keep the dated review folder.
 - Verify ADR numbering remains unique after `docs/adr/0000-forge-is-ai-os.md` renumbering.
 - Add `docs/onboarding.md` as the single answer to "where do I start?"

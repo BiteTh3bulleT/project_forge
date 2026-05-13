@@ -188,7 +188,7 @@ Phase 12G is docs-only. It records that:
 - no request or response body capture is approved.
 - no tool payload, retrieval content, memory content, public diagnostics API, route behavior change, or authority migration is approved.
 
-The Phase 12G design is in `docs/architecture/phase_12g_chat_metadata_expansion_design.md`; the risk review is in `docs/reviews/phase_12g_chat_metadata_risk_review.md`; the Phase 12H test coverage is in `docs/testing/phase_12h_chat_metadata_shadow_tests.md`.
+The Phase 12G design is in `docs/architecture/phase_12g_chat_metadata_expansion_design.md`; the risk review is in `docs/reviews/archive/phase_12/phase_12g_chat_metadata_risk_review.md`; the Phase 12H test coverage is in `docs/testing/phase_12h_chat_metadata_shadow_tests.md`.
 
 ## What Not To Do
 

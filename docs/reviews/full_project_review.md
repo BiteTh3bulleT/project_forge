@@ -343,7 +343,7 @@ This is a focused validation pass. Do not add features or change public APIs.
 
 Read:
 - docs/reviews/full_project_review.md
-- docs/reviews/full_project_review_checklist.md
+- docs/reviews/archive/full_project/full_project_review_checklist.md
 - docs/reviews/current_phase_status.md
 - AGENTS.md
 - docs/adr/0005-forge-k-simulator-vs-live-authority.md

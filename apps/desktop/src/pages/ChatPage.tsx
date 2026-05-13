@@ -32,9 +32,7 @@ import {
 import { ChatThreadRail } from "./ChatPage/ChatThreadRail";
 import {
   CodeBlock,
-  parseMessageParts,
 } from "./ChatPage/messageContent";
-import { readAttachments } from "./ChatPage/messageMetadata";
 import {
   AttachmentInspectorCard,
   MessageRow,
@@ -54,13 +52,8 @@ import {
 import {
   BrowserResultPanel,
   TerminalTranscript,
-  isBrowserTool,
-  isTerminalTool,
-  numberField,
-  readToolEntries,
-  readToolGatewayActivity,
-  type ChatToolEntry,
 } from "./ChatPage/toolGateway";
+import { useChatInspectorData } from "./ChatPage/useChatInspectorData";
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   if (v && typeof v === "object" && !Array.isArray(v))
@@ -160,47 +153,6 @@ function extractApiErrorMessage(err: unknown): string {
   } catch {
     return trimmed;
   }
-}
-
-type MessageCodeSnippet = {
-  key: string;
-  messageId: number;
-  createdAtMs: number;
-  lang: string;
-  code: string;
-};
-
-function readThinkingEvents(message: ChatMessage): ChatThinkingEvent[] {
-  const meta = message.metadata ?? {};
-  const activity = readToolGatewayActivity(meta);
-  const pipeline = asRecord(meta.toolPipeline);
-  const activityStages = activity?.stages;
-  const pipelineStages = pipeline?.stages;
-  const rawStages: unknown[] = Array.isArray(activityStages)
-    ? activityStages
-    : Array.isArray(pipelineStages)
-      ? pipelineStages
-      : [];
-  const out: ChatThinkingEvent[] = [];
-  for (let i = 0; i < rawStages.length; i++) {
-    const row = asRecord(rawStages[i]);
-    if (!row) continue;
-    const stage =
-      typeof row.stage === "string" && row.stage.trim()
-        ? row.stage.trim()
-        : "stage";
-    const at = numberField(row, "atMs") ?? message.createdAtMs;
-    out.push({
-      key: `${message.id}-think-${i}-${stage}`,
-      messageId: message.id,
-      at,
-      kind: "stage",
-      text: formatThinkingStage(stage),
-      detail: compactThinkingDetail(row),
-      data: row,
-    });
-  }
-  return out;
 }
 
 export function ChatPage() {
@@ -1059,82 +1011,13 @@ export function ChatPage() {
     );
   }, [threadFilter, threads]);
 
-  const messageAttachments = useMemo(() => {
-    const out: Array<{
-      messageId: number;
-      createdAtMs: number;
-      role: string;
-      attachment: ChatAttachment;
-    }> = [];
-    for (const message of active?.messages ?? []) {
-      for (const attachment of readAttachments(message.metadata)) {
-        out.push({
-          messageId: message.id,
-          createdAtMs: message.createdAtMs,
-          role: message.role,
-          attachment,
-        });
-      }
-    }
-    const seen = new Set<number>();
-    return out
-      .sort((a, b) => b.createdAtMs - a.createdAtMs)
-      .filter((item) => {
-        if (seen.has(item.attachment.artifactId)) return false;
-        seen.add(item.attachment.artifactId);
-        return true;
-      });
-  }, [active?.messages]);
-
-  const assistantCodeSnippets = useMemo<MessageCodeSnippet[]>(() => {
-    const out: MessageCodeSnippet[] = [];
-    for (const message of active?.messages ?? []) {
-      if (message.role !== "assistant") continue;
-      const parts = parseMessageParts(message.content);
-      let index = 0;
-      for (const part of parts) {
-        if (part.type !== "code") continue;
-        out.push({
-          key: `${message.id}:${index}`,
-          messageId: message.id,
-          createdAtMs: message.createdAtMs,
-          lang: part.lang || "code",
-          code: part.text,
-        });
-        index += 1;
-      }
-    }
-    return out.sort((a, b) => b.createdAtMs - a.createdAtMs);
-  }, [active?.messages]);
-
-  const terminalEntries = useMemo<ChatToolEntry[]>(() => {
-    const out: ChatToolEntry[] = [];
-    for (const message of active?.messages ?? []) {
-      for (const entry of readToolEntries(message)) {
-        if (isTerminalTool(entry.tool)) out.push(entry);
-      }
-    }
-    return out.sort((a, b) => b.createdAtMs - a.createdAtMs);
-  }, [active?.messages]);
-
-  const browserEntries = useMemo<ChatToolEntry[]>(() => {
-    const out: ChatToolEntry[] = [];
-    for (const message of active?.messages ?? []) {
-      for (const entry of readToolEntries(message)) {
-        if (isBrowserTool(entry.tool)) out.push(entry);
-      }
-    }
-    return out.sort((a, b) => b.createdAtMs - a.createdAtMs);
-  }, [active?.messages]);
-
-  const thinkingEntries = useMemo<ChatThinkingEvent[]>(() => {
-    const out: ChatThinkingEvent[] = [];
-    for (const message of active?.messages ?? []) {
-      if (message.role !== "assistant") continue;
-      out.push(...readThinkingEvents(message));
-    }
-    return out.sort((a, b) => b.at - a.at);
-  }, [active?.messages]);
+  const {
+    messageAttachments,
+    assistantCodeSnippets,
+    terminalEntries,
+    browserEntries,
+    thinkingEntries,
+  } = useChatInspectorData(active);
 
   useEffect(() => {
     if (!selectedSnippetKey && assistantCodeSnippets.length > 0) {

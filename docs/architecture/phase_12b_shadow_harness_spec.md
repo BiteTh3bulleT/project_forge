@@ -62,7 +62,7 @@ Phase 12H adds one chat metadata touchpoint, and Phase 12I hardens that same tou
 - the touchpoint is the existing chat message POST handler after live handler ownership is established
 - reports capture bounded metadata only: operation kind, safe ids/refs, role class, stream class, safe model id, request/workspace ids, counts, and diagnostic markers
 - no chat content, prompt, completion, model output, request body, response body, tool payload, retrieval content, or memory content capture is approved
-- Phase 12H/12I coverage is recorded in `docs/testing/phase_12h_chat_metadata_shadow_tests.md` and `docs/reviews/phase_12i_chat_metadata_shadow_hardening.md`
+- Phase 12H/12I coverage is recorded in `docs/testing/phase_12h_chat_metadata_shadow_tests.md` and `docs/reviews/archive/phase_12/phase_12i_chat_metadata_shadow_hardening.md`
 
 Phase 12K-L adds and hardens one retrieval metadata touchpoint:
 
@@ -70,7 +70,7 @@ Phase 12K-L adds and hardens one retrieval metadata touchpoint:
 - the touchpoint runs after the live `/api/retrieval/runs` handler has already created the retrieval run
 - reports capture bounded metadata only: retrieval run/result refs, source type/ref, result count, selected count, bounded score summary, ranking position, retrieval strategy, index type, safe embedding model id, timing, and diagnostic markers
 - no source text, chunk text, document content, raw query text, search snippet, embedding/vector, RAG output, prompt, model output, request body, response body, memory content, secret, route/API behavior, or user-visible output change is approved
-- Phase 12K-L coverage is recorded in `docs/testing/phase_12k_retrieval_metadata_shadow_tests.md` and `docs/reviews/phase_12kl_retrieval_metadata_shadow_hardening.md`
+- Phase 12K-L coverage is recorded in `docs/testing/phase_12k_retrieval_metadata_shadow_tests.md` and `docs/reviews/archive/phase_12/phase_12kl_retrieval_metadata_shadow_hardening.md`
 
 ## Future Candidate Live Request Types
 
@@ -238,7 +238,7 @@ After Phase 12I:
 - retrieval metadata diagnostics are implemented/hardened after Phase 12K-L, but content observation remains forbidden.
 - no retrieval/search/embedding execution from FORGE-K is approved.
 
-The Phase 12D design is in `docs/architecture/phase_12d_controlled_shadow_expansion_design.md`; the touchpoint decision is in `docs/reviews/phase_12d_touchpoint_selection.md`; the Phase 12E and Phase 12F test coverage is recorded in `docs/testing/phase_12e_shadow_route_envelope_tests.md`; the Phase 12F hardening review is recorded in `docs/reviews/phase_12f_route_envelope_shadow_hardening.md`; the Phase 12G chat metadata design is recorded in `docs/architecture/phase_12g_chat_metadata_expansion_design.md`; the Phase 12I chat metadata hardening review is recorded in `docs/reviews/phase_12i_chat_metadata_shadow_hardening.md`; the Phase 12J retrieval metadata design is recorded in `docs/architecture/phase_12j_retrieval_metadata_expansion_design.md`; the Phase 12K-L retrieval metadata hardening review is recorded in `docs/reviews/phase_12kl_retrieval_metadata_shadow_hardening.md`.
+The Phase 12D design is in `docs/architecture/phase_12d_controlled_shadow_expansion_design.md`; the touchpoint decision is in `docs/reviews/archive/phase_12/phase_12d_touchpoint_selection.md`; the Phase 12E and Phase 12F test coverage is recorded in `docs/testing/phase_12e_shadow_route_envelope_tests.md`; the Phase 12F hardening review is recorded in `docs/reviews/archive/phase_12/phase_12f_route_envelope_shadow_hardening.md`; the Phase 12G chat metadata design is recorded in `docs/architecture/phase_12g_chat_metadata_expansion_design.md`; the Phase 12I chat metadata hardening review is recorded in `docs/reviews/archive/phase_12/phase_12i_chat_metadata_shadow_hardening.md`; the Phase 12J retrieval metadata design is recorded in `docs/architecture/phase_12j_retrieval_metadata_expansion_design.md`; the Phase 12K-L retrieval metadata hardening review is recorded in `docs/reviews/archive/phase_12/phase_12kl_retrieval_metadata_shadow_hardening.md`.
 
 ## What Not To Do
 

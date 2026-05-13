@@ -202,7 +202,7 @@ Phase 12H/12I require tests for:
 - bounded sink retention
 - no public diagnostics route
 
-The detailed test plan is `docs/testing/phase_12h_chat_metadata_shadow_tests.md`; the Phase 12I hardening review is `docs/reviews/phase_12i_chat_metadata_shadow_hardening.md`.
+The detailed test plan is `docs/testing/phase_12h_chat_metadata_shadow_tests.md`; the Phase 12I hardening review is `docs/reviews/archive/phase_12/phase_12i_chat_metadata_shadow_hardening.md`.
 
 ## Phase 12J Handoff
 

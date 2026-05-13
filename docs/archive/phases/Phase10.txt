@@ -639,7 +639,7 @@ Update:
 - docs/architecture/forge_k_overview.md
 - docs/roadmap/forge_k_build_phases.md
 - docs/reviews/current_phase_status.md
-- docs/reviews/full_project_review_checklist.md
+- docs/reviews/archive/full_project/full_project_review_checklist.md
 - README.md if current phase advances to Phase 10
 - services/core/internal/forgek/README.md if present
 

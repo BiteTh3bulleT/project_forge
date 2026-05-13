@@ -60,7 +60,7 @@ Read first:
 - docs/architecture/storage_backend_migration.md
 - docs/testing/storage_backend_parity.md
 - docs/data_model/persistence_inventory.md
-- docs/reviews/phase_13de_diagnostic_persistence_and_retrieval_adapter.md
+- docs/reviews/archive/phase_13/phase_13de_diagnostic_persistence_and_retrieval_adapter.md
 - docs/reviews/current_phase_status.md
 - docs/roadmap/forge_k_build_phases.md
 - services/core/internal/config/...
@@ -272,7 +272,7 @@ Update:
 
 Create:
 
-- `docs/reviews/phase_13fg_qdrant_shadow_vector_adapter.md`
+- `docs/reviews/archive/phase_13/phase_13fg_qdrant_shadow_vector_adapter.md`
 
 Include:
 

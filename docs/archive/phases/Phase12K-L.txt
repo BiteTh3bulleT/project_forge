@@ -69,7 +69,7 @@ Read first:
 - docs/architecture/phase_12d_controlled_shadow_expansion_design.md
 - docs/architecture/phase_12g_chat_metadata_expansion_design.md
 - docs/architecture/phase_12j_retrieval_metadata_expansion_design.md
-- docs/reviews/phase_12j_retrieval_metadata_risk_review.md
+- docs/reviews/archive/phase_12/phase_12j_retrieval_metadata_risk_review.md
 - docs/testing/phase_12k_retrieval_metadata_shadow_tests.md
 - docs/architecture/memory_taxonomy.md
 - docs/architecture/shadow_mode.md
@@ -431,7 +431,7 @@ Update:
 
 Create if useful:
 
-- docs/reviews/phase_12kl_retrieval_metadata_shadow_hardening.md
+- docs/reviews/archive/phase_12/phase_12kl_retrieval_metadata_shadow_hardening.md
 
 Add Phase 12K-L notes:
 

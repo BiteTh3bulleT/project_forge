@@ -137,7 +137,7 @@ Must explicitly state:
 Phase 12A does not authorize implementation.
 Phase 12B must be separately approved before live code changes.
 
-2. Create docs/reviews/phase_12a_live_integration_readiness.md
+2. Create docs/reviews/archive/phase_12/phase_12a_live_integration_readiness.md
 
 Include:
 
@@ -270,7 +270,7 @@ IMPLEMENTED if docs are complete
 
 Where it lives:
 - docs/architecture/forge_k_live_integration_design.md
-- docs/reviews/phase_12a_live_integration_readiness.md
+- docs/reviews/archive/phase_12/phase_12a_live_integration_readiness.md
 - docs/architecture/phase_12b_shadow_harness_spec.md
 - docs/architecture/phase_12b_adapter_interfaces.md
 

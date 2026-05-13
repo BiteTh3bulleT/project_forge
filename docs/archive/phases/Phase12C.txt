@@ -53,7 +53,7 @@ Read first:
 - docs/architecture/shadow_mode.md
 - docs/architecture/shadow_mode_harness.md
 - docs/testing/phase_12b_shadow_harness_tests.md
-- docs/reviews/phase_12a_live_integration_readiness.md
+- docs/reviews/archive/phase_12/phase_12a_live_integration_readiness.md
 - docs/reviews/current_phase_status.md
 - docs/roadmap/forge_k_build_phases.md
 - services/core/internal/forgekshadow/...
@@ -105,7 +105,7 @@ Inspect:
 
 Create or update:
 
-- docs/reviews/phase_12c_shadow_diagnostics_review.md
+- docs/reviews/archive/phase_12/phase_12c_shadow_diagnostics_review.md
 
 Include:
 

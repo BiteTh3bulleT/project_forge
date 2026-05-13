@@ -69,7 +69,7 @@ Read first:
 - docs/architecture/shadow_mode.md
 - docs/architecture/shadow_mode_harness.md
 - docs/testing/phase_12h_chat_metadata_shadow_tests.md
-- docs/reviews/phase_12i_chat_metadata_shadow_hardening.md
+- docs/reviews/archive/phase_12/phase_12i_chat_metadata_shadow_hardening.md
 - docs/reviews/current_phase_status.md
 - docs/roadmap/forge_k_build_phases.md
 - services/core/internal/forgekshadow/...
@@ -182,7 +182,7 @@ Include:
 - required tests before implementation
 - what not to do
 
-2. Create docs/reviews/phase_12j_retrieval_metadata_risk_review.md
+2. Create docs/reviews/archive/phase_12/phase_12j_retrieval_metadata_risk_review.md
 
 Include a risk review comparing:
 
@@ -286,7 +286,7 @@ DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY
 
 Where:
 - docs/architecture/phase_12j_retrieval_metadata_expansion_design.md
-- docs/reviews/phase_12j_retrieval_metadata_risk_review.md
+- docs/reviews/archive/phase_12/phase_12j_retrieval_metadata_risk_review.md
 - docs/testing/phase_12k_retrieval_metadata_shadow_tests.md
 
 Evidence:

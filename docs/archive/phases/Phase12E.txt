@@ -58,8 +58,8 @@ Read first:
 - docs/testing/phase_12e_shadow_route_envelope_tests.md
 - docs/architecture/shadow_mode.md
 - docs/architecture/shadow_mode_harness.md
-- docs/reviews/phase_12c_shadow_diagnostics_review.md
-- docs/reviews/phase_12d_touchpoint_selection.md
+- docs/reviews/archive/phase_12/phase_12c_shadow_diagnostics_review.md
+- docs/reviews/archive/phase_12/phase_12d_touchpoint_selection.md
 - docs/reviews/current_phase_status.md
 - docs/roadmap/forge_k_build_phases.md
 - services/core/internal/forgekshadow/...

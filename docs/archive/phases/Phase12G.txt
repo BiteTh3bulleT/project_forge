@@ -59,7 +59,7 @@ Read first:
 - docs/architecture/phase_12b_shadow_harness_spec.md
 - docs/architecture/phase_12d_controlled_shadow_expansion_design.md
 - docs/testing/phase_12e_shadow_route_envelope_tests.md
-- docs/reviews/phase_12f_route_envelope_shadow_hardening.md
+- docs/reviews/archive/phase_12/phase_12f_route_envelope_shadow_hardening.md
 - docs/architecture/shadow_mode.md
 - docs/architecture/shadow_mode_harness.md
 - docs/reviews/current_phase_status.md
@@ -162,7 +162,7 @@ Include:
 - required tests before implementation
 - what not to do
 
-2. Create docs/reviews/phase_12g_chat_metadata_risk_review.md
+2. Create docs/reviews/archive/phase_12/phase_12g_chat_metadata_risk_review.md
 
 Include a risk review comparing:
 
@@ -260,7 +260,7 @@ DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY
 
 Where:
 - docs/architecture/phase_12g_chat_metadata_expansion_design.md
-- docs/reviews/phase_12g_chat_metadata_risk_review.md
+- docs/reviews/archive/phase_12/phase_12g_chat_metadata_risk_review.md
 - docs/testing/phase_12h_chat_metadata_shadow_tests.md
 
 Evidence:

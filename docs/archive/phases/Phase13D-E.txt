@@ -267,7 +267,7 @@ Update:
 
 Create:
 
-- docs/reviews/phase_13de_diagnostic_persistence_and_retrieval_adapter.md
+- docs/reviews/archive/phase_13/phase_13de_diagnostic_persistence_and_retrieval_adapter.md
 
 Include:
 

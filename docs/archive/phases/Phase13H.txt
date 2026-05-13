@@ -230,7 +230,7 @@ Update:
 
 Create:
 
-- docs/reviews/phase_13h_redis_ephemeral_boundary.md
+- docs/reviews/archive/phase_13/phase_13h_redis_ephemeral_boundary.md
 
 Include:
 
