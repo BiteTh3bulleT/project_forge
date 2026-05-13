@@ -86,6 +86,8 @@ type Server struct {
 	dashboard       *dashboard.Service
 	jobs            *jobs.Service
 	gateway         *gateway.Gateway
+	capStoreOK      bool
+	capStoreErr     string
 	lanes           *lanes.Service
 	permissions     *permissions.Service
 	auditSvc        *audit.Service
@@ -210,9 +212,13 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	if loop := newDefaultAutonomyMaintenanceLoop(st.DB, cfg, ev, memorySvc, shadowObserver); loop != nil {
 		autonomyLoop = loop
 	}
+	capabilityOverrideStoreDurable := true
+	capabilityOverrideStoreError := ""
 	capabilityRegistry, err := gateway.NewToolCapabilityRegistryWithStore(bg, &gateway.SQLiteOverrideStore{DB: st.DB})
 	if err != nil {
 		log.Printf("tool capability override store unavailable; using in-memory registry: %v", err)
+		capabilityOverrideStoreDurable = false
+		capabilityOverrideStoreError = err.Error()
 		capabilityRegistry = gateway.NewToolCapabilityRegistry()
 	}
 	gw := gateway.New(gateway.Options{
@@ -290,6 +296,8 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		dashboard:      dashboardSvc,
 		jobs:           jobSvc,
 		gateway:        gw,
+		capStoreOK:     capabilityOverrideStoreDurable,
+		capStoreErr:    capabilityOverrideStoreError,
 		lanes:          laneSvc,
 		permissions:    permSvc,
 		auditSvc:       auditSvc,

@@ -110,6 +110,38 @@ func TestForgeSystemStatusDoesNotExposeMutationMethod(t *testing.T) {
 	}
 }
 
+func TestForgeSystemStatusWarnsWhenCapabilityOverrideStoreFallsBack(t *testing.T) {
+	dataDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: filepath.Join(dataDir, "workspace")})
+	srv.capStoreOK = false
+	srv.capStoreErr = "load tool capability overrides: missing table"
+
+	req := httptest.NewRequest(http.MethodGet, "/forge/system/status", nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	warnings, ok := payload["warnings"].([]any)
+	if !ok {
+		t.Fatalf("warnings=%#v, want list", payload["warnings"])
+	}
+	if !containsStringValue(warnings, "gateway capability override store unavailable; capability status overrides are in-memory only for this process") {
+		t.Fatalf("expected gateway override fallback warning, got %#v", warnings)
+	}
+}
+
 func TestForgeSystemStatusSourceContainsNoHostMutationCommands(t *testing.T) {
 	body, err := os.ReadFile("system_status.go")
 	if err != nil {
@@ -135,6 +167,15 @@ func TestForgeSystemStatusSourceContainsNoHostMutationCommands(t *testing.T) {
 			t.Fatalf("system status route must not contain forbidden mutation text %q", forbidden)
 		}
 	}
+}
+
+func containsStringValue(values []any, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func asMap(t *testing.T, value any) map[string]any {

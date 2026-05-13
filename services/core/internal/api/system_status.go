@@ -143,6 +143,18 @@ func (s *Server) handleForgeSystemStatus(w http.ResponseWriter, r *http.Request)
 		proposals = proposals[:shellSystemStatusProposalLimit]
 	}
 
+	warnings := []string{
+		"shell system surface is read-only",
+		"host command-backed probes are disabled for this endpoint",
+		"FORGE-K remains simulator authority only",
+	}
+	if s != nil && !s.capStoreOK {
+		warnings = append(warnings, "gateway capability override store unavailable; capability status overrides are in-memory only for this process")
+		if strings.TrimSpace(s.capStoreErr) != "" {
+			warnings = append(warnings, "gateway capability override store error: "+strings.TrimSpace(s.capStoreErr))
+		}
+	}
+
 	payload := forgeSystemStatusResponse{
 		GeneratedAt: now,
 		Core: forgeSystemCoreStatus{
@@ -193,11 +205,7 @@ func (s *Server) handleForgeSystemStatus(w http.ResponseWriter, r *http.Request)
 		ModelRuntime:  s.shellSystemModelRuntime(r),
 		Storage:       s.shellSystemStorage(snapshot),
 		ApprovalQueue: forgeSystemApprovalQueue{Wired: true, Reason: "use governed approvals surface for decisions; G6 status is read-only"},
-		Warnings: []string{
-			"shell system surface is read-only",
-			"host command-backed probes are disabled for this endpoint",
-			"FORGE-K remains simulator authority only",
-		},
+		Warnings:      warnings,
 	}
 	writeJSON(w, http.StatusOK, payload)
 }
