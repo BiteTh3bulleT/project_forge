@@ -104,8 +104,9 @@ Last convergence sweep update: 2026-04-22 (branch-local status alignment).
 - Optional Go static checks: `cd services/core && go vet ./...` (root `npm run lint` runs VSA preflight first)
 - Root aggregate test command: `npm test` (delegates to Go core test suite).
 - Root lint command: `npm run lint` (delegates to Go vet/static checks).
-- JS/TS tests: no dedicated repository JS/TS test suite is currently configured.
-- JS/TS lint: no dedicated repository JS/TS lint script is currently configured.
+- JS/TS tests: `npm run test:js` (delegates to desktop Vitest suite).
+- JS/TS lint/static check: `npm run lint:js` (delegates to desktop TypeScript typecheck; no ESLint lane is configured yet).
+- JS/TS validation bundle: `npm run validate:js` (runs JS/TS static check plus desktop tests).
 
 ## Bring-up (current FORGE)
 - Runbook: `docs/runbooks/current_forge_bringup.md` (authoritative operator path).

@@ -26,7 +26,7 @@ VSA lane status: **authoritative source** (not generated, not optional).
 
 1. Add desktop/operator affordances for the consolidated `/api/audit/trace/{correlationId}` report.
 2. Expand rule-agent set or explicitly defer missing agents in docs/matrix.
-3. Add real lint/test coverage for JS/TS (not just build/typecheck).
+3. Broaden JS/TS lint/test coverage beyond the current desktop-focused Vitest and TypeScript lanes.
 4. Register `model.*` tool capabilities in gateway capability registry with honest M3 status transitions.
 
 ## Dangerous unresolved issues
@@ -34,7 +34,7 @@ VSA lane status: **authoritative source** (not generated, not optional).
 1. VSA exported sections remain non-restorable by explicit export-only policy in this phase.
 2. Restore is transactional only for DB-supported sections; non-DB side effects are explicitly warned, not globally rollback-managed.
    - Restore payload now reports `globalAtomic=false` and per-section `nonDbSideEffects`.
-3. JS/TS lint/test coverage remains shallow (desktop typecheck/build present; no dedicated JS/TS lint/test suite).
+3. JS/TS lint/test coverage remains shallow: root `test:js`, `lint:js`, and `validate:js` now exist, but `lint:js` is TypeScript-only and coverage remains desktop-focused.
 4. Model file deletion remains intentionally unavailable; remove-registration and archive are the only supported governance paths in M3.
 
 ## Operational guardrails (not blockers)
