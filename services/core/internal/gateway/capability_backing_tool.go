@@ -73,6 +73,8 @@ func (t *capabilityBackingTool) Execute(ctx context.Context, req Request) (Resul
 		return t.executeAgent(ctx, req)
 	case "backup":
 		return t.executeBackup(ctx, req)
+	case "model":
+		return t.executeModel(ctx, req)
 	default:
 		return capabilityOK("capability executed", map[string]any{
 			"capabilityId": t.capability.ID,

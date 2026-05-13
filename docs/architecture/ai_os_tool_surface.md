@@ -234,7 +234,7 @@ Branch snapshot status on 2026-04-22:
 - Model runtime API paths are implemented (`/forge/models*` and gated `/v1/*`) through `modelruntime.Service`.
 - Runtime execution is scheduler-governed with FIFO queueing, bounded admission, lifecycle controls, deterministic model/backend selection, and policy hooks.
 - Model management flows are implemented for import, verify, enable, disable, archive, and remove-registration.
-- Dedicated `model.*` gateway capability registry entries remain a follow-up; this section documents the capability envelope, not gateway alias completion.
+- Dedicated `model.*` gateway capability registry entries now exist for policy/taxonomy visibility with honest M3/M4 statuses. They do not execute a second modelruntime path; runtime work still goes through the governed `/forge/models*` API surface.
 
 ## Capability Status
 
@@ -251,22 +251,22 @@ Model-runtime capability honesty:
 
 | Capability | Current branch status | Notes |
 |---|---|---|
-| `model.list` | real via runtime API | gateway taxonomy aliasing remains pending |
-| `model.inspect` | real via runtime API | gateway taxonomy aliasing remains pending |
-| `model.load` | real via runtime API | explicit lifecycle path; approval posture can be tightened later |
-| `model.unload` | real via runtime API | explicit lifecycle path; approval posture can be tightened later |
+| `model.list` | active alias / real via runtime API | gateway alias is taxonomy/policy visibility only; execution remains `/forge/models` |
+| `model.inspect` | active alias / real via runtime API | gateway alias is taxonomy/policy visibility only; execution remains `/forge/models/{id}` |
+| `model.load` | approval_only alias / real via runtime API | explicit lifecycle path remains governed by modelruntime management approval |
+| `model.unload` | approval_only alias / real via runtime API | explicit lifecycle path remains governed by modelruntime management approval |
 | `model.chat` | partial via runtime API | non-streaming M3 behavior with FIFO scheduler and policy hooks |
 | `model.generate` | partial via runtime API | non-streaming M3 behavior with FIFO scheduler and policy hooks |
-| `model.import` | real via runtime API | local GGUF and manifest-backed directory registration only |
-| `model.verify` | real via runtime API | checksum/file verification where metadata exists |
-| `model.enable` | real via runtime API | re-enables disabled managed models |
-| `model.disable` | real via runtime API | blocks inference while preserving metadata |
-| `model.archive` | real via runtime API | archives metadata/managed directory without deleting bytes |
-| `model.remove_registration` | real via runtime API | removes runtime registration without destructive delete |
-| `model.backend.list` | real via runtime API | reports configured runtime backend availability |
-| `model.embed` | deferred | out of current runtime scope |
-| `model.delete_file` | deferred | approval-required design target; not implemented |
-| `model.benchmark` | deferred | deferred |
+| `model.import` | approval_only alias / real via runtime API | local GGUF and manifest-backed directory registration only |
+| `model.verify` | active alias / real via runtime API | checksum/file verification where metadata exists |
+| `model.enable` | approval_only alias / real via runtime API | re-enables disabled managed models |
+| `model.disable` | active alias / real via runtime API | blocks inference while preserving metadata |
+| `model.archive` | approval_only alias / real via runtime API | archives metadata/managed directory without deleting bytes |
+| `model.remove_registration` | approval_only alias / real via runtime API | removes runtime registration without destructive delete |
+| `model.backend.list` | active alias / real via runtime API | reports configured runtime backend availability |
+| `model.embed` | deferred alias | out of current runtime scope |
+| `model.delete_file` | deferred alias | approval-required design target; not implemented |
+| `model.benchmark` | deferred alias | deferred |
 
 ## Risk Model
 

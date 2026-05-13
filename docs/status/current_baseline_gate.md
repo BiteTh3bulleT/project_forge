@@ -20,14 +20,14 @@ VSA lane status: **authoritative source** (not generated, not optional).
 ## Must-fix blockers
 
 1. Surface the consolidated correlation report in operator flows so trace/explain is not API-only.
-2. Continue Model Runtime M4 work (streaming, delete-file approval flow, stronger backend/process supervision, and gateway capability registry aliasing).
+2. Continue Model Runtime M4 work (streaming, delete-file approval flow, and stronger backend/process supervision). Gateway `model.*` registry aliases now exist as policy-visible taxonomy entries, but do not add a second runtime execution path.
 
 ## Should-fix next
 
 1. Add desktop/operator affordances for the consolidated `/api/audit/trace/{correlationId}` report.
 2. Expand rule-agent set or explicitly defer missing agents in docs/matrix.
 3. Add real lint/test coverage for JS/TS (not just build/typecheck).
-4. Register `model.*` tool capabilities in gateway capability registry with honest M3 status transitions.
+4. Surface policy-visible `model.*` capability aliases in operator governance displays without bypassing `/forge/models*`.
 
 ## Dangerous unresolved issues
 

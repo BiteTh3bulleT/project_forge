@@ -593,3 +593,7 @@ func (t *capabilityBackingTool) executeAgent(ctx context.Context, req Request) (
 func (t *capabilityBackingTool) executeBackup(ctx context.Context, req Request) (Result, error) {
 	return capabilityOK("backup operation captured", map[string]any{"operation": t.capability.Name, "input": capabilityInputSummary(req.Input)}), nil
 }
+
+func (t *capabilityBackingTool) executeModel(ctx context.Context, req Request) (Result, error) {
+	return Result{}, fmt.Errorf("%s is a gateway capability alias only; use the governed /forge/models API path for modelruntime execution", t.capability.ID)
+}
