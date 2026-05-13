@@ -12,7 +12,7 @@ Scope: readiness decision after convergence hardening.
 | Ready for more autonomy/tool freedom? | conditional | Guardrails are stronger and tool execution is gateway-only, and API-level traceability is stronger, but operator-facing trace UX remains partial. |
 | Ready for IRIS integration? | conditional | Only as proposal-only source under existing gateway/syscall policy boundaries. |
 | Ready for external/demo use? | conditional | Controlled demos are viable; unrestricted posture is not ready. |
-| Ready to run local models without Ollama? | yes | Model Runtime M3 now governs local and compatible remote inference through `/forge/models*` plus gated `/v1/*`, with scheduler, limits, management workflows, lifecycle policy, and audit; current scope remains non-streaming and delete-file-safe. |
+| Ready to run local models without Ollama? | yes | Model Runtime M3 now governs local and compatible remote inference through `/forge/models*` plus gated `/v1/*`, with scheduler, limits, management workflows, lifecycle policy, audit, and SSE chat streaming when a backend supports it; current scope remains delete-file-safe. |
 | Is runtime authority clearer than before? | yes | Restore/apply guarantees are clearer (`atomicScope` + non-DB warnings), tool execution authority is gateway-only, and model runtime now owns managed model registration/lifecycle under one service boundary. |
 
 VSA lane status: **authoritative source** (not generated, not optional).
@@ -20,7 +20,7 @@ VSA lane status: **authoritative source** (not generated, not optional).
 ## Must-fix blockers
 
 1. Surface the consolidated correlation report in operator flows so trace/explain is not API-only.
-2. Continue Model Runtime M4 work (streaming, delete-file approval flow, stronger backend/process supervision, and gateway capability registry aliasing).
+2. Continue Model Runtime M4 work (delete-file approval flow, stronger backend/process supervision, gateway capability registry aliasing, and streaming hardening beyond chat/SSE).
 
 ## Should-fix next
 

@@ -1612,18 +1612,27 @@ func (f *fakeStreamingModelRuntime) StreamChat(_ context.Context, req ModelRunti
 	f.streamCalls++
 	f.lastMeta = req.Meta
 	f.lastChat = req
+	streamErr := f.streamErr
+	tokens := append([]string(nil), f.streamTokens...)
+	if len(tokens) == 0 {
+		tokens = []string{"cloud ", "stream"}
+	}
 	f.mu.Unlock()
-	for i, token := range []string{"cloud ", "stream"} {
+	if streamErr != nil {
+		return ModelRuntimeChatResult{}, streamErr
+	}
+	for i, token := range tokens {
 		if err := onToken(ModelRuntimeChatStreamToken{Text: token, Index: i}); err != nil {
 			return ModelRuntimeChatResult{}, err
 		}
 	}
+	content := strings.Join(tokens, "")
 	return ModelRuntimeChatResult{
-		Content:      "cloud stream",
+		Content:      content,
 		FinishReason: "stop",
 		Usage: ModelRuntimeUsage{
 			PromptTokens:     4,
-			CompletionTokens: 2,
+			CompletionTokens: len(tokens),
 			TotalTokens:      6,
 		},
 		DurationMs: 25,

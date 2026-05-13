@@ -721,10 +721,6 @@ func (s *Server) handleForgeModelChat(w http.ResponseWriter, r *http.Request) {
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "TIMEOUT_INVALID", message: "timeoutMs must be >= 0"}, initialMeta)
 		return
 	}
-	if body.Stream {
-		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusNotImplemented, code: "STREAM_UNSUPPORTED", message: "streaming is not supported in the current model runtime API"}, initialMeta)
-		return
-	}
 	if err := validateChatMessages(body.Messages); err != nil {
 		s.writeModelRuntimeError(w, err, initialMeta)
 		return
@@ -736,6 +732,31 @@ func (s *Server) handleForgeModelChat(w http.ResponseWriter, r *http.Request) {
 
 	meta := requestAuditMetaForBackup(r, body.CorrelationID, body.TraceID, body.WorkspaceID, "model.runtime.chat")
 	metaReq := modelRuntimeMetaFromRequestAudit(meta)
+	if body.Stream {
+		streamRuntime, ok := runtimeSvc.(modelRuntimeStreamingService)
+		if !ok {
+			s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusNotImplemented, code: "STREAM_UNSUPPORTED", message: "streaming is unavailable for the current model runtime service"}, metaReq)
+			return
+		}
+		s.streamForgeModelChat(w, r, streamRuntime, ModelRuntimeChatRequest{
+			ModelID:       pathModelID,
+			Backend:       strings.TrimSpace(body.Backend),
+			Role:          strings.TrimSpace(body.Role),
+			WorkloadClass: strings.TrimSpace(body.WorkloadClass),
+			Messages:      body.Messages,
+			Prompt:        strings.TrimSpace(body.Prompt),
+			Parameters:    body.Parameters,
+			MaxTokens:     body.MaxTokens,
+			TimeoutMs:     body.TimeoutMs,
+			Stream:        true,
+			Actor:         strings.TrimSpace(body.Actor),
+			Source:        strings.TrimSpace(body.Source),
+			Meta:          metaReq,
+			Provenance:    body.Provenance,
+			Metadata:      body.Metadata,
+		})
+		return
+	}
 	result, err := runtimeSvc.Chat(r.Context(), ModelRuntimeChatRequest{
 		ModelID:       pathModelID,
 		Backend:       strings.TrimSpace(body.Backend),
@@ -919,10 +940,6 @@ func (s *Server) handleV1ChatCompletions(w http.ResponseWriter, r *http.Request)
 		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusBadRequest, code: "TIMEOUT_INVALID", message: "timeout_ms must be >= 0"}, initialMeta)
 		return
 	}
-	if body.Stream {
-		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusNotImplemented, code: "STREAM_UNSUPPORTED", message: "streaming is not supported in the current model runtime API"}, initialMeta)
-		return
-	}
 	if err := validateChatMessages(body.Messages); err != nil {
 		s.writeModelRuntimeError(w, err, initialMeta)
 		return
@@ -930,6 +947,27 @@ func (s *Server) handleV1ChatCompletions(w http.ResponseWriter, r *http.Request)
 
 	meta := requestAuditMetaForBackup(r, body.CorrelationID, body.TraceID, body.WorkspaceID, "model.runtime.openai.chat")
 	metaReq := modelRuntimeMetaFromRequestAudit(meta)
+	if body.Stream {
+		streamRuntime, ok := runtimeSvc.(modelRuntimeStreamingService)
+		if !ok {
+			s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusNotImplemented, code: "STREAM_UNSUPPORTED", message: "streaming is unavailable for the current model runtime service"}, metaReq)
+			return
+		}
+		s.streamOpenAICompatChatCompletions(w, r, streamRuntime, ModelRuntimeChatRequest{
+			ModelID:       modelID,
+			Role:          strings.TrimSpace(body.Role),
+			WorkloadClass: strings.TrimSpace(body.WorkloadClass),
+			Messages:      body.Messages,
+			MaxTokens:     body.MaxTokens,
+			TimeoutMs:     body.TimeoutMs,
+			Stream:        true,
+			Actor:         strings.TrimSpace(body.User),
+			Source:        "openai_compat",
+			Meta:          metaReq,
+			Metadata:      body.Metadata,
+		})
+		return
+	}
 	result, err := runtimeSvc.Chat(r.Context(), ModelRuntimeChatRequest{
 		ModelID:       modelID,
 		Role:          strings.TrimSpace(body.Role),
@@ -984,6 +1022,161 @@ func (s *Server) handleV1ChatCompletions(w http.ResponseWriter, r *http.Request)
 		"traceId":       metaReq.TraceID,
 		"workspaceId":   metaReq.WorkspaceID,
 	})
+}
+
+func (s *Server) streamForgeModelChat(w http.ResponseWriter, r *http.Request, runtimeSvc modelRuntimeStreamingService, req ModelRuntimeChatRequest) {
+	prepareModelRuntimeSSE(w)
+	result, err := runtimeSvc.StreamChat(r.Context(), req, func(token ModelRuntimeChatStreamToken) error {
+		if token.Done || strings.TrimSpace(token.Text) == "" {
+			return nil
+		}
+		return writeModelRuntimeSSE(w, "token", token)
+	})
+	if err != nil {
+		_ = writeModelRuntimeSSE(w, "error", map[string]any{
+			"error": map[string]any{
+				"code":    modelRuntimeErrorCode(err),
+				"message": modelRuntimeErrorMessage(err),
+			},
+			"correlationId": req.Meta.CorrelationID,
+			"traceId":       req.Meta.TraceID,
+			"workspaceId":   req.Meta.WorkspaceID,
+		})
+		flushModelRuntimeSSE(w)
+		return
+	}
+	_ = writeModelRuntimeSSE(w, "result", map[string]any{
+		"result":        result,
+		"correlationId": req.Meta.CorrelationID,
+		"traceId":       req.Meta.TraceID,
+		"workspaceId":   req.Meta.WorkspaceID,
+	})
+	_ = writeModelRuntimeSSE(w, "done", map[string]any{"done": true})
+	flushModelRuntimeSSE(w)
+}
+
+func (s *Server) streamOpenAICompatChatCompletions(w http.ResponseWriter, r *http.Request, runtimeSvc modelRuntimeStreamingService, req ModelRuntimeChatRequest) {
+	prepareModelRuntimeSSE(w)
+	id := fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
+	created := time.Now().Unix()
+	modelID := strings.TrimSpace(req.ModelID)
+	result, err := runtimeSvc.StreamChat(r.Context(), req, func(token ModelRuntimeChatStreamToken) error {
+		if token.Done || strings.TrimSpace(token.Text) == "" {
+			return nil
+		}
+		if strings.TrimSpace(token.ModelID) != "" {
+			modelID = strings.TrimSpace(token.ModelID)
+		}
+		return writeModelRuntimeSSEData(w, map[string]any{
+			"id":      id,
+			"object":  "chat.completion.chunk",
+			"created": created,
+			"model":   modelID,
+			"choices": []map[string]any{
+				{
+					"index": token.Index,
+					"delta": map[string]any{
+						"content": token.Text,
+					},
+					"finish_reason": nil,
+				},
+			},
+			"correlationId": req.Meta.CorrelationID,
+			"traceId":       req.Meta.TraceID,
+			"workspaceId":   req.Meta.WorkspaceID,
+		})
+	})
+	if err != nil {
+		_ = writeModelRuntimeSSEData(w, map[string]any{
+			"error": map[string]any{
+				"code":    modelRuntimeErrorCode(err),
+				"message": modelRuntimeErrorMessage(err),
+			},
+			"correlationId": req.Meta.CorrelationID,
+			"traceId":       req.Meta.TraceID,
+			"workspaceId":   req.Meta.WorkspaceID,
+		})
+		flushModelRuntimeSSE(w)
+		return
+	}
+	if strings.TrimSpace(result.ModelID) != "" {
+		modelID = strings.TrimSpace(result.ModelID)
+	}
+	finishReason := strings.TrimSpace(result.FinishReason)
+	if finishReason == "" {
+		finishReason = "stop"
+	}
+	totalTokens := result.Usage.TotalTokens
+	if totalTokens == 0 {
+		totalTokens = result.Usage.PromptTokens + result.Usage.CompletionTokens
+	}
+	_ = writeModelRuntimeSSEData(w, map[string]any{
+		"id":      id,
+		"object":  "chat.completion.chunk",
+		"created": created,
+		"model":   modelID,
+		"choices": []map[string]any{
+			{
+				"index":         0,
+				"delta":         map[string]any{},
+				"finish_reason": finishReason,
+			},
+		},
+		"usage": map[string]any{
+			"prompt_tokens":     result.Usage.PromptTokens,
+			"completion_tokens": result.Usage.CompletionTokens,
+			"total_tokens":      totalTokens,
+		},
+		"correlationId": req.Meta.CorrelationID,
+		"traceId":       req.Meta.TraceID,
+		"workspaceId":   req.Meta.WorkspaceID,
+	})
+	_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	flushModelRuntimeSSE(w)
+}
+
+func prepareModelRuntimeSSE(w http.ResponseWriter) {
+	h := w.Header()
+	h.Set("Content-Type", "text/event-stream")
+	h.Set("Cache-Control", "no-cache")
+	h.Set("Connection", "keep-alive")
+}
+
+func writeModelRuntimeSSE(w http.ResponseWriter, event string, payload any) error {
+	if strings.TrimSpace(event) != "" {
+		if _, err := fmt.Fprintf(w, "event: %s\n", strings.TrimSpace(event)); err != nil {
+			return err
+		}
+	}
+	return writeModelRuntimeSSEData(w, payload)
+}
+
+func writeModelRuntimeSSEData(w http.ResponseWriter, payload any) error {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "data: %s\n\n", raw); err != nil {
+		return err
+	}
+	flushModelRuntimeSSE(w)
+	return nil
+}
+
+func flushModelRuntimeSSE(w http.ResponseWriter) {
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func modelRuntimeErrorCode(err error) string {
+	_, code, _ := mapModelRuntimeError(err)
+	return code
+}
+
+func modelRuntimeErrorMessage(err error) string {
+	_, _, message := mapModelRuntimeError(err)
+	return message
 }
 
 func (s *Server) requireModelRuntime(w http.ResponseWriter, r *http.Request, fallbackPrefix string) (modelRuntimeService, ModelRuntimeRequestMeta, bool) {

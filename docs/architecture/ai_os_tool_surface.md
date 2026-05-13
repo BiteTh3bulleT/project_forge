@@ -255,8 +255,8 @@ Model-runtime capability honesty:
 | `model.inspect` | real via runtime API | gateway taxonomy aliasing remains pending |
 | `model.load` | real via runtime API | explicit lifecycle path; approval posture can be tightened later |
 | `model.unload` | real via runtime API | explicit lifecycle path; approval posture can be tightened later |
-| `model.chat` | partial via runtime API | non-streaming M3 behavior with FIFO scheduler and policy hooks |
-| `model.generate` | partial via runtime API | non-streaming M3 behavior with FIFO scheduler and policy hooks |
+| `model.chat` | partial via runtime API | non-streaming and SSE chat paths use FIFO scheduler and policy hooks; gateway taxonomy aliasing remains pending |
+| `model.generate` | partial via runtime API | runtime service generation boundary exists; public chat APIs expose the governed inference surface |
 | `model.import` | real via runtime API | local GGUF and manifest-backed directory registration only |
 | `model.verify` | real via runtime API | checksum/file verification where metadata exists |
 | `model.enable` | real via runtime API | re-enables disabled managed models |
