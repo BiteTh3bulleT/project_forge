@@ -349,9 +349,7 @@ func (b *LlamaCppBackend) Health(ctx context.Context) (BackendHealth, error) {
 	health := BackendHealth{
 		Name: b.Name(),
 		Kind: b.Kind(),
-		Meta: map[string]any{
-			"endpoint": b.endpoint,
-		},
+		Meta: b.supervisionMeta(),
 	}
 	if strings.TrimSpace(b.endpoint) == "" {
 		health.Healthy = false
@@ -396,6 +394,9 @@ func (b *LlamaCppBackend) Inspect(_ context.Context, modelID string) (BackendIns
 		"endpoint": b.endpoint,
 		"loaded":   ok,
 	}
+	for key, value := range b.supervisionMeta() {
+		meta[key] = value
+	}
 	if ok {
 		meta["loadedAt"] = loaded.LoadedAt
 	}
@@ -405,6 +406,22 @@ func (b *LlamaCppBackend) Inspect(_ context.Context, modelID string) (BackendIns
 		Found:   ok,
 		Meta:    meta,
 	}, nil
+}
+
+func (b *LlamaCppBackend) supervisionMeta() map[string]any {
+	timeout := defaultIfZero(b.requestTimeout, 2*time.Second)
+	return map[string]any{
+		"endpoint":             b.endpoint,
+		"supervision":          "external_endpoint",
+		"processManaged":       false,
+		"spawnSupported":       false,
+		"allowSpawnConfigured": b.allowSpawn,
+		"binaryPathConfigured": strings.TrimSpace(b.binaryPath) != "",
+		"healthPath":           b.healthPath,
+		"chatPath":             b.chatPath,
+		"completionPath":       b.completionPath,
+		"requestTimeoutMs":     timeout.Milliseconds(),
+	}
 }
 
 func (b *LlamaCppBackend) postJSON(ctx context.Context, path string, payload map[string]any) ([]byte, error) {

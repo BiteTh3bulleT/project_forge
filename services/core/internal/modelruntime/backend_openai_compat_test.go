@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestOpenAICompatBackendLoadGenerateHealth(t *testing.T) {
@@ -62,6 +63,41 @@ func TestOpenAICompatBackendLoadGenerateHealth(t *testing.T) {
 	}
 	if !health.Healthy || health.Kind != BackendOpenAICompat {
 		t.Fatalf("unexpected health: %+v", health)
+	}
+}
+
+func TestOpenAICompatBackendHealthReportsSupervisionMetadata(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/models" {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{"id": "remote-model"}}})
+	}))
+	defer server.Close()
+
+	backend := NewOpenAICompatBackend(OpenAICompatOptions{
+		Name:           "vllm-compatible",
+		Endpoint:       server.URL,
+		Kind:           BackendVLLM,
+		RequestTimeout: 2300 * time.Millisecond,
+		ModelsPath:     "/models",
+		ChatPath:       "/chat",
+		Profile:        "interactive_vllm",
+	})
+
+	health, err := backend.Health(context.Background())
+	if err != nil {
+		t.Fatalf("health: %v", err)
+	}
+	if health.Meta["supervision"] != "external_endpoint" || health.Meta["processManaged"] != false || health.Meta["spawnSupported"] != false {
+		t.Fatalf("unexpected supervision metadata: %#v", health.Meta)
+	}
+	if health.Meta["profile"] != "interactive_vllm" || health.Meta["modelsPath"] != "/models" || health.Meta["chatPath"] != "/chat" {
+		t.Fatalf("unexpected profile/path metadata: %#v", health.Meta)
+	}
+	if health.Meta["requestTimeoutMs"] != int64(2300) {
+		t.Fatalf("unexpected timeout metadata: %#v", health.Meta)
 	}
 }
 

@@ -176,3 +176,36 @@ func TestLlamaCppBackend_SpawnDeferred(t *testing.T) {
 		t.Fatalf("expected unsupported spawn error, got %v", err)
 	}
 }
+
+func TestLlamaCppBackendHealthReportsSupervisionMetadata(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/healthz" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer ts.Close()
+
+	backend := NewLlamaCppBackend(LlamaCppOptions{
+		Endpoint:       ts.URL,
+		RequestTimeout: 1500 * time.Millisecond,
+		AllowSpawn:     true,
+		BinaryPath:     "/usr/bin/llama-server",
+		HealthPath:     "/healthz",
+	})
+
+	health, err := backend.Health(context.Background())
+	if err != nil {
+		t.Fatalf("health: %v", err)
+	}
+	if health.Meta["supervision"] != "external_endpoint" || health.Meta["processManaged"] != false || health.Meta["spawnSupported"] != false {
+		t.Fatalf("unexpected supervision metadata: %#v", health.Meta)
+	}
+	if health.Meta["allowSpawnConfigured"] != true || health.Meta["binaryPathConfigured"] != true {
+		t.Fatalf("expected spawn configuration to be visible without enabling spawn, got %#v", health.Meta)
+	}
+	if health.Meta["healthPath"] != "/healthz" || health.Meta["requestTimeoutMs"] != int64(1500) {
+		t.Fatalf("unexpected health path/timeout metadata: %#v", health.Meta)
+	}
+}
