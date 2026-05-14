@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -59,6 +61,9 @@ func (o Ollama) ollamaChatWithModel(ctx context.Context, baseURL, model string, 
 		"messages": messages,
 		"stream":   false,
 	}
+	if options := ollamaChatOptions(); len(options) > 0 {
+		payload["options"] = options
+	}
 	if len(tools) > 0 {
 		payload["tools"] = tools
 	}
@@ -103,6 +108,9 @@ func (o Ollama) streamChatWithModel(ctx context.Context, baseURL, model string, 
 		"model":    model,
 		"messages": messages,
 		"stream":   true,
+	}
+	if options := ollamaChatOptions(); len(options) > 0 {
+		payload["options"] = options
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -174,6 +182,32 @@ func (o Ollama) streamChatWithModel(ctx context.Context, baseURL, model string, 
 		return acc.String(), lastMeta, err
 	}
 	return acc.String(), lastMeta, nil
+}
+
+func ollamaChatOptions() map[string]any {
+	options := map[string]any{}
+	if v := envPositiveInt("FORGE_OLLAMA_CHAT_NUM_PREDICT", 96); v > 0 {
+		options["num_predict"] = v
+	}
+	if v := envPositiveInt("FORGE_OLLAMA_CHAT_NUM_CTX", 1024); v > 0 {
+		options["num_ctx"] = v
+	}
+	if v := envPositiveInt("FORGE_OLLAMA_CHAT_NUM_THREAD", 0); v > 0 {
+		options["num_thread"] = v
+	}
+	return options
+}
+
+func envPositiveInt(key string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil || v < 0 {
+		return fallback
+	}
+	return v
 }
 
 func uniqueStrings(input []string) []string {
