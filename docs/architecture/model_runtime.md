@@ -106,6 +106,8 @@ Current backend posture:
 - vLLM-compatible endpoint use is supported through the same transport shape as the disabled-by-default `interactive_vllm` profile, without deep vLLM-specific orchestration
 - spawn/process management remains explicitly out of current scope except for structured unsupported/error behavior
 
+Phase M5 adds pure backend profile labels in `services/core/internal/modelruntime/profiles.go` for `cpu_safe`, `local_llama_cpp`, `local_ollama_dev`, `interactive_vllm`, `embedding_tei`, and `openai_compatible_remote`. These labels are descriptive contracts only; they do not change backend selection, scheduler behavior, lifecycle behavior, API routes, or shell behavior.
+
 ### vLLM Profile Boundary
 
 M4 treats vLLM as an external governed backend endpoint. Operators configure it with `FORGE_VLLM_BASE_URL` and optional `FORGE_VLLM_API_KEY`; legacy `FORGE_MODEL_VLLM_*` aliases remain supported. FORGE does not install, start, stop, or supervise vLLM in this phase, and Nix evaluation must not require vLLM, CUDA, or GPU hardware.
