@@ -972,7 +972,7 @@ func TestRestoreBundleRejectsSymlinkEscapingBundleDirs(t *testing.T) {
 	}
 	linkPath := filepath.Join(backupDir, "outside-link.json")
 	if err := os.Symlink(outside, linkPath); err != nil {
-		t.Fatalf("create symlink: %v", err)
+		t.Skipf("skipping symlink escape test because symlink creation is unavailable: %v", err)
 	}
 
 	_, err = svc.RestoreBundle(ctx, RestoreBundleRequest{FilePath: linkPath, DryRun: true})
