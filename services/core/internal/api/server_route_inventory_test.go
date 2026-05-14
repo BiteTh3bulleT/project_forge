@@ -30,6 +30,7 @@ func TestServerRouteInventoryRepresentativeCoverage(t *testing.T) {
 		{http.MethodGet, "/forge/models"},
 		{http.MethodPost, "/forge/models/{id}/load"},
 		{http.MethodPost, "/forge/models/{id}/unload"},
+		{http.MethodPost, "/forge/models/{id}/delete-file"},
 		{http.MethodPost, "/forge/models/{id}/chat"},
 		{http.MethodGet, "/forge/model-runtime/health"},
 		{http.MethodGet, "/forge/model-runtime/queue"},

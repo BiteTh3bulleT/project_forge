@@ -1,10 +1,10 @@
 # Model Runtime Status (M3/M4 Runtime Profile)
 
-Snapshot date: 2026-05-12.
+Snapshot date: 2026-05-13.
 
 ## Executive Status
 
-Model Runtime M3 is implemented in this branch. M4 closes the external vLLM-compatible backend profile as a governed, disabled-by-default modelruntime profile. FORGE now treats models as managed runtime assets instead of loose local manifests: local GGUF or manifest-backed imports can be registered into FORGE model home, persistent model state is tracked across import/verify/disable/archive/remove-registration operations, runtime selection spans multiple pluggable backends, and the service exposes management, compatibility, usage, backend, queue, loaded, and health views while keeping inference policy-governed, auditable, and non-authoritative over semantic truth.
+Model Runtime M3 is implemented in this branch. M4 closes the external vLLM-compatible backend profile as a governed, disabled-by-default modelruntime profile and adds the approval-required destructive delete-file flow for managed model directories. FORGE now treats models as managed runtime assets instead of loose local manifests: local GGUF or manifest-backed imports can be registered into FORGE model home, persistent model state is tracked across import/verify/disable/archive/remove-registration/delete-file operations, runtime selection spans multiple pluggable backends, and the service exposes management, compatibility, usage, backend, queue, loaded, and health views while keeping inference policy-governed, auditable, and non-authoritative over semantic truth.
 
 ## Implemented
 
@@ -16,7 +16,7 @@ Model Runtime M3 is implemented in this branch. M4 closes the external vLLM-comp
 | Persistent model state (`model.state.json`) | real | `services/core/internal/modelruntime/state.go` |
 | Model registry lifecycle metadata | real | `services/core/internal/modelruntime/registry.go`, `registry_test.go` |
 | Local import/register/reconcile workflows | real | `services/core/internal/modelruntime/store_management.go`, `service_management_test.go` |
-| Verification / enable / disable / archive / remove-registration | real | `services/core/internal/modelruntime/management.go`, `store_management_test.go` |
+| Verification / enable / disable / archive / remove-registration / delete-file | real | `services/core/internal/modelruntime/management.go`, `store_management.go`, `store_management_test.go` |
 | Backend interface | real | `services/core/internal/modelruntime/backend.go` |
 | Fake backend for tests | real | `services/core/internal/modelruntime/backend_fake.go`, `backend_fake_test.go` |
 | llama.cpp backend adapter (endpoint mode) | real | `services/core/internal/modelruntime/backend_llama_cpp.go`, `backend_llama_cpp_test.go` |
@@ -38,8 +38,9 @@ Model Runtime M3 is implemented in this branch. M4 closes the external vLLM-comp
 - Import manifest-backed model directories.
 - Reconcile registry state by rescanning model home.
 - Verify managed model files and checksum metadata where available.
-- Enable, disable, archive, and remove registration without conflating those operations.
+- Enable, disable, archive, remove registration, and approval-required delete-file without conflating those operations.
 - Preserve archive/remove-registration metadata without silently deleting model bytes.
+- Delete managed model files only through the explicit high-risk approval path, constrained to active or archived model directories under `FORGE_MODEL_HOME`.
 - Track preferred/default model selection explicitly.
 
 ### Backend Coverage and Selection
@@ -75,6 +76,7 @@ Management and inspection:
 - `POST /forge/models/{id}/disable`
 - `POST /forge/models/{id}/archive`
 - `POST /forge/models/{id}/remove`
+- `POST /forge/models/{id}/delete-file`
 - `POST /forge/models/{id}/load`
 - `POST /forge/models/{id}/unload`
 - `POST /forge/models/{id}/chat`
@@ -156,13 +158,13 @@ Safe default posture:
 | Area | Status | Notes |
 |---|---|---|
 | Import/register local GGUF and manifest-backed directories | real | Local-only path is implemented. |
-| Verify / enable / disable / archive / remove-registration | real | File deletion remains separate and deferred. |
+| Verify / enable / disable / archive / remove-registration | real | Non-destructive lifecycle and registration paths remain separate from deletion. |
+| Destructive model file deletion | real / approval-required | `POST /forge/models/{id}/delete-file` deletes only managed active/archive directories under `FORGE_MODEL_HOME` after high-risk model-management approval. |
 | Preferred/default model selection | real | Deterministic within current runtime scope. |
 | OpenAI-compatible backend adapter | real | Endpoint-backed path is implemented. |
 | vLLM-compatible backend path | partial/live external profile | Uses the OpenAI-compatible transport shape, is disabled when unset, and exposes backend status through modelruntime. No separate managed vLLM service or deep vLLM orchestration is added. |
 | Streaming responses | deferred | Service/API remain intentionally non-streaming. |
 | llama.cpp spawn mode | deferred | Spawn flag exists; runtime returns structured unsupported behavior. |
-| Destructive model file deletion | deferred | Approval-required design target; not implemented. |
 | Embeddings/rerank/vision runtime paths | deferred | Taxonomy remains documented; execution not implemented. |
 | Gateway `model.*` capability registration | partial | Runtime APIs are real; gateway registry aliasing remains follow-up work. |
 | Advanced batching/load balancing/distributed scheduling | deferred | FIFO single-active-per-backend scheduler only. |
@@ -172,7 +174,6 @@ Safe default posture:
 - streaming support
 - stronger backend/process supervision for llama.cpp and remote backends
 - dedicated gateway `model.*` capability aliasing
-- destructive model file delete flow with explicit approval posture
 - deeper multi-backend routing/load balancing beyond deterministic selection
 - embeddings/rerank/vision execution paths
 

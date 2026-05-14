@@ -1,6 +1,6 @@
 # FORGE Model Runtime Architecture
 
-Status date: 2026-05-12 (M3 plus M4 external vLLM profile snapshot).
+Status date: 2026-05-13 (M3 plus M4 external vLLM profile and delete-file snapshot).
 
 ## Intent
 
@@ -121,7 +121,7 @@ Responsibilities:
 - list and inspect models
 - import and reconcile managed models
 - explicit load and unload
-- verify, enable, disable, archive, and remove registration
+- verify, enable, disable, archive, remove registration, and approval-required managed file deletion
 - generate via scheduler-controlled execution
 - resolve backend/model selection deterministically
 - expose loaded-model, queue, usage, backend, and health snapshots
@@ -150,7 +150,7 @@ Lifecycle rules:
 - duplicate loads are idempotent when the same model is already loaded
 - disabled or archived models are denied for inference
 - remove-registration and archive are metadata/governance operations, not destructive deletion
-- file deletion remains deferred to a later approval-governed phase
+- file deletion is a separate approval-required operation and is limited to managed active/archive model directories under `FORGE_MODEL_HOME`
 
 ## Scheduler and Admission Control
 
@@ -250,6 +250,7 @@ This leaves room for future charter/budget/autonomy policy without creating a se
 - `POST /forge/models/{id}/disable`
 - `POST /forge/models/{id}/archive`
 - `POST /forge/models/{id}/remove`
+- `POST /forge/models/{id}/delete-file`
 - `POST /forge/models/{id}/load`
 - `POST /forge/models/{id}/unload`
 - `POST /forge/models/{id}/chat`
@@ -318,7 +319,7 @@ Model runtime management is governed inside FORGE, but this phase does not creat
 
 Still deferred or intentionally bounded:
 
-- destructive model file deletion
+- destructive model file deletion is implemented only for managed model-home directories and always requires high-risk model-management approval
 - streaming inference
 - advanced multi-backend load balancing
 - distributed scheduling

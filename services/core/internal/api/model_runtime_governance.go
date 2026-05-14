@@ -304,7 +304,7 @@ func (s *Server) modelManagementRisk(ctx context.Context, runtimeSvc modelRuntim
 	}
 
 	switch op {
-	case "import", "archive", "remove", "load", "unload":
+	case "import", "archive", "remove", "delete_file", "load", "unload":
 		return modelManagementRiskHigh, backend, provider
 	case "enable":
 		if req.Preferred || isExternalModelBackend(backend) || isExternalProvider(provider) {

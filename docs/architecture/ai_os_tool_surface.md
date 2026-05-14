@@ -233,7 +233,7 @@ Branch snapshot status on 2026-04-22:
 
 - Model runtime API paths are implemented (`/forge/models*` and gated `/v1/*`) through `modelruntime.Service`.
 - Runtime execution is scheduler-governed with FIFO queueing, bounded admission, lifecycle controls, deterministic model/backend selection, and policy hooks.
-- Model management flows are implemented for import, verify, enable, disable, archive, and remove-registration.
+- Model management flows are implemented for import, verify, enable, disable, archive, remove-registration, and approval-required delete-file.
 - Dedicated `model.*` gateway capability registry entries remain a follow-up; this section documents the capability envelope, not gateway alias completion.
 
 ## Capability Status
@@ -265,7 +265,7 @@ Model-runtime capability honesty:
 | `model.remove_registration` | real via runtime API | removes runtime registration without destructive delete |
 | `model.backend.list` | real via runtime API | reports configured runtime backend availability |
 | `model.embed` | deferred | out of current runtime scope |
-| `model.delete_file` | deferred | approval-required design target; not implemented |
+| `model.delete_file` | approval-required via runtime API | deletes only managed active/archive model directories under `FORGE_MODEL_HOME` after high-risk approval |
 | `model.benchmark` | deferred | deferred |
 
 ## Risk Model

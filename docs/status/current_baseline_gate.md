@@ -12,7 +12,7 @@ Scope: readiness decision after convergence hardening.
 | Ready for more autonomy/tool freedom? | conditional | Guardrails are stronger and tool execution is gateway-only, and API-level traceability is stronger, but operator-facing trace UX remains partial. |
 | Ready for IRIS integration? | conditional | Only as proposal-only source under existing gateway/syscall policy boundaries. |
 | Ready for external/demo use? | conditional | Controlled demos are viable; unrestricted posture is not ready. |
-| Ready to run local models without Ollama? | yes | Model Runtime M3 now governs local and compatible remote inference through `/forge/models*` plus gated `/v1/*`, with scheduler, limits, management workflows, lifecycle policy, and audit; current scope remains non-streaming and delete-file-safe. |
+| Ready to run local models without Ollama? | yes | Model Runtime M3 now governs local and compatible remote inference through `/forge/models*` plus gated `/v1/*`, with scheduler, limits, management workflows, lifecycle policy, audit, non-streaming inference, and approval-required managed delete-file flow. |
 | Is runtime authority clearer than before? | yes | Restore/apply guarantees are clearer (`atomicScope` + non-DB warnings), tool execution authority is gateway-only, and model runtime now owns managed model registration/lifecycle under one service boundary. |
 
 VSA lane status: **authoritative source** (not generated, not optional).
@@ -20,7 +20,7 @@ VSA lane status: **authoritative source** (not generated, not optional).
 ## Must-fix blockers
 
 1. Surface the consolidated correlation report in operator flows so trace/explain is not API-only.
-2. Continue Model Runtime M4 work (streaming, delete-file approval flow, stronger backend/process supervision, and gateway capability registry aliasing).
+2. Continue Model Runtime M4 work (streaming, stronger backend/process supervision, and gateway capability registry aliasing).
 
 ## Should-fix next
 
@@ -35,7 +35,7 @@ VSA lane status: **authoritative source** (not generated, not optional).
 2. Restore is transactional only for DB-supported sections; non-DB side effects are explicitly warned, not globally rollback-managed.
    - Restore payload now reports `globalAtomic=false` and per-section `nonDbSideEffects`.
 3. JS/TS lint/test coverage remains shallow: root `test:js`, `lint:js`, and `validate:js` now exist, but `lint:js` is TypeScript-only and coverage remains desktop-focused.
-4. Model file deletion remains intentionally unavailable; remove-registration and archive are the only supported governance paths in M3.
+4. Model file deletion is intentionally narrow: only managed model-home directories can be deleted, and the flow requires high-risk model-management approval.
 
 ## Operational guardrails (not blockers)
 
