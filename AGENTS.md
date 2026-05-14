@@ -69,6 +69,11 @@ Last convergence sweep update: 2026-04-22 (branch-local status alignment).
 - Never silently escalate between execution boundaries.
 - Attach task packet references and artifact evidence to outputs.
 
+## Branch and Worktree Policy
+- Keep task branches and their `.worktrees/` checkouts after merging unless explicitly told to clean them up; they are retained as notes/provenance.
+- When creating task branches, merge the completed work back to `main` before or as part of commit/push handoff.
+- Push completed branch work to `main` as well as any task branch/PR branch unless explicitly told not to.
+
 ## FORGE AI-OS Invariants
 - FORGE is the OS.
 - IRIS is a future semantic service inside FORGE, not the owner of truth.
