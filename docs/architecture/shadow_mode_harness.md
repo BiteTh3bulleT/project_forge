@@ -1,12 +1,19 @@
 # FORGE-K Shadow Mode Harness
 
-Status: Phase 11G simulator-only shadow harness design plus Phase 12A live integration design handoff. Phase 11G scope is `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`; Phase 12A scope is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12M-Q adds disabled-by-default internal advisory diagnostics in the live shadow package without making the harness live authority.
+Status: Phase 11G simulator-only shadow harness design plus Phase 12 read-only live diagnostics and Phase 14 validation-shadow reporting context. Phase 11G scope is `SIMULATOR_ONLY / SHADOW_DESIGN_ONLY`; Phase 12A scope is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12M-Q adds disabled-by-default internal advisory diagnostics in the live shadow package without making the harness live authority. Phase 14D/14E add disabled-by-default Control Lane validation summary emission through `forgekshadow` without changing validation decisions or granting live authority.
 
-Phase 11G does not implement live shadow mode and does not authorize Phase 12 live authority migration. Phase 12B later implemented one disabled-by-default `/health` metadata observer, Phase 12C hardened it without adding touchpoints, Phase 12E/12H/12K-L added route/chat/retrieval metadata diagnostics, and Phase 12M-Q adds advisory summaries derived only from those existing safe diagnostics.
+Phase 11G did not implement live shadow mode and did not authorize live authority migration. Phase 12B later implemented one disabled-by-default `/health` metadata observer, Phase 12C hardened it without adding touchpoints, Phase 12E/12H/12K-L added route/chat/retrieval metadata diagnostics, and Phase 12M-Q adds advisory summaries derived only from those existing safe diagnostics.
+
+Current boundary banner:
+
+- `[SIMULATOR-ONLY]` `services/core/internal/forgek/shadowharness` is a contract model and no-effect validation shape.
+- `[LIVE / READ_ONLY]` `services/core/internal/forgekshadow` stores bounded metadata diagnostics only when disabled-by-default flags are enabled.
+- `[PARTIAL LIVE VALIDATION]` Phase 14 validation reports mirror existing Control Lane validation outcomes after the live owner has produced a result. They do not decide, commit, admit, compile, retrieve, generate, execute, or mutate.
+- `[BLOCKED]` Live Courthouse admission, live Context Compiler authority, governed semantic mutation routing, runtime driver authority, and broader FORGE-K Kernel authority are outside shadow-mode scope.
 
 ## Executive Summary
 
-The shadow mode harness is the future read-only observation and diagnostic layer for comparing existing live daemon behavior against FORGE-K simulator contracts. In Phase 11G, the harness is a design and pure contract model only. It does not observe live requests, wire adapters, call model runtimes, execute tools, run retrieval, call embedding providers, write memory, alter routes, change APIs, or affect user-visible output.
+The shadow mode harness began as the future read-only observation and diagnostic layer for comparing existing live daemon behavior against FORGE-K simulator contracts. In Phase 11G, the harness is a design and pure contract model only. Later Phase 12 live diagnostics implement bounded disabled-by-default metadata observation outside the simulator package. No shadow path may call model runtimes, execute tools, run retrieval, call embedding providers, write memory, alter routes, change APIs, or affect user-visible output.
 
 Shadow reports are diagnostics only. They cannot authorize canonical mutation, live integration, tool execution, memory writes, retrieval, modelruntime calls, or response changes.
 
@@ -41,23 +48,23 @@ A future live shadow harness may:
 - produce comparison reports
 - produce consensus, context, RAG, runtime, KV, and lymphatic shadow reports
 - produce metadata-only advisory summaries from existing safe diagnostic reports
+- mirror live Control Lane validation result summaries after the Control Lane has already accepted or rejected the validation action
 - flag divergence and risk for operator review
 
 It must remain read-only until a later `LIVE_INTEGRATION` phase explicitly authorizes more.
 
-## Non-Goals
+## Non-Goals And Current No-Authority Rules
 
-- No live daemon wiring.
-- No live request observation in Phase 11G.
-- No public API or route changes.
+- Phase 11G had no live daemon wiring and no live request observation.
+- Current Phase 12/14 touchpoints do not create live authority migration.
+- No public API or route changes for diagnostic surfaces.
 - No live modelruntime calls.
 - No tool execution.
-- No live retrieval or embedding calls.
+- No live retrieval or embedding calls from FORGE-K.
 - No live RAG.
 - No memory writes.
 - No user-visible response changes.
 - No second authority path.
-- No Phase 12 live integration.
 
 ## Shadow Request Lifecycle
 
@@ -276,9 +283,9 @@ Diagnostic failures:
 - KV acceleration-not-memory verification missing
 - lymphatic no-silent-mutation verification missing
 
-## Phase 12B Implementation Gates
+## Historical Phase 12B Implementation Gates
 
-Before implementing a read-only live shadow harness:
+Before the first read-only live shadow harness implementation:
 
 - Phase 12A live integration design is complete
 - route inventory tests pass
@@ -325,9 +332,9 @@ The following cannot be wired in Phase 12B:
 
 ## What Not To Do
 
-- Do not implement Phase 12.
-- Do not observe live daemon requests in Phase 11G.
-- Do not wire adapters to live systems.
+- Do not treat Phase 12 diagnostics or Phase 14 validation summaries as authority.
+- Do not observe live daemon requests in simulator-only packages.
+- Do not wire simulator adapters to live systems as authority paths.
 - Do not implement live RAG.
 - Do not call live retrieval or embedding providers.
 - Do not modify live daemon behavior.

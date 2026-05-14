@@ -41,7 +41,7 @@ On hosts with `/dev/dri/renderD128`, `npm run docker:start` automatically layers
 npm run docker:start
 ```
 
-`npm run docker:start` runs `scripts/forge-docker-up.sh`, starts Postgres, Redis, Qdrant, and core, and preserves existing named volumes. It does not start the browser-served `desktop-web` container. The normal operator shell is native Tauri through `npm run docker:desktop`.
+`npm run docker:start` starts Postgres, Redis, Qdrant, and core, and preserves existing named volumes. It does not start the browser-served `desktop-web` container. The normal operator shell is native Tauri through `npm run docker:desktop`.
 
 If the native dev core or desktop is already using the default ports, choose alternate published ports:
 

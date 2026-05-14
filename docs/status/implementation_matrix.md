@@ -1,8 +1,8 @@
-# FORGE Implementation Matrix (Phase 5.996 Snapshot)
+# FORGE Implementation Matrix (Current Live Authority Snapshot)
 
-Observed against this branch on 2026-04-22.
+Observed against this branch on 2026-05-14.
 
-Top note: this matrix tracks legacy/live AI-OS implementation status and current daemon authority paths. It is not the FORGE-K simulator phase matrix. For FORGE-K Phase 0-14 status, including the simulator/live authority boundary, see `docs/reviews/current_phase_status.md` and ADR 0005 (`docs/adr/0005-forge-k-simulator-vs-live-authority.md`).
+Top note: this matrix tracks legacy/live AI-OS implementation status and current daemon authority paths. It is not the FORGE-K simulator phase matrix. For current phase status and FORGE-K simulator/live authority boundaries, see `docs/reviews/current_phase_status.md`, `docs/status/current_authority_sources.md`, and ADR 0005 (`docs/adr/0005-forge-k-simulator-vs-live-authority.md`).
 
 Status values: `real`, `partial`, `legacy-boundary`, `blocked`, `scaffold`, `deferred`.
 
@@ -10,7 +10,7 @@ Status values: `real`, `partial`, `legacy-boundary`, `blocked`, `scaffold`, `def
 |---|---|---|---|---|
 | Tool execution | `/api/gateway/invoke` -> `gateway.Execute` | real | `internal/gateway/service.go`, gateway tests | keep gateway-only ingress discipline |
 | Legacy adapter side door | route removed | resolved | `server.go`, `server_adapters_test.go` | `/api/adapters/{id}/invoke` no longer wired; removed-route behavior tested as `404` |
-| Model runtime governance (M3/M4) | `/forge/models*` + `modelruntime.Service` (with gated `/v1/*` compatibility) | partial (implemented) | `services/core/internal/modelruntime/*`, `services/core/internal/api/model_runtime.go`, `services/core/internal/api/model_runtime_bridge.go`, `services/core/internal/config/config.go`, gateway `model.*` policy aliases | M4 items remain: stronger backend/process supervision, deeper multi-backend scheduling, streaming hardening beyond chat/SSE |
+| Model runtime governance (M3/M4) | `/forge/models*` + `modelruntime.Service` (with gated `/v1/*` compatibility) | partial (implemented) | `services/core/internal/modelruntime/*`, `services/core/internal/api/model_runtime.go`, `services/core/internal/api/model_runtime_bridge.go`, `services/core/internal/config/config.go`, gateway `model.*` policy aliases | Remaining work is hardening/supervision: stronger backend/process control, deeper scheduling/backpressure, cancellation/usage accounting hardening, and operator visibility |
 | Semantic mutation kernel | `controllane.Processor` | real | controllane/truth tests, `processor.go` | broader API-level path coverage |
 | Retired memory observation mutation | syscall-native memory/state mutation only | resolved | retired gate in `server.go`, `server_memory_legacy_test.go` | keep mutation endpoints returning `410 Gone`; add only syscall-native write facades |
 | Approvals/events/jobs/artifacts restore parity | `backup.Service` restore mappings | mostly complete | `backup/service.go`, `backup/service_test.go` | VSA-derived export-only sections remain |
@@ -29,4 +29,4 @@ Status values: `real`, `partial`, `legacy-boundary`, `blocked`, `scaffold`, `def
 1. Backup restore parity materially improved with restore support for project context/evaluations/audit/gateway sections and atomic rollback behavior.
 2. Legacy memory mutation boundaries are retired (`410 Gone`) with correlation/trace/workspace audit payloads, and legacy adapter ingress is removed.
 3. Root core build/test/vet/core/smoke flows include strict `--require-tracked` VSA preflight checks, and required VSA source files are tracked in authoritative branch state.
-4. Model runtime M3/M4 is now real: manifest/store/registry/backend/runtime service/APIs/config/audit paths are implemented with import/register flows, persistent lifecycle state, deterministic selection, backend expansion, runtime inspection endpoints, approval-required managed delete-file flow, policy-visible gateway `model.*` aliases, and governed chat SSE streaming; remaining M4 items stay explicit.
+4. Model runtime M3/M4 is now real inside the governed modelruntime boundary: manifest/store/registry/backend/runtime service/APIs/config/audit paths are implemented with import/register flows, persistent lifecycle state, deterministic selection, backend expansion, runtime inspection endpoints, approval-required managed delete-file flow, disabled-by-default vLLM-compatible external endpoint support, policy-visible gateway `model.*` aliases, and governed chat/SSE streaming. Remaining work is hardening/supervision, not a FORGE-K live authority change.

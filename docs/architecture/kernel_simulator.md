@@ -1,6 +1,13 @@
 # FORGE-K Kernel Simulator
 
-Status: Phase 1 implementation baseline.
+Status: Historical simulator architecture baseline. FORGE-K simulator services under `services/core/internal/forgek` remain `SIMULATOR_ONLY`; Phase 12 shadow diagnostics and Phase 14 live Control Lane validation seams live outside simulator authority.
+
+Current boundary banner:
+
+- `[SIMULATOR-ONLY]` Kernel, Neuron Fabric, Courthouse, Memory Palace, Semantic Algebra, Snapshots, Context Compiler, KV System, Runtime Boundary, Lymphatic Lane, and Consensus Mesh are simulator services unless explicitly migrated through a later live authority phase.
+- `[LIVE / READ_ONLY]` Phase 12 shadow diagnostics live in `services/core/internal/forgekshadow` and may observe bounded metadata only when disabled-by-default flags are enabled. They do not make simulator services live authority.
+- `[PARTIAL LIVE VALIDATION]` Phase 14 Control Lane seams use live-owned validation actions and shared pure validator packages. They do not import simulator services, admit evidence, compile context, execute semantic mutations, call modelruntime, execute retrieval/search/embeddings, write memory, or grant live Kernel authority.
+- `[BLOCKED]` Live Courthouse admission, live Context Compiler prompt authority, governed semantic mutation routing, runtime driver authority, and broader FORGE-K Kernel authority require separate migration design, tests, rollback, and operator gates.
 
 The FORGE-K kernel simulator is the first userspace implementation of the deterministic cognitive microkernel authority skeleton. It is intentionally small and lives in `services/core/internal/forgek`.
 
@@ -159,15 +166,13 @@ Phase 1 supports:
 
 - The simulator is in-memory only.
 - Capability bootstrap is intentionally small and not a production root-authority model.
-- The object registry defines future object types but only implements CasePacket storage.
-- Courthouse and Memory Palace records are simulator-local in-memory records.
-- Semantic Algebra records are simulator-local in-memory records.
-- There is no snapshot manager.
-- There is no context compiler.
-- There is no deterministic KV cache.
-- There are no runtime model drivers.
-- There are no tool drivers.
-- There is no FORGE-1 simulator.
+- Simulator records are simulator-local in-memory records unless a phase explicitly says otherwise.
+- Simulator Courthouse admission is not live evidence admission.
+- Simulator Memory Palace routing and Context Compiler output are not live retrieval, live prompt authority, or live `COMPILE_CONTEXT` authority.
+- Simulator KV manifests are acceleration metadata only and do not enable live KV reuse.
+- Simulator Runtime Boundary uses deterministic proposal-only drivers and does not call live `modelruntime`.
+- Simulator Lymphatic and Consensus outputs are reports/proposals/diagnostics only.
+- There are no live tool drivers in FORGE-K.
 - The Phase 2 Neuron Fabric scheduler exists, but it is intentionally basic and cannot mutate canonical state directly.
 
 ## Phase 2 Neuron Integration Boundary
@@ -219,11 +224,7 @@ Semantic Algebra mutation is syscall-bound:
 
 ## Future Phase Extensions
 
-- Phase 2 adds Neuron Fabric envelopes and bounded scheduling.
-- Phase 3 adds minimal Courthouse admission.
-- Phase 4 adds Memory Palace retrieval topology.
-- Phase 5 adds semantic algebra objects and operators.
-- Phase 6 adds Context-Shape Snapshots.
-- Phase 7 adds deterministic context compilation.
-- Phase 8 adds Deterministic KV Cache validation.
-- Phase 9 adds runtime driver integration behind proposal-only interfaces.
+- Historical simulator phases added Neuron Fabric, Courthouse, Memory Palace, Semantic Algebra, Context-Shape Snapshots, deterministic context compilation, Deterministic KV validation, Runtime Boundary, Lymphatic Lane, and Consensus Mesh.
+- Phase 12 work adds read-only disabled-by-default shadow diagnostics outside the simulator package. Those diagnostics observe metadata; they do not route live requests through FORGE-K.
+- Phase 14 work adds validation-only live Control Lane seams through shared pure packages and existing live authority owners. Those seams validate shapes and authority claims; they do not execute simulator syscalls or grant live mutation authority.
+- Future live authority work must migrate one narrow gate at a time and keep simulator services out of live authority until the gate is explicitly designed, tested, documented, and reversible.

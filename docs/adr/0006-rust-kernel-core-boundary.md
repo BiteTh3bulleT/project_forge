@@ -57,6 +57,15 @@ Negative:
 - FFI boundary must be carefully tested before any integration
 - Go/Rust drift becomes a maintenance risk without shared fixtures
 
+## Amendment Notes
+
+These notes clarify later work without changing the accepted decision above.
+
+- Later FORGE-K simulator phases and live validation seams do not change the Rust boundary decision. Rust remains appropriate only for deterministic primitives, fixture validation, and tooling unless a later explicit phase approves a broader integration.
+- Phase 12 read-only shadow diagnostics do not require Rust live integration and must not use Rust tooling as a side channel for live authority.
+- Phase 14 Control Lane validation seams may share pure deterministic contracts, but they do not authorize Rust to become a live daemon sidecar, cgo dependency, modelruntime driver, gateway/tool executor, Context Compiler authority, Courthouse admission authority, or memory mutation path.
+- Any future Rust live use must preserve the existing live owner boundary, prove no simulator-service import, and pass parity, rollback, and no-effect tests before it can participate in a live validation seam.
+
 ## Alternatives Considered
 
 ### Keep Everything In Go

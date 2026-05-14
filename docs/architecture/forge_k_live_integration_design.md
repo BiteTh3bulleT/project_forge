@@ -1,14 +1,21 @@
 # FORGE-K Live Integration Design
 
-Status: Phase 12A implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12B implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 12C implemented as `LIVE_INTEGRATION / OBSERVABILITY_ONLY / HARDENING_ONLY`; Phase 12D implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12M-Q implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / ADVISORY_DIAGNOSTIC_ONLY`.
+Status: Phase 12A implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12B/12E/12H/12K-L implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT` metadata diagnostics; Phase 12C/12F/12I implemented as observability hardening; Phase 12D/12G/12J implemented as design-only expansion records; Phase 12M-Q implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / ADVISORY_DIAGNOSTIC_ONLY`.
 
-Phase 12B implements the first disabled-by-default read-only live touchpoint. Phase 12C hardens that implementation. Phase 12D selects route envelope metadata as the recommended next controlled expansion for a future Phase 12E. Later Phase 12 metadata passes add route, chat, retrieval, and advisory diagnostics while preserving the same no-authority boundary. These phases do not authorize live authority migration.
+Phase 12B implements the first disabled-by-default read-only live touchpoint. Phase 12C hardens that implementation. Phase 12D selected route envelope metadata as the next controlled expansion, and Phase 12E later implemented it. Later Phase 12 metadata passes add chat, retrieval, and advisory diagnostics while preserving the same no-authority boundary. These phases do not authorize live authority migration.
+
+Current boundary banner:
+
+- Phase 12 is read-only shadow diagnostics and advisory reporting. It may copy bounded metadata from already-executing live paths into `forgekshadow`; it must not decide, commit, execute, retrieve, generate, admit, compile, or mutate.
+- Phase 14 is a separate validation-only Control Lane seam pattern. It uses live-owned actions and shared pure validators; it is not the Phase 12 shadow harness and it is not simulator authority.
+- Simulator services under `services/core/internal/forgek` remain simulator services. Live diagnostics may reuse pure contract shapes, but they must not import `forgek.Kernel`, simulator Courthouse, simulator Context Compiler, simulator Runtime Boundary, or simulator syscalls as live authority.
+- Blocked authority gates remain blocked: live Courthouse admission, live Context Compiler prompt authority, governed semantic mutation routing, runtime driver authority, and full FORGE-K Kernel authority.
 
 ## Executive Summary
 
 FORGE-K Phase 1-11G is implemented and tested in simulator, research, tooling, governance, integration-prep, and shadow-design layers. The live daemon still uses the existing AI-OS, gateway, permissions, lane, audit, modelruntime, retrieval, embeddings, memory, search, and API authority paths.
 
-Phase 12A designed the first live integration path. Phase 12B implements the smallest read-only shadow harness: `/health` request metadata can be copied into a bounded in-memory diagnostic sink when `FORGE_K_SHADOW_MODE_ENABLED=true`. Phase 12C hardens that observer. Phase 12D is design-only and selects route envelope metadata as the recommended next candidate for a future Phase 12E. Phase 12M-Q adds an internal advisory report that consumes only existing safe diagnostics when `FORGE_K_SHADOW_ADVISORY_ENABLED=true` and global shadow mode is also enabled. The design preserves live authority by allowing only passive observation of already-executing live paths, diagnostic report generation, advisory-only summaries, and disabled-by-default activation. It does not wire FORGE-K into live authority.
+Phase 12A designed the first live integration path. Phase 12B implements the smallest read-only shadow harness: `/health` request metadata can be copied into a bounded in-memory diagnostic sink when `FORGE_K_SHADOW_MODE_ENABLED=true`. Phase 12C hardens that observer. Phase 12D is design-only and selected route envelope metadata; Phase 12E later implemented that read-only route-envelope observer. Phase 12M-Q adds an internal advisory report that consumes only existing safe diagnostics when `FORGE_K_SHADOW_ADVISORY_ENABLED=true` and global shadow mode is also enabled. The design preserves live authority by allowing only passive observation of already-executing live paths, diagnostic report generation, advisory-only summaries, and disabled-by-default activation. It does not wire FORGE-K into live authority.
 
 ## Current Simulator / Live Split
 
@@ -33,6 +40,8 @@ Phase 12A does not add feature flags in code, routes, adapters, syscalls, import
 ## Phase 12B Proposed Scope
 
 Phase 12B scope is `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`.
+
+This section is the historical candidate envelope for Phase 12B. The implementation record below is narrower, and later Phase 12 route/chat/retrieval/advisory diagnostics remain bounded by the same read-only no-authority rules.
 
 The first Phase 12B candidate may observe:
 
@@ -83,7 +92,7 @@ Phase 12C adds no live touchpoints, routes, public APIs, persistence, gateway be
 
 Phase 12D is `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`. It selects exactly one recommended next touchpoint and records the test plan required before implementation.
 
-Recommended future Phase 12E candidate: route envelope metadata.
+Historical Phase 12E candidate selected by Phase 12D: route envelope metadata.
 
 Route envelope metadata is selected because it can provide route-level diagnostics without approaching prompt text, response bodies, tool payloads, retrieval result content, model output, or memory content. The future allowed surface is method, matched route template or route class, route owner classification, timing summary, workspace/correlation ids when already available, status class after response completion, and no-effect validation.
 
@@ -123,6 +132,7 @@ Authority preservation rules:
 - Retrieval/search/embeddings remain evidence infrastructure, not truth.
 - Memory writes remain live authority until an approved migration phase changes that.
 - FORGE-K reports remain diagnostics only.
+- Phase 14 validation status/readiness surfaces may report gate state, but they do not grant mutation controls or live Kernel authority.
 
 ## Read-Only Shadow Integration Concept
 

@@ -1,5 +1,7 @@
 # Model Runtime M3 Baseline
 
+> Historical baseline snapshot. This file is retained as pre-M3/M3 governance evidence and is superseded for current operations by [model_runtime_status.md](model_runtime_status.md) and [../architecture/model_runtime.md](../architecture/model_runtime.md).
+
 Date: 2026-04-22
 Scope: verify what Model Runtime M1 and M2 actually shipped before extending M3.
 

@@ -20,8 +20,8 @@ Needed for Tauri:
 - `pkg-config`, `webkit2gtk-4.1`, `javascriptcoregtk-4.1`, `gtk+-3.0`,
   `libsoup3`, `librsvg`, `libayatana-appindicator`, `openssl`.
 
-Run `bash scripts/check-desktop-deps.sh` for distro-specific install
-hints. Or use the Nix desktop shell which includes all of these:
+Run `npm run desktop:check` for distro-specific install hints. Or use the
+Nix desktop shell which includes all of these:
 `nix develop .#desktop`.
 
 ### VSA repo state check
@@ -88,7 +88,7 @@ npm run smoke
 
 This boots core against an ephemeral data dir, probes 7 endpoints, and
 tears down cleanly. See
-[docs/status/smoke_test_status.md](docs/status/smoke_test_status.md).
+[../status/smoke_test_status.md](../status/smoke_test_status.md).
 Expected output ends with `==> smoke OK`.
 
 ## 3. Orchestrated bring-up with desktop
@@ -263,12 +263,12 @@ See [no_gpu_boot_and_recovery.md](no_gpu_boot_and_recovery.md) for full degraded
 
 ## 7. Known degraded areas
 
-Tracked in [implementation_matrix.md](docs/status/implementation_matrix.md)
+Tracked in [implementation_matrix.md](../status/implementation_matrix.md)
 and the Pass-1 status docs under `docs/status/`. Highlights:
 
 - **VSA dependency integrity** — required VSA files are authoritative
   tracked source files and guarded by strict preflight. See
-  [vsa_authority_report.md](docs/status/vsa_authority_report.md).
+  [vsa_authority_report.md](../status/vsa_authority_report.md).
 - **Backup/restore asymmetry** — only VSA-derived sections remain
   export-only/rebuildable. Full backup bundles include a section manifest,
   per-section checksums, restore row counts, and schema verification; restore

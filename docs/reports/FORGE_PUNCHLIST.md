@@ -143,7 +143,7 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 - [x] Chat gateway tool argument bounds — `d2b3d77 fix: bound chat gateway tool arguments`
 - [ ] **Complete chat assistant prompt-injection audit.** Trace every assignment from a model response field to `chat_assistant_*.go` files into (a) command args, (b) file paths, (c) URLs, (d) capability inputs. Verify validator coverage on each.
 - [ ] **Remote token (`X-Forge-Remote-Token`) lifecycle.** Verify rotation, storage, revocation paths are tested.
-- [ ] **Dangerous capabilities audit.** Run [docs/status/dangerous_capabilities.md](docs/status/dangerous_capabilities.md) against current `tool_capability_registry.go` — every approval-only capability still gated?
+- [ ] **Dangerous capabilities audit.** Run [docs/status/dangerous_capabilities.md](../status/dangerous_capabilities.md) against current `tool_capability_registry.go` — every approval-only capability still gated?
 - [ ] **Wildcard bind hardening** (also in Section 1).
 - [ ] **Audit `chat_post.go` (1,319 lines) for body-bound coverage.** Already has `request_body_bounds_test.go` series — verify the new chat surface didn't introduce unbounded paths.
 
@@ -156,10 +156,10 @@ These are the items between "wired" and "works the way I want."
 ### Model runtime (PhaseM4 / vLLM)
 
 - [x] PhaseM4 plan drafted
-- [ ] **Streaming model output.** First M4 deliverable. Both for the existing managed backends and for the new vLLM path.
-- [ ] **vLLM as a governed backend.** Behind existing modelruntime boundary, not a rewrite, not a bypass. Per PhaseM4.
-- [ ] **Delete-file approval flow** for managed model artifacts.
-- [ ] **Stronger backend/process supervision.** Restart on crash, health probe, resource caps.
+- [x] **Streaming model output.** Governed chat/SSE streaming is wired through modelruntime when the selected backend supports streaming; unsupported runtimes return structured `STREAM_UNSUPPORTED` behavior.
+- [x] **vLLM-compatible external profile.** Disabled-by-default vLLM endpoint support is behind the existing modelruntime boundary, not a raw chat bypass and not a FORGE-K authority path.
+- [x] **Delete-file approval flow** for managed model artifacts.
+- [ ] **Stronger backend/process supervision and runtime hardening.** Restart/degraded-state policy, health probes, resource caps, deeper scheduling/backpressure, cancellation-safe accounting, and operator visibility.
 
 ### Hyperlane
 
@@ -248,8 +248,8 @@ The project is "wired and working properly" when:
 - [ ] All Section 1 hygiene items closed.
 - [ ] `/health/detailed` and `/metrics` endpoints live.
 - [ ] slog migration complete with correlation IDs.
-- [ ] Streaming model output working through modelruntime.
-- [ ] vLLM backend integrated per PhaseM4.
+- [x] Streaming model output working through modelruntime where supported.
+- [x] vLLM-compatible external endpoint profile integrated per PhaseM4, disabled by default and governed by modelruntime.
 - [ ] Hyperlane routing real traffic deterministically.
 - [ ] Chat latency cliff diagnosed and resolved or accepted.
 - [ ] Cross-session memory recall verified working.

@@ -1,5 +1,7 @@
 # Model Runtime M2 Baseline
 
+> Historical baseline snapshot. This file is retained as M1/M2 evidence before later runtime hardening. For current runtime truth, use [model_runtime_status.md](model_runtime_status.md) and [../architecture/model_runtime.md](../architecture/model_runtime.md).
+
 Date: 2026-04-22
 Scope: verify the actual Model Runtime M1 baseline before M2 hardening.
 

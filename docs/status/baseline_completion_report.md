@@ -1,5 +1,7 @@
 # Phase 5.99 Baseline Completion Report
 
+> Historical audit snapshot. This file preserves the Phase 5.99 local working-tree report and should not be treated as current branch truth. For current readiness and phase posture, use [current_baseline_gate.md](current_baseline_gate.md), [remaining_cutover_blockers.md](remaining_cutover_blockers.md), and [../reviews/current_phase_status.md](../reviews/current_phase_status.md).
+
 Date: 2026-04-21
 Scope: pass-1 truth audit + pass-2 minimal hardening
 

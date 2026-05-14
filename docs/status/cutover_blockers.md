@@ -1,5 +1,7 @@
 # FORGE Runtime Cutover Blockers
 
+> Historical status snapshot. This file is retained for dated blocker provenance from 2026-04-21 and may be superseded by newer cutover/status records. For current blocker posture, start with [remaining_cutover_blockers.md](remaining_cutover_blockers.md), [current_baseline_gate.md](current_baseline_gate.md), and [../reviews/current_phase_status.md](../reviews/current_phase_status.md).
+
 Date: 2026-04-21  
 Purpose: identify what still prevents FORGE from operating as one authoritative machine.
 

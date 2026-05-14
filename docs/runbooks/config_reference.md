@@ -1,7 +1,7 @@
 # FORGE Config Reference
 
 _All env vars and durable settings the current FORGE system reads at
-boot or runtime. Observed 2026-04-21._
+boot or runtime. Observed 2026-05-14._
 
 ## Environment variables
 
@@ -9,16 +9,16 @@ boot or runtime. Observed 2026-04-21._
 
 | Var | Consumer | Default | Purpose |
 |---|---|---|---|
-| `FORGE_DATA_DIR` | [config.go:16](services/core/internal/config/config.go#L16) | `${XDG_CONFIG_HOME}/forge` (typically `~/.config/forge`); falls back to CWD if `UserConfigDir` errors | Location of `forge.sqlite`, `backups/`, `exports/` |
-| `FORGE_CORE_PORT` | [config.go:25](services/core/internal/config/config.go#L25) | `18492` | HTTP listen port |
-| `FORGE_CORE_BIND_HOST` | [config.go](services/core/internal/config/config.go) | `127.0.0.1` | HTTP bind host. Wildcard hosts (`0.0.0.0`, `::`) fail closed unless `FORGE_ALLOW_WILDCARD_BIND=true` is also set. |
-| `FORGE_ALLOW_WILDCARD_BIND` | [config.go](services/core/internal/config/config.go) + [main.go](services/core/main.go) | `false` | Explicit opt-in required before `forge-core` may bind every interface. Docker sets this to `true` inside the container while host-published ports still default to loopback. |
-| `FORGE_WORKSPACE_DIR` | [config.go:30](services/core/internal/config/config.go#L30) | `/` for direct Go/dev runs; managed NixOS service defaults to `/forge/workspaces/default` | Workspace root for file-sensitive operations |
-| `FORGE_K_SHADOW_MODE_ENABLED` | [config.go](services/core/internal/config/config.go) | `false` | Enables disabled-by-default FORGE-K shadow diagnostics. Can also be toggled at runtime by the dashboard through the durable `forge_k_shadow_mode_enabled` setting. |
-| `FORGE_K_SHADOW_CHAT_METADATA_ENABLED` | [config.go](services/core/internal/config/config.go) | `false` | Enables Phase 12H chat metadata diagnostics only when `FORGE_K_SHADOW_MODE_ENABLED=true`. Captures bounded metadata only, never chat content, prompts, completions, request/response bodies, tool payloads, retrieval content, memory content, auth headers, cookies, or secrets. |
-| `FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED` | [config.go](services/core/internal/config/config.go) | `false` | Enables Phase 12K-L retrieval metadata diagnostics only when `FORGE_K_SHADOW_MODE_ENABLED=true`. Captures bounded refs/counts/classes/summaries only. |
-| `FORGE_K_SHADOW_ADVISORY_ENABLED` | [config.go](services/core/internal/config/config.go) | `false` | Enables Phase 12M-Q internal shadow advisory reports only when `FORGE_K_SHADOW_MODE_ENABLED=true`. Advisories consume existing safe diagnostics only and do not force-enable chat or retrieval observers. |
-| `FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED` | [config.go](services/core/internal/config/config.go) | `false` | Enables Phase 14D internal Control Lane validation summary diagnostics only when `FORGE_K_SHADOW_MODE_ENABLED=true`. Captures bounded scalar validation metadata only and does not alter Control Lane decisions. |
+| `FORGE_DATA_DIR` | [config.go:16](../../services/core/internal/config/config.go#L16) | `${XDG_CONFIG_HOME}/forge` (typically `~/.config/forge`); falls back to CWD if `UserConfigDir` errors | Location of `forge.sqlite`, `backups/`, `exports/` |
+| `FORGE_CORE_PORT` | [config.go:25](../../services/core/internal/config/config.go#L25) | `18492` | HTTP listen port |
+| `FORGE_CORE_BIND_HOST` | [config.go](../../services/core/internal/config/config.go) | `127.0.0.1` | HTTP bind host. Wildcard hosts (`0.0.0.0`, `::`) fail closed unless `FORGE_ALLOW_WILDCARD_BIND=true` is also set. |
+| `FORGE_ALLOW_WILDCARD_BIND` | [config.go](../../services/core/internal/config/config.go) + [main.go](../../services/core/main.go) | `false` | Explicit opt-in required before `forge-core` may bind every interface. Docker sets this to `true` inside the container while host-published ports still default to loopback. |
+| `FORGE_WORKSPACE_DIR` | [config.go:30](../../services/core/internal/config/config.go#L30) | `/` for direct Go/dev runs; managed NixOS service defaults to `/forge/workspaces/default` | Workspace root for file-sensitive operations |
+| `FORGE_K_SHADOW_MODE_ENABLED` | [config.go](../../services/core/internal/config/config.go) | `false` | Enables disabled-by-default FORGE-K shadow diagnostics. Can also be toggled at runtime by the dashboard through the durable `forge_k_shadow_mode_enabled` setting. |
+| `FORGE_K_SHADOW_CHAT_METADATA_ENABLED` | [config.go](../../services/core/internal/config/config.go) | `false` | Enables Phase 12H chat metadata diagnostics only when `FORGE_K_SHADOW_MODE_ENABLED=true`. Captures bounded metadata only, never chat content, prompts, completions, request/response bodies, tool payloads, retrieval content, memory content, auth headers, cookies, or secrets. |
+| `FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED` | [config.go](../../services/core/internal/config/config.go) | `false` | Enables Phase 12K-L retrieval metadata diagnostics only when `FORGE_K_SHADOW_MODE_ENABLED=true`. Captures bounded refs/counts/classes/summaries only. |
+| `FORGE_K_SHADOW_ADVISORY_ENABLED` | [config.go](../../services/core/internal/config/config.go) | `false` | Enables Phase 12M-Q internal shadow advisory reports only when `FORGE_K_SHADOW_MODE_ENABLED=true`. Advisories consume existing safe diagnostics only and do not force-enable chat or retrieval observers. |
+| `FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED` | [config.go](../../services/core/internal/config/config.go) | `false` | Enables Phase 14D internal Control Lane validation summary diagnostics only when `FORGE_K_SHADOW_MODE_ENABLED=true`. Captures bounded scalar validation metadata only and does not alter Control Lane decisions. |
 | `FORGE_TELEGRAM_GATEWAY_ENABLED` | telegram wire | `true` | Gateway feature flag; token absence still disables |
 | `FORGE_TELEGRAM_BOT_TOKEN` | telegram wire | unset (= disabled) | Enables Telegram gateway |
 | `FORGE_TELEGRAM_API_BASE`, `FORGE_TELEGRAM_POLL_TIMEOUT_S`, `FORGE_TELEGRAM_ALLOWED_CHATS` | telegram wire | standard telegram defaults | Optional tuning |
@@ -46,7 +46,7 @@ boot or runtime. Observed 2026-04-21._
 | `FORGE_MODEL_CHAT_MAX_ATTEMPTS`, `FORGE_MODEL_CHAT_RETRY_BACKOFF_MS`, `FORGE_MODEL_CHAT_PROVIDER_COOLDOWN_MS`, `FORGE_MODEL_CHAT_MODEL_COOLDOWN_MS`, `FORGE_MODEL_CHAT_CHECKPOINT_LIMIT` | chat orchestration | `3` / `250` / `5000` / `5000` / `128` | Retry pacing, cooldown, and checkpoint bounds. |
 | `FORGE_ENABLE_OPENAI_COMPAT_API` | `/v1/*` routes | `false` | Enables gated OpenAI-compatible model API surface. |
 
-Local dev startup note: `scripts/forge-core.sh` auto-detects a running
+Local dev startup note: `npm run core` auto-detects a running
 Ollama OpenAI-compatible endpoint at `OLLAMA_BASE_URL` or
 `http://127.0.0.1:11434` when no explicit modelruntime backend env vars are
 set. In that case it enables modelruntime, configures
@@ -102,16 +102,16 @@ to bypass autodetect.
 
 | Var | Consumer | Default | Purpose |
 |---|---|---|---|
-| `VITE_FORGE_API_URL` | [api.ts:258](apps/desktop/src/lib/api.ts#L258) | `http://127.0.0.1:18492` | Backend URL baked into the built frontend |
+| `VITE_FORGE_API_URL` | [api.ts:258](../../apps/desktop/src/lib/api.ts#L258) | `http://127.0.0.1:18492` | Backend URL baked into the built frontend |
 
-Template: [apps/desktop/.env.example](apps/desktop/.env.example). Copy
+Template: [apps/desktop/.env.example](../../apps/desktop/.env.example). Copy
 to `apps/desktop/.env.development` (or `.env.production`) to override.
 
 ### Orchestration scripts
 
 | Var | Consumer | Default | Purpose |
 |---|---|---|---|
-| `FORGE_CORE_PORT` | `scripts/forge-up.sh`, `scripts/forge-down.sh` | `18492` | Health-check target / cleanup port |
+| `FORGE_CORE_PORT` | `npm run up`, `npm run down` | `18492` | Health-check target / cleanup port |
 | `FORGE_CORE_BIND_HOST` | `services/core` | `127.0.0.1` | Direct core bind host; orchestration health checks use loopback. |
 | `FORGE_ALLOW_WILDCARD_BIND` | `services/core` | `false` | Required only when intentionally binding `FORGE_CORE_BIND_HOST` to `0.0.0.0` or `::`. |
 
@@ -119,7 +119,7 @@ to `apps/desktop/.env.development` (or `.env.production`) to override.
 
 Selected keys the core reads via `loadSetting(db, key, default)`. Most
 are editable via `PUT /api/settings` or the desktop Settings page.
-Full list in [server.go handleGetSettings / handleUpdateSettings](services/core/internal/api/server.go).
+Full list in [server.go handleGetSettings / handleUpdateSettings](../../services/core/internal/api/server.go).
 
 | Key | Default | Effect |
 |---|---|---|
@@ -160,7 +160,7 @@ Full list in [server.go handleGetSettings / handleUpdateSettings](services/core/
   reviewing durable charters/budgets suited to it.
 - Dangerous tools (shell, process control, external effects, privileged
   operations) stay `approval_only` per
-  [dangerous_capabilities.md](dangerous_capabilities.md).
+  [dangerous_capabilities.md](../status/dangerous_capabilities.md).
 - Remote access stays `false` until the operator configures a token.
 - Direct Go/dev `FORGE_WORKSPACE_DIR` defaults to `/`; managed NixOS
   `forge-core` defaults to `/forge/workspaces/default`. For any real

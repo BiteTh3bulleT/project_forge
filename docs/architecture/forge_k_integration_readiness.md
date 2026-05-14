@@ -1,8 +1,15 @@
 # FORGE-K Integration Readiness
 
-Status: Phase 11F implemented as `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`.
+Status: Historical Phase 11F readiness record, amended for current boundaries. Phase 11F remains `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`; later Phase 12 diagnostics are `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 14 seams are `PARTIAL LIVE VALIDATION` through the existing live Control Lane.
 
 Phase 11F does not authorize live authority migration.
+
+Current boundary banner:
+
+- Simulator services in `services/core/internal/forgek` remain target architecture, not live daemon authority.
+- Phase 12 shadow diagnostics in `services/core/internal/forgekshadow` are read-only metadata observers and advisory report builders. They do not commit truth, admit evidence, compile prompt context, call modelruntime, execute retrieval/search/embeddings, write memory, change routes, or affect user-visible output.
+- Phase 14 Control Lane validation seams use shared pure validators from live-owned actions such as `VALIDATE_KV_IDENTITY`, `VALIDATE_REF_SHAPE`, `COMPARE_REF_SHAPE`, `VALIDATE_SOURCE_OBJECT_AUTHORITY`, and `VALIDATE_SEMANTIC_OPERATION`. They are validation/enforcement gates only, not live FORGE-K Kernel authority.
+- Live Courthouse admission, live Context Compiler authority, governed semantic mutation routing, runtime driver authority, and broader Kernel authority are blocked until separate migration gates are approved and proven.
 
 ## Executive Summary
 
@@ -27,7 +34,7 @@ An integration-ready subsystem has:
 - a known live equivalent
 - a read-only adapter boundary
 - a no-mutation rule
-- a required test set for future Phase 12 work
+- a required test set for any later read-only diagnostic or validation seam work
 - clear ownership of current live authority
 
 Readiness reports are diagnostics only. A readiness score cannot authorize live integration, canonical mutation, or public behavior changes.
@@ -102,7 +109,7 @@ ReadOnlyRAGAdapter must not execute new retrieval queries from FORGE-K, call emb
 
 ## Shadow Mode Summary
 
-Shadow mode is defined in `docs/architecture/shadow_mode.md`. In Phase 11F it is a policy and contract design only. Live requests execute through existing live paths. FORGE-K may mirror inputs and produce diagnostics only.
+Shadow mode is defined in `docs/architecture/shadow_mode.md`. In Phase 11F it was a policy and contract design only. Phase 12 later implemented disabled-by-default read-only metadata diagnostics outside the simulator package. Live requests still execute through existing live paths, and shadow output remains diagnostic/advisory only.
 
 ## Dry-Run Bridge And Mirror Rules
 
@@ -123,9 +130,9 @@ Phase 11F tests cover:
 - shadow policy diagnostics-only behavior
 - live path mapping completeness
 
-## Phase 12 Gates
+## Live Authority Gates
 
-Before live integration can start, all gates must be met:
+The following gates are required before any step can move beyond read-only diagnostics or validation-only Control Lane seams:
 
 - all simulator tests pass
 - route inventory tests pass
@@ -142,6 +149,11 @@ Before live integration can start, all gates must be met:
 - memory writes remain live authority until migration
 - retrieval/RAG remains evidence-only until migration
 - no user-visible output is affected by shadow mode
+- source-object authority lookup remains validation/read-only unless explicitly promoted
+- Courthouse admission integration remains blocked until live evidence ownership, rollback, and tests exist
+- live Context Compiler prompt authority remains blocked until no-effect comparison and prompt authority tests exist
+- governed semantic mutation routing remains blocked until syscall, audit, approval, and rollback boundaries are designed
+- runtime driver authority remains blocked until modelruntime trace-only and proposal-only guarantees are proven
 
 ## Risks
 

@@ -1,5 +1,7 @@
 # Runtime Truth vs Docs Audit
 
+> Historical audit snapshot. This file records the 2026-04-21 documentation audit and is retained for provenance. For current runtime and phase truth, use [current_baseline_gate.md](current_baseline_gate.md), [model_runtime_status.md](model_runtime_status.md), and [../reviews/current_phase_status.md](../reviews/current_phase_status.md).
+
 Date: 2026-04-21  
 Scope: documentation claims vs current implementation reality (repo working tree)
 

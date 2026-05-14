@@ -34,6 +34,16 @@ Every future FORGE-K phase must declare one scope marker before work starts:
 - Live daemon changes must continue to respect existing gateway, permissions, lane, audit, controllane, and model runtime boundaries unless a `LIVE_INTEGRATION` phase explicitly changes them.
 - Status docs must distinguish FORGE-K simulator phase status from legacy/live AI-OS implementation status.
 
+## Amendment Notes
+
+These notes clarify later work without changing the accepted decision above.
+
+- Later simulator phases added Snapshots, Context Compiler, KV System, Runtime Boundary, Lymphatic Lane, Consensus Mesh, integration readiness, and simulator shadow contracts. Those packages remain simulator or contract authorities unless a later live migration explicitly says otherwise.
+- Phase 12 introduced disabled-by-default live shadow diagnostics in `services/core/internal/forgekshadow`. Phase 12 diagnostics are `LIVE_INTEGRATION / READ_ONLY`; they observe bounded metadata and produce diagnostic/advisory reports only. They do not admit evidence, compile live context, execute tools, call modelruntime, run retrieval/search/embeddings, write memory, change routes, or affect user-visible output.
+- Phase 14 introduced partial live Control Lane validation seams through shared pure validator packages and existing live owners. Actions such as `VALIDATE_KV_IDENTITY`, `VALIDATE_REF_SHAPE`, `COMPARE_REF_SHAPE`, `VALIDATE_SOURCE_OBJECT_AUTHORITY`, and `VALIDATE_SEMANTIC_OPERATION` are validation/enforcement seams only. They do not import simulator services as live authority or execute simulator syscalls.
+- Readiness/status surfaces may display blocked gates for Courthouse admission integration, live Context Compiler authority, governed semantic mutation routing, runtime driver authority, and broader Kernel authority. Displaying a gate does not grant mutation authority or live FORGE-K authority.
+- Any future promotion beyond read-only diagnostics or validation-only seams still requires the integration design, authority migration plan, tests, rollback, and documentation updates required by this ADR.
+
 ## Alternatives considered
 
 - Treat FORGE-K as live authority now: rejected because the live daemon still uses existing authority paths and non-test live code is not wired through FORGE-K.

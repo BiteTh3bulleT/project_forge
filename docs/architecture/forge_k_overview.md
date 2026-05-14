@@ -1,8 +1,15 @@
 # FORGE-K Architecture Overview
 
-Status: Phase 11E Consensus Mesh implemented in the Go simulator; live daemon authority remains outside FORGE-K.
+Status: Current overview with historical simulator context. FORGE-K simulator services are implemented through Consensus Mesh and remain `SIMULATOR_ONLY`; Phase 12 adds read-only disabled-by-default shadow diagnostics outside the simulator; Phase 14 adds validation-only Control Lane seams through shared pure contracts. Live daemon authority remains outside FORGE-K except for those narrow live-owned validation seams.
 
-FORGE-K is a deterministic cognitive microkernel for governed semantic work. It owns canonical truth through semantic syscalls, deterministic validation, journaled commits, and replayable evidence. Model runtimes are drivers attached to the operating system; they may propose interpretations, actions, or text, but they do not own truth authority.
+Current boundary banner:
+
+- `[SIMULATOR-ONLY]` Kernel, Courthouse, Memory Palace, Semantic Algebra, Snapshots, Context Compiler, KV System, Runtime Boundary, Lymphatic Lane, and Consensus Mesh are simulator authorities only.
+- `[LIVE / READ_ONLY]` Phase 12 shadow diagnostics can observe bounded metadata and produce advisory reports; they cannot affect output or state.
+- `[PARTIAL LIVE VALIDATION]` Phase 14 Control Lane seams validate identity, ref shape, source-object authority, comparison shape, and semantic-operation envelopes without executing those operations.
+- `[BLOCKED]` Live Courthouse admission, live Context Compiler prompt authority, governed semantic mutation routing, runtime driver authority, and full Kernel authority require explicit future migration gates.
+
+As target architecture, FORGE-K is a deterministic cognitive microkernel for governed semantic work. In the simulator and future migrated authority model, it owns canonical truth through semantic syscalls, deterministic validation, journaled commits, and replayable evidence. Model runtimes are drivers attached to the operating system; they may propose interpretations, actions, or text, but they do not own truth authority.
 
 ## Why FORGE-K Exists
 
@@ -19,7 +26,7 @@ FORGE-K exists to provide:
 
 ## Kernel-First Thesis
 
-The Kernel is the only component that commits canonical state. Every proposed state change becomes a semantic syscall request, passes deterministic validation, and is either rejected, admitted for commit, or committed with journal evidence. Kernel-space correctness must not depend on live model behavior.
+In FORGE-K target architecture, the Kernel is the only component that commits canonical state. Every proposed state change becomes a semantic syscall request, passes deterministic validation, and is either rejected, admitted for commit, or committed with journal evidence. Kernel-space correctness must not depend on live model behavior.
 
 ## Model-as-Driver Principle
 
@@ -103,6 +110,8 @@ Memory Palace is the retrieval topology for Evidence-Governed Memory. It organiz
 
 Rule: Memory Palace finds candidates. Courthouse decides what enters context.
 
+Current live status: this is simulator doctrine. Live retrieval/search/embedding and live memory remain owned by existing live paths. Phase 14 source-object authority validation can prove supported refs through a live-owned read path, but it does not admit evidence or make the simulator Courthouse live.
+
 ## Semantic Algebra
 
 Semantic algebra defines typed objects and deterministic operators over admitted meaning. It supports operations such as RETRIEVE, SUBMIT, ADMIT, REJECT, MERGE, DIFF, CONTRADICT, SUPERSEDE, COMPRESS, DERIVE, PROMOTE, DEMOTE, and EXPIRE.
@@ -117,9 +126,13 @@ Snapshots preserve semantic shape, not truth. They cite source objects and may s
 
 The context compiler expands candidate meaning from Memory Palace, contracts it through Courthouse admission and deterministic budget rules, and emits token-addressed ContextBlocks. It creates stable prompt layouts so restored context is inspectable, replayable, and cache-eligible when token identity permits. In the current FORGE codebase, this doctrine aligns with `COMPILE_CONTEXT`, restore scoring, fresh-compile fallback, snapshot persistence, and restore metadata.
 
+Current live status: the simulator Context Compiler is not live prompt authority. Phase 12 may report metadata-only context advisories, and Phase 14 readiness may show the context authority gate as blocked, but neither path compiles live response context through FORGE-K.
+
 ## Deterministic KV Cache
 
 KV cache is acceleration, not memory. Reuse requires deterministic identity validation across model, model revision, tokenizer, tokenizer revision, chat template, prompt layout version, policy/syscall schema version, final token IDs, and runtime KV assumptions.
+
+Current live status: live Control Lane KV identity validation exists as a partial validation/enforcement seam. It does not enable live KV reuse or runtime cache mutation.
 
 ## Journal and Replay
 
