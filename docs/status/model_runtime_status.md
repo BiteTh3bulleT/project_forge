@@ -4,7 +4,7 @@ Snapshot date: 2026-05-13.
 
 ## Executive Status
 
-Model Runtime M3 is implemented in this branch. M4 closes the external vLLM-compatible backend profile as a governed, disabled-by-default modelruntime profile and adds the approval-required destructive delete-file flow for managed model directories. FORGE now treats models as managed runtime assets instead of loose local manifests: local GGUF or manifest-backed imports can be registered into FORGE model home, persistent model state is tracked across import/verify/disable/archive/remove-registration/delete-file operations, runtime selection spans multiple pluggable backends, and the service exposes management, compatibility, usage, backend, queue, loaded, and health views while keeping inference policy-governed, auditable, and non-authoritative over semantic truth.
+Model Runtime M3 is implemented in this branch. M4 closes the external vLLM-compatible backend profile as a governed, disabled-by-default modelruntime profile, adds public SSE streaming over the existing governed chat paths when the selected backend supports token streaming, and adds the approval-required destructive delete-file flow for managed model directories. FORGE now treats models as managed runtime assets instead of loose local manifests: local GGUF or manifest-backed imports can be registered into FORGE model home, persistent model state is tracked across import/verify/disable/archive/remove-registration/delete-file operations, runtime selection spans multiple pluggable backends, and the service exposes management, compatibility, usage, backend, queue, loaded, health, non-streaming chat, and streaming chat views while keeping inference policy-governed, auditable, and non-authoritative over semantic truth.
 
 ## Implemented
 
@@ -22,6 +22,7 @@ Model Runtime M3 is implemented in this branch. M4 closes the external vLLM-comp
 | llama.cpp backend adapter (endpoint mode) | real | `services/core/internal/modelruntime/backend_llama_cpp.go`, `backend_llama_cpp_test.go` |
 | OpenAI-compatible backend adapter | real | `services/core/internal/modelruntime/backend_openai_compat.go`, `backend_openai_compat_test.go` |
 | vLLM-compatible endpoint path | partial/live external profile | `services/core/internal/api/model_runtime_bridge.go`, `backend_openai_compat.go`, `docs/architecture/nix_rust_vllm_runtime.md` |
+| Streaming chat responses | real | `services/core/internal/api/model_runtime.go`, `model_runtime_test.go`, `backend_openai_compat.go`, `backend_openai_compat_test.go` |
 | Runtime scheduler and queue admission | real | `services/core/internal/modelruntime/service.go`, `service_test.go` |
 | Runtime compatibility / usage / backend inspection | real | `services/core/internal/modelruntime/management.go`, `model_runtime_m3_test.go` |
 | Internal FORGE model management API | real | `services/core/internal/api/model_runtime.go`, `server.go` |
@@ -92,6 +93,13 @@ OpenAI-compatible minimum:
 - `GET /v1/models`
 - `POST /v1/chat/completions`
 
+Streaming:
+
+- `POST /forge/models/{id}/chat` accepts `stream: true` and emits FORGE SSE `token`, `result`, and `done` events when `modelRuntimeStreamingService` is available.
+- `POST /v1/chat/completions` accepts `stream: true` and emits OpenAI-compatible `chat.completion.chunk` SSE data followed by `data: [DONE]`.
+- Streaming remains governed by the same modelruntime scheduler, policy hooks, backend selection, workspace metadata, correlation, and audit path as non-streaming chat.
+- If the selected runtime service/backend cannot stream, the request fails with structured `STREAM_UNSUPPORTED` behavior before normal JSON response streaming begins.
+
 ## Audit and Evidence
 
 Management and inference actions emit audit records with correlation metadata.
@@ -152,7 +160,7 @@ Safe default posture:
 - runtime disabled unless explicitly enabled
 - missing backend/endpoint yields structured unavailable errors
 - missing model home or manifests do not crash startup
-- spawn and streaming remain disabled by default
+- spawn remains disabled by default; streaming is available only on enabled runtime paths with a streaming-capable backend
 
 ## Real / Partial / Deferred
 
@@ -164,7 +172,7 @@ Safe default posture:
 | Preferred/default model selection | real | Deterministic within current runtime scope. |
 | OpenAI-compatible backend adapter | real | Endpoint-backed path is implemented. |
 | vLLM-compatible backend path | partial/live external profile | Uses the OpenAI-compatible transport shape, is disabled when unset, and exposes backend status through modelruntime. No separate managed vLLM service or deep vLLM orchestration is added. |
-| Streaming responses | deferred | Service/API remain intentionally non-streaming. |
+| Streaming chat responses | real | `/forge/models/{id}/chat` and gated `/v1/chat/completions` support SSE when the runtime service/backend supports token streaming. |
 | llama.cpp spawn mode | deferred | Spawn flag exists; runtime returns structured unsupported behavior. |
 | Embeddings/rerank/vision runtime paths | deferred | Taxonomy remains documented; execution not implemented. |
 | Gateway `model.*` capability registration | partial / policy-visible | Registry aliases now exist with active, approval_only, and deferred statuses. They do not add a second runtime execution path; `/forge/models*` remains authoritative. |
@@ -172,7 +180,7 @@ Safe default posture:
 
 ## Remaining Modelruntime Work Beyond M4 External vLLM Profile
 
-- streaming support
+- streaming hardening beyond chat/SSE, including broader backend coverage and client cancellation UX
 - stronger backend/process supervision for llama.cpp and remote backends
 - route-level convergence from policy-visible `model.*` aliases into operator governance displays
 - deeper multi-backend routing/load balancing beyond deterministic selection

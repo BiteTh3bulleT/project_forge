@@ -179,7 +179,7 @@ Primary code:
 
 - No direct adapter invoke API route is registered; legacy adapter execution only remains as gateway tool `legacy.adapter.invoke`.
 - `future_iris` is a proposer source class, not a bypass for tool or syscall policy.
-- Model runtime is the owned inference substrate when enabled, and gateway `model.*` aliases now expose policy/taxonomy visibility. Those aliases do not execute a second runtime path; model execution and management still go through the governed modelruntime API and remain non-streaming.
+- Model runtime is the owned inference substrate when enabled. Chat streaming is exposed through governed modelruntime SSE paths when a backend supports it, and gateway `model.*` aliases expose policy/taxonomy visibility without creating a second runtime execution path.
 - Context restore snapshots are evidence, not truth authority.
 - Restore outcome feedback is evidence about utility, not memory truth authority.
 - Rule Cell traces and Dream reports are evidence, not truth authority.

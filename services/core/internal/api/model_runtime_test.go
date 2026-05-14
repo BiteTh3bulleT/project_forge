@@ -18,29 +18,31 @@ import (
 )
 
 type fakeModelRuntime struct {
-	mu          sync.Mutex
-	models      map[string]ModelRuntimeModel
-	loaded      map[string]bool
-	chatErr     error
-	chatContent string
-	health      *ModelRuntimeHealth
-	healthErr   error
-	queueStatus ModelRuntimeQueueStatus
-	queueErr    error
-	importCalls int
-	listCalls   int
-	getCalls    int
-	loadCalls   int
-	unloadCalls int
-	deleteCalls int
-	chatCalls   int
-	healthCalls int
-	queueCalls  int
-	loadedCalls int
-	lastMeta    ModelRuntimeRequestMeta
-	lastImport  ModelRuntimeImportRequest
-	lastControl ModelRuntimeControlRequest
-	lastChat    ModelRuntimeChatRequest
+	mu           sync.Mutex
+	models       map[string]ModelRuntimeModel
+	loaded       map[string]bool
+	chatErr      error
+	chatContent  string
+	streamErr    error
+	streamTokens []string
+	health       *ModelRuntimeHealth
+	healthErr    error
+	queueStatus  ModelRuntimeQueueStatus
+	queueErr     error
+	importCalls  int
+	listCalls    int
+	getCalls     int
+	loadCalls    int
+	unloadCalls  int
+	deleteCalls  int
+	chatCalls    int
+	healthCalls  int
+	queueCalls   int
+	loadedCalls  int
+	lastMeta     ModelRuntimeRequestMeta
+	lastImport   ModelRuntimeImportRequest
+	lastControl  ModelRuntimeControlRequest
+	lastChat     ModelRuntimeChatRequest
 }
 
 func newFakeModelRuntime() *fakeModelRuntime {
@@ -725,55 +727,63 @@ func TestModelRuntimeChatValidationAndStructuredMapping(t *testing.T) {
 	}
 }
 
-func TestOpenAICompatStreamingUnsupported(t *testing.T) {
+func TestOpenAICompatStreamingEmitsSSEChunks(t *testing.T) {
 	t.Parallel()
 
 	srv, _ := newModelRuntimeHarness(t)
-	srv.modelRuntime = newFakeModelRuntime()
+	fake := &fakeStreamingModelRuntime{fakeModelRuntime: newFakeModelRuntime()}
+	fake.streamTokens = []string{"hello ", "stream"}
+	srv.modelRuntime = fake
 
-	raw := []byte(`{"model":"mistral-7b-instruct","messages":[{"role":"user","content":"hello"}],"stream":true}`)
+	raw := []byte(`{"model":"mistral-7b-instruct","messages":[{"role":"user","content":"hello"}],"stream":true,"correlationId":"corr-stream","workspaceId":"ws-stream"}`)
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(raw))
 	rr := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr, req)
-	if rr.Code != http.StatusNotImplemented {
+	if rr.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
 	}
-	var payload struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
+	if contentType := rr.Header().Get("Content-Type"); !strings.Contains(contentType, "text/event-stream") {
+		t.Fatalf("content-type=%q want text/event-stream", contentType)
 	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode stream unsupported response: %v body=%s", err, rr.Body.String())
+	body := rr.Body.String()
+	if !strings.Contains(body, `"object":"chat.completion.chunk"`) || !strings.Contains(body, `"content":"hello "`) || !strings.Contains(body, `"content":"stream"`) {
+		t.Fatalf("expected streamed content chunks, got body=%s", body)
 	}
-	if payload.Error.Code != "STREAM_UNSUPPORTED" {
-		t.Fatalf("error code=%q want STREAM_UNSUPPORTED", payload.Error.Code)
+	if !strings.Contains(body, `"finish_reason":"stop"`) || !strings.Contains(body, "data: [DONE]") {
+		t.Fatalf("expected final stop chunk and done sentinel, got body=%s", body)
+	}
+	if !fake.lastChat.Stream || fake.lastChat.Source != "openai_compat" || fake.lastChat.Meta.CorrelationID != "corr-stream" || fake.lastChat.Meta.WorkspaceID != "ws-stream" {
+		t.Fatalf("stream request not propagated correctly: %#v", fake.lastChat)
 	}
 }
 
-func TestForgeModelRuntimeStreamingUnsupported(t *testing.T) {
+func TestForgeModelRuntimeStreamingEmitsSSEEvents(t *testing.T) {
 	t.Parallel()
 
 	srv, _ := newModelRuntimeHarness(t)
-	srv.modelRuntime = newFakeModelRuntime()
+	fake := &fakeStreamingModelRuntime{fakeModelRuntime: newFakeModelRuntime()}
+	fake.streamTokens = []string{"forge ", "stream"}
+	srv.modelRuntime = fake
 
-	raw := []byte(`{"messages":[{"role":"user","content":"hello"}],"stream":true}`)
+	raw := []byte(`{"messages":[{"role":"user","content":"hello"}],"stream":true,"correlationId":"corr-forge-stream","workspaceId":"ws-forge-stream"}`)
 	req := httptest.NewRequest(http.MethodPost, "/forge/models/mistral-7b-instruct/chat", bytes.NewReader(raw))
 	rr := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr, req)
-	if rr.Code != http.StatusNotImplemented {
+	if rr.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
 	}
-	var payload struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
+	if contentType := rr.Header().Get("Content-Type"); !strings.Contains(contentType, "text/event-stream") {
+		t.Fatalf("content-type=%q want text/event-stream", contentType)
 	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode forge stream unsupported response: %v body=%s", err, rr.Body.String())
+	body := rr.Body.String()
+	if !strings.Contains(body, "event: token") || !strings.Contains(body, `"text":"forge "`) || !strings.Contains(body, `"text":"stream"`) {
+		t.Fatalf("expected token events, got body=%s", body)
 	}
-	if payload.Error.Code != "STREAM_UNSUPPORTED" {
-		t.Fatalf("error code=%q want STREAM_UNSUPPORTED", payload.Error.Code)
+	if !strings.Contains(body, "event: result") || !strings.Contains(body, `"content":"forge stream"`) {
+		t.Fatalf("expected final result event, got body=%s", body)
+	}
+	if !fake.lastChat.Stream || fake.lastChat.Meta.CorrelationID != "corr-forge-stream" || fake.lastChat.Meta.WorkspaceID != "ws-forge-stream" {
+		t.Fatalf("forge stream request not propagated correctly: %#v", fake.lastChat)
 	}
 }
 

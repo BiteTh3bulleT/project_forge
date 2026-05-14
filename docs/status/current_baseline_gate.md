@@ -12,7 +12,7 @@ Scope: readiness decision after convergence hardening.
 | Ready for more autonomy/tool freedom? | conditional | Guardrails are stronger and tool execution is gateway-only, and API-level traceability is stronger, but operator-facing trace UX remains partial. |
 | Ready for IRIS integration? | conditional | Only as proposal-only source under existing gateway/syscall policy boundaries. |
 | Ready for external/demo use? | conditional | Controlled demos are viable; unrestricted posture is not ready. |
-| Ready to run local models without Ollama? | yes | Model Runtime M3 now governs local and compatible remote inference through `/forge/models*` plus gated `/v1/*`, with scheduler, limits, management workflows, lifecycle policy, audit, non-streaming inference, and approval-required managed delete-file flow. |
+| Ready to run local models without Ollama? | yes | Model Runtime M3 now governs local and compatible remote inference through `/forge/models*` plus gated `/v1/*`, with scheduler, limits, management workflows, lifecycle policy, audit, SSE chat streaming when a backend supports it, and approval-required managed delete-file flow. |
 | Is runtime authority clearer than before? | yes | Restore/apply guarantees are clearer (`atomicScope` + non-DB warnings), tool execution authority is gateway-only, and model runtime now owns managed model registration/lifecycle under one service boundary. |
 
 VSA lane status: **authoritative source** (not generated, not optional).
@@ -20,7 +20,7 @@ VSA lane status: **authoritative source** (not generated, not optional).
 ## Must-fix blockers
 
 1. Surface the consolidated correlation report in operator flows so trace/explain is not API-only.
-2. Continue Model Runtime M4 work (streaming and stronger backend/process supervision). Gateway `model.*` registry aliases now exist as policy-visible taxonomy entries, but do not add a second runtime execution path.
+2. Continue Model Runtime M4 work (stronger backend/process supervision and streaming hardening beyond chat/SSE). Gateway `model.*` registry aliases now exist as policy-visible taxonomy entries, but do not add a second runtime execution path.
 
 ## Should-fix next
 

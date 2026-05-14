@@ -255,8 +255,8 @@ Model-runtime capability honesty:
 | `model.inspect` | active alias / real via runtime API | gateway alias is taxonomy/policy visibility only; execution remains `/forge/models/{id}` |
 | `model.load` | approval_only alias / real via runtime API | explicit lifecycle path remains governed by modelruntime management approval |
 | `model.unload` | approval_only alias / real via runtime API | explicit lifecycle path remains governed by modelruntime management approval |
-| `model.chat` | partial via runtime API | non-streaming M3 behavior with FIFO scheduler and policy hooks |
-| `model.generate` | partial via runtime API | non-streaming M3 behavior with FIFO scheduler and policy hooks |
+| `model.chat` | partial via runtime API | non-streaming and SSE chat paths use FIFO scheduler and policy hooks |
+| `model.generate` | partial via runtime API | runtime service generation boundary exists; public chat APIs expose the governed inference surface |
 | `model.import` | approval_only alias / real via runtime API | local GGUF and manifest-backed directory registration only |
 | `model.verify` | active alias / real via runtime API | checksum/file verification where metadata exists |
 | `model.enable` | approval_only alias / real via runtime API | re-enables disabled managed models |

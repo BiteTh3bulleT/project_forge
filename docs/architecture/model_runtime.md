@@ -1,6 +1,6 @@
 # FORGE Model Runtime Architecture
 
-Status date: 2026-05-13 (M3 plus M4 external vLLM profile and delete-file snapshot).
+Status date: 2026-05-13 (M3 plus M4 external vLLM profile, streaming, and delete-file snapshot).
 
 ## Intent
 
@@ -210,7 +210,7 @@ Enforced runtime controls include:
 - max output tokens
 - max output bytes
 - request timeout
-- non-streaming enforcement
+- streaming requires an explicit token handler and a streaming-capable backend
 - queue depth
 - max concurrent requests
 - one-active-per-backend execution rule
@@ -265,7 +265,12 @@ This leaves room for future charter/budget/autonomy policy without creating a se
 - `GET /v1/models`
 - `POST /v1/chat/completions`
 
-Streaming remains deferred. The current API is deliberately non-streaming.
+Streaming chat is supported on both public chat surfaces when the runtime service and selected backend support token streaming:
+
+- `/forge/models/{id}/chat` with `stream: true` emits FORGE SSE events: `token`, `result`, and `done`.
+- `/v1/chat/completions` with `stream: true` emits OpenAI-compatible `chat.completion.chunk` SSE data followed by `data: [DONE]`.
+
+Streaming stays inside the same modelruntime boundary as non-streaming chat: scheduler admission, policy hooks, backend selection, correlation/workspace metadata, audit, and output evidence semantics remain unchanged. A runtime/backend without token streaming returns structured `STREAM_UNSUPPORTED` behavior.
 
 ## Compatibility, Usage, and Health Inspection
 
@@ -320,7 +325,7 @@ Model runtime management is governed inside FORGE, but this phase does not creat
 Still deferred or intentionally bounded:
 
 - destructive model file deletion is implemented only for managed model-home directories and always requires high-risk model-management approval
-- streaming inference
+- streaming hardening beyond governed chat/SSE paths
 - advanced multi-backend load balancing
 - distributed scheduling
 - embeddings/rerank/vision execution paths
