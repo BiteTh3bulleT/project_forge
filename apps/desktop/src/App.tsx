@@ -1,5 +1,3 @@
-import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef } from "react";
 import {
   Navigate,
@@ -12,11 +10,14 @@ import {
 import { ForgeErrorBoundary } from "./components/ForgeErrorBoundary";
 import { AppShell } from "./layout/AppShell";
 import {
-  WORKSPACE_LAYOUT_EVENT,
-  WORKSPACE_NAVIGATE_EVENT,
   isTauriDesktop,
   isShellHostWindowLabel,
 } from "./lib/desktop";
+import {
+  subscribeToCurrentWindowLifecycle,
+  subscribeToWorkspaceLayoutSync,
+  subscribeToWorkspaceNavigation,
+} from "./lib/windowManager";
 import { ActionLanesPage } from "./pages/ActionLanesPage";
 import { AdaptersPage } from "./pages/AdaptersPage";
 import { AuditPage } from "./pages/AuditPage";
@@ -191,39 +192,29 @@ export default function App() {
     };
 
     (async () => {
-      const appWindow = getCurrentWindow();
-      const handleNavigate = await appWindow.listen<{ route: string }>(
-        WORKSPACE_NAVIGATE_EVENT,
-        (event) => {
-          if (
-            event.payload?.route &&
-            event.payload.route !== locationRef.current
-          ) {
-            navigate(event.payload.route);
-          }
-        },
-      );
-      disposers.push(handleNavigate);
+      const handleNavigate = await subscribeToWorkspaceNavigation((route) => {
+        if (route !== locationRef.current) {
+          navigate(route);
+        }
+      });
+      if (handleNavigate) disposers.push(handleNavigate);
       disposers.push(
-        await appWindow.onMoved(() => scheduleEnvironmentRefresh()),
-      );
-      disposers.push(
-        await appWindow.onResized(() => scheduleEnvironmentRefresh()),
-      );
-      disposers.push(
-        await appWindow.onFocusChanged(() => scheduleEnvironmentRefresh()),
+        ...(await subscribeToCurrentWindowLifecycle(() =>
+          scheduleEnvironmentRefresh(),
+        )),
       );
       if (isPrimaryShellWindow) {
-        disposers.push(
-          await listen<{ origin?: string }>(WORKSPACE_LAYOUT_EVENT, (event) => {
-            const origin = event.payload?.origin?.trim() ?? "";
+        const disposeLayoutSync = await subscribeToWorkspaceLayoutSync(
+          (payload) => {
+            const origin = payload?.origin?.trim() ?? "";
             // Ignore self-originated sync events to prevent refresh/emission loops.
             if (origin && origin === (currentWindowLabel || "main")) {
               return;
             }
             void refreshEnvironment();
-          }),
+          },
         );
+        if (disposeLayoutSync) disposers.push(disposeLayoutSync);
       }
     })();
 

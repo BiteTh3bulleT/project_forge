@@ -2,13 +2,15 @@ import { create } from "zustand";
 
 import {
   DETACHED_TAURI_TOOL_WINDOWS,
+  isTauriDesktop,
+  type ForgeWindowSnapshot,
+} from "../lib/desktop";
+import {
   closeTauriWindow,
   createShellWindow,
   focusTauriWindow,
-  isTauriDesktop,
   minimizeTauriWindow,
-  type ForgeWindowSnapshot,
-} from "../lib/desktop";
+} from "../lib/windowManager";
 import { allShellTools, type ShellToolId } from "../layout/shellConfig";
 
 const PINNED_KEY = "forge.os.pinned.v1";

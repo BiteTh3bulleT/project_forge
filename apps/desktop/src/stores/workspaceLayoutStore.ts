@@ -1,30 +1,33 @@
 import { create } from "zustand";
-import {
-  type Window,
-  LogicalPosition,
-  LogicalSize,
-  getCurrentWindow,
-} from "@tauri-apps/api/window";
 
 import { assignableShellTools } from "../layout/shellConfig";
 import {
   DETACHED_TAURI_TOOL_WINDOWS,
-  WORKSPACE_NAVIGATE_EVENT,
-  createShellWindow,
   emitWorkspaceSync,
-  getCurrentWindowLabel,
-  getCurrentWindowSnapshot,
-  getWindowByLabel,
   isForgeManagedWindowLabel,
   isTauriDesktop,
   listAvailableMonitors,
-  listRuntimeWindows,
   monitorSignature,
   spanCurrentWindowAcrossMonitors,
   virtualDesktopBounds,
   type MonitorSnapshot,
 } from "../lib/desktop";
 import { hostLabelForMonitorOrdinal } from "../lib/desktopHostLabels";
+import {
+  bringCurrentWindowFront,
+  bringWindowToFrontByLabel,
+  closeWindowByLabel,
+  createShellWindow,
+  getCurrentWindowLabel,
+  getCurrentWindowSnapshot,
+  getWindowByLabel,
+  listRuntimeWindows,
+  navigateWindowByLabel,
+  setCurrentWindowBounds,
+  setCurrentWindowTitle,
+  setWindowBoundsByLabel,
+  setWindowTitleByLabel,
+} from "../lib/windowManager";
 
 const STORAGE_KEY = "forge.workspace.layouts.v2";
 const STORAGE_KEY_LEGACY = "forge.workspace.layouts.v1";
@@ -717,36 +720,8 @@ function isInvalidWindowHandleError(error: unknown) {
   );
 }
 
-async function reclaimWindowLabel(runtimeWindow: Window) {
-  await runtimeWindow.close().catch(() => undefined);
-}
-
-async function restoreWindow(runtimeWindow: Window) {
-  const maybeWindow = runtimeWindow as {
-    isMinimized?: () => Promise<boolean>;
-    unminimize?: () => Promise<void>;
-    show?: () => Promise<void>;
-    setFocus?: () => Promise<void>;
-    restore?: () => Promise<void>;
-  };
-  const isMinimized =
-    typeof maybeWindow.isMinimized === "function"
-      ? await maybeWindow.isMinimized().catch(() => false)
-      : false;
-  if (isMinimized && typeof maybeWindow.unminimize === "function") {
-    await maybeWindow.unminimize().catch(() => undefined);
-  } else if (isMinimized && typeof maybeWindow.restore === "function") {
-    await maybeWindow.restore().catch(() => undefined);
-  }
-  await runtimeWindow.show().catch(() => undefined);
-}
-
-async function bringWindowFront(runtimeWindow: Window, setFocus = false) {
-  await restoreWindow(runtimeWindow);
-  if (setFocus) {
-    const maybeWindow = runtimeWindow as { setFocus?: () => Promise<void> };
-    await maybeWindow.setFocus?.().catch(() => undefined);
-  }
+async function reclaimWindowLabel(runtimeLabel: string) {
+  await closeWindowByLabel(runtimeLabel).catch(() => undefined);
 }
 
 async function syncOrRecreateWindow(
@@ -764,21 +739,19 @@ async function syncOrRecreateWindow(
     });
   }
   try {
-    await targetWindow.setTitle(layoutWindow.title).catch(() => undefined);
-    await targetWindow
-      .setPosition(new LogicalPosition(bounds.x, bounds.y))
-      .catch(() => undefined);
-    await targetWindow
-      .setSize(new LogicalSize(bounds.width, bounds.height))
-      .catch(() => undefined);
+    await setWindowTitleByLabel(layoutWindow.runtimeLabel, layoutWindow.title);
+    await setWindowBoundsByLabel(layoutWindow.runtimeLabel, bounds);
     await navigateWindow(layoutWindow.runtimeLabel, options.route);
-    await bringWindowFront(targetWindow, options.setFocus === true);
+    await bringWindowToFrontByLabel(
+      layoutWindow.runtimeLabel,
+      options.setFocus === true,
+    );
     return targetWindow;
   } catch (error) {
     if (!isInvalidWindowHandleError(error)) {
       throw error;
     }
-    await reclaimWindowLabel(targetWindow).catch(() => undefined);
+    await reclaimWindowLabel(layoutWindow.runtimeLabel).catch(() => undefined);
     if (typeof console !== "undefined") {
       console.warn(
         `[FORGE] window ${layoutWindow.runtimeLabel} has invalid handle, recreating`,
@@ -842,15 +815,13 @@ async function closeSecondaryShellHosts() {
   for (const runtimeWindow of runtimeWindows) {
     if (runtimeWindow.label === "main") continue;
     if (isForgeManagedWindowLabel(runtimeWindow.label)) {
-      await runtimeWindow.close().catch(() => undefined);
+      await closeWindowByLabel(runtimeWindow.label).catch(() => undefined);
     }
   }
 }
 
 async function navigateWindow(runtimeLabel: string, route: string) {
-  const target = await getWindowByLabel(runtimeLabel);
-  if (!target) return;
-  await target.emit(WORKSPACE_NAVIGATE_EVENT, { route });
+  await navigateWindowByLabel(runtimeLabel, route);
 }
 
 async function syncCurrentRuntimeWindow(
@@ -929,8 +900,7 @@ async function applyLayout(
     );
     if (resolved.fallbackReason) fallbacks.push(resolved.fallbackReason);
 
-    const appWindow = getCurrentWindow();
-    await appWindow.setTitle(mainRecord.title || "FORGE");
+    await setCurrentWindowTitle(mainRecord.title || "FORGE");
     let shellBounds = resolved.bounds;
     if (resolvedMonitors.length > 1) {
       const spanned = await spanCurrentWindowAcrossMonitors(resolvedMonitors);
@@ -939,26 +909,14 @@ async function applyLayout(
         fallbacks.push(
           "Unable to span the desktop shell across all displays; using the main display.",
         );
-        await appWindow
-          .setPosition(new LogicalPosition(resolved.bounds.x, resolved.bounds.y))
-          .catch(() => undefined);
-        await appWindow
-          .setSize(
-            new LogicalSize(resolved.bounds.width, resolved.bounds.height),
-          )
-          .catch(() => undefined);
+        await setCurrentWindowBounds(resolved.bounds);
         shellBounds = resolved.bounds;
       }
     } else {
-      await appWindow
-        .setPosition(new LogicalPosition(resolved.bounds.x, resolved.bounds.y))
-        .catch(() => undefined);
-      await appWindow
-        .setSize(new LogicalSize(resolved.bounds.width, resolved.bounds.height))
-        .catch(() => undefined);
+      await setCurrentWindowBounds(resolved.bounds);
     }
     await navigateWindow("main", mainRecord.activeRoute || "/chat");
-    await bringWindowFront(appWindow, true).catch(() => undefined);
+    await bringCurrentWindowFront(true).catch(() => undefined);
     await closeSecondaryShellHosts();
 
     const runtimeRecord: RuntimeWindowRecord = {
@@ -1000,16 +958,10 @@ async function applyLayout(
         ? null
         : await getWindowByLabel(windowRecord.runtimeLabel);
     if (windowRecord.runtimeLabel === currentLabel) {
-      const appWindow = getCurrentWindow();
-      await appWindow.setTitle(windowRecord.title);
-      await appWindow
-        .setPosition(new LogicalPosition(resolved.bounds.x, resolved.bounds.y))
-        .catch(() => undefined);
-      await appWindow
-        .setSize(new LogicalSize(resolved.bounds.width, resolved.bounds.height))
-        .catch(() => undefined);
+      await setCurrentWindowTitle(windowRecord.title);
+      await setCurrentWindowBounds(resolved.bounds);
       await navigateWindow(currentLabel, windowRecord.activeRoute);
-      await bringWindowFront(appWindow, true).catch(() => undefined);
+      await bringCurrentWindowFront(true).catch(() => undefined);
     } else if (targetWindow) {
       try {
         await syncOrRecreateWindow(windowRecord, resolved.bounds, {
@@ -1018,7 +970,9 @@ async function applyLayout(
         });
       } catch (error) {
         if (isInvalidWindowHandleError(error)) {
-          await reclaimWindowLabel(targetWindow).catch(() => undefined);
+          await reclaimWindowLabel(windowRecord.runtimeLabel).catch(
+            () => undefined,
+          );
           if (typeof console !== "undefined") {
             console.warn(
               `[FORGE] window ${windowRecord.runtimeLabel} could not be restored`,
@@ -1052,7 +1006,7 @@ async function applyLayout(
         DETACHED_TAURI_TOOL_WINDOWS ||
         isForgeManagedWindowLabel(runtimeWindow.label)
       ) {
-        await runtimeWindow.close().catch(() => undefined);
+        await closeWindowByLabel(runtimeWindow.label).catch(() => undefined);
       }
     }
   }

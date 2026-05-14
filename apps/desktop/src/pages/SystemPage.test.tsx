@@ -59,6 +59,14 @@ describe("SystemPage", () => {
         thermal_available: false,
         source_errors_count: 0,
         degraded: false,
+        cache: {
+          available: true,
+          cache_hit: true,
+          stale: false,
+          age_ms: 700,
+          read_only: true,
+          advisory_only: true,
+        },
       },
       forgeh: {
         wired: true,
@@ -106,6 +114,14 @@ describe("SystemPage", () => {
         },
         advisory_only: true,
         canonical_write_committed: false,
+        cache: {
+          available: true,
+          cache_hit: true,
+          stale: false,
+          age_ms: 900,
+          read_only: true,
+          advisory_only: true,
+        },
       },
       kernel_activation: {
         phase: "14M",
@@ -224,8 +240,101 @@ describe("SystemPage", () => {
           role: "optional vector index",
         },
       },
+      authority: {
+        matrix_available: true,
+        matrix_rows: 18,
+        live_authority_rows: 12,
+        partial_validation_rows: 5,
+        forge_k_live_authority_rows: 0,
+        host_mutation_rows: 0,
+        semantic_memory_write_rows: 4,
+        modelruntime_gateway_alignment: "aligned_modelruntime_owned",
+        model_delete_file_status: "real",
+        model_chat_owner: "modelruntime",
+        model_generate_owner: "modelruntime",
+        rows: [
+          {
+            id: "model.delete_file",
+            surface: "api.modelruntime",
+            method: "POST",
+            route: "/forge/models/{id}/delete-file",
+            action: "model.delete_file",
+            authorityOwner: "modelruntime",
+            capabilityId: "model.delete_file",
+            gatewayCapabilityStatus: "approval_only",
+            mutating: true,
+            destructive: true,
+            requiresApproval: true,
+            approvalMechanism: "modelruntime_management",
+            liveAuthority: true,
+            forgeKAuthority: false,
+            hostMutation: false,
+            modelruntimeMutation: true,
+            semanticMemoryWrite: false,
+            status: "real",
+            notes: "Deletes a managed model artifact through approval-governed modelruntime management.",
+          },
+          {
+            id: "system.status",
+            surface: "api.system_status",
+            method: "GET",
+            route: "/forge/system/status",
+            action: "system.status.read",
+            authorityOwner: "system_status",
+            capabilityId: "observability.get_metrics",
+            gatewayCapabilityStatus: "not_applicable",
+            mutating: false,
+            destructive: false,
+            requiresApproval: false,
+            approvalMechanism: "none",
+            liveAuthority: true,
+            forgeKAuthority: false,
+            hostMutation: false,
+            modelruntimeMutation: false,
+            semanticMemoryWrite: false,
+            status: "read_only",
+            notes: "System cockpit/status aggregation is read-only.",
+          },
+        ],
+        blockers: [
+          {
+            row_id: "memory.observations.write",
+            status: "legacy_gate",
+            reason: "Legacy memory mutation remains gated.",
+            next_step: "route canonical semantic writes through Control Lane",
+          },
+        ],
+        notes: [
+          "Gateway owns tool execution; modelruntime owns model inference and lifecycle governance",
+        ],
+      },
+      control_lane: {
+        approval_fingerprint: {
+          available: true,
+          version: "control_lane_approval_fingerprint.v1",
+          enforcement_wired: false,
+          deterministic_helper: true,
+          reason: "approval fingerprint seam is deterministic",
+        },
+      },
+      validation: {
+        available: true,
+        status: "passing",
+        source: "desktop",
+        latency_measured: false,
+        reason: "static validation evidence",
+        commands: [
+          {
+            command: "npm -w @forge/desktop run test -- src/pages/SystemPage.test.tsx",
+            result: "PASS",
+          },
+        ],
+      },
       approval_queue: {
         wired: true,
+        available: true,
+        pending_count: 1,
+        read_only: true,
         reason: "use governed approvals surface",
       },
       warnings: ["shell system surface is read-only"],
@@ -249,6 +358,26 @@ describe("SystemPage", () => {
     expect(screen.getByText("Host mutation disabled")).toBeTruthy();
     expect(screen.getByText("FORGE-K live authority disabled")).toBeTruthy();
     expect(screen.getByText("FORGE-K Activation Readiness")).toBeTruthy();
+    expect(screen.getByText("Authority Matrix")).toBeTruthy();
+    expect(screen.getAllByText("model.delete_file").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("real").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Authority Blockers")).toBeTruthy();
+    expect(screen.getByText("Authority Rows")).toBeTruthy();
+    expect(screen.getByText("/forge/models/{id}/delete-file")).toBeTruthy();
+    expect(screen.getByText("modelruntime_management")).toBeTruthy();
+    expect(screen.getByText("mutating, destructive, approval, modelruntime")).toBeTruthy();
+    expect(screen.getByText("/forge/system/status")).toBeTruthy();
+    expect(screen.getAllByText("read-only").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Next: route canonical semantic writes through Control Lane")).toBeTruthy();
+    expect(screen.getByText("model.chat owner")).toBeTruthy();
+    expect(screen.getByText("model.generate owner")).toBeTruthy();
+    expect(screen.getAllByText("modelruntime").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("aligned_modelruntime_owned")).toBeTruthy();
+    expect(screen.getByText("Gateway owns tool execution; modelruntime owns model inference and lifecycle governance")).toBeTruthy();
+    expect(screen.getByText("Control Lane Fingerprint Seam")).toBeTruthy();
+    expect(screen.getByText("control_lane_approval_fingerprint.v1")).toBeTruthy();
+    expect(screen.getByText("approval fingerprint seam is deterministic")).toBeTruthy();
+    expect(screen.getByText("Enforcement wired")).toBeTruthy();
     expect(screen.getAllByText("partial_live_validation_ready").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("5/5")).toBeTruthy();
     expect(screen.getByText("Simulator authority disabled")).toBeTruthy();
@@ -266,11 +395,15 @@ describe("SystemPage", () => {
     expect(screen.queryByRole("button", { name: /reject/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /execute/i })).toBeNull();
     expect(screen.getByText("Degraded")).toBeTruthy();
+    expect(screen.getAllByText("Cache state").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("fresh").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("700 ms")).toBeTruthy();
+    expect(screen.getByText("900 ms")).toBeTruthy();
     expect(screen.getByText("FORGE-H Resource Posture")).toBeTruthy();
     expect(screen.getByText("Disk")).toBeTruthy();
     expect(screen.getByText("Warnings")).toBeTruthy();
     expect(screen.getByText("proposal_1")).toBeTruthy();
-    expect(screen.getByText("Advisory only")).toBeTruthy();
+    expect(screen.getAllByText("Advisory only").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("execution_1")).toBeTruthy();
     expect(screen.getByText("Proposal: proposal_1")).toBeTruthy();
     expect(screen.getByText("Action: warn_operator")).toBeTruthy();
@@ -280,14 +413,107 @@ describe("SystemPage", () => {
     expect(screen.getByText("Used")).toBeTruthy();
     expect(screen.getByText("Pending approvals")).toBeTruthy();
     expect(screen.getAllByText("1").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Latest Validation Evidence")).toBeTruthy();
+    expect(screen.getByText("passing")).toBeTruthy();
+    expect(screen.getByText("npm -w @forge/desktop run test -- src/pages/SystemPage.test.tsx")).toBeTruthy();
+    expect(screen.getByText("PASS")).toBeTruthy();
     expect(screen.getAllByRole("button").map((button) => button.textContent))
       .toEqual(["Refresh"]);
-    expect(screen.queryByRole("button", { name: /approve/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /load model/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /unload/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /restart/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /rebuild/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /delete/i })).toBeNull();
+    for (const label of [
+      /restart/i,
+      /shutdown/i,
+      /rebuild/i,
+      /systemctl/i,
+      /nixos-rebuild/i,
+      /^load$/i,
+      /unload/i,
+      /approve/i,
+      /reject/i,
+      /^delete$/i,
+      /cleanup/i,
+    ]) {
+      expect(screen.queryByRole("button", { name: label })).toBeNull();
+    }
+  });
+
+  it("renders stale cache and missing optional cockpit data honestly", async () => {
+    mocks.approvals.mockRejectedValueOnce(new Error("approval route absent"));
+    mocks.status.mockResolvedValueOnce({
+      generated_at: "2026-05-09T12:00:00Z",
+      core: {
+        reachable: true,
+        service: "forge-core",
+        health_state: "ok",
+      },
+      shell_session: {
+        host_mutation_disabled: true,
+        model_mutation_disabled: true,
+        semantic_memory_write_disabled: true,
+        forge_k_live_authority_disabled: true,
+      },
+      hostbridge: {
+        wired: true,
+        reason: "bounded read-only diagnostics",
+        ram_pressure: "unknown",
+        disk_pressure: "unknown",
+        cache: {
+          available: true,
+          cache_hit: true,
+          stale: true,
+          age_ms: 125000,
+          read_only: true,
+          advisory_only: true,
+        },
+      },
+      forgeh: {
+        wired: true,
+        advisory_only: true,
+        canonical_write_committed: false,
+        cache: {
+          available: true,
+          cache_hit: false,
+          stale: true,
+          age_ms: 3660000,
+          read_only: true,
+          advisory_only: true,
+        },
+      },
+      kernel_activation: {
+        status: "unknown",
+        validation_actions: [],
+        authority_gates: [],
+      },
+      modelruntime: {
+        available: false,
+        state: "unavailable",
+        mutation_disabled: true,
+      },
+      storage: {
+        truth_authority: "sqlite",
+        ping_ok: false,
+        pressure_level: "unknown",
+        redis: { enabled: false, truth_authority: false, role: "optional cache" },
+        qdrant: { enabled: false, truth_authority: false, role: "optional vector index" },
+      },
+    });
+
+    render(
+      <MemoryRouter>
+        <SystemPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "System Surfaces" }))
+      .toBeTruthy();
+    expect(screen.getAllByText("stale").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("2m")).toBeTruthy();
+    expect(screen.getByText("1h")).toBeTruthy();
+    expect(screen.getByText("fingerprint seam status unavailable")).toBeTruthy();
+    expect(screen.getByText("validation evidence not wired")).toBeTruthy();
+    expect(screen.getByText("Approval queue surface not wired yet")).toBeTruthy();
+    expect(screen.getByText("approval route absent")).toBeTruthy();
+    expect(screen.getAllByRole("button").map((button) => button.textContent))
+      .toEqual(["Refresh"]);
   });
 
   it("renders core unreachable state when the status endpoint is unavailable", async () => {

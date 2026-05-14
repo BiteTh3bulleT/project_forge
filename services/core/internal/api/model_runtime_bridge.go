@@ -1047,10 +1047,11 @@ func (b *modelRuntimeBridge) Health(ctx context.Context, _ ModelRuntimeRequestMe
 	backendDetails := details["backends"].(map[string]map[string]any)
 	for kind, backend := range health.Backends {
 		backendDetails[string(kind)] = map[string]any{
-			"name":    backend.Name,
-			"healthy": backend.Healthy,
-			"detail":  backend.Detail,
-			"meta":    cloneAnyMap(backend.Meta),
+			"name":        backend.Name,
+			"healthy":     backend.Healthy,
+			"detail":      backend.Detail,
+			"meta":        cloneAnyMap(backend.Meta),
+			"supervision": backend.Supervision,
 		}
 	}
 	if health.GPUTelemetry != nil {
@@ -1164,6 +1165,7 @@ func (b *modelRuntimeBridge) Backends(ctx context.Context, _ ModelRuntimeRequest
 			Detail:      backend.Detail,
 			LoadedModel: backend.LoadedModel,
 			Meta:        cloneAnyMap(backend.Meta),
+			Supervision: backend.Supervision,
 		})
 	}
 	return out, nil

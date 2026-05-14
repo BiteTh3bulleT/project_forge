@@ -233,17 +233,6 @@ func (s *ModelStore) readModelDir(modelDir string, archived bool) (StoredModel, 
 	if err != nil {
 		return StoredModel{}, err
 	}
-	st, err := os.Stat(modelFilePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return StoredModel{}, fmt.Errorf("%w: %s", ErrModelFileMissing, modelFilePath)
-		}
-		return StoredModel{}, fmt.Errorf("stat model file: %w", err)
-	}
-	if st.IsDir() {
-		return StoredModel{}, fmt.Errorf("%w: %s is a directory", ErrModelFileMissing, modelFilePath)
-	}
-
 	state, err := readModelState(filepath.Join(modelDir, ModelStateFilename))
 	if err != nil {
 		return StoredModel{}, err
@@ -254,6 +243,27 @@ func (s *ModelStore) readModelDir(modelDir string, archived bool) (StoredModel, 
 			state.ArchivedAt = time.Now().UTC()
 		}
 		state.Managed = true
+	}
+	st, err := os.Stat(modelFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			if modelFileDeleted(state) {
+				return StoredModel{
+					Manifest:      manifest,
+					State:         state,
+					ModelDir:      modelDir,
+					ManifestPath:  manifestPath,
+					ModelFilePath: modelFilePath,
+					Archived:      archived,
+					Warnings:      []string{fmt.Sprintf("model file deleted: %s", modelFilePath)},
+				}, nil
+			}
+			return StoredModel{}, fmt.Errorf("%w: %s", ErrModelFileMissing, modelFilePath)
+		}
+		return StoredModel{}, fmt.Errorf("stat model file: %w", err)
+	}
+	if st.IsDir() {
+		return StoredModel{}, fmt.Errorf("%w: %s is a directory", ErrModelFileMissing, modelFilePath)
 	}
 
 	rec := StoredModel{
@@ -291,6 +301,25 @@ func (s *ModelStore) readModelDir(modelDir string, archived bool) (StoredModel, 
 	}
 
 	return rec, nil
+}
+
+func modelFileDeleted(state ModelState) bool {
+	state.Normalize()
+	if state.Status != StatusUnavailable {
+		return false
+	}
+	value, ok := state.Metadata["modelFileDeleted"]
+	if !ok {
+		return false
+	}
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), "true")
+	default:
+		return false
+	}
 }
 
 func (s *ModelStore) archivesRoot(require bool) (string, error) {

@@ -216,10 +216,10 @@ ProjectForge/
 
 **Location:** [services/core/internal/modelruntime/](services/core/internal/modelruntime/)
 **Purpose:** Governed inference substrate. Backend selection, lifecycle, manifest, store, queue, usage tracking.
-**Current Status:** Working — M3 management features complete; M4 deferred (streaming, delete-file approval, stronger supervision).
+**Current Status:** Working — M3 management features complete; M4 streaming, delete-file approval, and backend supervision snapshots are implemented; managed-service restart remains future work.
 **Key Files:** `service.go` (1,581 lines), `backend_llama_cpp.go`, `backend_openai_compat.go`, `store.go`, `store_management.go`, `manifest.go`, `state.go`, `json_file.go`, `policy.go`, `scheduler.go`, `limits.go`.
 **Strengths:** 17.7% coverage. Bounded JSON file loading. Backend abstraction is clean.
-**Problems:** `service.go` is large. Streaming is missing.
+**Problems:** `service.go` is large. Stronger backend/process supervision remains.
 **Recommended Action:** Continue M4. Split `service.go` by lifecycle concern.
 
 ### Memory / State
@@ -911,7 +911,7 @@ Evidence by file:
 - **Postgres / Qdrant / Redis backends.** Schemas and shadow adapters exist; not the live default. Phase 13I marked `READINESS_REVIEW` only.
 - **Autonomy lanes.** Charters/budgets scaffolded, propose-only, not exercised at scale.
 - **Hyperlane intent classification.** 114-line enum + route table; gateway parser tests exist; core package has no tests; classifier not yet routing live traffic.
-- **Streaming model output.** Modelruntime M4 deferred.
+- **Modelruntime backend/process supervision.** Streaming-capable SSE and delete-file approval are implemented; stronger supervision remains.
 - **Operator apps allowlist.** Foot + pcmanfm working; Firefox path partial; Tauri-side `launch_operator_app` is invoked but Rust implementation needs end-to-end review.
 - **Discord / Telegram integration.** Wired with bounded payload tests; live operator use not in evidence.
 - **System status surface.** `SystemPage.tsx` exists and renders; underlying `system_status.go` is 271 lines, reasonable; not all subsystems report through it yet.

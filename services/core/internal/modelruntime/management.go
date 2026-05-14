@@ -59,12 +59,13 @@ type CompatibilityReport struct {
 }
 
 type RuntimeBackendStatus struct {
-	Kind        ModelBackendKind `json:"kind"`
-	Name        string           `json:"name"`
-	Healthy     bool             `json:"healthy"`
-	Detail      string           `json:"detail,omitempty"`
-	LoadedModel string           `json:"loadedModel,omitempty"`
-	Meta        map[string]any   `json:"meta,omitempty"`
+	Kind        ModelBackendKind           `json:"kind"`
+	Name        string                     `json:"name"`
+	Healthy     bool                       `json:"healthy"`
+	Detail      string                     `json:"detail,omitempty"`
+	LoadedModel string                     `json:"loadedModel,omitempty"`
+	Meta        map[string]any             `json:"meta,omitempty"`
+	Supervision BackendSupervisionSnapshot `json:"supervision,omitempty"`
 }
 
 type RuntimeUsageSummary struct {
@@ -297,7 +298,7 @@ func (s *Service) Backends(ctx context.Context) ([]RuntimeBackendStatus, error) 
 	for _, rawKind := range kinds {
 		kind := ModelBackendKind(rawKind)
 		backendHealth := health.Backends[kind]
-		statuses = append(statuses, RuntimeBackendStatus{Kind: kind, Name: backendHealth.Name, Healthy: backendHealth.Healthy, Detail: backendHealth.Detail, LoadedModel: health.Loaded[kind], Meta: cloneStateMetadata(backendHealth.Meta)})
+		statuses = append(statuses, RuntimeBackendStatus{Kind: kind, Name: backendHealth.Name, Healthy: backendHealth.Healthy, Detail: backendHealth.Detail, LoadedModel: health.Loaded[kind], Meta: cloneStateMetadata(backendHealth.Meta), Supervision: backendHealth.Supervision})
 	}
 	return statuses, err
 }

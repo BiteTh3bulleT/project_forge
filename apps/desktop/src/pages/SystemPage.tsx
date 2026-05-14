@@ -15,13 +15,13 @@ function valueText(value: unknown, fallback = "not reported") {
 
 function statusClass(status?: string) {
   const normalized = (status ?? "").toLowerCase();
-  if (["ok", "normal", "available", "healthy", "reachable"].includes(normalized)) {
+  if (["ok", "normal", "available", "healthy", "reachable", "fresh", "read_only"].includes(normalized)) {
     return "forge-ops-status forge-ops-status--ok";
   }
   if (normalized === "partial_live_validation_ready" || normalized === "ready") {
     return "forge-ops-status forge-ops-status--ok";
   }
-  if (["degraded", "elevated", "constrained", "warning", "proposed"].includes(normalized)) {
+  if (["degraded", "elevated", "constrained", "warning", "proposed", "stale", "deferred", "legacy_gate"].includes(normalized)) {
     return "forge-ops-status forge-ops-status--warn";
   }
   if (["critical", "failed", "unreachable", "error"].includes(normalized)) {
@@ -54,9 +54,27 @@ function formatBytes(value?: number) {
   return `${current.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
+function formatAge(value?: number) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return "not reported";
+  }
+  if (value < 1000) return `${value} ms`;
+  const seconds = Math.round(value / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  return `${Math.round(minutes / 60)}h`;
+}
+
 function formatList(values?: string[]) {
   const filtered = (values ?? []).filter(Boolean);
   return filtered.length > 0 ? filtered.join(", ") : "none";
+}
+
+function cacheState(cache?: { available?: boolean; stale?: boolean; source_error?: string }) {
+  if (!cache?.available) return "unavailable";
+  if (cache.source_error) return "degraded";
+  return cache.stale ? "stale" : "fresh";
 }
 
 function Metric(props: { label: string; value: unknown; tone?: string }) {
@@ -163,15 +181,41 @@ export function SystemPage() {
     return () => window.clearInterval(interval);
   }, [load]);
 
-  const proposalRows = status?.forgeh.proposals ?? [];
-  const executionRows = status?.forgeh.executions?.items ?? [];
+  const proposalRows = status?.forgeh?.proposals ?? [];
+  const executionRows = status?.forgeh?.executions?.items ?? [];
   const kernelActivation = status?.kernel_activation;
+  const authorityRows = status?.authority?.rows ?? [];
+  const authorityBlockers = status?.authority?.blockers ?? [];
+  const approvalQueueReason = status?.approval_queue?.reason;
+  const backendPendingApprovals = status?.approval_queue?.pending_count;
+  const displayedPendingApprovals =
+    typeof backendPendingApprovals === "number"
+      ? backendPendingApprovals
+      : pendingApprovals;
+  const fingerprint = status?.control_lane?.approval_fingerprint;
+  const legacyFingerprint = status?.control_lane_fingerprint;
+  const fingerprintStatus = fingerprint
+    ? fingerprint.available
+      ? "available"
+      : "unavailable"
+    : legacyFingerprint?.status;
+  const fingerprintVersion = fingerprint?.version ?? legacyFingerprint?.version;
+  const fingerprintDeterministic =
+    fingerprint?.deterministic_helper ?? legacyFingerprint?.deterministic;
+  const fingerprintReason =
+    fingerprint?.reason ?? legacyFingerprint?.reason;
+  const validation = status?.validation;
+  const validationEvidence = status?.validation_evidence;
+  const validationCommand =
+    validation?.commands?.[0]?.command ?? validationEvidence?.command;
+  const validationResult =
+    validation?.commands?.[0]?.result ?? validationEvidence?.status;
   const warnings = useMemo(() => {
     const values = [
       ...(status?.warnings ?? []),
-      ...(status?.forgeh.policy?.warnings ?? []),
-      ...(status?.modelruntime.warnings ?? []),
-      ...(status?.modelruntime.errors ?? []),
+      ...(status?.forgeh?.policy?.warnings ?? []),
+      ...(status?.modelruntime?.warnings ?? []),
+      ...(status?.modelruntime?.errors ?? []),
     ];
     return Array.from(new Set(values.filter(Boolean))).slice(0, 8);
   }, [status]);
@@ -218,8 +262,8 @@ export function SystemPage() {
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Metric
           label="Core Status"
-          value={status?.core.service ?? "forge-core"}
-          tone={status?.core.reachable ? "ok" : "unreachable"}
+          value={status?.core?.service ?? "forge-core"}
+          tone={status?.core?.reachable ? "ok" : "unreachable"}
         />
         <Metric
           label="Kernel"
@@ -228,18 +272,18 @@ export function SystemPage() {
         />
         <Metric
           label="FORGE-H Posture"
-          value={status?.forgeh.policy?.overall_posture}
-          tone={status?.forgeh.policy?.overall_posture}
+          value={status?.forgeh?.policy?.overall_posture}
+          tone={status?.forgeh?.policy?.overall_posture}
         />
         <Metric
           label="Modelruntime"
-          value={status?.modelruntime.state}
-          tone={status?.modelruntime.available ? "available" : "unavailable"}
+          value={status?.modelruntime?.state}
+          tone={status?.modelruntime?.available ? "available" : "unavailable"}
         />
         <Metric
           label="Storage"
-          value={status?.storage.pressure_level}
-          tone={status?.storage.pressure_level}
+          value={status?.storage?.pressure_level}
+          tone={status?.storage?.pressure_level}
         />
       </section>
 
@@ -249,59 +293,237 @@ export function SystemPage() {
             <div className="grid gap-3 md:grid-cols-2">
               <Metric
                 label="Reachability"
-                value={status?.core.reachable ? "reachable" : "unreachable"}
-                tone={status?.core.reachable ? "reachable" : "unreachable"}
+                value={status?.core?.reachable ? "reachable" : "unreachable"}
+                tone={status?.core?.reachable ? "reachable" : "unreachable"}
               />
               <Metric
                 label="Core health"
-                value={status?.core.health_state}
-                tone={status?.core.health_state}
+                value={status?.core?.health_state}
+                tone={status?.core?.health_state}
               />
               <Metric
                 label="Core URL"
-                value={status?.core.core_url}
+                value={status?.core?.core_url}
               />
               <Metric
                 label="Last core refresh"
-                value={formatTimestamp(status?.core.last_refresh_at)}
+                value={formatTimestamp(status?.core?.last_refresh_at)}
               />
             </div>
           </Panel>
 
           <Panel title="Shell Session Status">
             <div className="grid gap-3 md:grid-cols-3">
-              <Metric label="Shell mode" value={status?.shell_session.shell_mode} />
+              <Metric label="Shell mode" value={status?.shell_session?.shell_mode} />
               <Metric
                 label="Display backend"
-                value={status?.shell_session.display_backend}
+                value={status?.shell_session?.display_backend}
               />
               <Metric
                 label="Compositor"
-                value={status?.shell_session.compositor_session}
+                value={status?.shell_session?.compositor_session}
               />
               <Metric
                 label="Safe mode"
-                value={status?.shell_session.safe_mode}
-                tone={status?.shell_session.safe_mode ? "warning" : "ok"}
+                value={status?.shell_session?.safe_mode}
+                tone={status?.shell_session?.safe_mode ? "warning" : "ok"}
               />
             </div>
             <div className="mt-3 rounded border border-white/10 bg-black/20 p-3">
               <BoundaryFlag
                 label="Host mutation disabled"
-                enabled={status?.shell_session.host_mutation_disabled}
+                enabled={status?.shell_session?.host_mutation_disabled}
               />
               <BoundaryFlag
                 label="Model mutation disabled"
-                enabled={status?.shell_session.model_mutation_disabled}
+                enabled={status?.shell_session?.model_mutation_disabled}
               />
               <BoundaryFlag
                 label="Semantic memory write disabled"
-                enabled={status?.shell_session.semantic_memory_write_disabled}
+                enabled={status?.shell_session?.semantic_memory_write_disabled}
               />
               <BoundaryFlag
                 label="FORGE-K live authority disabled"
-                enabled={status?.shell_session.forge_k_live_authority_disabled}
+                enabled={status?.shell_session?.forge_k_live_authority_disabled}
               />
+            </div>
+          </Panel>
+
+          <Panel title="Authority Matrix">
+            <div className="grid gap-3 md:grid-cols-3">
+              <Metric
+                label="Rows"
+                value={status?.authority?.matrix_rows}
+                tone={status?.authority?.matrix_available ? "available" : "unavailable"}
+              />
+              <Metric
+                label="Model drift"
+                value={status?.authority?.modelruntime_gateway_alignment}
+                tone={status?.authority?.modelruntime_gateway_alignment}
+              />
+              <Metric
+                label="model.delete_file"
+                value={status?.authority?.model_delete_file_status}
+                tone={status?.authority?.model_delete_file_status}
+              />
+              <Metric
+                label="model.chat owner"
+                value={status?.authority?.model_chat_owner}
+              />
+              <Metric
+                label="model.generate owner"
+                value={status?.authority?.model_generate_owner}
+              />
+              <Metric
+                label="Partial validations"
+                value={status?.authority?.partial_validation_rows}
+              />
+              <Metric
+                label="Host mutation rows"
+                value={status?.authority?.host_mutation_rows}
+                tone={(status?.authority?.host_mutation_rows ?? 0) > 0 ? "warning" : "ok"}
+              />
+              <Metric
+                label="Semantic writes"
+                value={status?.authority?.semantic_memory_write_rows}
+                tone={(status?.authority?.semantic_memory_write_rows ?? 0) > 0 ? "warning" : "ok"}
+              />
+            </div>
+            <div className="mt-3 rounded border border-white/10 bg-black/20 p-3 text-xs leading-5 text-forge-mist/75">
+              {formatList(status?.authority?.notes)}
+            </div>
+            <div className="mt-3 rounded border border-white/10 bg-black/20 p-3">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-semibold text-forge-ash">
+                  Authority Blockers
+                </div>
+                <span className={statusClass(authorityBlockers.length > 0 ? "warning" : "ok")}>
+                  {authorityBlockers.length}
+                </span>
+              </div>
+              {authorityBlockers.length === 0 ? (
+                <div className="text-xs text-forge-mist/70">
+                  No structured authority blockers reported.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {authorityBlockers.map((blocker) => (
+                    <div
+                      key={blocker.row_id ?? blocker.reason}
+                      className="rounded border border-forge-amber/20 bg-forge-amber/10 p-2 text-xs leading-5"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-mono text-forge-ash">
+                          {valueText(blocker.row_id)}
+                        </span>
+                        <span className={statusClass(blocker.status)}>
+                          {valueText(blocker.status)}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-forge-mist/75">
+                        {valueText(blocker.reason)}
+                      </div>
+                      <div className="mt-1 text-forge-mist/60">
+                        Next: {valueText(blocker.next_step)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="mt-3 overflow-x-auto rounded border border-white/10 bg-black/20 p-3">
+              <div className="mb-2 text-xs font-semibold text-forge-ash">
+                Authority Rows
+              </div>
+              {authorityRows.length === 0 ? (
+                <div className="text-xs text-forge-mist/70">
+                  Authority row drilldown not wired.
+                </div>
+              ) : (
+                <table className="w-full min-w-[980px] text-left text-xs">
+                  <thead className="text-forge-mist/70">
+                    <tr>
+                      <th className="py-2 pr-3">Row</th>
+                      <th className="py-2 pr-3">Owner</th>
+                      <th className="py-2 pr-3">Status</th>
+                      <th className="py-2 pr-3">Method</th>
+                      <th className="py-2 pr-3">Route</th>
+                      <th className="py-2 pr-3">Capability</th>
+                      <th className="py-2 pr-3">Approval</th>
+                      <th className="py-2 pr-3">Mutation</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {authorityRows.map((row) => (
+                      <tr
+                        key={row.id ?? row.action}
+                        className="border-t border-white/10"
+                      >
+                        <td className="py-2 pr-3 font-mono text-forge-ash">
+                          {valueText(row.id)}
+                        </td>
+                        <td className="py-2 pr-3 text-forge-mist">
+                          {valueText(row.authorityOwner)}
+                        </td>
+                        <td className="py-2 pr-3">
+                          <span className={statusClass(row.status)}>
+                            {valueText(row.status)}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-3 font-mono text-forge-mist">
+                          {valueText(row.method)}
+                        </td>
+                        <td className="py-2 pr-3 font-mono text-forge-mist">
+                          {valueText(row.route)}
+                        </td>
+                        <td className="py-2 pr-3 font-mono text-forge-mist">
+                          {valueText(row.capabilityId)}
+                        </td>
+                        <td className="py-2 pr-3 text-forge-mist">
+                          {valueText(row.approvalMechanism)}
+                        </td>
+                        <td className="py-2 pr-3 text-forge-mist">
+                          {[
+                            row.mutating ? "mutating" : "",
+                            row.destructive ? "destructive" : "",
+                            row.requiresApproval ? "approval" : "",
+                            row.semanticMemoryWrite ? "semantic" : "",
+                            row.hostMutation ? "host" : "",
+                            row.modelruntimeMutation ? "modelruntime" : "",
+                          ].filter(Boolean).join(", ") || "read-only"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </Panel>
+
+          <Panel title="Control Lane Fingerprint Seam">
+            <div className="grid gap-3 md:grid-cols-3">
+              <Metric
+                label="Status"
+                value={fingerprintStatus ?? "not wired"}
+                tone={fingerprintStatus}
+              />
+              <Metric
+                label="Version"
+                value={fingerprintVersion}
+              />
+              <Metric
+                label="Deterministic"
+                value={fingerprintDeterministic}
+                tone={fingerprintDeterministic ? "ok" : "unavailable"}
+              />
+              <Metric
+                label="Enforcement wired"
+                value={fingerprint?.enforcement_wired}
+                tone={fingerprint?.enforcement_wired ? "warning" : "ok"}
+              />
+            </div>
+            <div className="mt-2 text-xs leading-5 text-forge-mist/70">
+              {fingerprintReason ?? "fingerprint seam status unavailable"}
             </div>
           </Panel>
 
@@ -443,39 +665,54 @@ export function SystemPage() {
 
           <Panel
             title="Host Diagnostics Summary"
-            detail={status?.hostbridge.reason}
+            detail={status?.hostbridge?.reason}
           >
             <div className="grid gap-3 md:grid-cols-3">
-              <Metric label="Host" value={status?.hostbridge.host_identity} />
+              <Metric label="Host" value={status?.hostbridge?.host_identity} />
               <Metric
                 label="RAM pressure"
-                value={status?.hostbridge.ram_pressure}
-                tone={status?.hostbridge.ram_pressure}
+                value={status?.hostbridge?.ram_pressure}
+                tone={status?.hostbridge?.ram_pressure}
               />
               <Metric
                 label="Disk pressure"
-                value={status?.hostbridge.disk_pressure}
-                tone={status?.hostbridge.disk_pressure}
+                value={status?.hostbridge?.disk_pressure}
+                tone={status?.hostbridge?.disk_pressure}
               />
               <Metric
                 label="GPU available"
-                value={status?.hostbridge.gpu_available}
-                tone={status?.hostbridge.gpu_available ? "available" : "unavailable"}
+                value={status?.hostbridge?.gpu_available}
+                tone={status?.hostbridge?.gpu_available ? "available" : "unavailable"}
               />
               <Metric
                 label="Thermal available"
-                value={status?.hostbridge.thermal_available}
-                tone={status?.hostbridge.thermal_available ? "available" : "unavailable"}
+                value={status?.hostbridge?.thermal_available}
+                tone={status?.hostbridge?.thermal_available ? "available" : "unavailable"}
               />
               <Metric
                 label="Source errors"
-                value={status?.hostbridge.source_errors_count ?? 0}
-                tone={(status?.hostbridge.source_errors_count ?? 0) > 0 ? "warning" : "ok"}
+                value={status?.hostbridge?.source_errors_count ?? 0}
+                tone={(status?.hostbridge?.source_errors_count ?? 0) > 0 ? "warning" : "ok"}
               />
               <Metric
                 label="Degraded"
-                value={status?.hostbridge.degraded}
-                tone={status?.hostbridge.degraded ? "warning" : "ok"}
+                value={status?.hostbridge?.degraded}
+                tone={status?.hostbridge?.degraded ? "warning" : "ok"}
+              />
+              <Metric
+                label="Cache state"
+                value={cacheState(status?.hostbridge?.cache)}
+                tone={cacheState(status?.hostbridge?.cache)}
+              />
+              <Metric
+                label="Cache hit"
+                value={status?.hostbridge?.cache?.cache_hit}
+                tone={status?.hostbridge?.cache?.stale ? "warning" : "ok"}
+              />
+              <Metric
+                label="Cache age"
+                value={formatAge(status?.hostbridge?.cache?.age_ms)}
+                tone={status?.hostbridge?.cache?.stale ? "warning" : undefined}
               />
             </div>
           </Panel>
@@ -484,41 +721,61 @@ export function SystemPage() {
             <div className="grid gap-3 md:grid-cols-3">
               <Metric
                 label="RAM"
-                value={status?.forgeh.policy?.ram_pressure}
-                tone={status?.forgeh.policy?.ram_pressure}
+                value={status?.forgeh?.policy?.ram_pressure}
+                tone={status?.forgeh?.policy?.ram_pressure}
               />
               <Metric
                 label="Swap"
-                value={status?.forgeh.policy?.swap_pressure}
-                tone={status?.forgeh.policy?.swap_pressure}
+                value={status?.forgeh?.policy?.swap_pressure}
+                tone={status?.forgeh?.policy?.swap_pressure}
               />
               <Metric
                 label="Disk"
-                value={status?.forgeh.policy?.disk_pressure}
-                tone={status?.forgeh.policy?.disk_pressure}
+                value={status?.forgeh?.policy?.disk_pressure}
+                tone={status?.forgeh?.policy?.disk_pressure}
               />
               <Metric
                 label="VRAM"
-                value={status?.forgeh.policy?.vram_pressure}
-                tone={status?.forgeh.policy?.vram_pressure}
+                value={status?.forgeh?.policy?.vram_pressure}
+                tone={status?.forgeh?.policy?.vram_pressure}
               />
               <Metric
                 label="Thermal"
-                value={status?.forgeh.policy?.thermal_pressure}
-                tone={status?.forgeh.policy?.thermal_pressure}
+                value={status?.forgeh?.policy?.thermal_pressure}
+                tone={status?.forgeh?.policy?.thermal_pressure}
               />
               <Metric
-                label="Model load"
-                value={status?.forgeh.policy?.model_load_recommendation}
+                label="Model recommendation"
+                value={status?.forgeh?.policy?.model_load_recommendation}
               />
               <Metric
                 label="Background work"
-                value={status?.forgeh.policy?.background_work_recommendation}
+                value={status?.forgeh?.policy?.background_work_recommendation}
               />
               <Metric
                 label="Warnings"
-                value={status?.forgeh.policy?.warnings?.length ?? 0}
-                tone={(status?.forgeh.policy?.warnings?.length ?? 0) > 0 ? "warning" : "ok"}
+                value={status?.forgeh?.policy?.warnings?.length ?? 0}
+                tone={(status?.forgeh?.policy?.warnings?.length ?? 0) > 0 ? "warning" : "ok"}
+              />
+              <Metric
+                label="Advisory only"
+                value={status?.forgeh?.advisory_only}
+                tone={status?.forgeh?.advisory_only ? "ok" : "warning"}
+              />
+              <Metric
+                label="Cache state"
+                value={cacheState(status?.forgeh?.cache)}
+                tone={cacheState(status?.forgeh?.cache)}
+              />
+              <Metric
+                label="Cache hit"
+                value={status?.forgeh?.cache?.cache_hit}
+                tone={status?.forgeh?.cache?.stale ? "warning" : "ok"}
+              />
+              <Metric
+                label="Cache age"
+                value={formatAge(status?.forgeh?.cache?.age_ms)}
+                tone={status?.forgeh?.cache?.stale ? "warning" : undefined}
               />
             </div>
           </Panel>
@@ -584,13 +841,13 @@ export function SystemPage() {
 
         <div className="space-y-4">
           <Panel title="FORGE-H Bounded Executions">
-            {!status?.forgeh.executions?.available && executionRows.length === 0 ? (
+            {!status?.forgeh?.executions?.available && executionRows.length === 0 ? (
               <div className="rounded border border-dashed border-white/10 bg-black/20 p-3">
                 <div className="text-sm font-semibold text-forge-ash">
                   Bounded execution ledger not wired
                 </div>
                 <div className="mt-1 text-xs leading-5 text-forge-mist/70">
-                  {status?.forgeh.executions?.reason ??
+                  {status?.forgeh?.executions?.reason ??
                     "No live execution surface is exposed in this phase."}
                 </div>
               </div>
@@ -625,48 +882,68 @@ export function SystemPage() {
 
           <Panel title="Modelruntime Status">
             <div className="space-y-2 text-xs text-forge-mist">
-              <DetailRow label="Available" value={status?.modelruntime.available} />
-              <DetailRow label="State" value={status?.modelruntime.state} />
-              <DetailRow label="Backend" value={status?.modelruntime.backend} />
-              <DetailRow label="Mutation disabled" value={status?.modelruntime.mutation_disabled} />
+              <DetailRow label="Available" value={status?.modelruntime?.available} />
+              <DetailRow label="State" value={status?.modelruntime?.state} />
+              <DetailRow label="Backend" value={status?.modelruntime?.backend} />
+              <DetailRow label="Mutation disabled" value={status?.modelruntime?.mutation_disabled} />
             </div>
           </Panel>
 
           <Panel title="Storage Status">
             <div className="space-y-2 text-xs text-forge-mist">
-              <DetailRow label="Root" value={status?.storage.root} mono />
-              <DetailRow label="Truth authority" value={status?.storage.truth_authority} />
-              <DetailRow label="SQLite ping" value={status?.storage.ping_ok} />
-              <DetailRow label="Used" value={formatBytes(status?.storage.used_bytes)} />
-              <DetailRow label="Free" value={formatBytes(status?.storage.free_bytes)} />
-              <DetailRow label="Redis truth" value={status?.storage.redis?.truth_authority} />
-              <DetailRow label="Qdrant truth" value={status?.storage.qdrant?.truth_authority} />
+              <DetailRow label="Root" value={status?.storage?.root} mono />
+              <DetailRow label="Truth authority" value={status?.storage?.truth_authority} />
+              <DetailRow label="SQLite ping" value={status?.storage?.ping_ok} />
+              <DetailRow label="Used" value={formatBytes(status?.storage?.used_bytes)} />
+              <DetailRow label="Free" value={formatBytes(status?.storage?.free_bytes)} />
+              <DetailRow label="Redis truth" value={status?.storage?.redis?.truth_authority} />
+              <DetailRow label="Qdrant truth" value={status?.storage?.qdrant?.truth_authority} />
             </div>
           </Panel>
 
           <Panel title="Approval Queue">
-            {pendingApprovals == null ? (
+            {displayedPendingApprovals == null ? (
               <div className="rounded border border-dashed border-white/10 bg-black/20 p-3">
                 <div className="text-sm font-semibold text-forge-ash">
                   Approval queue surface not wired yet
                 </div>
                 <div className="mt-1 text-xs leading-5 text-forge-mist/70">
-                  {approvalError || status?.approval_queue.reason || "No approval summary available."}
+                  {approvalError || approvalQueueReason || "No approval summary available."}
                 </div>
               </div>
             ) : (
               <div className="rounded border border-white/10 bg-black/20 p-3">
                 <div className="forge-ops-label">Pending approvals</div>
                 <div className="mt-1 text-2xl font-semibold text-forge-ash">
-                  {pendingApprovals}
+                  {displayedPendingApprovals}
                 </div>
               </div>
             )}
-            {status?.approval_queue.reason && pendingApprovals != null ? (
+            {approvalQueueReason && displayedPendingApprovals != null ? (
               <div className="mt-2 text-xs leading-5 text-forge-mist/70">
-                {status.approval_queue.reason}
+                {approvalQueueReason}
               </div>
             ) : null}
+          </Panel>
+
+          <Panel title="Latest Validation Evidence">
+            {validation?.available || validationEvidence ? (
+              <div className="space-y-2 text-xs text-forge-mist">
+                <DetailRow label="Status" value={validation?.status ?? validationEvidence?.status} tone={validation?.status ?? validationEvidence?.status} />
+                <DetailRow label="Source" value={validation?.source ?? validationEvidence?.source} />
+                <DetailRow label="Latency measured" value={validation?.latency_measured} />
+                <DetailRow label="Command" value={validationCommand} mono />
+                <DetailRow label="Result" value={validationResult} tone={validationResult} />
+                <DetailRow label="Updated" value={formatTimestamp(validationEvidence?.updated_at)} />
+                <div className="text-forge-mist/70">
+                  {validation?.reason}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded border border-dashed border-white/10 bg-black/20 p-3 text-xs leading-5 text-forge-mist/70">
+                {validation?.reason ?? "validation evidence not wired"}
+              </div>
+            )}
           </Panel>
 
           <Panel title="Recent Warnings">

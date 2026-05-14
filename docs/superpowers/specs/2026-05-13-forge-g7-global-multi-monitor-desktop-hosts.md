@@ -152,6 +152,38 @@ host windows = all windows where window.hostLabel == this hostLabel
 
 The taskbar may render all windows globally, or per-host with global awareness.
 
+## Compositor Boundary
+
+FORGE is the desktop shell and operator environment. labwc remains the Wayland
+compositor and owns real native app placement, pointer-driven drag/resize,
+interactive output movement, decorations, and compositor policy.
+
+G7 can safely expose bounded compositor requests for native toplevels:
+
+```text
+focus
+minimize
+maximize
+fullscreen
+close
+```
+
+Those requests go through allowlisted Tauri commands and `wlrctl`. They are not
+host service control, package mutation, NixOS rebuild behavior, modelruntime
+mutation, semantic memory writes, or FORGE-K authority.
+
+G7 does not yet provide native-window geometry mutation because the current
+foreign-toplevel path exposes focus/state/close actions, not a stable bounded
+move/resize/output protocol. Native drag across monitors remains compositor
+behavior.
+
+Native toplevel lifecycle must be owned by the backend, not inferred ad hoc by
+the frontend. The Tauri backend keeps a registry of compositor-reported windows,
+including stable ids, lifecycle state, first-seen time, and last-seen time. The
+frontend renders registry snapshots and sends lifecycle requests back to the
+backend. The backend verifies that a target is still active before issuing a
+bounded compositor control request.
+
 ---
 
 # Phase Plan

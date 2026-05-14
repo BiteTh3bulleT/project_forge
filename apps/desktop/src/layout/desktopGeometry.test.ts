@@ -181,6 +181,41 @@ describe("desktop geometry", () => {
     });
   });
 
+  it("moves a window into an inactive monitor host derived from monitor layout", () => {
+    const hosts = buildDesktopHosts([
+      {
+        id: "main-monitor",
+        ordinal: 0,
+        workArea: { x: 0, y: 0, width: 1000, height: 800 },
+      },
+      {
+        id: "right-monitor",
+        ordinal: 1,
+        workArea: { x: 1000, y: 0, width: 1000, height: 800 },
+      },
+    ]);
+    const hostBounds = hosts.map((host) => ({
+      runtimeLabel: host.hostLabel,
+      monitorId: host.monitorId,
+      bounds: host.bounds,
+    }));
+
+    const placement = resolveDesktopHostPlacement(
+      hostBounds,
+      "main",
+      { hostLabel: "main", width: 300, height: 200 },
+      920,
+      120,
+      shellHost,
+    );
+
+    expect(placement).toEqual({
+      hostLabel: "forge-monitor-2",
+      x: -80,
+      y: 120,
+    });
+  });
+
   it("moves a window from a right monitor host back to the main host", () => {
     const placement = resolveDesktopHostPlacement(
       [

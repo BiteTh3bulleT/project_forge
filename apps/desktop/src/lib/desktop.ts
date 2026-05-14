@@ -97,7 +97,17 @@ export type LinuxWindowSnapshot = {
   focused: boolean;
   minimized: boolean;
   native: boolean;
+  lifecycle?: "active" | "closed";
+  firstSeenMs?: number | null;
+  lastSeenMs?: number | null;
 };
+
+export type LinuxWindowAction =
+  | "focus"
+  | "minimize"
+  | "maximize"
+  | "fullscreen"
+  | "close";
 
 export function isTauriDesktop() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -580,6 +590,18 @@ function parseLinuxWindowPayload(raw: unknown): LinuxWindowSnapshot | null {
     focused: typeof value.focused === "boolean" ? value.focused : false,
     minimized: typeof value.minimized === "boolean" ? value.minimized : false,
     native: typeof value.native === "boolean" ? value.native : true,
+    lifecycle:
+      value.lifecycle === "active" || value.lifecycle === "closed"
+        ? value.lifecycle
+        : undefined,
+    firstSeenMs:
+      typeof (value.firstSeenMs ?? value.first_seen_ms) === "number"
+        ? ((value.firstSeenMs ?? value.first_seen_ms) as number)
+        : null,
+    lastSeenMs:
+      typeof (value.lastSeenMs ?? value.last_seen_ms) === "number"
+        ? ((value.lastSeenMs ?? value.last_seen_ms) as number)
+        : null,
   };
 }
 
@@ -609,9 +631,15 @@ export async function createShellWindow(options: {
       visible: true,
       focus: true,
       resizable: true,
-      preventOverflow: true,
+      preventOverflow: false,
     });
     try {
+      await window.setPosition(
+        new LogicalPosition(options.bounds.x, options.bounds.y),
+      ).catch(() => undefined);
+      await window.setSize(
+        new LogicalSize(options.bounds.width, options.bounds.height),
+      ).catch(() => undefined);
       await window.show();
       await window.setFocus();
     } catch (error) {
@@ -791,6 +819,25 @@ export async function focusLinuxWindow(windowId: string): Promise<boolean> {
   } catch (error) {
     if (typeof console !== "undefined") {
       console.error(`[FORGE] failed to focus Linux window ${windowId}`, error);
+    }
+    return false;
+  }
+}
+
+export async function controlLinuxWindow(
+  windowId: string,
+  action: LinuxWindowAction,
+): Promise<boolean> {
+  if (!isTauriDesktop()) return false;
+  try {
+    const result = await invoke("control_linux_window", { windowId, action });
+    return result === true;
+  } catch (error) {
+    if (typeof console !== "undefined") {
+      console.error(
+        `[FORGE] failed to ${action} Linux window ${windowId}`,
+        error,
+      );
     }
     return false;
   }

@@ -621,6 +621,43 @@ func TestService_HealthPreservesDegradedPayloadWhenBackendHealthErrors(t *testin
 	}
 }
 
+func TestService_HealthTracksBackendSupervisionFailures(t *testing.T) {
+	now := time.Date(2026, 5, 14, 13, 40, 0, 0, time.UTC)
+	backend := NewFakeBackend(FakeBackendOptions{
+		Healthy:      false,
+		Kind:         BackendFake,
+		HealthDetail: "probe failed",
+		HealthErr:    errors.New("probe failed"),
+	})
+	svc, err := NewService(ServiceOptions{
+		Backends: []ModelBackend{backend},
+		Models:   []ModelManifest{completionManifest("supervision-model", BackendFake)},
+		Clock:    func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+
+	if _, err := svc.Health(context.Background()); err != nil {
+		t.Fatalf("first health should return degraded payload: %v", err)
+	}
+	health, err := svc.Health(context.Background())
+	if err != nil {
+		t.Fatalf("second health should return degraded payload: %v", err)
+	}
+
+	supervision := health.Backends[BackendFake].Supervision
+	if supervision.ConsecutiveFailures != 2 || supervision.LastError != "probe failed" {
+		t.Fatalf("unexpected supervision snapshot: %+v", supervision)
+	}
+	if !supervision.LastProbeAt.Equal(now) {
+		t.Fatalf("last probe at=%v, want %v", supervision.LastProbeAt, now)
+	}
+	if supervision.RestartSupported || supervision.RestartAttempted {
+		t.Fatalf("unmanaged backend must not claim restart support: %+v", supervision)
+	}
+}
+
 func TestService_GPUTelemetryPressureBlocksBackgroundJobs(t *testing.T) {
 	backend := NewFakeBackend(FakeBackendOptions{Healthy: true, Kind: BackendFake})
 	svc, err := NewService(ServiceOptions{

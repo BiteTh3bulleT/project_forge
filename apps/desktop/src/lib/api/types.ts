@@ -734,6 +734,15 @@ export type ForgeSystemStatus = {
     thermal_available?: boolean;
     source_errors_count?: number;
     degraded?: boolean;
+    cache?: {
+      available?: boolean;
+      cache_hit?: boolean;
+      stale?: boolean;
+      age_ms?: number;
+      source_error?: string;
+      read_only?: boolean;
+      advisory_only?: boolean;
+    };
   };
   forgeh: {
     wired: boolean;
@@ -777,6 +786,15 @@ export type ForgeSystemStatus = {
     };
     advisory_only?: boolean;
     canonical_write_committed?: boolean;
+    cache?: {
+      available?: boolean;
+      cache_hit?: boolean;
+      stale?: boolean;
+      age_ms?: number;
+      source_error?: string;
+      read_only?: boolean;
+      advisory_only?: boolean;
+    };
   };
   kernel_activation?: {
     generated_at?: string;
@@ -858,11 +876,104 @@ export type ForgeSystemStatus = {
       role?: string;
     };
   };
-  approval_queue: {
-    wired?: boolean;
+  authority?: {
+    matrix_available?: boolean;
+    matrix_rows?: number;
+    live_authority_rows?: number;
+    partial_validation_rows?: number;
+    forge_k_live_authority_rows?: number;
+    host_mutation_rows?: number;
+    semantic_memory_write_rows?: number;
+    modelruntime_gateway_alignment?: string;
+    model_delete_file_status?: string;
+    model_chat_owner?: string;
+    model_generate_owner?: string;
+    rows?: Array<{
+      id?: string;
+      surface?: string;
+      method?: string;
+      route?: string;
+      action?: string;
+      authorityOwner?: string;
+      capabilityId?: string;
+      gatewayCapabilityStatus?: string;
+      mutating?: boolean;
+      destructive?: boolean;
+      requiresApproval?: boolean;
+      approvalMechanism?: string;
+      auditCategory?: string;
+      auditAction?: string;
+      responseVisibility?: string;
+      liveAuthority?: boolean;
+      forgeKAuthority?: boolean;
+      hostMutation?: boolean;
+      modelruntimeMutation?: boolean;
+      semanticMemoryWrite?: boolean;
+      status?: string;
+      notes?: string;
+    }>;
+    blockers?: Array<{
+      row_id?: string;
+      status?: string;
+      reason?: string;
+      next_step?: string;
+    }>;
+    notes?: string[];
+  };
+  control_lane?: {
+    approval_fingerprint?: {
+      available?: boolean;
+      version?: string;
+      enforcement_wired?: boolean;
+      deterministic_helper?: boolean;
+      reason?: string;
+    };
+  };
+  control_lane_fingerprint?: {
+    status?: string;
+    version?: string;
+    deterministic?: boolean;
     reason?: string;
+  };
+  validation?: {
+    available?: boolean;
+    source?: string;
+    status?: string;
+    latency_measured?: boolean;
+    reason?: string;
+    commands?: Array<{
+      command?: string;
+      result?: string;
+    }>;
+  };
+  validation_evidence?: {
+    status?: string;
+    source?: string;
+    command?: string;
+    updated_at?: string;
+  };
+  approval_queue?: {
+    wired?: boolean;
+    available?: boolean;
+    reason?: string;
+    pending_count?: number;
+    total_count?: number;
+    limit?: number;
+    read_only?: boolean;
+    items?: Array<{
+      id?: number;
+      job_id?: string;
+      requested_action?: string;
+      risk_class?: string;
+      requested_adapter?: string;
+      write_intent?: boolean;
+      created_at_ms?: number;
+      expires_at_ms?: number;
+      status?: string;
+    }>;
+    by_risk_class?: Record<string, number>;
+    by_action?: Record<string, number>;
   };
   warnings?: string[];
   errors?: string[];
 };
-

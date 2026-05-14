@@ -62,16 +62,23 @@ writeShellApplication {
       <core>
         <decoration>server</decoration>
       </core>
+      <keyboard>
+        <default />
+      </keyboard>
+      <mouse>
+        <default />
+      </mouse>
       <applications>
+        <!-- FORGE sizes the main shell and per-monitor host windows itself.
+             A global maximize rule pins secondary hosts to the compositor's
+             chosen output and breaks multi-monitor placement. -->
         <application identifier="dev.forge.workshop">
           <decor>no</decor>
-          <maximized>yes</maximized>
           <focus>yes</focus>
           <skip_taskbar>yes</skip_taskbar>
         </application>
         <application title="FORGE">
           <decor>no</decor>
-          <maximized>yes</maximized>
           <focus>yes</focus>
           <skip_taskbar>yes</skip_taskbar>
         </application>

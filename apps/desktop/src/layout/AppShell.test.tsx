@@ -42,6 +42,7 @@ const desktopMocks = vi.hoisted(() => ({
     () => new Promise(() => {}),
   ),
   focusLinuxWindow: vi.fn(() => Promise.resolve(true)),
+  controlLinuxWindow: vi.fn(() => Promise.resolve(true)),
   minimizeTauriWindow: vi.fn(() => Promise.resolve(true)),
   listOperatorApps: vi.fn<() => Promise<OperatorApp[]>>(
     () => new Promise(() => {}),
@@ -102,6 +103,7 @@ vi.mock("../lib/desktop", () => ({
   listForgeWindows: desktopMocks.listForgeWindows,
   listLinuxWindows: desktopMocks.listLinuxWindows,
   focusLinuxWindow: desktopMocks.focusLinuxWindow,
+  controlLinuxWindow: desktopMocks.controlLinuxWindow,
   listOperatorApps: desktopMocks.listOperatorApps,
   launchOperatorApp: desktopMocks.launchOperatorApp,
   iconAssetUrl: desktopMocks.iconAssetUrl,
@@ -139,6 +141,7 @@ describe("AppShell confined Tauri tool surfaces", () => {
       () => new Promise(() => {}),
     );
     desktopMocks.focusLinuxWindow.mockResolvedValue(true);
+    desktopMocks.controlLinuxWindow.mockResolvedValue(true);
     desktopMocks.listOperatorApps.mockClear();
     desktopMocks.listOperatorApps.mockImplementation(
       () => new Promise(() => {}),
@@ -146,6 +149,7 @@ describe("AppShell confined Tauri tool surfaces", () => {
     desktopMocks.launchOperatorApp.mockClear();
     desktopMocks.iconAssetUrl.mockClear();
     desktopMocks.minimizeTauriWindow.mockClear();
+    desktopMocks.controlLinuxWindow.mockClear();
     useDesktopWindowStore.setState({
       pinned: ["chat", "jobs", "memory", "models", "approvals", "settings"],
       windows: [
@@ -588,6 +592,43 @@ describe("AppShell confined Tauri tool surfaces", () => {
     await waitFor(() => {
       expect(desktopMocks.focusLinuxWindow).toHaveBeenCalledWith(
         "firefox-window",
+      );
+    });
+  });
+
+  it("offers compositor controls for native Linux taskbar windows", async () => {
+    desktopMocks.listLinuxWindows.mockResolvedValue([
+      {
+        id: "firefox-window",
+        title: "Mozilla Firefox",
+        appId: "firefox",
+        iconName: "firefox",
+        iconPath: null,
+        focused: false,
+        minimized: false,
+        native: true,
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const firefox = await screen.findByRole("button", {
+      name: "Mozilla Firefox linux app",
+    });
+
+    fireEvent.contextMenu(firefox);
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Minimize window" }));
+
+    await waitFor(() => {
+      expect(desktopMocks.controlLinuxWindow).toHaveBeenCalledWith(
+        "firefox-window",
+        "minimize",
       );
     });
   });

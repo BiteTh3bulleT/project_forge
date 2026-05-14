@@ -10,10 +10,13 @@ const desktopMocks = vi.hoisted(() => ({
 
 vi.mock("../lib/desktop", () => ({
   DETACHED_TAURI_TOOL_WINDOWS: false,
+  isTauriDesktop: desktopMocks.isTauriDesktop,
+}));
+
+vi.mock("../lib/windowManager", () => ({
   closeTauriWindow: desktopMocks.closeTauriWindow,
   createShellWindow: desktopMocks.createShellWindow,
   focusTauriWindow: desktopMocks.focusTauriWindow,
-  isTauriDesktop: desktopMocks.isTauriDesktop,
   minimizeTauriWindow: desktopMocks.minimizeTauriWindow,
 }));
 

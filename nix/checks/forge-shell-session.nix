@@ -83,11 +83,15 @@ stdenv.mkDerivation {
     FORGE_SHELL_BINARY="$fake" FORGE_CORE_URL=http://127.0.0.1:19997 "$wrapper" override path > "$TMPDIR/shell-override.out"
     grep -F 'fake-shell:true:http://127.0.0.1:19997:override path' "$TMPDIR/shell-override.out"
 
+    set +e
     FORGE_SHELL_BINARY="$fake" \
       FORGE_SHELL_MODE=operator-desktop \
       FORGE_SHELL_FULLSCREEN=false \
-      "$wrapper" preserved mode > "$TMPDIR/shell-preserve-env.out"
-    grep -F 'fake-shell:true:http://127.0.0.1:18492:preserved mode' "$TMPDIR/shell-preserve-env.out"
+      "$wrapper" preserved mode > "$TMPDIR/shell-preserve-env.out" 2> "$TMPDIR/shell-preserve-env.err"
+    status=$?
+    set -e
+    test "$status" -eq 1
+    grep -F 'FORGE_SHELL_BINARY is disabled for operator-desktop sessions' "$TMPDIR/shell-preserve-env.err"
 
     fake_desktop="$TMPDIR/fake-forge-desktop"
     printf '%s\n' \

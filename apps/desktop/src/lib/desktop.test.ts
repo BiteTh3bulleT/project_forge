@@ -8,12 +8,19 @@ const windowMocks = vi.hoisted(() => ({
   setFocus: vi.fn(async () => undefined),
 }));
 
+const shellWindowMocks = vi.hoisted(() => ({
+  show: vi.fn(async () => undefined),
+  setFocus: vi.fn(async () => undefined),
+  setPosition: vi.fn(async () => undefined),
+  setSize: vi.fn(async () => undefined),
+}));
+
 vi.mock("@tauri-apps/api/event", () => ({
   emit: vi.fn(async () => undefined),
 }));
 
 vi.mock("@tauri-apps/api/webviewWindow", () => ({
-  WebviewWindow: vi.fn(),
+  WebviewWindow: vi.fn(() => shellWindowMocks),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -60,6 +67,10 @@ describe("desktop monitor spanning", () => {
     windowMocks.setSize.mockClear();
     windowMocks.setFocus.mockClear();
     windowMocks.isMaximized.mockResolvedValue(false);
+    shellWindowMocks.show.mockClear();
+    shellWindowMocks.setFocus.mockClear();
+    shellWindowMocks.setPosition.mockClear();
+    shellWindowMocks.setSize.mockClear();
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
       configurable: true,
       value: {},
@@ -102,5 +113,79 @@ describe("desktop monitor spanning", () => {
     expect(windowMocks.setSize).toHaveBeenCalledWith(
       expect.objectContaining({ width: 4480, height: 1400 }),
     );
+  });
+
+  it("creates monitor host windows without overflow clamping", async () => {
+    const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+    const { createShellWindow } = await import("./desktop");
+
+    await expect(
+      createShellWindow({
+        label: "forge-monitor-2",
+        route: "/?host=forge-monitor-2",
+        title: "FORGE Monitor 2",
+        bounds: { x: 1920, y: 0, width: 1280, height: 720 },
+      }),
+    ).resolves.toBe(shellWindowMocks);
+
+    expect(WebviewWindow).toHaveBeenCalledWith(
+      "forge-monitor-2",
+      expect.objectContaining({
+        x: 1920,
+        y: 0,
+        width: 1280,
+        height: 720,
+        preventOverflow: false,
+      }),
+    );
+    expect(shellWindowMocks.setPosition).toHaveBeenCalledWith(
+      expect.objectContaining({ x: 1920, y: 0 }),
+    );
+    expect(shellWindowMocks.setSize).toHaveBeenCalledWith(
+      expect.objectContaining({ width: 1280, height: 720 }),
+    );
+  });
+
+  it("sends allowlisted native Linux window actions through Tauri", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const { controlLinuxWindow } = await import("./desktop");
+    vi.mocked(invoke).mockResolvedValueOnce(true);
+
+    await expect(
+      controlLinuxWindow("firefox-window", "minimize"),
+    ).resolves.toBe(true);
+
+    expect(invoke).toHaveBeenCalledWith("control_linux_window", {
+      windowId: "firefox-window",
+      action: "minimize",
+    });
+  });
+
+  it("parses backend-owned native Linux window registry metadata", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const { listLinuxWindows } = await import("./desktop");
+    vi.mocked(invoke).mockResolvedValueOnce([
+      {
+        id: "firefox-window",
+        title: "Mozilla Firefox",
+        app_id: "firefox",
+        focused: true,
+        minimized: false,
+        native: true,
+        lifecycle: "active",
+        first_seen_ms: 100,
+        last_seen_ms: 250,
+      },
+    ]);
+
+    await expect(listLinuxWindows()).resolves.toEqual([
+      expect.objectContaining({
+        id: "firefox-window",
+        appId: "firefox",
+        lifecycle: "active",
+        firstSeenMs: 100,
+        lastSeenMs: 250,
+      }),
+    ]);
   });
 });

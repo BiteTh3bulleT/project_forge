@@ -257,6 +257,7 @@ type ModelRuntimeBackendStatus struct {
 	Detail      string         `json:"detail,omitempty"`
 	LoadedModel string         `json:"loadedModel,omitempty"`
 	Meta        map[string]any `json:"meta,omitempty"`
+	Supervision any            `json:"supervision,omitempty"`
 }
 
 type ModelRuntimeUsageSummary struct {

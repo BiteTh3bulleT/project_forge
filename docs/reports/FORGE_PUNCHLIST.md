@@ -52,6 +52,7 @@ Detail in [FORGE_LARGE_FILE_INVENTORY.md](FORGE_LARGE_FILE_INVENTORY.md). Summar
 - [ ] `lib/api.ts` — extract remaining domains (`memory`, `approvals`, `audit`, `jobs`, `retrieval`, `gateway`, `system`, `autonomy`, `dream`, `backup`, `integrations`). Each into `apps/desktop/src/lib/api/<domain>.ts`.
   - 2026-05-13 progress: extracted `canvas` into `apps/desktop/src/lib/api/canvas.ts`; `api.ts` is now 1,001 lines.
   - 2026-05-13 progress: extracted `approvals` and `jobs` into `apps/desktop/src/lib/api/`; `api.ts` is now 933 lines.
+  - 2026-05-14 progress: extracted `system`, `settings`, `remote`, `sources`, `autonomy`, `gateway`, `backup`, `artifacts`, and `release` domains; `api.ts` is now 488 lines.
 - [ ] **`apps/desktop/src/pages/ChatPage.tsx` (3,540 lines).** Split into `ChatPage/{index, MessageList, MessageItem, Composer, ToolPanel, ApprovalsPanel, useChatStream, useChatHistory, useChatComposer, types}.tsx`. Largest single file in the repo. Affects how tonight feels.
   - 2026-05-13 progress: extracted inspector derivation into `ChatPage/useChatInspectorData.ts`; `ChatPage.tsx` is now 1,940 lines.
 - [ ] **`apps/desktop/src/pages/InspectorsPage.tsx` (2,444).** Split per-inspector sub-component.
@@ -68,6 +69,7 @@ Detail in [FORGE_LARGE_FILE_INVENTORY.md](FORGE_LARGE_FILE_INVENTORY.md). Summar
   - 2026-05-13 progress: extracted static section mappings into `section_mappings.go`; `service.go` is now 985 lines and no backup source file exceeds 1,500 lines.
   - 2026-05-13 progress: extracted restore section policy helpers into `restore_sections.go`; `service.go` is now 805 lines.
 - [ ] **`services/core/internal/modelruntime/service.go` (1,581).** Split by lifecycle stage: `service.go`, `lifecycle.go`, `selection.go`, `queue.go`, `usage.go`, `policy.go`.
+  - 2026-05-14 progress: extracted runtime health/supervision into `service_health.go`; `service.go` is now 1,488 lines.
 - [ ] **`services/core/internal/api/autonomy_maintenance_loop.go` (1,545).** Split by phase: loop driver + phase implementations + charters + budgets.
 - [ ] **`services/core/internal/aios/controllane/compile_context_restore_scoring.go` (1,478).** Split into `listing`, `ranking`, `threshold`, `fallback`, `persistence`.
 - [ ] **`services/core/internal/jobs/service.go` (1,452).** Split by lifecycle (queue/exec/result/events).

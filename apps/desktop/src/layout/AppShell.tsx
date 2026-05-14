@@ -14,6 +14,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import {
   DETACHED_TAURI_TOOL_WINDOWS,
+  controlLinuxWindow,
   iconAssetUrl,
   focusLinuxWindow,
   isShellHostWindowLabel,
@@ -23,6 +24,7 @@ import {
   listLinuxWindows,
   listOperatorApps,
   type LinuxWindowSnapshot,
+  type LinuxWindowAction,
   type OperatorApp,
 } from "../lib/desktop";
 import { useUiStore } from "../stores/uiStore";
@@ -246,6 +248,8 @@ export function AppShell(props: AppShellProps) {
   const [linuxWindows, setLinuxWindows] = useState<LinuxWindowSnapshot[]>([]);
   const [now, setNow] = useState(() => new Date());
   const [contextMenu, setContextMenu] = useState<DockContextMenu | null>(null);
+  const [nativeContextMenu, setNativeContextMenu] =
+    useState<NativeWindowContextMenu | null>(null);
   const isMainWindow = props.isMainWindow;
   const hostLabel = props.hostLabel?.trim() || "main";
   const desktopHosts = useMemo(
@@ -259,6 +263,15 @@ export function AppShell(props: AppShellProps) {
         runtimeWindows,
       ),
     [monitors, runtimeWindows],
+  );
+  const desktopHostBounds = useMemo(
+    () =>
+      desktopHosts.map((host) => ({
+        runtimeLabel: host.hostLabel,
+        monitorId: host.monitorId,
+        bounds: host.bounds,
+      })),
+    [desktopHosts],
   );
   const currentDesktopHost =
     desktopHosts.find((host) => host.hostLabel === hostLabel) ?? null;
@@ -477,13 +490,26 @@ export function AppShell(props: AppShellProps) {
     }
   }
 
+  async function runNativeWindowAction(
+    window_: LinuxWindowSnapshot,
+    action: LinuxWindowAction,
+  ) {
+    const ok =
+      action === "focus"
+        ? await focusLinuxWindow(window_.id)
+        : await controlLinuxWindow(window_.id, action);
+    if (!ok) return;
+    const nextWindows = await listLinuxWindows();
+    setLinuxWindows(nextWindows);
+  }
+
   function resolveTransferredWindow(
     win: DesktopWindow,
     nextX: number,
     nextY: number,
   ) {
     return resolveDesktopHostPlacement(
-      runtimeWindows,
+      desktopHostBounds,
       hostLabel,
       win,
       nextX,
@@ -882,6 +908,20 @@ export function AppShell(props: AppShellProps) {
                   key={window_.id}
                   type="button"
                   onClick={() => void focusLinuxWindow(window_.id)}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setNativeContextMenu({
+                      x: event.clientX,
+                      y: event.clientY,
+                      window: window_,
+                    });
+                  }}
+                  onAuxClick={(event) => {
+                    if (event.button === 1) {
+                      event.preventDefault();
+                      void runNativeWindowAction(window_, "minimize");
+                    }
+                  }}
                   className={cx(
                     "forge-os-taskbar__item",
                     "forge-os-taskbar__item--native",
@@ -1028,6 +1068,16 @@ export function AppShell(props: AppShellProps) {
           }}
         />
       ) : null}
+      {nativeContextMenu ? (
+        <NativeWindowContextMenuView
+          menu={nativeContextMenu}
+          onClose={() => setNativeContextMenu(null)}
+          onAction={(action) => {
+            void runNativeWindowAction(nativeContextMenu.window, action);
+            setNativeContextMenu(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1047,6 +1097,12 @@ type DockContextMenu = {
   window: DesktopWindow | null;
   pinned: boolean;
   open: boolean;
+};
+
+type NativeWindowContextMenu = {
+  x: number;
+  y: number;
+  window: LinuxWindowSnapshot;
 };
 
 function DesktopWallpaper() {
@@ -1751,6 +1807,62 @@ function DockContextMenuView(props: {
           Pin to taskbar
         </button>
       )}
+      <button
+        type="button"
+        role="menuitem"
+        className="forge-os-context-menu__item forge-os-context-menu__item--muted"
+        onClick={props.onClose}
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+function NativeWindowContextMenuView(props: {
+  menu: NativeWindowContextMenu;
+  onClose: () => void;
+  onAction: (action: LinuxWindowAction) => void;
+}) {
+  const left = Math.min(
+    props.menu.x,
+    typeof window !== "undefined" ? window.innerWidth - 240 : props.menu.x,
+  );
+  const top = Math.max(
+    8,
+    typeof window !== "undefined"
+      ? Math.min(props.menu.y - 8, window.innerHeight - 260)
+      : props.menu.y - 8,
+  );
+  return (
+    <div
+      role="menu"
+      className="forge-os-context-menu"
+      style={{ left, top }}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <div className="forge-os-context-menu__title">
+        {props.menu.window.title}
+      </div>
+      {(
+        [
+          ["focus", "Focus window"],
+          ["minimize", "Minimize window"],
+          ["maximize", "Maximize window"],
+          ["fullscreen", "Fullscreen window"],
+          ["close", "Close window"],
+        ] satisfies Array<[LinuxWindowAction, string]>
+      ).map(([action, label]) => (
+        <button
+          key={action}
+          type="button"
+          role="menuitem"
+          className="forge-os-context-menu__item"
+          onClick={() => props.onAction(action)}
+        >
+          {label}
+        </button>
+      ))}
       <button
         type="button"
         role="menuitem"

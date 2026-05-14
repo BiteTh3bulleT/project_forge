@@ -10,6 +10,11 @@ type TestMonitor = {
   scaleFactor: number;
 };
 
+type TestRuntimeWindow = {
+  label: string;
+  close?: () => Promise<void>;
+};
+
 const desktopMocks = vi.hoisted(() => ({
   createShellWindow: vi.fn(async () => ({ label: "layout-chat" })),
   emitWorkspaceSync: vi.fn(async () => undefined),
@@ -24,42 +29,28 @@ const desktopMocks = vi.hoisted(() => ({
   getWindowByLabel: vi.fn(async () => null),
   isTauriDesktop: vi.fn(() => true),
   listAvailableMonitors: vi.fn(async (): Promise<TestMonitor[]> => []),
-  listRuntimeWindows: vi.fn(async () => [{ label: "main" }]),
+  listRuntimeWindows: vi.fn(async (): Promise<TestRuntimeWindow[]> => [
+    { label: "main" },
+  ]),
   monitorSignature: vi.fn(() => ""),
   spanCurrentWindowAcrossMonitors: vi.fn(async () => true),
   tauriWindow: {
     setTitle: vi.fn(async () => undefined),
-    setPosition: vi.fn(async () => undefined),
-    setSize: vi.fn(async () => undefined),
+    setPosition: vi.fn(
+      async (_position: { x: number; y: number }) => undefined,
+    ),
+    setSize: vi.fn(
+      async (_size: { width: number; height: number }) => undefined,
+    ),
     show: vi.fn(async () => undefined),
     setFocus: vi.fn(async () => undefined),
   },
 }));
 
-vi.mock("@tauri-apps/api/window", () => ({
-  LogicalPosition: class LogicalPosition {
-    constructor(
-      public x: number,
-      public y: number,
-    ) {}
-  },
-  LogicalSize: class LogicalSize {
-    constructor(
-      public width: number,
-      public height: number,
-    ) {}
-  },
-  getCurrentWindow: () => desktopMocks.tauriWindow,
-}));
-
 vi.mock("../lib/desktop", () => ({
   DETACHED_TAURI_TOOL_WINDOWS: false,
   WORKSPACE_NAVIGATE_EVENT: "forge://workspace-navigate",
-  createShellWindow: desktopMocks.createShellWindow,
   emitWorkspaceSync: desktopMocks.emitWorkspaceSync,
-  getCurrentWindowLabel: desktopMocks.getCurrentWindowLabel,
-  getCurrentWindowSnapshot: desktopMocks.getCurrentWindowSnapshot,
-  getWindowByLabel: desktopMocks.getWindowByLabel,
   isTauriDesktop: desktopMocks.isTauriDesktop,
   isForgeManagedWindowLabel: (label: string) =>
     label === "main" || label.startsWith("forge-"),
@@ -67,7 +58,6 @@ vi.mock("../lib/desktop", () => ({
     label === "main" ||
     (label.startsWith("forge-") && !label.startsWith("forge-app-")),
   listAvailableMonitors: desktopMocks.listAvailableMonitors,
-  listRuntimeWindows: desktopMocks.listRuntimeWindows,
   monitorSignature: desktopMocks.monitorSignature,
   spanCurrentWindowAcrossMonitors: desktopMocks.spanCurrentWindowAcrossMonitors,
   virtualDesktopBounds: (monitors: TestMonitor[]) => {
@@ -84,6 +74,38 @@ vi.mock("../lib/desktop", () => ({
     );
     return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   },
+}));
+
+vi.mock("../lib/windowManager", () => ({
+  bringCurrentWindowFront: desktopMocks.tauriWindow.setFocus,
+  bringWindowToFrontByLabel: vi.fn(async () => true),
+  closeWindowByLabel: vi.fn(async (label: string) => {
+    const windows = await desktopMocks.listRuntimeWindows();
+    const target = windows.find(
+      (window: { label: string }) => window.label === label,
+    );
+    await target?.close?.();
+    return Boolean(target);
+  }),
+  createShellWindow: desktopMocks.createShellWindow,
+  getCurrentWindowLabel: desktopMocks.getCurrentWindowLabel,
+  getCurrentWindowSnapshot: desktopMocks.getCurrentWindowSnapshot,
+  getWindowByLabel: desktopMocks.getWindowByLabel,
+  listRuntimeWindows: desktopMocks.listRuntimeWindows,
+  navigateWindowByLabel: vi.fn(async () => undefined),
+  setCurrentWindowBounds: vi.fn(async (bounds) => {
+    await desktopMocks.tauriWindow.setPosition({
+      x: bounds.x,
+      y: bounds.y,
+    });
+    await desktopMocks.tauriWindow.setSize({
+      width: bounds.width,
+      height: bounds.height,
+    });
+  }),
+  setCurrentWindowTitle: desktopMocks.tauriWindow.setTitle,
+  setWindowBoundsByLabel: vi.fn(async () => undefined),
+  setWindowTitleByLabel: vi.fn(async () => undefined),
 }));
 
 function activeLayoutDoc() {

@@ -50,11 +50,21 @@ type RuntimeDefaults = ModelRuntimeDefaults
 type ChatMessage = GenerateMessage
 
 type BackendHealth struct {
-	Name    string           `json:"name"`
-	Kind    ModelBackendKind `json:"kind"`
-	Healthy bool             `json:"healthy"`
-	Detail  string           `json:"detail,omitempty"`
-	Meta    map[string]any   `json:"meta,omitempty"`
+	Name        string                     `json:"name"`
+	Kind        ModelBackendKind           `json:"kind"`
+	Healthy     bool                       `json:"healthy"`
+	Detail      string                     `json:"detail,omitempty"`
+	Meta        map[string]any             `json:"meta,omitempty"`
+	Supervision BackendSupervisionSnapshot `json:"supervision,omitempty"`
+}
+
+type BackendSupervisionSnapshot struct {
+	LastProbeAt         time.Time `json:"lastProbeAt,omitempty"`
+	ConsecutiveFailures int       `json:"consecutiveFailures"`
+	LastError           string    `json:"lastError,omitempty"`
+	RestartSupported    bool      `json:"restartSupported"`
+	RestartAttempted    bool      `json:"restartAttempted"`
+	RestartReason       string    `json:"restartReason,omitempty"`
 }
 
 type BackendInspectResult struct {
@@ -103,7 +113,6 @@ var (
 	ErrManagementUnavailable       = errors.New("model management unavailable")
 	ErrModelAlreadyExists          = errors.New("model already exists")
 	ErrModelArchived               = errors.New("model is archived")
-	ErrDeleteModelFileDeferred     = errors.New("model file deletion is deferred")
 	ErrModelSelectionAmbiguous     = errors.New("model selection is ambiguous")
 	ErrImportPathInvalid           = errors.New("model import path invalid")
 	ErrUnsupportedBackendOverride  = errors.New("requested backend override is unsupported")

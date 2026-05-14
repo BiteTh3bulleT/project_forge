@@ -1,7 +1,19 @@
 {
   "identifier": "default",
   "description": "Baseline FORGE window capability set.",
-  "windows": ["main", "forge-*"],
+  "windows": [
+    "main",
+    "forge-*",
+    "workspace-*",
+    "terminal-*",
+    "artifact-*",
+    "settings",
+    "memory-panel",
+    "task-panel",
+    "system-panel",
+    "inspector",
+    "debug-console"
+  ],
   "permissions": [
     "core:default",
     "core:event:allow-emit",
@@ -33,11 +45,6 @@
     "core:window:allow-unminimize",
     "core:window:allow-show",
     "core:window:allow-hide",
-    "core:window:allow-close",
-    "core:window:allow-destroy",
-    "core:webview:allow-create-webview-window",
-    "core:webview:allow-webview-show",
-    "core:webview:allow-webview-hide",
-    "core:webview:allow-webview-close"
+    "core:window:allow-close"
   ]
 }

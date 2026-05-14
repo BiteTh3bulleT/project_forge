@@ -15,7 +15,6 @@ let
       test -f "$config_file"
       grep -F '<application identifier="dev.forge.workshop">' "$config_file"
       grep -F '<decor>no</decor>' "$config_file"
-      grep -F '<maximized>yes</maximized>' "$config_file"
       shift 2
       test "$1" = "--startup"
       shift
@@ -66,7 +65,6 @@ stdenv.mkDerivation {
     grep -F 'labwc_config_file="$labwc_config_dir/rc.xml"' "$wrapper"
     grep -F '<application identifier="dev.forge.workshop">' "$wrapper"
     grep -F '<decor>no</decor>' "$wrapper"
-    grep -F '<maximized>yes</maximized>' "$wrapper"
     grep -F 'exec "$compositor" --config "$labwc_config_file" --startup "$shell_session" "$@"' "$wrapper"
 
     if grep -F 'FORGE_OPERATOR_COMPOSITOR' "$real_wrapper" "$wrapper"; then
