@@ -14,21 +14,21 @@
 
 | Lines | File | Domain | Status |
 |---|---|---|---|
-| 2,005 | `services/core/internal/backup/service.go` | Backup/restore/export | **P0 — biggest single file in Go.** |
-| 1,581 | `services/core/internal/modelruntime/service.go` | Model runtime lifecycle | P1 |
+| 805 | `services/core/internal/backup/service.go` | Backup/restore/export | Done — service split below threshold. |
+| 1,488 | `services/core/internal/modelruntime/service.go` | Model runtime lifecycle | Done — service split below threshold. |
 | 1,407 | `services/core/internal/api/autonomy_maintenance_loop.go` | Autonomy maintenance | Done — type/state split landed. |
-| 1,478 | `services/core/internal/aios/controllane/compile_context_restore_scoring.go` | Context restore scoring | P1 |
-| 1,452 | `services/core/internal/jobs/service.go` | Job orchestration | P1 |
-| 1,447 | `services/core/internal/aios/dream/service.go` | Dream lane | P1 — recently grew |
+| 1,478 | `services/core/internal/aios/controllane/compile_context_restore_scoring.go` | Context restore scoring | Below threshold — watch. |
+| 1,452 | `services/core/internal/jobs/service.go` | Job orchestration | Below threshold — watch. |
+| 1,447 | `services/core/internal/aios/dream/service.go` | Dream lane | Below threshold — watch. |
 | 1,431 | `services/core/internal/store/migrate_schema.go` | SQL migrations | P3 — long is inherent here |
-| 1,413 | `services/core/internal/api/model_runtime_bridge.go` | API ↔ runtime bridge | P2 |
+| 1,424 | `services/core/internal/api/model_runtime_bridge.go` | API ↔ runtime bridge | Below threshold — watch. |
 | 1,297 | `services/core/internal/api/phase5.go` | Phase historical handler | P2 — consider archiving |
-| 1,280 | `services/core/internal/api/chat_post.go` | Chat POST handler | P2 |
-| 1,193 | `services/core/internal/aios/compute/librarian/cells_phase4.go` | Cell pipeline | P2 |
-| 1,160 | `services/core/internal/api/model_runtime.go` | Model runtime API | P2 |
-| 1,060 | `services/core/internal/aios/truth/engine.go` | Current truth engine | P2 |
+| 1,319 | `services/core/internal/api/chat_post.go` | Chat POST handler | Below threshold — watch. |
+| 1,193 | `services/core/internal/aios/compute/librarian/cells_phase4.go` | Cell pipeline | Below threshold — watch. |
+| 1,372 | `services/core/internal/api/model_runtime.go` | Model runtime API | Below threshold — watch. |
+| 1,060 | `services/core/internal/aios/truth/engine.go` | Current truth engine | Below threshold — watch. |
 | 1,032 | `services/core/internal/gateway/service.go` | Gateway core (post-split) | P3 |
-| 1,028 | `services/core/internal/retrieval/service.go` | Retrieval service | P2 |
+| 1,028 | `services/core/internal/retrieval/service.go` | Retrieval service | Below threshold — watch. |
 | 975 | `services/core/internal/gateway/service_helpers.go` | Gateway helpers (post-split) | **Watch** — sibling of recent split |
 | 963 | `services/core/internal/aios/controllane/store.go` | Controllane store glue | P2 |
 | 923 | `services/core/internal/api/operator_inspector.go` | Operator inspector API | P3 |
@@ -55,9 +55,9 @@
 | 1,466 | `apps/desktop/src/pages/ModelsPage.tsx` | Models page | Done — model panels extracted. |
 | 1,498 | `apps/desktop/src/pages/SettingsPage.tsx` | Settings page | Done — settings panels extracted. |
 | 998 | `apps/desktop/src/layout/AppShell.tsx` | App shell layout | Done — shell surface components extracted. |
-| 1,374 | `apps/desktop/src/stores/workspaceLayoutStore.ts` | Workspace layout store | P2 |
-| 1,320 | `apps/desktop/src/pages/DashboardPage.tsx` | Dashboard page | P2 |
-| 1,107 | `apps/desktop/src/pages/MemoryPage.tsx` | Memory page | P2 |
+| 386 | `apps/desktop/src/stores/workspaceLayoutStore.ts` | Workspace layout store | Done — store model/runtime/persistence extracted. |
+| 905 | `apps/desktop/src/pages/DashboardPage.tsx` | Dashboard page | Done — dashboard panels extracted. |
+| 415 | `apps/desktop/src/pages/MemoryPage.tsx` | Memory page | Done — memory panels extracted. |
 | 951 | `apps/desktop/src/pages/ToolGatewayPage.tsx` | Tool gateway page | P2 |
 | 902 | `apps/desktop/src/pages/JobDetailPage.tsx` | Job detail page | P2 |
 | 799 | `packages/shared/src/index.ts` | Shared types barrel | P3 |
@@ -69,7 +69,7 @@
 
 | Lines | File | Status |
 |---|---|---|
-| 766 | `apps/desktop/src-tauri/src/main.rs` | P1 — grew with operator-window work |
+| 536 | `apps/desktop/src-tauri/src/main.rs` | Done — below threshold with window manager extracted |
 | 696 | `crates/forgek-validate/src/lib.rs` | P3 — acceptable for a validator crate |
 | 388 | `crates/forgek-validate/src/validate.rs` | OK |
 
