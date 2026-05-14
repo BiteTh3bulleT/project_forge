@@ -54,11 +54,15 @@ Detail in [FORGE_LARGE_FILE_INVENTORY.md](FORGE_LARGE_FILE_INVENTORY.md). Summar
   - 2026-05-13 progress: extracted `approvals` and `jobs` into `apps/desktop/src/lib/api/`; `api.ts` is now 933 lines.
   - 2026-05-14 progress: extracted `system`, `settings`, `remote`, `sources`, `autonomy`, `gateway`, `backup`, `artifacts`, and `release` domains; `api.ts` is now 488 lines.
   - 2026-05-14 progress: extracted remaining inline API domains (`packets`, `projectContext`, `embeddings`, `retrieval`, `dossiers`, `evaluations`, `lineage`, `imports`, `insights`, `dashboard`, `strategies`, `policy`, `automation`, `packetGuidance`, `reconciliation`, `reviews`, `failurePatterns`); `api.ts` is now a 149-line aggregator.
-- [ ] **`apps/desktop/src/pages/ChatPage.tsx` (3,540 lines).** Split into `ChatPage/{index, MessageList, MessageItem, Composer, ToolPanel, ApprovalsPanel, useChatStream, useChatHistory, useChatComposer, types}.tsx`. Largest single file in the repo. Affects how tonight feels.
+- [x] **`apps/desktop/src/pages/ChatPage.tsx` (3,540 lines).** Split into `ChatPage/{index, MessageList, MessageItem, Composer, ToolPanel, ApprovalsPanel, useChatStream, useChatHistory, useChatComposer, types}.tsx`. Largest single file in the repo. Affects how tonight feels.
   - 2026-05-13 progress: extracted inspector derivation into `ChatPage/useChatInspectorData.ts`; `ChatPage.tsx` is now 1,940 lines.
-- [ ] **`apps/desktop/src/pages/InspectorsPage.tsx` (2,444).** Split per-inspector sub-component.
-- [ ] **`apps/desktop/src/pages/ModelsPage.tsx` (1,950).** Split into list/detail/import/runtime panels.
-- [ ] **`apps/desktop/src/pages/SettingsPage.tsx` (1,825).** Split by settings domain.
+  - 2026-05-14 progress: extracted composer and inspector surfaces into `ChatPage/ChatComposer.tsx` and `ChatPage/ChatInspector.tsx`; `ChatPage.tsx` is now 1,436 lines.
+- [x] **`apps/desktop/src/pages/InspectorsPage.tsx` (2,444).** Split per-inspector sub-component.
+  - 2026-05-14 progress: extracted snapshot and dream report panels into `InspectorsPage/`; `InspectorsPage.tsx` is now 1,295 lines.
+- [x] **`apps/desktop/src/pages/ModelsPage.tsx` (1,950).** Split into list/detail/import/runtime panels.
+  - 2026-05-14 progress: extracted compact board, import/registration panel, and shared model widgets into `ModelsPage/`; `ModelsPage.tsx` is now 1,466 lines.
+- [x] **`apps/desktop/src/pages/SettingsPage.tsx` (1,825).** Split by settings domain.
+  - 2026-05-14 progress: extracted prompt, diagnostics, shared components, and local settings types into `SettingsPage/`; `SettingsPage.tsx` is now 1,498 lines.
 - [x] **`apps/desktop/src/layout/AppShell.tsx` (1,648).** Split into Sidebar/TopBar/StatusBar/WindowFrame + extract window manager.
   - 2026-05-14 progress: extracted wallpaper, floating window, Start menu, icon, and context-menu surfaces into `AppShellSurfaces.tsx`; `AppShell.tsx` is now 998 lines.
 - [ ] **`apps/desktop/src/stores/workspaceLayoutStore.ts` (1,374).** Split store into model + actions + selectors.

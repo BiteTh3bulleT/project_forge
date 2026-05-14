@@ -49,11 +49,11 @@
 
 | Lines | File | Domain | Status |
 |---|---|---|---|
-| **3,540** | `apps/desktop/src/pages/ChatPage.tsx` | Chat page | **P0 — largest single source file in the entire repo.** |
+| 1,436 | `apps/desktop/src/pages/ChatPage.tsx` | Chat page | Done — composer and inspector surfaces extracted. |
 | 149 | `apps/desktop/src/lib/api.ts` | API client shim | **Done — split into domain modules.** |
-| 2,444 | `apps/desktop/src/pages/InspectorsPage.tsx` | Inspectors page | P0 |
-| 1,950 | `apps/desktop/src/pages/ModelsPage.tsx` | Models page | P1 |
-| 1,825 | `apps/desktop/src/pages/SettingsPage.tsx` | Settings page | P1 |
+| 1,295 | `apps/desktop/src/pages/InspectorsPage.tsx` | Inspectors page | Done — inspector panels extracted. |
+| 1,466 | `apps/desktop/src/pages/ModelsPage.tsx` | Models page | Done — model panels extracted. |
+| 1,498 | `apps/desktop/src/pages/SettingsPage.tsx` | Settings page | Done — settings panels extracted. |
 | 998 | `apps/desktop/src/layout/AppShell.tsx` | App shell layout | Done — shell surface components extracted. |
 | 1,374 | `apps/desktop/src/stores/workspaceLayoutStore.ts` | Workspace layout store | P2 |
 | 1,320 | `apps/desktop/src/pages/DashboardPage.tsx` | Dashboard page | P2 |

@@ -2,10 +2,7 @@ import { GhostButton, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import {
-  HumanDataView,
-  summarizeHumanValue,
-} from "../components/HumanDataView";
+import { HumanDataView } from "../components/HumanDataView";
 import {
   api,
   type ModelRuntimeBackendStatus,
@@ -18,171 +15,25 @@ import {
 } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
-
-const CONTROL_ACTOR = "operator";
-const CONTROL_SOURCE = "desktop";
-const MODEL_MANAGEMENT_CAPABILITY = "model.management";
-const CHAT_MODEL_SELECTION_CACHE_KEY = "forge.chat.requestedModelId.v1";
-
-function cx(...parts: Array<string | false | null | undefined>) {
-  return parts.filter(Boolean).join(" ");
-}
-
-function normalizeStatus(status?: string) {
-  return (status ?? "unknown").trim().toLowerCase();
-}
-
-function badgeClass(status?: string) {
-  switch (normalizeStatus(status)) {
-    case "loaded":
-    case "verified":
-    case "available":
-    case "ok":
-    case "healthy":
-      return "forge-ops-status forge-ops-status--ok";
-    case "loading":
-    case "unloading":
-    case "imported":
-      return "forge-ops-status forge-ops-status--warn";
-    case "disabled":
-    case "archived":
-      return "forge-ops-status forge-ops-status--muted";
-    case "error":
-    case "unavailable":
-      return "forge-ops-status forge-ops-status--bad";
-    default:
-      return "forge-ops-status forge-ops-status--muted";
-  }
-}
-
-function summarizeList(values?: string[]) {
-  if (!Array.isArray(values) || values.length === 0) return "none";
-  return values.join(", ");
-}
-
-function summarizeValue(value: unknown) {
-  const summary = summarizeHumanValue(value);
-  return summary === "None" ? "—" : summary;
-}
-
-function EmptyState(props: {
-  title: string;
-  detail: string;
-  tone?: "muted" | "warn" | "bad";
-}) {
-  const toneClass =
-    props.tone === "bad"
-      ? "border-forge-ember/30 bg-forge-ember/10"
-      : props.tone === "warn"
-        ? "border-forge-amber/30 bg-forge-amber/10"
-        : "border-forge-platinum/10 bg-black/20";
-  return (
-    <div className={cx("rounded border border-dashed p-4", toneClass)}>
-      <div className="text-sm font-semibold text-forge-ash">{props.title}</div>
-      <div className="mt-1 text-xs leading-5 text-forge-mist/75">
-        {props.detail}
-      </div>
-    </div>
-  );
-}
-
-function supportsChatCapability(model: ModelRuntimeModel) {
-  const capabilities = Array.isArray(model.capabilities)
-    ? model.capabilities
-    : [];
-  if (capabilities.length === 0) return true;
-  return capabilities.some((capability) => {
-    const normalized = String(capability).trim().toLowerCase();
-    return normalized === "chat" || normalized === "completion";
-  });
-}
-
-function usableChatStatus(model: ModelRuntimeModel) {
-  const status = normalizeStatus(model.status);
-  return (
-    status !== "disabled" &&
-    status !== "archived" &&
-    status !== "unavailable" &&
-    status !== "error"
-  );
-}
-
-function readCachedChatModelSelection() {
-  if (typeof window === "undefined") return "";
-  try {
-    return (
-      window.localStorage.getItem(CHAT_MODEL_SELECTION_CACHE_KEY) ?? ""
-    ).trim();
-  } catch {
-    return "";
-  }
-}
-
-function writeCachedChatModelSelection(value: string) {
-  if (typeof window === "undefined") return;
-  try {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      window.localStorage.removeItem(CHAT_MODEL_SELECTION_CACHE_KEY);
-      return;
-    }
-    window.localStorage.setItem(CHAT_MODEL_SELECTION_CACHE_KEY, trimmed);
-  } catch {
-    return;
-  }
-}
-
-function modelManagementRequest(metadata?: Record<string, unknown>) {
-  return {
-    actor: CONTROL_ACTOR,
-    source: CONTROL_SOURCE,
-    capabilityId: MODEL_MANAGEMENT_CAPABILITY,
-    metadata,
-  };
-}
-
-type ModelGovernanceDecision = {
-  requiresApproval?: boolean;
-  approved?: boolean;
-  dryRun?: boolean;
-  approvalRequestId?: number;
-  operation?: string;
-  reason?: string;
-};
-
-function modelGovernanceMessage(payload: unknown, label: string) {
-  if (!payload || typeof payload !== "object") return null;
-  const governance = (payload as { governance?: unknown }).governance;
-  if (!governance || typeof governance !== "object") return null;
-  const decision = governance as ModelGovernanceDecision;
-  const approvalId =
-    typeof decision.approvalRequestId === "number"
-      ? ` #${decision.approvalRequestId}`
-      : "";
-  if (decision.requiresApproval && !decision.approved) {
-    return `${label} requires approval${approvalId}.`;
-  }
-  if (decision.dryRun) {
-    return `${label} dry run completed.`;
-  }
-  return null;
-}
-
-function emptyModelRuntimeUsage(): ModelRuntimeUsageSummary {
-  return {
-    registered: 0,
-    imported: 0,
-    verified: 0,
-    available: 0,
-    disabled: 0,
-    archived: 0,
-    loaded: 0,
-    queueDepth: 0,
-    running: 0,
-    completed: 0,
-    backends: {},
-  };
-}
+import { CompactModelsBoard } from "./ModelsPage/CompactModelsBoard";
+import { ImportRegistrationPanel } from "./ModelsPage/ImportRegistrationPanel";
+import {
+  badgeClass,
+  cx,
+  EmptyState,
+  emptyModelRuntimeUsage,
+  Metric,
+  modelGovernanceMessage,
+  modelManagementRequest,
+  normalizeStatus,
+  readCachedChatModelSelection,
+  StateBox,
+  summarizeList,
+  summarizeValue,
+  supportsChatCapability,
+  usableChatStatus,
+  writeCachedChatModelSelection,
+} from "./ModelsPage/shared";
 
 export function ModelsPage() {
   const setStatus = useUiStore((s) => s.setStatusLine);
@@ -579,200 +430,27 @@ export function ModelsPage() {
 
   if (!advancedView) {
     return (
-      <div className="forge-ops-board space-y-5">
-        <header className="rounded border border-forge-platinum/10 bg-black/20 p-4 lg:flex lg:items-end lg:justify-between">
-          <div className="min-w-0">
-            <div className="forge-ops-label">Model Runtime</div>
-            <h1 className="mt-2 text-2xl font-semibold tracking-normal text-forge-ash sm:text-3xl">
-              Runtime command board
-            </h1>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-forge-mist/75">
-              Cognitive model view with runtime status, active model,
-              availability, and chat preference. Registry controls open only
-              when requested.
-            </p>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-2 lg:mt-0 lg:justify-end">
-            <span
-              className={badgeClass(
-                health?.ok === false || !runtimeAvailable ? "error" : "ok",
-              )}
-            >
-              {runtimeAvailable ? health?.status || "runtime" : "unavailable"}
-            </span>
-            <GhostButton
-              onClick={() => void refreshOverview(true)}
-              disabled={loading}
-            >
-              {loading ? "Refreshing" : "Refresh"}
-            </GhostButton>
-            <GhostButton onClick={() => setSearchParams({ view: "registry" })}>
-              Open Registry
-            </GhostButton>
-          </div>
-        </header>
-
-        <section className="forge-ops-panel">
-          {err ? (
-            <div className="m-3">
-              <EmptyState
-                title="Runtime request failed"
-                detail={err}
-                tone="bad"
-              />
-            </div>
-          ) : null}
-          {!runtimeAvailable ? (
-            <div className="m-3">
-              <EmptyState
-                title="Model runtime unavailable"
-                detail="Core UI remains healthy; enable modelruntime before registry and load controls become active."
-                tone="warn"
-              />
-            </div>
-          ) : null}
-          <div className="forge-ops-panel__body grid gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
-            <div className="rounded border border-forge-platinum/10 bg-black/20 p-4">
-              <div className="forge-ops-label">Runtime Status</div>
-              <div className="mt-2 text-2xl font-semibold text-forge-ash">
-                {health?.status || (health?.ok ? "ok" : "unknown")}
-              </div>
-              <div className="mt-2 text-sm text-forge-mist">
-                {loaded?.count ?? 0} loaded · {queue?.depth ?? 0} queued ·{" "}
-                {chatSelectableModels.length} chat-capable
-              </div>
-              {health?.degradedReasons?.length ? (
-                <div className="mt-3 rounded-md border border-forge-ember/30 bg-forge-ember/10 p-2 text-xs leading-5 text-forge-ash">
-                  {health.degradedReasons.join("; ")}
-                </div>
-              ) : null}
-              {health?.policyWarnings?.length ? (
-                <div className="mt-2 rounded-md border border-white/10 bg-black/25 p-2 text-xs leading-5 text-forge-mist">
-                  {health.policyWarnings.join("; ")}
-                </div>
-              ) : null}
-              <div className="mt-4 grid gap-2 md:grid-cols-2">
-                <StateBox
-                  title="Active Model"
-                  rows={[
-                    [
-                      "Selected",
-                      selectedModelSummary?.displayName ||
-                        selectedModelSummary?.id ||
-                        "none",
-                    ],
-                    [
-                      "Backend",
-                      selectedModelSummary?.backend ||
-                        health?.backend ||
-                        "unknown",
-                    ],
-                    ["Loaded", selectedLoadedRecord?.status || "not loaded"],
-                  ]}
-                />
-                <StateBox
-                  title="Availability"
-                  rows={[
-                    ["Registered", String(models.length)],
-                    [
-                      "Available",
-                      String(modelCounts.available ?? usage?.available ?? 0),
-                    ],
-                    [
-                      "Disabled/Archived",
-                      String((usage?.disabled ?? 0) + (usage?.archived ?? 0)),
-                    ],
-                  ]}
-                />
-              </div>
-            </div>
-            <div className="rounded border border-forge-platinum/10 bg-black/20 p-4">
-              <div className="forge-ops-label">Chat Preference</div>
-              <select
-                className="forge-input mt-3"
-                value={chatSelectedModelId}
-                onChange={(event) => {
-                  setChatSelectedModelId(event.target.value);
-                  setStatus(
-                    event.target.value
-                      ? `Chat model preference set to ${event.target.value}`
-                      : "Chat model preference cleared (auto)",
-                  );
-                }}
-              >
-                <option value="">Auto routing</option>
-                {chatSelectableModels.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.displayName?.trim() || model.id}
-                  </option>
-                ))}
-              </select>
-              <GhostButton
-                className="mt-3 w-full"
-                onClick={() => setChatSelectedModelId("")}
-                disabled={!chatSelectedModelId}
-              >
-                Clear preference
-              </GhostButton>
-            </div>
-          </div>
-        </section>
-
-        <section className="forge-ops-panel">
-          <div className="forge-ops-panel__head">
-            <div>
-              <div className="forge-ops-title">Registry</div>
-              <div className="mt-1 text-xs text-forge-mist/65">
-                Compact model list. Select a model or open advanced registry for
-                lifecycle controls.
-              </div>
-            </div>
-            <span className="font-mono text-[11px] text-forge-mist/60">
-              {models.length} registered
-            </span>
-          </div>
-          <div className="forge-ops-panel__body">
-            {models.length === 0 ? (
-              <EmptyState
-                title={loading ? "Refreshing registry" : "No models registered"}
-                detail={
-                  loading
-                    ? "Waiting for the runtime registry, queue, loaded-models, and backend health calls to return."
-                    : "Import a local model or open the registry to reconcile a configured model home."
-                }
-              />
-            ) : (
-              <div className="space-y-2">
-                {models.slice(0, 12).map((model) => (
-                  <button
-                    key={model.id}
-                    type="button"
-                    onClick={() => setSelectedModelId(model.id)}
-                    className={cx(
-                      "flex w-full items-start justify-between gap-3 rounded border border-forge-platinum/10 bg-black/20 px-4 py-3 text-left transition hover:border-forge-ember/35 hover:bg-black/30 sm:items-center",
-                      selectedModelId === model.id &&
-                        "border-forge-ember/45 bg-forge-ember/10",
-                    )}
-                  >
-                    <span className="min-w-0">
-                      <span className="block break-all font-mono text-sm text-forge-ash">
-                        {model.id}
-                      </span>
-                      <span className="mt-1 block break-words text-xs leading-5 text-forge-mist">
-                        {model.displayName || "Unnamed model"} ·{" "}
-                        {model.backend || "backend unset"}
-                      </span>
-                    </span>
-                    <span className={cx("shrink-0", badgeClass(model.status))}>
-                      {model.status || "unknown"}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      </div>
+      <CompactModelsBoard
+        err={err}
+        health={health}
+        runtimeAvailable={runtimeAvailable}
+        loading={loading}
+        loaded={loaded}
+        queue={queue}
+        chatSelectableModels={chatSelectableModels}
+        selectedModelSummary={selectedModelSummary}
+        selectedLoadedRecord={selectedLoadedRecord}
+        modelCounts={modelCounts}
+        usage={usage}
+        chatSelectedModelId={chatSelectedModelId}
+        models={models}
+        selectedModelId={selectedModelId}
+        onRefresh={() => void refreshOverview(true)}
+        onOpenRegistry={() => setSearchParams({ view: "registry" })}
+        onSelectModel={setSelectedModelId}
+        onSelectChatModel={setChatSelectedModelId}
+        setStatus={setStatus}
+      />
     );
   }
 
@@ -1089,134 +767,26 @@ export function ModelsPage() {
         </div>
       </section>
 
-      <section className="forge-ops-panel">
-        <div className="forge-ops-panel__head">
-          <div>
-            <div className="forge-ops-title">Import and Registration</div>
-            <div className="mt-1 text-xs text-forge-mist/65">
-              Local GGUF and manifest-backed model registration. File deletion
-              remains intentionally out of scope.
-            </div>
-          </div>
-          <span className="font-mono text-[11px] text-forge-mist/60">
-            model.management
-          </span>
-        </div>
-        <div className="forge-ops-panel__body">
-          {!runtimeAvailable ? (
-            <div className="mb-4">
-              <EmptyState
-                title="Model runtime unavailable"
-                detail="Registration controls are read-only until modelruntime is available through the governed core status path."
-                tone="warn"
-              />
-            </div>
-          ) : null}
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(240px,0.65fr)]">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              <label className="text-xs text-forge-mist">
-                Path
-                <input
-                  className="forge-input mt-1"
-                  value={importPath}
-                  onChange={(e) => setImportPath(e.target.value)}
-                  placeholder="/models/coder.gguf"
-                  disabled={runtimeControlsDisabled}
-                />
-              </label>
-              <label className="text-xs text-forge-mist">
-                Display name
-                <input
-                  className="forge-input mt-1"
-                  value={importDisplayName}
-                  onChange={(e) => setImportDisplayName(e.target.value)}
-                  placeholder="Qwen Coder"
-                  disabled={runtimeControlsDisabled}
-                />
-              </label>
-              <label className="text-xs text-forge-mist">
-                Family
-                <input
-                  className="forge-input mt-1"
-                  value={importFamily}
-                  onChange={(e) => setImportFamily(e.target.value)}
-                  placeholder="qwen"
-                  disabled={runtimeControlsDisabled}
-                />
-              </label>
-              <label className="relative z-10 overflow-visible text-xs text-forge-mist">
-                Backend
-                <select
-                  className="forge-input relative z-20 mt-1 h-10 w-full"
-                  value={importBackend}
-                  onChange={(e) => setImportBackend(e.target.value)}
-                  disabled={runtimeControlsDisabled}
-                >
-                  <option value="">manifest/default</option>
-                  <option value="llama_cpp">llama_cpp</option>
-                  <option value="openai_compat">openai_compat</option>
-                  <option value="vllm">vllm</option>
-                </select>
-              </label>
-              <label className="text-xs text-forge-mist">
-                Capabilities
-                <input
-                  className="forge-input mt-1"
-                  value={importCapabilities}
-                  onChange={(e) => setImportCapabilities(e.target.value)}
-                  placeholder="chat,completion"
-                  disabled={runtimeControlsDisabled}
-                />
-              </label>
-              <label className="flex items-center gap-2 self-end rounded border border-white/10 bg-black/20 px-3 py-2 text-xs text-forge-mist">
-                <input
-                  type="checkbox"
-                  checked={importPreferred}
-                  onChange={(e) => setImportPreferred(e.target.checked)}
-                  disabled={runtimeControlsDisabled}
-                />
-                Mark as preferred
-              </label>
-            </div>
-            <div className="rounded border border-white/10 bg-black/20 p-3 text-xs text-forge-mist">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-forge-mist/80">
-                Registration Notes
-              </div>
-              <div className="mt-3 space-y-2">
-                <div>
-                  Import records runtime details only; removal never deletes
-                  model files.
-                </div>
-                <div>
-                  Use <span className="text-forge-ash">preferred</span> when the
-                  imported model should be favored by runtime compatibility
-                  checks.
-                </div>
-                <div>
-                  Capabilities should stay comma-separated so registry and chat
-                  filtering remain aligned.
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <PrimaryButton
-              className="min-h-11 px-4"
-              onClick={() => void handleImport()}
-              disabled={importBusy || runtimeControlsDisabled}
-            >
-              {importBusy ? "Importing..." : "Import Model"}
-            </PrimaryButton>
-            <GhostButton
-              className="min-h-11 px-4"
-              onClick={() => void handleScan()}
-              disabled={scanBusy || runtimeControlsDisabled}
-            >
-              {scanBusy ? "Scanning..." : "Reconcile Registry"}
-            </GhostButton>
-          </div>
-        </div>
-      </section>
+      <ImportRegistrationPanel
+        runtimeAvailable={runtimeAvailable}
+        runtimeControlsDisabled={runtimeControlsDisabled}
+        importPath={importPath}
+        importDisplayName={importDisplayName}
+        importFamily={importFamily}
+        importBackend={importBackend}
+        importCapabilities={importCapabilities}
+        importPreferred={importPreferred}
+        importBusy={importBusy}
+        scanBusy={scanBusy}
+        setImportPath={setImportPath}
+        setImportDisplayName={setImportDisplayName}
+        setImportFamily={setImportFamily}
+        setImportBackend={setImportBackend}
+        setImportCapabilities={setImportCapabilities}
+        setImportPreferred={setImportPreferred}
+        onImport={() => void handleImport()}
+        onScan={() => void handleScan()}
+      />
 
       <div className="grid gap-3 xl:grid-cols-[1.15fr_0.85fr]">
         <section className="forge-ops-panel">
@@ -1893,58 +1463,4 @@ export function ModelsPage() {
       </div>
     </div>
   );
-}
-
-function Metric(props: {
-  label: string;
-  value: string | number;
-  hint: string;
-  tone?: "ok" | "warn" | "bad" | "muted";
-}) {
-  return (
-    <div className="forge-ops-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="forge-ops-label">{props.label}</div>
-          <div className="mt-2 break-words text-xl font-semibold tracking-normal text-forge-ash">
-            {props.value}
-          </div>
-        </div>
-        <span className={opsToneClass(props.tone ?? "muted")}>
-          {props.tone ?? "muted"}
-        </span>
-      </div>
-      <div className="mt-3 break-words text-xs leading-5 text-forge-mist/65">
-        {props.hint}
-      </div>
-    </div>
-  );
-}
-
-function StateBox(props: { title: string; rows: Array<[string, string]> }) {
-  return (
-    <div className="rounded border border-forge-platinum/10 bg-black/25 p-3">
-      <div className="forge-ops-title text-sm">{props.title}</div>
-      <div className="mt-2 grid gap-2">
-        {props.rows.map(([label, value]) => (
-          <div
-            key={label}
-            className="flex items-start justify-between gap-3 text-[11px] text-forge-mist"
-          >
-            <span className="shrink-0">{label}</span>
-            <span className="min-w-0 break-words text-right text-forge-ash">
-              {value}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function opsToneClass(tone: "ok" | "warn" | "bad" | "muted") {
-  if (tone === "ok") return "forge-ops-status forge-ops-status--ok";
-  if (tone === "warn") return "forge-ops-status forge-ops-status--warn";
-  if (tone === "bad") return "forge-ops-status forge-ops-status--bad";
-  return "forge-ops-status forge-ops-status--muted";
 }

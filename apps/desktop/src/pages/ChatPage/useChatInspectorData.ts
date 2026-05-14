@@ -17,7 +17,7 @@ import {
   type ChatToolEntry,
 } from "./toolGateway";
 
-type MessageAttachmentItem = {
+export type MessageAttachmentItem = {
   messageId: number;
   createdAtMs: number;
   role: string;

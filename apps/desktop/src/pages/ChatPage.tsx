@@ -8,7 +8,7 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import {
   api,
@@ -29,14 +29,10 @@ import {
   usableChatStatus,
   writeCachedChatModelSelection,
 } from "./ChatPage/chatModels";
+import { ChatComposer } from "./ChatPage/ChatComposer";
+import { ChatInspector } from "./ChatPage/ChatInspector";
 import { ChatThreadRail } from "./ChatPage/ChatThreadRail";
-import {
-  CodeBlock,
-} from "./ChatPage/messageContent";
-import {
-  AttachmentInspectorCard,
-  MessageRow,
-} from "./ChatPage/messageSurface";
+import { MessageRow } from "./ChatPage/messageSurface";
 import {
   CHAT_PANE_LAYOUT_KEY,
   clampNumber,
@@ -49,10 +45,6 @@ import {
   ThinkingTimeline,
   type ChatThinkingEvent,
 } from "./ChatPage/thinking";
-import {
-  BrowserResultPanel,
-  TerminalTranscript,
-} from "./ChatPage/toolGateway";
 import { useChatInspectorData } from "./ChatPage/useChatInspectorData";
 
 function asRecord(v: unknown): Record<string, unknown> | null {
@@ -1371,292 +1363,39 @@ export function ChatPage() {
               </div>
             </div>
 
-            <footer className="forge-chat-footer border-t border-forge-platinum/10 bg-forge-black/95">
-              <div className="forge-chat-content-width mx-auto w-full">
-                <div className="forge-chat-routing-strip mb-2 rounded-lg border border-forge-platinum/10 bg-black/30 p-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[10px] uppercase tracking-[0.16em] text-forge-mist/60">
-                        Assistant Routing
-                      </div>
-                      <div className="mt-0.5 truncate text-xs text-forge-mist/80">
-                        {assistantModeSummary} ·{" "}
-                        {chatModelMessage || chatModelSummary}
-                      </div>
-                    </div>
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <label className="inline-flex min-w-0 items-center gap-2 rounded-lg border border-forge-platinum/10 bg-black/20 px-2.5 py-1.5 text-xs text-forge-mist">
-                        <input
-                          aria-label="Use assistant"
-                          type="checkbox"
-                          checked={requestAssistant}
-                          onChange={(e) =>
-                            setRequestAssistant(e.target.checked)
-                          }
-                        />
-                        Use assistant
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => void refreshChatModels()}
-                        className="min-w-0 rounded-lg border border-forge-platinum/10 bg-forge-platinum/5 px-3 py-1.5 text-[11px] text-forge-mist transition hover:border-forge-ember/30 hover:text-forge-ash"
-                      >
-                        Refresh models
-                      </button>
-                      <Link
-                        to="/models"
-                        className="min-w-0 rounded-lg border border-forge-ember/25 bg-forge-ember/10 px-3 py-1.5 text-[11px] text-forge-emberSoft transition hover:border-forge-ember/40 hover:text-forge-ash"
-                      >
-                        Open Models
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => setShowAdvanced((v) => !v)}
-                        className="forge-chat-action-btn border-forge-platinum/10 bg-transparent py-1 px-2.5 text-[11px]"
-                      >
-                        {showAdvanced ? "Hide advanced" : "Advanced"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {showAdvanced ? (
-                    <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-                      <label className="block min-w-0">
-                        <span className="text-[11px] font-medium uppercase tracking-wide text-forge-mist">
-                          Chat model
-                        </span>
-                        <select
-                          aria-label="Chat runtime model"
-                          className="forge-input mt-1 h-10 w-full py-1 text-sm"
-                          value={selectedChatModelId}
-                          onChange={(e) =>
-                            setSelectedChatModelId(e.target.value)
-                          }
-                          disabled={chatModelLoadState === "loading"}
-                        >
-                          <option value="">
-                            Auto (runtime default / adapter fallback)
-                          </option>
-                          {selectedChatModelId &&
-                          !chatModels.some(
-                            (model) => model.id === selectedChatModelId,
-                          ) ? (
-                            <option value={selectedChatModelId}>
-                              Saved: {selectedChatModelId} (not in current
-                              runtime list)
-                            </option>
-                          ) : null}
-                          {chatModels.map((model) => (
-                            <option key={model.id} value={model.id}>
-                              {model.displayName?.trim() || model.id}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedChatModelId("")}
-                        disabled={!selectedChatModelId}
-                        className="rounded-lg border border-forge-platinum/10 bg-black/25 px-3 py-2 text-[11px] text-forge-mist transition hover:border-forge-platinum/20 hover:text-forge-ash disabled:opacity-40"
-                      >
-                        Use auto
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-
-                {showAdvanced ? (
-                  <div className="mb-3 grid gap-2 md:grid-cols-3">
-                    <label className="inline-flex items-center gap-2 rounded border border-forge-platinum/10 bg-black/25 px-2.5 py-2 text-xs text-forge-mist">
-                      <input
-                        aria-label="Assistant dry run"
-                        type="checkbox"
-                        checked={assistantDryRun}
-                        disabled={!requestAssistant}
-                        onChange={(e) => setAssistantDryRun(e.target.checked)}
-                      />
-                      Dry-run
-                    </label>
-                    <label className="inline-flex items-center gap-2 rounded border border-forge-platinum/10 bg-black/25 px-2.5 py-2 text-xs text-forge-mist">
-                      <input
-                        aria-label="Stream assistant response"
-                        type="checkbox"
-                        checked={streamAssistant}
-                        disabled={
-                          !requestAssistant ||
-                          assistantDryRun ||
-                          blockingAssistant
-                        }
-                        onChange={(e) => {
-                          setStreamAssistant(e.target.checked);
-                          if (e.target.checked) setBlockingAssistant(false);
-                        }}
-                      />
-                      Stream response
-                    </label>
-                    <label className="inline-flex items-center gap-2 rounded border border-forge-platinum/10 bg-black/25 px-2.5 py-2 text-xs text-forge-mist">
-                      <input
-                        aria-label="Block on assistant response"
-                        type="checkbox"
-                        checked={blockingAssistant}
-                        disabled={!requestAssistant || assistantDryRun}
-                        onChange={(e) => {
-                          setBlockingAssistant(e.target.checked);
-                          if (e.target.checked) setStreamAssistant(false);
-                        }}
-                      />
-                      Block request
-                    </label>
-                  </div>
-                ) : null}
-
-                <div className="forge-chat-composer-shell">
-                  {pendingAttachments.length > 0 ? (
-                    <div className="mb-3">
-                      <div className="mb-2 text-[10px] uppercase tracking-[0.14em] text-forge-mist/65">
-                        Pending attachments
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {pendingAttachments.map((item) => (
-                          <span
-                            key={item.artifactId}
-                            className="inline-flex items-center gap-2 rounded-full border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setInspectorMode("files");
-                                setSelectedAttachmentId(item.artifactId);
-                              }}
-                              className="truncate hover:text-forge-ash"
-                            >
-                              {item.fileName}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setPendingAttachments((prev) =>
-                                  prev.filter(
-                                    (entry) =>
-                                      entry.artifactId !== item.artifactId,
-                                  ),
-                                )
-                              }
-                              className="text-forge-mist/70 hover:text-forge-ash"
-                              aria-label={`Remove ${item.fileName}`}
-                            >
-                              ×
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  <div className="mb-2 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setInspectorMode("terminal");
-                        setDraft((prev) => prev || "run ");
-                        window.setTimeout(
-                          () => textareaRef.current?.focus(),
-                          0,
-                        );
-                      }}
-                      className="rounded-lg border border-forge-platinum/10 bg-black/35 px-3 py-1.5 text-[11px] font-semibold text-forge-mist transition hover:border-forge-ember/30 hover:text-forge-ash"
-                    >
-                      Terminal
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setInspectorMode("browser");
-                        setDraft((prev) => prev || "search the web for ");
-                        window.setTimeout(
-                          () => textareaRef.current?.focus(),
-                          0,
-                        );
-                      }}
-                      className="rounded-lg border border-forge-platinum/10 bg-black/35 px-3 py-1.5 text-[11px] font-semibold text-forge-mist transition hover:border-forge-ember/30 hover:text-forge-ash"
-                    >
-                      Web search
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setInspectorMode("browser");
-                        setDraft((prev) => prev || "open browser https://");
-                        window.setTimeout(
-                          () => textareaRef.current?.focus(),
-                          0,
-                        );
-                      }}
-                      className="rounded-lg border border-forge-platinum/10 bg-black/35 px-3 py-1.5 text-[11px] font-semibold text-forge-mist transition hover:border-forge-ember/30 hover:text-forge-ash"
-                    >
-                      Browser
-                    </button>
-                  </div>
-
-                  <div className="forge-chat-compose-row">
-                    <div className="min-w-0 flex-1">
-                      <label htmlFor="chat-composer" className="sr-only">
-                        Message
-                      </label>
-                      <textarea
-                        id="chat-composer"
-                        aria-label="Chat message"
-                        ref={textareaRef}
-                        rows={2}
-                        className="forge-chat-composer"
-                        placeholder="Message FORGE"
-                        value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
-                        onKeyDown={onComposerKeyDown}
-                        disabled={busy}
-                      />
-                    </div>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      className="hidden"
-                      multiple
-                      onChange={(e) => void uploadSelectedFiles(e.target.files)}
-                      disabled={busy || uploading}
-                    />
-                    <div className="forge-chat-compose-actions">
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        disabled={busy || uploading || !active}
-                        className="forge-chat-action-btn bg-black/35"
-                      >
-                        {uploading ? "Uploading…" : "Attach"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void send()}
-                        disabled={
-                          busy ||
-                          (!draft.trim() && pendingAttachments.length === 0)
-                        }
-                        className="forge-chat-action-btn forge-chat-primary-btn text-sm"
-                      >
-                        Send
-                      </button>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-forge-mist/75">
-                    <span>Enter to send · Shift+Enter for newline</span>
-                    <span className="hidden min-w-0 break-words sm:inline">
-                      {requestAssistant
-                        ? `Assistant mode: ${assistantModeSummary}`
-                        : "No assistant reply requested"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </footer>
+            <ChatComposer
+              pendingAttachments={pendingAttachments}
+              onPendingAttachmentsChange={setPendingAttachments}
+              onInspectorModeChange={setInspectorMode}
+              onSelectedAttachmentIdChange={setSelectedAttachmentId}
+              onDraftChange={setDraft}
+              textareaRef={textareaRef}
+              fileInputRef={fileInputRef}
+              busy={busy}
+              uploading={uploading}
+              draft={draft}
+              onComposerKeyDown={onComposerKeyDown}
+              onUploadSelectedFiles={(files) => void uploadSelectedFiles(files)}
+              onSend={() => void send()}
+              requestAssistant={requestAssistant}
+              onRequestAssistantChange={setRequestAssistant}
+              assistantModeSummary={assistantModeSummary}
+              chatModelMessage={chatModelMessage}
+              chatModelSummary={chatModelSummary}
+              onRefreshChatModels={() => void refreshChatModels()}
+              showAdvanced={showAdvanced}
+              onShowAdvancedChange={setShowAdvanced}
+              selectedChatModelId={selectedChatModelId}
+              onSelectedChatModelIdChange={setSelectedChatModelId}
+              chatModelLoadState={chatModelLoadState}
+              chatModels={chatModels}
+              assistantDryRun={assistantDryRun}
+              onAssistantDryRunChange={setAssistantDryRun}
+              streamAssistant={streamAssistant}
+              onStreamAssistantChange={setStreamAssistant}
+              blockingAssistant={blockingAssistant}
+              onBlockingAssistantChange={setBlockingAssistant}
+            />
           </>
         )}
       </section>
@@ -1674,266 +1413,23 @@ export function ChatPage() {
       ) : null}
 
       {active ? (
-        <aside className="forge-chat-inspector min-h-0 min-w-0 flex-col overflow-hidden border-l border-forge-platinum/10 bg-forge-black/95 shadow-[-8px_0_40px_rgba(0,0,0,0.28)]">
-          <div className="flex flex-col gap-3 border-b border-forge-platinum/10 bg-forge-carbon/75 px-4 py-3">
-            <div className="text-sm font-semibold text-forge-ash">
-              Inspector
-            </div>
-            <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-1 text-xs">
-              <button
-                type="button"
-                onClick={() => setInspectorMode("thinking")}
-                className={[
-                  "shrink-0 rounded border px-2 py-1",
-                  inspectorMode === "thinking"
-                    ? "border-forge-ember/45 bg-forge-ember/10 text-forge-emberSoft"
-                    : "border-forge-platinum/10 text-forge-mist hover:border-forge-ember/30",
-                ].join(" ")}
-              >
-                Thinking
-              </button>
-              <button
-                type="button"
-                onClick={() => setInspectorMode("terminal")}
-                className={[
-                  "shrink-0 rounded border px-2 py-1",
-                  inspectorMode === "terminal"
-                    ? "border-forge-ember/45 bg-forge-ember/10 text-forge-emberSoft"
-                    : "border-forge-platinum/10 text-forge-mist hover:border-forge-ember/30",
-                ].join(" ")}
-              >
-                Terminal
-              </button>
-              <button
-                type="button"
-                onClick={() => setInspectorMode("browser")}
-                className={[
-                  "shrink-0 rounded border px-2 py-1",
-                  inspectorMode === "browser"
-                    ? "border-forge-ember/45 bg-forge-ember/10 text-forge-emberSoft"
-                    : "border-forge-platinum/10 text-forge-mist hover:border-forge-ember/30",
-                ].join(" ")}
-              >
-                Browser
-              </button>
-              <button
-                type="button"
-                onClick={() => setInspectorMode("code")}
-                className={[
-                  "shrink-0 rounded border px-2 py-1",
-                  inspectorMode === "code"
-                    ? "border-forge-ember/45 bg-forge-ember/10 text-forge-emberSoft"
-                    : "border-forge-platinum/10 text-forge-mist hover:border-forge-ember/30",
-                ].join(" ")}
-              >
-                Code
-              </button>
-              <button
-                type="button"
-                onClick={() => setInspectorMode("files")}
-                className={[
-                  "shrink-0 rounded border px-2 py-1",
-                  inspectorMode === "files"
-                    ? "border-forge-ember/45 bg-forge-ember/10 text-forge-emberSoft"
-                    : "border-forge-platinum/10 text-forge-mist hover:border-forge-ember/30",
-                ].join(" ")}
-              >
-                Files
-              </button>
-            </div>
-          </div>
-
-          {inspectorMode === "thinking" ? (
-            <div className="forge-chat-scroll min-h-0 flex-1 overflow-y-auto p-3">
-              {streamingText !== null && streamingEvents.length > 0 ? (
-                <div className="mb-4">
-                  <ThinkingTimeline
-                    events={streamingEvents.slice().reverse()}
-                    live
-                  />
-                </div>
-              ) : null}
-              <ThinkingTimeline
-                events={thinkingEntries}
-                emptyText={
-                  streamingText !== null
-                    ? "FORGE has not emitted a visible thinking event yet."
-                    : "No FORGE thinking trace in this thread yet."
-                }
-              />
-            </div>
-          ) : inspectorMode === "terminal" ? (
-            <div className="forge-chat-scroll min-h-0 flex-1 overflow-y-auto p-3">
-              {terminalEntries.length === 0 ? (
-                <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">
-                  No terminal runs in this thread yet.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {terminalEntries.map((entry) => (
-                    <div key={entry.key}>
-                      <div className="mb-1 text-[10px] uppercase tracking-[0.12em] text-forge-mist/60">
-                        message {entry.messageId} ·{" "}
-                        {formatTime(entry.createdAtMs)}
-                      </div>
-                      <TerminalTranscript entry={entry} compact />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : inspectorMode === "browser" ? (
-            <div className="forge-chat-scroll min-h-0 flex-1 overflow-y-auto p-3">
-              {browserEntries.length === 0 ? (
-                <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">
-                  No browser or web-search results in this thread yet.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {browserEntries.map((entry) => (
-                    <div key={entry.key}>
-                      <div className="mb-1 text-[10px] uppercase tracking-[0.12em] text-forge-mist/60">
-                        {entry.tool} · message {entry.messageId} ·{" "}
-                        {formatTime(entry.createdAtMs)}
-                      </div>
-                      <BrowserResultPanel entry={entry} compact />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ) : inspectorMode === "code" ? (
-            <div
-              className="forge-chat-inspector-split grid min-h-0 flex-1"
-              style={inspectorSplitStyle}
-            >
-              <div className="forge-chat-scroll overflow-y-auto border-b border-forge-platinum/10 p-2">
-                {assistantCodeSnippets.length === 0 ? (
-                  <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">
-                    No assistant code blocks in this thread yet.
-                  </div>
-                ) : (
-                  assistantCodeSnippets.map((snippet) => (
-                    <button
-                      key={snippet.key}
-                      type="button"
-                      onClick={() => setSelectedSnippetKey(snippet.key)}
-                      className={[
-                        "mb-2 w-full rounded-lg border px-3 py-2 text-left",
-                        selectedSnippetKey === snippet.key
-                          ? "border-forge-platinum/20 bg-forge-platinum/10"
-                          : "border-forge-platinum/10 bg-black/20 hover:border-forge-platinum/20",
-                      ].join(" ")}
-                    >
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-forge-ash">
-                        {snippet.lang}
-                      </div>
-                      <div className="mt-1 line-clamp-2 font-mono text-[11px] text-forge-mist">
-                        {snippet.code.trim() || "(empty code block)"}
-                      </div>
-                      <div className="mt-1 text-[10px] text-forge-mist/70">
-                        {formatTime(snippet.createdAtMs)}
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-              <div
-                role="separator"
-                aria-label="Resize code inspector list"
-                aria-orientation="horizontal"
-                className="forge-chat-row-resizer"
-                onPointerDown={startInspectorSplitResize}
-              />
-              <div className="forge-chat-scroll overflow-y-auto p-3">
-                {assistantCodeSnippets.find(
-                  (item) => item.key === selectedSnippetKey,
-                ) ? (
-                  <CodeBlock
-                    code={
-                      assistantCodeSnippets.find(
-                        (item) => item.key === selectedSnippetKey,
-                      )?.code ?? ""
-                    }
-                    lang={
-                      assistantCodeSnippets.find(
-                        (item) => item.key === selectedSnippetKey,
-                      )?.lang ?? "code"
-                    }
-                  />
-                ) : (
-                  <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">
-                    Select a code block.
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : inspectorMode === "files" ? (
-            <div
-              className="forge-chat-inspector-split grid min-h-0 flex-1"
-              style={inspectorSplitStyle}
-            >
-              <div className="forge-chat-scroll overflow-y-auto border-b border-forge-platinum/10 p-2">
-                {messageAttachments.length === 0 ? (
-                  <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">
-                    No files attached in this thread.
-                  </div>
-                ) : (
-                  messageAttachments.map((item) => (
-                    <button
-                      key={item.attachment.artifactId}
-                      type="button"
-                      onClick={() =>
-                        setSelectedAttachmentId(item.attachment.artifactId)
-                      }
-                      className={[
-                        "mb-2 w-full rounded-lg border px-3 py-2 text-left",
-                        selectedAttachmentId === item.attachment.artifactId
-                          ? "border-forge-platinum/20 bg-forge-platinum/10"
-                          : "border-forge-platinum/10 bg-black/20 hover:border-forge-platinum/20",
-                      ].join(" ")}
-                    >
-                      <div className="truncate text-xs font-semibold text-forge-ash">
-                        {item.attachment.title}
-                      </div>
-                      <div className="mt-1 truncate text-[11px] text-forge-mist">
-                        {item.attachment.fileName}
-                      </div>
-                      <div className="mt-1 text-[10px] text-forge-mist/70">
-                        {item.attachment.mimeType}
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-              <div
-                role="separator"
-                aria-label="Resize file inspector list"
-                aria-orientation="horizontal"
-                className="forge-chat-row-resizer"
-                onPointerDown={startInspectorSplitResize}
-              />
-              <div className="forge-chat-scroll overflow-y-auto p-3">
-                {messageAttachments.find(
-                  (item) => item.attachment.artifactId === selectedAttachmentId,
-                ) ? (
-                  <AttachmentInspectorCard
-                    attachment={
-                      messageAttachments.find(
-                        (item) =>
-                          item.attachment.artifactId === selectedAttachmentId,
-                      )!.attachment
-                    }
-                  />
-                ) : (
-                  <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">
-                    Select a file.
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : null}
-        </aside>
+        <ChatInspector
+          inspectorMode={inspectorMode}
+          onInspectorModeChange={setInspectorMode}
+          streamingText={streamingText}
+          streamingEvents={streamingEvents}
+          thinkingEntries={thinkingEntries}
+          terminalEntries={terminalEntries}
+          browserEntries={browserEntries}
+          assistantCodeSnippets={assistantCodeSnippets}
+          selectedSnippetKey={selectedSnippetKey}
+          onSelectedSnippetKeyChange={setSelectedSnippetKey}
+          messageAttachments={messageAttachments}
+          selectedAttachmentId={selectedAttachmentId}
+          onSelectedAttachmentIdChange={setSelectedAttachmentId}
+          inspectorSplitStyle={inspectorSplitStyle}
+          onStartInspectorSplitResize={startInspectorSplitResize}
+        />
       ) : null}
     </div>
   );

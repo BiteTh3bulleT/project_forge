@@ -1,5 +1,5 @@
 import { GhostButton, PrimaryButton } from "@forge/ui";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 
 import { FoldSection } from "../components/FoldSection";
 import {
@@ -7,21 +7,26 @@ import {
   type DiscordGatewayStatusResponse,
   type TelegramStatusResponse,
 } from "../lib/api";
-import {
-  getDesktopSystemDiagnostics,
-  type DesktopSystemDiagnostics,
-  isTauriDesktop,
-} from "../lib/desktop";
+import { getDesktopSystemDiagnostics, isTauriDesktop } from "../lib/desktop";
 import { useUiStore } from "../stores/uiStore";
-
-type SettingsView =
-  | "all"
-  | "core"
-  | "remote"
-  | "retrieval"
-  | "chat"
-  | "display"
-  | "diagnostics";
+import {
+  DiagnosticsSection,
+  WorkspacePathsSection,
+} from "./SettingsPage/DiagnosticsSections";
+import { ChatPromptSection } from "./SettingsPage/ChatPromptSection";
+import {
+  MetricTile,
+  MiniEmpty,
+  Panel,
+  RemoteStateChip,
+  StatusDot,
+  StatusRow,
+} from "./SettingsPage/components";
+import type {
+  CoreMeta,
+  PcDiagnostics,
+  SettingsView,
+} from "./SettingsPage/types";
 
 const redactedSettingSecret = "[redacted]";
 
@@ -100,35 +105,16 @@ export function SettingsPage() {
     useState<DiscordGatewayStatusResponse | null>(null);
   const [discordStatusErr, setDiscordStatusErr] = useState<string | null>(null);
   const [remoteStatusBusy, setRemoteStatusBusy] = useState(false);
-  const [meta, setMeta] = useState<{
-    dataDir: string;
-    dbPath: string;
-    workspaceDir: string;
-  } | null>(null);
+  const [meta, setMeta] = useState<CoreMeta | null>(null);
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [ollamaModelsError, setOllamaModelsError] = useState<string | null>(
     null,
   );
   const [ollamaModelsLoading, setOllamaModelsLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [pcDiagnostics, setPcDiagnostics] = useState<{
-    userAgent: string;
-    platform: string;
-    language: string;
-    languages: string;
-    cores: string;
-    memoryGiB: string;
-    screenWidth: number;
-    screenHeight: number;
-    availWidth: number;
-    availHeight: number;
-    colorDepth: number;
-    pixelRatio: number;
-    runtime: string;
-    memoryUsedMB: string;
-    memoryLimitMB: string;
-    desktop: DesktopSystemDiagnostics | null;
-  } | null>(null);
+  const [pcDiagnostics, setPcDiagnostics] = useState<PcDiagnostics | null>(
+    null,
+  );
   const [settingsView, setSettingsView] = useState<SettingsView>("all");
   const setStatus = useUiStore((s) => s.setStatusLine);
   const contrastPreference = useUiStore((s) => s.contrastPreference);
@@ -1406,54 +1392,12 @@ export function SettingsPage() {
       ) : null}
 
       {settingsView === "all" || settingsView === "chat" ? (
-        <FoldSection
-          title="Chat Prompt"
-          subtitle="System prompt and default restoration controls."
-          defaultOpen
-        >
-          <Panel
-            title="Chat Personality Prompt"
-            subtitle="Live system prompt for chat replies. Changes apply on the next assistant response."
-          >
-            <label className="text-xs font-semibold tracking-wide text-forge-mist">
-              System prompt
-            </label>
-            <textarea
-              className="forge-input mt-2 min-h-[280px] font-mono text-xs leading-relaxed"
-              value={chatPersonalityPrompt}
-              onChange={(e) => setChatPersonalityPrompt(e.target.value)}
-            />
-            <div className="mt-3 flex flex-wrap gap-2">
-              <PrimaryButton
-                onClick={async () => {
-                  await api.settings.patch({ chatPersonalityPrompt });
-                  setStatus("Chat personality prompt saved.");
-                }}
-              >
-                Save chat prompt
-              </PrimaryButton>
-              <GhostButton
-                onClick={() => {
-                  setChatPersonalityPrompt(chatPromptDefault);
-                  setStatus("Restored default chat prompt in editor.");
-                }}
-              >
-                Reset editor to default
-              </GhostButton>
-              <GhostButton
-                onClick={async () => {
-                  await api.settings.patch({
-                    chatPersonalityPrompt: chatPromptDefault,
-                  });
-                  setChatPersonalityPrompt(chatPromptDefault);
-                  setStatus("Chat personality prompt reset to default.");
-                }}
-              >
-                Save default prompt
-              </GhostButton>
-            </div>
-          </Panel>
-        </FoldSection>
+        <ChatPromptSection
+          chatPersonalityPrompt={chatPersonalityPrompt}
+          chatPromptDefault={chatPromptDefault}
+          setChatPersonalityPrompt={setChatPersonalityPrompt}
+          setStatus={setStatus}
+        />
       ) : null}
 
       {settingsView === "all" || settingsView === "display" ? (
@@ -1540,286 +1484,15 @@ export function SettingsPage() {
       ) : null}
 
       {settingsView === "all" || settingsView === "diagnostics" ? (
-        <FoldSection
-          title="Diagnostics"
-          subtitle="Machine/runtime visibility and host metrics."
-          defaultOpen
-        >
-          <Panel
-            title="PC Diagnostics"
-            subtitle="Local process-level and rendering context visibility used for monitor/resource audits."
-          >
-            <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3">
-              {pcDiagnostics ? (
-                <div className="space-y-2 text-sm text-forge-mist">
-                  <MetricRow label="Platform" value={pcDiagnostics.platform} />
-                  <MetricRow label="Language" value={pcDiagnostics.language} />
-                  <MetricRow
-                    label="Languages"
-                    value={pcDiagnostics.languages}
-                  />
-                  <MetricRow
-                    label="Processor Cores"
-                    value={pcDiagnostics.cores}
-                  />
-                  <MetricRow
-                    label="Device Memory"
-                    value={pcDiagnostics.memoryGiB}
-                  />
-                  <MetricRow
-                    label="Screen"
-                    value={`${pcDiagnostics.screenWidth}×${pcDiagnostics.screenHeight} @ DPR ${pcDiagnostics.pixelRatio}`}
-                  />
-                  <MetricRow
-                    label="Screen Available"
-                    value={`${pcDiagnostics.availWidth}×${pcDiagnostics.availHeight} (${pcDiagnostics.colorDepth}-bit)`}
-                  />
-                  <MetricRow
-                    label="JS Heap Used / Limit"
-                    value={`${pcDiagnostics.memoryUsedMB} / ${pcDiagnostics.memoryLimitMB}`}
-                  />
-                  <MetricRow
-                    label="User Agent"
-                    value={pcDiagnostics.userAgent}
-                  />
-                  <MetricRow
-                    label="Runtime Origin"
-                    value={pcDiagnostics.runtime}
-                  />
-                  {pcDiagnostics.desktop ? (
-                    <div className="mt-3 border-t border-forge-platinum/10 pt-3">
-                      <div className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-forge-mist">
-                        Host / process diagnostics
-                      </div>
-                      <MetricRow
-                        label="Host"
-                        value={`${pcDiagnostics.desktop.hostName} · ${pcDiagnostics.desktop.osName} ${pcDiagnostics.desktop.osVersion} ${pcDiagnostics.desktop.architecture ?? ""}`}
-                      />
-                      <MetricRow
-                        label="Kernel"
-                        value={
-                          pcDiagnostics.desktop.kernelVersion ?? "unavailable"
-                        }
-                      />
-                      <MetricRow
-                        label="Uptime"
-                        value={`${Math.floor(pcDiagnostics.desktop.uptimeSeconds / 3600)}h ${Math.floor((pcDiagnostics.desktop.uptimeSeconds % 3600) / 60)}m`}
-                      />
-                      <MetricRow
-                        label="CPU"
-                        value={`${pcDiagnostics.desktop.cpuCount} logical cores${pcDiagnostics.desktop.process ? ` · process ${pcDiagnostics.desktop.process.cpuUsagePercent.toFixed(1)}%` : ""}`}
-                      />
-                      <MetricRow
-                        label="Memory"
-                        value={`${Math.round(pcDiagnostics.desktop.usedMemoryBytes / 1024 / 1024 / 1024)} GB used / ${Math.round(pcDiagnostics.desktop.totalMemoryBytes / 1024 / 1024 / 1024)} GB total`}
-                      />
-                      <MetricRow
-                        label="Swap"
-                        value={`${Math.round(pcDiagnostics.desktop.usedSwapBytes / 1024 / 1024)} MB used / ${Math.round(pcDiagnostics.desktop.totalSwapBytes / 1024 / 1024)} MB total`}
-                      />
-                      <MetricRow
-                        label="Process"
-                        value={
-                          pcDiagnostics.desktop.process
-                            ? `${pcDiagnostics.desktop.process.name} (${pcDiagnostics.desktop.process.pid})`
-                            : "Unavailable"
-                        }
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <MiniEmpty
-                  title="Diagnostics unavailable"
-                  detail="Refresh diagnostics to collect browser and desktop host metrics."
-                />
-              )}
-            </div>
-            <div className="mt-3">
-              <GhostButton onClick={() => refreshDiagnostics()}>
-                Refresh diagnostics
-              </GhostButton>
-            </div>
-          </Panel>
-        </FoldSection>
+        <DiagnosticsSection
+          pcDiagnostics={pcDiagnostics}
+          refreshDiagnostics={refreshDiagnostics}
+        />
       ) : null}
 
       {settingsView === "all" || settingsView === "display" ? (
-        <FoldSection
-          title="Workspace Paths"
-          subtitle="Core data/database/workspace roots."
-        >
-          <Panel
-            title="Workspace"
-            subtitle="Local paths used by FORGE core for persistence and context generation."
-          >
-            {meta ? (
-              <div className="space-y-2 text-sm text-forge-mist">
-                <div>
-                  <span className="text-forge-ash">FORGE_DATA_DIR:</span>{" "}
-                  <span className="font-mono text-xs text-forge-ash">
-                    {meta.dataDir}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-forge-ash">Database:</span>{" "}
-                  <span className="font-mono text-xs text-forge-ash">
-                    {meta.dbPath}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-forge-ash">Workspace:</span>{" "}
-                  <span className="font-mono text-xs text-forge-ash">
-                    {meta.workspaceDir}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <MiniEmpty
-                title="Core metadata unavailable"
-                detail="Start or reconnect core to show data, database, and workspace paths."
-              />
-            )}
-          </Panel>
-        </FoldSection>
+        <WorkspacePathsSection meta={meta} />
       ) : null}
     </div>
-  );
-}
-
-function RemoteStateChip(props: {
-  label: string;
-  ok: boolean;
-  okText: string;
-  offText: string;
-}) {
-  return (
-    <div className="forge-ops-card px-3 py-2 text-[11px] text-forge-mist">
-      <div className="forge-ops-label">{props.label}</div>
-      <div
-        className={
-          props.ok
-            ? "mt-1 font-semibold text-forge-ash"
-            : "mt-1 font-semibold text-forge-emberSoft"
-        }
-      >
-        {props.ok ? props.okText : props.offText}
-      </div>
-    </div>
-  );
-}
-
-function MetricTile(props: {
-  label: string;
-  value: string;
-  detail: string;
-  tone: "ok" | "warn" | "bad" | "muted";
-}) {
-  return (
-    <div className="forge-ops-card p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="forge-ops-label">{props.label}</div>
-          <div className="mt-2 truncate text-2xl font-semibold tracking-normal text-forge-ash">
-            {props.value}
-          </div>
-        </div>
-        <span className={statusClass(props.tone)}>{props.tone}</span>
-      </div>
-      <div className="mt-3 truncate text-xs text-forge-mist/65">
-        {props.detail}
-      </div>
-    </div>
-  );
-}
-
-function MiniEmpty(props: { title: string; detail: string }) {
-  return (
-    <div className="mt-2 rounded border border-dashed border-white/10 bg-black/20 p-3 text-xs">
-      <div className="font-semibold text-forge-ash">{props.title}</div>
-      <div className="mt-1 leading-5 text-forge-mist/70">{props.detail}</div>
-    </div>
-  );
-}
-
-function statusClass(tone: "ok" | "warn" | "bad" | "muted") {
-  if (tone === "ok") return "forge-ops-status forge-ops-status--ok";
-  if (tone === "warn") return "forge-ops-status forge-ops-status--warn";
-  if (tone === "bad") return "forge-ops-status forge-ops-status--bad";
-  return "forge-ops-status forge-ops-status--muted";
-}
-
-function StatusDot(props: { ok: boolean; label: string }) {
-  return (
-    <div className="inline-flex items-center gap-2 text-[11px]">
-      <span
-        className={
-          props.ok
-            ? "h-2 w-2 rounded-full bg-forge-electric"
-            : "h-2 w-2 rounded-full bg-forge-emberSoft"
-        }
-      />
-      <span className={props.ok ? "text-forge-ash" : "text-forge-emberSoft"}>
-        {props.label}
-      </span>
-    </div>
-  );
-}
-
-function StatusRow(props: {
-  label: string;
-  value: string;
-  tone?: "normal" | "warn";
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b border-forge-platinum/5 pb-1">
-      <span className="text-forge-mist/75">{props.label}</span>
-      <span
-        className={
-          props.tone === "warn"
-            ? "text-right text-forge-emberSoft"
-            : "text-right text-forge-ash"
-        }
-      >
-        {props.value}
-      </span>
-    </div>
-  );
-}
-
-function MetricRow(props: { label: string; value: string }) {
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-2 rounded border border-forge-platinum/10 bg-black/25 px-3 py-2 text-[11px] text-forge-mist">
-      <span className="text-forge-mist/65">{props.label}</span>
-      <span className="text-right text-forge-ash">{props.value}</span>
-    </div>
-  );
-}
-
-function Panel(props: {
-  title: string;
-  subtitle?: string;
-  actions?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className="forge-ops-panel">
-      <div className="forge-ops-panel__head">
-        <div>
-          <div className="forge-ops-title">{props.title}</div>
-          {props.subtitle ? (
-            <div className="mt-1 text-xs text-forge-mist/65">
-              {props.subtitle}
-            </div>
-          ) : null}
-        </div>
-        {props.actions ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {props.actions}
-          </div>
-        ) : null}
-      </div>
-      <div className="forge-ops-panel__body">{props.children}</div>
-    </section>
   );
 }
