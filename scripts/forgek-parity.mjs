@@ -4,8 +4,9 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = resolve(new URL("..", import.meta.url).pathname);
+const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const fixtureRoot = resolve(root, "fixtures/forgek");
 const goldenPath = resolve(root, "fixtures/forgek/golden/hashes.json");
 
