@@ -25,7 +25,7 @@ VSA lane status: **authoritative source** (not generated, not optional).
 ## Should-fix next
 
 1. Add desktop/operator affordances for the consolidated `/api/audit/trace/{correlationId}` report.
-2. Expand rule-agent set or explicitly defer missing agents in docs/matrix.
+2. Keep the rule-agent layer explicitly narrow/deferred unless adding deterministic agents with signal, policy, test, and trace coverage.
 3. Broaden JS/TS lint/test coverage beyond the current desktop-focused Vitest and TypeScript lanes.
 4. Surface policy-visible `model.*` capability aliases in operator governance displays without bypassing `/forge/models*`.
 
@@ -36,6 +36,7 @@ VSA lane status: **authoritative source** (not generated, not optional).
    - Restore payload now reports `globalAtomic=false` and per-section `nonDbSideEffects`.
 3. JS/TS lint/test coverage remains shallow: root `test:js`, `lint:js`, and `validate:js` now exist, but `lint:js` is TypeScript-only and coverage remains desktop-focused.
 4. Model file deletion is intentionally narrow: only managed model-home directories can be deleted, and the flow requires high-risk model-management approval.
+5. Rule-agent coverage is intentionally narrow: only `OpenLoopStalenessAgent` and safe no-action `CleanupProposalAgent` are live; broader maintenance agents are deferred until deterministic signal, policy, test, and trace coverage exists.
 
 ## Operational guardrails (not blockers)
 

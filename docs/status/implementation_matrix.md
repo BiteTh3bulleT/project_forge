@@ -18,7 +18,7 @@ Status values: `real`, `partial`, `legacy-boundary`, `blocked`, `scaffold`, `def
 | Project context/evaluation/audit restore parity | restore mappings in backup service | mostly complete | `backup/service.go`, `backup/service_test.go` | audit/gateway export window remains capped (`LIMIT 5000`) |
 | Restore failure safety | transactional restore for supported DB sections | mostly complete | `backup/service.go`, rollback test coverage | cross-system rollback outside DB scope remains limited; `atomicScope`/warnings are explicit |
 | Autonomy persistence safety | SQLite-backed autonomy repos + persistence gate | mostly complete | autonomy policy/runner tests | trace/audit visibility still partial |
-| Rule-agent layer | propose-only runtime with 2 agents | partial | `rule_agents.go`, safety guard tests | narrow coverage set |
+| Rule-agent layer | propose-only runtime with 2 agents | partial (explicitly narrow) | `rule_agents.go`, safety guard tests, `docs/architecture/rule_based_agents.md` | broader deterministic agents deferred until signal, policy, test, and trace coverage exists |
 | Desktop/backend mutation boundary | desktop -> backend `/api/*` | real | `apps/desktop/src/lib/api.ts`, API server wiring | dedicated trace/explain UI remains partial |
 | JS/TS validation surface | root `test:js`/`lint:js`/`validate:js` + desktop Vitest/typecheck/build | partial (improved) | `package.json`, `apps/desktop/package.json` | lint is TypeScript-only; no ESLint lane or non-desktop package tests yet |
 | Nix foundation | flake/check definitions present | blocked in this env | command outputs in `test_gap_analysis.md` | daemon unavailable for authoritative validation |

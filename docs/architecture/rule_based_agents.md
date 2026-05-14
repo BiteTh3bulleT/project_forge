@@ -1,6 +1,6 @@
 # Rule-Based Agents (Phase 5.5 + 5.75 Integration)
 
-Status: `[LIVE] / [PARTIAL]`. Deterministic rule agents can propose intents and semantic actions. They do not commit by themselves; any durable effect must pass autonomy policy and Control Lane syscall validation.
+Status: `[LIVE] / [PARTIAL] / [NARROW]`. Deterministic rule agents can propose intents and semantic actions. They do not commit by themselves; any durable effect must pass autonomy policy and Control Lane syscall validation.
 
 Rule-based agents are deterministic internal workers that detect conditions and propose bounded follow-up action.
 
@@ -44,6 +44,13 @@ Flow:
   - emits memory-cleanup intent
   - currently emits no direct syscall actions by default (safe proposal-only posture while deterministic targeting remains narrow)
 
+No other live rule agents are implemented in this phase. Broader deterministic maintenance agents are intentionally deferred until each agent has all of the following:
+
+- deterministic signal inputs with bounded scope and stable provenance
+- charter, budget, and risk policy coverage
+- tests proving proposal-only behavior and destructive-action rejection
+- operator-visible trace evidence for every proposed intent/action
+
 ## Design constraints
 
 - deterministic logic only (no required LLM dependency)
@@ -61,6 +68,14 @@ Ingest can optionally trigger one bounded autonomy/rule-agent pass through:
 
 This keeps ingest-triggered autonomy bounded and inspectable.
 
-## Forward path
+## Deferred agents
 
-As Phase 6+ evolves runtime/event scheduling, these rule agents can be scheduled daemons while retaining the same intent->policy->kernel flow.
+The following agent families remain planned/deferred rather than live:
+
+- contradiction and supersession review agents
+- projection repair or rebuild proposal agents
+- stale artifact/cache hygiene agents
+- broader cleanup target selection agents
+- runtime or model-maintenance agents
+
+As Phase 6+ evolves runtime/event scheduling, additional rule agents can be scheduled daemons only while retaining the same intent->policy->kernel flow. Until then, docs and matrices should treat the rule-agent layer as a narrow, safe, proposal-only runtime rather than a broad deterministic workforce.
