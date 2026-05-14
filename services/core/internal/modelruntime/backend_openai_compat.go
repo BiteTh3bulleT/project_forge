@@ -473,7 +473,8 @@ func (b *OpenAICompatBackend) Health(ctx context.Context) (BackendHealth, error)
 	b.mu.RLock()
 	loadedCount := len(b.loaded)
 	b.mu.RUnlock()
-	meta := map[string]any{"loaded": loadedCount}
+	meta := b.supervisionMeta()
+	meta["loaded"] = loadedCount
 	if b.profile != "" {
 		meta["profile"] = b.profile
 	}
@@ -484,7 +485,26 @@ func (b *OpenAICompatBackend) Inspect(_ context.Context, modelID string) (Backen
 	b.mu.RLock()
 	_, ok := b.loaded[strings.TrimSpace(modelID)]
 	b.mu.RUnlock()
-	return BackendInspectResult{ModelID: strings.TrimSpace(modelID), Backend: b.kind, Found: ok, Meta: map[string]any{"loaded": ok, "endpoint": b.endpoint}}, nil
+	meta := b.supervisionMeta()
+	meta["loaded"] = ok
+	return BackendInspectResult{ModelID: strings.TrimSpace(modelID), Backend: b.kind, Found: ok, Meta: meta}, nil
+}
+
+func (b *OpenAICompatBackend) supervisionMeta() map[string]any {
+	timeout := defaultIfZero(b.requestTimeout, 30*time.Second)
+	meta := map[string]any{
+		"endpoint":         b.endpoint,
+		"supervision":      "external_endpoint",
+		"processManaged":   false,
+		"spawnSupported":   false,
+		"modelsPath":       b.modelsPath,
+		"chatPath":         b.chatPath,
+		"requestTimeoutMs": timeout.Milliseconds(),
+	}
+	if b.profile != "" {
+		meta["profile"] = b.profile
+	}
+	return meta
 }
 
 func (b *OpenAICompatBackend) postJSON(ctx context.Context, path string, payload map[string]any) ([]byte, error) {
