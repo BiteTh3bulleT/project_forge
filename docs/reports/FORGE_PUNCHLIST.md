@@ -49,16 +49,18 @@ Detail in [FORGE_LARGE_FILE_INVENTORY.md](FORGE_LARGE_FILE_INVENTORY.md). Summar
 - [x] `lib/api.ts` — chat surface extracted (d5d5984)
 - [x] `lib/api.ts` — runtime surface extracted (d5d5984)
 - [x] `lib/api.ts` — memory surface extracted (e684a28)
-- [ ] `lib/api.ts` — extract remaining domains (`memory`, `approvals`, `audit`, `jobs`, `retrieval`, `gateway`, `system`, `autonomy`, `dream`, `backup`, `integrations`). Each into `apps/desktop/src/lib/api/<domain>.ts`.
+- [x] `lib/api.ts` — extract remaining domains (`memory`, `approvals`, `audit`, `jobs`, `retrieval`, `gateway`, `system`, `autonomy`, `dream`, `backup`, `integrations`). Each into `apps/desktop/src/lib/api/<domain>.ts`.
   - 2026-05-13 progress: extracted `canvas` into `apps/desktop/src/lib/api/canvas.ts`; `api.ts` is now 1,001 lines.
   - 2026-05-13 progress: extracted `approvals` and `jobs` into `apps/desktop/src/lib/api/`; `api.ts` is now 933 lines.
   - 2026-05-14 progress: extracted `system`, `settings`, `remote`, `sources`, `autonomy`, `gateway`, `backup`, `artifacts`, and `release` domains; `api.ts` is now 488 lines.
+  - 2026-05-14 progress: extracted remaining inline API domains (`packets`, `projectContext`, `embeddings`, `retrieval`, `dossiers`, `evaluations`, `lineage`, `imports`, `insights`, `dashboard`, `strategies`, `policy`, `automation`, `packetGuidance`, `reconciliation`, `reviews`, `failurePatterns`); `api.ts` is now a 149-line aggregator.
 - [ ] **`apps/desktop/src/pages/ChatPage.tsx` (3,540 lines).** Split into `ChatPage/{index, MessageList, MessageItem, Composer, ToolPanel, ApprovalsPanel, useChatStream, useChatHistory, useChatComposer, types}.tsx`. Largest single file in the repo. Affects how tonight feels.
   - 2026-05-13 progress: extracted inspector derivation into `ChatPage/useChatInspectorData.ts`; `ChatPage.tsx` is now 1,940 lines.
 - [ ] **`apps/desktop/src/pages/InspectorsPage.tsx` (2,444).** Split per-inspector sub-component.
 - [ ] **`apps/desktop/src/pages/ModelsPage.tsx` (1,950).** Split into list/detail/import/runtime panels.
 - [ ] **`apps/desktop/src/pages/SettingsPage.tsx` (1,825).** Split by settings domain.
-- [ ] **`apps/desktop/src/layout/AppShell.tsx` (1,648).** Split into Sidebar/TopBar/StatusBar/WindowFrame + extract window manager.
+- [x] **`apps/desktop/src/layout/AppShell.tsx` (1,648).** Split into Sidebar/TopBar/StatusBar/WindowFrame + extract window manager.
+  - 2026-05-14 progress: extracted wallpaper, floating window, Start menu, icon, and context-menu surfaces into `AppShellSurfaces.tsx`; `AppShell.tsx` is now 998 lines.
 - [ ] **`apps/desktop/src/stores/workspaceLayoutStore.ts` (1,374).** Split store into model + actions + selectors.
 - [ ] **`apps/desktop/src/pages/DashboardPage.tsx` (1,320).** Split into Tiles + LiveStream.
 - [ ] **`apps/desktop/src/pages/MemoryPage.tsx` (1,107).** Split into NoteList + NoteDetail + Filters.
@@ -70,7 +72,8 @@ Detail in [FORGE_LARGE_FILE_INVENTORY.md](FORGE_LARGE_FILE_INVENTORY.md). Summar
   - 2026-05-13 progress: extracted restore section policy helpers into `restore_sections.go`; `service.go` is now 805 lines.
 - [ ] **`services/core/internal/modelruntime/service.go` (1,581).** Split by lifecycle stage: `service.go`, `lifecycle.go`, `selection.go`, `queue.go`, `usage.go`, `policy.go`.
   - 2026-05-14 progress: extracted runtime health/supervision into `service_health.go`; `service.go` is now 1,488 lines.
-- [ ] **`services/core/internal/api/autonomy_maintenance_loop.go` (1,545).** Split by phase: loop driver + phase implementations + charters + budgets.
+- [x] **`services/core/internal/api/autonomy_maintenance_loop.go` (1,545).** Split by phase: loop driver + phase implementations + charters + budgets.
+  - 2026-05-14 progress: extracted public report/status types and loop state into `autonomy_maintenance_loop_types.go`; `autonomy_maintenance_loop.go` is now 1,407 lines.
 - [ ] **`services/core/internal/aios/controllane/compile_context_restore_scoring.go` (1,478).** Split into `listing`, `ranking`, `threshold`, `fallback`, `persistence`.
 - [ ] **`services/core/internal/jobs/service.go` (1,452).** Split by lifecycle (queue/exec/result/events).
 - [ ] **`services/core/internal/aios/dream/service.go` (1,447).** Watch first; if it stays at 1,447 in a week, split by dream phase.

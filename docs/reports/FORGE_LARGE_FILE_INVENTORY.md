@@ -16,7 +16,7 @@
 |---|---|---|---|
 | 2,005 | `services/core/internal/backup/service.go` | Backup/restore/export | **P0 — biggest single file in Go.** |
 | 1,581 | `services/core/internal/modelruntime/service.go` | Model runtime lifecycle | P1 |
-| 1,545 | `services/core/internal/api/autonomy_maintenance_loop.go` | Autonomy maintenance | P1 |
+| 1,407 | `services/core/internal/api/autonomy_maintenance_loop.go` | Autonomy maintenance | Done — type/state split landed. |
 | 1,478 | `services/core/internal/aios/controllane/compile_context_restore_scoring.go` | Context restore scoring | P1 |
 | 1,452 | `services/core/internal/jobs/service.go` | Job orchestration | P1 |
 | 1,447 | `services/core/internal/aios/dream/service.go` | Dream lane | P1 — recently grew |
@@ -50,11 +50,11 @@
 | Lines | File | Domain | Status |
 |---|---|---|---|
 | **3,540** | `apps/desktop/src/pages/ChatPage.tsx` | Chat page | **P0 — largest single source file in the entire repo.** |
-| 2,470 | `apps/desktop/src/lib/api.ts` | API client shim | **P0 — every domain in one file.** |
+| 149 | `apps/desktop/src/lib/api.ts` | API client shim | **Done — split into domain modules.** |
 | 2,444 | `apps/desktop/src/pages/InspectorsPage.tsx` | Inspectors page | P0 |
 | 1,950 | `apps/desktop/src/pages/ModelsPage.tsx` | Models page | P1 |
 | 1,825 | `apps/desktop/src/pages/SettingsPage.tsx` | Settings page | P1 |
-| 1,648 | `apps/desktop/src/layout/AppShell.tsx` | App shell layout | P1 |
+| 998 | `apps/desktop/src/layout/AppShell.tsx` | App shell layout | Done — shell surface components extracted. |
 | 1,374 | `apps/desktop/src/stores/workspaceLayoutStore.ts` | Workspace layout store | P2 |
 | 1,320 | `apps/desktop/src/pages/DashboardPage.tsx` | Dashboard page | P2 |
 | 1,107 | `apps/desktop/src/pages/MemoryPage.tsx` | Memory page | P2 |
