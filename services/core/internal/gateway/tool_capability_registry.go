@@ -317,6 +317,9 @@ func defaultToolCapabilities() []domain.ToolCapability {
 		"external": {
 			"call_llm", "query_database", "call_api", "read_email", "send_email", "post_message", "create_issue", "update_issue", "read_calendar", "create_event", "search_web",
 		},
+		"model": {
+			"list", "inspect", "load", "unload", "chat", "generate", "import", "verify", "enable", "disable", "archive", "remove_registration", "backend.list", "embed", "delete_file", "benchmark",
+		},
 	}
 
 	activeMappings := map[string]map[string]any{
@@ -364,6 +367,22 @@ func defaultToolCapabilities() []domain.ToolCapability {
 		"external.create_issue":       {"gatewayToolId": "external.create_issue", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
 		"external.update_issue":       {"gatewayToolId": "external.update_issue", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneIO},
 		"time.get_system_time":        {"gatewayToolId": "time.now", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskNone, "lane": domain.ToolLaneIO},
+		"model.list":                  {"gatewayToolId": "model.list", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskLow, "lane": domain.ToolLaneCompute, "runtimeAuthority": "modelruntime_api"},
+		"model.inspect":               {"gatewayToolId": "model.inspect", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskLow, "lane": domain.ToolLaneCompute, "runtimeAuthority": "modelruntime_api"},
+		"model.backend.list":          {"gatewayToolId": "model.backend.list", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskLow, "lane": domain.ToolLaneCompute, "runtimeAuthority": "modelruntime_api"},
+		"model.chat":                  {"gatewayToolId": "model.chat", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneCompute, "runtimeAuthority": "modelruntime_api"},
+		"model.generate":              {"gatewayToolId": "model.generate", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneCompute, "runtimeAuthority": "modelruntime_api"},
+		"model.import":                {"gatewayToolId": "model.import", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneCompute, "runtimeAuthority": "modelruntime_api"},
+		"model.verify":                {"gatewayToolId": "model.verify", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskMedium, "lane": domain.ToolLaneCompute, "runtimeAuthority": "modelruntime_api"},
+		"model.enable":                {"gatewayToolId": "model.enable", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneCompute, "runtimeAuthority": "modelruntime_api"},
+		"model.disable":               {"gatewayToolId": "model.disable", "status": domain.ToolCapabilityActive, "risk": domain.ToolRiskMedium, "lane": domain.ToolLaneCompute, "runtimeAuthority": "modelruntime_api"},
+		"model.archive":               {"gatewayToolId": "model.archive", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneCompute, "runtimeAuthority": "modelruntime_api"},
+		"model.remove_registration":   {"gatewayToolId": "model.remove_registration", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneCompute, "runtimeAuthority": "modelruntime_api"},
+		"model.load":                  {"gatewayToolId": "model.load", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneCompute, "runtimeAuthority": "modelruntime_api"},
+		"model.unload":                {"gatewayToolId": "model.unload", "status": domain.ToolCapabilityApprovalOnly, "risk": domain.ToolRiskHigh, "lane": domain.ToolLaneCompute, "runtimeAuthority": "modelruntime_api"},
+		"model.embed":                 {"gatewayToolId": "model.embed", "status": domain.ToolCapabilityDeferred, "risk": domain.ToolRiskMedium, "lane": domain.ToolLaneCompute, "runtimeAuthority": "modelruntime_api", "deferredReason": "embedding runtime path is not implemented"},
+		"model.delete_file":           {"gatewayToolId": "model.delete_file", "status": domain.ToolCapabilityDeferred, "risk": domain.ToolRiskCritical, "lane": domain.ToolLaneControl, "runtimeAuthority": "modelruntime_api", "deferredReason": "destructive model file deletion requires a future approval flow"},
+		"model.benchmark":             {"gatewayToolId": "model.benchmark", "status": domain.ToolCapabilityDeferred, "risk": domain.ToolRiskMedium, "lane": domain.ToolLaneCompute, "runtimeAuthority": "modelruntime_api", "deferredReason": "benchmark execution is not implemented"},
 	}
 
 	out := make([]domain.ToolCapability, 0, 160)
@@ -479,6 +498,23 @@ func inferCapabilityEffects(domainID, primitive string) []domain.ToolEffect {
 		}
 		effects = append(effects, effect)
 	}
+	if domainID == "model" {
+		switch name {
+		case "list", "inspect", "backend.list", "verify":
+			add(domain.ToolEffectRead)
+		case "disable", "archive", "remove_registration", "import", "enable", "load", "unload":
+			add(domain.ToolEffectWrite)
+		case "chat", "generate", "embed", "benchmark":
+			add(domain.ToolEffectExecute)
+		case "delete_file":
+			add(domain.ToolEffectWrite)
+			add(domain.ToolEffectPrivileged)
+			add(domain.ToolEffectDestructive)
+		default:
+			add(domain.ToolEffectRead)
+		}
+		return effects
+	}
 	if hasAnyPrefix(name, "read_", "list_", "get_", "query_", "inspect_", "recall", "search_", "verify_", "measure_", "diff_") {
 		add(domain.ToolEffectRead)
 	}
@@ -539,6 +575,9 @@ func inferCapabilityRisk(domainID, primitive string, effects []domain.ToolEffect
 	if domainID == "external" && risk.Rank() < domain.ToolRiskHigh.Rank() {
 		risk = domain.ToolRiskHigh
 	}
+	if domainID == "model" && (strings.Contains(name, "delete") || strings.Contains(name, "load") || strings.Contains(name, "import")) && risk.Rank() < domain.ToolRiskHigh.Rank() {
+		risk = domain.ToolRiskHigh
+	}
 	if domainID == "time" && name == "get_system_time" {
 		risk = domain.ToolRiskNone
 	}
@@ -547,6 +586,9 @@ func inferCapabilityRisk(domainID, primitive string, effects []domain.ToolEffect
 
 func inferCapabilityLane(domainID string, effects []domain.ToolEffect) domain.ToolLane {
 	if domainID == "memory" || domainID == "code" || domainID == "agent" {
+		return domain.ToolLaneCompute
+	}
+	if domainID == "model" {
 		return domain.ToolLaneCompute
 	}
 	for _, effect := range effects {

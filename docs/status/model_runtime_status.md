@@ -29,6 +29,7 @@ Model Runtime M3 is implemented in this branch. M4 closes the external vLLM-comp
 | Runtime config surface | real | `services/core/internal/config/config.go`, `config_test.go` |
 | Audit and usage accounting | real | `services/core/internal/api/model_runtime_bridge.go`, `service_test.go`, `service_management_test.go` |
 | Runtime DB schema tables | real | `services/core/internal/store/migrate.go`, `migrate_model_runtime_test.go` |
+| Gateway `model.*` capability aliases | partial / policy-visible | `services/core/internal/gateway/tool_capability_registry.go`, `tool_surface_test.go` |
 
 ## M3 Behavior Now Enforced
 
@@ -166,14 +167,14 @@ Safe default posture:
 | Streaming responses | deferred | Service/API remain intentionally non-streaming. |
 | llama.cpp spawn mode | deferred | Spawn flag exists; runtime returns structured unsupported behavior. |
 | Embeddings/rerank/vision runtime paths | deferred | Taxonomy remains documented; execution not implemented. |
-| Gateway `model.*` capability registration | partial | Runtime APIs are real; gateway registry aliasing remains follow-up work. |
+| Gateway `model.*` capability registration | partial / policy-visible | Registry aliases now exist with active, approval_only, and deferred statuses. They do not add a second runtime execution path; `/forge/models*` remains authoritative. |
 | Advanced batching/load balancing/distributed scheduling | deferred | FIFO single-active-per-backend scheduler only. |
 
 ## Remaining Modelruntime Work Beyond M4 External vLLM Profile
 
 - streaming support
 - stronger backend/process supervision for llama.cpp and remote backends
-- dedicated gateway `model.*` capability aliasing
+- route-level convergence from policy-visible `model.*` aliases into operator governance displays
 - deeper multi-backend routing/load balancing beyond deterministic selection
 - embeddings/rerank/vision execution paths
 

@@ -55,10 +55,13 @@ func TestToolCapabilityRegistryCoverageAndDuplicateRejection(t *testing.T) {
 		if strings.HasPrefix(row.AdapterID, "stub.") {
 			t.Fatalf("capability %s must not use synthetic stub adapter %q", row.ID, row.AdapterID)
 		}
-		if row.Status == domain.ToolCapabilityDeferred || row.Status == domain.ToolCapabilityStubbed {
-			t.Fatalf("capability %s must be active or approval_only by default, got %q", row.ID, row.Status)
+		if row.Status == domain.ToolCapabilityStubbed {
+			t.Fatalf("capability %s must not be stubbed by default", row.ID)
 		}
-		if row.Status != domain.ToolCapabilityActive && row.Status != domain.ToolCapabilityApprovalOnly {
+		if row.Status == domain.ToolCapabilityDeferred && metadataString(row.Metadata, "deferredReason") == "" {
+			t.Fatalf("deferred capability %s must explain why it is not executable", row.ID)
+		}
+		if row.Status != domain.ToolCapabilityActive && row.Status != domain.ToolCapabilityApprovalOnly && row.Status != domain.ToolCapabilityDeferred {
 			t.Fatalf("capability %s has unexpected default status %q", row.ID, row.Status)
 		}
 		if metadataString(row.Metadata, "gatewayToolId") == "" {
@@ -88,6 +91,71 @@ func TestToolCapabilityRegistryCoverageAndDuplicateRejection(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatalf("expected duplicate registration to fail")
+	}
+}
+
+func TestModelRuntimeCapabilitiesRegisteredWithHonestStatuses(t *testing.T) {
+	t.Parallel()
+	reg := NewToolCapabilityRegistry()
+	expected := map[string]domain.ToolCapabilityStatus{
+		"model.list":                domain.ToolCapabilityActive,
+		"model.inspect":             domain.ToolCapabilityActive,
+		"model.backend.list":        domain.ToolCapabilityActive,
+		"model.chat":                domain.ToolCapabilityApprovalOnly,
+		"model.generate":            domain.ToolCapabilityApprovalOnly,
+		"model.import":              domain.ToolCapabilityApprovalOnly,
+		"model.verify":              domain.ToolCapabilityActive,
+		"model.enable":              domain.ToolCapabilityApprovalOnly,
+		"model.disable":             domain.ToolCapabilityActive,
+		"model.archive":             domain.ToolCapabilityApprovalOnly,
+		"model.remove_registration": domain.ToolCapabilityApprovalOnly,
+		"model.load":                domain.ToolCapabilityApprovalOnly,
+		"model.unload":              domain.ToolCapabilityApprovalOnly,
+		"model.embed":               domain.ToolCapabilityDeferred,
+		"model.delete_file":         domain.ToolCapabilityDeferred,
+		"model.benchmark":           domain.ToolCapabilityDeferred,
+	}
+	for id, wantStatus := range expected {
+		id := id
+		wantStatus := wantStatus
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			capability, ok := reg.Get(id)
+			if !ok {
+				t.Fatalf("missing model runtime capability %s", id)
+			}
+			if capability.Status != wantStatus {
+				t.Fatalf("capability %s status=%q, want %q", id, capability.Status, wantStatus)
+			}
+			if capability.Domain != "model" {
+				t.Fatalf("capability %s domain=%q, want model", id, capability.Domain)
+			}
+			if metadataString(capability.Metadata, "runtimeAuthority") != "modelruntime_api" {
+				t.Fatalf("capability %s missing modelruntime API authority metadata", id)
+			}
+			if metadataString(capability.Metadata, "gatewayToolId") != id {
+				t.Fatalf("capability %s gatewayToolId=%q, want %q", id, metadataString(capability.Metadata, "gatewayToolId"), id)
+			}
+			if wantStatus == domain.ToolCapabilityDeferred && metadataString(capability.Metadata, "deferredReason") == "" {
+				t.Fatalf("deferred capability %s must include deferredReason metadata", id)
+			}
+		})
+	}
+}
+
+func TestModelRuntimeCapabilityAliasDoesNotExecuteRuntimeWork(t *testing.T) {
+	t.Parallel()
+	reg := NewToolCapabilityRegistry()
+	capability, ok := reg.Get("model.list")
+	if !ok {
+		t.Fatalf("missing model.list capability")
+	}
+	tool := capabilityBackingTool{
+		capability: capability,
+		toolID:     metadataString(capability.Metadata, "gatewayToolId"),
+	}
+	if _, err := tool.Execute(context.Background(), Request{}); err == nil || !strings.Contains(err.Error(), "governed /forge/models API path") {
+		t.Fatalf("expected model alias to reject direct gateway execution, got %v", err)
 	}
 }
 
