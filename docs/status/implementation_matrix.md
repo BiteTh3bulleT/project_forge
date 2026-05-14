@@ -20,7 +20,7 @@ Status values: `real`, `partial`, `legacy-boundary`, `blocked`, `scaffold`, `def
 | Autonomy persistence safety | SQLite-backed autonomy repos + persistence gate | mostly complete | autonomy policy/runner tests | trace/audit visibility still partial |
 | Rule-agent layer | propose-only runtime with 2 agents | partial | `rule_agents.go`, safety guard tests | narrow coverage set |
 | Desktop/backend mutation boundary | desktop -> backend `/api/*` | real | `apps/desktop/src/lib/api.ts`, API server wiring | dedicated trace/explain UI remains partial |
-| JS/TS validation surface | root + desktop typecheck/build and core delegated lint/test | partial (improved) | `package.json`, `apps/desktop/package.json` | dedicated JS/TS lint/test scripts still missing |
+| JS/TS validation surface | root `test:js`/`lint:js`/`validate:js` + desktop Vitest/typecheck/build | partial (improved) | `package.json`, `apps/desktop/package.json` | lint is TypeScript-only; no ESLint lane or non-desktop package tests yet |
 | Nix foundation | flake/check definitions present | blocked in this env | command outputs in `test_gap_analysis.md` | daemon unavailable for authoritative validation |
 | Fresh-clone boot integrity | core build path + VSA preflight scripts | real (guarded) | `scripts/check-vsa-files.sh`, `scripts/forge-core.sh`, `scripts/forge-smoke.sh`, tracked `services/core/internal/memory/vsa_*.go` | VSA status is authoritative source; maintain tracked files and `--require-tracked` preflight guard |
 

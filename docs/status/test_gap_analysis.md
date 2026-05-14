@@ -12,7 +12,7 @@ Scope: branch-local validation evidence after convergence hardening pass.
 | Backup export/restore parity | improved, near-complete | `internal/backup` tests now cover project context/evaluations/audit/gateway restore + rollback safety + unsupported reporting + `atomicScope`/warning reporting | VSA-derived export-only sections remain |
 | Retired side-door hardening | improved | adapter invoke removed-route tests + retired memory mutation boundary tests + audit propagation checks + route/body mismatch rejection | keep retired routes non-executable and broaden syscall-native API coverage |
 | Rule-agent safety | partial but safe | cleanup placeholder/destructive guard tests; propose-only runtime | broader deterministic agent set still missing |
-| Desktop/frontend validation | partial | desktop build + root/desktop typecheck pass; root build/test/lint/typecheck commands runnable; Tauri `cargo check` passes | no dedicated JS/TS lint/test scripts |
+| Desktop/frontend validation | partial (improved) | desktop build + root/desktop typecheck pass; root `test:js`, `lint:js`, and `validate:js` commands now expose the desktop Vitest/typecheck lanes; Tauri `cargo check` passes | JS/TS lint is currently TypeScript-only; no ESLint lane or non-desktop package tests yet |
 | Nix foundation checks | blocked in env | flake/build commands attempted | local nix daemon unavailable |
 
 ## Validation command evidence (executed)
@@ -39,5 +39,5 @@ Scope: branch-local validation evidence after convergence hardening pass.
 `npm run typecheck` now passes at root/desktop levels in this environment.
 
 Remaining gap:
-- no dedicated JS/TS lint/test scripts (current root `lint`/`test` delegate to Go tooling).
+- JS/TS validation is now explicit at root through `npm run test:js`, `npm run lint:js`, and `npm run validate:js`, but lint remains TypeScript-only until an ESLint or equivalent style/static-analysis lane is introduced.
 - Nix validation remains environment-blocked by local daemon availability.
