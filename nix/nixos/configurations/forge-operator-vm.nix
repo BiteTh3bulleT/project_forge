@@ -54,6 +54,7 @@
       "networkmanager"
       "video"
       "render"
+      "forge"
     ];
   };
 
