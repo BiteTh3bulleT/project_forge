@@ -34,8 +34,12 @@
 
   services.forge-core = {
     bindHost = lib.mkDefault "127.0.0.1";
-    enableModelRuntime = lib.mkDefault false;
+    enableModelRuntime = lib.mkDefault true;
     safeModeForceCPUOnly = lib.mkDefault true;
+    extraEnvironment = {
+      OLLAMA_BASE_URL = lib.mkDefault "http://127.0.0.1:11434";
+      FORGE_MODEL_DEFAULT_BACKEND = lib.mkDefault "ollama_compat";
+    };
   };
 
   services.openssh.enable = lib.mkDefault false;
@@ -66,6 +70,8 @@
     FORGE_OPERATOR_VM_LOGIN_USER=operator
     FORGE_OPERATOR_VM_LOCAL_ONLY=true
     FORGE_CORE_URL=http://127.0.0.1:18492
+    OLLAMA_BASE_URL=http://127.0.0.1:11434
+    FORGE_MODEL_DEFAULT_BACKEND=ollama_compat
     FORGE_SHELL_MODE=operator-desktop
     FORGE_SHELL_SAFE_MODE=true
     FORGE_SHELL_HOST_MUTATION=false

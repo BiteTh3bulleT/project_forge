@@ -255,6 +255,91 @@ func TestInitModelRuntimeServiceDiscoversLocalOllamaModels(t *testing.T) {
 	}
 }
 
+func TestModelRuntimeListRefreshDiscoversNewLocalOllamaModels(t *testing.T) {
+	ollamaReady := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/tags":
+			if !ollamaReady {
+				_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]any{}})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"models": []map[string]any{
+					{
+						"name":  "phi4-mini:latest",
+						"model": "phi4-mini:latest",
+						"size":  int64(2048),
+						"details": map[string]any{
+							"family":             "phi",
+							"parameter_size":     "3.8B",
+							"quantization_level": "Q4_K_M",
+							"format":             "gguf",
+						},
+					},
+				},
+			})
+		case "/v1/chat/completions":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"choices": []map[string]any{
+					{
+						"message":       map[string]any{"role": "assistant", "content": "local loop ok"},
+						"finish_reason": "stop",
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("FORGE_ENABLE_MODEL_RUNTIME", "true")
+	t.Setenv("FORGE_ENABLE_OPENAI_COMPAT_API", "false")
+	t.Setenv("FORGE_MODEL_OPENAI_COMPAT_ENDPOINT", "")
+	t.Setenv("FORGE_MODEL_VLLM_ENDPOINT", "")
+	t.Setenv("FORGE_MODEL_DEFAULT_BACKEND", "ollama_compat")
+	t.Setenv("FORGE_MODEL_POLICY_REQUIRE_WORKSPACE_SCOPE", "false")
+	t.Setenv("OLLAMA_BASE_URL", server.URL)
+	t.Setenv("FORGE_MODEL_HOME", t.TempDir())
+
+	svc := initModelRuntimeService(config.Load(), nil)
+	if svc == nil {
+		t.Fatalf("expected model runtime service")
+	}
+	models, err := svc.ListModels(context.Background(), ModelRuntimeListRequest{})
+	if err != nil {
+		t.Fatalf("initial list models: %v", err)
+	}
+	if hasModelID(models, "phi4-mini:latest") {
+		t.Fatalf("did not expect model before local ollama reported it, got=%#v", models)
+	}
+
+	ollamaReady = true
+	models, err = svc.ListModels(context.Background(), ModelRuntimeListRequest{})
+	if err != nil {
+		t.Fatalf("refreshed list models: %v", err)
+	}
+	if !hasModelID(models, "phi4-mini:latest") {
+		t.Fatalf("expected refreshed list to discover newly pulled local ollama model, got=%#v", models)
+	}
+	result, err := svc.Chat(context.Background(), ModelRuntimeChatRequest{
+		ModelID: "phi4-mini:latest",
+		Messages: []ModelRuntimeChatMessage{
+			{Role: "user", Content: "ping"},
+		},
+		Actor:  "operator",
+		Source: "test",
+		Meta:   ModelRuntimeRequestMeta{WorkspaceID: "ws-test"},
+	})
+	if err != nil {
+		t.Fatalf("chat through refreshed ollama model: %v", err)
+	}
+	if result.Content != "local loop ok" || result.Backend != "ollama_compat" {
+		t.Fatalf("unexpected refreshed chat result: %#v", result)
+	}
+}
+
 func TestDockerHostGatewayIsTreatedAsLocalOllamaProvider(t *testing.T) {
 	if !isLocalHTTPProvider("http://host.docker.internal:11434") {
 		t.Fatalf("expected Docker host gateway endpoint to be treated as local Ollama")

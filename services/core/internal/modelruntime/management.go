@@ -120,6 +120,32 @@ func (s *Service) ScanModels(ctx context.Context, meta ManagementRequestMeta) ([
 	return infos, err
 }
 
+func (s *Service) RegisterDiscoveredModels(ctx context.Context, manifests []ModelManifest, meta ManagementRequestMeta) (int, error) {
+	if s.registry == nil {
+		return 0, ErrManagementUnavailable
+	}
+	registered := 0
+	for _, manifest := range manifests {
+		id := strings.TrimSpace(manifest.ID)
+		if id == "" {
+			continue
+		}
+		if _, exists := s.registry.Get(id); exists {
+			continue
+		}
+		if err := s.registry.Register(manifest); err != nil {
+			s.recordAudit(ctx, ModelRuntimeAuditRecord{Operation: "discover", ModelID: id, Backend: manifest.Backend, WorkspaceID: strings.TrimSpace(meta.WorkspaceID), Actor: strings.TrimSpace(meta.Actor), Source: strings.TrimSpace(meta.Source), CorrelationID: strings.TrimSpace(meta.CorrelationID), TraceID: strings.TrimSpace(meta.TraceID), Outcome: "error", Error: err.Error(), Metadata: meta.Metadata})
+			return registered, err
+		}
+		registered++
+	}
+	if registered > 0 {
+		s.refreshFromRegistry()
+		s.recordAudit(ctx, ModelRuntimeAuditRecord{Operation: "discover", WorkspaceID: strings.TrimSpace(meta.WorkspaceID), Actor: strings.TrimSpace(meta.Actor), Source: strings.TrimSpace(meta.Source), CorrelationID: strings.TrimSpace(meta.CorrelationID), TraceID: strings.TrimSpace(meta.TraceID), Outcome: "ok", Metadata: map[string]any{"count": registered}})
+	}
+	return registered, nil
+}
+
 func (s *Service) VerifyModel(ctx context.Context, modelID string, meta ManagementRequestMeta) (ModelInfo, error) {
 	if s.registry == nil {
 		return ModelInfo{}, ErrManagementUnavailable

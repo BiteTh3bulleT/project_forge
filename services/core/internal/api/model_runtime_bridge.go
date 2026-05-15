@@ -28,6 +28,13 @@ type modelRuntimeBridge struct {
 	gpuEnabledConfigured                 bool
 	modelruntimeDegradedOnUnavailableGPU bool
 	dreamModeGPUOnlyInDeepIdle           bool
+	modelOpenAICompatEndpoint            string
+	modelOpenAICompatAPIKey              string
+	modelVLLMEndpoint                    string
+	modelVLLMAPIKey                      string
+	ollamaEndpoint                       string
+	ollamaDiscoveryEnabled               bool
+	allowOllamaCloudModels               bool
 }
 
 const modelRuntimeDiscoveryResponseLimit = 8 << 20
@@ -269,6 +276,13 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service, telemet
 		gpuEnabledConfigured:                 cfg.GPUEnabled,
 		modelruntimeDegradedOnUnavailableGPU: cfg.ModelRuntimeDegradedOnUnavailableGPU,
 		dreamModeGPUOnlyInDeepIdle:           cfg.DreamModeGPUOnlyInDeepIdle,
+		modelOpenAICompatEndpoint:            strings.TrimSpace(cfg.ModelOpenAICompatEndpoint),
+		modelOpenAICompatAPIKey:              strings.TrimSpace(cfg.ModelOpenAICompatAPIKey),
+		modelVLLMEndpoint:                    strings.TrimSpace(cfg.ModelVLLMEndpoint),
+		modelVLLMAPIKey:                      strings.TrimSpace(cfg.ModelVLLMAPIKey),
+		ollamaEndpoint:                       ollamaEndpoint,
+		ollamaDiscoveryEnabled:               modelruntime.ParseModelBackendKind(cfg.ModelDefaultBackend) == modelruntime.BackendOllamaCompat || strings.TrimSpace(os.Getenv("OLLAMA_BASE_URL")) != "",
+		allowOllamaCloudModels:               cfg.ModelRuntimeAllowOllamaCloudModels,
 	}
 }
 
@@ -611,6 +625,14 @@ func modelRuntimeDiscoveredManifest(rawID, rawName string, backend modelruntime.
 }
 
 func (b *modelRuntimeBridge) ListModels(ctx context.Context, req ModelRuntimeListRequest) ([]ModelRuntimeModel, error) {
+	b.refreshDiscoveredModels(ctx, modelruntime.ManagementRequestMeta{
+		WorkspaceID:   strings.TrimSpace(req.Meta.WorkspaceID),
+		Actor:         "api",
+		Source:        "model_runtime_list",
+		CorrelationID: strings.TrimSpace(req.Meta.CorrelationID),
+		TraceID:       strings.TrimSpace(req.Meta.TraceID),
+		Metadata:      map[string]any{"trigger": "list"},
+	})
 	infos, err := b.runtime.List(ctx)
 	if err != nil {
 		return nil, mapModelRuntimeBridgeError(err)
@@ -620,6 +642,33 @@ func (b *modelRuntimeBridge) ListModels(ctx context.Context, req ModelRuntimeLis
 		out = append(out, toModelRuntimeModel(info))
 	}
 	return out, nil
+}
+
+func (b *modelRuntimeBridge) refreshDiscoveredModels(ctx context.Context, meta modelruntime.ManagementRequestMeta) {
+	if b == nil || b.runtime == nil {
+		return
+	}
+	discovered := make([]modelruntime.ModelManifest, 0)
+	if strings.TrimSpace(b.modelOpenAICompatEndpoint) != "" || strings.TrimSpace(b.modelVLLMEndpoint) != "" {
+		cfg := config.Config{
+			ModelOpenAICompatEndpoint: strings.TrimSpace(b.modelOpenAICompatEndpoint),
+			ModelOpenAICompatAPIKey:   strings.TrimSpace(b.modelOpenAICompatAPIKey),
+			ModelVLLMEndpoint:         strings.TrimSpace(b.modelVLLMEndpoint),
+			ModelVLLMAPIKey:           strings.TrimSpace(b.modelVLLMAPIKey),
+		}
+		if models, err := discoverOpenAICompatModels(ctx, cfg); err == nil {
+			discovered = append(discovered, models...)
+		}
+	}
+	if b.ollamaDiscoveryEnabled {
+		if models, err := discoverLocalOllamaModels(ctx, b.ollamaEndpoint, b.allowOllamaCloudModels); err == nil {
+			discovered = append(discovered, models...)
+		}
+	}
+	if len(discovered) == 0 {
+		return
+	}
+	_, _ = b.runtime.RegisterDiscoveredModels(ctx, discovered, meta)
 }
 
 func (b *modelRuntimeBridge) GetModel(ctx context.Context, modelID string, _ ModelRuntimeRequestMeta) (ModelRuntimeModel, error) {
@@ -667,6 +716,7 @@ func (b *modelRuntimeBridge) ImportModel(ctx context.Context, req ModelRuntimeIm
 }
 
 func (b *modelRuntimeBridge) ScanModels(ctx context.Context, req ModelRuntimeControlRequest) ([]ModelRuntimeModel, error) {
+	b.refreshDiscoveredModels(ctx, toManagementMeta(req))
 	infos, err := b.runtime.ScanModels(ctx, modelruntime.ManagementRequestMeta{
 		WorkspaceID:   strings.TrimSpace(req.Meta.WorkspaceID),
 		Actor:         firstNonEmptyTrimmed(req.Actor, "api"),

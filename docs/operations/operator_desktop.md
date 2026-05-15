@@ -59,7 +59,9 @@ CLI tools are launched through fixed `forge-operator-*` wrappers in a terminal. 
 
 ## Runtime Services
 
-Ollama is installed through Nix as part of the operator toolbelt, not by a runtime installer. The profile provides the `ollama` CLI on `PATH`, but this pass does not enable an Ollama service by default and does not add model load/unload controls.
+Ollama is installed through Nix as part of the operator toolbelt, not by a runtime installer. The profile provides the `ollama` CLI on `PATH`, and the canonical operator VM config enables governed modelruntime with the local Ollama-compatible backend at `http://127.0.0.1:11434`.
+
+The desktop shell does not start Ollama, pull models, or expose model load/unload controls. The operator starts Ollama from the toolbelt/terminal, pulls a model, then uses the Chat surface's model refresh path. `forge-core` discovers local Ollama models through governed modelruntime list/scan calls and marks them as non-managed local runtime models.
 
 To enable an Ollama service later, add an explicit NixOS configuration change and review it as host configuration. Do not use `curl | sh` installers on FORGE-OS.
 
@@ -71,6 +73,7 @@ If an app fails to launch:
 - confirm `forge-operator-toolbelt` is installed in `environment.systemPackages`
 - launch a terminal and check that the wrapper exists with `command -v forge-operator-core-status`
 - for Ollama, check `command -v ollama` and then use the fixed `Ollama Status` launcher
+- for chat, confirm `OLLAMA_BASE_URL=http://127.0.0.1:11434`, pull a local model from the terminal, refresh Chat models, and select the discovered `ollama_compat` model
 
 Core operator tools are required by the Nix package. Platform-specific tools,
 such as GPU telemetry, are optional and may be absent.

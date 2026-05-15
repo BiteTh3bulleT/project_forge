@@ -36,6 +36,11 @@ safe shell flags. It is the preferred reproducible bring-up path. Manual ISO
 installation and VirtualBox shared-folder profiles are fallback/operator
 debugging paths.
 
+The canonical VM also starts `forge-core` with governed modelruntime enabled
+and `FORGE_MODEL_DEFAULT_BACKEND=ollama_compat`. This does not start Ollama or
+pull models by itself; it makes the local Ollama endpoint discoverable once the
+operator starts Ollama from the toolbelt.
+
 Default local VM login:
 
 ```text
@@ -68,6 +73,21 @@ curl -fsS http://127.0.0.1:18492/health
 
 Do not add shell UI controls that run service-control commands. Service checks
 from this runbook are operator verification only.
+
+## Verify Local Model Loop
+
+Inside the operator session:
+
+1. Open Terminal from the Start menu.
+2. Confirm toolbelt Ollama is present with `command -v ollama`.
+3. Pull and run the intended local model from the terminal.
+4. Confirm Ollama responds at `http://127.0.0.1:11434`.
+5. Open FORGE Chat, use Refresh models, select the discovered local Ollama model, and send a short prompt.
+
+Expected result: Chat records a normal assistant reply and trace metadata shows
+`backend=ollama_compat`. If Chat says no runtime models are available, verify
+the model appears in `ollama list`, then refresh the Chat model list again. The
+refresh path re-discovers local Ollama models without restarting `forge-core`.
 
 ## Rebuild-Safe Profile Import
 

@@ -208,6 +208,8 @@ These are the items between "wired" and "works the way I want."
 - [x] Window tracking working
 - [ ] **Verify ollama-in-toolbelt actually works end-to-end.** Boot, launch foot, run `ollama pull phi4-mini`, run `ollama run phi4-mini`. No PATH issues, no read-only systemd surprises.
 - [ ] **Chat-to-model loop using toolbelt ollama.** Configure FORGE's modelruntime to talk to the toolbelt-provided ollama. Verify chat works inside the operator session.
+- [x] **Operator VM local Ollama modelruntime wiring.** Canonical VM now enables governed modelruntime with `ollama_compat` pointed at local toolbelt Ollama.
+- [x] **Post-start Ollama model discovery.** Modelruntime list/scan now re-discovers newly pulled local Ollama models without restarting `forge-core`.
 - [ ] **Status bar across the shell.** One-line summary of modelruntime + autonomy + last journal entry + workspace. Data already exists.
 - [ ] **Right-side context inspector.** Shows current context being compiled, recent journal entries, active loops/approvals.
 - [ ] **Activity log surface.** Last 20 audit events, popover or accordion.
