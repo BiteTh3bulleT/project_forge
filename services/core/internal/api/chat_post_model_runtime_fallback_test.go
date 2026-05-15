@@ -1602,6 +1602,64 @@ func TestChatAssistantStreamFallsBackToModelRuntimeWhenOllamaStreamUnavailable(t
 	}
 }
 
+func TestChatAssistantStreamPrefersModelRuntimePlainBeforeNativeOllamaStream(t *testing.T) {
+	nativeStreamCalls := 0
+	ollamaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/chat" {
+			http.NotFound(w, r)
+			return
+		}
+		nativeStreamCalls++
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		_, _ = w.Write([]byte(`{"message":{"content":"native stream"},"done":false}` + "\n"))
+		_, _ = w.Write([]byte(`{"done":true}` + "\n"))
+	}))
+	defer ollamaServer.Close()
+	t.Setenv("OLLAMA_BASE_URL", ollamaServer.URL)
+	t.Setenv("OLLAMA_MODEL", "native-model")
+
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "runtime plain before native stream", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	um, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "plain runtime first please", map[string]any{"source": "operator"})
+	if err != nil {
+		t.Fatalf("append user message: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/assistant-stream?userMessageId="+strconv.FormatInt(um.ID, 10),
+		nil,
+	)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "event: done") {
+		t.Fatalf("expected done SSE event, got body=%s", body)
+	}
+	if !strings.Contains(body, `"modelRuntimeOk":true`) {
+		t.Fatalf("expected model runtime metadata in SSE payload, got body=%s", body)
+	}
+	if strings.Contains(body, `"ollamaStream":true`) {
+		t.Fatalf("did not expect native ollama stream metadata, got body=%s", body)
+	}
+	if nativeStreamCalls != 0 {
+		t.Fatalf("expected native ollama stream to be skipped before model runtime plain chat, got %d calls", nativeStreamCalls)
+	}
+	if fakeRuntime.chatCalls != 1 {
+		t.Fatalf("expected one model runtime chat call, got %d", fakeRuntime.chatCalls)
+	}
+}
+
 type fakeStreamingModelRuntime struct {
 	*fakeModelRuntime
 	streamCalls int
@@ -1787,8 +1845,6 @@ func TestChatAssistantStreamRoutesStatusWithoutModel(t *testing.T) {
 
 func TestChatAssistantStreamUsesNativeOllamaStreamForNoToolChat(t *testing.T) {
 	srv, st := newBackupAuditHarness(t)
-	fakeRuntime := newFakeModelRuntime()
-	srv.modelRuntime = fakeRuntime
 
 	var sawStream bool
 	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1850,9 +1906,6 @@ func TestChatAssistantStreamUsesNativeOllamaStreamForNoToolChat(t *testing.T) {
 	}
 	if strings.Contains(body, `"modelRuntimeOk":true`) {
 		t.Fatalf("expected native ollama stream to avoid modelruntime, got body=%s", body)
-	}
-	if fakeRuntime.chatCalls != 0 {
-		t.Fatalf("expected model runtime not called, got %d calls", fakeRuntime.chatCalls)
 	}
 }
 

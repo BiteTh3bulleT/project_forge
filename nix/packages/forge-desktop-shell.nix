@@ -40,7 +40,7 @@ let
     inherit version;
 
     src = repoSrc;
-    npmDepsHash = "sha256-ptWL5gb8xRg9LaaosAgNyuMnj4Giw5AG2p2N5yrxrvc=";
+    npmDepsHash = "sha256-/Q0Xd7f/YGq/OUym7z4NXo7ZJX6Mma6+r6dzK6jkujc=";
     npmBuildScript = "build:desktop";
 
     installPhase = ''
@@ -58,7 +58,7 @@ rustPlatform.buildRustPackage rec {
   src = repoSrc;
   cargoRoot = "apps/desktop/src-tauri";
   buildAndTestSubdir = cargoRoot;
-  cargoHash = "sha256-FAg/zbaZUIvgStXX9Wn0+p41iFAlF8eM73Dy0lUMl7A=";
+  cargoHash = "sha256-IUDU2aJI9Iw9DfkZhOqLB+/EGpQGQsbVLy+6s6a+pRY=";
 
   nativeBuildInputs = [
     cargo-tauri.hook

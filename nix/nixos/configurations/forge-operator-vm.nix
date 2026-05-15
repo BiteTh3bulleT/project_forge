@@ -34,7 +34,7 @@
 
   services.forge-core = {
     bindHost = lib.mkDefault "127.0.0.1";
-    enableModelRuntime = lib.mkDefault true;
+    enableModelRuntime = true;
     safeModeForceCPUOnly = lib.mkDefault true;
     extraEnvironment = {
       OLLAMA_BASE_URL = lib.mkDefault "http://127.0.0.1:11434";

@@ -83,12 +83,6 @@ func (s *Server) completeAssistantWithoutTools(
 		return am
 	}
 
-	if emit != nil {
-		if am := s.completeAssistantWithNativeOllamaStream(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, corr, getManifests, stages, pushStage, emit, requestStart, perf); am != nil {
-			return am
-		}
-	}
-
 	manifests = getManifests()
 	if s.modelRuntime != nil {
 		recordStage("runtime_primary", map[string]any{"reason": "plain chat prefers model runtime"})
@@ -96,6 +90,12 @@ func (s *Server) completeAssistantWithoutTools(
 			return am
 		} else if strings.TrimSpace(reason) != "" {
 			recordStage("runtime_fallback", map[string]any{"reason": "model runtime plain-chat path failed: " + reason})
+		}
+	}
+
+	if emit != nil {
+		if am := s.completeAssistantWithNativeOllamaStream(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, corr, getManifests, stages, pushStage, emit, requestStart, perf); am != nil {
+			return am
 		}
 	}
 

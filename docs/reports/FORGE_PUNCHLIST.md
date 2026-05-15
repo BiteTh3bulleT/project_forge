@@ -196,8 +196,8 @@ These are the items between "wired" and "works the way I want."
 
 ### Chat path latency (lived friction)
 
-- [ ] **Diagnose "fast first response, slow after."** Most likely culprit: KV identity cache rejecting reuse on turn 2. Check `kv_enforcement.go` counters and the journal logs across turn 1 vs turn 2.
-- [ ] **Fix or accept** based on diagnosis. If KV: figure out why reuse is rejected. If context-compile: profile and cache appropriately. If model-side: defer to streaming.
+- [x] **Diagnose "fast first response, slow after."** Root cause was the legacy native Ollama stream fallback running before modelruntime plain chat on the non-streaming runtime path; its 120s timeout created the observed cliff before the `runtime_primary` stage. KV identity counters are not on the normal chat path, context compile timing is reported as `0` for this path, and modelruntime timing starts after the delay.
+- [x] **Fix or accept** based on diagnosis. Fixed by preferring modelruntime plain chat before native Ollama stream fallback and adding regression coverage.
 - [ ] **Add a chat latency budget** — log a warning when any turn exceeds N seconds in critical phases.
 
 ### Operator desktop
