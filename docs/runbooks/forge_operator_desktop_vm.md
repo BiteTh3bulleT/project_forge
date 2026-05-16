@@ -1,15 +1,15 @@
 # FORGE Operator Desktop VM Runbook
 
-Status: Phase G6 operator desktop bring-up
+Status: Native operator desktop bring-up
 
-Last verified: 2026-05-11 on VirtualBox VM `FORGE-OS`.
+Last verified: 2026-05-16 on VirtualBox VM `FORGE-OS`.
 
 In-repo evidence record:
 [docs/evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md](../evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md)
 
 ## Purpose
 
-This runbook starts the opt-in FORGE operator desktop session in a NixOS VM. FORGE remains the primary desktop surface, while `labwc` provides the window-management substrate needed for terminal, file-manager, and other operator app windows.
+This runbook starts the FORGE operator desktop session in a NixOS VM. The normal path is now appliance-style: FORGE boot splash, FORGE login screen, then the operator desktop. `labwc` provides the window-management substrate needed for terminal, file-manager, and other operator app windows.
 
 ## Canonical Nix VM Target
 
@@ -31,10 +31,10 @@ This target imports:
 - `nix/nixos/profiles/forge-operator-desktop.nix`
 
 It includes `forge-core`, the packaged desktop shell, `forge-operator-session`,
-the operator toolbelt, `/forge` storage layout, local-only core binding, and
-safe shell flags. It is the preferred reproducible bring-up path. Manual ISO
-installation and VirtualBox shared-folder profiles are fallback/operator
-debugging paths.
+the operator toolbelt, `/forge` storage layout, local-only core binding, a
+Plymouth FORGE boot splash, greetd session handoff, and safe shell flags. It is
+the preferred reproducible bring-up path. Manual ISO installation and
+VirtualBox shared-folder profiles are fallback/operator debugging paths.
 
 The canonical VM also starts `forge-core` with governed modelruntime enabled
 and `FORGE_MODEL_DEFAULT_BACKEND=ollama_compat`. This does not start Ollama or
@@ -48,9 +48,11 @@ user: operator
 password: forge
 ```
 
-The VM keeps SSH disabled by default and does not enable autologin. Change the
-local password before exposing the VM beyond the host-only/local development
-boundary.
+The packaged desktop shows the FORGE login screen at boot. The current VM
+greeter is a local operator UX gate, not a PAM-backed security boundary yet.
+Change the local password before exposing the VM beyond the host-only/local
+development boundary. The VM keeps SSH disabled by default and does not enable
+display-manager autologin.
 
 ## Boundaries
 
@@ -61,6 +63,23 @@ boundary.
 - Do not launch arbitrary commands from FORGE UI surfaces in this phase.
 - Do not add `curl | sh` installers; Ollama and operator tools come from Nix.
 - Do not add model load/unload, service restart, or rebuild controls to the UI.
+
+## Normal Boot
+
+Expected normal path:
+
+```text
+firmware / bootloader
+-> Plymouth FORGE-OS splash
+-> greetd starts forge-operator-session
+-> labwc compositor
+-> forge-shell-session
+-> packaged forge-desktop-shell
+-> FORGE login screen
+-> FORGE operator desktop
+```
+
+At the FORGE login screen, sign in with the local VM operator credentials above.
 
 ## Start FORGE Core
 
@@ -143,7 +162,7 @@ Installed layout:
 - Operator user: `operator`, in `wheel`, `networkmanager`, `video`, `render`, and `vboxsf`.
 - This manual VM has SSH enabled for key-based access.
 - Manual VM host access uses VirtualBox NAT forwarding: `ssh -p 2222 operator@127.0.0.1`.
-- Automatic login remains disabled.
+- Display-manager automatic login remains disabled.
 - ISO is detached and disk is first in the VirtualBox boot order.
 - The packaged Tauri shell defaults to `1180x680` as a fallback, and the locked
   operator session fits the shell window to the detected monitor bounds before
@@ -167,7 +186,7 @@ sudo ls -ld /forge /forge/data /forge/models /forge/workspaces/default /forge/ru
 curl -fsS http://127.0.0.1:18492/health
 ```
 
-## Start Operator Desktop
+## Recovery Manual Operator Desktop
 
 From a TTY login:
 

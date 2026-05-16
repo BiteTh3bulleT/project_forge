@@ -4103,3 +4103,138 @@ html[data-effects="subtle"] .forge-context-card:hover {
   margin-top: 0.25rem;
   border-top: 1px solid rgba(var(--forge-border-strong-rgb), 0.08);
 }
+
+.forge-login-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  align-items: center;
+  justify-items: center;
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+  overflow: hidden;
+  background:
+    linear-gradient(120deg, rgba(54, 220, 232, 0.11), transparent 34%),
+    linear-gradient(210deg, rgba(245, 158, 11, 0.12), transparent 32%),
+    linear-gradient(155deg, #020405 0%, #0b1114 45%, #12181c 100%);
+}
+
+.forge-login-screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.36;
+  background-image:
+    linear-gradient(rgba(54, 220, 232, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(54, 220, 232, 0.06) 1px, transparent 1px),
+    linear-gradient(115deg, transparent 0 48%, rgba(245, 158, 11, 0.1) 49% 50%, transparent 51% 100%);
+  background-size:
+    84px 84px,
+    84px 84px,
+    520px 520px;
+  mask-image: linear-gradient(90deg, transparent, black 18%, black 82%, transparent);
+}
+
+.forge-login-screen__brand,
+.forge-login-panel {
+  position: relative;
+  z-index: 1;
+}
+
+.forge-login-screen__brand {
+  width: min(100%, 34rem);
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  justify-self: start;
+}
+
+.forge-login-screen__mark {
+  width: 2.75rem;
+  aspect-ratio: 1;
+  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.36);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(var(--forge-cyan-rgb), 0.95), rgba(var(--forge-amber-rgb), 0.72)),
+    rgb(var(--forge-panel-rgb));
+  box-shadow: 0 0 28px rgba(var(--forge-cyan-rgb), 0.24);
+}
+
+.forge-login-screen__product {
+  font-size: clamp(1.35rem, 2.8vw, 2.1rem);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.forge-login-screen__subtitle {
+  margin-top: 0.25rem;
+  font-size: 0.82rem;
+  color: rgba(var(--forge-muted-rgb), 0.88);
+}
+
+.forge-login-panel {
+  width: min(100%, 24rem);
+  display: grid;
+  gap: 0.85rem;
+  padding: clamp(1rem, 4vw, 1.35rem);
+  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.18);
+  border-radius: 8px;
+  background:
+    var(--forge-panel-gloss),
+    rgba(var(--forge-panel-rgb), 0.86);
+  box-shadow: var(--forge-shadow-panel);
+  -webkit-backdrop-filter: blur(18px) saturate(1.18);
+  backdrop-filter: blur(18px) saturate(1.18);
+}
+
+.forge-login-panel__time {
+  margin-bottom: 0.1rem;
+  font-size: clamp(2.2rem, 7vw, 3.8rem);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.forge-login-field {
+  display: grid;
+  gap: 0.38rem;
+  font-size: 0.78rem;
+  color: rgba(var(--forge-muted-rgb), 0.9);
+}
+
+.forge-login-field input {
+  width: 100%;
+  min-width: 0;
+  height: 2.65rem;
+  border: 1px solid rgba(var(--forge-border-rgb), 0.28);
+  border-radius: 6px;
+  padding: 0 0.72rem;
+  color: rgb(var(--forge-text-rgb));
+  background: rgba(0, 0, 0, 0.26);
+  outline: none;
+}
+
+.forge-login-field input:focus {
+  border-color: rgba(var(--forge-cyan-rgb), 0.7);
+  box-shadow: 0 0 0 3px rgba(var(--forge-cyan-rgb), 0.12);
+}
+
+.forge-login-panel__error {
+  min-height: 1.2rem;
+  color: rgb(var(--forge-danger-rgb));
+  font-size: 0.8rem;
+}
+
+.forge-login-panel__submit {
+  height: 2.65rem;
+  border: 1px solid rgba(var(--forge-cyan-rgb), 0.42);
+  border-radius: 6px;
+  color: #031012;
+  font-weight: 750;
+  background: linear-gradient(135deg, rgb(var(--forge-cyan-rgb)), rgb(var(--forge-amber-soft-rgb)));
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
+}
+
+.forge-login-panel__submit:hover {
+  filter: brightness(1.04);
+}

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Navigate,
   Route,
@@ -33,6 +33,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { ExecutionPermissionsPage } from "./pages/ExecutionPermissionsPage";
 import { EventsPage } from "./pages/EventsPage";
 import { EvaluationsPage } from "./pages/EvaluationsPage";
+import { ForgeLoginPage } from "./pages/ForgeLoginPage";
 import { PolicyPage } from "./pages/PolicyPage";
 import { ReviewsPage } from "./pages/ReviewsPage";
 import { JobDetailPage } from "./pages/JobDetailPage";
@@ -60,7 +61,15 @@ import { useWorkspaceLayoutStore } from "./stores/workspaceLayoutStore";
 import { useWorkspaceStore } from "./stores/workspaceStore";
 import { useUiStore } from "./stores/uiStore";
 
-function RoutedViews() {
+const FORGE_OPERATOR_LOGIN_SESSION_KEY = "forge.operator.login.unlocked";
+const FORGE_BOOT_LOGIN_REQUIRED =
+  import.meta.env.VITE_FORGE_BOOT_LOGIN === "true";
+
+function RoutedViews({
+  onForgeLoginUnlock,
+}: {
+  onForgeLoginUnlock: () => void;
+}) {
   const location = useLocation();
   return (
     <ForgeErrorBoundary resetKey={location.pathname + location.search}>
@@ -68,6 +77,10 @@ function RoutedViews() {
         {/* Root renders the FORGE desktop (wallpaper). The shell decides what
             to show; route components only render when a tool is active. */}
         <Route path="/" element={null} />
+        <Route
+          path="/login"
+          element={<ForgeLoginPage onUnlock={onForgeLoginUnlock} />}
+        />
         <Route path="/start" element={<StartPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/system" element={<SystemPage />} />
@@ -134,10 +147,36 @@ export default function App() {
     layoutReady && isShellHostWindowLabel(currentWindowLabel || "main");
   const contrastPreference = useUiStore((s) => s.contrastPreference);
   const effectsPreference = useUiStore((s) => s.effectsPreference);
+  const [forgeLoginUnlocked, setForgeLoginUnlocked] = useState(() => {
+    if (!FORGE_BOOT_LOGIN_REQUIRED) return true;
+    return (
+      window.sessionStorage.getItem(FORGE_OPERATOR_LOGIN_SESSION_KEY) === "true"
+    );
+  });
+  const requiresForgeLogin =
+    FORGE_BOOT_LOGIN_REQUIRED &&
+    (isPrimaryShellWindow || !layoutReady || currentWindowLabel === "main");
+
+  const handleForgeLoginUnlock = () => {
+    window.sessionStorage.setItem(FORGE_OPERATOR_LOGIN_SESSION_KEY, "true");
+    setForgeLoginUnlocked(true);
+    navigate("/start", { replace: true });
+  };
 
   useEffect(() => {
     locationRef.current = `${location.pathname}${location.search}`;
   }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    if (!requiresForgeLogin) return;
+    if (!forgeLoginUnlocked && location.pathname !== "/login") {
+      navigate("/login", { replace: true });
+      return;
+    }
+    if (forgeLoginUnlocked && location.pathname === "/login") {
+      navigate("/start", { replace: true });
+    }
+  }, [forgeLoginUnlocked, location.pathname, navigate, requiresForgeLogin]);
 
   useEffect(() => {
     document.documentElement.dataset.contrast = contrastPreference;
@@ -231,7 +270,7 @@ export default function App() {
   if (!isShellHostWindow) {
     return (
       <div className="forge-tauri-surface">
-        <RoutedViews />
+        <RoutedViews onForgeLoginUnlock={handleForgeLoginUnlock} />
       </div>
     );
   }
@@ -240,7 +279,7 @@ export default function App() {
       isMainWindow={isPrimaryShellWindow}
       hostLabel={currentWindowLabel || "main"}
     >
-      <RoutedViews />
+      <RoutedViews onForgeLoginUnlock={handleForgeLoginUnlock} />
     </AppShell>
   );
 }

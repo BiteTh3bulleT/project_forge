@@ -123,7 +123,7 @@ Current verified state:
   `/nix/store/iy4v4h28zl65x0a5nw64332cvllfxx5v-nixos-system-forge-os-vm-25.11.10470.0c88e1f2bdb9`
 - VM network: NAT with host SSH forwarding on `127.0.0.1:2222`.
 - Launch path:
-  `TTY -> forge-operator-session -> labwc -> forge-shell-session -> forge-desktop-shell -> forge-core`
+  `Plymouth FORGE-OS splash -> greetd -> forge-operator-session -> labwc -> forge-shell-session -> forge-desktop-shell -> FORGE login screen -> forge-core`
 - Display: VirtualBox VMSVGA, 128 MiB VRAM, 3D acceleration enabled.
 - Session compatibility: `WEBKIT_DISABLE_DMABUF_RENDERER=1` is set for the
   operator desktop to avoid VirtualBox Wayland/dmabuf protocol failures.

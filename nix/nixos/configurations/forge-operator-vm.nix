@@ -5,6 +5,35 @@
   ...
 }:
 
+let
+  forgeOperatorSessionCommand = "${config.forge.shellSession.wayland.sessionPackage}/bin/forge-operator-session";
+  forgePlymouthTheme = pkgs.runCommand "forge-plymouth-theme" { } ''
+    theme_dir="$out/share/plymouth/themes/forge"
+    mkdir -p "$theme_dir"
+    cat > "$theme_dir/forge.plymouth" <<'EOF'
+[Plymouth Theme]
+Name=FORGE
+Description=FORGE-OS Runtime boot screen
+ModuleName=script
+
+[script]
+ImageDir=/share/plymouth/themes/forge
+ScriptFile=/share/plymouth/themes/forge/forge.script
+EOF
+    cat > "$theme_dir/forge.script" <<'EOF'
+Window.SetBackgroundTopColor(0.02, 0.03, 0.035);
+Window.SetBackgroundBottomColor(0.0, 0.0, 0.0);
+
+title = Text("FORGE-OS", 0.95, 0.98, 1.0);
+subtitle = Text("Operator Runtime", 0.55, 0.68, 0.72);
+
+title.SetX(Window.GetWidth() / 2 - title.GetWidth() / 2);
+title.SetY(Window.GetHeight() / 2 - title.GetHeight() / 2 - 24);
+subtitle.SetX(Window.GetWidth() / 2 - subtitle.GetWidth() / 2);
+subtitle.SetY(Window.GetHeight() / 2 + 18);
+EOF
+  '';
+in
 {
   imports = [
     ../modules/forge-os.nix
@@ -12,11 +41,24 @@
   ];
 
   # Canonical local VM target for Nix-first FORGE operator bring-up.
-  # This is intentionally conservative: manual login, safe mode, local core
+  # This is intentionally conservative: FORGE greeter UX, safe mode, local core
   # bind, no display-manager autologin, and no FORGE UI host-mutation path.
   system.stateVersion = "25.11";
 
   boot.loader.grub.devices = lib.mkDefault [ "/dev/sda" ];
+  boot.consoleLogLevel = lib.mkDefault 3;
+  boot.initrd.verbose = lib.mkDefault false;
+  boot.kernelParams = lib.mkDefault [
+    "quiet"
+    "splash"
+    "udev.log_priority=3"
+  ];
+  boot.plymouth = {
+    enable = lib.mkDefault true;
+    theme = lib.mkDefault "forge";
+    themePackages = lib.mkDefault [ forgePlymouthTheme ];
+  };
+
   fileSystems."/" = {
     device = lib.mkDefault "/dev/disk/by-label/nixos";
     fsType = lib.mkDefault "ext4";
@@ -34,7 +76,7 @@
 
   services.forge-core = {
     bindHost = lib.mkDefault "127.0.0.1";
-    enableModelRuntime = true;
+    enableModelRuntime = lib.mkDefault true;
     safeModeForceCPUOnly = lib.mkDefault true;
     extraEnvironment = {
       OLLAMA_BASE_URL = lib.mkDefault "http://127.0.0.1:11434";
@@ -44,6 +86,19 @@
 
   services.openssh.enable = lib.mkDefault false;
   services.displayManager.autoLogin.enable = lib.mkForce false;
+  services.greetd = {
+    enable = lib.mkDefault true;
+    settings = {
+      initial_session = {
+        command = forgeOperatorSessionCommand;
+        user = "operator";
+      };
+      default_session = {
+        command = forgeOperatorSessionCommand;
+        user = "operator";
+      };
+    };
+  };
 
   users.users.operator = {
     isNormalUser = true;
@@ -80,12 +135,15 @@
     FORGE_SHELL_MODEL_MUTATION=false
     FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false
     FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false
+    FORGE_BOOT_SPLASH=plymouth
+    FORGE_BOOT_LOGIN=forge-greeter
   '';
 
   services.getty.helpLine = ''
     FORGE operator VM
-    Login: operator / forge
-    Start shell: forge-operator-session
+    Normal boot: FORGE login screen -> operator desktop
+    Recovery TTY login: operator / forge
+    Recovery shell: forge-operator-session
     Health: curl -fsS http://127.0.0.1:18492/health
   '';
 
@@ -102,6 +160,14 @@
     {
       assertion = config.services.displayManager.autoLogin.enable == false;
       message = "FORGE operator VM must not enable display-manager autologin.";
+    }
+    {
+      assertion = config.services.greetd.enable == true;
+      message = "FORGE operator VM must start the graphical FORGE session through greetd.";
+    }
+    {
+      assertion = config.boot.plymouth.enable == true;
+      message = "FORGE operator VM must present the FORGE boot splash by default.";
     }
     {
       assertion = config.forge.shellSession.safeMode == true;
