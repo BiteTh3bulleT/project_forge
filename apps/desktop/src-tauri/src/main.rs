@@ -379,6 +379,11 @@ fn launch_operator_app(app_id: String) -> Result<OperatorAppLaunchResult, String
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_os::init())
         .manage(linux_windows::LinuxWindowRegistryState::default())
         .manage(window_manager::WindowManagerState::default())
         .on_window_event(|window, event| {

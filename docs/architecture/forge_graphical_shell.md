@@ -117,6 +117,8 @@ The G2 local-binary fallback remains part of the G3.5 contract. Desktop-shell pa
 
 Nix/Tauri package limitations must remain explicit. The current G3.5 package is validated as a Linux Nix package. It does not add compositor integration, display-manager integration, autostart, desktop replacement, or host mutation. G4 is the separate opt-in compositor/session lane and does not change the G3.5 package truth.
 
+The desktop shell registers the official Tauri v2 `fs`, `shell`, `http`, `dialog`, and `os` plugins for native shell ergonomics. Their capability grants are intentionally narrow: file-system access starts with Tauri's application-directory default, shell access uses the default link-opening permission rather than arbitrary command execution, HTTP access is scoped to loopback FORGE endpoints, dialogs are UI-only operator prompts, and OS metadata is read-only. These Tauri capabilities do not bypass `forge-core`, gateway, approval, audit, memory, modelruntime, host-mutation, or FORGE-K authority boundaries.
+
 Exact operator commands:
 
 ```bash
