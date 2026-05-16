@@ -46,17 +46,24 @@ in
   system.stateVersion = "25.11";
 
   boot.loader.grub.devices = lib.mkDefault [ "/dev/sda" ];
+  boot.loader.timeout = lib.mkDefault 0;
   boot.consoleLogLevel = lib.mkDefault 3;
   boot.initrd.verbose = lib.mkDefault false;
   boot.kernelParams = lib.mkDefault [
     "quiet"
     "splash"
+    "loglevel=3"
     "udev.log_priority=3"
+    "systemd.show_status=false"
+    "rd.systemd.show_status=false"
   ];
   boot.plymouth = {
     enable = lib.mkDefault true;
     theme = lib.mkDefault "forge";
     themePackages = lib.mkDefault [ forgePlymouthTheme ];
+    extraConfig = ''
+      ShowDelay=0
+    '';
   };
 
   fileSystems."/" = {

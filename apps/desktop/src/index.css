@@ -3913,6 +3913,104 @@ html[data-effects="subtle"] .forge-context-card:hover {
   color: rgb(var(--forge-text-rgb));
 }
 
+.forge-tauri-surface--boot {
+  overflow: hidden;
+}
+
+.forge-boot-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  align-items: center;
+  justify-items: center;
+  padding: clamp(1.25rem, 3vw, 2.5rem);
+  overflow: hidden;
+  background:
+    linear-gradient(120deg, rgba(54, 220, 232, 0.11), transparent 34%),
+    linear-gradient(210deg, rgba(245, 158, 11, 0.12), transparent 32%),
+    linear-gradient(155deg, #020405 0%, #0b1114 45%, #12181c 100%);
+}
+
+.forge-boot-screen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.34;
+  background-image:
+    linear-gradient(rgba(54, 220, 232, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(54, 220, 232, 0.06) 1px, transparent 1px),
+    linear-gradient(115deg, transparent 0 48%, rgba(245, 158, 11, 0.1) 49% 50%, transparent 51% 100%);
+  background-size:
+    84px 84px,
+    84px 84px,
+    520px 520px;
+  mask-image: linear-gradient(90deg, transparent, black 18%, black 82%, transparent);
+}
+
+.forge-boot-screen__brand,
+.forge-boot-screen__status {
+  position: relative;
+  z-index: 1;
+}
+
+.forge-boot-screen__brand {
+  display: grid;
+  justify-items: center;
+  gap: 0.85rem;
+}
+
+.forge-boot-screen__mark {
+  width: 3.25rem;
+  aspect-ratio: 1;
+  object-fit: contain;
+  filter: drop-shadow(0 0 28px rgba(var(--forge-cyan-rgb), 0.22));
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.forge-boot-screen__product {
+  font-size: clamp(2rem, 7vw, 3.5rem);
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+}
+
+.forge-boot-screen__subtitle {
+  margin-top: 0.45rem;
+  font-size: 0.84rem;
+  text-align: center;
+  color: rgba(var(--forge-muted-rgb), 0.88);
+}
+
+.forge-boot-screen__status {
+  width: min(18rem, 62vw);
+  height: 0.18rem;
+  margin-bottom: clamp(1rem, 6vh, 3rem);
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(var(--forge-muted-rgb), 0.14);
+}
+
+.forge-boot-screen__line {
+  width: 38%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgb(var(--forge-cyan-rgb)), rgb(var(--forge-amber-rgb)));
+  animation: forge-boot-progress 1.4s ease-in-out infinite;
+}
+
+@keyframes forge-boot-progress {
+  0% {
+    transform: translateX(-115%);
+  }
+
+  100% {
+    transform: translateX(275%);
+  }
+}
+
 .forge-os-window__content > *,
 .forge-tauri-surface > * {
   min-width: 0;
@@ -4153,12 +4251,10 @@ html[data-effects="subtle"] .forge-context-card:hover {
 .forge-login-screen__mark {
   width: 2.75rem;
   aspect-ratio: 1;
-  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.36);
-  border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(var(--forge-cyan-rgb), 0.95), rgba(var(--forge-amber-rgb), 0.72)),
-    rgb(var(--forge-panel-rgb));
-  box-shadow: 0 0 28px rgba(var(--forge-cyan-rgb), 0.24);
+  object-fit: contain;
+  filter: drop-shadow(0 0 24px rgba(var(--forge-cyan-rgb), 0.24));
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .forge-login-screen__product {

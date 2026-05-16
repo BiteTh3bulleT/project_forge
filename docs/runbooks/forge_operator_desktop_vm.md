@@ -9,7 +9,7 @@ In-repo evidence record:
 
 ## Purpose
 
-This runbook starts the FORGE operator desktop session in a NixOS VM. The normal path is now appliance-style: FORGE boot splash, FORGE login screen, then the operator desktop. `labwc` provides the window-management substrate needed for terminal, file-manager, and other operator app windows.
+This runbook starts the FORGE operator desktop session in a NixOS VM. The normal path is now appliance-style: FORGE boot splash, FORGE shell loading screen, FORGE login screen, then an empty operator desktop. `labwc` provides the window-management substrate needed for terminal, file-manager, and other operator app windows.
 
 ## Canonical Nix VM Target
 
@@ -48,8 +48,9 @@ user: operator
 password: forge
 ```
 
-The packaged desktop shows the FORGE login screen at boot. The current VM
-greeter is a local operator UX gate, not a PAM-backed security boundary yet.
+The packaged desktop shows a FORGE loading screen before the FORGE login screen
+at boot. The current VM greeter is a local operator UX gate, not a PAM-backed
+security boundary yet.
 Change the local password before exposing the VM beyond the host-only/local
 development boundary. The VM keeps SSH disabled by default and does not enable
 display-manager autologin.
@@ -75,11 +76,14 @@ firmware / bootloader
 -> labwc compositor
 -> forge-shell-session
 -> packaged forge-desktop-shell
+-> FORGE shell loading screen
 -> FORGE login screen
--> FORGE operator desktop
+-> empty FORGE operator desktop
 ```
 
 At the FORGE login screen, sign in with the local VM operator credentials above.
+The shell clears restored in-shell FORGE windows during login so the first
+desktop view is wallpaper plus the pinned dock only.
 
 ## Start FORGE Core
 

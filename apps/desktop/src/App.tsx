@@ -56,6 +56,7 @@ import { SourcesPage } from "./pages/SourcesPage";
 import { StrategiesPage } from "./pages/StrategiesPage";
 import { SystemPage } from "./pages/SystemPage";
 import { WorkspaceLayoutsPage } from "./pages/WorkspaceLayoutsPage";
+import { useDesktopWindowStore } from "./stores/desktopWindowStore";
 import { useDesktopShellStore } from "./stores/desktopShellStore";
 import { useWorkspaceLayoutStore } from "./stores/workspaceLayoutStore";
 import { useWorkspaceStore } from "./stores/workspaceStore";
@@ -64,6 +65,32 @@ import { useUiStore } from "./stores/uiStore";
 const FORGE_OPERATOR_LOGIN_SESSION_KEY = "forge.operator.login.unlocked";
 const FORGE_BOOT_LOGIN_REQUIRED =
   import.meta.env.VITE_FORGE_BOOT_LOGIN === "true";
+const FORGE_OPERATOR_DESKTOP_ROUTE = "/";
+const FORGE_BOOT_SCREEN_MIN_MS = 1600;
+
+function ForgeBootScreen() {
+  return (
+    <section className="forge-boot-screen" aria-label="FORGE loading">
+      <div className="forge-boot-screen__brand">
+        <img
+          className="forge-boot-screen__mark"
+          src="/brand/forge-start-button.png"
+          alt=""
+          draggable={false}
+        />
+        <div>
+          <div className="forge-boot-screen__product">FORGE-OS</div>
+          <div className="forge-boot-screen__subtitle">
+            Loading operator shell
+          </div>
+        </div>
+      </div>
+      <div className="forge-boot-screen__status">
+        <div className="forge-boot-screen__line" />
+      </div>
+    </section>
+  );
+}
 
 function RoutedViews({
   onForgeLoginUnlock,
@@ -139,6 +166,7 @@ export default function App() {
   const hydrateShell = useDesktopShellStore((s) => s.hydrate);
   const layoutReady = useWorkspaceLayoutStore((s) => s.ready);
   const locationRef = useRef(`${location.pathname}${location.search}`);
+  const desktopShownAfterUnlockRef = useRef(false);
   const currentWindowLabel = useWorkspaceLayoutStore(
     (s) => s.currentWindowLabel,
   );
@@ -153,15 +181,40 @@ export default function App() {
       window.sessionStorage.getItem(FORGE_OPERATOR_LOGIN_SESSION_KEY) === "true"
     );
   });
+  const [forgeBootScreenReady, setForgeBootScreenReady] = useState(
+    () => !FORGE_BOOT_LOGIN_REQUIRED,
+  );
   const requiresForgeLogin =
     FORGE_BOOT_LOGIN_REQUIRED &&
     (isPrimaryShellWindow || !layoutReady || currentWindowLabel === "main");
 
   const handleForgeLoginUnlock = () => {
     window.sessionStorage.setItem(FORGE_OPERATOR_LOGIN_SESSION_KEY, "true");
+    useDesktopWindowStore.getState().resetDesktopSession();
+    desktopShownAfterUnlockRef.current = true;
     setForgeLoginUnlocked(true);
-    navigate("/start", { replace: true });
+    navigate(FORGE_OPERATOR_DESKTOP_ROUTE, { replace: true });
   };
+
+  useEffect(() => {
+    if (!FORGE_BOOT_LOGIN_REQUIRED) return;
+    const id = window.setTimeout(
+      () => setForgeBootScreenReady(true),
+      FORGE_BOOT_SCREEN_MIN_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, []);
+
+  useEffect(() => {
+    if (!FORGE_BOOT_LOGIN_REQUIRED) return;
+    if (!forgeLoginUnlocked) {
+      desktopShownAfterUnlockRef.current = false;
+      return;
+    }
+    if (desktopShownAfterUnlockRef.current) return;
+    useDesktopWindowStore.getState().resetDesktopSession();
+    desktopShownAfterUnlockRef.current = true;
+  }, [forgeLoginUnlocked]);
 
   useEffect(() => {
     locationRef.current = `${location.pathname}${location.search}`;
@@ -174,7 +227,7 @@ export default function App() {
       return;
     }
     if (forgeLoginUnlocked && location.pathname === "/login") {
-      navigate("/start", { replace: true });
+      navigate(FORGE_OPERATOR_DESKTOP_ROUTE, { replace: true });
     }
   }, [forgeLoginUnlocked, location.pathname, navigate, requiresForgeLogin]);
 
@@ -264,6 +317,22 @@ export default function App() {
       }
     };
   }, [navigate, refreshEnvironment, isPrimaryShellWindow, currentWindowLabel]);
+
+  if (FORGE_BOOT_LOGIN_REQUIRED && !forgeBootScreenReady) {
+    return <ForgeBootScreen />;
+  }
+
+  if (requiresForgeLogin && !forgeLoginUnlocked) {
+    return (
+      <div className="forge-tauri-surface forge-tauri-surface--boot">
+        <ForgeLoginPage onUnlock={handleForgeLoginUnlock} />
+      </div>
+    );
+  }
+
+  if (FORGE_BOOT_LOGIN_REQUIRED && forgeLoginUnlocked && !layoutReady) {
+    return <ForgeBootScreen />;
+  }
 
   // Detached tool windows are compatibility hosts. Main and secondary monitor
   // desktop hosts render the full shell; tool surfaces stay in-shell.

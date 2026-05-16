@@ -39,7 +39,12 @@ export function ForgeLoginPage({ onUnlock }: ForgeLoginPageProps) {
   return (
     <section className="forge-login-screen" aria-label="FORGE login">
       <div className="forge-login-screen__brand">
-        <span className="forge-login-screen__mark" aria-hidden="true" />
+        <img
+          className="forge-login-screen__mark"
+          src="/brand/forge-start-button.png"
+          alt=""
+          draggable={false}
+        />
         <div>
           <div className="forge-login-screen__product">FORGE-OS</div>
           <div className="forge-login-screen__subtitle">Operator Runtime</div>

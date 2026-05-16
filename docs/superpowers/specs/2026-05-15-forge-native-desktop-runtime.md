@@ -93,7 +93,9 @@ firmware / bootloader
 -> labwc compositor
 -> forge-shell-session
 -> packaged forge-desktop-shell
+-> FORGE shell loading screen
 -> FORGE login screen
+-> empty FORGE desktop
 -> local forge-core
 ```
 
@@ -110,9 +112,11 @@ canonical operator VM target.
 Required behavior:
 
 - show a minimal FORGE-OS Runtime boot splash
+- show a FORGE shell loading screen before the login form
 - start a FORGE login screen by default
 - require password login
 - make the FORGE operator session the default login session
+- clear restored in-shell windows on login so the operator lands on an empty desktop
 - preserve TTY fallback and Nix generation rollback
 - keep SSH disabled by default unless the local VM config explicitly enables it
 - keep `forge-core` bound to localhost by default
@@ -139,11 +143,12 @@ Expected normal operator flow:
 
 1. Start VM or machine.
 2. See FORGE-OS Runtime splash during boot.
-3. See graphical password login.
-4. Log in as `operator`.
-5. Land directly in the FORGE desktop session.
-6. Launch terminal/files/toolbelt apps from FORGE.
-7. Lock/logout from the desktop path without losing recovery access.
+3. See the FORGE shell loading screen.
+4. See graphical password login.
+5. Log in as `operator`.
+6. Land directly on an empty FORGE desktop.
+7. Launch terminal/files/toolbelt apps from FORGE.
+8. Lock/logout from the desktop path without losing recovery access.
 
 Longer-term Windows-like polish belongs to later phases:
 
