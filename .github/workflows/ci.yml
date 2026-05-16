@@ -61,6 +61,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: JS/TS validation
+        run: npm run validate:js
+
       - name: Desktop build
         run: npm run build:desktop
 

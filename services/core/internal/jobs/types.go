@@ -43,6 +43,7 @@ const (
 	FailPersistence        FailureCode = "persistence_failure"
 	FailUserCancellation   FailureCode = "user_cancellation"
 	FailExecution          FailureCode = "execution_failure"
+	FailInterrupted        FailureCode = "interrupted"
 )
 
 type Job struct {

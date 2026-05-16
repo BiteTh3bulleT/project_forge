@@ -71,7 +71,8 @@ func (s *Server) handleCancelJob(w http.ResponseWriter, r *http.Request) {
 		writePhase2DecodeError(w, err)
 		return
 	}
-	if err := s.jobs.RequestCancel(r.Context(), id, body.Actor); err != nil {
+	actor := authenticatedActorName(r)
+	if err := s.jobs.RequestCancel(r.Context(), id, actor); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -136,7 +137,8 @@ func (s *Server) handleApprovalDecision(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 	}
-	d, err := s.jobs.ApplyApprovalDecision(r.Context(), id, decision, body.Actor, body.Note)
+	actor := authenticatedActorName(r)
+	d, err := s.jobs.ApplyApprovalDecision(r.Context(), id, decision, actor, body.Note)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

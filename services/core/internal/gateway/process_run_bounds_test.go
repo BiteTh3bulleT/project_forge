@@ -1,7 +1,9 @@
 package gateway
 
 import (
+	"context"
 	"errors"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -52,5 +54,19 @@ func TestBoundedOutputBufferCapsCapturedData(t *testing.T) {
 	}
 	if !buf.Truncated() {
 		t.Fatalf("expected output to be marked truncated")
+	}
+}
+
+func TestProcessRunReturnsStructuredUnsupportedOnWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows parity behavior")
+	}
+	tool := &processRunTool{workspace: t.TempDir()}
+	result, err := tool.Execute(context.Background(), Request{Input: map[string]any{"command": "echo hi"}})
+	if err != nil {
+		t.Fatalf("expected structured unsupported result, got error %v", err)
+	}
+	if result.Data["unsupported"] != true || result.Data["ok"] != false {
+		t.Fatalf("expected unsupported result, got %#v", result.Data)
 	}
 }

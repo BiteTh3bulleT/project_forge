@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -15,6 +17,12 @@ type Config struct {
 	Port                                        int
 	BindHost                                    string
 	AllowWildcardBind                           bool
+	APIToken                                    string
+	APITokenFile                                string
+	APIActor                                    string
+	CORSAllowedOrigins                          []string
+	CORSAllowDevLocalhost                       bool
+	ProjectContextAllowedRoots                  []string
 	WorkspaceDir                                string
 	StoreBackend                                string
 	PostgresDSN                                 string
@@ -148,6 +156,12 @@ func Load() Config {
 		Port:                       port,
 		BindHost:                   bindHost,
 		AllowWildcardBind:          envBool("FORGE_ALLOW_WILDCARD_BIND", false),
+		APIToken:                   loadAPIToken(dataDir),
+		APITokenFile:               apiTokenFile(dataDir),
+		APIActor:                   envStringDefault("FORGE_API_ACTOR", "operator"),
+		CORSAllowedOrigins:         envList("FORGE_CORS_ALLOWED_ORIGINS"),
+		CORSAllowDevLocalhost:      envBool("FORGE_CORS_ALLOW_DEV_LOCALHOST", false),
+		ProjectContextAllowedRoots: envList("FORGE_PROJECT_CONTEXT_ALLOWED_ROOTS"),
 		WorkspaceDir:               workspace,
 		StoreBackend:               envStringDefault("FORGE_STORE_BACKEND", "sqlite"),
 		PostgresDSN:                strings.TrimSpace(os.Getenv("FORGE_POSTGRES_DSN")),
@@ -331,4 +345,69 @@ func envFloat(key string, defaultValue, minValue, maxValue float64) float64 {
 		return defaultValue
 	}
 	return value
+}
+
+func envList(key string) []string {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
+}
+
+func loadAPIToken(dataDir string) string {
+	if token := strings.TrimSpace(os.Getenv("FORGE_API_TOKEN")); token != "" {
+		return token
+	}
+	path := apiTokenFile(dataDir)
+	if token := readTokenFile(path); token != "" {
+		return token
+	}
+	token, err := generateAPIToken()
+	if err != nil {
+		return ""
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return ""
+	}
+	if err := os.WriteFile(path, []byte(token+"\n"), 0o600); err != nil {
+		return ""
+	}
+	return token
+}
+
+func apiTokenFile(dataDir string) string {
+	if path := strings.TrimSpace(os.Getenv("FORGE_API_TOKEN_FILE")); path != "" {
+		if abs, err := filepath.Abs(path); err == nil {
+			return abs
+		}
+		return path
+	}
+	return filepath.Join(dataDir, "auth", "api_token")
+}
+
+func readTokenFile(path string) string {
+	if strings.TrimSpace(path) == "" {
+		return ""
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(body))
+}
+
+func generateAPIToken() (string, error) {
+	var buf [32]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf[:]), nil
 }

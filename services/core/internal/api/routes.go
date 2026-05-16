@@ -20,16 +20,7 @@ func (s *Server) mountMiddleware(r chi.Router) {
 
 	r.Use(cors.Handler(cors.Options{
 		AllowOriginFunc: func(_ *http.Request, origin string) bool {
-			if origin == "" {
-				return true
-			}
-			if strings.HasPrefix(origin, "http://localhost:") || strings.HasPrefix(origin, "http://127.0.0.1:") {
-				return true
-			}
-			if origin == "tauri://localhost" || origin == "https://tauri.localhost" {
-				return true
-			}
-			return false
+			return s.corsOriginAllowed(origin)
 		},
 		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "X-Forge-Remote-Token", "X-Telegram-Bot-Api-Secret-Token"},
@@ -71,8 +62,34 @@ func (s *Server) mountHealthRoutes(r chi.Router) {
 	r.Get("/health", s.handleHealth)
 }
 
+func (s *Server) corsOriginAllowed(origin string) bool {
+	origin = strings.TrimSpace(origin)
+	if origin == "" {
+		return true
+	}
+	defaultOrigins := map[string]struct{}{
+		"tauri://localhost":       {},
+		"http://tauri.localhost":  {},
+		"https://tauri.localhost": {},
+	}
+	if _, ok := defaultOrigins[origin]; ok {
+		return true
+	}
+	for _, allowed := range s.cfg.CORSAllowedOrigins {
+		if origin == strings.TrimSpace(allowed) {
+			return true
+		}
+	}
+	if s.cfg.CORSAllowDevLocalhost {
+		return strings.HasPrefix(origin, "http://localhost:") ||
+			strings.HasPrefix(origin, "http://127.0.0.1:")
+	}
+	return false
+}
+
 func (s *Server) mountForgeRoutes(r chi.Router) {
 	r.Route("/forge", func(r chi.Router) {
+		r.Use(s.requireAPIAuth)
 		r.Use(middleware.Timeout(120 * time.Second))
 		r.Get("/models", s.handleForgeModelsList)
 		r.Post("/models/import", s.handleForgeModelImport)
@@ -101,6 +118,7 @@ func (s *Server) mountForgeRoutes(r chi.Router) {
 func (s *Server) mountOpenAICompatRoutes(r chi.Router) {
 	if s.cfg.EnableOpenAICompatAPI {
 		r.Route("/v1", func(r chi.Router) {
+			r.Use(s.requireAPIAuth)
 			r.Use(middleware.Timeout(120 * time.Second))
 			r.Get("/models", s.handleV1Models)
 			r.Post("/chat/completions", s.handleV1ChatCompletions)
@@ -110,6 +128,7 @@ func (s *Server) mountOpenAICompatRoutes(r chi.Router) {
 
 func (s *Server) mountAPIRoutes(r chi.Router) {
 	r.Route("/api", func(r chi.Router) {
+		r.Use(s.requireAPIAuth)
 		// Long-lived SSE — must not use the short HTTP timeout used for the rest of /api.
 		r.Get("/chat/threads/{id}/assistant-stream", s.handleChatAssistantStream)
 

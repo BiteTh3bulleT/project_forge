@@ -15,6 +15,7 @@ PORT="${FORGE_CORE_PORT:-18492}"
 DATA_DIR="$(mktemp -d /tmp/forge-smoke.XXXXXX)"
 WORKSPACE_DIR="$(mktemp -d /tmp/forge-smoke-ws.XXXXXX)"
 LOG="$DATA_DIR/core.log"
+TOKEN_FILE="$DATA_DIR/auth/api_token"
 PID=""
 
 cleanup() {
@@ -46,7 +47,11 @@ probe() {
   local path="$1"
   local want_http="${2:-200}"
   local got
-  got="$(curl -s -o /tmp/forge-smoke-body -w '%{http_code}' "http://127.0.0.1:$PORT$path" || true)"
+  if [[ "$path" == "/health" ]]; then
+    got="$(curl -s -o /tmp/forge-smoke-body -w '%{http_code}' "http://127.0.0.1:$PORT$path" || true)"
+  else
+    got="$(curl -s -H "Authorization: Bearer $FORGE_SMOKE_API_TOKEN" -o /tmp/forge-smoke-body -w '%{http_code}' "http://127.0.0.1:$PORT$path" || true)"
+  fi
   if [[ "$got" != "$want_http" ]]; then
     echo "FAIL  $path -> http $got (expected $want_http)" >&2
     cat /tmp/forge-smoke-body >&2 || true
@@ -90,6 +95,7 @@ for i in $(seq 1 60); do
 done
 
 echo "==> probing endpoints"
+FORGE_SMOKE_API_TOKEN="$(tr -d '\r\n\t ' < "$TOKEN_FILE")"
 probe /health 200
 probe /api/meta 200
 probe /api/autonomy/status 200

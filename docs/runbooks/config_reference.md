@@ -11,8 +11,14 @@ boot or runtime. Observed 2026-05-14._
 |---|---|---|---|
 | `FORGE_DATA_DIR` | [config.go:16](../../services/core/internal/config/config.go#L16) | `${XDG_CONFIG_HOME}/forge` (typically `~/.config/forge`); falls back to CWD if `UserConfigDir` errors | Location of `forge.sqlite`, `backups/`, `exports/` |
 | `FORGE_CORE_PORT` | [config.go:25](../../services/core/internal/config/config.go#L25) | `18492` | HTTP listen port |
-| `FORGE_CORE_BIND_HOST` | [config.go](../../services/core/internal/config/config.go) | `127.0.0.1` | HTTP bind host. Wildcard hosts (`0.0.0.0`, `::`) fail closed unless `FORGE_ALLOW_WILDCARD_BIND=true` is also set. |
-| `FORGE_ALLOW_WILDCARD_BIND` | [config.go](../../services/core/internal/config/config.go) + [main.go](../../services/core/main.go) | `false` | Explicit opt-in required before `forge-core` may bind every interface. Docker sets this to `true` inside the container while host-published ports still default to loopback. |
+| `FORGE_CORE_BIND_HOST` | [config.go](../../services/core/internal/config/config.go) | `127.0.0.1` | HTTP bind host. Wildcard hosts (`0.0.0.0`, `::`) fail closed unless `FORGE_ALLOW_WILDCARD_BIND=true` is also set and an API token is available. |
+| `FORGE_ALLOW_WILDCARD_BIND` | [config.go](../../services/core/internal/config/config.go) + [main.go](../../services/core/main.go) | `false` | Explicit opt-in required before `forge-core` may bind every interface. Wildcard binds still require API auth. |
+| `FORGE_API_TOKEN` | [config.go](../../services/core/internal/config/config.go) + [auth.go](../../services/core/internal/api/auth.go) | generated under `${FORGE_DATA_DIR}/auth/api_token` | Bearer token required for `/api/*`, `/forge/*`, and enabled `/v1/*` routes. `/health` remains public. |
+| `FORGE_API_TOKEN_FILE` | [config.go](../../services/core/internal/config/config.go) | `${FORGE_DATA_DIR}/auth/api_token` | Optional explicit token file path. The token is read without logging and generated on first run when absent. |
+| `FORGE_API_ACTOR` | [config.go](../../services/core/internal/config/config.go) | `operator` | Authenticated actor label recorded for approval and cancellation decisions. Request-body `actor` is not authority. |
+| `FORGE_CORS_ALLOWED_ORIGINS` | [routes.go](../../services/core/internal/api/routes.go) | unset | Comma-separated exact origins allowed in addition to Tauri origins. |
+| `FORGE_CORS_ALLOW_DEV_LOCALHOST` | [routes.go](../../services/core/internal/api/routes.go) | `false` | Explicit dev flag for `http://localhost:*` and `http://127.0.0.1:*` browser origins. CORS is not authentication. |
+| `FORGE_PROJECT_CONTEXT_ALLOWED_ROOTS` | [projectcontext/service.go](../../services/core/internal/projectcontext/service.go) | unset | Comma-separated extra roots allowed for project-context imports. The workspace root is always allowed; absolute paths, `..` escapes, and symlink escapes outside allowed roots are rejected. |
 | `FORGE_WORKSPACE_DIR` | [config.go:30](../../services/core/internal/config/config.go#L30) | `/` for direct Go/dev runs; managed NixOS service defaults to `/forge/workspaces/default` | Workspace root for file-sensitive operations |
 | `FORGE_K_SHADOW_MODE_ENABLED` | [config.go](../../services/core/internal/config/config.go) | `false` | Enables disabled-by-default FORGE-K shadow diagnostics. Can also be toggled at runtime by the dashboard through the durable `forge_k_shadow_mode_enabled` setting. |
 | `FORGE_K_SHADOW_CHAT_METADATA_ENABLED` | [config.go](../../services/core/internal/config/config.go) | `false` | Enables Phase 12H chat metadata diagnostics only when `FORGE_K_SHADOW_MODE_ENABLED=true`. Captures bounded metadata only, never chat content, prompts, completions, request/response bodies, tool payloads, retrieval content, memory content, auth headers, cookies, or secrets. |
@@ -102,7 +108,7 @@ to bypass autodetect.
 
 | Var | Consumer | Default | Purpose |
 |---|---|---|---|
-| `VITE_FORGE_API_URL` | [api.ts:258](../../apps/desktop/src/lib/api.ts#L258) | `http://127.0.0.1:18492` | Backend URL baked into the built frontend |
+| `VITE_FORGE_API_URL` | [client.ts](../../apps/desktop/src/lib/api/client.ts) | `http://127.0.0.1:18492` | Backend URL baked into the built frontend. Native Tauri reads the local API token through `read_forge_api_token` and sends it as a bearer header. |
 
 Template: [apps/desktop/.env.example](../../apps/desktop/.env.example). Copy
 to `apps/desktop/.env.development` (or `.env.production`) to override.
@@ -113,7 +119,7 @@ to `apps/desktop/.env.development` (or `.env.production`) to override.
 |---|---|---|---|
 | `FORGE_CORE_PORT` | `npm run up`, `npm run down` | `18492` | Health-check target / cleanup port |
 | `FORGE_CORE_BIND_HOST` | `services/core` | `127.0.0.1` | Direct core bind host; orchestration health checks use loopback. |
-| `FORGE_ALLOW_WILDCARD_BIND` | `services/core` | `false` | Required only when intentionally binding `FORGE_CORE_BIND_HOST` to `0.0.0.0` or `::`. |
+| `FORGE_ALLOW_WILDCARD_BIND` | `services/core` | `false` | Required only when intentionally binding `FORGE_CORE_BIND_HOST` to `0.0.0.0` or `::`; wildcard still requires API auth. |
 
 ## Durable settings (stored in SQLite)
 

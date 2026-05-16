@@ -56,11 +56,19 @@ func main() {
 	_ = httpSrv.Shutdown(shutdownCtx)
 }
 
-var errWildcardBindRequiresOptIn = errors.New("wildcard bind host requires FORGE_ALLOW_WILDCARD_BIND=true")
+var (
+	errWildcardBindRequiresOptIn = errors.New("wildcard bind host requires FORGE_ALLOW_WILDCARD_BIND=true")
+	errWildcardBindRequiresAuth  = errors.New("wildcard bind host requires API auth token")
+)
 
 func validateCoreListenConfig(cfg config.Config) error {
-	if isWildcardBindHost(cfg.BindHost) && !cfg.AllowWildcardBind {
-		return errWildcardBindRequiresOptIn
+	if isWildcardBindHost(cfg.BindHost) {
+		if !cfg.AllowWildcardBind {
+			return errWildcardBindRequiresOptIn
+		}
+		if strings.TrimSpace(cfg.APIToken) == "" {
+			return errWildcardBindRequiresAuth
+		}
 	}
 	return nil
 }

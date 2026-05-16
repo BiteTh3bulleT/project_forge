@@ -132,6 +132,7 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	pktSvc := packets.New(st.DB, searchSvc, memorySvc)
 	appSvc := approvals.New(st.DB)
 	pcSvc := projectcontext.New(st.DB, ev, cfg.WorkspaceDir, cfg.DataDir)
+	pcSvc.SetAllowedRoots(cfg.ProjectContextAllowedRoots)
 	dossierSvc := dossiers.New(st.DB)
 	evalSvc := evaluations.New(st.DB)
 	lineageSvc := lineage.New(st.DB)

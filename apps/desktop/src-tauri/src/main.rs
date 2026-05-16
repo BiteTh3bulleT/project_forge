@@ -261,6 +261,68 @@ fn operator_desktop_locked() -> bool {
         .unwrap_or(false)
 }
 
+fn forge_data_dir() -> Option<PathBuf> {
+    if let Ok(value) = std::env::var("FORGE_DATA_DIR") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return Some(PathBuf::from(trimmed));
+        }
+    }
+    if cfg!(windows) {
+        std::env::var("APPDATA")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| PathBuf::from(value).join("forge"))
+    } else {
+        std::env::var("XDG_CONFIG_HOME")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .filter(|value| !value.trim().is_empty())
+                    .map(|value| PathBuf::from(value).join(".config"))
+            })
+            .map(|base| base.join("forge"))
+    }
+}
+
+fn forge_api_token_file() -> Option<PathBuf> {
+    if let Ok(value) = std::env::var("FORGE_API_TOKEN_FILE") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return Some(PathBuf::from(trimmed));
+        }
+    }
+    forge_data_dir().map(|dir| dir.join("auth").join("api_token"))
+}
+
+#[tauri::command]
+fn read_forge_api_token() -> Result<Option<String>, String> {
+    if let Ok(value) = std::env::var("FORGE_API_TOKEN") {
+        let token = value.trim();
+        if !token.is_empty() {
+            return Ok(Some(token.to_string()));
+        }
+    }
+    let Some(path) = forge_api_token_file() else {
+        return Ok(None);
+    };
+    match std::fs::read_to_string(&path) {
+        Ok(body) => {
+            let token = body.trim();
+            if token.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(token.to_string()))
+            }
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(format!("failed to read FORGE API token: {}", err)),
+    }
+}
+
 fn fit_operator_desktop_window(window: &tauri::WebviewWindow) {
     let monitor = window
         .current_monitor()
@@ -411,6 +473,7 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            read_forge_api_token,
             read_system_diagnostics,
             list_operator_apps,
             launch_operator_app,

@@ -116,6 +116,7 @@ func NewService(dep Dependencies) *Service {
 		stop:         make(chan struct{}),
 		cancelFuncs:  map[string]context.CancelFunc{},
 	}
+	_ = s.recoverInterruptedJobs(context.Background())
 	s.wg.Add(1)
 	go s.worker()
 	return s
@@ -123,6 +124,7 @@ func NewService(dep Dependencies) *Service {
 
 func (s *Service) Close() {
 	s.closeOnce.Do(func() {
+		s.cancelRunning()
 		close(s.stop)
 		s.wg.Wait()
 	})
@@ -210,8 +212,10 @@ INSERT INTO jobs(
 func (s *Service) Enqueue(jobID string) {
 	select {
 	case s.queue <- jobID:
+	case <-s.stop:
+		return
 	default:
-		go func() { s.queue <- jobID }()
+		_, _ = s.appendEvent(context.Background(), jobID, "job.queue.full", "Job queue is full; job remains queued for recovery", map[string]any{})
 	}
 }
 
@@ -227,6 +231,61 @@ func (s *Service) worker() {
 			}
 		}
 	}
+}
+
+func (s *Service) cancelRunning() {
+	s.mu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(s.cancelFuncs))
+	for _, cancel := range s.cancelFuncs {
+		if cancel != nil {
+			cancels = append(cancels, cancel)
+		}
+	}
+	s.mu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
+}
+
+func (s *Service) recoverInterruptedJobs(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, status
+FROM jobs
+WHERE status IN (?, ?, ?)`,
+		string(StatusQueued),
+		string(StatusPreparing),
+		string(StatusRunning),
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	type candidate struct {
+		id     string
+		status Status
+	}
+	var candidates []candidate
+	for rows.Next() {
+		var c candidate
+		if err := rows.Scan(&c.id, &c.status); err != nil {
+			return err
+		}
+		candidates = append(candidates, c)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, c := range candidates {
+		switch c.status {
+		case StatusQueued:
+			_, _ = s.appendEventIfMissing(ctx, c.id, "job.recovered", "Queued job recovered on startup", map[string]any{"fromStatus": c.status})
+			s.Enqueue(c.id)
+		case StatusPreparing, StatusRunning:
+			_ = s.fail(ctx, c.id, FailInterrupted, "Job interrupted by prior shutdown; operator retry required")
+			_, _ = s.appendEventIfMissing(ctx, c.id, "job.recovered", "Interrupted job reconciled on startup", map[string]any{"fromStatus": c.status, "recoverable": true})
+		}
+	}
+	return nil
 }
 
 func (s *Service) process(jobID string) error {
@@ -1013,8 +1072,22 @@ func (s *Service) appendEvent(ctx context.Context, jobID, typ, message string, p
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
-	_ = s.log.Emit(ctx, typ, map[string]any{"jobId": jobID, "message": message, "payload": payload, "eventId": id})
+	if s.log != nil {
+		_ = s.log.Emit(ctx, typ, map[string]any{"jobId": jobID, "message": message, "payload": payload, "eventId": id})
+	}
 	return &JobEvent{ID: id, JobID: jobID, CreatedAtMs: now, Type: typ, Message: message, Payload: b}, nil
+}
+
+func (s *Service) appendEventIfMissing(ctx context.Context, jobID, typ, message string, payload map[string]any) (*JobEvent, error) {
+	var id int64
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM job_events WHERE job_id = ? AND type = ? ORDER BY id ASC LIMIT 1`, jobID, typ).Scan(&id)
+	if err == nil {
+		return nil, nil
+	}
+	if err != sql.ErrNoRows {
+		return nil, err
+	}
+	return s.appendEvent(ctx, jobID, typ, message, payload)
 }
 
 func (s *Service) setApprovalStatus(ctx context.Context, jobID string, st ApprovalStatus) error {
@@ -1038,16 +1111,18 @@ func (s *Service) complete(ctx context.Context, jobID, summary string) error {
 	if s.retrieval != nil {
 		_ = s.retrieval.RecordOutcome(ctx, jobID, "succeeded")
 	}
-	_, _ = s.artifacts.CreateTextArtifact(ctx, artifacts.CreateTextArtifactRequest{
-		JobID:    &jobID,
-		Type:     "job_result",
-		Title:    "Job result summary",
-		FileName: fmt.Sprintf("job-result-%s.md", jobID),
-		Subdir:   "results",
-		Content:  "# Job Result\n\n" + summary + "\n",
-		MimeType: "text/markdown",
-		Metadata: map[string]any{"jobId": jobID},
-	})
+	if s.artifacts != nil {
+		_, _ = s.artifacts.CreateTextArtifact(ctx, artifacts.CreateTextArtifactRequest{
+			JobID:    &jobID,
+			Type:     "job_result",
+			Title:    "Job result summary",
+			FileName: fmt.Sprintf("job-result-%s.md", jobID),
+			Subdir:   "results",
+			Content:  "# Job Result\n\n" + summary + "\n",
+			MimeType: "text/markdown",
+			Metadata: map[string]any{"jobId": jobID},
+		})
+	}
 	return nil
 }
 
@@ -1082,16 +1157,18 @@ WHERE id = ?`,
 	if s.retrieval != nil {
 		_ = s.retrieval.RecordOutcome(ctx, jobID, "failed")
 	}
-	_, _ = s.artifacts.CreateTextArtifact(ctx, artifacts.CreateTextArtifactRequest{
-		JobID:    &jobID,
-		Type:     "error_report",
-		Title:    "Job failure report",
-		FileName: fmt.Sprintf("job-error-%s.md", jobID),
-		Subdir:   "errors",
-		Content:  fmt.Sprintf("# Job Failure\n\nCode: `%s`\n\nMessage: %s\n", code, message),
-		MimeType: "text/markdown",
-		Metadata: map[string]any{"jobId": jobID, "failureCode": code},
-	})
+	if s.artifacts != nil {
+		_, _ = s.artifacts.CreateTextArtifact(ctx, artifacts.CreateTextArtifactRequest{
+			JobID:    &jobID,
+			Type:     "error_report",
+			Title:    "Job failure report",
+			FileName: fmt.Sprintf("job-error-%s.md", jobID),
+			Subdir:   "errors",
+			Content:  fmt.Sprintf("# Job Failure\n\nCode: `%s`\n\nMessage: %s\n", code, message),
+			MimeType: "text/markdown",
+			Metadata: map[string]any{"jobId": jobID, "failureCode": code},
+		})
+	}
 	return nil
 }
 

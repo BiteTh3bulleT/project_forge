@@ -7,6 +7,53 @@ import type {
 } from "./types";
 import type { JobRecord } from "@forge/shared";
 
+export type AssistantStreamEvent = {
+  event: string;
+  data: string;
+};
+
+async function readSSEStream(
+  res: Response,
+  onEvent: (event: AssistantStreamEvent) => void,
+) {
+  if (!res.body) {
+    throw new Error("Assistant stream did not return a readable body.");
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const emitBlock = (block: string) => {
+    let event = "message";
+    const data: string[] = [];
+    for (const line of block.split(/\r?\n/)) {
+      if (line.startsWith("event:")) {
+        event = line.slice("event:".length).trim();
+      } else if (line.startsWith("data:")) {
+        data.push(line.slice("data:".length).trimStart());
+      }
+    }
+    if (data.length > 0) {
+      onEvent({ event, data: data.join("\n") });
+    }
+  };
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const blocks = buffer.split(/\r?\n\r?\n/);
+    buffer = blocks.pop() ?? "";
+    for (const block of blocks) {
+      emitBlock(block);
+    }
+  }
+  buffer += decoder.decode();
+  if (buffer.trim()) {
+    emitBlock(buffer);
+  }
+}
+
 export const chatApi = {
   threads: {
     list: (limit = 80) =>
@@ -82,8 +129,25 @@ export const chatApi = {
         previewText: string;
       };
     },
-    assistantStreamUrl: (threadId: number, userMessageId: number) =>
-      `${base()}/api/chat/threads/${encodeURIComponent(String(threadId))}/assistant-stream?userMessageId=${encodeURIComponent(String(userMessageId))}`,
+    assistantStream: async (
+      threadId: number,
+      userMessageId: number,
+      onEvent: (event: AssistantStreamEvent) => void,
+      signal?: AbortSignal,
+    ) => {
+      const res = await fetchWithTimeout(
+        `${base()}/api/chat/threads/${encodeURIComponent(String(threadId))}/assistant-stream?userMessageId=${encodeURIComponent(String(userMessageId))}`,
+        {
+          headers: { Accept: "text/event-stream" },
+          signal,
+        },
+      );
+      if (!res.ok) {
+        const t = await res.text().catch(() => "");
+        throw new Error(t || `${res.status} ${res.statusText}`);
+      }
+      await readSSEStream(res, onEvent);
+    },
     queueJob: (id: number, body: Record<string, unknown>) =>
       j<{ job: JobRecord }>(
         `/api/chat/threads/${encodeURIComponent(String(id))}/jobs`,
