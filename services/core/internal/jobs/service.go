@@ -63,10 +63,12 @@ type Service struct {
 	gateway      *gateway.Gateway
 	workspaceDir string
 
-	queue     chan string
-	stop      chan struct{}
-	wg        sync.WaitGroup
-	closeOnce sync.Once
+	queue      chan string
+	stop       chan struct{}
+	wg         sync.WaitGroup
+	closeOnce  sync.Once
+	rootCtx    context.Context
+	cancelRoot context.CancelFunc
 
 	mu          sync.Mutex
 	cancelFuncs map[string]context.CancelFunc
@@ -99,6 +101,7 @@ type Dependencies struct {
 }
 
 func NewService(dep Dependencies) *Service {
+	rootCtx, cancelRoot := context.WithCancel(context.Background())
 	s := &Service{
 		db:           dep.DB,
 		log:          dep.Logger,
@@ -114,6 +117,8 @@ func NewService(dep Dependencies) *Service {
 		workspaceDir: dep.WorkspaceDir,
 		queue:        make(chan string, 256),
 		stop:         make(chan struct{}),
+		rootCtx:      rootCtx,
+		cancelRoot:   cancelRoot,
 		cancelFuncs:  map[string]context.CancelFunc{},
 	}
 	_ = s.recoverInterruptedJobs(context.Background())
@@ -124,6 +129,9 @@ func NewService(dep Dependencies) *Service {
 
 func (s *Service) Close() {
 	s.closeOnce.Do(func() {
+		if s.cancelRoot != nil {
+			s.cancelRoot()
+		}
 		s.cancelRunning()
 		close(s.stop)
 		s.wg.Wait()
@@ -289,7 +297,7 @@ WHERE status IN (?, ?, ?)`,
 }
 
 func (s *Service) process(jobID string) error {
-	ctx := context.Background()
+	ctx := s.context()
 	job, err := s.Get(ctx, jobID)
 	if err != nil {
 		return err
@@ -355,29 +363,37 @@ func (s *Service) process(jobID string) error {
 	}
 	_, _ = s.appendEvent(ctx, jobID, "job.started", "Execution started", map[string]any{"templateId": tpl.ID})
 
-	runCtx, cancel := context.WithCancel(context.Background())
+	runCtx, cancel := context.WithCancel(ctx)
 	s.setCancel(jobID, cancel)
 	defer s.clearCancel(jobID)
 
 	resultSummary, err := s.execute(runCtx, jobID, job, meta, tpl, packet)
 	if err != nil {
+		commitCtx := context.WithoutCancel(ctx)
 		if errors.Is(err, errExecutionDeferred) {
 			return nil
 		}
 		if errors.Is(err, context.Canceled) {
-			return s.markCancelled(context.Background(), jobID, FailUserCancellation, "Execution cancelled")
+			return s.markCancelled(commitCtx, jobID, FailUserCancellation, "Execution cancelled")
 		}
 		var ex executionError
 		if errors.As(err, &ex) {
-			return s.fail(context.Background(), jobID, ex.Code, ex.Message)
+			return s.fail(commitCtx, jobID, ex.Code, ex.Message)
 		}
-		return s.fail(context.Background(), jobID, FailExecution, err.Error())
+		return s.fail(commitCtx, jobID, FailExecution, err.Error())
 	}
 
-	if err := s.complete(context.Background(), jobID, resultSummary); err != nil {
+	if err := s.complete(context.WithoutCancel(ctx), jobID, resultSummary); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (s *Service) context() context.Context {
+	if s.rootCtx != nil {
+		return s.rootCtx
+	}
+	return context.Background()
 }
 
 func (s *Service) execute(ctx context.Context, jobID string, job *Job, meta jobMetadata, tpl Template, packet *packets.Packet) (string, error) {

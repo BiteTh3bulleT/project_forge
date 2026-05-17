@@ -21,6 +21,9 @@ type Manager struct {
 
 	debounce   time.Duration
 	debounceAt *time.Timer
+	closeCtx   context.Context
+	close      context.CancelFunc
+	closed     bool
 
 	watched map[string]struct{}
 }
@@ -30,11 +33,14 @@ func New(ing *ingest.Service, log *events.Logger) (*Manager, error) {
 	if err != nil {
 		return nil, err
 	}
+	closeCtx, close := context.WithCancel(context.Background())
 	return &Manager{
 		watcher:  w,
 		ingest:   ing,
 		log:      log,
 		debounce: 700 * time.Millisecond,
+		closeCtx: closeCtx,
+		close:    close,
 		watched:  map[string]struct{}{},
 	}, nil
 }
@@ -66,11 +72,18 @@ func (m *Manager) Run(ctx context.Context) {
 func (m *Manager) scheduleReindex() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.closed {
+		return
+	}
 	if m.debounceAt != nil {
 		m.debounceAt.Stop()
 	}
 	m.debounceAt = time.AfterFunc(m.debounce, func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		baseCtx := m.closeCtx
+		if baseCtx == nil {
+			baseCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(baseCtx, 5*time.Minute)
 		defer cancel()
 		if err := m.ingest.IndexAllSources(ctx); err != nil {
 			log.Printf("watch reindex all: %v", err)
@@ -105,6 +118,21 @@ func (m *Manager) SyncSources(ctx context.Context, paths []string) error {
 }
 
 func (m *Manager) Close() error {
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return nil
+	}
+	m.closed = true
+	if m.debounceAt != nil {
+		m.debounceAt.Stop()
+		m.debounceAt = nil
+	}
+	if m.close != nil {
+		m.close()
+	}
+	m.mu.Unlock()
+
 	if m.watcher == nil {
 		return nil
 	}

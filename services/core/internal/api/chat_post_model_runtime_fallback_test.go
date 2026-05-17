@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"forge/projectforge/services/core/internal/config"
 	"forge/projectforge/services/core/internal/memory"
@@ -1698,6 +1700,102 @@ func (f *fakeStreamingModelRuntime) StreamChat(_ context.Context, req ModelRunti
 		ModelID:    req.ModelID,
 		AuditID:    "audit-stream",
 	}, nil
+}
+
+type cancelAfterFirstTokenModelRuntime struct {
+	*fakeModelRuntime
+	cancel         context.CancelFunc
+	callbackCalls  int
+	callbackErr    error
+	streamFinished bool
+}
+
+func (f *cancelAfterFirstTokenModelRuntime) StreamChat(ctx context.Context, req ModelRuntimeChatRequest, onToken func(ModelRuntimeChatStreamToken) error) (ModelRuntimeChatResult, error) {
+	f.mu.Lock()
+	f.lastMeta = req.Meta
+	f.lastChat = req
+	f.mu.Unlock()
+
+	tokens := []string{
+		strings.Repeat("a", assistantStreamFlushChars+32),
+		"should-not-be-processed-after-cancel",
+		"should-not-be-requested-after-cancel",
+	}
+	for i, token := range tokens {
+		f.callbackCalls++
+		err := onToken(ModelRuntimeChatStreamToken{Text: token, Index: i})
+		if i == 0 {
+			f.cancel()
+		}
+		if err != nil {
+			f.callbackErr = err
+			return ModelRuntimeChatResult{}, err
+		}
+	}
+	f.streamFinished = true
+	return ModelRuntimeChatResult{Content: strings.Join(tokens, ""), FinishReason: "stop", Backend: "fake", ModelID: req.ModelID}, nil
+}
+
+func TestChatAssistantModelRuntimeStreamStopsTokenCallbackAfterClientCancel(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fakeRuntime := &cancelAfterFirstTokenModelRuntime{fakeModelRuntime: newFakeModelRuntime(), cancel: cancel}
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "runtime stream canceled", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	um, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "cancel runtime stream", map[string]any{"source": "operator"})
+	if err != nil {
+		t.Fatalf("append user message: %v", err)
+	}
+	th, err := srv.chat.GetThread(context.Background(), thread.ID)
+	if err != nil {
+		t.Fatalf("get thread: %v", err)
+	}
+
+	var emitted []string
+	am, reason := srv.completeAssistantWithModelRuntimeStream(
+		ctx,
+		thread.ID,
+		um.ID,
+		th,
+		um.Content,
+		"corr-cancel-stream",
+		nil,
+		nil,
+		"",
+		time.Now(),
+		classifyChatPerformance(um.Content),
+		func(event string, payload map[string]any) {
+			if text, _ := payload["text"].(string); text != "" {
+				emitted = append(emitted, text)
+			}
+		},
+	)
+
+	if am != nil {
+		t.Fatalf("expected canceled stream not to append assistant message, got %#v", am)
+	}
+	if !strings.Contains(reason, "MODEL_REQUEST_CANCELED") {
+		t.Fatalf("expected canceled modelruntime reason, got %q", reason)
+	}
+	if fakeRuntime.callbackCalls != 2 {
+		t.Fatalf("expected callback to stop on first post-cancel token, got %d callback calls", fakeRuntime.callbackCalls)
+	}
+	if !errors.Is(fakeRuntime.callbackErr, context.Canceled) {
+		t.Fatalf("expected callback to return context.Canceled, got %v", fakeRuntime.callbackErr)
+	}
+	if fakeRuntime.streamFinished {
+		t.Fatalf("expected runtime stream to stop after cancellation")
+	}
+	for _, chunk := range emitted {
+		if strings.Contains(chunk, "should-not-be-processed-after-cancel") {
+			t.Fatalf("emitted post-cancel token chunk: %q", chunk)
+		}
+	}
 }
 
 func TestChatAssistantStreamUsesModelRuntimeStreamingWhenOllamaUnavailable(t *testing.T) {
