@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 	"database/sql"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -192,12 +192,12 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		var shadowSink forgekshadow.Sink = forgekshadow.NewMemorySink(forgekshadow.DefaultMaxReports)
 		if cfg.ShadowDiagnosticPersistenceEnabled {
 			if err := cfg.ValidateShadowDiagnosticPersistence(); err != nil {
-				log.Printf("forge-k shadow diagnostic persistence disabled: %v", err)
+				apiLogWarn("forge-k shadow diagnostic persistence disabled", apiLogErr(err))
 			} else if db, err := sql.Open("pgx", cfg.PostgresDSN); err != nil {
-				log.Printf("forge-k shadow diagnostic postgres open failed: %v", err)
+				apiLogWarn("forge-k shadow diagnostic postgres open failed", apiLogErr(err))
 			} else if err := store.NewPostgresMigrationRunner(store.PostgresMigrations()).Run(context.Background(), db); err != nil {
 				_ = db.Close()
-				log.Printf("forge-k shadow diagnostic postgres migrations failed: %v", err)
+				apiLogWarn("forge-k shadow diagnostic postgres migrations failed", apiLogErr(err))
 			} else {
 				shadowDB = db
 				shadowSink = forgekshadow.NewDiagnosticPersistenceSink(shadowSink, forgekshadow.NewPostgresDiagnosticRepository(db), forgekshadow.DiagnosticPersistenceOptions{
@@ -217,7 +217,7 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	capabilityOverrideStoreError := ""
 	capabilityRegistry, err := gateway.NewToolCapabilityRegistryWithStore(bg, &gateway.SQLiteOverrideStore{DB: st.DB})
 	if err != nil {
-		log.Printf("tool capability override store unavailable; using in-memory registry: %v", err)
+		apiLogWarn("tool capability override store unavailable; using in-memory registry", apiLogErr(err))
 		capabilityOverrideStoreDurable = false
 		capabilityOverrideStoreError = err.Error()
 		capabilityRegistry = gateway.NewToolCapabilityRegistry()
@@ -234,7 +234,7 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		AutonomyPolicy:     newGatewayAutonomyAuthorizer(autonomyLoop),
 	})
 	if err := gw.RegisterTool(newLegacyAdapterGatewayTool(reg)); err != nil {
-		log.Printf("legacy adapter gateway tool registration failed: %v", err)
+		apiLogWarn("legacy adapter gateway tool registration failed", apiLogErr(err))
 	}
 	jobSvc := jobs.NewService(jobs.Dependencies{
 		DB:           st.DB,
@@ -255,7 +255,7 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	_ = automationSvc.EnsureDefaults(context.Background())
 	wm, err := watch.New(ing, ev)
 	if err != nil {
-		log.Printf("watch disabled: %v", err)
+		apiLogWarn("watch disabled", apiLogErr(err))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	startApprovalExpiryReaper(ctx, appSvc)
@@ -326,11 +326,11 @@ func startApprovalExpiryReaper(ctx context.Context, svc *approvals.Service) {
 	run := func() {
 		n, err := svc.Expire(ctx)
 		if err != nil && ctx.Err() == nil {
-			log.Printf("approval expiry sweep failed: %v", err)
+			apiLogWarn("approval expiry sweep failed", apiLogErr(err))
 			return
 		}
 		if n > 0 {
-			log.Printf("approval expiry sweep expired %d request(s)", n)
+			apiLogInfo("approval expiry sweep expired requests", slog.Int("count", n))
 		}
 	}
 	run()

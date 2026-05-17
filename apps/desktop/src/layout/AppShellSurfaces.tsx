@@ -1,4 +1,5 @@
 import {
+  Suspense,
   useMemo,
   useRef,
   type CSSProperties,
@@ -360,7 +361,9 @@ export function FloatingWindow(props: {
       <div className="forge-os-window__body">
         <div className="forge-os-window__content">
           {Component ? (
-            <Component />
+            <Suspense fallback={<ToolLoadingFallback />}>
+              <Component />
+            </Suspense>
           ) : (
             <UnsupportedToolNotice toolId={tool?.id} />
           )}
@@ -374,6 +377,18 @@ export function FloatingWindow(props: {
         />
       ) : null}
     </section>
+  );
+}
+
+function ToolLoadingFallback() {
+  return (
+    <div
+      className="forge-route-loading"
+      role="status"
+      aria-label="Loading tool"
+    >
+      <span />
+    </div>
   );
 }
 

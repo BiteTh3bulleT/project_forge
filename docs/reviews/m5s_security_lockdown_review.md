@@ -25,6 +25,27 @@ Task packet: `FORGE_M5S_Security_Lockdown_Prompt_Pack`
 | Desktop logout | Hardened | Desktop logout clears the cached Tauri API-token promise so subsequent calls in the same window must re-read current auth state. |
 | CI/test posture | Improved | CI now runs `npm run validate:js` so desktop Vitest is covered alongside typecheck/build. Focused security tests were added for auth, CORS, import scoping, job recovery, and Windows process behavior. |
 
+## M5S Observability, Auth, And Error Posture
+
+M5S is a live daemon hardening pass for the existing AI-OS/API/gateway/modelruntime authority paths. It does not route live mutation through FORGE-K simulator services, does not make FORGE-K the live kernel, and does not change the doctrine that simulator outputs are non-authoritative unless a separate integration phase explicitly wires and tests a narrow live seam.
+
+Current high-priority posture:
+
+- Bearer auth is now the baseline for `/api/*`, `/forge/*`, and enabled `/v1/*` compatibility routes. `/health` remains public for readiness. The generated file token is a local single-operator baseline, not a complete multi-user credential system.
+- Approval authority is separated from request authority. Approval and cancellation decisions derive actor identity from authenticated request context, and same-authority approval of its own request is rejected.
+- Wildcard bind is fail-closed. Binding `0.0.0.0` or `::` requires explicit `FORGE_ALLOW_WILDCARD_BIND=true` plus an API token; standalone images default to loopback, while Compose opts into container-internal wildcard only with token-backed API access.
+- API errors use structured JSON envelopes instead of raw `http.Error(err.Error())` paths. Internal failures are logged server-side and return generic client-facing errors.
+- `/health/detailed` provides bearer-authenticated structured service health for operator diagnostics while preserving public `/health`.
+- `/metrics` is disabled by default behind `FORGE_ENABLE_METRICS_ENDPOINT` and bearer auth. The current metric set is intentionally bounded and non-secret; request-duration, gate-decision, KV identity, journal-rate, and deeper modelruntime/gateway metrics remain future observability work.
+
+Remaining gaps:
+
+- Bearer token lifecycle still lacks online rotation, revocation, expiry, and per-actor credential separation.
+- Remote ingress secrets still need broader lifecycle work beyond the encrypted-vault migration for newly updated values.
+- Audit/security forensics coverage should continue to expand around denial paths, auth failures, approval decisions, and gateway invocations.
+- `/metrics` shape is an initial protected surface, not a complete SLO/alerting system.
+- API route versioning remains unresolved; new internal surfaces continue to coexist with legacy root route layout.
+
 ## Remaining Boundaries
 
 - This does not make FORGE-K simulator services live daemon authority.

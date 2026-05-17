@@ -25,30 +25,30 @@ No installer / no code signing / no auto-update. tauri.conf.json has bundle.targ
 No SQLite online backup. backup.Service is logical JSON-export only. No VACUUM, no WAL checkpoint policy, no sqlite3_backup API call. WAL file will grow unbounded on never-checkpointed deployments.
 [DONE] audit_records and gateway_invocations backup exports are no longer capped at LIMIT 5000.
 [DONE] First-run release readiness seeds default lanes when action_lanes is empty.
-placeholders_and_stubs.md is now 27 days stale (2026-04-20 vs current_authority_sources at 2026-05-14).
+[DONE] placeholders_and_stubs.md refreshed on 2026-05-17 with current prompt-pack archive, dangerous-placeholder, gateway capability, and fake-hash posture.
 Architecture (largely unchanged)
 internal/api is still a 36k-LOC god-package (113 files, 38-field Server struct).
 controllane.Processor still constructed in exactly ONE production file (autonomy_maintenance_loop.go:1242). 5 of 11 controllane importers are read-only status routes. Live mutations bypass the kernel.
 hyperlane_no_model_responder.go still has 14 raw s.st.DB.QueryRowContext calls (down from 15). Total raw SQL in API package: 29 across 6 files.
 No /api/v1 versioning. New /metrics and /forge/* endpoints went straight onto root.
 NewServer still mixes wiring + side effects (MkdirAll, EnsureDefaults×5, goroutine spawns, shadow-DB open). Got worse — M5S added more bring-up logic.
-No ADR for M5S. AGENTS.md says "Major behavior changes must update the relevant architecture doc, ADR, glossary entry" — error envelope, metrics, auth posture are all undocumented at ADR level.
+[DONE] M5S review note now documents bearer auth, approval authority separation, wildcard bind, structured errors, /health/detailed, gated /metrics, and remaining gaps while preserving FORGE-K simulator/live boundary language.
 Tests (largely unchanged)
 internal/jobs coverage: 1.6% → 16.2%. Real movement, but still very low. Failure-mode tests (timeout, cancellation, adapter error, retry) absent.
 internal/audit coverage frozen at 32.5%. Two weeks of M5S "security lockdown" with no new audit tests is a smell — audit is the primary security forensics surface.
 internal/automation is 4.9%. New worst-coverage package — production rule engine, one bounds test.
-18 packages still have zero test files (chat, dossiers, policy, lanes, release, strategies, canvas, search, dashboard, evaluations, etc.). Zero progress.
+internal/search is no longer zero-test; focused package coverage measured 91.5%. Other zero/low-coverage packages remain open.
 Race detector scope narrow — CI now runs -race only on ./internal/api. Concurrency-rich packages (jobs, modelruntime, gateway, hostbridge, controllane) still unraced.
 Single-OS CI (ubuntu-latest only). Windows-only tests never run on PRs.
 Still no -coverprofile / coverage gate. Regressions invisible.
 Still no MSW for desktop API mocking — every page test stubs ../lib/api whole-module.
 Desktop
-Bundle: 861KB monolithic JS, 131KB CSS (CSS grew +426 lines to 4622). Zero React.lazy, zero manualChunks.
+Bundle split improved on 2026-05-17: route/tool pages now load through React.lazy/Suspense and the Vite production main JS chunk is ~312KB, with page chunks emitted separately. CSS remains ~132KB; no manualChunks policy yet.
 39 empty-deps useEffect hooks across 31 files. Still no ESLint.
 Pages still huge: Settings 1498, Models 1466, Chat 1447, Inspectors 1295. Chat partially split into a subdir but the top-level file is still 1447 lines.
 desktopShellStore multi-window race is unmitigated and now more reachable (multi-window operator shell shipped).
 [DONE] Logout clears apiTokenPromise so subsequent calls from the same window re-read auth state.
-Zero aria-live anywhere in 41k LOC of TS. Login error message isn't announced.
+[DONE] aria-live is now present for login errors (`assertive`) and shell status (`polite`) with focused Vitest coverage.
 Desktop TODO/stub count jumped 0 → 90 across 31 files in two weeks.
 Operational hygiene
 [DONE] FORGE_M5S_Security_Lockdown_Prompt_Pack.zip, FORGE_M5A_Authority_Convergence_Pack.zip, and their unzipped pack directories are archived under docs/prompt-packs/.

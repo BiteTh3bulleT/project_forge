@@ -1,7 +1,7 @@
 package api
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 )
@@ -25,7 +25,11 @@ func writeAPIError(w http.ResponseWriter, status int, code, message string, err 
 		message = http.StatusText(status)
 	}
 	if status >= http.StatusInternalServerError && err != nil {
-		log.Printf("api error: status=%d code=%s err=%v", status, code, err)
+		apiLogError("api error",
+			slog.Int("status", status),
+			slog.String("code", code),
+			apiLogErr(err),
+		)
 	}
 	writeJSON(w, status, apiErrorEnvelope{Error: apiErrorBody{Code: code, Message: message}})
 }

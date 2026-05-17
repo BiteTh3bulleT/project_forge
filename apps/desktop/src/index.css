@@ -4208,6 +4208,28 @@ html[data-effects="subtle"] .forge-context-card:hover {
   }
 }
 
+.forge-route-loading {
+  display: grid;
+  min-height: 12rem;
+  place-items: center;
+}
+
+.forge-route-loading > span {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  border: 2px solid rgba(var(--forge-border-strong-rgb), 0.22);
+  border-top-color: rgba(var(--forge-cyan-rgb), 0.95);
+  box-shadow: 0 0 22px rgba(var(--forge-cyan-rgb), 0.16);
+  animation: forge-route-loading-spin 0.9s linear infinite;
+}
+
+@keyframes forge-route-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .forge-os-window__content > *,
 .forge-tauri-surface > * {
   min-width: 0;

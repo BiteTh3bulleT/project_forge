@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  type ComponentType,
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Navigate,
   Route,
@@ -16,44 +23,7 @@ import {
   subscribeToWorkspaceLayoutSync,
   subscribeToWorkspaceNavigation,
 } from "./lib/windowManager";
-import { ActionLanesPage } from "./pages/ActionLanesPage";
-import { AdaptersPage } from "./pages/AdaptersPage";
-import { AuditPage } from "./pages/AuditPage";
-import { AutonomyPage } from "./pages/AutonomyPage";
-import { BackupPage } from "./pages/BackupPage";
-import { CanvasPage } from "./pages/CanvasPage";
-import { ChatPage } from "./pages/ChatPage";
-import { StartPage } from "./pages/StartPage";
-import { ApprovalsPage } from "./pages/ApprovalsPage";
-import { AutomationPage } from "./pages/AutomationPage";
-import { CommandPage } from "./pages/CommandPage";
-import { DashboardPage } from "./pages/DashboardPage";
-import { ExecutionPermissionsPage } from "./pages/ExecutionPermissionsPage";
-import { EventsPage } from "./pages/EventsPage";
-import { EvaluationsPage } from "./pages/EvaluationsPage";
 import { ForgeLoginPage } from "./pages/ForgeLoginPage";
-import { PolicyPage } from "./pages/PolicyPage";
-import { ReviewsPage } from "./pages/ReviewsPage";
-import { JobDetailPage } from "./pages/JobDetailPage";
-import { JobsPage } from "./pages/JobsPage";
-import { LineagePage } from "./pages/LineagePage";
-import { MemoryDetailPage } from "./pages/MemoryDetailPage";
-import { MemoryPage } from "./pages/MemoryPage";
-import { ModelsPage } from "./pages/ModelsPage";
-import { OperatorAppsPage } from "./pages/OperatorAppsPage";
-import { DossiersPage } from "./pages/DossiersPage";
-import { ProjectContextPage } from "./pages/ProjectContextPage";
-import { ReleasePage } from "./pages/ReleasePage";
-import { RetrievalRunsPage } from "./pages/RetrievalRunsPage";
-import { SettingsPage } from "./pages/SettingsPage";
-import { ToolGatewayPage } from "./pages/ToolGatewayPage";
-import { WorkbenchPage } from "./pages/WorkbenchPage";
-import { InsightsPage } from "./pages/InsightsPage";
-import { InspectorsPage } from "./pages/InspectorsPage";
-import { SourcesPage } from "./pages/SourcesPage";
-import { StrategiesPage } from "./pages/StrategiesPage";
-import { SystemPage } from "./pages/SystemPage";
-import { WorkspaceLayoutsPage } from "./pages/WorkspaceLayoutsPage";
 import { useDesktopWindowStore } from "./stores/desktopWindowStore";
 import { useDesktopShellStore } from "./stores/desktopShellStore";
 import { useWorkspaceLayoutStore } from "./stores/workspaceLayoutStore";
@@ -65,6 +35,116 @@ const FORGE_BOOT_LOGIN_REQUIRED =
   import.meta.env.VITE_FORGE_BOOT_LOGIN === "true";
 const FORGE_OPERATOR_DESKTOP_ROUTE = "/";
 const FORGE_BOOT_SCREEN_MIN_MS = 1600;
+
+type PageModule<K extends string> = Record<K, ComponentType>;
+
+function lazyPage<K extends string>(
+  load: () => Promise<PageModule<K>>,
+  exportName: K,
+) {
+  return lazy(async () => ({ default: (await load())[exportName] }));
+}
+
+const ActionLanesPage = lazyPage(
+  () => import("./pages/ActionLanesPage"),
+  "ActionLanesPage",
+);
+const AdaptersPage = lazyPage(
+  () => import("./pages/AdaptersPage"),
+  "AdaptersPage",
+);
+const AuditPage = lazyPage(() => import("./pages/AuditPage"), "AuditPage");
+const AutonomyPage = lazyPage(
+  () => import("./pages/AutonomyPage"),
+  "AutonomyPage",
+);
+const BackupPage = lazyPage(() => import("./pages/BackupPage"), "BackupPage");
+const CanvasPage = lazyPage(() => import("./pages/CanvasPage"), "CanvasPage");
+const ChatPage = lazyPage(() => import("./pages/ChatPage"), "ChatPage");
+const StartPage = lazyPage(() => import("./pages/StartPage"), "StartPage");
+const ApprovalsPage = lazyPage(
+  () => import("./pages/ApprovalsPage"),
+  "ApprovalsPage",
+);
+const AutomationPage = lazyPage(
+  () => import("./pages/AutomationPage"),
+  "AutomationPage",
+);
+const CommandPage = lazyPage(() => import("./pages/CommandPage"), "CommandPage");
+const DashboardPage = lazyPage(
+  () => import("./pages/DashboardPage"),
+  "DashboardPage",
+);
+const ExecutionPermissionsPage = lazyPage(
+  () => import("./pages/ExecutionPermissionsPage"),
+  "ExecutionPermissionsPage",
+);
+const EventsPage = lazyPage(() => import("./pages/EventsPage"), "EventsPage");
+const EvaluationsPage = lazyPage(
+  () => import("./pages/EvaluationsPage"),
+  "EvaluationsPage",
+);
+const PolicyPage = lazyPage(() => import("./pages/PolicyPage"), "PolicyPage");
+const ReviewsPage = lazyPage(() => import("./pages/ReviewsPage"), "ReviewsPage");
+const JobDetailPage = lazyPage(
+  () => import("./pages/JobDetailPage"),
+  "JobDetailPage",
+);
+const JobsPage = lazyPage(() => import("./pages/JobsPage"), "JobsPage");
+const LineagePage = lazyPage(() => import("./pages/LineagePage"), "LineagePage");
+const MemoryDetailPage = lazyPage(
+  () => import("./pages/MemoryDetailPage"),
+  "MemoryDetailPage",
+);
+const MemoryPage = lazyPage(() => import("./pages/MemoryPage"), "MemoryPage");
+const ModelsPage = lazyPage(() => import("./pages/ModelsPage"), "ModelsPage");
+const OperatorAppsPage = lazyPage(
+  () => import("./pages/OperatorAppsPage"),
+  "OperatorAppsPage",
+);
+const DossiersPage = lazyPage(
+  () => import("./pages/DossiersPage"),
+  "DossiersPage",
+);
+const ProjectContextPage = lazyPage(
+  () => import("./pages/ProjectContextPage"),
+  "ProjectContextPage",
+);
+const ReleasePage = lazyPage(() => import("./pages/ReleasePage"), "ReleasePage");
+const RetrievalRunsPage = lazyPage(
+  () => import("./pages/RetrievalRunsPage"),
+  "RetrievalRunsPage",
+);
+const SettingsPage = lazyPage(
+  () => import("./pages/SettingsPage"),
+  "SettingsPage",
+);
+const ToolGatewayPage = lazyPage(
+  () => import("./pages/ToolGatewayPage"),
+  "ToolGatewayPage",
+);
+const WorkbenchPage = lazyPage(
+  () => import("./pages/WorkbenchPage"),
+  "WorkbenchPage",
+);
+const InsightsPage = lazyPage(
+  () => import("./pages/InsightsPage"),
+  "InsightsPage",
+);
+const InspectorsPage = lazyPage(
+  () => import("./pages/InspectorsPage"),
+  "InspectorsPage",
+);
+const SourcesPage = lazyPage(() => import("./pages/SourcesPage"), "SourcesPage");
+const StrategiesPage = lazyPage(
+  () => import("./pages/StrategiesPage"),
+  "StrategiesPage",
+);
+const SystemPage = lazyPage(() => import("./pages/SystemPage"), "SystemPage");
+const WorkspaceLayoutsPage = lazyPage(
+  () => import("./pages/WorkspaceLayoutsPage"),
+  "WorkspaceLayoutsPage",
+);
 
 function ForgeBootScreen() {
   return (
@@ -90,6 +170,18 @@ function ForgeBootScreen() {
   );
 }
 
+function RouteLoadingFallback() {
+  return (
+    <div
+      className="forge-route-loading"
+      role="status"
+      aria-label="Loading view"
+    >
+      <span />
+    </div>
+  );
+}
+
 function RoutedViews({
   onForgeLoginUnlock,
 }: {
@@ -98,56 +190,58 @@ function RoutedViews({
   const location = useLocation();
   return (
     <ForgeErrorBoundary resetKey={location.pathname + location.search}>
-      <Routes>
-        {/* Root renders the FORGE desktop (wallpaper). The shell decides what
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <Routes>
+          {/* Root renders the FORGE desktop (wallpaper). The shell decides what
             to show; route components only render when a tool is active. */}
-        <Route path="/" element={null} />
-        <Route
-          path="/login"
-          element={<ForgeLoginPage onUnlock={onForgeLoginUnlock} />}
-        />
-        <Route path="/start" element={<StartPage />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/system" element={<SystemPage />} />
-        <Route path="/chat" element={<ChatPage />} />
-        <Route path="/workbench" element={<WorkbenchPage />} />
-        <Route path="/canvas" element={<CanvasPage />} />
-        <Route path="/command" element={<CommandPage />} />
-        <Route path="/operator-apps" element={<OperatorAppsPage />} />
-        <Route path="/memory" element={<MemoryPage />} />
-        <Route path="/memory/chunk/:id" element={<MemoryDetailPage />} />
-        <Route path="/project-context" element={<ProjectContextPage />} />
-        <Route path="/inspectors" element={<InspectorsPage />} />
-        <Route path="/policy" element={<PolicyPage />} />
-        <Route path="/strategies" element={<StrategiesPage />} />
-        <Route path="/automation" element={<AutomationPage />} />
-        <Route path="/reviews" element={<ReviewsPage />} />
-        <Route path="/dossiers" element={<DossiersPage />} />
-        <Route path="/retrieval-runs" element={<RetrievalRunsPage />} />
-        <Route path="/evaluations" element={<EvaluationsPage />} />
-        <Route path="/lineage" element={<LineagePage />} />
-        <Route path="/insights" element={<InsightsPage />} />
-        <Route path="/jobs" element={<JobsPage />} />
-        <Route path="/jobs/:id" element={<JobDetailPage />} />
-        <Route path="/approvals" element={<ApprovalsPage />} />
-        <Route path="/gateway" element={<ToolGatewayPage />} />
-        <Route path="/action-lanes" element={<ActionLanesPage />} />
-        <Route
-          path="/execution-permissions"
-          element={<ExecutionPermissionsPage />}
-        />
-        <Route path="/audit" element={<AuditPage />} />
-        <Route path="/backup" element={<BackupPage />} />
-        <Route path="/release" element={<ReleasePage />} />
-        <Route path="/sources" element={<SourcesPage />} />
-        <Route path="/adapters" element={<AdaptersPage />} />
-        <Route path="/models" element={<ModelsPage />} />
-        <Route path="/events" element={<EventsPage />} />
-        <Route path="/autonomy" element={<AutonomyPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/layouts" element={<WorkspaceLayoutsPage />} />
-        <Route path="*" element={<Navigate to="/chat" replace />} />
-      </Routes>
+          <Route path="/" element={null} />
+          <Route
+            path="/login"
+            element={<ForgeLoginPage onUnlock={onForgeLoginUnlock} />}
+          />
+          <Route path="/start" element={<StartPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/system" element={<SystemPage />} />
+          <Route path="/chat" element={<ChatPage />} />
+          <Route path="/workbench" element={<WorkbenchPage />} />
+          <Route path="/canvas" element={<CanvasPage />} />
+          <Route path="/command" element={<CommandPage />} />
+          <Route path="/operator-apps" element={<OperatorAppsPage />} />
+          <Route path="/memory" element={<MemoryPage />} />
+          <Route path="/memory/chunk/:id" element={<MemoryDetailPage />} />
+          <Route path="/project-context" element={<ProjectContextPage />} />
+          <Route path="/inspectors" element={<InspectorsPage />} />
+          <Route path="/policy" element={<PolicyPage />} />
+          <Route path="/strategies" element={<StrategiesPage />} />
+          <Route path="/automation" element={<AutomationPage />} />
+          <Route path="/reviews" element={<ReviewsPage />} />
+          <Route path="/dossiers" element={<DossiersPage />} />
+          <Route path="/retrieval-runs" element={<RetrievalRunsPage />} />
+          <Route path="/evaluations" element={<EvaluationsPage />} />
+          <Route path="/lineage" element={<LineagePage />} />
+          <Route path="/insights" element={<InsightsPage />} />
+          <Route path="/jobs" element={<JobsPage />} />
+          <Route path="/jobs/:id" element={<JobDetailPage />} />
+          <Route path="/approvals" element={<ApprovalsPage />} />
+          <Route path="/gateway" element={<ToolGatewayPage />} />
+          <Route path="/action-lanes" element={<ActionLanesPage />} />
+          <Route
+            path="/execution-permissions"
+            element={<ExecutionPermissionsPage />}
+          />
+          <Route path="/audit" element={<AuditPage />} />
+          <Route path="/backup" element={<BackupPage />} />
+          <Route path="/release" element={<ReleasePage />} />
+          <Route path="/sources" element={<SourcesPage />} />
+          <Route path="/adapters" element={<AdaptersPage />} />
+          <Route path="/models" element={<ModelsPage />} />
+          <Route path="/events" element={<EventsPage />} />
+          <Route path="/autonomy" element={<AutonomyPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/layouts" element={<WorkspaceLayoutsPage />} />
+          <Route path="*" element={<Navigate to="/chat" replace />} />
+        </Routes>
+      </Suspense>
     </ForgeErrorBoundary>
   );
 }

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -61,15 +61,15 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service, telemet
 	}
 	runtimeEnabled := cfg.EnableModelRuntime
 	if !runtimeEnabled && cfg.EnableOpenAICompatAPI {
-		log.Printf("model runtime auto-enabled because FORGE_ENABLE_OPENAI_COMPAT_API is true")
+		apiLogInfo("model runtime auto-enabled", slog.String("reason", "openai_compat_api_enabled"))
 		runtimeEnabled = true
 	}
 	if !runtimeEnabled && strings.TrimSpace(cfg.ModelOpenAICompatEndpoint) != "" {
-		log.Printf("model runtime auto-enabled because FORGE_MODEL_OPENAI_COMPAT_ENDPOINT is configured")
+		apiLogInfo("model runtime auto-enabled", slog.String("reason", "openai_compat_endpoint_configured"))
 		runtimeEnabled = true
 	}
 	if !runtimeEnabled && strings.TrimSpace(cfg.ModelVLLMEndpoint) != "" {
-		log.Printf("model runtime auto-enabled because FORGE_MODEL_VLLM_ENDPOINT is configured")
+		apiLogInfo("model runtime auto-enabled", slog.String("reason", "vllm_endpoint_configured"))
 		runtimeEnabled = true
 	}
 	if !runtimeEnabled {
@@ -78,13 +78,13 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service, telemet
 
 	modelStore := modelruntime.NewModelStore(cfg.ModelHome, modelruntime.ModelStoreOptions{StrictChecksum: false})
 	if err := os.MkdirAll(filepath.Join(cfg.ModelHome, "models"), 0o755); err != nil {
-		log.Printf("model runtime model home init warning: %v", err)
+		apiLogWarn("model runtime model home init warning", apiLogErr(err))
 	}
 	registry := modelruntime.NewModelRegistry(modelStore)
 	models := []modelruntime.ModelManifest{}
 	registered, err := registry.Scan(context.Background())
 	if err != nil {
-		log.Printf("model runtime startup scan warning: %v", err)
+		apiLogWarn("model runtime startup scan warning", apiLogErr(err))
 	} else {
 		models = make([]modelruntime.ModelManifest, 0, len(registered))
 		for _, rec := range registered {
@@ -98,7 +98,7 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service, telemet
 	}
 
 	if discovered, err := discoverOpenAICompatModels(context.Background(), cfg); err != nil {
-		log.Printf("model runtime remote model discovery warning: %v", err)
+		apiLogWarn("model runtime remote model discovery warning", apiLogErr(err))
 	} else if len(discovered) > 0 {
 		for _, model := range discovered {
 			id := strings.ToLower(strings.TrimSpace(model.ID))
@@ -115,7 +115,7 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service, telemet
 	}
 	ollamaEndpoint := localOllamaEndpoint()
 	if discovered, err := discoverLocalOllamaModels(context.Background(), ollamaEndpoint, cfg.ModelRuntimeAllowOllamaCloudModels); err != nil {
-		log.Printf("model runtime local ollama discovery warning: %v", err)
+		apiLogWarn("model runtime local ollama discovery warning", apiLogErr(err))
 	} else if len(discovered) > 0 {
 		for _, model := range discovered {
 			id := strings.ToLower(strings.TrimSpace(model.ID))
@@ -199,11 +199,11 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service, telemet
 				MaxOutputTokens: cfg.ModelMaxOutputTokens,
 			}))
 		default:
-			log.Printf("model runtime backend kind %q is not supported in m3 init", kind)
+			apiLogWarn("model runtime backend kind is not supported in m3 init", slog.String("backend", string(kind)))
 		}
 	}
 	if len(backends) == 0 {
-		log.Printf("model runtime disabled: no supported backends configured")
+		apiLogWarn("model runtime disabled", slog.String("reason", "no_supported_backends_configured"))
 		return nil
 	}
 
@@ -259,13 +259,16 @@ func initModelRuntimeService(cfg config.Config, auditSvc *audit.Service, telemet
 		},
 	})
 	if err != nil {
-		log.Printf("model runtime disabled: %v", err)
+		apiLogWarn("model runtime disabled", apiLogErr(err))
 		return nil
 	}
 
 	if defaultModel := strings.TrimSpace(cfg.ModelDefaultID); defaultModel != "" {
 		if _, err := runtimeSvc.Inspect(context.Background(), defaultModel); err != nil {
-			log.Printf("model runtime default model %q unavailable: %v", defaultModel, err)
+			apiLogWarn("model runtime default model unavailable",
+				slog.String("model_id", defaultModel),
+				apiLogErr(err),
+			)
 		}
 	}
 
@@ -347,7 +350,10 @@ func registerDiscoveredModels(registry *modelruntime.ModelRegistry, discovered [
 	}
 	for _, model := range discovered {
 		if err := registry.Register(model); err != nil {
-			log.Printf("model runtime discovered model registration warning for %q: %v", strings.TrimSpace(model.ID), err)
+			apiLogWarn("model runtime discovered model registration warning",
+				slog.String("model_id", strings.TrimSpace(model.ID)),
+				apiLogErr(err),
+			)
 		}
 	}
 }

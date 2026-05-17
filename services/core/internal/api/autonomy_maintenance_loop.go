@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1265,7 +1264,7 @@ func newDefaultAutonomyMaintenanceLoop(db *sql.DB, cfg config.Config, ev *events
 	})
 	bundle, err := autonomy.NewSQLiteBundleStrict(db)
 	if err != nil {
-		log.Printf("autonomy maintenance loop disabled: %v", err)
+		apiLogWarn("autonomy maintenance loop disabled", apiLogErr(err))
 		return nil
 	}
 	for _, budget := range autonomy.DefaultBudgets(scope, nowFn(), "forge.autonomy") {

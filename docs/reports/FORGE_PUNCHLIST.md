@@ -136,7 +136,7 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 - [ ] `internal/insights` — insight surface
 - [ ] `internal/dossiers` — dossier service
 - [ ] `internal/evaluations` — evaluation pipeline
-- [ ] `internal/search` — search service
+- [x] `internal/search` — search service. 2026-05-17: focused coverage is 91.5%.
 
 ### Untested packages worth leaving for later
 
@@ -214,7 +214,7 @@ These are the items between "wired" and "works the way I want."
 - [ ] **Right-side context inspector.** Shows current context being compiled, recent journal entries, active loops/approvals.
 - [ ] **Activity log surface.** Last 20 audit events, popover or accordion.
 - [ ] **Theme variables.** Minimal CSS-vars-driven light/dark + accent.
-- [ ] **Lazy-load tier-2 pages.** `React.lazy` for everything past the operator surface in `App.tsx`.
+- [x] **Lazy-load tier-2 pages.** 2026-05-17: route and shell tool pages now load through `React.lazy`/`Suspense`; Vite production build emits per-page chunks and the main JS chunk is ~312 KB.
 
 ### Memory and state
 
