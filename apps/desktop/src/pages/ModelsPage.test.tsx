@@ -58,6 +58,25 @@ describe("ModelsPage", () => {
         status: "unavailable",
       },
     });
+    mocks.modelList.mockResolvedValue({ models: [] });
+    mocks.modelHealth.mockResolvedValue({
+      health: { ok: true, status: "ok", backend: "none" },
+    });
+    mocks.modelQueue.mockResolvedValue({
+      queue: { depth: 0, scheduler: "idle" },
+    });
+    mocks.modelLoaded.mockResolvedValue({ loaded: { count: 0, models: [] } });
+    mocks.modelUsage.mockResolvedValue({
+      usage: {
+        totalRequests: 0,
+        completedRequests: 0,
+        failedRequests: 0,
+        activeRequests: 0,
+        totalTokensIn: 0,
+        totalTokensOut: 0,
+      },
+    });
+    mocks.modelBackends.mockResolvedValue({ backends: [] });
   });
 
   it("keeps model runtime controls read-only when runtime is unavailable", async () => {
@@ -102,5 +121,28 @@ describe("ModelsPage", () => {
     expect(mocks.modelScan).not.toHaveBeenCalled();
     expect(mocks.modelImport).not.toHaveBeenCalled();
     expect(mocks.settingsPatch).not.toHaveBeenCalled();
+  });
+
+  it("describes GPU acceleration without implying telemetry is enabled", async () => {
+    mocks.health.mockResolvedValue({
+      ok: true,
+      service: "forge-core",
+      modelRuntime: {
+        available: true,
+        status: "ok",
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/models?view=registry"]}>
+        <ModelsPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByText(
+        "GPU acceleration uses the model runtime policy only; DCGM and Intel telemetry stay separate in Settings.",
+      ),
+    ).toBeTruthy();
   });
 });

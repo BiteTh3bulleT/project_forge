@@ -51,6 +51,6 @@ desktopShellStore multi-window race is unmitigated and now more reachable (multi
 Zero aria-live anywhere in 41k LOC of TS. Login error message isn't announced.
 Desktop TODO/stub count jumped 0 → 90 across 31 files in two weeks.
 Operational hygiene
-FORGE_M5S_Security_Lockdown_Prompt_Pack.zip, FORGE_M5A_Authority_Convergence_Pack.zip, and the doubly-nested unzipped pack directory are sitting in working tree, ungitignored. Either commit under docs/prompt-packs/ or gitignore.
-WindoManager.txt at repo root — typo'd dev prompt, still present.
-[DONE] docker-compose.yml now defaults FORGE_ALLOW_WILDCARD_BIND=false.
+[DONE] FORGE_M5S_Security_Lockdown_Prompt_Pack.zip, FORGE_M5A_Authority_Convergence_Pack.zip, and their unzipped pack directories are archived under docs/prompt-packs/.
+[DONE] WindoManager.txt archived as docs/superpowers/specs/2026-05-17-forge-desktop-window-manager.md.
+[DONE] Standalone Docker image defaults to loopback; Compose explicitly opts into container-internal wildcard bind while publishing host ports to 127.0.0.1 by default.

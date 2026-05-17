@@ -60,6 +60,10 @@ func (s *Server) routeEnvelopeShadowMiddleware(next http.Handler) http.Handler {
 
 func (s *Server) mountHealthRoutes(r chi.Router) {
 	r.Get("/health", s.handleHealth)
+	r.Group(func(r chi.Router) {
+		r.Use(s.requireAPIAuth)
+		r.Get("/health/detailed", s.handleDetailedHealth)
+	})
 	s.mountMetricsRoutes(r)
 }
 

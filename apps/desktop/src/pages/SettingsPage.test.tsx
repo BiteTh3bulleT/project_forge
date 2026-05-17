@@ -159,4 +159,23 @@ describe("SettingsPage remote secrets", () => {
       remoteAccessToken: "new-remote-token",
     });
   });
+
+  it("separates GPU acceleration from optional telemetry controls", async () => {
+    render(<SettingsPage />);
+
+    expect(
+      await screen.findByText("GPU acceleration and model visibility"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Enable this for host GPU/model acceleration. This does not enable vendor telemetry.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Optional telemetry probes")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Leave these off unless NVIDIA DCGM or Intel Level Zero telemetry is installed and reachable.",
+      ),
+    ).toBeTruthy();
+  });
 });
