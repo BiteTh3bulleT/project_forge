@@ -3,13 +3,17 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
 	"crypto/subtle"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +32,7 @@ const (
 	discordBotTokenKey         = "discord_bot_token"
 	discordDefaultChannelIDKey = "discord_default_channel_id"
 	discordWebhookURLKey       = "discord_webhook_url"
+	discordPublicKeyKey        = "discord_public_key"
 	remoteThreadMapKey         = "remote_thread_map"
 
 	remoteAssistantTimeout = 185 * time.Second
@@ -37,6 +42,7 @@ const (
 )
 
 var errRemoteMessageTooLarge = fmt.Errorf("remote message too large")
+var errDiscordSignatureInvalid = fmt.Errorf("discord signature verification failed")
 
 type remoteConfig struct {
 	enabled             bool
@@ -48,6 +54,7 @@ type remoteConfig struct {
 	discordBotToken     string
 	discordDefaultChat  string
 	discordWebhookURL   string
+	discordPublicKey    string
 	threadMap           map[string]int64
 }
 
@@ -94,7 +101,7 @@ type discordUser struct {
 func (s *Server) handleRemoteTelegram(w http.ResponseWriter, r *http.Request) {
 	conf, err := s.loadRemoteConfig(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		writeAPIRequestError(w, http.StatusUnauthorized, err)
 		return
 	}
 
@@ -116,10 +123,10 @@ func (s *Server) handleRemoteTelegram(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.processTelegramRemoteMessage(r.Context(), conf, msg); err != nil {
 		if errors.Is(err, errRemoteMessageTooLarge) {
-			http.Error(w, err.Error(), http.StatusRequestEntityTooLarge)
+			writeAPIRequestError(w, http.StatusRequestEntityTooLarge, err)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -129,11 +136,21 @@ func (s *Server) handleRemoteTelegram(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRemoteDiscord(w http.ResponseWriter, r *http.Request) {
 	conf, err := s.loadRemoteConfig(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		writeAPIRequestError(w, http.StatusUnauthorized, err)
 		return
 	}
 
 	if !s.remoteTokenOk(r, conf.token) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	if err := verifyRemoteDiscordSignature(w, r, conf.discordPublicKey); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			http.Error(w, "remote request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
 	}
@@ -147,10 +164,10 @@ func (s *Server) handleRemoteDiscord(w http.ResponseWriter, r *http.Request) {
 	text, err := remoteBoundedText(payload.Content)
 	if err != nil {
 		if errors.Is(err, errRemoteMessageTooLarge) {
-			http.Error(w, err.Error(), http.StatusRequestEntityTooLarge)
+			writeAPIRequestError(w, http.StatusRequestEntityTooLarge, err)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	if text == "" {
@@ -187,7 +204,7 @@ func (s *Server) handleRemoteDiscord(w http.ResponseWriter, r *http.Request) {
 	if err := s.processRemoteMessage(r.Context(), conf, sourceKey, text, sendTarget, func(ctx context.Context, reply string) error {
 		return s.sendDiscordReply(ctx, conf.discordWebhookURL, conf.discordBotToken, sendTarget.channelID, reply)
 	}); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -323,14 +340,15 @@ func (s *Server) loadRemoteConfig(ctx context.Context) (remoteConfig, error) {
 func (s *Server) loadRemoteConfigForMode(ctx context.Context, requireToken bool) (remoteConfig, error) {
 	conf := remoteConfig{
 		enabled:             parseRemoteBool(loadSetting(s.st.DB, remoteAccessEnabledKey, "false")),
-		token:               strings.TrimSpace(loadSetting(s.st.DB, remoteAccessTokenKey, "")),
+		token:               strings.TrimSpace(loadSecretSetting(ctx, s.st.DB, s.cfg.DataDir, remoteAccessTokenKey, "")),
 		defaultThreadID:     parseRemoteInt64(loadSetting(s.st.DB, remoteDefaultThreadIDKey, "")),
 		crossChatContext:    parseRemoteBool(loadSetting(s.st.DB, remoteCrossChatContextKey, "false")),
-		telegramBotToken:    strings.TrimSpace(loadSetting(s.st.DB, telegramBotTokenKey, "")),
+		telegramBotToken:    strings.TrimSpace(loadSecretSetting(ctx, s.st.DB, s.cfg.DataDir, telegramBotTokenKey, "")),
 		telegramDefaultChat: strings.TrimSpace(loadSetting(s.st.DB, telegramDefaultChatIDKey, "")),
-		discordBotToken:     strings.TrimSpace(loadSetting(s.st.DB, discordBotTokenKey, "")),
+		discordBotToken:     strings.TrimSpace(loadSecretSetting(ctx, s.st.DB, s.cfg.DataDir, discordBotTokenKey, "")),
 		discordDefaultChat:  strings.TrimSpace(loadSetting(s.st.DB, discordDefaultChannelIDKey, "")),
-		discordWebhookURL:   strings.TrimSpace(loadSetting(s.st.DB, discordWebhookURLKey, "")),
+		discordWebhookURL:   strings.TrimSpace(loadSecretSetting(ctx, s.st.DB, s.cfg.DataDir, discordWebhookURLKey, "")),
+		discordPublicKey:    strings.TrimSpace(loadSecretSetting(ctx, s.st.DB, s.cfg.DataDir, discordPublicKeyKey, strings.TrimSpace(os.Getenv("FORGE_DISCORD_PUBLIC_KEY")))),
 		threadMap:           remoteParseThreadMap(loadSetting(s.st.DB, remoteThreadMapKey, "{}")),
 	}
 
@@ -365,13 +383,49 @@ func (s *Server) remoteTokenOk(r *http.Request, expected string) bool {
 	return remoteTokenMatches(token, expected)
 }
 
+func verifyRemoteDiscordSignature(w http.ResponseWriter, r *http.Request, publicKeyHex string) error {
+	publicKeyHex = strings.TrimSpace(publicKeyHex)
+	if publicKeyHex == "" {
+		return nil
+	}
+
+	timestamp := strings.TrimSpace(r.Header.Get("X-Signature-Timestamp"))
+	signatureHex := strings.TrimSpace(r.Header.Get("X-Signature-Ed25519"))
+	if timestamp == "" || signatureHex == "" {
+		return errDiscordSignatureInvalid
+	}
+
+	publicKey, err := hex.DecodeString(publicKeyHex)
+	if err != nil || len(publicKey) != ed25519.PublicKeySize {
+		return errDiscordSignatureInvalid
+	}
+	signature, err := hex.DecodeString(signatureHex)
+	if err != nil || len(signature) != ed25519.SignatureSize {
+		return errDiscordSignatureInvalid
+	}
+
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, remoteInboundBodyLimit))
+	if err != nil {
+		return err
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+
+	message := append([]byte(timestamp), body...)
+	if !ed25519.Verify(ed25519.PublicKey(publicKey), message, signature) {
+		return errDiscordSignatureInvalid
+	}
+	return nil
+}
+
 func remoteTokenMatches(provided, expected string) bool {
 	provided = strings.TrimSpace(provided)
 	expected = strings.TrimSpace(expected)
-	if provided == "" || expected == "" || len(provided) != len(expected) {
+	if provided == "" || expected == "" {
 		return false
 	}
-	return subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
+	providedHash := sha256.Sum256([]byte(provided))
+	expectedHash := sha256.Sum256([]byte(expected))
+	return subtle.ConstantTimeCompare(providedHash[:], expectedHash[:]) == 1
 }
 
 func remoteFirstTelegramMessage(u *telegramUpdate) *telegramMessage {

@@ -37,7 +37,7 @@ func (s *Server) handleChatThreadsList(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	list, err := s.chat.ListThreads(ctx, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"threads": list})
@@ -55,7 +55,7 @@ func (s *Server) handleChatThreadCreate(w http.ResponseWriter, r *http.Request) 
 	}
 	t, err := s.chat.CreateThread(ctx, body.Title, body.DossierID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	_ = s.log.Emit(ctx, "chat.thread.created", map[string]any{"threadId": t.ID})
@@ -75,7 +75,7 @@ func (s *Server) handleChatThreadGet(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, chatThreadDetailForAPI(d))
@@ -163,7 +163,7 @@ func (s *Server) handleChatThreadPatch(w http.ResponseWriter, r *http.Request) {
 	}
 	t, err := s.chat.UpdateThreadTitle(ctx, id, body.Title)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	_ = s.log.Emit(ctx, "chat.thread.renamed", map[string]any{"threadId": id})
@@ -178,7 +178,7 @@ func (s *Server) handleChatThreadDelete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := s.chat.DeleteThread(ctx, id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	_ = s.log.Emit(ctx, "chat.thread.deleted", map[string]any{"threadId": id})
@@ -202,13 +202,13 @@ func (s *Server) handleChatJobCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	j, err := s.jobs.Create(ctx, body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	meta := map[string]any{"jobId": j.ID, "templateId": body.TemplateID}
 	_, err = s.chat.AppendMessage(ctx, threadID, "system", "Job queued: "+j.ID+" ("+j.Title+")", meta)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	_ = s.log.Emit(ctx, "chat.job.queued", map[string]any{"threadId": threadID, "jobId": j.ID})
@@ -227,7 +227,7 @@ func (s *Server) handleChatAttachmentUpload(w http.ResponseWriter, r *http.Reque
 			http.Error(w, "thread not found", http.StatusNotFound)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, chatAttachmentUploadRequestLimit)
@@ -279,7 +279,7 @@ func (s *Server) handleChatAttachmentUpload(w http.ResponseWriter, r *http.Reque
 		},
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	previewText := ""
@@ -332,7 +332,7 @@ func (s *Server) handleCanvasBoardsList(w http.ResponseWriter, r *http.Request) 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	list, err := s.canvas.ListBoards(ctx, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"boards": list})
@@ -350,7 +350,7 @@ func (s *Server) handleCanvasBoardCreate(w http.ResponseWriter, r *http.Request)
 	}
 	b, err := s.canvas.CreateBoard(ctx, body.Title, body.DossierID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"board": b})
@@ -369,7 +369,7 @@ func (s *Server) handleCanvasBoardGet(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, b)
@@ -383,7 +383,7 @@ func (s *Server) handleCanvasBoardDelete(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if err := s.canvas.DeleteBoard(ctx, id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -416,7 +416,7 @@ func (s *Server) handleCanvasNoteCreate(w http.ResponseWriter, r *http.Request) 
 	}
 	n, err := s.canvas.CreateNote(ctx, boardID, body.Title, body.Body, body.X, body.Y, body.Width, body.Height)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"note": n})
@@ -441,7 +441,7 @@ func (s *Server) handleCanvasNotePatch(w http.ResponseWriter, r *http.Request) {
 	}
 	n, err := s.canvas.PatchNote(ctx, boardID, noteID, body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"note": n})
@@ -460,7 +460,7 @@ func (s *Server) handleCanvasNoteDelete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := s.canvas.DeleteNote(ctx, boardID, noteID); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -485,12 +485,12 @@ func (s *Server) handleArtifactsList(w http.ResponseWriter, r *http.Request) {
 	}
 	list, err := s.artifacts.List(ctx, jobPtr, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	list, err = s.filterArtifactsForPublicList(ctx, list, threadID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"artifacts": list})
@@ -509,7 +509,7 @@ func (s *Server) handleArtifactGet(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	threadID, err := artifactThreadScopeFromRequest(r)
@@ -519,10 +519,10 @@ func (s *Server) handleArtifactGet(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.authorizeArtifactPublicRead(ctx, a, threadID); err != nil {
 		if errors.Is(err, errArtifactThreadScopeRequired) {
-			http.Error(w, err.Error(), http.StatusForbidden)
+			writeAPIRequestError(w, http.StatusForbidden, err)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, a)
@@ -541,7 +541,7 @@ func (s *Server) handleArtifactContent(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	threadID, err := artifactThreadScopeFromRequest(r)
@@ -551,15 +551,15 @@ func (s *Server) handleArtifactContent(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.authorizeArtifactPublicRead(ctx, art, threadID); err != nil {
 		if errors.Is(err, errArtifactThreadScopeRequired) {
-			http.Error(w, err.Error(), http.StatusForbidden)
+			writeAPIRequestError(w, http.StatusForbidden, err)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	body, art, textual, err := s.artifacts.ReadArtifactText(ctx, id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

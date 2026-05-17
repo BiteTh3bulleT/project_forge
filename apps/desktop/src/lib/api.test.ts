@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { api } from "./api";
+import { clearForgeApiTokenCache } from "./api/client";
+
+const tauriMocks = vi.hoisted(() => ({
+  invoke: vi.fn<() => Promise<string | null>>(() => Promise.resolve(null)),
+}));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: tauriMocks.invoke,
+}));
 
 describe("api client request bounds", () => {
   afterEach(() => {
@@ -22,6 +31,35 @@ describe("api client request bounds", () => {
 
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     expect(init?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("reloads the Tauri API token after the token cache is cleared", async () => {
+    clearForgeApiTokenCache();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        ),
+      );
+    tauriMocks.invoke
+      .mockResolvedValueOnce("stale-token")
+      .mockResolvedValueOnce(null);
+
+    await api.health();
+    clearForgeApiTokenCache();
+    await api.health();
+
+    const firstInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const secondInit = fetchMock.mock.calls[1]?.[1] as RequestInit | undefined;
+    expect(new Headers(firstInit?.headers).get("Authorization")).toBe(
+      "Bearer stale-token",
+    );
+    expect(new Headers(secondInit?.headers).has("Authorization")).toBe(false);
+    expect(tauriMocks.invoke).toHaveBeenCalledTimes(2);
   });
 
   it("attaches an abort signal to attachment uploads", async () => {

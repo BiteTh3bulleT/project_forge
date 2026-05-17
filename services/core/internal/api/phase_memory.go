@@ -32,7 +32,7 @@ func (s *Server) handleListMemoryObservations(w http.ResponseWriter, r *http.Req
 		StaleOnly:  staleOnly,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"observations": rows})
@@ -82,7 +82,7 @@ func (s *Server) handleCreateMemoryObservation(w http.ResponseWriter, r *http.Re
 		ObservedAtMs:      body.ObservedAtMs,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"observation": obs})
@@ -96,7 +96,7 @@ func (s *Server) handleGetMemoryObservation(w http.ResponseWriter, r *http.Reque
 	}
 	obs, err := s.memory.GetObservation(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeAPIRequestError(w, http.StatusNotFound, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"observation": obs})
@@ -110,7 +110,7 @@ func (s *Server) handleGetObservationVSA(w http.ResponseWriter, r *http.Request)
 	}
 	detail, err := s.memory.GetObservationVSA(r.Context(), observationID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"detail": detail})
@@ -143,7 +143,7 @@ func (s *Server) handlePatchMemoryObservation(w http.ResponseWriter, r *http.Req
 		RelatedFiles:      body.RelatedFiles,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"observation": updated})
@@ -178,7 +178,7 @@ func (s *Server) handleMarkMemoryObservationUsefulness(w http.ResponseWriter, r 
 		Weight:            body.Weight,
 		Note:              body.Note,
 	}); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "observationId": id})
@@ -192,7 +192,7 @@ func (s *Server) handleGetRetrievalSelection(w http.ResponseWriter, r *http.Requ
 	}
 	selection, err := s.memory.SelectionByRun(r.Context(), runID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"selection": selection})
@@ -207,7 +207,7 @@ func (s *Server) handleGetPacketAlignmentNotes(w http.ResponseWriter, r *http.Re
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	notes, err := s.memory.PacketAlignmentNotes(r.Context(), packetID, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"notes": notes})
@@ -222,7 +222,7 @@ func (s *Server) handleGetDossierMemory(w http.ResponseWriter, r *http.Request) 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	view, err := s.memory.DossierView(r.Context(), dossierID, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"view": view})
@@ -236,7 +236,7 @@ func (s *Server) handleGetDossierVSASummary(w http.ResponseWriter, r *http.Reque
 	}
 	summary, err := s.memory.DossierVSASummary(r.Context(), dossierID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"summary": summary})
@@ -247,7 +247,7 @@ func (s *Server) handleListMemoryRepairRuns(w http.ResponseWriter, r *http.Reque
 	dossierID := parseOptionalInt(r.URL.Query().Get("dossierId"))
 	runs, err := s.memory.ListRepairRuns(r.Context(), limit, dossierID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
@@ -261,7 +261,7 @@ func (s *Server) handleGetMemoryRepairRun(w http.ResponseWriter, r *http.Request
 	}
 	detail, err := s.memory.GetRepairRun(r.Context(), runID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeAPIRequestError(w, http.StatusNotFound, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"detail": detail})
@@ -286,7 +286,7 @@ func (s *Server) handleRunMemoryRepair(w http.ResponseWriter, r *http.Request) {
 		Note:       body.Note,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"detail": detail})
@@ -321,7 +321,7 @@ func (s *Server) handleRunVSAReindex(w http.ResponseWriter, r *http.Request) {
 		Force:       body.Force,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"detail": detail})
@@ -376,7 +376,7 @@ func (s *Server) handleListVSAReindexRuns(w http.ResponseWriter, r *http.Request
 	dossierID := parseOptionalInt(r.URL.Query().Get("dossierId"))
 	runs, err := s.memory.ListVSAReindexRuns(r.Context(), limit, dossierID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
@@ -394,7 +394,7 @@ func (s *Server) handleGetVSAReindexRun(w http.ResponseWriter, r *http.Request) 
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"detail": detail})

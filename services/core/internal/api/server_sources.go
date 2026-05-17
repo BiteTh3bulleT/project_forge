@@ -22,7 +22,7 @@ func (s *Server) handleListSources(w http.ResponseWriter, r *http.Request) {
 SELECT id, path, created_at, last_scan_started_at, last_scan_completed_at, last_error
 FROM sources ORDER BY id`)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	defer rows.Close()
@@ -40,7 +40,7 @@ FROM sources ORDER BY id`)
 		var ls, lc sql.NullInt64
 		var le sql.NullString
 		if err := rows.Scan(&srow.ID, &srow.Path, &srow.CreatedAtMs, &ls, &lc, &le); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 		if ls.Valid {
@@ -150,7 +150,7 @@ func (s *Server) handleAddSource(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "source already exists", http.StatusConflict)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	id, _ := res.LastInsertId()
@@ -172,7 +172,7 @@ func (s *Server) handleDeleteSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := s.st.DB.ExecContext(ctx, `DELETE FROM sources WHERE id = ?`, id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	_ = s.log.Emit(ctx, "command.executed", map[string]any{"command": "source.delete", "sourceId": id})
@@ -188,7 +188,7 @@ func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
 	_ = s.log.Emit(ctx, "command.executed", map[string]any{"command": "reindex", "sourceId": q})
 	if q == "" {
 		if err := s.ingest.IndexAllSources(ctx); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "scope": "all"})
@@ -205,7 +205,7 @@ func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.ingest.IndexSource(ctx, id, path); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "scope": "one", "sourceId": id})
@@ -218,7 +218,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	hits, err := s.search.Search(ctx, q, limit)
 	if err != nil {
 		_ = s.log.Emit(ctx, "error.raised", map[string]any{"where": "search", "message": err.Error()})
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	_ = s.log.Emit(ctx, "search.executed", map[string]any{"q": q, "hits": len(hits)})

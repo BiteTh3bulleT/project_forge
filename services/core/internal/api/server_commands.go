@@ -31,7 +31,7 @@ func (s *Server) handleCommandExecute(w http.ResponseWriter, r *http.Request) {
 			RequestPayload:   body.Args,
 		})
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIRequestError(w, http.StatusBadRequest, err)
 			return
 		}
 		_ = s.log.Emit(ctx, "command.executed", map[string]any{"command": "reindex", "jobId": job.ID})
@@ -84,7 +84,7 @@ func (s *Server) createTemplateJob(w http.ResponseWriter, r *http.Request, templ
 		RequestPayload:   args,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "jobId": job.ID})

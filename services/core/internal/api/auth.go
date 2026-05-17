@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"net/http"
 	"strings"
@@ -49,6 +50,18 @@ func authenticatedActorName(r *http.Request) string {
 	return "operator"
 }
 
+func authenticatedActorSource(r *http.Request) string {
+	if r == nil {
+		return "operator"
+	}
+	if actor, ok := r.Context().Value(authContextKey{}).(authenticatedActor); ok {
+		if source := strings.TrimSpace(actor.Source); source != "" {
+			return source
+		}
+	}
+	return "operator"
+}
+
 func bearerToken(header string) string {
 	header = strings.TrimSpace(header)
 	if header == "" {
@@ -64,10 +77,12 @@ func bearerToken(header string) string {
 func constantTimeTokenMatch(provided, expected string) bool {
 	provided = strings.TrimSpace(provided)
 	expected = strings.TrimSpace(expected)
-	if provided == "" || expected == "" || len(provided) != len(expected) {
+	if provided == "" || expected == "" {
 		return false
 	}
-	return subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
+	providedHash := sha256.Sum256([]byte(provided))
+	expectedHash := sha256.Sum256([]byte(expected))
+	return subtle.ConstantTimeCompare(providedHash[:], expectedHash[:]) == 1
 }
 
 func writeAuthError(w http.ResponseWriter) {

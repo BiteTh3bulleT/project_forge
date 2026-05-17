@@ -1,0 +1,51 @@
+🟠 HIGH — fix before next milestone
+Security (still open from prior audit)
+Discord webhook has no Ed25519 signature verification (remote.go:129-195). Telegram + Discord share one remote_access_token.
+/api/settings/ollama-models?baseUrl= is still reflected SSRF (server_settings.go:481-522). Now bearer-gated, but still a probe primitive.
+API tokens stored plaintext in SQLite settings table. Redaction is response-layer cosmetics only; on-disk is plaintext (Telegram/Discord/OpenAI/TEI keys).
+code.patch_code and service_process.go:115 bash exec bypass any future env scrubbing — exec sites need centralization.
+Bearer token has no rotation, no revocation, no per-actor distinction. Lives at ${FORGE_DATA_DIR}/auth/api_token (mode 0o600), but cannot be rotated without daemon restart.
+Approval decisions still single-principal: anyone holding the bearer can approve their own requests for any capability not flagged publicDecisionAllowed=false.
+Length-prefix timing leak in token compare (auth.go:64-71) — early-return on length mismatch defeats the point of subtle.ConstantTimeCompare. Minor.
+Gateway invoke accepts Initiator/ProvenanceActor from body (phase5.go:117-160) — audit attestation forgeable by bearer holder.
+chi middleware.Logger logs full URL including query string (routes.go:18) — ?baseUrl=, future tokens-in-URL, etc. land in operator logs.
+Code quality (still open from prior audit)
+watch/manager.go:72-78 debounce timer still leaks 5-minute context past Close(). Unchanged.
+jobs.Service.process still uses context.Background() — discards trace + cancellation. The Enqueue overflow leak got fixed; the process-context bug didn't.
+SSE token callbacks still ignore client disconnect (chat_assistant_modelruntime.go:113-126).
+22 sites still use err == sql.ErrNoRows instead of errors.Is.
+No schema_version table for SQLite. Forward-only via additive ensure*Columns. Unchanged.
+Operations (still open from prior audit)
+No installer / no code signing / no auto-update. tauri.conf.json has bundle.targets: "all" with no signing identity, no tauri-plugin-updater. Windows SmartScreen/macOS Gatekeeper block unsigned bundles. Anything shipped today is unsigned, undistributable, and unpatchable.
+No SQLite online backup. backup.Service is logical JSON-export only. No VACUUM, no WAL checkpoint policy, no sqlite3_backup API call. WAL file will grow unbounded on never-checkpointed deployments.
+audit_records export still capped at LIMIT 5000. Long-running operators silently lose history.
+First-run still fails OOTB: lanes.enabled=0 → release.ready: false → readiness gates closed. No default-lane seeder.
+placeholders_and_stubs.md is now 27 days stale (2026-04-20 vs current_authority_sources at 2026-05-14).
+Architecture (largely unchanged)
+internal/api is still a 36k-LOC god-package (113 files, 38-field Server struct).
+controllane.Processor still constructed in exactly ONE production file (autonomy_maintenance_loop.go:1242). 5 of 11 controllane importers are read-only status routes. Live mutations bypass the kernel.
+hyperlane_no_model_responder.go still has 14 raw s.st.DB.QueryRowContext calls (down from 15). Total raw SQL in API package: 29 across 6 files.
+No /api/v1 versioning. New /metrics and /forge/* endpoints went straight onto root.
+NewServer still mixes wiring + side effects (MkdirAll, EnsureDefaults×5, goroutine spawns, shadow-DB open). Got worse — M5S added more bring-up logic.
+No ADR for M5S. AGENTS.md says "Major behavior changes must update the relevant architecture doc, ADR, glossary entry" — error envelope, metrics, auth posture are all undocumented at ADR level.
+Tests (largely unchanged)
+internal/jobs coverage: 1.6% → 16.2%. Real movement, but still very low. Failure-mode tests (timeout, cancellation, adapter error, retry) absent.
+internal/audit coverage frozen at 32.5%. Two weeks of M5S "security lockdown" with no new audit tests is a smell — audit is the primary security forensics surface.
+internal/automation is 4.9%. New worst-coverage package — production rule engine, one bounds test.
+18 packages still have zero test files (chat, dossiers, policy, lanes, release, strategies, canvas, search, dashboard, evaluations, etc.). Zero progress.
+Race detector scope narrow — CI now runs -race only on ./internal/api. Concurrency-rich packages (jobs, modelruntime, gateway, hostbridge, controllane) still unraced.
+Single-OS CI (ubuntu-latest only). Windows-only tests never run on PRs.
+Still no -coverprofile / coverage gate. Regressions invisible.
+Still no MSW for desktop API mocking — every page test stubs ../lib/api whole-module.
+Desktop
+Bundle: 861KB monolithic JS, 131KB CSS (CSS grew +426 lines to 4622). Zero React.lazy, zero manualChunks.
+39 empty-deps useEffect hooks across 31 files. Still no ESLint.
+Pages still huge: Settings 1498, Models 1466, Chat 1447, Inspectors 1295. Chat partially split into a subdir but the top-level file is still 1447 lines.
+desktopShellStore multi-window race is unmitigated and now more reachable (multi-window operator shell shipped).
+Logout doesn't clear apiTokenPromise — subsequent calls from same window remain authenticated.
+Zero aria-live anywhere in 41k LOC of TS. Login error message isn't announced.
+Desktop TODO/stub count jumped 0 → 90 across 31 files in two weeks.
+Operational hygiene
+FORGE_M5S_Security_Lockdown_Prompt_Pack.zip, FORGE_M5A_Authority_Convergence_Pack.zip, and the doubly-nested unzipped pack directory are sitting in working tree, ungitignored. Either commit under docs/prompt-packs/ or gitignore.
+WindoManager.txt at repo root — typo'd dev prompt, still present.
+docker-compose.yml:12 still defaults FORGE_ALLOW_WILDCARD_BIND=true — bounded by token now, but inverts the docker security default.

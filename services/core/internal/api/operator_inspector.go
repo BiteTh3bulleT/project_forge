@@ -216,7 +216,7 @@ func (s *Server) handleContextSnapshotList(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	db, err := s.traceDB()
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		writeAPIRequestError(w, http.StatusServiceUnavailable, err)
 		return
 	}
 	limit := parsePositiveLimit(r.URL.Query().Get("limit"), 50, 200)
@@ -248,14 +248,14 @@ LIMIT ?`,
 		limit,
 	)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	defer rows.Close()
 
 	records, err := scanContextSnapshotInspectorRows(rows)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	out := make([]contextSnapshotInspectorSummary, 0, len(records))
@@ -274,7 +274,7 @@ func (s *Server) handleContextSnapshotGet(w http.ResponseWriter, r *http.Request
 	}
 	record, ok, err := s.getContextSnapshotInspectorRow(ctx, id, strings.TrimSpace(r.URL.Query().Get("workspaceId")), strings.TrimSpace(r.URL.Query().Get("laneId")), false)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok {
@@ -411,7 +411,7 @@ func (s *Server) loadScopedRestoreSnapshot(w http.ResponseWriter, r *http.Reques
 		if strings.Contains(err.Error(), "workspaceId required") {
 			status = http.StatusBadRequest
 		}
-		http.Error(w, err.Error(), status)
+		writeAPIRequestError(w, status, err)
 		return contextSnapshotInspectorRow{}, false
 	}
 	if !found {
@@ -436,7 +436,7 @@ func (s *Server) handleProcessHealthTrace(w http.ResponseWriter, r *http.Request
 	} else {
 		ids, err := s.listCorrelationIDsByTraceID(ctx, traceID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 		correlationIDs = ids
@@ -454,7 +454,7 @@ func (s *Server) handleProcessHealthTrace(w http.ResponseWriter, r *http.Request
 	for _, cid := range correlationIDs {
 		allInvocations, err := s.gateway.ListInvocationsByCorrelation(ctx, cid, 500)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 		items := make([]processHealthInvocation, 0, len(allInvocations))
@@ -550,7 +550,7 @@ func (s *Server) handleAuditTraceLookup(w http.ResponseWriter, r *http.Request) 
 	if correlationID != "" {
 		result, err := s.buildAuditTraceLookupResult(ctx, correlationID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -565,7 +565,7 @@ func (s *Server) handleAuditTraceLookup(w http.ResponseWriter, r *http.Request) 
 
 	correlationIDs, err := s.listCorrelationIDsByTraceID(ctx, traceID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	reports := make([]auditTraceLookupResult, 0, len(correlationIDs))

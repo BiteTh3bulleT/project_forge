@@ -33,3 +33,15 @@ func writeAPIError(w http.ResponseWriter, status int, code, message string, err 
 func writeAPIInternalError(w http.ResponseWriter, err error) {
 	writeAPIError(w, http.StatusInternalServerError, "internal_error", "internal server error", err)
 }
+
+func writeAPIRequestError(w http.ResponseWriter, status int, err error) {
+	if status >= http.StatusInternalServerError {
+		writeAPIInternalError(w, err)
+		return
+	}
+	message := http.StatusText(status)
+	if err != nil && strings.TrimSpace(err.Error()) != "" {
+		message = err.Error()
+	}
+	writeAPIError(w, status, "request_failed", message, err)
+}

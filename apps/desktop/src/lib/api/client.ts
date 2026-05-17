@@ -16,6 +16,10 @@ const requestTimeoutMs = () => {
 
 let apiTokenPromise: Promise<string | undefined> | undefined;
 
+export function clearForgeApiTokenCache() {
+  apiTokenPromise = undefined;
+}
+
 async function forgeApiToken(): Promise<string | undefined> {
   apiTokenPromise ??= invoke<string | null>("read_forge_api_token")
     .then((token) => token?.trim() || undefined)

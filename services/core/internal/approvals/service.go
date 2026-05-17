@@ -157,6 +157,10 @@ func (s *Service) Decide(ctx context.Context, requestID int64, actor, decision, 
 	if decision != "approved" && decision != "denied" && decision != "cancelled" {
 		return nil, fmt.Errorf("invalid decision %q", decision)
 	}
+	decisionActor := strings.TrimSpace(actor)
+	if decisionActor == "" {
+		return nil, errors.New("approval decision actor is required")
+	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -174,13 +178,22 @@ func (s *Service) Decide(ctx context.Context, requestID int64, actor, decision, 
 	if status != "pending" {
 		return nil, fmt.Errorf("approval request %d is not pending", requestID)
 	}
+	if decision == "approved" {
+		requestAuthorities, err := approvalRequestAuthorities(ctx, tx, requestID)
+		if err != nil {
+			return nil, err
+		}
+		if approvalAuthorityMatchesAny(decisionActor, requestAuthorities) {
+			return nil, fmt.Errorf("approval request %d requires separate approval authority", requestID)
+		}
+	}
 
 	now := time.Now().UnixMilli()
 	res, err := tx.ExecContext(ctx,
 		`INSERT INTO approval_decisions(request_id, created_at, actor, decision, note) VALUES(?,?,?,?,?)`,
 		requestID,
 		now,
-		nonEmpty(actor, "operator"),
+		decisionActor,
 		decision,
 		note,
 	)
@@ -198,6 +211,77 @@ func (s *Service) Decide(ctx context.Context, requestID int64, actor, decision, 
 	did, _ := res.LastInsertId()
 	s.notifyWaiters(requestID)
 	return s.GetDecision(ctx, did)
+}
+
+func approvalRequestAuthorities(ctx context.Context, tx *sql.Tx, requestID int64) ([]string, error) {
+	row := tx.QueryRowContext(ctx, `
+SELECT ar.scope_snapshot_json, j.initiating_source, j.metadata_json
+FROM approval_requests ar
+JOIN jobs j ON j.id = ar.job_id
+WHERE ar.id = ?`, requestID)
+	var scopeRaw, initiatingSource, metadataRaw string
+	if err := row.Scan(&scopeRaw, &initiatingSource, &metadataRaw); err != nil {
+		return nil, err
+	}
+	var authorities []string
+	var scope map[string]any
+	if err := json.Unmarshal([]byte(scopeRaw), &scope); err == nil {
+		for _, key := range []string{"requestedBy", "requester", "initiator", "provenanceActor"} {
+			authorities = appendApprovalAuthority(authorities, mapString(scope, key))
+		}
+	}
+	authorities = appendApprovalAuthority(authorities, initiatingSource)
+	var metadata map[string]any
+	if err := json.Unmarshal([]byte(metadataRaw), &metadata); err == nil {
+		authorities = appendApprovalAuthority(authorities, mapString(metadata, "createdBy"))
+		if payload, ok := metadata["requestPayload"].(map[string]any); ok {
+			for _, key := range []string{"initiator", "provenanceActor"} {
+				authorities = appendApprovalAuthority(authorities, mapString(payload, key))
+			}
+		}
+	}
+	return authorities, nil
+}
+
+func mapString(m map[string]any, key string) string {
+	if m == nil {
+		return ""
+	}
+	v, ok := m[key]
+	if !ok {
+		return ""
+	}
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return s
+}
+
+func appendApprovalAuthority(authorities []string, raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return authorities
+	}
+	for _, existing := range authorities {
+		if approvalAuthorityMatches(existing, raw) {
+			return authorities
+		}
+	}
+	return append(authorities, raw)
+}
+
+func approvalAuthorityMatchesAny(actor string, authorities []string) bool {
+	for _, authority := range authorities {
+		if approvalAuthorityMatches(actor, authority) {
+			return true
+		}
+	}
+	return false
+}
+
+func approvalAuthorityMatches(a, b string) bool {
+	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
 }
 
 // Wait returns a channel closed when the request reaches a terminal state

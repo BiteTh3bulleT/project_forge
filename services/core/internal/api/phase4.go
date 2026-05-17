@@ -29,7 +29,7 @@ var errPhase4RequestBodyTooLarge = errors.New("phase4 json request body too larg
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	summary, err := s.dashboard.Summary(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, summary)
@@ -40,7 +40,7 @@ func (s *Server) handleListStrategies(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	list, err := s.strategies.List(r.Context(), enabledOnly, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"strategies": list})
@@ -54,7 +54,7 @@ func (s *Server) handleSaveStrategy(w http.ResponseWriter, r *http.Request) {
 	}
 	item, err := s.strategies.Save(r.Context(), body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"strategy": item})
@@ -64,7 +64,7 @@ func (s *Server) handleListApprovalPresets(w http.ResponseWriter, r *http.Reques
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	rows, err := s.policy.ListApprovalPresets(r.Context(), limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"presets": rows})
@@ -84,7 +84,7 @@ func (s *Server) handleSaveApprovalPreset(w http.ResponseWriter, r *http.Request
 	}
 	item, err := s.policy.SaveApprovalPreset(r.Context(), body.ID, body.Name, body.Description, body.Profile, body.Editable)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"preset": item})
@@ -93,7 +93,7 @@ func (s *Server) handleSaveApprovalPreset(w http.ResponseWriter, r *http.Request
 func (s *Server) handleGetGlobalPreset(w http.ResponseWriter, r *http.Request) {
 	presetID, err := s.policy.GlobalApprovalPreset(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"presetId": presetID})
@@ -108,7 +108,7 @@ func (s *Server) handleSetGlobalPreset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.policy.SetGlobalApprovalPreset(r.Context(), body.PresetID); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "presetId": body.PresetID})
@@ -122,7 +122,7 @@ func (s *Server) handleGetDossierProfile(w http.ResponseWriter, r *http.Request)
 	}
 	item, err := s.policy.DossierProfile(r.Context(), &id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"profile": item})
@@ -142,7 +142,7 @@ func (s *Server) handleSaveDossierProfile(w http.ResponseWriter, r *http.Request
 	body.DossierID = id
 	item, err := s.policy.SaveDossierProfile(r.Context(), body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"profile": item})
@@ -156,7 +156,7 @@ func (s *Server) handlePolicyRecommend(w http.ResponseWriter, r *http.Request) {
 	}
 	item, err := s.policy.Recommend(r.Context(), body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"recommendation": item})
@@ -167,7 +167,7 @@ func (s *Server) handleListPolicyRecommendations(w http.ResponseWriter, r *http.
 	dossierID := parseOptionalInt(r.URL.Query().Get("dossierId"))
 	rows, err := s.policy.ListRecommendations(r.Context(), limit, dossierID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"recommendations": rows})
@@ -178,7 +178,7 @@ func (s *Server) handleListAutomationRules(w http.ResponseWriter, r *http.Reques
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	rows, err := s.automation.ListRules(r.Context(), enabledOnly, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"rules": rows})
@@ -192,7 +192,7 @@ func (s *Server) handleSaveAutomationRule(w http.ResponseWriter, r *http.Request
 	}
 	item, err := s.automation.SaveRule(r.Context(), body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"rule": item})
@@ -202,7 +202,7 @@ func (s *Server) handleAutomationHistory(w http.ResponseWriter, r *http.Request)
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	rows, err := s.automation.ListHistory(r.Context(), limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"history": rows})
@@ -282,7 +282,7 @@ func (s *Server) handleRunAutomationRule(w http.ResponseWriter, r *http.Request)
 		}
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"result": out})
@@ -304,7 +304,7 @@ func (s *Server) handleAnalyzePacketGuidance(w http.ResponseWriter, r *http.Requ
 		DossierID: body.DossierID,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"guidance": item})
@@ -315,7 +315,7 @@ func (s *Server) handleListPacketGuidance(w http.ResponseWriter, r *http.Request
 	packetID := parseOptionalInt(r.URL.Query().Get("packetId"))
 	rows, err := s.packetOpt.List(r.Context(), limit, packetID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"guidance": rows})
@@ -329,7 +329,7 @@ func (s *Server) handleGetImportReconciliation(w http.ResponseWriter, r *http.Re
 	}
 	rec, err := s.reconcile.ByImport(r.Context(), importID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeAPIRequestError(w, http.StatusNotFound, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"reconciliation": rec})
@@ -349,7 +349,7 @@ func (s *Server) handleSaveImportReconciliation(w http.ResponseWriter, r *http.R
 	body.ImportID = importID
 	rec, err := s.reconcile.Save(r.Context(), body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"reconciliation": rec})
@@ -360,7 +360,7 @@ func (s *Server) handleListReconciliations(w http.ResponseWriter, r *http.Reques
 	status := strings.TrimSpace(r.URL.Query().Get("reviewStatus"))
 	rows, err := s.reconcile.List(r.Context(), limit, status)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"reconciliations": rows})
@@ -374,7 +374,7 @@ func (s *Server) handleCreateReview(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, err := s.reviews.Create(r.Context(), body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"review": rec})
@@ -385,7 +385,7 @@ func (s *Server) handleListReviews(w http.ResponseWriter, r *http.Request) {
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
 	rows, err := s.reviews.List(r.Context(), status, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"reviews": rows})
@@ -404,7 +404,7 @@ func (s *Server) handleUpdateReview(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, err := s.reviews.Update(r.Context(), id, body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"review": rec})
@@ -424,7 +424,7 @@ func (s *Server) handleAnalyzeFailurePatterns(w http.ResponseWriter, r *http.Req
 		Lookback:  body.Lookback,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"patterns": rows})
@@ -435,7 +435,7 @@ func (s *Server) handleListFailurePatterns(w http.ResponseWriter, r *http.Reques
 	dossierID := parseOptionalInt(r.URL.Query().Get("dossierId"))
 	rows, err := s.failures.List(r.Context(), limit, dossierID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"patterns": rows})

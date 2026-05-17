@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -67,5 +69,19 @@ func TestCORSAllowsLocalhostOnlyWithDevFlag(t *testing.T) {
 	srv := &Server{cfg: config.Config{CORSAllowDevLocalhost: true}}
 	if !srv.corsOriginAllowed("http://localhost:5173") || !srv.corsOriginAllowed("http://127.0.0.1:5173") {
 		t.Fatalf("expected localhost origins to be allowed when dev flag is enabled")
+	}
+}
+
+func TestConstantTimeTokenMatchDoesNotEarlyReturnOnLengthMismatch(t *testing.T) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime caller unavailable")
+	}
+	body, err := os.ReadFile(strings.TrimSuffix(file, "_test.go") + ".go")
+	if err != nil {
+		t.Fatalf("read auth source: %v", err)
+	}
+	if strings.Contains(string(body), "len(provided) != len(expected)") {
+		t.Fatal("constantTimeTokenMatch must not early-return on token length mismatch")
 	}
 }

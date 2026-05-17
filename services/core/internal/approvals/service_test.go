@@ -153,3 +153,60 @@ INSERT INTO jobs(
 		t.Fatalf("fingerprint hash = %#v, want sha256:second", got)
 	}
 }
+
+func TestDecideRejectsSelfApprovalAuthority(t *testing.T) {
+	t.Parallel()
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	svc := New(st.DB)
+	ctx := context.Background()
+	jobID := "job-self-approval"
+	now := time.Now().UnixMilli()
+	if _, err := st.DB.ExecContext(ctx, `
+INSERT INTO jobs(
+  id, created_at, updated_at, queued_at,
+  title, requested_action, target_adapter, initiating_source,
+  execution_boundary, risk_class, status, approval_status, write_intent, metadata_json
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		jobID, now, now, now,
+		"self approval", "gateway.action", "forge", "operator-a",
+		"command_execution", "safe_write", "awaiting_approval", "pending", 1, `{"createdBy":"operator-a"}`,
+	); err != nil {
+		t.Fatalf("insert job: %v", err)
+	}
+
+	req, err := svc.OpenRequestForJob(ctx, jobID, CreateRequestInput{
+		JobID:            jobID,
+		RequestedAction:  "gateway.action",
+		RiskClass:        "medium",
+		RequestedAdapter: "gateway",
+		WriteIntent:      true,
+		ScopeSnapshot: map[string]any{
+			"initiator": "operator-a",
+		},
+		RequestSummary: "self approval test",
+	})
+	if err != nil {
+		t.Fatalf("open request: %v", err)
+	}
+
+	if _, err := svc.Decide(ctx, req.ID, "operator-a", "approved", "approve own request"); err == nil {
+		t.Fatalf("expected self-approval to be rejected")
+	}
+
+	fresh, err := svc.GetRequest(ctx, req.ID)
+	if err != nil {
+		t.Fatalf("get request: %v", err)
+	}
+	if fresh.Status != "pending" {
+		t.Fatalf("self-approval rejection should leave request pending, got %q", fresh.Status)
+	}
+
+	if _, err := svc.Decide(ctx, req.ID, "operator-b", "approved", "separate authority approval"); err != nil {
+		t.Fatalf("separate approval authority should be accepted: %v", err)
+	}
+}

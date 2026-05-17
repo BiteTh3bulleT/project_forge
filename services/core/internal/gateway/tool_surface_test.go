@@ -463,7 +463,7 @@ func TestGatewayApprovalFingerprintRejectsReplayForDifferentShape(t *testing.T) 
 	if approvalID <= 0 {
 		t.Fatalf("missing approval request id in %#v", first.Data)
 	}
-	if _, err := gw.approvals.Decide(ctx, approvalID, "operator-a", "approved", "fingerprint test approval"); err != nil {
+	if _, err := gw.approvals.Decide(ctx, approvalID, "operator-b", "approved", "fingerprint test approval"); err != nil {
 		t.Fatalf("approve request: %v", err)
 	}
 	approvalIDText := strconv.FormatInt(approvalID, 10)
@@ -608,7 +608,7 @@ func TestGatewayApprovalFingerprintMatchesSyntheticGatewayJobReplay(t *testing.T
 	if strings.TrimSpace(jobID) == "" {
 		t.Fatalf("missing synthetic job id in %#v", first.Data)
 	}
-	if _, err := gw.approvals.Decide(ctx, approvalID, "operator-a", "approved", "synthetic job replay approval"); err != nil {
+	if _, err := gw.approvals.Decide(ctx, approvalID, "operator-b", "approved", "synthetic job replay approval"); err != nil {
 		t.Fatalf("approve request: %v", err)
 	}
 	if _, err := st.DB.ExecContext(ctx, `UPDATE jobs SET approval_status = 'granted' WHERE id = ?`, jobID); err != nil {
@@ -705,7 +705,7 @@ func TestGatewayApprovalFingerprintMatchesDesktopOpenSyntheticJobReplay(t *testi
 	if strings.TrimSpace(jobID) == "" {
 		t.Fatalf("missing synthetic job id in %#v", first.Data)
 	}
-	if _, err := gw.approvals.Decide(ctx, approvalID, "operator-a", "approved", "desktop open replay approval"); err != nil {
+	if _, err := gw.approvals.Decide(ctx, approvalID, "operator-b", "approved", "desktop open replay approval"); err != nil {
 		t.Fatalf("approve request: %v", err)
 	}
 	if _, err := st.DB.ExecContext(ctx, `UPDATE jobs SET approval_status = 'granted' WHERE id = ?`, jobID); err != nil {
@@ -860,7 +860,7 @@ WHERE status = 'pending'
 ORDER BY id DESC
 LIMIT 1`).Scan(&requestID)
 			if err == nil {
-				_, err = gw.approvals.Decide(ctx, requestID, "tester", decision, "test decision")
+				_, err = gw.approvals.Decide(ctx, requestID, "operator-reviewer", decision, "test decision")
 				done <- err
 				return
 			}
@@ -1695,7 +1695,7 @@ func approveGatewayRequestForTest(t *testing.T, ctx context.Context, gw *Gateway
 	if approvalID <= 0 {
 		t.Fatalf("missing approval request id in %#v", res.Data)
 	}
-	if _, err := gw.approvals.Decide(ctx, approvalID, "tester", "approved", note); err != nil {
+	if _, err := gw.approvals.Decide(ctx, approvalID, "operator-reviewer", "approved", note); err != nil {
 		t.Fatalf("approve gateway request: %v", err)
 	}
 	return approvalID

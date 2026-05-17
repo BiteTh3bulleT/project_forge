@@ -9,6 +9,7 @@ import {
 
 import { ForgeErrorBoundary } from "./components/ForgeErrorBoundary";
 import { AppShell } from "./layout/AppShell";
+import { clearForgeApiTokenCache } from "./lib/api/client";
 import { isTauriDesktop, isShellHostWindowLabel } from "./lib/desktop";
 import {
   subscribeToCurrentWindowLifecycle,
@@ -199,6 +200,7 @@ export default function App() {
   };
 
   const handleForgeLogout = () => {
+    clearForgeApiTokenCache();
     window.sessionStorage.removeItem(FORGE_OPERATOR_LOGIN_SESSION_KEY);
     useDesktopWindowStore.getState().resetDesktopSession();
     desktopShownAfterUnlockRef.current = false;

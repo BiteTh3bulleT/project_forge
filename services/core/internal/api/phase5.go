@@ -121,6 +121,8 @@ func (s *Server) handleGatewayInvoke(w http.ResponseWriter, r *http.Request) {
 		writePhase5DecodeError(w, err)
 		return
 	}
+	actor := authenticatedActorName(r)
+	actorSource := authenticatedActorSource(r)
 	result, err := s.gateway.Execute(ctx, gateway.Request{
 		ToolID:              body.ToolID,
 		LaneID:              body.LaneID,
@@ -136,18 +138,18 @@ func (s *Server) handleGatewayInvoke(w http.ResponseWriter, r *http.Request) {
 		CharterID:           body.CharterID,
 		BudgetID:            body.BudgetID,
 		ApprovalID:          body.ApprovalID,
-		ProvenanceActor:     body.ProvenanceActor,
-		ProvenanceActorType: body.ProvenanceActorType,
+		ProvenanceActor:     actor,
+		ProvenanceActorType: actorSource,
 		Paths:               body.Paths,
 		Input:               body.Input,
 		JobID:               body.JobID,
 		PacketID:            body.PacketID,
-		Initiator:           body.Initiator,
+		Initiator:           actor,
 		DryRun:              body.DryRun,
 		Metadata:            body.Metadata,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	_ = s.log.Emit(ctx, "gateway.tool.invoked", map[string]any{
@@ -165,7 +167,7 @@ func (s *Server) handleGatewayInvocations(w http.ResponseWriter, r *http.Request
 	status := r.URL.Query().Get("status")
 	invs, err := s.gateway.ListInvocations(ctx, limit, status)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"invocations": invs})
@@ -309,7 +311,7 @@ func (s *Server) handleGatewayCapabilityStatusUpdate(w http.ResponseWriter, r *h
 		TraceID:           traceID,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	if !ok {
@@ -673,7 +675,7 @@ func (s *Server) handleListLanes(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	list, err := s.lanes.List(ctx)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"lanes": list})
@@ -688,7 +690,7 @@ func (s *Server) handleSaveLane(w http.ResponseWriter, r *http.Request) {
 	}
 	saved, err := s.lanes.Save(ctx, body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	_ = s.log.Emit(ctx, "gateway.lane.saved", map[string]any{"lane": saved.ID})
@@ -699,7 +701,7 @@ func (s *Server) handleDeleteLane(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := chi.URLParam(r, "id")
 	if err := s.lanes.Delete(ctx, id); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -709,7 +711,7 @@ func (s *Server) handleListPermissionProfiles(w http.ResponseWriter, r *http.Req
 	ctx := r.Context()
 	list, err := s.permissions.List(ctx)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	active, _ := s.permissions.Active(ctx)
@@ -730,7 +732,7 @@ func (s *Server) handleSavePermissionProfile(w http.ResponseWriter, r *http.Requ
 	}
 	saved, err := s.permissions.Save(ctx, body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	_ = s.log.Emit(ctx, "permissions.profile.saved", map[string]any{"profile": saved.ID, "active": saved.Active})
@@ -742,7 +744,7 @@ func (s *Server) handleActivatePermissionProfile(w http.ResponseWriter, r *http.
 	id := chi.URLParam(r, "id")
 	active, err := s.permissions.Activate(ctx, id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	_, _ = s.auditSvc.Record(ctx, audit.CreateRequest{
@@ -761,7 +763,7 @@ func (s *Server) handleDeletePermissionProfile(w http.ResponseWriter, r *http.Re
 	ctx := r.Context()
 	id := chi.URLParam(r, "id")
 	if err := s.permissions.Delete(ctx, id); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -782,7 +784,7 @@ func (s *Server) handleAuditList(w http.ResponseWriter, r *http.Request) {
 		Outcome:       outcome,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"records": records})
@@ -797,7 +799,7 @@ func (s *Server) handleAuditTrace(w http.ResponseWriter, r *http.Request) {
 	}
 	report, err := s.buildCorrelationTraceReport(ctx, correlation)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -812,7 +814,7 @@ func (s *Server) handleListBundles(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	list, err := s.backup.List(ctx, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	backupDir, exportDir := s.backup.Dirs()
@@ -834,7 +836,7 @@ func (s *Server) handleCreateBundle(w http.ResponseWriter, r *http.Request) {
 	body.Kind = strings.TrimSpace(body.Kind)
 	b, err := s.backup.CreateBundle(ctx, body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	meta := requestAuditMetaForBackup(r, "", "", "", "backup.bundle.create")
@@ -865,7 +867,7 @@ func (s *Server) handleDeleteBundle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.backup.Delete(ctx, id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -880,14 +882,14 @@ func (s *Server) handleRestoreBundle(w http.ResponseWriter, r *http.Request) {
 	}
 	resolvedPath, err := s.backup.ResolveRestorePath(body.FilePath)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	body.FilePath = resolvedPath
 	meta := requestAuditMetaForBackup(r, "", "", "", "backup.bundle.restore")
 	gov, err := s.evaluateBackupRestoreGovernance(ctx, body, meta)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	if gov.HTTPStatus > 0 {
@@ -904,7 +906,7 @@ func (s *Server) handleRestoreBundle(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := s.backup.RestoreBundle(ctx, body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	outcome := "ok"
@@ -1253,7 +1255,7 @@ func (s *Server) handleReleaseReadiness(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	cl, err := s.release.CheckReadiness(ctx)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"checklist": cl})
@@ -1264,7 +1266,7 @@ func (s *Server) handleReleaseArtifacts(w http.ResponseWriter, r *http.Request) 
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	list, err := s.release.List(ctx, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"artifacts": list})
@@ -1279,7 +1281,7 @@ func (s *Server) handleReleaseRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	artifact, err := s.release.RecordArtifact(ctx, body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	_ = s.log.Emit(ctx, "release.artifact.recorded", map[string]any{"id": artifact.ID, "kind": artifact.Kind})
@@ -1290,7 +1292,7 @@ func (s *Server) handleFirstRun(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	sum, err := s.release.FirstRun(ctx)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"firstRun": sum})

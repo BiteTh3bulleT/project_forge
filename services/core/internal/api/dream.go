@@ -76,7 +76,7 @@ func (s *Server) handleDreamRun(w http.ResponseWriter, r *http.Request) {
 		TraceID:                                strings.TrimSpace(body.TraceID),
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	resp := map[string]any{
@@ -93,7 +93,7 @@ func (s *Server) handleDreamRun(w http.ResponseWriter, r *http.Request) {
 			Metadata:   body.Metadata,
 		})
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 		resp["persisted"] = true
@@ -197,7 +197,7 @@ func (s *Server) handleDreamReportsList(w http.ResponseWriter, r *http.Request) 
 		Limit:       limit,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"reports": reports})
