@@ -18,6 +18,9 @@ var (
 func (s *Server) mountMetricsRoutes(r interface {
 	Get(string, http.HandlerFunc)
 }) {
+	if s == nil || !s.cfg.EnableMetricsEndpoint {
+		return
+	}
 	r.Get("/metrics", s.handleMetrics)
 }
 

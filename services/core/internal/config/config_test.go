@@ -76,6 +76,22 @@ func TestLoadDefaultsWildcardBindOptInDisabled(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultsMetricsEndpointDisabled(t *testing.T) {
+	t.Setenv("FORGE_ENABLE_METRICS_ENDPOINT", "")
+	cfg := Load()
+	if cfg.EnableMetricsEndpoint {
+		t.Fatal("expected metrics endpoint to default false")
+	}
+}
+
+func TestLoadRespectsMetricsEndpointOptIn(t *testing.T) {
+	t.Setenv("FORGE_ENABLE_METRICS_ENDPOINT", "true")
+	cfg := Load()
+	if !cfg.EnableMetricsEndpoint {
+		t.Fatal("expected metrics endpoint opt-in true")
+	}
+}
+
 func TestLoadRespectsWildcardBindOptIn(t *testing.T) {
 	t.Setenv("FORGE_ALLOW_WILDCARD_BIND", "true")
 	cfg := Load()

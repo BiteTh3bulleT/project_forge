@@ -666,7 +666,13 @@ export function AppShell(props: AppShellProps) {
               {focusedTool ? focusedTool.label : "Desktop"}
             </span>
           </div>
-          <div className="forge-os-statusbar__right">
+          <div
+            className="forge-os-statusbar__right"
+            role="status"
+            aria-label="FORGE shell status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             <span
               className={cx(
                 "forge-chip px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]",

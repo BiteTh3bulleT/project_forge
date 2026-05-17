@@ -238,6 +238,25 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(desktopMocks.listForgeWindows).not.toHaveBeenCalled();
   });
 
+  it("exposes the global shell status line as a polite live region", () => {
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const status = screen.getByRole("status", {
+      name: "FORGE shell status",
+    });
+    expect(status.getAttribute("aria-live")).toBe("polite");
+    expect(status.getAttribute("aria-atomic")).toBe("true");
+    expect(status.textContent).toContain("Core:");
+    expect(status.textContent).toContain("Runtime:");
+    expect(status.textContent).toContain("Queue:");
+  });
+
   it("renders each in-shell window only on its assigned desktop host", () => {
     useDesktopWindowStore.setState({
       windows: [

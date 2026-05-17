@@ -5,13 +5,29 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"forge/projectforge/services/core/internal/config"
 )
 
-func TestMetricsRouteServesPrometheusText(t *testing.T) {
+func TestMetricsRouteDisabledByDefault(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	rr := httptest.NewRecorder()
 
 	(&Server{}).Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("/metrics status=%d, want %d body=%q", rr.Code, http.StatusNotFound, rr.Body.String())
+	}
+	if strings.Contains(rr.Body.String(), "forge_core_") {
+		t.Fatalf("disabled /metrics exposed metrics body:\n%s", rr.Body.String())
+	}
+}
+
+func TestMetricsRouteServesPrometheusTextWhenEnabled(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rr := httptest.NewRecorder()
+
+	(&Server{cfg: config.Config{EnableMetricsEndpoint: true}}).Handler().ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("/metrics status=%d, want %d body=%q", rr.Code, http.StatusOK, rr.Body.String())
@@ -41,13 +57,13 @@ func TestMetricsRouteServesPrometheusText(t *testing.T) {
 	}
 }
 
-func TestMetricsRouteDoesNotExposeSecretLookingText(t *testing.T) {
+func TestMetricsRouteDoesNotExposeSecretLookingTextWhenEnabled(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/metrics?token=should-not-appear", nil)
 	req.Header.Set("Authorization", "Bearer should-not-appear")
 	req.Header.Set("X-Forge-Remote-Token", "should-not-appear")
 	rr := httptest.NewRecorder()
 
-	(&Server{}).Handler().ServeHTTP(rr, req)
+	(&Server{cfg: config.Config{EnableMetricsEndpoint: true}}).Handler().ServeHTTP(rr, req)
 
 	body := strings.ToLower(rr.Body.String())
 	for _, forbidden := range []string{

@@ -2,7 +2,25 @@
 
 Status date: 2026-04-24.
 
-FORGE can optionally read NVIDIA DCGM exporter metrics for GPU diagnostics and background-job admission policy. This is telemetry only. It is not required for boot and it does not create truth authority.
+FORGE can optionally read NVIDIA DCGM exporter metrics for GPU diagnostics and background-job admission policy. This is telemetry only. It is not required for boot, it is separate from modelruntime GPU acceleration, and it does not create truth authority.
+
+## GPU Acceleration vs Telemetry
+
+On a desktop where Ollama or another external model backend already uses an NVIDIA GPU, keep these concepts separate:
+
+- `FORGE_GPU_ENABLED=true` enables FORGE's GPU-aware modelruntime policy surface.
+- `FORGE_NVIDIA_DCGM_ENABLED=true` tells FORGE to probe a DCGM exporter.
+- If DCGM is enabled without a reachable exporter, modelruntime health reports degraded telemetry even when the model backend is reachable and using the GPU.
+
+For a Docker-backed desktop using host Ollama on a machine with an RTX GPU, the usual local posture is:
+
+```bash
+export FORGE_GPU_ENABLED=true
+export FORGE_NVIDIA_DCGM_ENABLED=false
+export FORGE_INTEL_LEVEL_ZERO_ENABLED=false
+```
+
+This keeps modelruntime GPU-aware without requiring telemetry plumbing. Enable DCGM only after an exporter is running and `FORGE_NVIDIA_DCGM_ENDPOINT` points at it.
 
 ## Enable
 
@@ -24,7 +42,7 @@ export FORGE_GPU_BACKGROUND_MEMORY_PRESSURE_BLOCK_THRESHOLD=0.90
 Safe defaults:
 
 - DCGM telemetry disabled
-- GPU disabled
+- GPU policy disabled unless explicitly enabled
 - background GPU jobs disabled
 - safe mode disables DCGM-backed GPU admission by forcing CPU-only posture
 

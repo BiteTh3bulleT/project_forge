@@ -117,6 +117,14 @@ func TestServerRouteInventoryOpenAICompatConditional(t *testing.T) {
 	assertRouteMounted(t, enabled, http.MethodPost, "/v1/chat/completions")
 }
 
+func TestServerRouteInventoryMetricsEndpointConditional(t *testing.T) {
+	disabled := collectServerRoutes(t, (&Server{}).Handler())
+	assertRouteNotMounted(t, disabled, http.MethodGet, "/metrics")
+
+	enabled := collectServerRoutes(t, (&Server{cfg: config.Config{EnableMetricsEndpoint: true}}).Handler())
+	assertRouteMounted(t, enabled, http.MethodGet, "/metrics")
+}
+
 func TestServerRouteInventoryCompatibilityAndRetiredRoutes(t *testing.T) {
 	srv := &Server{}
 	routes := collectServerRoutes(t, srv.Handler())

@@ -71,7 +71,15 @@ export function ForgeLoginPage({ onUnlock }: ForgeLoginPageProps) {
             onChange={(event) => setPassword(event.target.value)}
           />
         </label>
-        {error ? <div className="forge-login-panel__error">{error}</div> : null}
+        {error ? (
+          <div
+            className="forge-login-panel__error"
+            role="alert"
+            aria-live="assertive"
+          >
+            {error}
+          </div>
+        ) : null}
         <button className="forge-login-panel__submit" type="submit">
           Sign in
         </button>

@@ -156,7 +156,7 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 - [x] Structured logs (slog) wired — `cc03e07 feat: emit structured event logs`
 - [ ] **Complete slog migration.** Audit remaining `log.Printf` call sites in `services/core/` and migrate to slog. Tag every log line with `request_id` + `correlation_id` where available.
 - [x] **Add `/health/detailed` endpoint.** Per-service health rollup (storage, modelruntime, gateway, hostbridge, forgekshadow, dream, autonomy). One JSON body. 2026-05-17: implemented as bearer-authenticated structured JSON; `/health` remains public.
-- [ ] **Add `/metrics` endpoint behind config flag.** Prometheus format. Hit counters, request durations, KV identity decisions, gate decisions, journal append rate.
+- [x] **Add `/metrics` endpoint behind config flag.** Prometheus format. 2026-05-17: implemented disabled-by-default via `FORGE_ENABLE_METRICS_ENDPOINT`, returning bounded non-secret process/build/scrape metrics and 404 when disabled. Deeper request-duration, KV identity, gate decision, and journal-rate metrics remain future observability hardening.
 - [ ] **Per-service graceful shutdown.** Ensure every long-lived service (jobs runner, dream loop, autonomy maintenance) responds to context cancellation cleanly.
 - [ ] **Audit retention policy.** Journal and audit are append-only — confirm a documented rotation/archive plan before this becomes a disk-space problem.
 
@@ -272,7 +272,7 @@ The project is "wired and working properly" when:
 - [ ] No source file >1,500 lines (except SQL migrations, validator crates, barrel files).
 - [ ] Memory, controllane, autonomy, gateway, api all at 25%+ test/source.
 - [ ] All Section 1 hygiene items closed.
-- [ ] `/health/detailed` and `/metrics` endpoints live.
+- [x] `/health/detailed` and `/metrics` endpoints live.
 - [ ] slog migration complete with correlation IDs.
 - [x] Streaming model output working through modelruntime where supported.
 - [x] vLLM-compatible external endpoint profile integrated per PhaseM4, disabled by default and governed by modelruntime.

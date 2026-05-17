@@ -22,6 +22,7 @@ type Config struct {
 	APIActor                                    string
 	CORSAllowedOrigins                          []string
 	CORSAllowDevLocalhost                       bool
+	EnableMetricsEndpoint                       bool
 	ProjectContextAllowedRoots                  []string
 	WorkspaceDir                                string
 	StoreBackend                                string
@@ -161,6 +162,7 @@ func Load() Config {
 		APIActor:                   envStringDefault("FORGE_API_ACTOR", "operator"),
 		CORSAllowedOrigins:         envList("FORGE_CORS_ALLOWED_ORIGINS"),
 		CORSAllowDevLocalhost:      envBool("FORGE_CORS_ALLOW_DEV_LOCALHOST", false),
+		EnableMetricsEndpoint:      envBool("FORGE_ENABLE_METRICS_ENDPOINT", false),
 		ProjectContextAllowedRoots: envList("FORGE_PROJECT_CONTEXT_ALLOWED_ROOTS"),
 		WorkspaceDir:               workspace,
 		StoreBackend:               envStringDefault("FORGE_STORE_BACKEND", "sqlite"),
