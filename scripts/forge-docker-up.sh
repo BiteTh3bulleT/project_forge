@@ -33,6 +33,85 @@ if [[ "$igpu_mode" != "0" && "$igpu_mode" != "false" ]]; then
   fi
 fi
 
+env_set() {
+  local name="$1"
+  [[ -n "${!name:-}" ]]
+}
+
+default_env() {
+  local name="$1"
+  local value="$2"
+  if ! env_set "$name"; then
+    export "$name=$value"
+  fi
+}
+
+docker_ollama_probe_url() {
+  local container_url="${OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
+  local probe_url="${FORGE_DOCKER_OLLAMA_PROBE_URL:-$container_url}"
+  if [[ "$probe_url" == *"host.docker.internal"* ]]; then
+    probe_url="http://127.0.0.1:11434"
+  fi
+  printf '%s' "${probe_url%/}"
+}
+
+enable_docker_ollama_defaults() {
+  if [[ "${FORGE_DISABLE_OLLAMA_AUTODETECT:-false}" == "true" ]]; then
+    return
+  fi
+
+  default_env OLLAMA_BASE_URL "http://host.docker.internal:11434"
+  default_env FORGE_ENABLE_MODEL_RUNTIME "true"
+  default_env FORGE_MODEL_DEFAULT_BACKEND "ollama_compat"
+
+  if env_set FORGE_MODEL_DEFAULT_ID && ! env_set OLLAMA_MODEL; then
+    export OLLAMA_MODEL="$FORGE_MODEL_DEFAULT_ID"
+    return
+  fi
+  if env_set OLLAMA_MODEL && ! env_set FORGE_MODEL_DEFAULT_ID; then
+    export FORGE_MODEL_DEFAULT_ID="$OLLAMA_MODEL"
+    return
+  fi
+  if env_set FORGE_MODEL_DEFAULT_ID || env_set OLLAMA_MODEL; then
+    return
+  fi
+
+  local probe_url
+  probe_url="$(docker_ollama_probe_url)"
+  local models_json
+  if ! models_json="$(curl -fsS --max-time 2 "$probe_url/v1/models" 2>/dev/null)"; then
+    return
+  fi
+
+  local selected_model
+  selected_model="$(
+    printf '%s' "$models_json" | node -e '
+const fs = require("fs");
+const raw = fs.readFileSync(0, "utf8");
+const payload = JSON.parse(raw);
+const ids = (payload.data || []).map((model) => model && model.id).filter(Boolean);
+const preferred = [
+  "phi4-mini:latest",
+  "llama3.2:latest",
+  "llama3.2:3b",
+  "phi3:3.8b",
+  "llama3.1:8b",
+  "qwen2.5-coder:7b",
+  "mistral:latest",
+  "qwen2.5:14b",
+  "qwen3.6:latest"
+];
+const chosen = preferred.find((id) => ids.includes(id)) || ids.find((id) => !id.includes("embed") && !id.includes("cloud")) || "";
+process.stdout.write(chosen);
+' 2>/dev/null || true
+  )"
+  if [[ -n "$selected_model" ]]; then
+    export FORGE_MODEL_DEFAULT_ID="$selected_model"
+    export OLLAMA_MODEL="$selected_model"
+    printf 'FORGE Docker model default selected from host Ollama: %s\n' "$selected_model"
+  fi
+}
+
 args=()
 if [[ -f "$ENV_FILE" ]]; then
   args+=(--env-file "$ENV_FILE")
@@ -95,6 +174,7 @@ echo "Env file: $([[ -f "$ENV_FILE" ]] && echo "$ENV_FILE" || echo "(none)")"
 echo "Services: ${services[*]}"
 echo "Intel iGPU telemetry: $([[ "$igpu_enabled" == "true" ]] && echo "enabled via docker-compose.igpu.yml" || echo "not enabled")"
 
+enable_docker_ollama_defaults
 docker compose "${compose_args[@]}" "${args[@]}" up -d --build "${services[@]}"
 
 echo

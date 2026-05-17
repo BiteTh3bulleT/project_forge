@@ -24,6 +24,84 @@ if ($IgpuMode -eq "1" -or $IgpuMode -eq "true") {
   throw "FORGE_DOCKER_IGPU requested, but Windows host iGPU compose passthrough is not supported by this script."
 }
 
+function Test-EnvSet {
+  param([string]$Name)
+  return -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($Name, "Process"))
+}
+
+function Set-DefaultEnv {
+  param(
+    [string]$Name,
+    [string]$Value
+  )
+  if (-not (Test-EnvSet $Name)) {
+    [Environment]::SetEnvironmentVariable($Name, $Value, "Process")
+  }
+}
+
+function Get-OllamaProbeUrl {
+  $ContainerUrl = if (Test-EnvSet "OLLAMA_BASE_URL") { $env:OLLAMA_BASE_URL } else { "http://host.docker.internal:11434" }
+  $ProbeUrl = if (Test-EnvSet "FORGE_DOCKER_OLLAMA_PROBE_URL") { $env:FORGE_DOCKER_OLLAMA_PROBE_URL } else { $ContainerUrl }
+  if ($ProbeUrl -match "host\.docker\.internal") {
+    $ProbeUrl = "http://127.0.0.1:11434"
+  }
+  return $ProbeUrl.TrimEnd("/")
+}
+
+function Enable-DockerOllamaDefaults {
+  if ($env:FORGE_DISABLE_OLLAMA_AUTODETECT -eq "true") {
+    return
+  }
+
+  Set-DefaultEnv "OLLAMA_BASE_URL" "http://host.docker.internal:11434"
+  Set-DefaultEnv "FORGE_ENABLE_MODEL_RUNTIME" "true"
+  Set-DefaultEnv "FORGE_MODEL_DEFAULT_BACKEND" "ollama_compat"
+
+  if ((Test-EnvSet "FORGE_MODEL_DEFAULT_ID") -and -not (Test-EnvSet "OLLAMA_MODEL")) {
+    $env:OLLAMA_MODEL = $env:FORGE_MODEL_DEFAULT_ID
+    return
+  }
+  if ((Test-EnvSet "OLLAMA_MODEL") -and -not (Test-EnvSet "FORGE_MODEL_DEFAULT_ID")) {
+    $env:FORGE_MODEL_DEFAULT_ID = $env:OLLAMA_MODEL
+    return
+  }
+  if ((Test-EnvSet "FORGE_MODEL_DEFAULT_ID") -or (Test-EnvSet "OLLAMA_MODEL")) {
+    return
+  }
+
+  $ProbeUrl = Get-OllamaProbeUrl
+  try {
+    $ModelsPayload = Invoke-RestMethod -Uri "$ProbeUrl/v1/models" -TimeoutSec 2
+  } catch {
+    return
+  }
+
+  $Ids = @()
+  if ($ModelsPayload.data) {
+    $Ids = @($ModelsPayload.data | ForEach-Object { $_.id } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+  }
+  $Preferred = @(
+    "phi4-mini:latest",
+    "llama3.2:latest",
+    "llama3.2:3b",
+    "phi3:3.8b",
+    "llama3.1:8b",
+    "qwen2.5-coder:7b",
+    "mistral:latest",
+    "qwen2.5:14b",
+    "qwen3.6:latest"
+  )
+  $Selected = $Preferred | Where-Object { $Ids -contains $_ } | Select-Object -First 1
+  if (-not $Selected) {
+    $Selected = $Ids | Where-Object { $_ -notlike "*embed*" -and $_ -notlike "*cloud*" } | Select-Object -First 1
+  }
+  if ($Selected) {
+    $env:FORGE_MODEL_DEFAULT_ID = $Selected
+    $env:OLLAMA_MODEL = $Selected
+    Write-Host "FORGE Docker model default selected from host Ollama: $Selected"
+  }
+}
+
 function Test-DockerEngineReady {
   try {
     & docker version --format "{{.Server.Version}}" *> $null
@@ -149,6 +227,7 @@ Write-Host "Env file: $(if (Test-Path $EnvFile) { $EnvFile } else { "(none)" })"
 Write-Host "Services: $($Services -join " ")"
 Write-Host "Intel iGPU telemetry: not enabled"
 
+Enable-DockerOllamaDefaults
 Wait-DockerEngineReady
 
 & docker compose @ComposeArgs @ArgsList up -d --build @Services
