@@ -36,7 +36,7 @@ Restore behavior:
 | Autonomy settings (`autonomy_settings`) | yes | yes | parity |
 | Project context (`project_context_records`) | yes | yes | parity |
 | Evaluations (`evaluation_records`) | yes | yes | parity |
-| Audit history (`audit_records`, `gateway_invocations`) | yes (limited extract window) | yes (`audit_records` are insert-only on id conflict to preserve immutability triggers) | parity within export window |
+| Audit history (`audit_records`, `gateway_invocations`) | yes (uncapped, deterministic newest-first extract) | yes (`audit_records` are insert-only on id conflict to preserve immutability triggers) | parity |
 | VSA tables (`memory_vsa_*`, `retrieval_result_vsa_signals`) | yes | no | export-only by explicit restore policy |
 
 ## Claim boundary
@@ -50,4 +50,4 @@ Restore is atomic only for supported DB sections; it is not a global filesystem/
 ## Next parity targets
 
 1. If VSA restore is ever added, preserve derivation/provenance guarantees and avoid bypassing reindex invariants.
-2. Keep export window limitations explicit for `audit_records`/`gateway_invocations` (`LIMIT 5000` extract policy).
+2. Keep audit/gateway history export ordering deterministic and monitor bundle size for very long-running operators.

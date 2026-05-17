@@ -170,7 +170,7 @@ func (s *Service) Decide(ctx context.Context, requestID int64, actor, decision, 
 
 	var status string
 	if err := tx.QueryRowContext(ctx, `SELECT status FROM approval_requests WHERE id = ?`, requestID).Scan(&status); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("approval request %d not found", requestID)
 		}
 		return nil, err
@@ -392,7 +392,7 @@ func (s *Service) LatestRequestByJob(ctx context.Context, jobID string) (*Reques
 	row := s.db.QueryRowContext(ctx, `SELECT id FROM approval_requests WHERE job_id = ? ORDER BY id DESC LIMIT 1`, jobID)
 	var id int64
 	if err := row.Scan(&id); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
@@ -407,7 +407,7 @@ func (s *Service) LatestDecisionForRequest(ctx context.Context, requestID int64)
 	)
 	var d Decision
 	if err := row.Scan(&d.ID, &d.RequestID, &d.CreatedAtMs, &d.Actor, &d.Decision, &d.Note); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err

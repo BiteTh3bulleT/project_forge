@@ -566,6 +566,20 @@ func (s *Service) EnsureDefaults(ctx context.Context, workspaceDir string) error
 	return nil
 }
 
+// EnsureDefaultsIfEmpty seeds built-in lanes only for a fresh store with no
+// lane records. Existing lane state, including operator-disabled lanes, is
+// left untouched.
+func (s *Service) EnsureDefaultsIfEmpty(ctx context.Context, workspaceDir string) error {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM action_lanes`).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	return s.EnsureDefaults(ctx, workspaceDir)
+}
+
 func (s *Service) upsert(ctx context.Context, l Lane) error {
 	allow, _ := json.Marshal(nonNilStrings(l.AllowedPaths))
 	forbid, _ := json.Marshal(nonNilStrings(l.ForbiddenPaths))

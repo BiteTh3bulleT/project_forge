@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -90,7 +91,7 @@ func NewSQLiteBundleStrict(db *sql.DB) (SQLiteBundle, error) {
 func (r *sqliteKVRepository) get(ctx context.Context, key string) (string, bool, error) {
 	var raw string
 	err := r.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = ?`, key).Scan(&raw)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}
 	if err != nil {

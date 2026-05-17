@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"forge/projectforge/services/core/internal/lanes"
 )
 
 // BuildVersion is compiled into the forge-core binary at build time. Keep
@@ -266,6 +268,11 @@ func (s *Service) auditItem(ctx context.Context) ChecklistItem {
 func (s *Service) laneItem(ctx context.Context) ChecklistItem {
 	var count int
 	_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM action_lanes WHERE enabled = 1`).Scan(&count)
+	if count == 0 {
+		if err := lanes.New(s.db).EnsureDefaultsIfEmpty(ctx, s.workspaceDir); err == nil {
+			_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM action_lanes WHERE enabled = 1`).Scan(&count)
+		}
+	}
 	if count == 0 {
 		return ChecklistItem{ID: "lanes.enabled", Title: "Action lanes enabled", Status: "fail", Detail: "no enabled lanes — gateway cannot execute", Category: "gateway"}
 	}

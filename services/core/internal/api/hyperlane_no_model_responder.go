@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -456,7 +457,7 @@ ORDER BY ABS(m.created_at - ?) ASC, m.id DESC
 LIMIT 1`, targetMs-windowMs, targetMs+windowMs, targetMs)
 	var msg chatHistoryLookupMessage
 	if err := row.Scan(&msg.ID, &msg.ThreadID, &msg.ThreadTitle, &msg.Content, &msg.CreatedAtMs); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return chatHistoryLookupMessage{}, false, nil
 		}
 		return chatHistoryLookupMessage{}, false, err
@@ -518,7 +519,7 @@ func (s *Server) readModelRuntimeStructuredSummary(ctx context.Context) modelRun
 		out.Warnings = append(out.Warnings, "model_runtime_loads: "+err.Error())
 	}
 	err := s.st.DB.QueryRowContext(ctx, `SELECT model_id, status FROM model_runtime_loads ORDER BY loaded_at DESC, id DESC LIMIT 1`).Scan(&out.LatestLoadedModel, &out.LatestLoadedStatus)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		out.Warnings = append(out.Warnings, "latest model_runtime_loads: "+err.Error())
 	}
 	return out
@@ -569,7 +570,7 @@ snapshot_hygiene_proposals_json,warnings_json,trace_json,correlation_id,trace_id
 COALESCE(syscall_id,''),COALESCE(audit_id,''),proposed_by,committed_by,metadata_json
 FROM dream_reports WHERE workspace_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`, workspaceID)
 	rec, err := scanDreamReportNoModel(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return dreamReportNoModelRecord{}, count, false, nil
 	}
 	if err != nil {

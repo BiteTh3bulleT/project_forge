@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -333,7 +334,7 @@ FROM approval_presets WHERE id = ?`, id)
 func (s *Service) GlobalApprovalPreset(ctx context.Context) (string, error) {
 	var value string
 	err := s.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'approval_preset_global'`).Scan(&value)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
 	if err != nil {
@@ -375,7 +376,7 @@ WHERE dossier_id = ?`, *dossierID)
 		&p.DossierID, &p.UpdatedAtMs, &preferredStrategies, &preferredAdapters, &approvalPreset,
 		&retrievalDefaults, &highValueFiles, &noisyFiles, &p.RoutingNotes, &automationBindings,
 	); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err

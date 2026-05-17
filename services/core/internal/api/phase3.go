@@ -309,7 +309,7 @@ func (s *Server) handleGetRetrievalResultVSASignal(w http.ResponseWriter, r *htt
 	}
 	signal, err := s.memory.RetrievalResultVSASignal(r.Context(), resultID)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}

@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"path/filepath"
@@ -889,7 +890,7 @@ func (l *AutonomyMaintenanceLoop) previewMemoryRepairObservation(ctx context.Con
 		resultID, parseErr := strconv.ParseInt(strings.TrimSpace(obs.OriginID), 10, 64)
 		if parseErr == nil && resultID > 0 {
 			var snippet sql.NullString
-			if err := l.db.QueryRowContext(ctx, `SELECT snippet FROM retrieval_results WHERE id = ?`, resultID).Scan(&snippet); err != nil && err != sql.ErrNoRows {
+			if err := l.db.QueryRowContext(ctx, `SELECT snippet FROM retrieval_results WHERE id = ?`, resultID).Scan(&snippet); err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return AutonomyMaintenanceAction{}, err
 			} else if snippet.Valid {
 				fresh := strings.TrimSpace(snippet.String)

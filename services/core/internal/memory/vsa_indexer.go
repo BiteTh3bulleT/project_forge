@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"math"
 	"sort"
 	"strconv"
@@ -650,7 +651,7 @@ WHERE observation_id = ?`, observationID)
 		&pointerRecord.CreatedAtMs,
 		&pointerRecord.UpdatedAtMs,
 	); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return detail, nil
 		}
 		return nil, err

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"math"
 	"sort"
 	"strings"
@@ -365,7 +366,7 @@ FROM retrieval_result_vsa_signals
 WHERE retrieval_result_id = ?`, resultID)
 	item, err := scanRetrievalResultVSASignal(row)
 	if err != nil {
-		if err == sql.ErrNoRows || strings.Contains(strings.ToLower(err.Error()), "no such table") {
+		if errors.Is(err, sql.ErrNoRows) || strings.Contains(strings.ToLower(err.Error()), "no such table") {
 			return nil, nil
 		}
 		return nil, err

@@ -3,6 +3,7 @@ package evaluations
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -110,7 +111,7 @@ SELECT id, created_at, job_id, dossier_id, success,
        retry_recommended, influence_routing, notes, scorer
 FROM evaluation_records WHERE job_id = ? ORDER BY id DESC LIMIT 1`, jobID)
 	r, err := scanRecord(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	return r, err

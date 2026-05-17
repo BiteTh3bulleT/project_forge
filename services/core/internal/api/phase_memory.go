@@ -390,7 +390,7 @@ func (s *Server) handleGetVSAReindexRun(w http.ResponseWriter, r *http.Request) 
 	}
 	detail, err := s.memory.GetVSAReindexRun(r.Context(), runID)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}

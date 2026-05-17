@@ -15,7 +15,7 @@ Status values: `real`, `partial`, `legacy-boundary`, `blocked`, `scaffold`, `def
 | Retired memory observation mutation | syscall-native memory/state mutation only | resolved | retired gate in `server.go`, `server_memory_legacy_test.go` | keep mutation endpoints returning `410 Gone`; add only syscall-native write facades |
 | Approvals/events/jobs/artifacts restore parity | `backup.Service` restore mappings | mostly complete | `backup/service.go`, `backup/service_test.go` | VSA-derived export-only sections remain |
 | Cognitive filesystem restore parity | restore mappings for core cognitive tables | mostly complete | `backup/service.go` mappings + tests | VSA tables still export-only |
-| Project context/evaluation/audit restore parity | restore mappings in backup service | mostly complete | `backup/service.go`, `backup/service_test.go` | audit/gateway export window remains capped (`LIMIT 5000`) |
+| Project context/evaluation/audit restore parity | restore mappings in backup service | mostly complete | `backup/service.go`, `backup/service_test.go` | VSA-derived export-only sections remain |
 | Restore failure safety | transactional restore for supported DB sections | mostly complete | `backup/service.go`, rollback test coverage | cross-system rollback outside DB scope remains limited; `atomicScope`/warnings are explicit |
 | Autonomy persistence safety | SQLite-backed autonomy repos + persistence gate | mostly complete | autonomy policy/runner tests | trace/audit visibility still partial |
 | Rule-agent layer | propose-only runtime with 2 agents | partial (explicitly narrow) | `rule_agents.go`, safety guard tests, `docs/architecture/rule_based_agents.md` | broader deterministic agents deferred until signal, policy, test, and trace coverage exists |

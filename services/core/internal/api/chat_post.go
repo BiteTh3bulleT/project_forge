@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -432,7 +433,7 @@ func (s *Server) resolveAttachmentMetadata(ctx context.Context, threadID int64, 
 		seen[id] = struct{}{}
 		art, err := s.artifacts.GetByID(ctx, id)
 		if err != nil {
-			if err == sql.ErrNoRows {
+			if errors.Is(err, sql.ErrNoRows) {
 				return nil, fmt.Errorf("attachment %d not found", id)
 			}
 			return nil, err

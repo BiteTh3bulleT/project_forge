@@ -8,6 +8,15 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS schema_version (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  version INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+INSERT OR IGNORE INTO schema_version(id, version, updated_at)
+VALUES (1, 1, CAST(strftime('%s', 'now') AS INTEGER) * 1000);
+
 CREATE TABLE IF NOT EXISTS sources (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   path TEXT NOT NULL UNIQUE,

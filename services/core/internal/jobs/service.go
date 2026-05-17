@@ -1100,7 +1100,7 @@ func (s *Service) appendEventIfMissing(ctx context.Context, jobID, typ, message 
 	if err == nil {
 		return nil, nil
 	}
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
 	return s.appendEvent(ctx, jobID, typ, message, payload)
