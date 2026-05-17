@@ -2,7 +2,7 @@ package watch
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -86,7 +86,7 @@ func (m *Manager) scheduleReindex() {
 		ctx, cancel := context.WithTimeout(baseCtx, 5*time.Minute)
 		defer cancel()
 		if err := m.ingest.IndexAllSources(ctx); err != nil {
-			log.Printf("watch reindex all: %v", err)
+			slog.Warn("watch reindex all failed", slog.String("error", err.Error()))
 		}
 	})
 }
