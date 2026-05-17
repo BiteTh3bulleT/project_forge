@@ -1,25 +1,30 @@
 🟠 HIGH — fix before next milestone
-Security (still open from prior audit)
-Discord webhook has no Ed25519 signature verification (remote.go:129-195). Telegram + Discord share one remote_access_token.
-/api/settings/ollama-models?baseUrl= is still reflected SSRF (server_settings.go:481-522). Now bearer-gated, but still a probe primitive.
-API tokens stored plaintext in SQLite settings table. Redaction is response-layer cosmetics only; on-disk is plaintext (Telegram/Discord/OpenAI/TEI keys).
-code.patch_code and service_process.go:115 bash exec bypass any future env scrubbing — exec sites need centralization.
+Status: 2026-05-17 follow-up commits landed on main:
+- 3cf6e50 Harden M5S high-priority surfaces
+- d5de95a Tighten runtime cancellation and command execution
+- 979f709 Close storage and readiness punchlist gaps
+
+Security
+[DONE] Discord webhook Ed25519 signature verification added for configured Discord public keys. Telegram + Discord still share one remote_access_token.
+[DONE] /api/settings/ollama-models?baseUrl= explicit overrides now reject unsafe hosts before HTTP.
+[PARTIAL] Newly updated remote/Telegram/Discord secrets persist through encrypted secrets_vault. Broader API/OpenAI/TEI/keychain migration remains open.
+[DONE] code.patch_code and service_process.go subprocess creation now route through centralized gateway command helpers with secret-bearing env scrubbing.
 Bearer token has no rotation, no revocation, no per-actor distinction. Lives at ${FORGE_DATA_DIR}/auth/api_token (mode 0o600), but cannot be rotated without daemon restart.
-Approval decisions still single-principal: anyone holding the bearer can approve their own requests for any capability not flagged publicDecisionAllowed=false.
-Length-prefix timing leak in token compare (auth.go:64-71) — early-return on length mismatch defeats the point of subtle.ConstantTimeCompare. Minor.
-Gateway invoke accepts Initiator/ProvenanceActor from body (phase5.go:117-160) — audit attestation forgeable by bearer holder.
-chi middleware.Logger logs full URL including query string (routes.go:18) — ?baseUrl=, future tokens-in-URL, etc. land in operator logs.
-Code quality (still open from prior audit)
-watch/manager.go:72-78 debounce timer still leaks 5-minute context past Close(). Unchanged.
-jobs.Service.process still uses context.Background() — discards trace + cancellation. The Enqueue overflow leak got fixed; the process-context bug didn't.
-SSE token callbacks still ignore client disconnect (chat_assistant_modelruntime.go:113-126).
-22 sites still use err == sql.ErrNoRows instead of errors.Is.
-No schema_version table for SQLite. Forward-only via additive ensure*Columns. Unchanged.
-Operations (still open from prior audit)
+[DONE] Approval decisions now require separate approval authority from the request/initiation authority.
+[DONE] Length-prefix timing leak in bearer and remote token comparisons closed with fixed-length hash compares.
+[DONE] Gateway invoke ignores body Initiator/ProvenanceActor for audit authority and uses authenticated context.
+[DONE] chi middleware.Logger replaced with path-only request logging.
+Code quality
+[DONE] watch/manager.go debounce timer/context now cancels on Close().
+[DONE] jobs.Service.process now derives process/execution context from service root cancellation.
+[DONE] SSE token callbacks now check request cancellation and skip final flush on client disconnect.
+[DONE] Direct sql.ErrNoRows equality comparisons under services/core/internal replaced with errors.Is.
+[DONE] SQLite schema_version table added with idempotent non-downgrading initialization.
+Operations
 No installer / no code signing / no auto-update. tauri.conf.json has bundle.targets: "all" with no signing identity, no tauri-plugin-updater. Windows SmartScreen/macOS Gatekeeper block unsigned bundles. Anything shipped today is unsigned, undistributable, and unpatchable.
 No SQLite online backup. backup.Service is logical JSON-export only. No VACUUM, no WAL checkpoint policy, no sqlite3_backup API call. WAL file will grow unbounded on never-checkpointed deployments.
-audit_records export still capped at LIMIT 5000. Long-running operators silently lose history.
-First-run still fails OOTB: lanes.enabled=0 → release.ready: false → readiness gates closed. No default-lane seeder.
+[DONE] audit_records and gateway_invocations backup exports are no longer capped at LIMIT 5000.
+[DONE] First-run release readiness seeds default lanes when action_lanes is empty.
 placeholders_and_stubs.md is now 27 days stale (2026-04-20 vs current_authority_sources at 2026-05-14).
 Architecture (largely unchanged)
 internal/api is still a 36k-LOC god-package (113 files, 38-field Server struct).
@@ -42,10 +47,10 @@ Bundle: 861KB monolithic JS, 131KB CSS (CSS grew +426 lines to 4622). Zero React
 39 empty-deps useEffect hooks across 31 files. Still no ESLint.
 Pages still huge: Settings 1498, Models 1466, Chat 1447, Inspectors 1295. Chat partially split into a subdir but the top-level file is still 1447 lines.
 desktopShellStore multi-window race is unmitigated and now more reachable (multi-window operator shell shipped).
-Logout doesn't clear apiTokenPromise — subsequent calls from same window remain authenticated.
+[DONE] Logout clears apiTokenPromise so subsequent calls from the same window re-read auth state.
 Zero aria-live anywhere in 41k LOC of TS. Login error message isn't announced.
 Desktop TODO/stub count jumped 0 → 90 across 31 files in two weeks.
 Operational hygiene
 FORGE_M5S_Security_Lockdown_Prompt_Pack.zip, FORGE_M5A_Authority_Convergence_Pack.zip, and the doubly-nested unzipped pack directory are sitting in working tree, ungitignored. Either commit under docs/prompt-packs/ or gitignore.
 WindoManager.txt at repo root — typo'd dev prompt, still present.
-docker-compose.yml:12 still defaults FORGE_ALLOW_WILDCARD_BIND=true — bounded by token now, but inverts the docker security default.
+[DONE] docker-compose.yml now defaults FORGE_ALLOW_WILDCARD_BIND=false.
