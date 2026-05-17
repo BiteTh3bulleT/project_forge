@@ -2,8 +2,21 @@ $ErrorActionPreference = "Stop"
 
 $RootDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $EnvFile = if ($env:FORGE_DOCKER_ENV_FILE) { $env:FORGE_DOCKER_ENV_FILE } else { Join-Path $RootDir ".env.docker" }
+$TokenFile = Join-Path $RootDir ".forge/docker-api-token"
 
 Set-Location $RootDir
+
+if ([string]::IsNullOrWhiteSpace($env:FORGE_API_TOKEN)) {
+  $TokenDir = Split-Path -Parent $TokenFile
+  New-Item -ItemType Directory -Force -Path $TokenDir | Out-Null
+  if (-not (Test-Path $TokenFile) -or (Get-Item $TokenFile).Length -eq 0) {
+    $Bytes = [byte[]]::new(32)
+    [System.Security.Cryptography.RandomNumberGenerator]::Fill($Bytes)
+    $Token = -join ($Bytes | ForEach-Object { $_.ToString("x2") })
+    Set-Content -LiteralPath $TokenFile -Value $Token -NoNewline
+  }
+  $env:FORGE_API_TOKEN = (Get-Content -Raw -LiteralPath $TokenFile).Trim()
+}
 
 $ComposeArgs = @()
 $IgpuMode = if ($env:FORGE_DOCKER_IGPU) { $env:FORGE_DOCKER_IGPU } else { "auto" }

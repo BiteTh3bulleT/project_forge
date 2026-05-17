@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,7 +21,10 @@ import (
 	"forge/projectforge/services/core/internal/ingest"
 )
 
-const redactedSettingSecret = "[redacted]"
+const (
+	redactedSettingSecret = "[redacted]"
+	localOllamaBaseURL    = "http://127.0.0.1:11434"
+)
 
 func redactedSettingSecretValue(value string) string {
 	if strings.TrimSpace(value) == "" {
@@ -36,7 +40,7 @@ func shouldPersistSettingSecret(value string) bool {
 func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	ext := loadSetting(s.st.DB, "extensions_csv", ingest.DefaultExtensionsCSV())
 	theme := loadSetting(s.st.DB, "theme", "dark")
-	ollamaBase := loadSetting(s.st.DB, "ollama_base_url", "http://127.0.0.1:11434")
+	ollamaBase := effectiveOllamaBaseURL(s.st.DB)
 	ollamaModel := normalizeOllamaModel(loadSetting(s.st.DB, "ollama_model", ""))
 	embeddingProvider := loadSetting(s.st.DB, "embedding_provider", "local_hash")
 	embeddingModel := loadSetting(s.st.DB, "embedding_model", "")
@@ -483,7 +487,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGetOllamaModels(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	configuredBaseURL := strings.TrimSpace(loadSetting(s.st.DB, "ollama_base_url", "http://127.0.0.1:11434"))
+	configuredBaseURL := strings.TrimSpace(effectiveOllamaBaseURL(s.st.DB))
 	baseURLOverride := strings.TrimSpace(r.URL.Query().Get("baseUrl"))
 	baseURL := baseURLOverride
 	if baseURLOverride == "" {
@@ -615,6 +619,25 @@ func sameOllamaModelsBaseURL(a, b string) bool {
 		return false
 	}
 	return strings.EqualFold(left, right)
+}
+
+func defaultOllamaBaseURL() string {
+	if value := strings.TrimSpace(os.Getenv("OLLAMA_BASE_URL")); value != "" {
+		return value
+	}
+	return localOllamaBaseURL
+}
+
+func effectiveOllamaBaseURL(db *sql.DB) string {
+	envDefault := defaultOllamaBaseURL()
+	stored := strings.TrimSpace(loadSetting(db, "ollama_base_url", ""))
+	if stored == "" {
+		return envDefault
+	}
+	if !sameOllamaModelsBaseURL(envDefault, localOllamaBaseURL) && sameOllamaModelsBaseURL(stored, localOllamaBaseURL) {
+		return envDefault
+	}
+	return stored
 }
 
 func normalizeOllamaModel(raw string) string {

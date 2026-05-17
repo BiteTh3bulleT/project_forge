@@ -3,8 +3,18 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${FORGE_DOCKER_ENV_FILE:-$ROOT_DIR/.env.docker}"
+TOKEN_FILE="$ROOT_DIR/.forge/docker-api-token"
 
 cd "$ROOT_DIR"
+
+if [[ -z "${FORGE_API_TOKEN:-}" ]]; then
+  mkdir -p "$(dirname "$TOKEN_FILE")"
+  if [[ ! -s "$TOKEN_FILE" ]]; then
+    od -An -N32 -tx1 /dev/urandom | tr -d ' \n' >"$TOKEN_FILE"
+    chmod 600 "$TOKEN_FILE" || true
+  fi
+  export FORGE_API_TOKEN="$(tr -d '\r\n' <"$TOKEN_FILE")"
+fi
 
 compose_args=()
 igpu_enabled=false

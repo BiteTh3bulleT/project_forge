@@ -232,6 +232,81 @@ func TestGetOllamaModelsKeepsDefaultLocalOllamaBehaviorWithoutOverride(t *testin
 	}
 }
 
+func TestGetOllamaModelsUsesOllamaBaseURLEnvDefault(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tags" {
+			t.Fatalf("unexpected upstream path %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]string{{"name": "env-model"}}})
+	}))
+	t.Cleanup(upstream.Close)
+	t.Setenv("OLLAMA_BASE_URL", upstream.URL)
+
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	req := httptest.NewRequest(http.MethodGet, "/api/settings/ollama-models", nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"baseUrl":"`+upstream.URL+`"`) || !strings.Contains(body, `"env-model"`) {
+		t.Fatalf("env ollama base URL was not used in body=%s", body)
+	}
+}
+
+func TestGetOllamaModelsUsesEnvDefaultOverLegacyLoopbackSetting(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]string{{"name": "docker-env-model"}}})
+	}))
+	t.Cleanup(upstream.Close)
+	t.Setenv("OLLAMA_BASE_URL", upstream.URL)
+
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := upsertSetting(t.Context(), st.DB, "ollama_base_url", "http://127.0.0.1:11434"); err != nil {
+		t.Fatalf("seed legacy ollama base url: %v", err)
+	}
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	settingsReq := httptest.NewRequest(http.MethodGet, "/api/settings", nil)
+	settingsRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(settingsRR, settingsReq)
+	if settingsRR.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settingsRR.Code, settingsRR.Body.String())
+	}
+	if !strings.Contains(settingsRR.Body.String(), `"ollamaBaseUrl":"`+upstream.URL+`"`) {
+		t.Fatalf("settings did not expose env ollama base URL over legacy loopback: %s", settingsRR.Body.String())
+	}
+
+	modelsReq := httptest.NewRequest(http.MethodGet, "/api/settings/ollama-models?baseUrl="+url.QueryEscape(upstream.URL), nil)
+	modelsRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(modelsRR, modelsReq)
+	if modelsRR.Code != http.StatusOK {
+		t.Fatalf("models status=%d body=%s", modelsRR.Code, modelsRR.Body.String())
+	}
+	if !strings.Contains(modelsRR.Body.String(), `"docker-env-model"`) {
+		t.Fatalf("env ollama models were not returned in body=%s", modelsRR.Body.String())
+	}
+}
+
 func TestGetOllamaModelsAllowsConfiguredLocalBaseURLOverride(t *testing.T) {
 	dataDir := t.TempDir()
 	workspaceDir := t.TempDir()

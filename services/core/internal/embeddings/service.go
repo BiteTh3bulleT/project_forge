@@ -10,6 +10,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,6 +24,7 @@ const (
 
 	embeddingProviderResponseLimit = 8 << 20
 	teiEmbeddingResponseLimit      = embeddingProviderResponseLimit
+	localOllamaBaseURL             = "http://127.0.0.1:11434"
 )
 
 type Provider interface {
@@ -132,10 +134,38 @@ func (s *Service) CurrentConfig(ctx context.Context) Config {
 		Provider:     provider,
 		Model:        model,
 		Dims:         dims,
-		OllamaURL:    strings.TrimSpace(s.setting(ctx, "ollama_base_url", "http://127.0.0.1:11434")),
+		OllamaURL:    strings.TrimSpace(s.ollamaBaseURL(ctx)),
 		TEIEndpoint:  strings.TrimSpace(s.setting(ctx, "embedding_tei_endpoint", "")),
 		TEITimeoutMs: settingInt(s.setting(ctx, "embedding_tei_timeout_ms", "30000"), 30000),
 	}
+}
+
+func defaultOllamaBaseURL() string {
+	if value := strings.TrimSpace(os.Getenv("OLLAMA_BASE_URL")); value != "" {
+		return value
+	}
+	return localOllamaBaseURL
+}
+
+func (s *Service) ollamaBaseURL(ctx context.Context) string {
+	envDefault := defaultOllamaBaseURL()
+	stored := strings.TrimSpace(s.setting(ctx, "ollama_base_url", ""))
+	if stored == "" {
+		return envDefault
+	}
+	if !sameBaseURL(envDefault, localOllamaBaseURL) && sameBaseURL(stored, localOllamaBaseURL) {
+		return envDefault
+	}
+	return stored
+}
+
+func sameBaseURL(a, b string) bool {
+	left := strings.TrimRight(strings.TrimSpace(a), "/")
+	right := strings.TrimRight(strings.TrimSpace(b), "/")
+	if left == "" || right == "" {
+		return false
+	}
+	return strings.EqualFold(left, right)
 }
 
 func (s *Service) Provider(ctx context.Context, overrideProvider, overrideModel string) Provider {
