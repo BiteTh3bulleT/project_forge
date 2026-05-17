@@ -146,7 +146,7 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 
 - [ ] **Make CI integration env required.** No more silent skips on Postgres/Qdrant/Redis env vars.
 - [x] **Add scoped `go test -race` to weekly CI.** 2026-05-17: added weekly/manual race workflow for concurrency-heavy core packages (`api`, `jobs`, `modelruntime`, `gateway`, `hostbridge`, `aios/controllane`). Full `./...` race coverage remains optional because it is expensive.
-- [ ] **Add fuzz tests** on URL/path/mode/ref/PID validators (5 fuzz targets in `gateway/`).
+- [x] **Add fuzz tests** on URL/path/mode/ref/PID validators (5 fuzz targets in `gateway/`). 2026-05-17: added fuzz coverage for outbound HTTP URL, workspace path, chmod mode, git checkout ref, and terminate PID validators.
 - [ ] **Cross-platform smoke port.** Move `scripts/forge-smoke.mjs` off bash so it runs on Windows.
 
 ---
@@ -158,7 +158,7 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 - [x] **Add `/health/detailed` endpoint.** Per-service health rollup (storage, modelruntime, gateway, hostbridge, forgekshadow, dream, autonomy). One JSON body. 2026-05-17: implemented as bearer-authenticated structured JSON; `/health` remains public.
 - [x] **Add `/metrics` endpoint behind config flag.** Prometheus format. 2026-05-17: implemented disabled-by-default via `FORGE_ENABLE_METRICS_ENDPOINT`, returning bounded non-secret process/build/scrape metrics and 404 when disabled. Deeper request-duration, KV identity, gate decision, and journal-rate metrics remain future observability hardening.
 - [ ] **Per-service graceful shutdown.** Ensure every long-lived service (jobs runner, dream loop, autonomy maintenance) responds to context cancellation cleanly.
-- [ ] **Audit retention policy.** Journal and audit are append-only — confirm a documented rotation/archive plan before this becomes a disk-space problem.
+- [x] **Audit retention policy.** 2026-05-17: documented current append-only audit/journal behavior, backup/export posture, retention/archive gap, recommended archive-before-prune approach, and explicit non-implemented items in `docs/AUDIT_AND_TRACE.md`. This closes the policy documentation gap only; automated rotation/pruning is not implemented.
 
 ---
 
@@ -198,7 +198,7 @@ These are the items between "wired" and "works the way I want."
 
 - [x] **Diagnose "fast first response, slow after."** Root cause was the legacy native Ollama stream fallback running before modelruntime plain chat on the non-streaming runtime path; its 120s timeout created the observed cliff before the `runtime_primary` stage. KV identity counters are not on the normal chat path, context compile timing is reported as `0` for this path, and modelruntime timing starts after the delay.
 - [x] **Fix or accept** based on diagnosis. Fixed by preferring modelruntime plain chat before native Ollama stream fallback and adding regression coverage.
-- [ ] **Add a chat latency budget** — log a warning when any turn exceeds N seconds in critical phases.
+- [x] **Add a chat latency budget** — log a warning when any turn exceeds N seconds in critical phases. 2026-05-17: chat traces now emit a bounded structured warning when total or critical phase latency crosses the conservative 30s budget.
 
 ### Operator desktop
 

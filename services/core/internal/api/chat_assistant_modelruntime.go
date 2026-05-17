@@ -165,6 +165,7 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 		traceExtras[k] = v
 	}
 	trace := chatLatencyTraceWithPrompt(requestStart, perf, promptBudget, traceExtras)
+	s.warnIfChatLatencyBudgetExceeded(ctx, threadID, userMessageID, corr, trace)
 	activity := map[string]any{
 		"userRequestSummary": trimSummary(lastUserContent, 500),
 		"toolManifest":       manifests,
@@ -297,6 +298,7 @@ func (s *Server) completeAssistantWithModelRuntime(
 		traceExtras[k] = v
 	}
 	trace := chatLatencyTraceWithPrompt(requestStart, perf, promptBudget, traceExtras)
+	s.warnIfChatLatencyBudgetExceeded(ctx, threadID, userMessageID, corr, trace)
 
 	activity := map[string]any{
 		"userRequestSummary": trimSummary(lastUserContent, 500),

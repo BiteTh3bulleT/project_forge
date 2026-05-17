@@ -2,7 +2,10 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +25,8 @@ const (
 	chatOutputNormal = "normal"
 	chatOutputDeep   = "deep"
 	chatOutputReport = "report"
+
+	chatLatencyBudgetWarningThreshold = 30 * time.Second
 )
 
 type chatPerformanceDecision struct {
@@ -431,6 +436,107 @@ func chatLatencyTraceWithPrompt(start time.Time, decision chatPerformanceDecisio
 	extras["tokens_estimated"] = apiMaxInt(1, prompt.TotalChars/4)
 	extras["context_compile_ms"] = int64(0)
 	return chatLatencyTrace(start, decision, extras)
+}
+
+func (s *Server) warnIfChatLatencyBudgetExceeded(ctx context.Context, threadID, userMessageID int64, correlationID string, trace map[string]any) {
+	payload, ok := chatLatencyBudgetWarningPayload(threadID, userMessageID, correlationID, trace, chatLatencyBudgetWarningThreshold)
+	if !ok {
+		return
+	}
+	apiLogWarn("chat latency budget exceeded",
+		slog.Int64("threadId", threadID),
+		slog.Int64("userMessageId", userMessageID),
+		slog.String("correlationId", strings.TrimSpace(correlationID)),
+		slog.String("phase", asString(payload["phase"])),
+		slog.Int64("threshold_ms", chatTraceInt64(payload["threshold_ms"])),
+		slog.Int64("phase_ms", chatTraceInt64(payload["phase_ms"])),
+		slog.Int64("total_request_ms", chatTraceInt64(payload["total_request_ms"])),
+		slog.String("route_intent", asString(payload["route_intent"])),
+		slog.String("context_budget_class", asString(payload["context_budget_class"])),
+		slog.String("output_mode", asString(payload["output_mode"])),
+	)
+}
+
+func chatLatencyBudgetWarningPayload(threadID, userMessageID int64, correlationID string, trace map[string]any, threshold time.Duration) (map[string]any, bool) {
+	if len(trace) == 0 {
+		return nil, false
+	}
+	if threshold <= 0 {
+		threshold = chatLatencyBudgetWarningThreshold
+	}
+	thresholdMs := threshold.Milliseconds()
+	phase, phaseMs := slowestCriticalChatLatencyPhase(trace)
+	totalMs := chatTraceInt64(trace["total_request_ms"])
+	if phaseMs < thresholdMs && totalMs < thresholdMs {
+		return nil, false
+	}
+	if phase == "" || phaseMs < thresholdMs {
+		phase = "total_request"
+		phaseMs = totalMs
+	}
+	payload := map[string]any{
+		"threadId":             threadID,
+		"userMessageId":        userMessageID,
+		"correlationId":        strings.TrimSpace(correlationID),
+		"phase":                phase,
+		"threshold_ms":         thresholdMs,
+		"phase_ms":             phaseMs,
+		"total_request_ms":     totalMs,
+		"route_intent":         asString(trace["route_intent"]),
+		"context_budget_class": asString(trace["context_budget_class"]),
+		"output_mode":          asString(trace["output_mode"]),
+	}
+	return payload, true
+}
+
+func slowestCriticalChatLatencyPhase(trace map[string]any) (string, int64) {
+	critical := []struct {
+		traceKey string
+		phase    string
+	}{
+		{traceKey: "context_compile_ms", phase: "context_compile"},
+		{traceKey: "restore_ms", phase: "restore"},
+		{traceKey: "gateway_preflight_ms", phase: "gateway_preflight"},
+		{traceKey: "gateway_execution_ms", phase: "gateway_execution"},
+		{traceKey: "modelruntime_ms", phase: "modelruntime"},
+		{traceKey: "modelruntime_first_token_ms", phase: "modelruntime_first_token"},
+	}
+	var slowestPhase string
+	var slowestMs int64
+	for _, item := range critical {
+		ms := chatTraceInt64(trace[item.traceKey])
+		if ms > slowestMs {
+			slowestMs = ms
+			slowestPhase = item.phase
+		}
+	}
+	return slowestPhase, slowestMs
+}
+
+func chatTraceInt64(value any) int64 {
+	switch v := value.(type) {
+	case int:
+		return int64(v)
+	case int64:
+		return v
+	case int32:
+		return int64(v)
+	case float64:
+		return int64(v)
+	case float32:
+		return int64(v)
+	case json.Number:
+		n, err := v.Int64()
+		if err == nil {
+			return n
+		}
+	case string:
+		n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		if err == nil {
+			return n
+		}
+	}
+	return 0
 }
 
 func apiMaxInt(a, b int) int {

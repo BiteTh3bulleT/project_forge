@@ -21,6 +21,8 @@
     "validate:forgek-fixtures": "cd crates/forgek-validate && cargo run -- validate-fixtures ../../fixtures/forgek",
     "test:forgek:parity": "node ./scripts/forgek-parity.mjs",
     "validate:forgek": "npm run test:rust:forgek && npm run validate:forgek-fixtures && npm run test:forgek:parity",
+    "docs:routes": "node ./scripts/generate-api-routes.mjs",
+    "docs:routes:check": "node ./scripts/generate-api-routes.mjs --check",
     "test:integration:env": "node ./scripts/check-integration-env.mjs --allow-missing",
     "test:integration": "node ./scripts/check-integration-env.mjs && cd services/core && go test ./...",
     "validate:local": "npm run test:integration:env && npm run validate:desktop && npm run validate:forgek && npm run build:core",
