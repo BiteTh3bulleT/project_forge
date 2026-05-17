@@ -1,0 +1,30 @@
+name: Weekly Race
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 8 * * 1"
+
+jobs:
+  core-concurrency:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/core/go.mod
+          cache-dependency-path: services/core/go.sum
+
+      - name: Race test concurrency-heavy core packages
+        run: |
+          cd services/core
+          go test -race \
+            ./internal/api \
+            ./internal/jobs \
+            ./internal/modelruntime \
+            ./internal/gateway \
+            ./internal/hostbridge \
+            ./internal/aios/controllane

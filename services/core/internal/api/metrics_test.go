@@ -57,6 +57,27 @@ func TestMetricsRouteServesPrometheusTextWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestMetricsRouteRequiresAuthWhenTokenConfigured(t *testing.T) {
+	srv := &Server{cfg: config.Config{
+		EnableMetricsEndpoint: true,
+		APIToken:              "operator-token",
+	}}
+
+	unauth := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(unauth, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	if unauth.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated /metrics status=%d, want %d", unauth.Code, http.StatusUnauthorized)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	req.Header.Set("Authorization", "Bearer operator-token")
+	auth := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(auth, req)
+	if auth.Code != http.StatusOK {
+		t.Fatalf("authenticated /metrics status=%d, want %d body=%q", auth.Code, http.StatusOK, auth.Body.String())
+	}
+}
+
 func TestMetricsRouteDoesNotExposeSecretLookingTextWhenEnabled(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/metrics?token=should-not-appear", nil)
 	req.Header.Set("Authorization", "Bearer should-not-appear")

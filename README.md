@@ -96,6 +96,7 @@ Nix remains optional. Do not require vLLM, CUDA, GPU hardware, or a managed mode
 
 ## More Docs
 
+- `docs/onboarding.md`
 - `docs/USER_MANUAL.md`
 - `docs/DESKTOP_SHELL.md`
 - `docs/architecture/forge_ai_os.md`

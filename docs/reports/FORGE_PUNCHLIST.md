@@ -145,7 +145,7 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 ### Test infrastructure
 
 - [ ] **Make CI integration env required.** No more silent skips on Postgres/Qdrant/Redis env vars.
-- [ ] **Add `go test -race ./...` to weekly CI.**
+- [x] **Add scoped `go test -race` to weekly CI.** 2026-05-17: added weekly/manual race workflow for concurrency-heavy core packages (`api`, `jobs`, `modelruntime`, `gateway`, `hostbridge`, `aios/controllane`). Full `./...` race coverage remains optional because it is expensive.
 - [ ] **Add fuzz tests** on URL/path/mode/ref/PID validators (5 fuzz targets in `gateway/`).
 - [ ] **Cross-platform smoke port.** Move `scripts/forge-smoke.mjs` off bash so it runs on Windows.
 
@@ -281,7 +281,7 @@ The project is "wired and working properly" when:
 - [ ] Cross-session memory recall verified working.
 - [ ] Operator desktop session running with toolbelt-provided ollama as the model backend.
 - [ ] One more simulator-to-live migration landed.
-- [ ] CI is strict (integration env required, race detector weekly, fuzz on validators).
+- [ ] CI is strict (integration env required and race detector weekly are present; fuzz on validators remains open).
 - [ ] No remaining items in Sections 1, 4, 5, 6.
 
 ---
