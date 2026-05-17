@@ -65,11 +65,40 @@ in
       ShowDelay=0
     '';
   };
+  boot.tmp.cleanOnBoot = lib.mkDefault true;
+
+  nix = {
+    settings = {
+      experimental-features = lib.mkDefault [
+        "nix-command"
+        "flakes"
+      ];
+      max-jobs = lib.mkDefault 6;
+      cores = lib.mkDefault 0;
+      auto-optimise-store = lib.mkDefault true;
+    };
+    gc = {
+      automatic = lib.mkDefault true;
+      dates = lib.mkDefault "weekly";
+      options = lib.mkDefault "--delete-older-than 14d";
+    };
+  };
 
   fileSystems."/" = {
     device = lib.mkDefault "/dev/disk/by-label/nixos";
     fsType = lib.mkDefault "ext4";
   };
+
+  services.fstrim.enable = lib.mkDefault true;
+  zramSwap = {
+    enable = lib.mkDefault true;
+    memoryPercent = lib.mkDefault 25;
+  };
+
+  services.journald.extraConfig = lib.mkDefault ''
+    SystemMaxUse=512M
+    RuntimeMaxUse=128M
+  '';
 
   networking.hostName = "forge-operator-vm";
   networking.networkmanager.enable = lib.mkDefault true;
@@ -156,8 +185,8 @@ in
 
   virtualisation.vmVariant = {
     virtualisation = {
-      memorySize = lib.mkDefault 4096;
-      cores = lib.mkDefault 4;
+      memorySize = lib.mkDefault 12288;
+      cores = lib.mkDefault 6;
       diskSize = lib.mkDefault 32768;
       graphics = lib.mkDefault true;
     };

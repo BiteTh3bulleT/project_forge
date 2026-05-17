@@ -9,10 +9,7 @@ import {
 
 import { ForgeErrorBoundary } from "./components/ForgeErrorBoundary";
 import { AppShell } from "./layout/AppShell";
-import {
-  isTauriDesktop,
-  isShellHostWindowLabel,
-} from "./lib/desktop";
+import { isTauriDesktop, isShellHostWindowLabel } from "./lib/desktop";
 import {
   subscribeToCurrentWindowLifecycle,
   subscribeToWorkspaceLayoutSync,
@@ -167,6 +164,7 @@ export default function App() {
   const layoutReady = useWorkspaceLayoutStore((s) => s.ready);
   const locationRef = useRef(`${location.pathname}${location.search}`);
   const desktopShownAfterUnlockRef = useRef(false);
+  const layoutHydratedRef = useRef(false);
   const currentWindowLabel = useWorkspaceLayoutStore(
     (s) => s.currentWindowLabel,
   );
@@ -187,6 +185,10 @@ export default function App() {
   const requiresForgeLogin =
     FORGE_BOOT_LOGIN_REQUIRED &&
     (isPrimaryShellWindow || !layoutReady || currentWindowLabel === "main");
+  const canHydrateLayouts = !FORGE_BOOT_LOGIN_REQUIRED || forgeLoginUnlocked;
+  const showingForgeBootSurface =
+    FORGE_BOOT_LOGIN_REQUIRED &&
+    (!forgeBootScreenReady || !forgeLoginUnlocked || !layoutReady);
 
   const handleForgeLoginUnlock = () => {
     window.sessionStorage.setItem(FORGE_OPERATOR_LOGIN_SESSION_KEY, "true");
@@ -194,6 +196,15 @@ export default function App() {
     desktopShownAfterUnlockRef.current = true;
     setForgeLoginUnlocked(true);
     navigate(FORGE_OPERATOR_DESKTOP_ROUTE, { replace: true });
+  };
+
+  const handleForgeLogout = () => {
+    window.sessionStorage.removeItem(FORGE_OPERATOR_LOGIN_SESSION_KEY);
+    useDesktopWindowStore.getState().resetDesktopSession();
+    desktopShownAfterUnlockRef.current = false;
+    setForgeLoginUnlocked(false);
+    setForgeBootScreenReady(true);
+    navigate("/login", { replace: true });
   };
 
   useEffect(() => {
@@ -237,6 +248,15 @@ export default function App() {
   }, [contrastPreference, effectsPreference]);
 
   useEffect(() => {
+    document.documentElement.dataset.forgeBootSurface = showingForgeBootSurface
+      ? "true"
+      : "false";
+    return () => {
+      delete document.documentElement.dataset.forgeBootSurface;
+    };
+  }, [showingForgeBootSurface]);
+
+  useEffect(() => {
     if (!isPrimaryShellWindow) return;
     void ping();
     const id = window.setInterval(() => void ping(), 8000);
@@ -244,16 +264,28 @@ export default function App() {
   }, [ping, isPrimaryShellWindow]);
 
   useEffect(() => {
-    void hydrateLayouts(location.pathname + location.search);
-  }, []);
+    if (!canHydrateLayouts || layoutHydratedRef.current) return;
+    layoutHydratedRef.current = true;
+    const hydrationRoute =
+      FORGE_BOOT_LOGIN_REQUIRED && location.pathname === "/login"
+        ? FORGE_OPERATOR_DESKTOP_ROUTE
+        : location.pathname + location.search;
+    void hydrateLayouts(hydrationRoute);
+  }, [canHydrateLayouts, hydrateLayouts, location.pathname, location.search]);
 
   useEffect(() => {
     hydrateShell(currentWindowLabel || "main");
   }, [currentWindowLabel, hydrateShell]);
 
   useEffect(() => {
+    if (FORGE_BOOT_LOGIN_REQUIRED && !forgeLoginUnlocked) return;
     void syncCurrentRoute(location.pathname + location.search);
-  }, [location.pathname, location.search, syncCurrentRoute]);
+  }, [
+    forgeLoginUnlocked,
+    location.pathname,
+    location.search,
+    syncCurrentRoute,
+  ]);
 
   useEffect(() => {
     if (!isPrimaryShellWindow) return;
@@ -347,6 +379,7 @@ export default function App() {
     <AppShell
       isMainWindow={isPrimaryShellWindow}
       hostLabel={currentWindowLabel || "main"}
+      onForgeLogout={handleForgeLogout}
     >
       <RoutedViews onForgeLoginUnlock={handleForgeLoginUnlock} />
     </AppShell>

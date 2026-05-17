@@ -55,6 +55,9 @@ jobs:
       - name: Go tests
         run: npm test
 
+      - name: Go race tests (core API)
+        run: cd services/core && go test -race ./internal/api
+
       - name: Go vet
         run: npm run lint
 

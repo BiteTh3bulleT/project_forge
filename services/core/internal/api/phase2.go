@@ -34,7 +34,7 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	}
 	j, err := s.jobs.Create(r.Context(), body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "job_create_failed", err.Error(), nil)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"job": j})
@@ -45,7 +45,7 @@ func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	rows, err := s.jobs.List(r.Context(), status, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIInternalError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"jobs": rows})
@@ -56,7 +56,7 @@ func (s *Server) handleJobDetail(w http.ResponseWriter, r *http.Request) {
 	afterID, _ := strconv.ParseInt(r.URL.Query().Get("afterEventId"), 10, 64)
 	detail, err := s.jobs.Detail(r.Context(), id, afterID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeAPIError(w, http.StatusNotFound, "job_not_found", "job not found", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, detail)
@@ -73,7 +73,7 @@ func (s *Server) handleCancelJob(w http.ResponseWriter, r *http.Request) {
 	}
 	actor := authenticatedActorName(r)
 	if err := s.jobs.RequestCancel(r.Context(), id, actor); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "job_cancel_failed", err.Error(), nil)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "jobId": id})
@@ -84,7 +84,7 @@ func (s *Server) handleListApprovals(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	rows, err := s.approvals.ListRequests(r.Context(), status, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIInternalError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"approvals": rows})
@@ -93,12 +93,12 @@ func (s *Server) handleListApprovals(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetApproval(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "bad_id", "bad id", err)
 		return
 	}
 	req, err := s.approvals.GetRequest(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeAPIError(w, http.StatusNotFound, "approval_not_found", "approval not found", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"approval": req})
@@ -119,7 +119,7 @@ func (s *Server) handleCancelRequest(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleApprovalDecision(w http.ResponseWriter, r *http.Request, decision string) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "bad_id", "bad id", err)
 		return
 	}
 	var body struct {
@@ -133,14 +133,14 @@ func (s *Server) handleApprovalDecision(w http.ResponseWriter, r *http.Request, 
 	if decision == "approved" && s.approvals != nil {
 		ar, err := s.approvals.GetRequest(r.Context(), id)
 		if err == nil && approvalDecisionRequiresNonPublicAuthority(ar) {
-			http.Error(w, "approval request requires a non-public approval authority", http.StatusForbidden)
+			writeAPIError(w, http.StatusForbidden, "approval_requires_non_public_authority", "approval request requires a non-public approval authority", nil)
 			return
 		}
 	}
 	actor := authenticatedActorName(r)
 	d, err := s.jobs.ApplyApprovalDecision(r.Context(), id, decision, actor, body.Note)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "approval_decision_failed", err.Error(), nil)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"decision": d})
@@ -168,12 +168,12 @@ func approvalDecisionRequiresNonPublicAuthority(req *approvals.Request) bool {
 func (s *Server) handleGetPacket(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "bad_id", "bad id", err)
 		return
 	}
 	pkt, err := s.packets.GetByID(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeAPIError(w, http.StatusNotFound, "packet_not_found", "packet not found", err)
 		return
 	}
 	writeJSON(w, http.StatusOK, pkt)
@@ -182,7 +182,7 @@ func (s *Server) handleGetPacket(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetProjectContext(w http.ResponseWriter, r *http.Request) {
 	rec, err := s.projectCtx.Latest(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIInternalError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"record": rec})
@@ -196,7 +196,7 @@ func (s *Server) handleImportProjectContext(w http.ResponseWriter, r *http.Reque
 	}
 	rec, err := s.projectCtx.ImportAndNormalize(r.Context(), body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "project_context_import_failed", err.Error(), nil)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"record": rec})
@@ -240,16 +240,16 @@ func readPhase2RequestBody(r *http.Request) ([]byte, error) {
 
 func writePhase2DecodeError(w http.ResponseWriter, err error) {
 	if errors.Is(err, errPhase2RequestBodyTooLarge) {
-		http.Error(w, "phase2 json request body too large", http.StatusRequestEntityTooLarge)
+		writeAPIError(w, http.StatusRequestEntityTooLarge, "request_body_too_large", "phase2 json request body too large", err)
 		return
 	}
-	http.Error(w, "invalid json", http.StatusBadRequest)
+	writeAPIError(w, http.StatusBadRequest, "invalid_json", "invalid json", err)
 }
 
 func (s *Server) handleRegenerateProjectContext(w http.ResponseWriter, r *http.Request) {
 	rec, err := s.projectCtx.ImportAndNormalize(r.Context(), projectcontext.ImportRequest{})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "project_context_regenerate_failed", err.Error(), nil)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"record": rec})

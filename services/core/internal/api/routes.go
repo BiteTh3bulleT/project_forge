@@ -60,6 +60,7 @@ func (s *Server) routeEnvelopeShadowMiddleware(next http.Handler) http.Handler {
 
 func (s *Server) mountHealthRoutes(r chi.Router) {
 	r.Get("/health", s.handleHealth)
+	s.mountMetricsRoutes(r)
 }
 
 func (s *Server) corsOriginAllowed(origin string) bool {

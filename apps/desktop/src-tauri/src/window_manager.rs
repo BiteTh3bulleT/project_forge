@@ -623,6 +623,7 @@ fn create_or_focus_window(
         .position(bounds.x, bounds.y)
         .inner_size(bounds.width, bounds.height)
         .resizable(true)
+        .background_color(tauri::webview::Color(3, 3, 3, 255))
         .visible(false)
         .focused(false)
         .build()

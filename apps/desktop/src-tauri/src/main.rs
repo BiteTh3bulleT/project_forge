@@ -8,6 +8,7 @@ use desktop_metadata::{find_desktop_file_for_ids, find_icon_path, parse_desktop_
 
 use serde::Serialize;
 use std::path::PathBuf;
+use std::process::Command;
 use sysinfo::{Disks, Pid, System};
 use tauri::{Manager, PhysicalPosition, PhysicalSize};
 
@@ -80,6 +81,13 @@ struct OperatorAppLaunchResult {
     executable: String,
     launched: bool,
     pid: Option<u32>,
+    message: String,
+}
+
+#[derive(Serialize)]
+struct HostPowerActionResult {
+    action: String,
+    requested: bool,
     message: String,
 }
 
@@ -439,6 +447,72 @@ fn launch_operator_app(app_id: String) -> Result<OperatorAppLaunchResult, String
     })
 }
 
+fn spawn_host_power_command(action: &str) -> Result<(), String> {
+    let mut command = match action {
+        "shutdown" => {
+            #[cfg(target_os = "windows")]
+            {
+                let mut command = Command::new("shutdown");
+                command.args(["/s", "/t", "0"]);
+                command
+            }
+            #[cfg(target_os = "macos")]
+            {
+                let mut command = Command::new("osascript");
+                command.args(["-e", "tell app \"System Events\" to shut down"]);
+                command
+            }
+            #[cfg(all(unix, not(target_os = "macos")))]
+            {
+                let mut command = Command::new("systemctl");
+                command.arg("poweroff");
+                command
+            }
+        }
+        "reboot" => {
+            #[cfg(target_os = "windows")]
+            {
+                let mut command = Command::new("shutdown");
+                command.args(["/r", "/t", "0"]);
+                command
+            }
+            #[cfg(target_os = "macos")]
+            {
+                let mut command = Command::new("osascript");
+                command.args(["-e", "tell app \"System Events\" to restart"]);
+                command
+            }
+            #[cfg(all(unix, not(target_os = "macos")))]
+            {
+                let mut command = Command::new("systemctl");
+                command.arg("reboot");
+                command
+            }
+        }
+        _ => return Err("host power action is not allowlisted".to_string()),
+    };
+
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|err| format!("failed to request {action}: {err}"))
+}
+
+#[tauri::command]
+fn request_host_power_action(action: String) -> Result<HostPowerActionResult, String> {
+    let normalized = action.trim().to_ascii_lowercase();
+    if normalized != "shutdown" && normalized != "reboot" {
+        return Err("host power action is not allowlisted".to_string());
+    }
+
+    spawn_host_power_command(&normalized)?;
+    Ok(HostPowerActionResult {
+        action: normalized.clone(),
+        requested: true,
+        message: format!("Host {normalized} requested"),
+    })
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
@@ -477,6 +551,7 @@ fn main() {
             read_system_diagnostics,
             list_operator_apps,
             launch_operator_app,
+            request_host_power_action,
             linux_windows::list_linux_windows,
             linux_windows::focus_linux_window,
             linux_windows::control_linux_window,

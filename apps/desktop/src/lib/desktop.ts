@@ -108,6 +108,13 @@ export type LinuxWindowAction =
   | "maximize"
   | "fullscreen"
   | "close";
+export type ForgeHostPowerAction = "shutdown" | "reboot";
+
+export type ForgeHostPowerActionResult = {
+  action: ForgeHostPowerAction;
+  requested: boolean;
+  message: string;
+};
 
 export function isTauriDesktop() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -634,12 +641,12 @@ export async function createShellWindow(options: {
       preventOverflow: false,
     });
     try {
-      await window.setPosition(
-        new LogicalPosition(options.bounds.x, options.bounds.y),
-      ).catch(() => undefined);
-      await window.setSize(
-        new LogicalSize(options.bounds.width, options.bounds.height),
-      ).catch(() => undefined);
+      await window
+        .setPosition(new LogicalPosition(options.bounds.x, options.bounds.y))
+        .catch(() => undefined);
+      await window
+        .setSize(new LogicalSize(options.bounds.width, options.bounds.height))
+        .catch(() => undefined);
       await window.show();
       await window.setFocus();
     } catch (error) {
@@ -793,6 +800,31 @@ export async function launchOperatorApp(
     throw new Error("invalid operator app launch response");
   }
   return parsed;
+}
+
+export async function requestHostPowerAction(
+  action: ForgeHostPowerAction,
+): Promise<ForgeHostPowerActionResult> {
+  if (!isTauriDesktop()) {
+    throw new Error("FORGE host power controls require the Tauri shell.");
+  }
+  const result = await invoke("request_host_power_action", { action });
+  if (!result || typeof result !== "object") {
+    throw new Error("invalid host power action response");
+  }
+  const value = result as Record<string, unknown>;
+  if (
+    (value.action !== "shutdown" && value.action !== "reboot") ||
+    typeof value.requested !== "boolean" ||
+    typeof value.message !== "string"
+  ) {
+    throw new Error("invalid host power action response");
+  }
+  return {
+    action: value.action,
+    requested: value.requested,
+    message: value.message,
+  };
 }
 
 export async function listLinuxWindows(): Promise<LinuxWindowSnapshot[]> {

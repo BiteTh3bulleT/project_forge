@@ -48,6 +48,7 @@ const desktopMocks = vi.hoisted(() => ({
     () => new Promise(() => {}),
   ),
   launchOperatorApp: vi.fn(),
+  requestHostPowerAction: vi.fn(),
   iconAssetUrl: vi.fn((path: string) => `asset://${path}`),
 }));
 
@@ -60,7 +61,8 @@ function resolvedOperatorApps() {
       executable: "foot",
       category: "Workspace",
       iconName: "foot",
-      iconPath: "/run/current-system/sw/share/icons/hicolor/48x48/apps/foot.png",
+      iconPath:
+        "/run/current-system/sw/share/icons/hicolor/48x48/apps/foot.png",
       desktopFile: "/run/current-system/sw/share/applications/foot.desktop",
       native: true,
     },
@@ -106,6 +108,7 @@ vi.mock("../lib/desktop", () => ({
   controlLinuxWindow: desktopMocks.controlLinuxWindow,
   listOperatorApps: desktopMocks.listOperatorApps,
   launchOperatorApp: desktopMocks.launchOperatorApp,
+  requestHostPowerAction: desktopMocks.requestHostPowerAction,
   iconAssetUrl: desktopMocks.iconAssetUrl,
   minimizeTauriWindow: desktopMocks.minimizeTauriWindow,
   monitorSignature: (monitors: Array<{ id: string }>) =>
@@ -147,6 +150,12 @@ describe("AppShell confined Tauri tool surfaces", () => {
       () => new Promise(() => {}),
     );
     desktopMocks.launchOperatorApp.mockClear();
+    desktopMocks.requestHostPowerAction.mockReset();
+    desktopMocks.requestHostPowerAction.mockResolvedValue({
+      action: "reboot",
+      requested: true,
+      message: "Host reboot requested",
+    });
     desktopMocks.iconAssetUrl.mockClear();
     desktopMocks.minimizeTauriWindow.mockClear();
     desktopMocks.controlLinuxWindow.mockClear();
@@ -508,6 +517,57 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(screen.queryByText("Native")).toBeNull();
   });
 
+  it("shows Start menu power controls and logs out through the shell callback", () => {
+    const onForgeLogout = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true} onForgeLogout={onForgeLogout}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+
+    expect(screen.getByRole("button", { name: /Logout/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Reboot/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Shutdown/ })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /Logout/ }));
+
+    expect(onForgeLogout).toHaveBeenCalledTimes(1);
+  });
+
+  it("confirms and requests host reboot from Start", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    desktopMocks.requestHostPowerAction.mockResolvedValue({
+      action: "reboot",
+      requested: true,
+      message: "Host reboot requested",
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+    fireEvent.click(screen.getByRole("button", { name: /Reboot/ }));
+
+    await waitFor(() => {
+      expect(desktopMocks.requestHostPowerAction).toHaveBeenCalledWith(
+        "reboot",
+      );
+    });
+    expect(confirm).toHaveBeenCalledWith("Reboot the FORGE host now?");
+
+    confirm.mockRestore();
+  });
+
   it("loads native operator apps when the shell runtime probe is unavailable", async () => {
     resolvedOperatorApps();
     desktopMocks.isTauriDesktop.mockReturnValue(false);
@@ -623,7 +683,9 @@ describe("AppShell confined Tauri tool surfaces", () => {
     });
 
     fireEvent.contextMenu(firefox);
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Minimize window" }));
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Minimize window" }),
+    );
 
     await waitFor(() => {
       expect(desktopMocks.controlLinuxWindow).toHaveBeenCalledWith(

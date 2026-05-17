@@ -53,6 +53,12 @@ html {
   background: rgb(var(--forge-bg-rgb));
 }
 
+html[data-forge-boot-surface="true"],
+html[data-forge-boot-surface="true"] body,
+html[data-forge-boot-surface="true"] #root {
+  background: #020405;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -74,13 +80,7 @@ body {
       rgba(54, 220, 232, 0.035) 32% 34%,
       transparent 35% 100%
     ),
-    linear-gradient(
-      148deg,
-      #020405 0%,
-      #091014 32%,
-      #121a1f 55%,
-      #06080b 100%
-    );
+    linear-gradient(148deg, #020405 0%, #091014 32%, #121a1f 55%, #06080b 100%);
   background-size:
     100% 100%,
     100% 100%,
@@ -99,8 +99,18 @@ body::before {
   background-image:
     linear-gradient(rgba(54, 220, 232, 0.06) 1px, transparent 1px),
     linear-gradient(90deg, rgba(54, 220, 232, 0.05) 1px, transparent 1px),
-    linear-gradient(115deg, transparent 0 46%, rgba(54, 220, 232, 0.11) 47% 48%, transparent 49% 100%),
-    linear-gradient(65deg, transparent 0 59%, rgba(245, 158, 11, 0.065) 60% 61%, transparent 62% 100%),
+    linear-gradient(
+      115deg,
+      transparent 0 46%,
+      rgba(54, 220, 232, 0.11) 47% 48%,
+      transparent 49% 100%
+    ),
+    linear-gradient(
+      65deg,
+      transparent 0 59%,
+      rgba(245, 158, 11, 0.065) 60% 61%,
+      transparent 62% 100%
+    ),
     linear-gradient(transparent 94%, rgba(255, 255, 255, 0.04) 96%),
     repeating-linear-gradient(
       0deg,
@@ -116,7 +126,13 @@ body::before {
     360px 360px,
     100% 100%,
     120px 120px;
-  mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
+  mask-image: linear-gradient(
+    90deg,
+    transparent,
+    black 12%,
+    black 88%,
+    transparent
+  );
   animation: forge-drift 26s linear infinite;
 }
 
@@ -137,6 +153,12 @@ body::after {
       transparent 15px
     );
   mix-blend-mode: screen;
+}
+
+html[data-forge-boot-surface="true"] body::before,
+html[data-forge-boot-surface="true"] body::after {
+  opacity: 0;
+  animation: none;
 }
 
 @keyframes forge-drift {
@@ -814,11 +836,7 @@ html[data-effects="subtle"] .forge-context-card:hover {
   padding: 0.55rem 1rem;
   border-top: 1px solid rgba(var(--forge-border-strong-rgb), 0.16);
   background:
-    linear-gradient(
-      180deg,
-      rgba(20, 24, 28, 0.76),
-      rgba(8, 10, 12, 0.88)
-    ),
+    linear-gradient(180deg, rgba(20, 24, 28, 0.76), rgba(8, 10, 12, 0.88)),
     rgba(5, 7, 9, 0.72);
   box-shadow:
     0 -22px 58px rgba(0, 0, 0, 0.38),
@@ -2653,11 +2671,7 @@ html[data-effects="subtle"] .forge-context-card:hover {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(
-      ellipse at 72% 28%,
-      rgba(0, 0, 0, 0.08),
-      transparent 42%
-    ),
+    radial-gradient(ellipse at 72% 28%, rgba(0, 0, 0, 0.08), transparent 42%),
     radial-gradient(
       ellipse at 50% 100%,
       rgba(var(--forge-cyan-rgb), 0.12),
@@ -2688,17 +2702,15 @@ html[data-effects="subtle"] .forge-context-card:hover {
       rgba(var(--forge-cyan-rgb), 0.05) 1px,
       transparent 1px
     );
-  background-size: 96px 96px, 96px 96px;
+  background-size:
+    96px 96px,
+    96px 96px;
   -webkit-mask-image: radial-gradient(
     ellipse at center,
     black 30%,
     transparent 78%
   );
-  mask-image: radial-gradient(
-    ellipse at center,
-    black 30%,
-    transparent 78%
-  );
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 78%);
 }
 
 .forge-os-wallpaper__glow {
@@ -2787,7 +2799,6 @@ html[data-effects="subtle"] .forge-context-card:hover {
   .forge-os-statusbar__left {
     flex-basis: 18rem;
   }
-
 }
 
 .forge-os-stage {
@@ -3386,7 +3397,9 @@ html[data-effects="subtle"] .forge-context-card:hover {
   color: rgb(var(--forge-text-rgb));
   font-size: 0.82rem;
   outline: none;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .forge-os-startmenu__input:focus {
@@ -3654,6 +3667,75 @@ html[data-effects="subtle"] .forge-context-card:hover {
   margin-bottom: 0.5rem;
 }
 
+.forge-os-startmenu__power {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+  padding: 0.75rem 1.1rem 0.9rem;
+  border-top: 1px solid rgba(var(--forge-border-strong-rgb), 0.1);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.forge-os-startmenu__power-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  min-width: 6.2rem;
+  min-height: 2.25rem;
+  padding: 0.35rem 0.62rem;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 70%),
+    rgba(255, 255, 255, 0.025);
+  color: rgba(var(--forge-text-rgb), 0.94);
+  font-size: 0.76rem;
+  font-weight: 650;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.forge-os-startmenu__power-btn:hover {
+  border-color: rgba(var(--forge-cyan-rgb), 0.42);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 70%),
+    rgba(var(--forge-cyan-rgb), 0.1);
+  box-shadow: 0 0 20px rgba(var(--forge-cyan-rgb), 0.08);
+}
+
+.forge-os-startmenu__power-btn--danger:hover {
+  border-color: rgba(var(--forge-danger-rgb), 0.46);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 70%),
+    rgba(var(--forge-danger-rgb), 0.11);
+  box-shadow: 0 0 20px rgba(var(--forge-danger-rgb), 0.08);
+}
+
+.forge-os-startmenu__power-icon {
+  display: grid;
+  place-items: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 6px;
+  border: 1px solid rgba(var(--forge-cyan-rgb), 0.28);
+  background: rgba(var(--forge-cyan-rgb), 0.1);
+  color: rgb(var(--forge-cyan-rgb));
+  font-family: theme(fontFamily.mono);
+  font-size: 0.55rem;
+  font-weight: 800;
+}
+
+.forge-os-startmenu__power-btn--danger .forge-os-startmenu__power-icon {
+  border-color: rgba(var(--forge-danger-rgb), 0.3);
+  background: rgba(var(--forge-danger-rgb), 0.1);
+  color: rgb(var(--forge-danger-rgb));
+}
+
 .forge-os-startmenu__empty {
   padding: 0.8rem 0.6rem;
   font-size: 0.78rem;
@@ -3701,11 +3783,28 @@ html[data-effects="subtle"] .forge-context-card:hover {
   .forge-os-startmenu__row {
     padding: 0.48rem 0.55rem;
   }
+
+  .forge-os-startmenu__power {
+    padding: 0.55rem 0.9rem 0.65rem;
+  }
+
+  .forge-os-startmenu__power-btn {
+    min-height: 2rem;
+  }
 }
 
 @media (max-width: 760px) {
   .forge-os-startmenu__body {
     grid-template-columns: 1fr;
+  }
+
+  .forge-os-startmenu__power {
+    justify-content: stretch;
+  }
+
+  .forge-os-startmenu__power-btn {
+    min-width: 0;
+    flex: 1 1 0;
   }
 }
 
@@ -3928,44 +4027,132 @@ html[data-effects="subtle"] .forge-context-card:hover {
   padding: clamp(1.25rem, 3vw, 2.5rem);
   overflow: hidden;
   background:
-    linear-gradient(120deg, rgba(54, 220, 232, 0.11), transparent 34%),
-    linear-gradient(210deg, rgba(245, 158, 11, 0.12), transparent 32%),
-    linear-gradient(155deg, #020405 0%, #0b1114 45%, #12181c 100%);
+    radial-gradient(
+      ellipse at 42% 74%,
+      rgba(var(--forge-cyan-rgb), 0.14),
+      transparent 42%
+    ),
+    radial-gradient(
+      ellipse at 64% 32%,
+      rgba(var(--forge-cyan-rgb), 0.07),
+      transparent 34%
+    ),
+    linear-gradient(
+      115deg,
+      rgba(var(--forge-amber-rgb), 0.045),
+      transparent 24%
+    ),
+    linear-gradient(155deg, #020405 0%, #071014 48%, #030506 100%);
 }
 
 .forge-boot-screen::before {
   content: "";
   position: absolute;
   inset: 0;
-  opacity: 0.34;
+  z-index: 1;
+  opacity: 1;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.2) 0%,
+      transparent 48%,
+      rgba(0, 0, 0, 0.34) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.18) 0%,
+      transparent 34%,
+      rgba(0, 0, 0, 0.38) 100%
+    );
+}
+
+.forge-boot-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.22;
   background-image:
-    linear-gradient(rgba(54, 220, 232, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(54, 220, 232, 0.06) 1px, transparent 1px),
-    linear-gradient(115deg, transparent 0 48%, rgba(245, 158, 11, 0.1) 49% 50%, transparent 51% 100%);
+    linear-gradient(rgba(var(--forge-cyan-rgb), 0.08) 1px, transparent 1px),
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.055) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      120deg,
+      transparent 0 46%,
+      rgba(var(--forge-cyan-rgb), 0.16) 47% 48%,
+      transparent 49% 100%
+    ),
+    linear-gradient(
+      64deg,
+      transparent 0 58%,
+      rgba(var(--forge-amber-rgb), 0.08) 59% 60%,
+      transparent 61% 100%
+    );
   background-size:
-    84px 84px,
-    84px 84px,
-    520px 520px;
-  mask-image: linear-gradient(90deg, transparent, black 18%, black 82%, transparent);
+    92px 92px,
+    92px 92px,
+    460px 460px,
+    380px 380px;
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    black 24%,
+    transparent 76%
+  );
+  mask-image: radial-gradient(ellipse at center, black 24%, transparent 76%);
+}
+
+.forge-boot-screen__brand::before,
+.forge-login-screen__brand::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.1;
+  background-image:
+    linear-gradient(rgba(var(--forge-cyan-rgb), 0.07) 1px, transparent 1px),
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.055) 1px,
+      transparent 1px
+    );
+  background-size:
+    96px 96px,
+    96px 96px;
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    black 30%,
+    transparent 78%
+  );
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 78%);
 }
 
 .forge-boot-screen__brand,
 .forge-boot-screen__status {
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .forge-boot-screen__brand {
   display: grid;
   justify-items: center;
   gap: 0.85rem;
+  margin-top: clamp(5rem, 18vh, 10rem);
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.1);
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.75);
 }
 
 .forge-boot-screen__mark {
   width: 3.25rem;
   aspect-ratio: 1;
   object-fit: contain;
-  filter: drop-shadow(0 0 28px rgba(var(--forge-cyan-rgb), 0.22));
+  filter: drop-shadow(0 0 24px rgba(var(--forge-cyan-rgb), 0.24))
+    drop-shadow(0 0 48px rgba(var(--forge-amber-rgb), 0.12));
   -webkit-user-select: none;
   user-select: none;
 }
@@ -3975,6 +4162,7 @@ html[data-effects="subtle"] .forge-context-card:hover {
   font-weight: 800;
   line-height: 1;
   text-align: center;
+  letter-spacing: 0;
 }
 
 .forge-boot-screen__subtitle {
@@ -3990,24 +4178,33 @@ html[data-effects="subtle"] .forge-context-card:hover {
   margin-bottom: clamp(1rem, 6vh, 3rem);
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(var(--forge-muted-rgb), 0.14);
+  background: rgba(var(--forge-border-strong-rgb), 0.12);
+  box-shadow: inset 0 0 0 1px rgba(var(--forge-cyan-rgb), 0.08);
 }
 
 .forge-boot-screen__line {
-  width: 38%;
+  width: 100%;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, rgb(var(--forge-cyan-rgb)), rgb(var(--forge-amber-rgb)));
-  animation: forge-boot-progress 1.4s ease-in-out infinite;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(var(--forge-cyan-rgb), 0.95) 34%,
+    rgba(var(--forge-amber-rgb), 0.9) 58%,
+    transparent 100%
+  );
+  transform: translate3d(-100%, 0, 0);
+  will-change: transform;
+  animation: forge-boot-progress 2s linear infinite;
 }
 
 @keyframes forge-boot-progress {
   0% {
-    transform: translateX(-115%);
+    transform: translate3d(-100%, 0, 0);
   }
 
   100% {
-    transform: translateX(275%);
+    transform: translate3d(100%, 0, 0);
   }
 }
 
@@ -4213,31 +4410,87 @@ html[data-effects="subtle"] .forge-context-card:hover {
   padding: clamp(1.25rem, 3vw, 2.5rem);
   overflow: hidden;
   background:
-    linear-gradient(120deg, rgba(54, 220, 232, 0.11), transparent 34%),
-    linear-gradient(210deg, rgba(245, 158, 11, 0.12), transparent 32%),
-    linear-gradient(155deg, #020405 0%, #0b1114 45%, #12181c 100%);
+    radial-gradient(
+      ellipse at 42% 74%,
+      rgba(var(--forge-cyan-rgb), 0.14),
+      transparent 42%
+    ),
+    radial-gradient(
+      ellipse at 64% 32%,
+      rgba(var(--forge-cyan-rgb), 0.07),
+      transparent 34%
+    ),
+    linear-gradient(
+      115deg,
+      rgba(var(--forge-amber-rgb), 0.045),
+      transparent 24%
+    ),
+    linear-gradient(155deg, #020405 0%, #071014 48%, #030506 100%);
 }
 
 .forge-login-screen::before {
   content: "";
   position: absolute;
   inset: 0;
-  opacity: 0.36;
+  z-index: 1;
+  opacity: 1;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.2) 0%,
+      transparent 48%,
+      rgba(0, 0, 0, 0.34) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.18) 0%,
+      transparent 34%,
+      rgba(0, 0, 0, 0.38) 100%
+    );
+}
+
+.forge-login-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.22;
   background-image:
-    linear-gradient(rgba(54, 220, 232, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(54, 220, 232, 0.06) 1px, transparent 1px),
-    linear-gradient(115deg, transparent 0 48%, rgba(245, 158, 11, 0.1) 49% 50%, transparent 51% 100%);
+    linear-gradient(rgba(var(--forge-cyan-rgb), 0.08) 1px, transparent 1px),
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.055) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      120deg,
+      transparent 0 46%,
+      rgba(var(--forge-cyan-rgb), 0.16) 47% 48%,
+      transparent 49% 100%
+    ),
+    linear-gradient(
+      64deg,
+      transparent 0 58%,
+      rgba(var(--forge-amber-rgb), 0.08) 59% 60%,
+      transparent 61% 100%
+    );
   background-size:
-    84px 84px,
-    84px 84px,
-    520px 520px;
-  mask-image: linear-gradient(90deg, transparent, black 18%, black 82%, transparent);
+    92px 92px,
+    92px 92px,
+    460px 460px,
+    380px 380px;
+  -webkit-mask-image: radial-gradient(
+    ellipse at center,
+    black 24%,
+    transparent 76%
+  );
+  mask-image: radial-gradient(ellipse at center, black 24%, transparent 76%);
 }
 
 .forge-login-screen__brand,
 .forge-login-panel {
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .forge-login-screen__brand {
@@ -4252,7 +4505,8 @@ html[data-effects="subtle"] .forge-context-card:hover {
   width: 2.75rem;
   aspect-ratio: 1;
   object-fit: contain;
-  filter: drop-shadow(0 0 24px rgba(var(--forge-cyan-rgb), 0.24));
+  filter: drop-shadow(0 0 22px rgba(var(--forge-cyan-rgb), 0.24))
+    drop-shadow(0 0 40px rgba(var(--forge-amber-rgb), 0.12));
   -webkit-user-select: none;
   user-select: none;
 }
@@ -4274,12 +4528,20 @@ html[data-effects="subtle"] .forge-context-card:hover {
   display: grid;
   gap: 0.85rem;
   padding: clamp(1rem, 4vw, 1.35rem);
-  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.18);
+  border: 1px solid rgba(var(--forge-cyan-rgb), 0.16);
   border-radius: 8px;
   background:
     var(--forge-panel-gloss),
-    rgba(var(--forge-panel-rgb), 0.86);
-  box-shadow: var(--forge-shadow-panel);
+    linear-gradient(
+      160deg,
+      rgba(var(--forge-cyan-rgb), 0.055),
+      transparent 48%
+    ),
+    rgba(3, 5, 6, 0.72);
+  box-shadow:
+    0 0 0 1px rgba(var(--forge-border-strong-rgb), 0.08),
+    0 26px 72px rgba(0, 0, 0, 0.62),
+    0 0 42px rgba(var(--forge-cyan-rgb), 0.07);
   -webkit-backdrop-filter: blur(18px) saturate(1.18);
   backdrop-filter: blur(18px) saturate(1.18);
 }
@@ -4302,11 +4564,11 @@ html[data-effects="subtle"] .forge-context-card:hover {
   width: 100%;
   min-width: 0;
   height: 2.65rem;
-  border: 1px solid rgba(var(--forge-border-rgb), 0.28);
+  border: 1px solid rgba(var(--forge-border-rgb), 0.3);
   border-radius: 6px;
   padding: 0 0.72rem;
   color: rgb(var(--forge-text-rgb));
-  background: rgba(0, 0, 0, 0.26);
+  background: rgba(0, 0, 0, 0.34);
   outline: none;
 }
 
@@ -4323,14 +4585,38 @@ html[data-effects="subtle"] .forge-context-card:hover {
 
 .forge-login-panel__submit {
   height: 2.65rem;
-  border: 1px solid rgba(var(--forge-cyan-rgb), 0.42);
+  border: 1px solid rgba(var(--forge-cyan-rgb), 0.58);
   border-radius: 6px;
-  color: #031012;
+  color: rgb(var(--forge-text-rgb));
   font-weight: 750;
-  background: linear-gradient(135deg, rgb(var(--forge-cyan-rgb)), rgb(var(--forge-amber-soft-rgb)));
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.085), transparent 48%),
+    linear-gradient(
+      135deg,
+      rgba(var(--forge-cyan-rgb), 0.34),
+      rgba(var(--forge-cyan-rgb), 0.18)
+    ),
+    rgb(8, 36, 42);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.055),
+    inset 0 -2px 0 rgba(var(--forge-cyan-rgb), 0.22),
+    0 14px 32px rgba(0, 0, 0, 0.34),
+    0 0 28px rgba(var(--forge-cyan-rgb), 0.16);
 }
 
 .forge-login-panel__submit:hover {
-  filter: brightness(1.04);
+  border-color: rgba(var(--forge-cyan-rgb), 0.78);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 48%),
+    linear-gradient(
+      135deg,
+      rgba(var(--forge-cyan-rgb), 0.44),
+      rgba(var(--forge-cyan-rgb), 0.22)
+    ),
+    rgb(9, 44, 52);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.065),
+    inset 0 -2px 0 rgba(var(--forge-cyan-rgb), 0.26),
+    0 14px 32px rgba(0, 0, 0, 0.36),
+    0 0 34px rgba(var(--forge-cyan-rgb), 0.24);
 }

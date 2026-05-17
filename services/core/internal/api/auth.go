@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"crypto/subtle"
-	"encoding/json"
 	"net/http"
 	"strings"
 )
@@ -72,12 +71,5 @@ func constantTimeTokenMatch(provided, expected string) bool {
 }
 
 func writeAuthError(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusUnauthorized)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"error": map[string]any{
-			"code":    "unauthorized",
-			"message": "missing or invalid bearer token",
-		},
-	})
+	writeAPIError(w, http.StatusUnauthorized, "unauthorized", "missing or invalid bearer token", nil)
 }
