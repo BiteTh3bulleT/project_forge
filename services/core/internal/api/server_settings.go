@@ -483,12 +483,21 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGetOllamaModels(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	configuredBaseURL := strings.TrimSpace(loadSetting(s.st.DB, "ollama_base_url", "http://127.0.0.1:11434"))
 	baseURLOverride := strings.TrimSpace(r.URL.Query().Get("baseUrl"))
 	baseURL := baseURLOverride
 	if baseURLOverride == "" {
-		baseURL = strings.TrimSpace(loadSetting(s.st.DB, "ollama_base_url", "http://127.0.0.1:11434"))
-	} else if err := validateOllamaModelsBaseURLOverride(ctx, baseURLOverride); err != nil {
-		writeAPIRequestError(w, http.StatusBadRequest, fmt.Errorf("invalid baseUrl: %w", err))
+		baseURL = configuredBaseURL
+	} else if !sameOllamaModelsBaseURL(baseURLOverride, configuredBaseURL) {
+		if err := validateOllamaModelsBaseURLOverride(ctx, baseURLOverride); err != nil {
+			writeAPIRequestError(w, http.StatusBadRequest, fmt.Errorf("invalid baseUrl: %w", err))
+			return
+		}
+	} else if configuredBaseURL != "" {
+		baseURL = configuredBaseURL
+	}
+	if baseURL == "" {
+		writeAPIRequestError(w, http.StatusBadRequest, fmt.Errorf("invalid baseUrl: must not be empty"))
 		return
 	}
 	// Always allow best-effort discovery so settings UX can render even if Ollama is offline.
@@ -597,6 +606,15 @@ func isAllowedOllamaModelsBaseURLAddr(addr netip.Addr) bool {
 		!addr.IsLinkLocalUnicast() &&
 		!addr.IsMulticast() &&
 		!addr.IsUnspecified()
+}
+
+func sameOllamaModelsBaseURL(a, b string) bool {
+	left := strings.TrimRight(strings.TrimSpace(a), "/")
+	right := strings.TrimRight(strings.TrimSpace(b), "/")
+	if left == "" || right == "" {
+		return false
+	}
+	return strings.EqualFold(left, right)
 }
 
 func normalizeOllamaModel(raw string) string {

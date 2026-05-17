@@ -167,6 +167,9 @@ func TestGetOllamaModelsRejectsUnsafeBaseURLOverrides(t *testing.T) {
 
 	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
 	t.Cleanup(func() { srv.ShutdownWatch() })
+	if err := upsertSetting(t.Context(), st.DB, "ollama_base_url", "http://ollama-configured.example:11434"); err != nil {
+		t.Fatalf("seed configured ollama base url: %v", err)
+	}
 
 	longURL := "http://" + strings.Repeat("a", 4097) + ".example"
 	tests := []struct {
@@ -226,6 +229,33 @@ func TestGetOllamaModelsKeepsDefaultLocalOllamaBehaviorWithoutOverride(t *testin
 	}
 	if !strings.Contains(rr.Body.String(), `"baseUrl":"http://127.0.0.1:11434"`) {
 		t.Fatalf("default local baseUrl not preserved in body=%s", rr.Body.String())
+	}
+}
+
+func TestGetOllamaModelsAllowsConfiguredLocalBaseURLOverride(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	configuredBaseURL := "http://127.0.0.1:11434"
+	if err := upsertSetting(t.Context(), st.DB, "ollama_base_url", configuredBaseURL); err != nil {
+		t.Fatalf("seed configured ollama base url: %v", err)
+	}
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	req := httptest.NewRequest(http.MethodGet, "/api/settings/ollama-models?baseUrl="+url.QueryEscape(configuredBaseURL), nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"baseUrl":"`+configuredBaseURL+`"`) {
+		t.Fatalf("configured local baseUrl not preserved in body=%s", rr.Body.String())
 	}
 }
 
