@@ -1,15 +1,14 @@
 # Smoke Test Status
 
-_Added 2026-04-21 as part of the bring-up pass. Updated 2026-04-22 for VSA authority lane consistency._
+_Added 2026-04-21 as part of the bring-up pass. Updated 2026-04-22 for VSA authority lane consistency. Updated 2026-05-18 for cross-platform smoke dispatch._
 
 ## What the smoke test does
 
-[`scripts/forge-smoke.sh`](scripts/forge-smoke.sh) — invocable as
-`npm run smoke` — performs a black-box bring-up check:
+`npm run smoke` invokes [`scripts/forge-smoke.mjs`](../../scripts/forge-smoke.mjs), which dispatches to [`scripts/forge-smoke.ps1`](../../scripts/forge-smoke.ps1) on Windows and [`scripts/forge-smoke.sh`](../../scripts/forge-smoke.sh) on other hosts. It performs a black-box bring-up check:
 
 1. Asserts port `18492` is free.
-2. Creates ephemeral `$DATA_DIR` and `$WORKSPACE_DIR` under `/tmp`.
-3. Runs `scripts/check-vsa-files.sh --require-tracked`, then starts `go run .` from `services/core` with those env vars.
+2. Creates ephemeral data/workspace dirs under the platform temp directory.
+3. Runs the strict VSA tracked-source preflight, then starts `go run .` from `services/core` with those env vars.
 4. Polls `/health` for up to 30 s.
 5. Probes these endpoints and asserts HTTP 200:
    - `/health`
@@ -60,7 +59,7 @@ ok    /api/jobs -> 200
 ==> smoke OK
 ```
 
-`scripts/forge-smoke.sh` still calls `scripts/check-vsa-files.sh --require-tracked` as a guardrail.
+The smoke path still calls the strict VSA tracked-source preflight as a guardrail.
 VSA status for smoke lane is authoritative source (not generated, not optional).
 With authoritative tracked VSA files in this branch state, smoke passes.
 
@@ -78,10 +77,9 @@ With authoritative tracked VSA files in this branch state, smoke passes.
 
 ## Safety of running smoke
 
-- Uses ephemeral `/tmp/forge-smoke.*` dirs per run; never touches
+- Uses ephemeral platform temp dirs per run; never touches
   `~/.config/forge` or any operator data.
-- Kills only its own PID plus anything left listening on port 18492
-  via `lsof -ti tcp:18492`.
+- Kills its own core process tree and cleans up any child listener left on the smoke port.
 - Trap cleanup runs on any exit path.
 - Autonomy runs in the default `observe` mode during the boot window
   covered by smoke. Maintain/mission behavior requires an explicit
