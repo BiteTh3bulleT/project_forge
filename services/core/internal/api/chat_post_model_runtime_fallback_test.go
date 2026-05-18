@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"forge/projectforge/services/core/internal/config"
 	"forge/projectforge/services/core/internal/memory"
@@ -70,6 +72,50 @@ func TestChatPostSyncFallsBackToModelRuntimeWhenOllamaModelMissing(t *testing.T)
 	}
 	if fakeRuntime.chatCalls == 0 {
 		t.Fatalf("expected model runtime chat call")
+	}
+}
+
+func TestChatPostModelRuntimeConsensusGateWithholdsUnsupportedActionClaim(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.chatContent = "I deleted the workspace file."
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "runtime consensus gate", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+
+	raw := []byte(`{"content":"did you delete the file?","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message in response")
+	}
+	if strings.Contains(payload.AssistantMessage.Content, "I deleted the workspace file") {
+		t.Fatalf("unsupported action claim was not withheld: %q", payload.AssistantMessage.Content)
+	}
+	gate, ok := payload.AssistantMessage.Metadata["consensusGate"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected consensusGate metadata, got %#v", payload.AssistantMessage.Metadata["consensusGate"])
+	}
+	if got := strings.TrimSpace(asString(gate["status"])); got != "withheld" {
+		t.Fatalf("consensus gate status=%q, gate=%#v", got, gate)
+	}
+	for _, key := range []string{"canonicalTruth", "memoryMutation", "evidenceAdmission", "gatewayExecution", "liveAuthorityMigration"} {
+		if value, _ := gate[key].(bool); value {
+			t.Fatalf("consensus gate claimed forbidden authority %s=true: %#v", key, gate)
+		}
 	}
 }
 
@@ -649,6 +695,16 @@ func TestSanitizeAssistantVisibleContentStripsThinkingBlocksAndTraceability(t *t
 	}
 }
 
+func TestSanitizeAssistantVisibleContentStripsWeNeedReasoningLeak(t *testing.T) {
+	content, warnings := sanitizeAssistantVisibleContent("We need to parse the operator's statement. I should inspect tools before answering.")
+	if content != "" {
+		t.Fatalf("expected reasoning leak to be fully stripped, got=%q", content)
+	}
+	if !containsString(warnings, "stripped_reasoning_scaffold") {
+		t.Fatalf("expected stripped_reasoning_scaffold warning, got=%#v", warnings)
+	}
+}
+
 func TestSanitizeAssistantVisibleContentStripsSyntheticUserTurnAndNormalizesIdentity(t *testing.T) {
 	content, warnings := sanitizeAssistantVisibleContent("I am Phi, the AI conversational partner.\nUSER: Can we implement a feature?")
 	if content != "I am FORGE." {
@@ -659,6 +715,29 @@ func TestSanitizeAssistantVisibleContentStripsSyntheticUserTurnAndNormalizesIden
 	}
 	if !containsString(warnings, "stripped_synthetic_transcript_turn") {
 		t.Fatalf("expected synthetic transcript warning, got=%#v", warnings)
+	}
+}
+
+func TestSanitizeAssistantVisibleContentStripsCopiedThreadTranscript(t *testing.T) {
+	content, warnings := sanitizeAssistantVisibleContent("I am FORGE.\n\n---\nTHREAD TITLE: copied context\n---\nUSER: Who are you?")
+	if content != "I am FORGE." {
+		t.Fatalf("expected copied transcript to be stripped, got=%q", content)
+	}
+	if !containsString(warnings, "stripped_synthetic_transcript_turn") {
+		t.Fatalf("expected synthetic transcript warning, got=%#v", warnings)
+	}
+
+	content, warnings = sanitizeAssistantVisibleContent("I am FORGE.\n\n---\nUSER: copied context\n\n---\nASSISTANT #1: copied answer")
+	if content != "I am FORGE." {
+		t.Fatalf("expected copied user transcript to be stripped, got=%q", content)
+	}
+	if !containsString(warnings, "stripped_synthetic_transcript_turn") {
+		t.Fatalf("expected synthetic transcript warning for copied user block, got=%#v", warnings)
+	}
+
+	content, warnings = sanitizeAssistantVisibleContent("I AM FORGE.\n\n---")
+	if content != "I am FORGE." {
+		t.Fatalf("expected canonical FORGE identity without trailing fence, got=%q", content)
 	}
 }
 
@@ -683,7 +762,51 @@ func TestChatPostSyncAnswersIdentityWithoutModel(t *testing.T) {
 		t.Fatalf("create thread: %v", err)
 	}
 
-	raw := []byte(`{"content":"What is your name?","requestAssistant":true,"syncAssistant":true}`)
+	for _, content := range []string{
+		"What is your name?",
+		"Who are you? Start your answer with exactly: I am FORGE.",
+	} {
+		raw, err := json.Marshal(map[string]any{"content": content, "requestAssistant": true, "syncAssistant": true})
+		if err != nil {
+			t.Fatalf("marshal request: %v", err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+		rr := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+		}
+		var payload chatPostResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+		}
+		if payload.AssistantMessage == nil {
+			t.Fatalf("expected assistant message")
+		}
+		if got := strings.TrimSpace(payload.AssistantMessage.Content); got != "I am FORGE." {
+			t.Fatalf("expected deterministic FORGE identity for %q, got=%q", content, got)
+		}
+	}
+	if fakeRuntime.chatCalls != 0 {
+		t.Fatalf("expected no model runtime calls, got %d", fakeRuntime.chatCalls)
+	}
+}
+
+func TestChatPostSyncAnswersOperatorNameFromCommitMemoryClaim(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "operator name deterministic", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	if _, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "Commit to memory, I am Robert.", nil); err != nil {
+		t.Fatalf("append name claim: %v", err)
+	}
+
+	raw := []byte(`{"content":"Who am I?","requestAssistant":true,"syncAssistant":true}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
 	rr := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr, req)
@@ -698,8 +821,8 @@ func TestChatPostSyncAnswersIdentityWithoutModel(t *testing.T) {
 	if payload.AssistantMessage == nil {
 		t.Fatalf("expected assistant message")
 	}
-	if got := strings.TrimSpace(payload.AssistantMessage.Content); got != "I am FORGE." {
-		t.Fatalf("expected deterministic FORGE identity, got=%q", got)
+	if got := strings.TrimSpace(payload.AssistantMessage.Content); got != "Your name is Robert." {
+		t.Fatalf("expected remembered operator name, got=%q", got)
 	}
 	if fakeRuntime.chatCalls != 0 {
 		t.Fatalf("expected no model runtime calls, got %d", fakeRuntime.chatCalls)
@@ -1697,7 +1820,104 @@ func (f *fakeStreamingModelRuntime) StreamChat(_ context.Context, req ModelRunti
 		Backend:    "openai_compat",
 		ModelID:    req.ModelID,
 		AuditID:    "audit-stream",
+		Proposal:   testModelRuntimeProposal(req, content, "audit-stream", len([]byte(content))),
 	}, nil
+}
+
+type cancelAfterFirstTokenModelRuntime struct {
+	*fakeModelRuntime
+	cancel         context.CancelFunc
+	callbackCalls  int
+	callbackErr    error
+	streamFinished bool
+}
+
+func (f *cancelAfterFirstTokenModelRuntime) StreamChat(ctx context.Context, req ModelRuntimeChatRequest, onToken func(ModelRuntimeChatStreamToken) error) (ModelRuntimeChatResult, error) {
+	f.mu.Lock()
+	f.lastMeta = req.Meta
+	f.lastChat = req
+	f.mu.Unlock()
+
+	tokens := []string{
+		strings.Repeat("a", assistantStreamFlushChars+32),
+		"should-not-be-processed-after-cancel",
+		"should-not-be-requested-after-cancel",
+	}
+	for i, token := range tokens {
+		f.callbackCalls++
+		err := onToken(ModelRuntimeChatStreamToken{Text: token, Index: i})
+		if i == 0 {
+			f.cancel()
+		}
+		if err != nil {
+			f.callbackErr = err
+			return ModelRuntimeChatResult{}, err
+		}
+	}
+	f.streamFinished = true
+	return ModelRuntimeChatResult{Content: strings.Join(tokens, ""), FinishReason: "stop", Backend: "fake", ModelID: req.ModelID}, nil
+}
+
+func TestChatAssistantModelRuntimeStreamStopsTokenCallbackAfterClientCancel(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fakeRuntime := &cancelAfterFirstTokenModelRuntime{fakeModelRuntime: newFakeModelRuntime(), cancel: cancel}
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "runtime stream canceled", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	um, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "cancel runtime stream", map[string]any{"source": "operator"})
+	if err != nil {
+		t.Fatalf("append user message: %v", err)
+	}
+	th, err := srv.chat.GetThread(context.Background(), thread.ID)
+	if err != nil {
+		t.Fatalf("get thread: %v", err)
+	}
+
+	var emitted []string
+	am, reason := srv.completeAssistantWithModelRuntimeStream(
+		ctx,
+		thread.ID,
+		um.ID,
+		th,
+		um.Content,
+		"corr-cancel-stream",
+		nil,
+		nil,
+		"",
+		time.Now(),
+		classifyChatPerformance(um.Content),
+		func(event string, payload map[string]any) {
+			if text, _ := payload["text"].(string); text != "" {
+				emitted = append(emitted, text)
+			}
+		},
+	)
+
+	if am != nil {
+		t.Fatalf("expected canceled stream not to append assistant message, got %#v", am)
+	}
+	if !strings.Contains(reason, "MODEL_REQUEST_CANCELED") {
+		t.Fatalf("expected canceled modelruntime reason, got %q", reason)
+	}
+	if fakeRuntime.callbackCalls != 2 {
+		t.Fatalf("expected callback to stop on first post-cancel token, got %d callback calls", fakeRuntime.callbackCalls)
+	}
+	if !errors.Is(fakeRuntime.callbackErr, context.Canceled) {
+		t.Fatalf("expected callback to return context.Canceled, got %v", fakeRuntime.callbackErr)
+	}
+	if fakeRuntime.streamFinished {
+		t.Fatalf("expected runtime stream to stop after cancellation")
+	}
+	for _, chunk := range emitted {
+		if strings.Contains(chunk, "should-not-be-processed-after-cancel") {
+			t.Fatalf("emitted post-cancel token chunk: %q", chunk)
+		}
+	}
 }
 
 func TestChatAssistantStreamUsesModelRuntimeStreamingWhenOllamaUnavailable(t *testing.T) {

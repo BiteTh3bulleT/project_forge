@@ -1,0 +1,910 @@
+.forge-chat-header {
+  @apply border-b px-4 py-3;
+  z-index: 2;
+  border-color: rgba(var(--forge-border-rgb), 0.18);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-bg-elevated-rgb), 0.92),
+      rgba(var(--forge-bg-rgb), 0.88)
+    ),
+    linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.05), transparent);
+}
+
+.forge-chat-toolbar {
+  @apply border-b px-4 py-3;
+  z-index: 3;
+  border-color: rgba(var(--forge-border-rgb), 0.16);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.86),
+      rgba(var(--forge-panel-soft-rgb), 0.82)
+    ),
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.05),
+      rgba(var(--forge-amber-rgb), 0.03)
+    );
+}
+
+.forge-chat-footer {
+  @apply border-t px-4 py-3;
+  z-index: 3;
+  border-color: rgba(var(--forge-border-rgb), 0.18);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-bg-elevated-rgb), 0.9),
+      rgba(var(--forge-bg-rgb), 0.94)
+    ),
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.05),
+      transparent 38%,
+      rgba(var(--forge-amber-rgb), 0.04)
+    );
+}
+
+.forge-chat-composer {
+  @apply max-h-[300px] min-h-[80px] flex-1 resize-none rounded-2xl border px-4 py-3 text-[15px] leading-relaxed text-forge-bone outline-none placeholder:text-forge-gray/60;
+  border-color: rgba(var(--forge-border-rgb), 0.24);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.9),
+      rgba(var(--forge-panel-soft-rgb), 0.82)
+    ),
+    linear-gradient(
+      145deg,
+      rgba(var(--forge-cyan-rgb), 0.05),
+      rgba(var(--forge-amber-rgb), 0.03)
+    );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.forge-chat-composer:focus {
+  border-color: rgba(var(--forge-cyan-rgb), 0.58);
+  box-shadow:
+    0 0 0 3px rgba(var(--forge-focus-rgb), 0.18),
+    0 14px 30px rgba(0, 0, 0, 0.16);
+}
+
+.forge-chat-action-btn {
+  @apply rounded-2xl border px-3 py-1 text-xs font-semibold text-forge-bone transition disabled:opacity-40;
+  position: relative;
+  z-index: 2;
+  border-color: rgba(var(--forge-border-rgb), 0.24);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.76),
+      rgba(var(--forge-panel-soft-rgb), 0.66)
+    ),
+    linear-gradient(
+      135deg,
+      rgba(var(--forge-cyan-rgb), 0.08),
+      rgba(var(--forge-amber-rgb), 0.06)
+    );
+}
+
+.forge-chat-action-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--forge-cyan-rgb), 0.34);
+  background-color: rgba(var(--forge-panel-rgb), 0.9);
+}
+
+.forge-chat-layout {
+  grid-template-columns:
+    var(--forge-chat-thread-width, 280px) 7px minmax(28rem, 1fr)
+    7px var(--forge-chat-inspector-width, 380px);
+  isolation: isolate;
+  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.18);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 32%),
+    radial-gradient(
+      circle at 50% 0%,
+      rgba(var(--forge-cyan-rgb), 0.08),
+      transparent 34%
+    ),
+    linear-gradient(180deg, rgba(6, 7, 8, 0.98), rgba(1, 1, 1, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 34px 90px rgba(0, 0, 0, 0.5);
+}
+
+.forge-chat-layout--ops {
+  --ops-border: rgba(var(--forge-border-strong-rgb), 0.13);
+  --ops-panel: rgba(14, 18, 23, 0.86);
+  --ops-panel-soft: rgba(11, 14, 18, 0.72);
+  border-radius: 8px;
+  border-color: var(--ops-border);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.028), transparent 44%),
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(var(--forge-cyan-rgb), 0.055),
+      transparent 34%
+    ),
+    linear-gradient(180deg, var(--ops-panel), var(--ops-panel-soft));
+  box-shadow:
+    0 16px 44px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.forge-chat-layout--empty {
+  grid-template-columns: var(--forge-chat-thread-width, 280px) 7px minmax(
+      0,
+      1fr
+    );
+}
+
+.forge-chat-thread-rail {
+  border-color: rgba(var(--forge-border-strong-rgb), 0.16) !important;
+  background:
+    linear-gradient(180deg, rgba(19, 21, 23, 0.98), rgba(7, 8, 9, 0.98)),
+    linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.05), transparent 58%);
+}
+
+.forge-chat-resizer {
+  position: relative;
+  z-index: 5;
+  width: 7px;
+  cursor: col-resize;
+  background:
+    linear-gradient(
+      180deg,
+      transparent,
+      rgba(var(--forge-border-strong-rgb), 0.12),
+      transparent
+    ),
+    rgba(0, 0, 0, 0.24);
+}
+
+.forge-chat-resizer::before {
+  content: "";
+  position: absolute;
+  inset: 18% 2px;
+  border-radius: 999px;
+  background: rgba(var(--forge-cyan-rgb), 0.26);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.forge-chat-resizer:hover::before {
+  opacity: 1;
+}
+
+.forge-chat-content-width {
+  max-width: min(100%, 74rem);
+}
+
+.forge-chat-header {
+  @apply px-4 py-2.5;
+  background:
+    linear-gradient(180deg, rgba(16, 18, 20, 0.96), rgba(7, 8, 9, 0.94)),
+    linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.08), transparent 44%);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.forge-chat-toolbar {
+  @apply px-4 py-3;
+  background:
+    linear-gradient(180deg, rgba(20, 23, 26, 0.96), rgba(10, 11, 12, 0.94)),
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.06),
+      rgba(255, 255, 255, 0.025)
+    );
+}
+
+.forge-chat-messages {
+  background:
+    radial-gradient(
+      circle at 50% -10%,
+      rgba(var(--forge-cyan-rgb), 0.055),
+      transparent 34%
+    ),
+    linear-gradient(180deg, rgba(3, 3, 3, 0.68), rgba(0, 0, 0, 0.94));
+}
+
+.forge-chat-message-stack {
+  padding-bottom: 0.25rem;
+}
+
+.forge-chat-footer {
+  @apply px-4 py-2.5;
+  background:
+    linear-gradient(180deg, rgba(13, 15, 17, 0.94), rgba(4, 4, 4, 0.98)),
+    linear-gradient(
+      90deg,
+      rgba(var(--forge-cyan-rgb), 0.055),
+      transparent 48%,
+      rgba(255, 255, 255, 0.025)
+    );
+  box-shadow:
+    0 -18px 44px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.forge-chat-routing-strip {
+  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.12);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.24);
+  padding: 0.55rem 0.65rem;
+}
+
+.forge-chat-composer-shell {
+  border: 1px solid rgba(var(--forge-border-strong-rgb), 0.16);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(21, 24, 27, 0.94), rgba(8, 9, 10, 0.96)),
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(var(--forge-cyan-rgb), 0.08),
+      transparent 44%
+    );
+  padding: 0.65rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 44px rgba(0, 0, 0, 0.24);
+}
+
+.forge-chat-compose-row {
+  display: grid;
+  grid-template-columns: minmax(22rem, 1fr) minmax(8.5rem, 9.25rem);
+  gap: 0.65rem;
+  align-items: end;
+}
+
+.forge-chat-composer {
+  @apply min-h-[48px] max-h-[150px] rounded-xl px-4 py-3 text-[15px];
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  border-color: rgba(var(--forge-border-strong-rgb), 0.24);
+  background:
+    linear-gradient(180deg, rgba(8, 9, 10, 0.92), rgba(0, 0, 0, 0.9)),
+    linear-gradient(90deg, rgba(var(--forge-cyan-rgb), 0.035), transparent 46%);
+}
+
+.forge-chat-composer:focus {
+  border-color: rgba(var(--forge-cyan-rgb), 0.58);
+  box-shadow:
+    0 0 0 2px rgba(var(--forge-cyan-rgb), 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.forge-chat-compose-actions {
+  display: grid;
+  min-width: 0;
+  gap: 0.45rem;
+}
+
+.forge-chat-action-btn {
+  min-height: 2.05rem;
+  border-radius: 999px;
+  border-color: rgba(var(--forge-border-strong-rgb), 0.22);
+  color: rgb(var(--forge-text-rgb));
+  background:
+    linear-gradient(180deg, rgba(42, 48, 54, 0.86), rgba(15, 17, 19, 0.9)),
+    linear-gradient(
+      120deg,
+      rgba(var(--forge-cyan-rgb), 0.08),
+      rgba(255, 255, 255, 0.035)
+    );
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.forge-chat-action-btn:hover {
+  border-color: rgba(var(--forge-cyan-rgb), 0.42);
+  background-color: rgba(42, 48, 54, 0.96);
+}
+
+.forge-chat-primary-btn {
+  min-height: 2.05rem;
+  border-radius: 8px;
+  border: 1px solid rgba(var(--forge-cyan-rgb), 0.58);
+  background: linear-gradient(180deg, #78f4ff, #25c8d6);
+  color: #021012;
+  font-weight: 700;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 14px 28px rgba(54, 220, 232, 0.18);
+}
+
+.forge-chat-primary-btn:hover {
+  border-color: rgba(var(--forge-cyan-rgb), 0.72);
+  background: linear-gradient(180deg, #8ff7ff, #31d6e3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    0 16px 30px rgba(54, 220, 232, 0.22);
+}
+
+.forge-chat-primary-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  transform: none;
+  box-shadow: none;
+}
+
+.forge-chat-inspector {
+  display: flex;
+  border-color: rgba(var(--forge-border-strong-rgb), 0.16) !important;
+  background:
+    linear-gradient(180deg, rgba(18, 20, 22, 0.98), rgba(7, 8, 9, 0.98)),
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(var(--forge-cyan-rgb), 0.065),
+      transparent 36%
+    );
+}
+
+.forge-chat-inspector button {
+  white-space: nowrap;
+}
+
+.forge-chat-inspector-split {
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.forge-chat-row-resizer {
+  height: 7px;
+  cursor: row-resize;
+  background:
+    linear-gradient(
+      90deg,
+      transparent,
+      rgba(var(--forge-border-strong-rgb), 0.16),
+      transparent
+    ),
+    rgba(0, 0, 0, 0.28);
+}
+
+.forge-message-card {
+  border-color: rgba(var(--forge-border-strong-rgb), 0.14) !important;
+  background:
+    linear-gradient(180deg, rgba(20, 22, 24, 0.94), rgba(8, 9, 10, 0.96)),
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(255, 255, 255, 0.04),
+      transparent 34%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    0 12px 34px rgba(0, 0, 0, 0.24);
+}
+
+.forge-chat-empty-state {
+  background:
+    radial-gradient(
+      circle at 50% 26%,
+      rgba(var(--forge-cyan-rgb), 0.1),
+      transparent 30%
+    ),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.32), rgba(0, 0, 0, 0.74));
+}
+
+.forge-context-panel {
+  @apply hidden w-[24rem] shrink-0 border-l p-3 xl:flex xl:flex-col xl:gap-3 xl:overflow-y-auto;
+  border-color: rgba(var(--forge-border-rgb), 0.16);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-bg-elevated-rgb), 0.97),
+      rgba(var(--forge-bg-rgb), 0.95)
+    ),
+    linear-gradient(180deg, rgba(var(--forge-cyan-rgb), 0.04), transparent 18%);
+}
+
+.forge-context-card {
+  @apply rounded-[1.1rem] border p-4 text-forge-bone;
+  z-index: 1;
+  border-color: rgba(var(--forge-border-rgb), 0.18);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.9),
+      rgba(var(--forge-panel-soft-rgb), 0.78)
+    ),
+    linear-gradient(
+      145deg,
+      rgba(var(--forge-cyan-rgb), 0.08),
+      rgba(var(--forge-amber-rgb), 0.06)
+    );
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
+  animation: forge-reveal 0.34s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.forge-inline-link {
+  @apply text-[11px] font-semibold text-forge-sky transition;
+  letter-spacing: 0.03em;
+}
+
+.forge-inline-link:hover {
+  @apply text-forge-bone underline;
+}
+
+.forge-chip {
+  @apply inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] text-forge-gray;
+  position: relative;
+  z-index: 1;
+  min-height: 1.8rem;
+  border-color: rgba(var(--forge-border-strong-rgb), 0.22);
+  background:
+    linear-gradient(180deg, rgba(24, 27, 30, 0.9), rgba(5, 6, 7, 0.9)),
+    linear-gradient(
+      135deg,
+      rgba(var(--forge-cyan-rgb), 0.07),
+      rgba(var(--forge-amber-rgb), 0.03)
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 18px rgba(0, 0, 0, 0.24);
+}
+
+.forge-chip--muted {
+  color: rgba(var(--forge-muted-rgb), 0.92);
+  border-color: rgba(var(--forge-border-rgb), 0.18);
+}
+
+.forge-chip--ok {
+  border-color: rgba(var(--forge-mint-rgb), 0.48);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-mint-rgb), 0.16),
+      rgba(var(--forge-mint-rgb), 0.08)
+    ),
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.9),
+      rgba(var(--forge-panel-soft-rgb), 0.74)
+    );
+  color: rgb(220 255 244);
+}
+
+.forge-chip--warn {
+  border-color: rgba(var(--forge-amber-rgb), 0.56);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-amber-rgb), 0.18),
+      rgba(var(--forge-amber-rgb), 0.08)
+    ),
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.9),
+      rgba(var(--forge-panel-soft-rgb), 0.74)
+    );
+  color: rgb(255 230 196);
+}
+
+.forge-chip--info {
+  border-color: rgba(var(--forge-cyan-rgb), 0.54);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-cyan-rgb), 0.16),
+      rgba(var(--forge-cyan-rgb), 0.08)
+    ),
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.9),
+      rgba(var(--forge-panel-soft-rgb), 0.74)
+    );
+  color: rgb(213 248 255);
+}
+
+.forge-chip--accent {
+  border-color: rgba(var(--forge-cyan-rgb), 0.34);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-cyan-rgb), 0.12),
+      rgba(var(--forge-amber-rgb), 0.1)
+    ),
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.9),
+      rgba(var(--forge-panel-soft-rgb), 0.74)
+    );
+  color: rgb(var(--forge-text-rgb));
+}
+
+.forge-context-row {
+  @apply flex justify-between gap-2 rounded-xl border px-3 py-2 text-[11px] text-forge-gray;
+  border-color: rgba(var(--forge-border-rgb), 0.16);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.76),
+      rgba(var(--forge-panel-soft-rgb), 0.66)
+    ),
+    linear-gradient(
+      135deg,
+      rgba(var(--forge-cyan-rgb), 0.05),
+      rgba(var(--forge-amber-rgb), 0.03)
+    );
+}
+
+.forge-stat {
+  @apply flex flex-col gap-1 rounded-xl border px-3 py-3 text-forge-bone;
+  border-color: rgba(var(--forge-border-rgb), 0.18);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.78),
+      rgba(var(--forge-panel-soft-rgb), 0.68)
+    ),
+    linear-gradient(
+      145deg,
+      rgba(var(--forge-cyan-rgb), 0.06),
+      rgba(var(--forge-amber-rgb), 0.04)
+    );
+}
+
+.forge-sim-graph__edge {
+  stroke: rgba(var(--forge-cyan-rgb), 0.48);
+  stroke-dasharray: 4 5;
+  stroke-linecap: round;
+  animation: forge-link-flow 9s linear infinite;
+}
+
+.forge-sim-graph__edge--highlight {
+  stroke: rgba(var(--forge-amber-soft-rgb), 0.95);
+}
+
+.forge-sim-graph__node {
+  fill: rgba(var(--forge-cyan-rgb), 0.86);
+  stroke: rgba(var(--forge-text-rgb), 0.54);
+  stroke-width: 1.2;
+}
+
+.forge-sim-graph__node--stale {
+  fill: rgba(var(--forge-danger-rgb), 0.82);
+  stroke: rgba(255, 220, 220, 0.52);
+}
+
+.forge-sim-graph__halo {
+  fill: none;
+  stroke: rgba(var(--forge-amber-soft-rgb), 0.72);
+  stroke-width: 1.4;
+}
+
+.forge-status-glow {
+  position: relative;
+  overflow: hidden;
+}
+
+.forge-status-glow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      circle at 100% 0%,
+      rgba(var(--forge-cyan-rgb), 0.24),
+      transparent 52%
+    ),
+    radial-gradient(
+      circle at 0% 100%,
+      rgba(var(--forge-amber-rgb), 0.22),
+      transparent 58%
+    );
+  opacity: 0;
+  transition: opacity 180ms ease;
+  pointer-events: none;
+}
+
+.forge-status-glow:hover::before {
+  opacity: 1;
+}
+
+.forge-status-glow > * {
+  position: relative;
+}
+
+.forge-nav-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--forge-border-strong-rgb), 0.3) transparent;
+}
+
+.forge-nav-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.forge-nav-scroll::-webkit-scrollbar-thumb {
+  background: rgba(var(--forge-border-strong-rgb), 0.3);
+  border-radius: 4px;
+}
+
+.forge-nav-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.forge-chat-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--forge-border-strong-rgb), 0.34) transparent;
+}
+
+.forge-chat-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.forge-chat-scroll::-webkit-scrollbar-thumb {
+  background: rgba(var(--forge-border-strong-rgb), 0.34);
+  border-radius: 8px;
+}
+
+.forge-chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (max-width: 1024px) {
+  .forge-topbar {
+    @apply flex-wrap;
+  }
+
+  .forge-dock {
+    @apply w-[4.75rem];
+  }
+
+  .forge-task {
+    @apply min-w-[11rem];
+  }
+
+  .forge-chat-layout {
+    grid-template-columns:
+      minmax(13.5rem, var(--forge-chat-thread-width, 260px))
+      7px minmax(0, 1fr);
+  }
+
+  .forge-chat-resizer--right,
+  .forge-chat-inspector {
+    display: none !important;
+  }
+
+  .forge-chat-content-width {
+    max-width: min(100%, 62rem);
+  }
+
+  .forge-chat-compose-row {
+    grid-template-columns: 1fr;
+  }
+
+  .forge-chat-compose-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .forge-topbar {
+    @apply px-3 py-2.5;
+  }
+
+  .forge-status-strip {
+    height: auto;
+    min-height: 3rem;
+    overflow-x: hidden;
+  }
+
+  .forge-mobile-rail-toggle {
+    display: grid;
+  }
+
+  .forge-dock {
+    @apply hidden;
+  }
+
+  .forge-os-dockbar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    min-height: 3.65rem;
+    padding: 0.45rem 0.55rem;
+    gap: 0.45rem;
+  }
+
+  .forge-os-dockbar__brand {
+    min-height: 2.35rem;
+    padding: 0.25rem;
+  }
+
+  .forge-os-dockbar__brand > span:last-child,
+  .forge-os-dockbar__search,
+  .forge-os-dockbar__system {
+    display: none;
+  }
+
+  .forge-os-dockbar__items {
+    justify-content: center;
+    overflow-x: auto;
+  }
+
+  .forge-os-dockbar__item {
+    width: 2.2rem;
+    height: 2.2rem;
+    flex: 0 0 auto;
+  }
+
+  .forge-desktop-surface {
+    @apply p-1.5;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .forge-window-frame {
+    @apply rounded-lg;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .forge-desktop-surface--flush {
+    padding: 0.35rem;
+  }
+
+  .forge-window-frame--chat,
+  .forge-window-frame--chat > div {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .forge-taskstrip {
+    @apply px-2 py-2;
+  }
+
+  .forge-context-panel {
+    @apply p-2;
+  }
+
+  .forge-chat-layout {
+    display: flex !important;
+    flex-direction: column;
+    width: calc(100vw - 1.25rem);
+    max-width: calc(100vw - 1.25rem);
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .forge-chat-layout > section {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .forge-chat-content-width,
+  .forge-chat-composer-shell,
+  .forge-chat-routing-strip {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .forge-chat-layout > *,
+  .forge-chat-layout header,
+  .forge-chat-layout footer,
+  .forge-chat-layout section {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .forge-chat-composer-shell,
+  .forge-chat-routing-strip {
+    overflow: hidden;
+    border-radius: 12px;
+  }
+
+  .forge-chat-thread-rail {
+    max-height: 15rem;
+    border-right: 0 !important;
+  }
+
+  .forge-chat-resizer {
+    display: none;
+  }
+
+  .forge-chat-header,
+  .forge-chat-toolbar,
+  .forge-chat-footer {
+    @apply px-2.5;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .forge-chat-messages {
+    @apply px-3 py-4;
+  }
+
+  .forge-chat-message-stack,
+  .forge-chat-message-stack > * {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .forge-chat-message-stack code,
+  .forge-chat-message-stack pre,
+  .forge-chat-message-stack p,
+  .forge-chat-message-stack span {
+    overflow-wrap: anywhere;
+  }
+
+  .forge-chat-empty-state {
+    align-items: stretch;
+    padding: 0.75rem;
+  }
+
+  .forge-chat-empty-state > div {
+    width: min(100%, calc(100vw - 2rem));
+    max-width: 100%;
+    min-width: 0;
+    margin-right: auto;
+    margin-left: auto;
+    overflow-wrap: anywhere;
+  }
+
+  .forge-chat-empty-state p {
+    max-width: 24ch;
+  }
+
+  .forge-chat-compose-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .forge-chat-compose-actions {
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+
+  .forge-chat-composer {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .forge-chat-compose-actions .forge-chat-action-btn,
+  .forge-chat-compose-actions .forge-chat-primary-btn {
+    width: 100%;
+    min-width: 0;
+    padding-right: 0.65rem;
+    padding-left: 0.65rem;
+  }
+
+  .forge-chat-routing-strip button,
+  .forge-chat-routing-strip a,
+  .forge-chat-routing-strip label {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .forge-chat-routing-strip .truncate {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .forge-chat-routing-strip > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: flex-start;
+  }
+
+  .forge-chat-routing-strip > div > div:last-child {
+    display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: 1fr;
+  }
+
+  .forge-chat-routing-strip > div > div:last-child > * {
+    justify-content: center;
+    text-align: center;
+  }
+}

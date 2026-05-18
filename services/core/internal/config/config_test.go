@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -25,6 +26,40 @@ func TestLoadDefaultsCoreBindHostToLoopback(t *testing.T) {
 	}
 }
 
+func TestLoadUsesEnvAPITokenWithoutWritingTokenFile(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("FORGE_DATA_DIR", dataDir)
+	t.Setenv("FORGE_API_TOKEN", " env-token ")
+	t.Setenv("FORGE_API_TOKEN_FILE", "")
+
+	cfg := Load()
+	if cfg.APIToken != "env-token" {
+		t.Fatalf("expected env API token, got %q", cfg.APIToken)
+	}
+	if _, err := os.Stat(filepath.Join(dataDir, "auth", "api_token")); !os.IsNotExist(err) {
+		t.Fatalf("expected env token load not to create token file, stat err=%v", err)
+	}
+}
+
+func TestLoadGeneratesAPITokenFileUnderDataDir(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("FORGE_DATA_DIR", dataDir)
+	t.Setenv("FORGE_API_TOKEN", "")
+	t.Setenv("FORGE_API_TOKEN_FILE", "")
+
+	cfg := Load()
+	if len(cfg.APIToken) < 32 {
+		t.Fatalf("expected generated API token, got %q", cfg.APIToken)
+	}
+	body, err := os.ReadFile(filepath.Join(dataDir, "auth", "api_token"))
+	if err != nil {
+		t.Fatalf("expected generated token file: %v", err)
+	}
+	if string(body) != cfg.APIToken+"\n" {
+		t.Fatalf("token file did not match loaded token")
+	}
+}
+
 func TestLoadRespectsCoreBindHostOverride(t *testing.T) {
 	t.Setenv("FORGE_CORE_BIND_HOST", " 0.0.0.0 ")
 	cfg := Load()
@@ -38,6 +73,22 @@ func TestLoadDefaultsWildcardBindOptInDisabled(t *testing.T) {
 	cfg := Load()
 	if cfg.AllowWildcardBind {
 		t.Fatal("expected wildcard bind opt-in to default false")
+	}
+}
+
+func TestLoadDefaultsMetricsEndpointDisabled(t *testing.T) {
+	t.Setenv("FORGE_ENABLE_METRICS_ENDPOINT", "")
+	cfg := Load()
+	if cfg.EnableMetricsEndpoint {
+		t.Fatal("expected metrics endpoint to default false")
+	}
+}
+
+func TestLoadRespectsMetricsEndpointOptIn(t *testing.T) {
+	t.Setenv("FORGE_ENABLE_METRICS_ENDPOINT", "true")
+	cfg := Load()
+	if !cfg.EnableMetricsEndpoint {
+		t.Fatal("expected metrics endpoint opt-in true")
 	}
 }
 

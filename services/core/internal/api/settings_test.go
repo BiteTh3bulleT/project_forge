@@ -2,11 +2,15 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"forge/projectforge/services/core/internal/config"
 	"forge/projectforge/services/core/internal/store"
@@ -152,6 +156,214 @@ func TestPatchSettingsPersistsAndAppliesShadowMode(t *testing.T) {
 	}
 }
 
+func TestGetOllamaModelsRejectsUnsafeBaseURLOverrides(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+	if err := upsertSetting(t.Context(), st.DB, "ollama_base_url", "http://ollama-configured.example:11434"); err != nil {
+		t.Fatalf("seed configured ollama base url: %v", err)
+	}
+
+	longURL := "http://" + strings.Repeat("a", 4097) + ".example"
+	tests := []struct {
+		name    string
+		baseURL string
+	}{
+		{name: "localhost name", baseURL: "http://localhost:11434"},
+		{name: "loopback ipv4", baseURL: "http://127.0.0.1:11434"},
+		{name: "loopback ipv6", baseURL: "http://[::1]:11434"},
+		{name: "loopback ipv4 mapped ipv6", baseURL: "http://[::ffff:127.0.0.1]:11434"},
+		{name: "private 10/8", baseURL: "http://10.0.0.1:11434"},
+		{name: "private ipv4 mapped ipv6", baseURL: "http://[::ffff:10.0.0.1]:11434"},
+		{name: "private 172.16/12", baseURL: "http://172.16.0.1:11434"},
+		{name: "private 192.168/16", baseURL: "http://192.168.1.10:11434"},
+		{name: "link local ipv4", baseURL: "http://169.254.1.1:11434"},
+		{name: "link local ipv6", baseURL: "http://[fe80::1]:11434"},
+		{name: "unspecified ipv4", baseURL: "http://0.0.0.0:11434"},
+		{name: "multicast ipv4", baseURL: "http://224.0.0.1:11434"},
+		{name: "multicast ipv6", baseURL: "http://[ff02::1]:11434"},
+		{name: "userinfo", baseURL: "http://user:pass@203.0.113.10:11434"},
+		{name: "unsupported scheme", baseURL: "ftp://203.0.113.10:11434"},
+		{name: "oversize url", baseURL: longURL},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 250*time.Millisecond)
+			defer cancel()
+
+			req := httptest.NewRequest(http.MethodGet, "/api/settings/ollama-models?baseUrl="+url.QueryEscape(tt.baseURL), nil).WithContext(ctx)
+			rr := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rr, req)
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+			}
+		})
+	}
+}
+
+func TestGetOllamaModelsKeepsDefaultLocalOllamaBehaviorWithoutOverride(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	req := httptest.NewRequest(http.MethodGet, "/api/settings/ollama-models", nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"baseUrl":"http://127.0.0.1:11434"`) {
+		t.Fatalf("default local baseUrl not preserved in body=%s", rr.Body.String())
+	}
+}
+
+func TestGetOllamaModelsUsesOllamaBaseURLEnvDefault(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/tags" {
+			t.Fatalf("unexpected upstream path %s", r.URL.Path)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]string{{"name": "env-model"}}})
+	}))
+	t.Cleanup(upstream.Close)
+	t.Setenv("OLLAMA_BASE_URL", upstream.URL)
+
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	req := httptest.NewRequest(http.MethodGet, "/api/settings/ollama-models", nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `"baseUrl":"`+upstream.URL+`"`) || !strings.Contains(body, `"env-model"`) {
+		t.Fatalf("env ollama base URL was not used in body=%s", body)
+	}
+}
+
+func TestGetOllamaModelsUsesEnvDefaultOverLegacyLoopbackSetting(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]string{{"name": "docker-env-model"}}})
+	}))
+	t.Cleanup(upstream.Close)
+	t.Setenv("OLLAMA_BASE_URL", upstream.URL)
+
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if err := upsertSetting(t.Context(), st.DB, "ollama_base_url", "http://127.0.0.1:11434"); err != nil {
+		t.Fatalf("seed legacy ollama base url: %v", err)
+	}
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	settingsReq := httptest.NewRequest(http.MethodGet, "/api/settings", nil)
+	settingsRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(settingsRR, settingsReq)
+	if settingsRR.Code != http.StatusOK {
+		t.Fatalf("settings status=%d body=%s", settingsRR.Code, settingsRR.Body.String())
+	}
+	if !strings.Contains(settingsRR.Body.String(), `"ollamaBaseUrl":"`+upstream.URL+`"`) {
+		t.Fatalf("settings did not expose env ollama base URL over legacy loopback: %s", settingsRR.Body.String())
+	}
+
+	modelsReq := httptest.NewRequest(http.MethodGet, "/api/settings/ollama-models?baseUrl="+url.QueryEscape(upstream.URL), nil)
+	modelsRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(modelsRR, modelsReq)
+	if modelsRR.Code != http.StatusOK {
+		t.Fatalf("models status=%d body=%s", modelsRR.Code, modelsRR.Body.String())
+	}
+	if !strings.Contains(modelsRR.Body.String(), `"docker-env-model"`) {
+		t.Fatalf("env ollama models were not returned in body=%s", modelsRR.Body.String())
+	}
+}
+
+func TestGetOllamaModelsAllowsConfiguredLocalBaseURLOverride(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	configuredBaseURL := "http://127.0.0.1:11434"
+	if err := upsertSetting(t.Context(), st.DB, "ollama_base_url", configuredBaseURL); err != nil {
+		t.Fatalf("seed configured ollama base url: %v", err)
+	}
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	req := httptest.NewRequest(http.MethodGet, "/api/settings/ollama-models?baseUrl="+url.QueryEscape(configuredBaseURL), nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"baseUrl":"`+configuredBaseURL+`"`) {
+		t.Fatalf("configured local baseUrl not preserved in body=%s", rr.Body.String())
+	}
+}
+
+func TestGetOllamaModelsRejectsUnsafeBaseURLOverrideBeforeHTTPRequest(t *testing.T) {
+	var upstreamHits atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamHits.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{"models": []map[string]string{{"name": "unsafe"}}})
+	}))
+	t.Cleanup(upstream.Close)
+
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	req := httptest.NewRequest(http.MethodGet, "/api/settings/ollama-models?baseUrl="+url.QueryEscape(upstream.URL), nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	if hits := upstreamHits.Load(); hits != 0 {
+		t.Fatalf("unsafe override made %d upstream HTTP requests", hits)
+	}
+}
+
 func TestGetSettingsRedactsStoredRemoteSecrets(t *testing.T) {
 	dataDir := t.TempDir()
 	workspaceDir := t.TempDir()
@@ -270,7 +482,18 @@ func TestPatchSettingsExplicitRemoteSecretUpdatesStoredValue(t *testing.T) {
 		t.Fatalf("patch settings status=%d body=%s", patchRR.Code, patchRR.Body.String())
 	}
 
-	if got := loadSetting(st.DB, remoteAccessTokenKey, ""); got != "new-secret" {
-		t.Fatalf("explicit remote secret update not stored: got %q", got)
+	if got := loadSetting(st.DB, remoteAccessTokenKey, ""); got != "" {
+		t.Fatalf("explicit remote secret update left plaintext setting: got %q", got)
+	}
+	if got := loadSecretSetting(ctx, st.DB, dataDir, remoteAccessTokenKey, ""); got != "new-secret" {
+		t.Fatalf("explicit remote secret update not stored in vault: got %q", got)
+	}
+
+	var ciphertext string
+	if err := st.DB.QueryRowContext(ctx, `SELECT ciphertext FROM secrets_vault WHERE name = ?`, secretSettingVaultName(remoteAccessTokenKey)).Scan(&ciphertext); err != nil {
+		t.Fatalf("load vaulted remote secret ciphertext: %v", err)
+	}
+	if strings.Contains(ciphertext, "new-secret") {
+		t.Fatalf("vaulted remote secret stored plaintext ciphertext=%q", ciphertext)
 	}
 }

@@ -58,10 +58,17 @@ func TestValidateCoreListenConfigRejectsWildcardWithoutOptIn(t *testing.T) {
 
 func TestValidateCoreListenConfigAllowsWildcardWithExplicitOptIn(t *testing.T) {
 	for _, host := range []string{"0.0.0.0", "::", "[::]"} {
-		err := validateCoreListenConfig(config.Config{BindHost: host, AllowWildcardBind: true})
+		err := validateCoreListenConfig(config.Config{BindHost: host, AllowWildcardBind: true, APIToken: "secret"})
 		if err != nil {
 			t.Fatalf("host %q unexpected error: %v", host, err)
 		}
+	}
+}
+
+func TestValidateCoreListenConfigRejectsWildcardWithoutAPIToken(t *testing.T) {
+	err := validateCoreListenConfig(config.Config{BindHost: "0.0.0.0", AllowWildcardBind: true})
+	if !errors.Is(err, errWildcardBindRequiresAuth) {
+		t.Fatalf("error = %v, want %v", err, errWildcardBindRequiresAuth)
 	}
 }
 

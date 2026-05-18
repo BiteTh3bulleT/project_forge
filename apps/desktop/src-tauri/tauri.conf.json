@@ -16,6 +16,7 @@
         "title": "FORGE",
         "width": 1180,
         "height": 680,
+        "backgroundColor": "#030303",
         "resizable": true
       }
     ],

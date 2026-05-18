@@ -8,6 +8,7 @@ use desktop_metadata::{find_desktop_file_for_ids, find_icon_path, parse_desktop_
 
 use serde::Serialize;
 use std::path::PathBuf;
+use std::process::Command;
 use sysinfo::{Disks, Pid, System};
 use tauri::{Manager, PhysicalPosition, PhysicalSize};
 
@@ -80,6 +81,13 @@ struct OperatorAppLaunchResult {
     executable: String,
     launched: bool,
     pid: Option<u32>,
+    message: String,
+}
+
+#[derive(Serialize)]
+struct HostPowerActionResult {
+    action: String,
+    requested: bool,
     message: String,
 }
 
@@ -261,6 +269,68 @@ fn operator_desktop_locked() -> bool {
         .unwrap_or(false)
 }
 
+fn forge_data_dir() -> Option<PathBuf> {
+    if let Ok(value) = std::env::var("FORGE_DATA_DIR") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return Some(PathBuf::from(trimmed));
+        }
+    }
+    if cfg!(windows) {
+        std::env::var("APPDATA")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(|value| PathBuf::from(value).join("forge"))
+    } else {
+        std::env::var("XDG_CONFIG_HOME")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .filter(|value| !value.trim().is_empty())
+                    .map(|value| PathBuf::from(value).join(".config"))
+            })
+            .map(|base| base.join("forge"))
+    }
+}
+
+fn forge_api_token_file() -> Option<PathBuf> {
+    if let Ok(value) = std::env::var("FORGE_API_TOKEN_FILE") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return Some(PathBuf::from(trimmed));
+        }
+    }
+    forge_data_dir().map(|dir| dir.join("auth").join("api_token"))
+}
+
+#[tauri::command]
+fn read_forge_api_token() -> Result<Option<String>, String> {
+    if let Ok(value) = std::env::var("FORGE_API_TOKEN") {
+        let token = value.trim();
+        if !token.is_empty() {
+            return Ok(Some(token.to_string()));
+        }
+    }
+    let Some(path) = forge_api_token_file() else {
+        return Ok(None);
+    };
+    match std::fs::read_to_string(&path) {
+        Ok(body) => {
+            let token = body.trim();
+            if token.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(token.to_string()))
+            }
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(format!("failed to read FORGE API token: {}", err)),
+    }
+}
+
 fn fit_operator_desktop_window(window: &tauri::WebviewWindow) {
     let monitor = window
         .current_monitor()
@@ -377,8 +447,79 @@ fn launch_operator_app(app_id: String) -> Result<OperatorAppLaunchResult, String
     })
 }
 
+fn spawn_host_power_command(action: &str) -> Result<(), String> {
+    let mut command = match action {
+        "shutdown" => {
+            #[cfg(target_os = "windows")]
+            {
+                let mut command = Command::new("shutdown");
+                command.args(["/s", "/t", "0"]);
+                command
+            }
+            #[cfg(target_os = "macos")]
+            {
+                let mut command = Command::new("osascript");
+                command.args(["-e", "tell app \"System Events\" to shut down"]);
+                command
+            }
+            #[cfg(all(unix, not(target_os = "macos")))]
+            {
+                let mut command = Command::new("systemctl");
+                command.arg("poweroff");
+                command
+            }
+        }
+        "reboot" => {
+            #[cfg(target_os = "windows")]
+            {
+                let mut command = Command::new("shutdown");
+                command.args(["/r", "/t", "0"]);
+                command
+            }
+            #[cfg(target_os = "macos")]
+            {
+                let mut command = Command::new("osascript");
+                command.args(["-e", "tell app \"System Events\" to restart"]);
+                command
+            }
+            #[cfg(all(unix, not(target_os = "macos")))]
+            {
+                let mut command = Command::new("systemctl");
+                command.arg("reboot");
+                command
+            }
+        }
+        _ => return Err("host power action is not allowlisted".to_string()),
+    };
+
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|err| format!("failed to request {action}: {err}"))
+}
+
+#[tauri::command]
+fn request_host_power_action(action: String) -> Result<HostPowerActionResult, String> {
+    let normalized = action.trim().to_ascii_lowercase();
+    if normalized != "shutdown" && normalized != "reboot" {
+        return Err("host power action is not allowlisted".to_string());
+    }
+
+    spawn_host_power_command(&normalized)?;
+    Ok(HostPowerActionResult {
+        action: normalized.clone(),
+        requested: true,
+        message: format!("Host {normalized} requested"),
+    })
+}
+
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_os::init())
         .manage(linux_windows::LinuxWindowRegistryState::default())
         .manage(window_manager::WindowManagerState::default())
         .on_window_event(|window, event| {
@@ -406,9 +547,11 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            read_forge_api_token,
             read_system_diagnostics,
             list_operator_apps,
             launch_operator_app,
+            request_host_power_action,
             linux_windows::list_linux_windows,
             linux_windows::focus_linux_window,
             linux_windows::control_linux_window,

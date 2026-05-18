@@ -113,7 +113,7 @@ func TestValidateSemanticOperationRejectsMixedSafeAndForbiddenClaims(t *testing.
 	req.Payload["claims"] = map[string]any{
 		"advisory_only":    true,
 		"operator_visible": "true",
-		" run_retrieval ": "1",
+		" run_retrieval ":  "1",
 	}
 
 	res, err := k.Process(ctx, req)

@@ -26,8 +26,7 @@ func runCommand(ctx context.Context, dir, bin string, args ...string) (Result, e
 	if _, err := exec.LookPath(bin); err != nil {
 		return Result{}, fmt.Errorf("%s not found: %w", bin, err)
 	}
-	cmd := exec.CommandContext(ctx, bin, args...)
-	cmd.Dir = dir
+	cmd := newGatewayCommand(ctx, dir, bin, args...)
 	out, err := boundedCombinedOutput(cmd)
 	return capabilityOK("command completed", map[string]any{"command": append([]string{bin}, args...), "output": out}), err
 }

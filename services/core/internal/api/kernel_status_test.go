@@ -35,25 +35,34 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	}
 
 	actions, ok := payload["validation_actions"].([]any)
-	if !ok || len(actions) != 5 {
-		t.Fatalf("expected five validation actions, got %#v", payload["validation_actions"])
+	if !ok || len(actions) != 7 {
+		t.Fatalf("expected seven validation actions, got %#v", payload["validation_actions"])
 	}
+	seenActions := map[string]bool{}
 	for _, raw := range actions {
 		action, ok := raw.(map[string]any)
 		if !ok {
 			t.Fatalf("unexpected action shape: %#v", raw)
 		}
+		name, _ := action["action"].(string)
+		seenActions[name] = true
 		if action["registered"] != true || action["mutating"] != false || action["approval_possible"] != false {
 			t.Fatalf("validation action is not read-only closed: %#v", action)
 		}
 	}
+	if !seenActions["VALIDATE_ADMISSION_CANDIDATE"] {
+		t.Fatalf("missing admission candidate validation action: %#v", actions)
+	}
+	if !seenActions["VALIDATE_CONTEXT_ATTRIBUTION"] {
+		t.Fatalf("missing context attribution validation action: %#v", actions)
+	}
 
-	if payload["authority_ready_gates"] != float64(2) || payload["authority_blocked_gates"] != float64(4) {
+	if payload["authority_ready_gates"] != float64(4) || payload["authority_blocked_gates"] != float64(3) {
 		t.Fatalf("unexpected authority gate counts: %#v", payload)
 	}
 	gates, ok := payload["authority_gates"].([]any)
-	if !ok || len(gates) != 6 {
-		t.Fatalf("expected six authority gates, got %#v", payload["authority_gates"])
+	if !ok || len(gates) != 7 {
+		t.Fatalf("expected seven authority gates, got %#v", payload["authority_gates"])
 	}
 	for _, raw := range gates {
 		gate, ok := raw.(map[string]any)
@@ -65,6 +74,48 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 		}
 		if gate["status"] == "blocked" && gate["next_step"] == "" {
 			t.Fatalf("blocked authority gate lacks next step: %#v", gate)
+		}
+	}
+
+	matrix, ok := payload["authority_matrix"].([]any)
+	if !ok || len(matrix) != 10 {
+		t.Fatalf("expected ten authority matrix entries, got %#v", payload["authority_matrix"])
+	}
+	seen := map[string]bool{}
+	for _, raw := range matrix {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected authority matrix entry shape: %#v", raw)
+		}
+		subsystem, _ := entry["subsystem"].(string)
+		seen[subsystem] = true
+		if entry["operator_visible"] != true {
+			t.Fatalf("authority matrix entry must be operator visible: %#v", entry)
+		}
+		if subsystem == "Courthouse" && entry["current_status"] != "ADMISSION_CANDIDATE_ONLY" {
+			t.Fatalf("courthouse must remain candidate-only, got %#v", entry)
+		}
+		if entry["live_owner"] == "" || entry["target_owner"] == "" || entry["rollback_path"] == "" {
+			t.Fatalf("authority matrix entry missing owner/rollback fields: %#v", entry)
+		}
+		if _, ok := entry["tests_required"].([]any); !ok {
+			t.Fatalf("authority matrix entry missing tests_required: %#v", entry)
+		}
+	}
+	for _, subsystem := range []string{
+		"Kernel",
+		"Courthouse",
+		"Memory Palace",
+		"Semantic Algebra",
+		"Snapshots",
+		"Context Compiler",
+		"KV System",
+		"Runtime Boundary",
+		"Lymphatic Lane",
+		"Consensus Mesh",
+	} {
+		if !seen[subsystem] {
+			t.Fatalf("missing authority matrix subsystem %q in %#v", subsystem, matrix)
 		}
 	}
 }

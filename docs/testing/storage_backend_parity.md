@@ -58,6 +58,19 @@ Phase 13H adds Redis ephemeral coordination boundary tests without changing live
 
 This remains ephemeral coordination infrastructure only. It does not switch live job queues to Redis, make Redis required, store canonical memory, store evidence admission, store provenance authority, add routes, or change public APIs.
 
+## FORGE-K Online Phase 16 Status
+
+Phase 16 adds a pure cutover readiness report under `services/core/internal/storagebackend` and surfaces it read-only through `GET /forge/system/status` as `storage.cutover_readiness`.
+
+- default readiness remains `blocked` with `canonical_default=sqlite`,
+- live owner is the existing SQLite store path,
+- target owner is future Postgres repository adapters and later FORGE-K persistence only after a separate authority migration,
+- Redis and Qdrant are explicitly non-authoritative,
+- readiness can mark a selected Postgres domain as proposal-ready only when every required evidence flag is present,
+- the report has no effect on backend defaults, dual-write, read switching, Redis authority, Qdrant authority, or FORGE-K authority migration.
+
+This remains readiness metadata only. It does not switch reads, dual-write canonical records, migrate memory/retrieval tables, wire Qdrant into live retrieval, wire Redis into live queues/cache, or change public APIs beyond the existing read-only status payload.
+
 ## Required Parity Test Areas
 
 Schema parity:
@@ -122,6 +135,12 @@ Phase 13H Redis ephemeral parity:
 - safe key namespace and TTL policy are enforced,
 - fake adapter behavior is deterministic,
 - optional Redis integration is gated by `FORGE_REDIS_TEST_ADDR`.
+
+Phase 16 cutover readiness:
+- default readiness report is blocked and preserves SQLite as canonical default,
+- Postgres proposal readiness requires selected domain, baseline SQLite tests, Postgres migration tests, Postgres adapter tests, repository parity tests, dual-write comparison tests, read-compare mismatch tests, backup/rollback tests, and operator approval,
+- Redis and Qdrant are not truth authority even when endpoint configuration is present,
+- `/forge/system/status` exposes the readiness report without mutation controls.
 
 Dual-write parity:
 - SQLite/Postgres write comparison.

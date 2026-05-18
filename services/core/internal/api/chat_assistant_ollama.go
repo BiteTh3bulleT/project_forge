@@ -60,6 +60,7 @@ func (s *Server) completeAssistantWithoutTools(
 		}
 		recordStage("deterministic_no_model_reply", map[string]any{"reason": perf.Reason, "intent": perf.Intent})
 		trace := chatHyperlaneNoModelTrace(requestStart, perf)
+		s.warnIfChatLatencyBudgetExceeded(ctx, threadID, userMessageID, corr, trace)
 		am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", text, map[string]any{
 			"replyToUserMessageId": userMessageID,
 			"correlationId":        corr,
@@ -106,6 +107,7 @@ func (s *Server) completeAssistantWithoutTools(
 			return am
 		}
 		trace := chatLatencyTrace(requestStart, perf, map[string]any{"modelruntime_ms": int64(0), "gateway_execution_ms": int64(0)})
+		s.warnIfChatLatencyBudgetExceeded(ctx, threadID, userMessageID, corr, trace)
 		am, _ = s.chat.AppendMessage(ctx, threadID, "assistant", "Chat completion requires the Ollama adapter in this runtime, and model runtime fallback failed: "+reason, map[string]any{
 			"failure": true, "replyToUserMessageId": userMessageID, "correlationId": corr,
 			"toolManifest": manifests, "toolPipeline": map[string]any{"stages": stages}, "chatLatencyTrace": trace,
@@ -130,6 +132,7 @@ func (s *Server) completeAssistantWithoutTools(
 			return am
 		}
 		trace := chatLatencyTrace(requestStart, perf, map[string]any{"modelruntime_ms": int64(0), "gateway_execution_ms": int64(0)})
+		s.warnIfChatLatencyBudgetExceeded(ctx, threadID, userMessageID, corr, trace)
 		am, _ = s.chat.AppendMessage(ctx, threadID, "assistant", "ollama model is not configured in Settings, and model runtime fallback failed: "+reason, map[string]any{
 			"replyToUserMessageId": userMessageID, "correlationId": corr,
 			"toolManifest": manifests, "toolPipeline": map[string]any{"stages": stages}, "chatLatencyTrace": trace,
@@ -162,6 +165,7 @@ func (s *Server) completeAssistantWithoutTools(
 			text += " (model runtime fallback failed: " + reason + ")"
 		}
 		trace := chatLatencyTrace(requestStart, perf, map[string]any{"modelruntime_ms": int64(0), "gateway_execution_ms": int64(0)})
+		s.warnIfChatLatencyBudgetExceeded(ctx, threadID, userMessageID, corr, trace)
 		am, _ = s.chat.AppendMessage(ctx, threadID, "assistant", text, map[string]any{
 			"failure": true, "replyToUserMessageId": userMessageID, "correlationId": corr,
 			"toolManifest": manifests, "toolPipeline": map[string]any{"stages": stages}, "chatLatencyTrace": trace,
@@ -191,6 +195,7 @@ func (s *Server) completeAssistantWithoutTools(
 		"gateway_execution_ms": int64(0),
 		"model_calls_avoided":  0,
 	})
+	s.warnIfChatLatencyBudgetExceeded(ctx, threadID, userMessageID, corr, trace)
 	metadata := map[string]any{
 		"replyToUserMessageId": userMessageID,
 		"correlationId":        corr,
@@ -313,6 +318,7 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 		"gateway_execution_ms": int64(0),
 		"model_calls_avoided":  1,
 	})
+	s.warnIfChatLatencyBudgetExceeded(ctx, threadID, userMessageID, corr, trace)
 	metadata := map[string]any{
 		"replyToUserMessageId": userMessageID,
 		"correlationId":        corr,

@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -906,10 +905,7 @@ func runCmd(ctx context.Context, dir string, parts ...string) (string, error) {
 	if len(parts) == 0 {
 		return "", errors.New("command required")
 	}
-	cmd := exec.CommandContext(ctx, parts[0], parts[1:]...)
-	if strings.TrimSpace(dir) != "" {
-		cmd.Dir = dir
-	}
+	cmd := newGatewayCommand(ctx, dir, parts[0], parts[1:]...)
 	return boundedCombinedOutput(cmd)
 }
 
@@ -917,10 +913,7 @@ func runDetachedCmd(dir string, parts ...string) (int, error) {
 	if len(parts) == 0 {
 		return 0, errors.New("command required")
 	}
-	cmd := exec.Command(parts[0], parts[1:]...)
-	if strings.TrimSpace(dir) != "" {
-		cmd.Dir = dir
-	}
+	cmd := newGatewayDetachedCommand(dir, parts[0], parts[1:]...)
 	if err := cmd.Start(); err != nil {
 		return 0, err
 	}

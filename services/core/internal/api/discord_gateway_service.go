@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
@@ -93,7 +92,7 @@ func (g *DiscordGateway) Start(ctx context.Context) error {
 	if g.cfg.EnableSlashCommands {
 		if err := g.registerSlashCommands(); err != nil {
 			g.setLastError(err)
-			log.Printf("discord gateway: slash registration failed: %v", err)
+			apiLogWarn("discord gateway slash registration failed", apiLogErr(err))
 		}
 	}
 	_ = g.emitEvent(ctx, "discord.gateway.started", map[string]any{

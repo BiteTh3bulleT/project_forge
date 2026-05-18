@@ -8,7 +8,7 @@ Current G4 status: the intended integration is a selectable Wayland session, not
 
 Current G5 status: `nix/nixos/profiles/forge-vbox-graphics-test.nix` is an opt-in test profile for minimal Oracle VirtualBox NixOS graphics bring-up. The target flow is TTY login -> `forge-wayland-session` -> Cage -> `forge-shell-session` -> packaged `forge-desktop-shell` -> local `forge-core`. The profile is not a general desktop profile and must not install a full desktop environment, enable automatic login, remove TTY fallback, or expose remote graphics by default.
 
-Current G6 status: the desktop shell has a read-only System surface at `/system` backed by `GET /forge/system/status`. It displays core reachability, request-derived core URL, health and refresh time, shell/session safety flags, bounded HostBridge diagnostics, FORGE-H resource posture/proposals, bounded execution availability and safety fields, modelruntime availability, FORGE-K activation readiness and authority gate blockers, storage posture, approval queue wiring, and recent warnings. It does not expose mutation controls, execute tools, run host commands, load/unload models, write semantic memory, or make FORGE-K live authority.
+Current G6/G7 status: the desktop shell has a read-only System surface at `/system` backed by `GET /forge/system/status`. It displays core reachability, request-derived core URL, health and refresh time, shell/session safety flags, bounded HostBridge diagnostics, FORGE-H resource posture/proposals, bounded execution availability and safety fields, modelruntime availability, FORGE-K activation readiness and authority gate blockers, a read-only operator cockpit index, FORGE-K subsystem matrix rows when present, storage posture including read-only storage cutover readiness, approval queue wiring, and recent warnings. It does not expose mutation controls, execute tools, run host commands, load/unload models, write semantic memory, switch storage backends, execute cleanup, or make FORGE-K live authority.
 
 This is not a web dashboard controlling a headless server. FORGE is intended to become the visible operating interface: the desktop shell, launcher, workspace surface, command center, approval surface, and system context surface. NixOS remains the boot, hardware, graphics, service, and host configuration substrate.
 
@@ -117,6 +117,8 @@ The G2 local-binary fallback remains part of the G3.5 contract. Desktop-shell pa
 
 Nix/Tauri package limitations must remain explicit. The current G3.5 package is validated as a Linux Nix package. It does not add compositor integration, display-manager integration, autostart, desktop replacement, or host mutation. G4 is the separate opt-in compositor/session lane and does not change the G3.5 package truth.
 
+The desktop shell registers the official Tauri v2 `fs`, `shell`, `http`, `dialog`, and `os` plugins for native shell ergonomics. Their capability grants are intentionally narrow: file-system access starts with Tauri's application-directory default, shell access uses the default link-opening permission rather than arbitrary command execution, HTTP access is scoped to loopback FORGE endpoints, dialogs are UI-only operator prompts, and OS metadata is read-only. These Tauri capabilities do not bypass `forge-core`, gateway, approval, audit, memory, modelruntime, host-mutation, or FORGE-K authority boundaries.
+
 Exact operator commands:
 
 ```bash
@@ -149,7 +151,7 @@ FORGE_SHELL_BINARY="$PWD/apps/desktop/src-tauri/target/release/forge_desktop" ni
 
 The shell talks to `forge-core` through governed local APIs/interfaces. It may render structured state and submit user requests, but it does not own truth authority, command authority, approval authority, memory authority, modelruntime authority, or FORGE-K authority.
 
-G6 introduces `GET /forge/system/status` as a bounded read-only status route for the shell. The route composes core/session metadata, SQLite storage posture, HostBridge summary data, FORGE-H advisory policy/proposals, modelruntime health, and approval queue wiring. The reported core URL is derived from the current request host and scheme rather than discovered through host probing. Command-backed HostBridge probes are disabled for this route, so the shell does not become a service-control or host-command path.
+G6 introduces `GET /forge/system/status` as a bounded read-only status route for the shell. The route composes core/session metadata, SQLite storage posture, storage cutover readiness metadata, HostBridge summary data, FORGE-H advisory policy/proposals, modelruntime health, and approval queue wiring. The reported core URL is derived from the current request host and scheme rather than discovered through host probing. Command-backed HostBridge probes are disabled for this route, so the shell does not become a service-control or host-command path.
 
 Allowed shell behavior:
 

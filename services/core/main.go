@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -21,12 +21,14 @@ import (
 func main() {
 	cfg := config.Load()
 	if err := validateCoreListenConfig(cfg); err != nil {
-		log.Fatalf("config: %v", err)
+		slog.Error("invalid configuration", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	st, err := store.Open(cfg.DataDir)
 	if err != nil {
-		log.Fatalf("store: %v", err)
+		slog.Error("store open failed", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 	defer st.Close()
 
@@ -41,9 +43,10 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("forge-core listening on http://%s", addr)
+		slog.Info("forge-core listening", slog.String("addr", addr))
 		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("http: %v", err)
+			slog.Error("http server failed", slog.String("error", err.Error()))
+			os.Exit(1)
 		}
 	}()
 
@@ -56,11 +59,19 @@ func main() {
 	_ = httpSrv.Shutdown(shutdownCtx)
 }
 
-var errWildcardBindRequiresOptIn = errors.New("wildcard bind host requires FORGE_ALLOW_WILDCARD_BIND=true")
+var (
+	errWildcardBindRequiresOptIn = errors.New("wildcard bind host requires FORGE_ALLOW_WILDCARD_BIND=true")
+	errWildcardBindRequiresAuth  = errors.New("wildcard bind host requires API auth token")
+)
 
 func validateCoreListenConfig(cfg config.Config) error {
-	if isWildcardBindHost(cfg.BindHost) && !cfg.AllowWildcardBind {
-		return errWildcardBindRequiresOptIn
+	if isWildcardBindHost(cfg.BindHost) {
+		if !cfg.AllowWildcardBind {
+			return errWildcardBindRequiresOptIn
+		}
+		if strings.TrimSpace(cfg.APIToken) == "" {
+			return errWildcardBindRequiresAuth
+		}
 	}
 	return nil
 }

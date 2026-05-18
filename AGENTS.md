@@ -33,6 +33,7 @@ Last convergence sweep update: 2026-05-14 (current authority/status alignment).
 - Do not route live state mutation through FORGE-K without an explicit integration phase, design, tests, and documentation updates. See `docs/adr/0001-forge-k-is-a-cognitive-microkernel.md` and `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
 
 ## Current Status Guidance
+- Start with `docs/onboarding.md` when orienting a new collaborator, future operator session, or agent.
 - Use `docs/reviews/current_phase_status.md` for current phase truth and FORGE-K simulator/live boundary status.
 - Use `docs/status/current_authority_sources.md` for the current authority-source map before treating older reviews, phase prompts, or roadmaps as active.
 - Use `docs/status/implementation_matrix.md` for live AI-OS and daemon implementation status; it is not the FORGE-K simulator phase matrix.
@@ -62,6 +63,7 @@ Last convergence sweep update: 2026-05-14 (current authority/status alignment).
 - **2026-05-09**: Phase 14D adds disabled-by-default internal Control Lane validation shadow reports under `services/core/internal/forgekshadow`. Reports require `FORGE_K_SHADOW_MODE_ENABLED=true` plus `FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED=true`, store bounded scalar summaries only, and do not change Control Lane decisions, routes/APIs, user-visible output, memory, retrieval/search/embeddings, modelruntime, gateway, or FORGE-K live authority.
 - **2026-05-10**: Phase 14E wires live Control Lane validation results into those disabled-by-default shadow reports through an optional best-effort observer. It does not change syscall results, Control Lane decisions, routes/APIs, user-visible output, memory, retrieval/search/embeddings, modelruntime, gateway, tool execution, or FORGE-K live authority.
 - **2026-05-14**: Current authority navigation is centralized in `docs/status/current_authority_sources.md`; detailed phase truth is delegated to `docs/reviews/current_phase_status.md`.
+- **2026-05-18**: Online Phase 19 adds `[PARTIAL LIVE VALIDATION]` context attribution validation through shared pure package `services/core/internal/contextattribution` and live Control Lane `VALIDATE_CONTEXT_ATTRIBUTION`. It validates planned source refs and selection reasons only; it does not replace `COMPILE_CONTEXT`, generate prompt text, call modelruntime, run retrieval/search/embeddings, write memory, admit evidence, execute gateway/tools, change routes/APIs, or make FORGE-K Context Compiler live authority.
 - Append-only per-job event streams as execution truth
 - Approval gates with separated request and decision records
 - Context normalization into durable guidance files (`AGENTS.md`, `CLAUDE.md`, briefing, cursor rule)

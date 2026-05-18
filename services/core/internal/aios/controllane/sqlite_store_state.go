@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"forge/projectforge/services/core/internal/aios/domain"
@@ -19,7 +20,7 @@ WHERE workspace_id = ? AND (? = '' OR lane_id = ?) AND key = ?`,
 	var item domain.StateItem
 	var valueRaw, status, derivedRaw, selected string
 	if err := row.Scan(&item.ID, &item.Key, &valueRaw, &item.Scope.WorkspaceID, &item.Scope.LaneID, &selected, &status, &derivedRaw, &item.UpdatedAt); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return domain.StateItem{}, false, nil
 		}
 		return domain.StateItem{}, false, err

@@ -1,3 +1,5 @@
+import { invoke } from "@tauri-apps/api/core";
+
 export const base = () =>
   import.meta.env.VITE_FORGE_API_URL ?? "http://127.0.0.1:18492";
 
@@ -11,6 +13,33 @@ const requestTimeoutMs = () => {
   }
   return parsed;
 };
+
+let apiTokenPromise: Promise<string | undefined> | undefined;
+
+export function clearForgeApiTokenCache() {
+  apiTokenPromise = undefined;
+}
+
+async function forgeApiToken(): Promise<string | undefined> {
+  apiTokenPromise ??= invoke<string | null>("read_forge_api_token")
+    .then((token) => token?.trim() || undefined)
+    .catch(() => undefined);
+  return apiTokenPromise;
+}
+
+async function authenticatedHeaders(init?: RequestInit): Promise<Headers> {
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Accept")) {
+    headers.set("Accept", "application/json");
+  }
+  if (!headers.has("Authorization")) {
+    const token = await forgeApiToken();
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+  }
+  return headers;
+}
 
 export async function fetchWithTimeout(
   input: RequestInfo | URL,
@@ -40,8 +69,10 @@ export async function fetchWithTimeout(
   }, timeoutMs);
 
   try {
+    const headers = await authenticatedHeaders(init);
     return await fetch(input, {
       ...init,
+      headers,
       signal: controller.signal,
     });
   } catch (err) {
@@ -60,10 +91,6 @@ export async function fetchWithTimeout(
 export async function j<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetchWithTimeout(`${base()}${path}`, {
     ...init,
-    headers: {
-      Accept: "application/json",
-      ...(init?.headers ?? {}),
-    },
   });
   if (!res.ok) {
     const t = await res.text().catch(() => "");

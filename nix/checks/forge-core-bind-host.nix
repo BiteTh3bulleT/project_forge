@@ -13,6 +13,13 @@ runCommandNoCC "forge-core-bind-host-check"
 
     grep -F 'default = "127.0.0.1";' "$module"
     grep -F 'FORGE_CORE_BIND_HOST = toString cfg.bindHost;' "$module"
+    grep -F 'default = false;' "$module"
+    grep -F 'FORGE_ALLOW_WILDCARD_BIND = boolString cfg.allowWildcardBind;' "$module"
+    grep -F 'assertion = cfg.allowWildcardBind || !(lib.elem cfg.bindHost [ "0.0.0.0" "::" ]);' "$module"
+    grep -F 'CapabilityBoundingSet = "";' "$module"
+    grep -F 'ProtectSystem = "strict";' "$module"
+    grep -F 'ProtectKernelTunables = true;' "$module"
+    grep -F 'RestrictSUIDSGID = true;' "$module"
     grep -F 'envStringDefault("FORGE_CORE_BIND_HOST", "127.0.0.1")' "$config"
     grep -F 'AllowWildcardBind:          envBool("FORGE_ALLOW_WILDCARD_BIND", false),' "$config"
     grep -F 'errWildcardBindRequiresOptIn = errors.New("wildcard bind host requires FORGE_ALLOW_WILDCARD_BIND=true")' "$main"
@@ -23,8 +30,11 @@ runCommandNoCC "forge-core-bind-host-check"
     fi
     grep -F 'FORGE_CORE_BIND_HOST: "''${FORGE_CORE_BIND_HOST:-0.0.0.0}"' "$compose"
     grep -F 'FORGE_ALLOW_WILDCARD_BIND: "''${FORGE_ALLOW_WILDCARD_BIND:-true}"' "$compose"
-    grep -F 'FORGE_CORE_BIND_HOST=0.0.0.0' "$dockerfile"
-    grep -F 'FORGE_ALLOW_WILDCARD_BIND=true' "$dockerfile"
+    grep -F 'FORGE_CORE_BIND_HOST=127.0.0.1' "$dockerfile"
+    if grep -F 'FORGE_ALLOW_WILDCARD_BIND=true' "$dockerfile"; then
+      echo "Dockerfile must not default to wildcard bind opt-in" >&2
+      exit 1
+    fi
 
     touch "$out"
   ''

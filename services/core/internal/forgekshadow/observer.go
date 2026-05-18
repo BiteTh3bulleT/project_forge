@@ -286,13 +286,33 @@ func (o *Observer) observeAt(ctx context.Context, input ObservationInput, now ti
 	if err := shadowharness.ValidateNoEffect(o.policy, report); err != nil {
 		return err
 	}
+	var memoryPalaceMirror *MemoryPalaceMirrorReport
+	if retrievalMetadata != nil && strings.TrimSpace(retrievalMetadata.WorkspaceID) != "" {
+		mirror, err := BuildMemoryPalaceMirrorFromRetrievalMetadata(*retrievalMetadata)
+		if err != nil {
+			return err
+		}
+		memoryPalaceMirror = &mirror
+	}
+	var contextBundleShadow *ContextBundleShadowReport
+	if controlLaneValidation != nil {
+		bundle, ok, err := BuildContextBundleShadowFromControlLaneValidation(*controlLaneValidation)
+		if err != nil {
+			return err
+		}
+		if ok {
+			contextBundleShadow = &bundle
+		}
+	}
 	diagnostic := DiagnosticReport{
 		Observation:           obs,
 		Comparison:            report,
 		RouteEnvelope:         routeEnvelope,
 		ChatMetadata:          chatMetadata,
 		RetrievalMetadata:     retrievalMetadata,
+		MemoryPalaceMirror:    memoryPalaceMirror,
 		ControlLaneValidation: controlLaneValidation,
+		ContextBundleShadow:   contextBundleShadow,
 		StoredAt:              now,
 	}
 	if o.cfg.AdvisoryEnabled {

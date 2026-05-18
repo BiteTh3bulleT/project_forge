@@ -10,8 +10,8 @@ import (
 func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	report := ForgeKActivationReadiness(NewStaticActionRegistry(), time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC))
 
-	if report.Phase != "14M" {
-		t.Fatalf("phase=%q, want 14M", report.Phase)
+	if report.Phase != "19" {
+		t.Fatalf("phase=%q, want 19", report.Phase)
 	}
 	if report.Status != "partial_live_validation_ready" {
 		t.Fatalf("status=%q, want partial_live_validation_ready", report.Status)
@@ -28,11 +28,14 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	if report.MutationControlsAvailable {
 		t.Fatalf("readiness report exposed mutation controls: %#v", report)
 	}
-	if report.ClosedValidationLanes != 5 || report.TotalValidationLanes != 5 {
-		t.Fatalf("validation lane counts = %d/%d, want 5/5", report.ClosedValidationLanes, report.TotalValidationLanes)
+	if report.ClosedValidationLanes != 7 || report.TotalValidationLanes != 7 {
+		t.Fatalf("validation lane counts = %d/%d, want 7/7", report.ClosedValidationLanes, report.TotalValidationLanes)
 	}
-	if report.AuthorityReadyGates != 2 || report.AuthorityBlockedGates != 4 {
-		t.Fatalf("authority gate counts = ready %d blocked %d, want 2/4", report.AuthorityReadyGates, report.AuthorityBlockedGates)
+	if report.AuthorityReadyGates != 4 || report.AuthorityBlockedGates != 3 {
+		t.Fatalf("authority gate counts = ready %d blocked %d, want 4/3", report.AuthorityReadyGates, report.AuthorityBlockedGates)
+	}
+	if len(report.AuthorityMatrix) != 10 {
+		t.Fatalf("authority matrix entries=%d, want 10: %#v", len(report.AuthorityMatrix), report.AuthorityMatrix)
 	}
 
 	actions := map[domain.SemanticActionType]ForgeKActivationActionReadiness{}
@@ -45,6 +48,8 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 		domain.ActionCompareRefShape,
 		domain.ActionValidateSourceObject,
 		domain.ActionValidateSemanticOperation,
+		domain.ActionValidateAdmissionCandidate,
+		domain.ActionValidateContextAttribution,
 	} {
 		got, ok := actions[action]
 		if !ok {
@@ -76,8 +81,13 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	if authorityGates["source_object_authority_lookup"].Status != "ready" {
 		t.Fatalf("source object authority gate not ready: %#v", authorityGates["source_object_authority_lookup"])
 	}
+	if authorityGates["courthouse_admission_integration"].Status != "ready" {
+		t.Fatalf("courthouse admission candidate gate not ready: %#v", authorityGates["courthouse_admission_integration"])
+	}
+	if authorityGates["context_attribution_validation"].Status != "ready" {
+		t.Fatalf("context attribution validation gate not ready: %#v", authorityGates["context_attribution_validation"])
+	}
 	for _, name := range []string{
-		"courthouse_admission_integration",
 		"live_context_compiler_authority",
 		"governed_semantic_mutation_routing",
 		"runtime_driver_authority_boundary",
@@ -103,6 +113,60 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 			t.Fatalf("no-effect key %s=%#v, want false", key, report.NoEffect[key])
 		}
 	}
+
+	matrix := map[string]ForgeKAuthorityGateMatrixEntry{}
+	for _, entry := range report.AuthorityMatrix {
+		matrix[entry.Subsystem] = entry
+		if !entry.OperatorVisible {
+			t.Fatalf("authority matrix entry is not operator visible: %#v", entry)
+		}
+		if entry.LiveOwner == "" || entry.TargetOwner == "" || entry.RollbackPath == "" {
+			t.Fatalf("authority matrix entry missing required ownership/rollback fields: %#v", entry)
+		}
+		if len(entry.TestsRequired) == 0 {
+			t.Fatalf("authority matrix entry missing tests_required: %#v", entry)
+		}
+	}
+	for _, subsystem := range []string{
+		"Kernel",
+		"Courthouse",
+		"Memory Palace",
+		"Semantic Algebra",
+		"Snapshots",
+		"Context Compiler",
+		"KV System",
+		"Runtime Boundary",
+		"Lymphatic Lane",
+		"Consensus Mesh",
+	} {
+		if _, ok := matrix[subsystem]; !ok {
+			t.Fatalf("missing authority matrix subsystem %q in %#v", subsystem, report.AuthorityMatrix)
+		}
+	}
+	if matrix["Kernel"].CurrentStatus != "STATE_AND_LOOP_COMMIT_LIVE" {
+		t.Fatalf("kernel matrix status=%q, want STATE_AND_LOOP_COMMIT_LIVE", matrix["Kernel"].CurrentStatus)
+	}
+	if matrix["KV System"].CurrentStatus != "KV_REUSE_CANARY_VALIDATION_ONLY" {
+		t.Fatalf("kv matrix status=%q, want KV_REUSE_CANARY_VALIDATION_ONLY", matrix["KV System"].CurrentStatus)
+	}
+	if matrix["Courthouse"].CurrentStatus != "ADMISSION_CANDIDATE_ONLY" {
+		t.Fatalf("courthouse matrix status=%q, want ADMISSION_CANDIDATE_ONLY", matrix["Courthouse"].CurrentStatus)
+	}
+	if matrix["Memory Palace"].CurrentStatus != "MEMORY_PALACE_MIRROR_ONLY" {
+		t.Fatalf("memory palace matrix status=%q, want MEMORY_PALACE_MIRROR_ONLY", matrix["Memory Palace"].CurrentStatus)
+	}
+	if matrix["Context Compiler"].CurrentStatus != "CONTEXT_ATTRIBUTION_VALIDATION_ONLY" {
+		t.Fatalf("context compiler matrix status=%q, want CONTEXT_ATTRIBUTION_VALIDATION_ONLY", matrix["Context Compiler"].CurrentStatus)
+	}
+	if matrix["Runtime Boundary"].CurrentStatus != "RUNTIME_PROPOSAL_BOUNDARY" {
+		t.Fatalf("runtime boundary status=%q, want RUNTIME_PROPOSAL_BOUNDARY", matrix["Runtime Boundary"].CurrentStatus)
+	}
+	if matrix["Lymphatic Lane"].CurrentStatus != "LYMPHATIC_PROPOSAL_ONLY_ONLINE" {
+		t.Fatalf("lymphatic lane status=%q, want LYMPHATIC_PROPOSAL_ONLY_ONLINE", matrix["Lymphatic Lane"].CurrentStatus)
+	}
+	if matrix["Consensus Mesh"].CurrentStatus != "CONSENSUS_GATE_MODEL_RUNTIME_ONLY" {
+		t.Fatalf("consensus mesh status=%q, want CONSENSUS_GATE_MODEL_RUNTIME_ONLY", matrix["Consensus Mesh"].CurrentStatus)
+	}
 }
 
 func TestForgeKActivationReadinessFailsClosedWhenActionMissing(t *testing.T) {
@@ -111,11 +175,19 @@ func TestForgeKActivationReadinessFailsClosedWhenActionMissing(t *testing.T) {
 	if report.Status != "blocked" {
 		t.Fatalf("status=%q, want blocked", report.Status)
 	}
-	if report.ClosedValidationLanes != 0 || report.TotalValidationLanes != 5 {
-		t.Fatalf("validation lane counts = %d/%d, want 0/5", report.ClosedValidationLanes, report.TotalValidationLanes)
+	if report.ClosedValidationLanes != 0 || report.TotalValidationLanes != 7 {
+		t.Fatalf("validation lane counts = %d/%d, want 0/7", report.ClosedValidationLanes, report.TotalValidationLanes)
 	}
-	if report.AuthorityReadyGates != 0 || report.AuthorityBlockedGates != 6 {
-		t.Fatalf("authority gate counts = ready %d blocked %d, want 0/6", report.AuthorityReadyGates, report.AuthorityBlockedGates)
+	if report.AuthorityReadyGates != 0 || report.AuthorityBlockedGates != 7 {
+		t.Fatalf("authority gate counts = ready %d blocked %d, want 0/7", report.AuthorityReadyGates, report.AuthorityBlockedGates)
+	}
+	if len(report.AuthorityMatrix) != 10 {
+		t.Fatalf("authority matrix entries=%d, want 10", len(report.AuthorityMatrix))
+	}
+	for _, entry := range report.AuthorityMatrix {
+		if entry.Subsystem == "Kernel" && entry.CurrentStatus != "BLOCKED" {
+			t.Fatalf("blocked report kernel matrix status=%q, want BLOCKED", entry.CurrentStatus)
+		}
 	}
 	if report.LiveKernelAuthority || report.LiveAuthorityMigration || report.SimulatorAuthority {
 		t.Fatalf("blocked report claimed forbidden authority: %#v", report)

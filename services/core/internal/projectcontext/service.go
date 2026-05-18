@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -59,10 +60,19 @@ type Service struct {
 	log          *events.Logger
 	workspaceDir string
 	dataDir      string
+	allowedRoots []string
 }
 
 func New(db *sql.DB, log *events.Logger, workspaceDir, dataDir string) *Service {
-	return &Service{db: db, log: log, workspaceDir: workspaceDir, dataDir: dataDir}
+	s := &Service{db: db, log: log, workspaceDir: workspaceDir, dataDir: dataDir}
+	s.SetAllowedRoots(nil)
+	return s
+}
+
+func (s *Service) SetAllowedRoots(extraRoots []string) {
+	roots := []string{s.workspaceDir}
+	roots = append(roots, extraRoots...)
+	s.allowedRoots = normalizeAllowedRoots(roots)
 }
 
 func (s *Service) Latest(ctx context.Context) (*Record, error) {
@@ -92,7 +102,7 @@ FROM project_context_records ORDER BY id DESC LIMIT 1`)
 		&r.GeneratedCursorPath,
 		&r.Notes,
 	); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
@@ -218,18 +228,75 @@ func (s *Service) resolveSourcePath(ctx context.Context, requested string) (stri
 		if _, err := os.Stat(abs); err != nil {
 			return "", fmt.Errorf("context file not found: %s", abs)
 		}
-		return abs, nil
+		return s.requireAllowedSourcePath(abs)
 	}
 	if v := s.getSetting(ctx, "project_context_source_path"); strings.TrimSpace(v) != "" {
 		if _, err := os.Stat(v); err == nil {
-			return v, nil
+			if allowed, err := s.requireAllowedSourcePath(v); err == nil {
+				return allowed, nil
+			}
 		}
 	}
 	candidate := filepath.Join(s.workspaceDir, "FORGE_CONTEXT.md")
 	if _, err := os.Stat(candidate); err == nil {
-		return candidate, nil
+		return s.requireAllowedSourcePath(candidate)
 	}
 	return "", fmt.Errorf("no context source file found; pass sourcePath or place FORGE_CONTEXT.md in workspace root")
+}
+
+func (s *Service) requireAllowedSourcePath(path string) (string, error) {
+	clean, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return "", err
+	}
+	evaluated, err := filepath.EvalSymlinks(clean)
+	if err != nil {
+		return "", err
+	}
+	if pathWithinAnyRoot(clean, s.allowedRoots) && pathWithinAnyRoot(evaluated, s.allowedRoots) {
+		return evaluated, nil
+	}
+	return "", fmt.Errorf("context file outside allowed roots: %s", clean)
+}
+
+func normalizeAllowedRoots(roots []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(roots))
+	for _, root := range roots {
+		if strings.TrimSpace(root) == "" {
+			continue
+		}
+		abs, err := filepath.Abs(filepath.Clean(root))
+		if err != nil {
+			continue
+		}
+		if evaluated, err := filepath.EvalSymlinks(abs); err == nil {
+			abs = evaluated
+		}
+		if _, ok := seen[abs]; ok {
+			continue
+		}
+		seen[abs] = struct{}{}
+		out = append(out, abs)
+	}
+	return out
+}
+
+func pathWithinAnyRoot(path string, roots []string) bool {
+	for _, root := range roots {
+		if pathWithinRoot(path, root) {
+			return true
+		}
+	}
+	return false
+}
+
+func pathWithinRoot(path, root string) bool {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != "" && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." && !filepath.IsAbs(rel))
 }
 
 func readContextSource(path string) ([]byte, error) {

@@ -3,8 +3,21 @@ $ErrorActionPreference = "Stop"
 $RootDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $CorePort = if ($env:FORGE_CORE_PORT) { $env:FORGE_CORE_PORT } else { "18492" }
 $CoreUrl = if ($env:VITE_FORGE_API_URL) { $env:VITE_FORGE_API_URL } else { "http://127.0.0.1:$CorePort" }
+$TokenFile = Join-Path $RootDir ".forge/docker-api-token"
 
 Set-Location $RootDir
+
+if ([string]::IsNullOrWhiteSpace($env:FORGE_API_TOKEN)) {
+  $TokenDir = Split-Path -Parent $TokenFile
+  New-Item -ItemType Directory -Force -Path $TokenDir | Out-Null
+  if (-not (Test-Path $TokenFile) -or (Get-Item $TokenFile).Length -eq 0) {
+    $Bytes = [byte[]]::new(32)
+    [System.Security.Cryptography.RandomNumberGenerator]::Fill($Bytes)
+    $Token = -join ($Bytes | ForEach-Object { $_.ToString("x2") })
+    Set-Content -LiteralPath $TokenFile -Value $Token -NoNewline
+  }
+  $env:FORGE_API_TOKEN = (Get-Content -Raw -LiteralPath $TokenFile).Trim()
+}
 
 Write-Host "Starting Docker-backed FORGE services first..."
 $env:FORGE_CORE_PORT = $CorePort

@@ -1,7 +1,7 @@
 # FORGE Native Desktop Runtime
 
 Date: 2026-05-15
-Status: Proposed for implementation
+Status: Initial VM implementation in progress
 
 ## Goal
 
@@ -33,9 +33,10 @@ feel structurally real before spending time on visual polish.
 
 ### 1. Plymouth + greetd/regreet + FORGE session
 
-Use Plymouth for the FORGE-OS boot image, greetd/regreet for a lightweight
-graphical password login, and the existing `forge-operator-session` as the
-default selected session.
+Use Plymouth for the FORGE-OS boot image, greetd for native session handoff,
+and the existing `forge-operator-session` as the default selected session.
+The first VM pass uses the packaged FORGE desktop as the visible login screen;
+PAM-backed greeter integration remains the hardening target.
 
 Benefits:
 
@@ -87,15 +88,21 @@ The native desktop path should be:
 ```text
 firmware / bootloader
 -> Plymouth FORGE-OS Runtime splash
--> greetd/regreet graphical password login
+-> greetd session handoff
 -> forge-operator Wayland session
 -> labwc compositor
 -> forge-shell-session
 -> packaged forge-desktop-shell
+-> FORGE shell loading screen
+-> FORGE login screen
+-> empty FORGE desktop
 -> local forge-core
 ```
 
-No autologin. The operator must be able to leave FORGE running but locked.
+The first normal interactive screen should be FORGE-branded. The operator must
+be able to leave FORGE running but locked. The initial VM implementation's
+FORGE login is a local UX gate; production hardening should replace or bind it
+to a PAM-backed greeter.
 
 ## Phase 1 Scope
 
@@ -105,9 +112,11 @@ canonical operator VM target.
 Required behavior:
 
 - show a minimal FORGE-OS Runtime boot splash
-- start a graphical login screen by default
+- show a FORGE shell loading screen before the login form
+- start a FORGE login screen by default
 - require password login
 - make the FORGE operator session the default login session
+- clear restored in-shell windows on login so the operator lands on an empty desktop
 - preserve TTY fallback and Nix generation rollback
 - keep SSH disabled by default unless the local VM config explicitly enables it
 - keep `forge-core` bound to localhost by default
@@ -134,11 +143,12 @@ Expected normal operator flow:
 
 1. Start VM or machine.
 2. See FORGE-OS Runtime splash during boot.
-3. See graphical password login.
-4. Log in as `operator`.
-5. Land directly in the FORGE desktop session.
-6. Launch terminal/files/toolbelt apps from FORGE.
-7. Lock/logout from the desktop path without losing recovery access.
+3. See the FORGE shell loading screen.
+4. See graphical password login.
+5. Log in as `operator`.
+6. Land directly on an empty FORGE desktop.
+7. Launch terminal/files/toolbelt apps from FORGE.
+8. Lock/logout from the desktop path without losing recovery access.
 
 Longer-term Windows-like polish belongs to later phases:
 
@@ -227,7 +237,7 @@ Build checks:
 
 Manual VM evidence:
 
-- boot reaches graphical login
+- boot reaches the FORGE login screen
 - login reaches FORGE desktop
 - terminal/toolbelt still launch
 - modelruntime remains governed and local
@@ -236,12 +246,13 @@ Manual VM evidence:
 ## Acceptance Criteria
 
 - FORGE-OS boots into a FORGE-branded runtime splash.
-- The first normal interactive screen is a graphical login, not a TTY.
-- Login requires a password.
+- The first normal interactive screen is a FORGE login screen, not a TTY.
+- Login requires a password in the VM UX gate; PAM-backed validation remains a
+  hardening requirement before treating it as a security boundary.
 - Successful login starts the FORGE native desktop session.
 - TTY fallback remains available.
 - Existing manual launch path remains documented as recovery.
-- No autologin is introduced.
+- No display-manager autologin is introduced.
 - No shell-side host mutation path is introduced.
 - No service-control, Nix rebuild, model load/unload, semantic memory write, or
   FORGE-K live authority bypass is introduced.

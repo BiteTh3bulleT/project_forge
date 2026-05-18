@@ -1,6 +1,12 @@
 # FORGE Workstation Substrate
 
-Status: DESIGN_ONLY / PLANNED / NO_LIVE_AUTHORITY_CHANGE
+Status: DESIGN_ONLY / PLANNED_FULL_WORKSTATION / PARTIAL_OPERATOR_VM_SUBSTRATE / NO_LIVE_AUTHORITY_CHANGE
+
+Note: this document describes the future full FORGE Workstation substrate. The
+repository already carries an opt-in operator VM/session substrate and NixOS
+host-envelope modules for local testing. Those pieces do not implement the
+future governed host mutation/proposal flow and do not make FORGE-K live
+authority.
 
 ## Purpose
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -41,6 +42,7 @@ Visibility boundary:
 - Return only the final user-facing answer.
 - If you need to think, do it privately and keep the response concise.
 - Your visible name is FORGE. Never identify as Phi, ChatGPT, Claude, an Ollama model, or the underlying model family.
+- Do not use rigid filler such as "AFFIRMATIVE", "awaiting a functional directive", or "provide the artifact/goal/output" unless the operator specifically asks for a formal intake form.
 - Do not continue the transcript, invent USER/YOU turns, or append synthetic prompts.`
 
 const chatOperationalGroundingGuard = `
@@ -88,9 +90,20 @@ Operational constraints:
 func (s *Server) chatOperatorSystemPrompt() string {
 	override := strings.TrimSpace(loadSetting(s.st.DB, "chat_personality_prompt", ""))
 	if override != "" {
-		return override + chatOperationalGroundingGuard + chatAssistantVisibilityGuard
+		return appendChatPromptGuards(override)
 	}
-	return defaultChatOperatorSystemPrompt() + chatAssistantVisibilityGuard
+	return appendChatPromptGuards(defaultChatOperatorSystemPrompt())
+}
+
+func appendChatPromptGuards(prompt string) string {
+	prompt = strings.TrimSpace(prompt)
+	if !strings.Contains(prompt, "Operational grounding:") {
+		prompt += chatOperationalGroundingGuard
+	}
+	if !strings.Contains(prompt, "Visibility boundary:") {
+		prompt += chatAssistantVisibilityGuard
+	}
+	return strings.TrimSpace(prompt)
 }
 
 func (s *Server) buildChatPrompt(ctx context.Context, th *chat.ThreadDetail) string {
@@ -432,7 +445,7 @@ func (s *Server) resolveAttachmentMetadata(ctx context.Context, threadID int64, 
 		seen[id] = struct{}{}
 		art, err := s.artifacts.GetByID(ctx, id)
 		if err != nil {
-			if err == sql.ErrNoRows {
+			if errors.Is(err, sql.ErrNoRows) {
 				return nil, fmt.Errorf("attachment %d not found", id)
 			}
 			return nil, err
@@ -513,7 +526,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 	if len(body.AttachmentArtifactIDs) > 0 {
 		attachments, err := s.resolveAttachmentMetadata(ctx, threadID, body.AttachmentArtifactIDs)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIRequestError(w, http.StatusBadRequest, err)
 			return
 		}
 		if len(attachments) > 0 {
@@ -522,7 +535,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 	}
 	um, err := s.chat.AppendMessage(ctx, threadID, "user", body.Content, userMeta)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	_ = s.log.Emit(ctx, "chat.message.user", map[string]any{"threadId": threadID, "messageId": um.ID})
@@ -625,7 +638,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 
 	th, err := s.chat.GetThread(ctx, threadID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	if am, handled := s.maybeRespondHyperlaneNoModel(ctx, threadID, um.ID, um.Content); handled {
@@ -1151,7 +1164,7 @@ func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Reques
 
 	th, err := s.chat.GetThread(ctx, threadID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeAPIRequestError(w, http.StatusNotFound, err)
 		return
 	}
 	found := false

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -81,7 +82,7 @@ FROM retrieval_result_observations
 WHERE retrieval_result_id = ?
 ORDER BY created_at DESC, observation_id DESC
 LIMIT 1`, resultID).Scan(&obsID)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

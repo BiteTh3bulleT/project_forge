@@ -74,6 +74,182 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *Server) handleDetailedHealth(w http.ResponseWriter, r *http.Request) {
+	services := map[string]map[string]any{
+		"storage":      s.storageHealth(r),
+		"modelruntime": s.modelRuntimeHealth(r, "health.detailed"),
+		"gateway":      s.gatewayHealth(),
+		"hostbridge":   s.hostBridgeHealth(),
+		"forgekshadow": s.forgeKShadowHealth(),
+		"dream":        s.dreamHealth(),
+		"autonomy":     s.autonomyHealth(),
+	}
+	ok := detailedHealthOK(services)
+	healthState := "ok"
+	if !ok {
+		healthState = "degraded"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":          ok,
+		"service":     "forge-core",
+		"healthState": healthState,
+		"services":    services,
+	})
+}
+
+func (s *Server) storageHealth(r *http.Request) map[string]any {
+	if s == nil || s.st == nil || s.st.DB == nil {
+		return map[string]any{
+			"ok":        false,
+			"available": false,
+			"status":    "unavailable",
+		}
+	}
+	if err := s.st.DB.PingContext(r.Context()); err != nil {
+		return map[string]any{
+			"ok":        false,
+			"available": true,
+			"status":    "degraded",
+			"reason":    "ping_failed",
+		}
+	}
+	return map[string]any{
+		"ok":             true,
+		"available":      true,
+		"status":         "ok",
+		"truthAuthority": true,
+	}
+}
+
+func (s *Server) modelRuntimeHealth(r *http.Request, source string) map[string]any {
+	if s == nil || s.modelRuntime == nil {
+		return map[string]any{
+			"ok":        false,
+			"available": false,
+			"status":    "unavailable",
+		}
+	}
+	meta := modelRuntimeMetaFromRequestAudit(requestAuditMetaForBackup(r, "", "", "", source))
+	health, err := s.modelRuntime.Health(r.Context(), meta)
+	if err != nil {
+		return map[string]any{
+			"ok":        false,
+			"available": true,
+			"status":    "degraded",
+			"reason":    "health_probe_failed",
+		}
+	}
+	status := health.Status
+	if status == "" {
+		if health.OK {
+			status = "ok"
+		} else {
+			status = "degraded"
+		}
+	}
+	return map[string]any{
+		"ok":              health.OK,
+		"available":       true,
+		"status":          status,
+		"backend":         health.Backend,
+		"runtimeEnabled":  health.RuntimeEnabled,
+		"gpuAware":        health.GPUAware,
+		"degradedReasons": append([]string(nil), health.DegradedReasons...),
+		"policyWarnings":  append([]string(nil), health.PolicyWarnings...),
+	}
+}
+
+func (s *Server) gatewayHealth() map[string]any {
+	if s == nil || s.gateway == nil {
+		return map[string]any{
+			"ok":        false,
+			"available": false,
+			"status":    "unavailable",
+		}
+	}
+	out := map[string]any{
+		"ok":        true,
+		"available": true,
+		"status":    "ok",
+	}
+	if !s.capStoreOK {
+		out["status"] = "degraded"
+		out["ok"] = false
+		out["reason"] = "capability_override_store_unavailable"
+	}
+	return out
+}
+
+func (s *Server) hostBridgeHealth() map[string]any {
+	return map[string]any{
+		"ok":                true,
+		"available":         true,
+		"status":            "read_only_available",
+		"mutationAuthority": false,
+	}
+}
+
+func (s *Server) forgeKShadowHealth() map[string]any {
+	enabled := s != nil && s.forgeKShadow != nil && s.forgeKShadow.Enabled()
+	status := "disabled"
+	if enabled {
+		status = "enabled"
+	}
+	return map[string]any{
+		"ok":            true,
+		"available":     enabled,
+		"status":        status,
+		"liveAuthority": false,
+	}
+}
+
+func (s *Server) dreamHealth() map[string]any {
+	available := s != nil && s.dream != nil
+	status := "not_configured"
+	if available {
+		status = "configured"
+	}
+	return map[string]any{
+		"ok":           true,
+		"available":    available,
+		"status":       status,
+		"proposalOnly": true,
+	}
+}
+
+func (s *Server) autonomyHealth() map[string]any {
+	if s == nil || s.autonomy == nil {
+		return map[string]any{
+			"ok":        true,
+			"available": false,
+			"status":    "not_configured",
+		}
+	}
+	status := s.autonomy.Status()
+	state := "configured"
+	if status.SweepActive {
+		state = "sweep_active"
+	} else if status.Active {
+		state = "dream_active"
+	}
+	return map[string]any{
+		"ok":          true,
+		"available":   true,
+		"status":      state,
+		"active":      status.Active,
+		"sweepActive": status.SweepActive,
+	}
+}
+
+func detailedHealthOK(services map[string]map[string]any) bool {
+	for _, service := range services {
+		if ok, present := service["ok"].(bool); present && !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"dataDir":      s.cfg.DataDir,
@@ -87,7 +263,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	rows, err := s.log.Recent(ctx, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"events": rows})

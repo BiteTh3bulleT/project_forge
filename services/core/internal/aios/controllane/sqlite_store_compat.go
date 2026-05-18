@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -88,7 +89,7 @@ FROM state_items
 WHERE workspace_id = ? AND lane_id = ? AND key = ?`,
 		scope.WorkspaceID, scope.LaneID, state.Key,
 	).Scan(&currentID, &currentVersion, &previousValueRaw)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 	prev := map[string]any{}

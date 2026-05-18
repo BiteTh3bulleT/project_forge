@@ -27,7 +27,9 @@ Phase 13H adds Redis boundary flags for future ephemeral coordination. `FORGE_RE
 
 The Docker core enables the governed model runtime surface by default and points Ollama discovery at host Ollama through `http://host.docker.internal:11434`. If Ollama is not running or has no local models, FORGE remains healthy and the model runtime reports degraded backend health instead of disappearing from the API surface.
 
-Docker sets `FORGE_CORE_BIND_HOST=0.0.0.0` and `FORGE_ALLOW_WILDCARD_BIND=true` inside the core container so the published container port can reach the process. Direct Go and NixOS service runs default to `127.0.0.1`, and wildcard binds fail closed unless explicitly opted in.
+The Compose development stack keeps `FORGE_CORE_BIND_HOST=0.0.0.0` available for container port publishing and explicitly sets `FORGE_ALLOW_WILDCARD_BIND=true` for that container-internal listener. Host exposure is controlled separately by `FORGE_DOCKER_BIND_HOST`, which defaults to `127.0.0.1`. That wildcard bind is still auth-gated: `/api/*`, `/forge/*`, and enabled `/v1/*` require `Authorization: Bearer <token>`, while `/health` remains public. Direct Go, raw Docker image, and NixOS service runs default to `127.0.0.1`, and wildcard binds fail closed unless explicitly opted in and an API token is available.
+
+The standalone `services/core/Dockerfile` no longer defaults to wildcard bind. Compose is the explicit development-network profile that opts into wildcard binding, local CORS for browser development, and token-backed API access.
 
 Compose binds host-published ports to `127.0.0.1` by default through `FORGE_DOCKER_BIND_HOST`. This keeps the core, browser-served desktop, managed data services, and optional provider sidecars local to the host even though containers still communicate over the Compose network. Set `FORGE_DOCKER_BIND_HOST=0.0.0.0` only when you intentionally expose these development services through a firewall or private lab network.
 
@@ -81,6 +83,8 @@ npm run docker:desktop
 ```
 
 The helper starts Postgres, Redis, Qdrant, and the Go core through Docker, then launches the native Tauri shell with `VITE_FORGE_API_URL` pointed at the Docker-published core URL.
+
+When `FORGE_API_TOKEN` is not already set, the native desktop helper creates an ignored local token at `.forge/docker-api-token`, passes it to the Docker core, and exposes the same process environment to Tauri. The desktop reads that token through its native command path and sends a backend-verified bearer header; it does not rely on `sessionStorage` as API authority.
 
 If `desktop-web` was already started by `npm run docker:web`, the helper stops only that browser-served container before launching native Tauri. This frees the shared Vite/Tauri development port `1420` without stopping the Docker-backed core or data services.
 

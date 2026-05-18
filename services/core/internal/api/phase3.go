@@ -84,7 +84,7 @@ func (s *Server) handleEmbeddingStatus(w http.ResponseWriter, r *http.Request) {
 	model := strings.TrimSpace(r.URL.Query().Get("model"))
 	status, err := s.embeddings.StatusBySource(r.Context(), provider, model)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	cfg := s.embeddings.CurrentConfig(r.Context())
@@ -116,7 +116,7 @@ func (s *Server) handleReembed(w http.ResponseWriter, r *http.Request) {
 		out, err = s.embeddings.ReembedAll(r.Context(), body.Provider, body.Model)
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	_ = s.log.Emit(r.Context(), "embeddings.reembedded", map[string]any{
@@ -164,7 +164,7 @@ func (s *Server) handleCreateRetrievalRun(w http.ResponseWriter, r *http.Request
 		Notes:           body.Notes,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	_ = s.log.Emit(r.Context(), "retrieval.run.created", map[string]any{"runId": run.ID, "mode": run.Mode, "query": run.Query})
@@ -267,7 +267,7 @@ func (s *Server) handleListRetrievalRuns(w http.ResponseWriter, r *http.Request)
 		runs, err = s.retrieval.ListRuns(r.Context(), limit, dossierID)
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
@@ -281,7 +281,7 @@ func (s *Server) handleGetRetrievalRun(w http.ResponseWriter, r *http.Request) {
 	}
 	run, err := s.retrieval.GetRun(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeAPIRequestError(w, http.StatusNotFound, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"run": run})
@@ -295,7 +295,7 @@ func (s *Server) handleGetRetrievalRunVSASignals(w http.ResponseWriter, r *http.
 	}
 	signals, err := s.memory.RetrievalRunVSASignals(r.Context(), runID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"signals": signals})
@@ -309,11 +309,11 @@ func (s *Server) handleGetRetrievalResultVSASignal(w http.ResponseWriter, r *htt
 	}
 	signal, err := s.memory.RetrievalResultVSASignal(r.Context(), resultID)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"signal": signal})
@@ -336,7 +336,7 @@ func (s *Server) handleMarkRetrievalUsefulness(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if err := s.retrieval.MarkUsefulness(r.Context(), resultID, body.Label, body.Note, body.JobID, body.PacketID.Value); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "resultId": resultID})
@@ -350,7 +350,7 @@ func (s *Server) handleCreateDossier(w http.ResponseWriter, r *http.Request) {
 	}
 	d, err := s.dossiers.Create(r.Context(), body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"dossier": d})
@@ -360,7 +360,7 @@ func (s *Server) handleListDossiers(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	list, err := s.dossiers.List(r.Context(), limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"dossiers": list})
@@ -374,7 +374,7 @@ func (s *Server) handleGetDossierDetail(w http.ResponseWriter, r *http.Request) 
 	}
 	detail, err := s.dossiers.Detail(r.Context(), id)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeAPIRequestError(w, http.StatusNotFound, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"detail": detail})
@@ -393,7 +393,7 @@ func (s *Server) handleUpdateDossier(w http.ResponseWriter, r *http.Request) {
 	}
 	d, err := s.dossiers.Update(r.Context(), id, body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"dossier": d})
@@ -414,7 +414,7 @@ func (s *Server) handleGenerateDossierBrief(w http.ResponseWriter, r *http.Reque
 	}
 	brief, err := s.dossiers.GenerateBrief(r.Context(), id, body.Notes)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	_, _ = s.artifacts.CreateTextArtifact(r.Context(), artifacts.CreateTextArtifactRequest{
@@ -437,7 +437,7 @@ func (s *Server) handleCreateEvaluation(w http.ResponseWriter, r *http.Request) 
 	}
 	rec, err := s.evals.Save(r.Context(), body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"evaluation": rec})
@@ -448,7 +448,7 @@ func (s *Server) handleListEvaluations(w http.ResponseWriter, r *http.Request) {
 	dossierID := parseOptionalInt(r.URL.Query().Get("dossierId"))
 	list, err := s.evals.List(r.Context(), limit, dossierID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"evaluations": list})
@@ -458,7 +458,7 @@ func (s *Server) handleAdapterMetrics(w http.ResponseWriter, r *http.Request) {
 	dossierID := parseOptionalInt(r.URL.Query().Get("dossierId"))
 	rows, err := s.evals.AdapterMetrics(r.Context(), dossierID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"metrics": rows})
@@ -514,7 +514,7 @@ func (s *Server) cloneJobWithRelation(w http.ResponseWriter, r *http.Request, re
 	}
 	parent, err := s.jobs.Get(r.Context(), parentID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		writeAPIRequestError(w, http.StatusNotFound, err)
 		return
 	}
 	var meta cloneMetadata
@@ -556,7 +556,7 @@ func (s *Server) cloneJobWithRelation(w http.ResponseWriter, r *http.Request, re
 
 	child, err := s.jobs.Create(r.Context(), req)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	changeSummary := map[string]any{
@@ -583,7 +583,7 @@ func (s *Server) cloneJobWithRelation(w http.ResponseWriter, r *http.Request, re
 
 	link, err := s.lineage.Link(r.Context(), parentID, child.ID, relation, changeSummary)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"job": child, "lineage": link, "changeSummary": changeSummary})
@@ -593,7 +593,7 @@ func (s *Server) handleJobLineage(w http.ResponseWriter, r *http.Request) {
 	jobID := strings.TrimSpace(chi.URLParam(r, "id"))
 	line, err := s.lineage.ForJob(r.Context(), jobID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, line)
@@ -607,7 +607,7 @@ func (s *Server) handleCreateImportedExecution(w http.ResponseWriter, r *http.Re
 	}
 	rec, err := s.imports.Create(r.Context(), body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 
@@ -655,7 +655,7 @@ func (s *Server) handleListImportedExecutions(w http.ResponseWriter, r *http.Req
 	dossierID := parseOptionalInt(r.URL.Query().Get("dossierId"))
 	list, err := s.imports.List(r.Context(), limit, dossierID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"imports": list})
@@ -671,7 +671,7 @@ func (s *Server) handleGenerateInsights(w http.ResponseWriter, r *http.Request) 
 	}
 	rows, err := s.insights.Generate(r.Context(), insights.GenerateRequest{DossierID: body.DossierID.Value})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"insights": rows})
@@ -682,7 +682,7 @@ func (s *Server) handleListInsights(w http.ResponseWriter, r *http.Request) {
 	dossierID := parseOptionalInt(r.URL.Query().Get("dossierId"))
 	rows, err := s.insights.List(r.Context(), limit, dossierID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"insights": rows})

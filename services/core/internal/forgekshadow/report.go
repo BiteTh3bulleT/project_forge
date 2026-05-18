@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"forge/projectforge/services/core/internal/forgek/shadowharness"
+	"forge/projectforge/services/core/internal/refvalidation"
 )
 
 type ObservationInput struct {
@@ -22,7 +23,9 @@ type DiagnosticReport struct {
 	RouteEnvelope         *RouteEnvelopeObservation
 	ChatMetadata          *ChatMetadataObservation
 	RetrievalMetadata     *RetrievalMetadataObservation
+	MemoryPalaceMirror    *MemoryPalaceMirrorReport
 	ControlLaneValidation *ControlLaneValidationObservation
+	ContextBundleShadow   *ContextBundleShadowReport
 	Advisory              *ShadowAdvisoryReport
 	StoredAt              time.Time
 }
@@ -164,37 +167,39 @@ type ControlLaneValidationInput struct {
 	LiveAuthorityMigration bool
 	Duration               time.Duration
 	Warnings               []string
+	NormalizedRefs         []refvalidation.ObjectRef
 	Metadata               map[string]any
 }
 
 type ControlLaneValidationObservation struct {
-	ObservationID          string         `json:"observation_id"`
-	ObservedAt             time.Time      `json:"observed_at"`
-	WorkspaceID            string         `json:"workspace_id,omitempty"`
-	RequestID              string         `json:"request_id,omitempty"`
-	CorrelationID          string         `json:"correlation_id,omitempty"`
-	Action                 string         `json:"action"`
-	ValidationKind         string         `json:"validation_kind"`
-	Decision               string         `json:"decision"`
-	Passed                 bool           `json:"passed"`
-	Match                  bool           `json:"match,omitempty"`
-	OperationType          string         `json:"operation_type,omitempty"`
-	NormalizedRefCount     int            `json:"normalized_ref_count,omitempty"`
-	AddedRefCount          int            `json:"added_ref_count,omitempty"`
-	RemovedRefCount        int            `json:"removed_ref_count,omitempty"`
-	UnchangedRefCount      int            `json:"unchanged_ref_count,omitempty"`
-	FailureCount           int            `json:"failure_count,omitempty"`
-	WarningCount           int            `json:"warning_count,omitempty"`
-	MemoryMutation         bool           `json:"memory_mutation"`
-	RuntimeMutation        bool           `json:"runtime_mutation"`
-	ModelRuntimeCall       bool           `json:"model_runtime_call"`
-	EvidenceAdmission      bool           `json:"evidence_admission"`
-	ContextCompilation     bool           `json:"context_compilation"`
-	UserVisibleOutput      bool           `json:"user_visible_output"`
-	LiveAuthorityMigration bool           `json:"live_authority_migration"`
-	DurationMS             int64          `json:"duration_ms"`
-	Warnings               []string       `json:"warnings,omitempty"`
-	Metadata               map[string]any `json:"metadata,omitempty"`
+	ObservationID          string                    `json:"observation_id"`
+	ObservedAt             time.Time                 `json:"observed_at"`
+	WorkspaceID            string                    `json:"workspace_id,omitempty"`
+	RequestID              string                    `json:"request_id,omitempty"`
+	CorrelationID          string                    `json:"correlation_id,omitempty"`
+	Action                 string                    `json:"action"`
+	ValidationKind         string                    `json:"validation_kind"`
+	Decision               string                    `json:"decision"`
+	Passed                 bool                      `json:"passed"`
+	Match                  bool                      `json:"match,omitempty"`
+	OperationType          string                    `json:"operation_type,omitempty"`
+	NormalizedRefCount     int                       `json:"normalized_ref_count,omitempty"`
+	AddedRefCount          int                       `json:"added_ref_count,omitempty"`
+	RemovedRefCount        int                       `json:"removed_ref_count,omitempty"`
+	UnchangedRefCount      int                       `json:"unchanged_ref_count,omitempty"`
+	FailureCount           int                       `json:"failure_count,omitempty"`
+	WarningCount           int                       `json:"warning_count,omitempty"`
+	MemoryMutation         bool                      `json:"memory_mutation"`
+	RuntimeMutation        bool                      `json:"runtime_mutation"`
+	ModelRuntimeCall       bool                      `json:"model_runtime_call"`
+	EvidenceAdmission      bool                      `json:"evidence_admission"`
+	ContextCompilation     bool                      `json:"context_compilation"`
+	UserVisibleOutput      bool                      `json:"user_visible_output"`
+	LiveAuthorityMigration bool                      `json:"live_authority_migration"`
+	DurationMS             int64                     `json:"duration_ms"`
+	Warnings               []string                  `json:"warnings,omitempty"`
+	NormalizedRefs         []refvalidation.ObjectRef `json:"normalized_refs,omitempty"`
+	Metadata               map[string]any            `json:"metadata,omitempty"`
 }
 
 type ShadowAdvisoryReport struct {

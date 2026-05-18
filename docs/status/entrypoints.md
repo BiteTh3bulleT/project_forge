@@ -14,7 +14,7 @@ _Scope: runnable surfaces in the current repo. Observed 2026-05-10._
 | `npm run build:desktop` | `vite build` only | `npm -w @forge/desktop run build` | For release | Does **not** build the Tauri binary. Use `npm -w @forge/desktop run tauri -- build` for that. |
 | Orchestrated up | [scripts/forge-up.sh](../../scripts/forge-up.sh) (via `.mjs` dispatcher) | `npm run up` | Optional | Backgrounds core, waits for `/health`, backgrounds desktop. Writes PIDs to `.forge/run/`. |
 | Orchestrated down | [scripts/forge-down.sh](../../scripts/forge-down.sh) | `npm run down` | Optional | Kills by PID/port. |
-| Smoke test | [scripts/forge-smoke.sh](../../scripts/forge-smoke.sh) (via `.mjs` dispatcher) | `npm run smoke` | Optional | Boots core against an isolated data dir, probes endpoints, tears down. |
+| Smoke test | [scripts/forge-smoke.mjs](../../scripts/forge-smoke.mjs) -> platform smoke script | `npm run smoke` | Optional | Boots core against an isolated data dir, probes endpoints, tears down; uses PowerShell on Windows and shell elsewhere. |
 
 ## Not authoritative / deferred
 

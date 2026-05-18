@@ -207,7 +207,7 @@ export function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const streamEsRef = useRef<EventSource | null>(null);
+  const streamEsRef = useRef<{ close: () => void } | null>(null);
   const streamTokenBufferRef = useRef("");
   const streamTokenFlushTimerRef = useRef<ReturnType<
     typeof window.setTimeout
@@ -675,11 +675,10 @@ export function ChatPage() {
     userMessageId: number,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const url = api.chat.threads.assistantStreamUrl(threadId, userMessageId);
       setStreamingText("");
       setInspectorMode("thinking");
-      const es = new EventSource(url);
-      streamEsRef.current = es;
+      const streamController = new AbortController();
+      streamEsRef.current = { close: () => streamController.abort() };
       setStreamingEvents([]);
       streamTokenBufferRef.current = "";
       if (streamTokenFlushTimerRef.current)
@@ -721,7 +720,7 @@ export function ChatPage() {
       };
 
       const cleanupStream = () => {
-        es.close();
+        streamController.abort();
         streamEsRef.current = null;
         if (streamTokenFlushTimerRef.current)
           window.clearTimeout(streamTokenFlushTimerRef.current);
@@ -752,46 +751,6 @@ export function ChatPage() {
 
       let settled = false;
 
-      es.addEventListener("token", (ev) => {
-        try {
-          const raw = JSON.parse((ev as MessageEvent).data as string) as {
-            text?: string;
-          };
-          const token = typeof raw.text === "string" ? raw.text : "";
-          queueToken(token);
-        } catch {
-          /* ignore malformed token payload */
-        }
-      });
-
-      es.addEventListener("done", (ev) => {
-        try {
-          if (settled) return;
-          settled = true;
-          const raw = JSON.parse((ev as MessageEvent).data as string) as {
-            assistantMessage?: ChatMessage;
-          };
-          es.close();
-          streamEsRef.current = null;
-          flushTokenBuffer();
-          setStreamingText(null);
-          setStreamingEvents([]);
-          const am = raw.assistantMessage;
-          if (am) {
-            setActive((prev) => appendAssistantMessage(prev, threadId, am));
-          }
-          void refreshThreads();
-          resolve();
-        } catch (e) {
-          settled = true;
-          es.close();
-          streamEsRef.current = null;
-          flushTokenBuffer();
-          setStreamingText(null);
-          reject(e);
-        }
-      });
-
       const failOrRecover = (error: Error) => {
         if (settled) return;
         settled = true;
@@ -805,90 +764,142 @@ export function ChatPage() {
         });
       };
 
-      es.addEventListener("error", (ev) => {
-        const data =
-          typeof (ev as MessageEvent).data === "string"
-            ? ((ev as MessageEvent).data as string)
-            : "";
-        if (!data) return;
-        try {
-          const raw = JSON.parse(data) as { message?: string; error?: string };
-          const message =
-            raw.message?.trim() ||
-            raw.error?.trim() ||
-            "Assistant stream failed.";
-          failOrRecover(new Error(message));
-        } catch {
-          failOrRecover(new Error(data));
+      const onStreamEvent = (event: { event: string; data: string }) => {
+        if (event.event === "token") {
+          try {
+            const raw = JSON.parse(event.data) as {
+              text?: string;
+            };
+            const token = typeof raw.text === "string" ? raw.text : "";
+            queueToken(token);
+          } catch {
+            /* ignore malformed token payload */
+          }
+          return;
         }
-      });
 
-      es.onerror = () => {
-        failOrRecover(new Error("Assistant stream disconnected."));
+        if (event.event === "done") {
+          try {
+            if (settled) return;
+            settled = true;
+            const raw = JSON.parse(event.data) as {
+              assistantMessage?: ChatMessage;
+            };
+            streamEsRef.current = null;
+            flushTokenBuffer();
+            setStreamingText(null);
+            setStreamingEvents([]);
+            const am = raw.assistantMessage;
+            if (am) {
+              setActive((prev) => appendAssistantMessage(prev, threadId, am));
+            }
+            void refreshThreads();
+            resolve();
+          } catch (e) {
+            settled = true;
+            streamEsRef.current = null;
+            flushTokenBuffer();
+            setStreamingText(null);
+            reject(e);
+          }
+          return;
+        }
+
+        if (event.event === "error") {
+          const data = event.data;
+          if (!data) {
+            return;
+          }
+          try {
+            const raw = JSON.parse(data) as { message?: string; error?: string };
+            const message =
+              raw.message?.trim() ||
+              raw.error?.trim() ||
+              "Assistant stream failed.";
+            failOrRecover(new Error(message));
+          } catch {
+            failOrRecover(new Error(data));
+          }
+          return;
+        }
+
+        if (event.event === "agent_stage") {
+          try {
+            const raw = JSON.parse(event.data) as Record<string, unknown>;
+            const stage = typeof raw.stage === "string" ? raw.stage : "stage";
+            const at = typeof raw.atMs === "number" ? raw.atMs : Date.now();
+            pushThinkingEvent({
+              at,
+              kind: "stage",
+              text: formatThinkingStage(stage),
+              detail: compactThinkingDetail(raw),
+              data: raw,
+            });
+          } catch {
+            /* ignore malformed stage payload */
+          }
+          return;
+        }
+
+        if (event.event === "tool_call") {
+          try {
+            const raw = JSON.parse(event.data) as Record<string, unknown>;
+            const modelName =
+              typeof raw.modelName === "string" ? raw.modelName : "tool";
+            const at = Date.now();
+            pushThinkingEvent({
+              at,
+              kind: "call",
+              text: `Tool call: ${modelName}`,
+              detail: compactThinkingDetail(raw),
+              data: raw,
+            });
+          } catch {
+            /* ignore malformed tool_call payload */
+          }
+          return;
+        }
+
+        if (event.event === "tool_result") {
+          try {
+            const raw = JSON.parse(event.data) as Record<string, unknown>;
+            const modelName =
+              typeof raw.modelName === "string" ? raw.modelName : "tool";
+            const state = typeof raw.state === "string" ? raw.state : "unknown";
+            const at = Date.now();
+            pushThinkingEvent({
+              at,
+              kind: "result",
+              text: `Tool result: ${modelName}`,
+              detail: `state: ${state}${compactThinkingDetail(raw) ? ` · ${compactThinkingDetail(raw)}` : ""}`,
+              data: raw,
+            });
+          } catch {
+            /* ignore malformed tool_result payload */
+          }
+        }
       };
 
-      es.addEventListener("agent_stage", (ev) => {
-        try {
-          const raw = JSON.parse((ev as MessageEvent).data as string) as Record<
-            string,
-            unknown
-          >;
-          const stage = typeof raw.stage === "string" ? raw.stage : "stage";
-          const at = typeof raw.atMs === "number" ? raw.atMs : Date.now();
-          pushThinkingEvent({
-            at,
-            kind: "stage",
-            text: formatThinkingStage(stage),
-            detail: compactThinkingDetail(raw),
-            data: raw,
-          });
-        } catch {
-          /* ignore malformed stage payload */
-        }
-      });
-
-      es.addEventListener("tool_call", (ev) => {
-        try {
-          const raw = JSON.parse((ev as MessageEvent).data as string) as Record<
-            string,
-            unknown
-          >;
-          const modelName =
-            typeof raw.modelName === "string" ? raw.modelName : "tool";
-          const at = Date.now();
-          pushThinkingEvent({
-            at,
-            kind: "call",
-            text: `Tool call: ${modelName}`,
-            detail: compactThinkingDetail(raw),
-            data: raw,
-          });
-        } catch {
-          /* ignore malformed tool_call payload */
-        }
-      });
-
-      es.addEventListener("tool_result", (ev) => {
-        try {
-          const raw = JSON.parse((ev as MessageEvent).data as string) as Record<
-            string,
-            unknown
-          >;
-          const modelName =
-            typeof raw.modelName === "string" ? raw.modelName : "tool";
-          const state = typeof raw.state === "string" ? raw.state : "unknown";
-          const at = Date.now();
-          pushThinkingEvent({
-            at,
-            kind: "result",
-            text: `Tool result: ${modelName}`,
-            detail: `state: ${state}${compactThinkingDetail(raw) ? ` · ${compactThinkingDetail(raw)}` : ""}`,
-            data: raw,
-          });
-        } catch {
-          /* ignore malformed tool_result payload */
-        }
-      });
+      void api.chat.threads
+        .assistantStream(
+          threadId,
+          userMessageId,
+          onStreamEvent,
+          streamController.signal,
+        )
+        .then(() => {
+          if (!settled && !streamController.signal.aborted) {
+            failOrRecover(new Error("Assistant stream ended before completion."));
+          }
+        })
+        .catch((error) => {
+          if (streamController.signal.aborted) return;
+          failOrRecover(
+            error instanceof Error
+              ? error
+              : new Error("Assistant stream disconnected."),
+          );
+        });
     });
   }
 

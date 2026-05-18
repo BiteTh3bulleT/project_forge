@@ -1,0 +1,15 @@
+---
+description: FORGE-K online migration rules
+alwaysApply: true
+---
+
+# FORGE-K Online Rules
+
+- Read AGENTS.md before implementation.
+- Execute one phase only.
+- Do not output code in chat; modify files.
+- Do not import simulator services into live authority paths.
+- Do not bypass gateway, permissions, lanes, approvals, audit, modelruntime governance, or NixOS substrate controls.
+- Add tests with behavior changes.
+- Update docs/status with authority impact.
+- Produce validation evidence.

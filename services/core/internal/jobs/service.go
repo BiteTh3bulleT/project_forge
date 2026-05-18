@@ -2,9 +2,7 @@ package jobs
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -63,10 +61,12 @@ type Service struct {
 	gateway      *gateway.Gateway
 	workspaceDir string
 
-	queue     chan string
-	stop      chan struct{}
-	wg        sync.WaitGroup
-	closeOnce sync.Once
+	queue      chan string
+	stop       chan struct{}
+	wg         sync.WaitGroup
+	closeOnce  sync.Once
+	rootCtx    context.Context
+	cancelRoot context.CancelFunc
 
 	mu          sync.Mutex
 	cancelFuncs map[string]context.CancelFunc
@@ -99,6 +99,7 @@ type Dependencies struct {
 }
 
 func NewService(dep Dependencies) *Service {
+	rootCtx, cancelRoot := context.WithCancel(context.Background())
 	s := &Service{
 		db:           dep.DB,
 		log:          dep.Logger,
@@ -114,8 +115,11 @@ func NewService(dep Dependencies) *Service {
 		workspaceDir: dep.WorkspaceDir,
 		queue:        make(chan string, 256),
 		stop:         make(chan struct{}),
+		rootCtx:      rootCtx,
+		cancelRoot:   cancelRoot,
 		cancelFuncs:  map[string]context.CancelFunc{},
 	}
+	_ = s.recoverInterruptedJobs(context.Background())
 	s.wg.Add(1)
 	go s.worker()
 	return s
@@ -123,6 +127,10 @@ func NewService(dep Dependencies) *Service {
 
 func (s *Service) Close() {
 	s.closeOnce.Do(func() {
+		if s.cancelRoot != nil {
+			s.cancelRoot()
+		}
+		s.cancelRunning()
 		close(s.stop)
 		s.wg.Wait()
 	})
@@ -210,8 +218,10 @@ INSERT INTO jobs(
 func (s *Service) Enqueue(jobID string) {
 	select {
 	case s.queue <- jobID:
+	case <-s.stop:
+		return
 	default:
-		go func() { s.queue <- jobID }()
+		_, _ = s.appendEvent(context.Background(), jobID, "job.queue.full", "Job queue is full; job remains queued for recovery", map[string]any{})
 	}
 }
 
@@ -229,8 +239,63 @@ func (s *Service) worker() {
 	}
 }
 
+func (s *Service) cancelRunning() {
+	s.mu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(s.cancelFuncs))
+	for _, cancel := range s.cancelFuncs {
+		if cancel != nil {
+			cancels = append(cancels, cancel)
+		}
+	}
+	s.mu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
+}
+
+func (s *Service) recoverInterruptedJobs(ctx context.Context) error {
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, status
+FROM jobs
+WHERE status IN (?, ?, ?)`,
+		string(StatusQueued),
+		string(StatusPreparing),
+		string(StatusRunning),
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	type candidate struct {
+		id     string
+		status Status
+	}
+	var candidates []candidate
+	for rows.Next() {
+		var c candidate
+		if err := rows.Scan(&c.id, &c.status); err != nil {
+			return err
+		}
+		candidates = append(candidates, c)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, c := range candidates {
+		switch c.status {
+		case StatusQueued:
+			_, _ = s.appendEventIfMissing(ctx, c.id, "job.recovered", "Queued job recovered on startup", map[string]any{"fromStatus": c.status})
+			s.Enqueue(c.id)
+		case StatusPreparing, StatusRunning:
+			_ = s.fail(ctx, c.id, FailInterrupted, "Job interrupted by prior shutdown; operator retry required")
+			_, _ = s.appendEventIfMissing(ctx, c.id, "job.recovered", "Interrupted job reconciled on startup", map[string]any{"fromStatus": c.status, "recoverable": true})
+		}
+	}
+	return nil
+}
+
 func (s *Service) process(jobID string) error {
-	ctx := context.Background()
+	ctx := s.context()
 	job, err := s.Get(ctx, jobID)
 	if err != nil {
 		return err
@@ -296,29 +361,37 @@ func (s *Service) process(jobID string) error {
 	}
 	_, _ = s.appendEvent(ctx, jobID, "job.started", "Execution started", map[string]any{"templateId": tpl.ID})
 
-	runCtx, cancel := context.WithCancel(context.Background())
+	runCtx, cancel := context.WithCancel(ctx)
 	s.setCancel(jobID, cancel)
 	defer s.clearCancel(jobID)
 
 	resultSummary, err := s.execute(runCtx, jobID, job, meta, tpl, packet)
 	if err != nil {
+		commitCtx := context.WithoutCancel(ctx)
 		if errors.Is(err, errExecutionDeferred) {
 			return nil
 		}
 		if errors.Is(err, context.Canceled) {
-			return s.markCancelled(context.Background(), jobID, FailUserCancellation, "Execution cancelled")
+			return s.markCancelled(commitCtx, jobID, FailUserCancellation, "Execution cancelled")
 		}
 		var ex executionError
 		if errors.As(err, &ex) {
-			return s.fail(context.Background(), jobID, ex.Code, ex.Message)
+			return s.fail(commitCtx, jobID, ex.Code, ex.Message)
 		}
-		return s.fail(context.Background(), jobID, FailExecution, err.Error())
+		return s.fail(commitCtx, jobID, FailExecution, err.Error())
 	}
 
-	if err := s.complete(context.Background(), jobID, resultSummary); err != nil {
+	if err := s.complete(context.WithoutCancel(ctx), jobID, resultSummary); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (s *Service) context() context.Context {
+	if s.rootCtx != nil {
+		return s.rootCtx
+	}
+	return context.Background()
 }
 
 func (s *Service) execute(ctx context.Context, jobID string, job *Job, meta jobMetadata, tpl Template, packet *packets.Packet) (string, error) {
@@ -1013,8 +1086,22 @@ func (s *Service) appendEvent(ctx context.Context, jobID, typ, message string, p
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
-	_ = s.log.Emit(ctx, typ, map[string]any{"jobId": jobID, "message": message, "payload": payload, "eventId": id})
+	if s.log != nil {
+		_ = s.log.Emit(ctx, typ, map[string]any{"jobId": jobID, "message": message, "payload": payload, "eventId": id})
+	}
 	return &JobEvent{ID: id, JobID: jobID, CreatedAtMs: now, Type: typ, Message: message, Payload: b}, nil
+}
+
+func (s *Service) appendEventIfMissing(ctx context.Context, jobID, typ, message string, payload map[string]any) (*JobEvent, error) {
+	var id int64
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM job_events WHERE job_id = ? AND type = ? ORDER BY id ASC LIMIT 1`, jobID, typ).Scan(&id)
+	if err == nil {
+		return nil, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	return s.appendEvent(ctx, jobID, typ, message, payload)
 }
 
 func (s *Service) setApprovalStatus(ctx context.Context, jobID string, st ApprovalStatus) error {
@@ -1038,16 +1125,18 @@ func (s *Service) complete(ctx context.Context, jobID, summary string) error {
 	if s.retrieval != nil {
 		_ = s.retrieval.RecordOutcome(ctx, jobID, "succeeded")
 	}
-	_, _ = s.artifacts.CreateTextArtifact(ctx, artifacts.CreateTextArtifactRequest{
-		JobID:    &jobID,
-		Type:     "job_result",
-		Title:    "Job result summary",
-		FileName: fmt.Sprintf("job-result-%s.md", jobID),
-		Subdir:   "results",
-		Content:  "# Job Result\n\n" + summary + "\n",
-		MimeType: "text/markdown",
-		Metadata: map[string]any{"jobId": jobID},
-	})
+	if s.artifacts != nil {
+		_, _ = s.artifacts.CreateTextArtifact(ctx, artifacts.CreateTextArtifactRequest{
+			JobID:    &jobID,
+			Type:     "job_result",
+			Title:    "Job result summary",
+			FileName: fmt.Sprintf("job-result-%s.md", jobID),
+			Subdir:   "results",
+			Content:  "# Job Result\n\n" + summary + "\n",
+			MimeType: "text/markdown",
+			Metadata: map[string]any{"jobId": jobID},
+		})
+	}
 	return nil
 }
 
@@ -1082,16 +1171,18 @@ WHERE id = ?`,
 	if s.retrieval != nil {
 		_ = s.retrieval.RecordOutcome(ctx, jobID, "failed")
 	}
-	_, _ = s.artifacts.CreateTextArtifact(ctx, artifacts.CreateTextArtifactRequest{
-		JobID:    &jobID,
-		Type:     "error_report",
-		Title:    "Job failure report",
-		FileName: fmt.Sprintf("job-error-%s.md", jobID),
-		Subdir:   "errors",
-		Content:  fmt.Sprintf("# Job Failure\n\nCode: `%s`\n\nMessage: %s\n", code, message),
-		MimeType: "text/markdown",
-		Metadata: map[string]any{"jobId": jobID, "failureCode": code},
-	})
+	if s.artifacts != nil {
+		_, _ = s.artifacts.CreateTextArtifact(ctx, artifacts.CreateTextArtifactRequest{
+			JobID:    &jobID,
+			Type:     "error_report",
+			Title:    "Job failure report",
+			FileName: fmt.Sprintf("job-error-%s.md", jobID),
+			Subdir:   "errors",
+			Content:  fmt.Sprintf("# Job Failure\n\nCode: `%s`\n\nMessage: %s\n", code, message),
+			MimeType: "text/markdown",
+			Metadata: map[string]any{"jobId": jobID, "failureCode": code},
+		})
+	}
 	return nil
 }
 
@@ -1143,310 +1234,4 @@ func (s *Service) jobMetadata(ctx context.Context, jobID string) (jobMetadata, e
 		return jobMetadata{}, err
 	}
 	return meta, nil
-}
-
-func toAdapterScope(s ScopeInput) adapters.Scope {
-	return adapters.Scope{AllowedPaths: s.AllowedPaths, ForbiddenPaths: s.ForbiddenPaths, SelectedPaths: s.SelectedPaths}
-}
-
-func adapterContent(res adapters.InvokeResult, tpl Template) (content string, title string) {
-	title = fmt.Sprintf("%s output", tpl.Name)
-	if handoff, ok := res.Data["handoffMarkdown"].(string); ok && strings.TrimSpace(handoff) != "" {
-		return handoff, title
-	}
-	if response, ok := res.Data["response"].(string); ok && strings.TrimSpace(response) != "" {
-		return "# Adapter Response\n\n" + response + "\n", title
-	}
-	b, _ := json.MarshalIndent(res.Data, "", "  ")
-	return "```json\n" + string(b) + "\n```\n", title
-}
-
-func packetID(p *packets.Packet) *int64 {
-	if p == nil {
-		return nil
-	}
-	v := p.ID
-	return &v
-}
-
-func scanJob(scanner interface{ Scan(dest ...any) error }) (*Job, error) {
-	var j Job
-	var status, risk, approval string
-	var writeIntent, cancelReq int
-	var queued, started, completed sql.NullInt64
-	var packetID sql.NullInt64
-	var resultSummary, failureInfo, lastError, lastFailureCode sql.NullString
-	var metadata string
-	if err := scanner.Scan(
-		&j.ID,
-		&j.Title,
-		&j.RequestedAction,
-		&j.TargetAdapter,
-		&status,
-		&j.CreatedAtMs,
-		&j.UpdatedAtMs,
-		&queued,
-		&started,
-		&completed,
-		&j.InitiatingSource,
-		&j.ExecutionBoundary,
-		&risk,
-		&approval,
-		&writeIntent,
-		&cancelReq,
-		&packetID,
-		&resultSummary,
-		&failureInfo,
-		&lastFailureCode,
-		&lastError,
-		&metadata,
-	); err != nil {
-		return nil, err
-	}
-	j.Status = Status(status)
-	j.RiskClass = RiskClass(risk)
-	j.ApprovalStatus = ApprovalStatus(approval)
-	j.WriteIntent = writeIntent == 1
-	j.CancelRequested = cancelReq == 1
-	if queued.Valid {
-		v := queued.Int64
-		j.QueuedAtMs = &v
-	}
-	if started.Valid {
-		v := started.Int64
-		j.StartedAtMs = &v
-	}
-	if completed.Valid {
-		v := completed.Int64
-		j.CompletedAtMs = &v
-	}
-	if packetID.Valid {
-		v := packetID.Int64
-		j.TaskPacketID = &v
-	}
-	if resultSummary.Valid {
-		v := resultSummary.String
-		j.ResultSummary = &v
-	}
-	if failureInfo.Valid {
-		v := failureInfo.String
-		j.FailureInfo = &v
-	}
-	if lastError.Valid {
-		v := lastError.String
-		j.LastError = &v
-	}
-	if lastFailureCode.Valid {
-		fc := FailureCode(lastFailureCode.String)
-		j.LastFailureCode = &fc
-	}
-	j.Metadata = json.RawMessage(metadata)
-	return &j, nil
-}
-
-func isTerminal(s Status) bool {
-	return s == StatusSucceeded || s == StatusFailed || s == StatusCancelled
-}
-
-func boolToInt(v bool) int {
-	if v {
-		return 1
-	}
-	return 0
-}
-
-func newJobID() string {
-	var b [6]byte
-	_, _ = rand.Read(b[:])
-	return fmt.Sprintf("job_%d_%s", time.Now().UnixMilli(), hex.EncodeToString(b[:]))
-}
-
-func nonEmpty(v, def string) string {
-	if strings.TrimSpace(v) == "" {
-		return def
-	}
-	return strings.TrimSpace(v)
-}
-
-func nonNilMap(v map[string]any) map[string]any {
-	if v == nil {
-		return map[string]any{}
-	}
-	return v
-}
-
-func readString(m map[string]any, key string) string {
-	if m == nil {
-		return ""
-	}
-	v, ok := m[key]
-	if !ok {
-		return ""
-	}
-	s, ok := v.(string)
-	if !ok {
-		return ""
-	}
-	return s
-}
-
-func readBool(m map[string]any, key string, def bool) bool {
-	if m == nil {
-		return def
-	}
-	v, ok := m[key]
-	if !ok {
-		return def
-	}
-	b, ok := v.(bool)
-	if !ok {
-		return def
-	}
-	return b
-}
-
-func readMap(m map[string]any, key string) map[string]any {
-	if m == nil {
-		return map[string]any{}
-	}
-	v, ok := m[key]
-	if !ok || v == nil {
-		return map[string]any{}
-	}
-	switch t := v.(type) {
-	case map[string]any:
-		return t
-	case map[string]string:
-		out := make(map[string]any, len(t))
-		for k, v := range t {
-			out[k] = v
-		}
-		return out
-	default:
-		return map[string]any{}
-	}
-}
-
-func readStringSlice(m map[string]any, key string) []string {
-	if m == nil {
-		return nil
-	}
-	v, ok := m[key]
-	if !ok || v == nil {
-		return nil
-	}
-	switch t := v.(type) {
-	case []string:
-		out := make([]string, 0, len(t))
-		for _, s := range t {
-			s = strings.TrimSpace(s)
-			if s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	case []any:
-		out := make([]string, 0, len(t))
-		for _, item := range t {
-			if s, ok := item.(string); ok {
-				s = strings.TrimSpace(s)
-				if s != "" {
-					out = append(out, s)
-				}
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
-func readInt(m map[string]any, key string, def int64) int64 {
-	if m == nil {
-		return def
-	}
-	v, ok := m[key]
-	if !ok {
-		return def
-	}
-	switch t := v.(type) {
-	case float64:
-		return int64(t)
-	case int64:
-		return t
-	case int:
-		return int64(t)
-	case json.Number:
-		n, err := t.Int64()
-		if err == nil {
-			return n
-		}
-	}
-	return def
-}
-
-func readFloat(m map[string]any, key string, def float64) float64 {
-	if m == nil {
-		return def
-	}
-	v, ok := m[key]
-	if !ok {
-		return def
-	}
-	switch t := v.(type) {
-	case float64:
-		return t
-	case float32:
-		return float64(t)
-	case int64:
-		return float64(t)
-	case int:
-		return float64(t)
-	case json.Number:
-		f, err := t.Float64()
-		if err == nil {
-			return f
-		}
-	}
-	return def
-}
-
-func readOptionalInt(m map[string]any, key string) *int64 {
-	if m == nil {
-		return nil
-	}
-	v, ok := m[key]
-	if !ok {
-		return nil
-	}
-	var out int64
-	switch t := v.(type) {
-	case float64:
-		out = int64(t)
-	case float32:
-		out = int64(t)
-	case int:
-		out = int64(t)
-	case int64:
-		out = t
-	case json.Number:
-		i, err := t.Int64()
-		if err != nil {
-			return nil
-		}
-		out = i
-	default:
-		return nil
-	}
-	if out <= 0 {
-		return nil
-	}
-	return &out
-}
-
-func derefInt64(v *int64) int64 {
-	if v == nil {
-		return 0
-	}
-	return *v
 }

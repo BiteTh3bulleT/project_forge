@@ -1,0 +1,56 @@
+🟠 HIGH — fix before next milestone
+Status: 2026-05-17 follow-up commits landed on main:
+- 3cf6e50 Harden M5S high-priority surfaces
+- d5de95a Tighten runtime cancellation and command execution
+- 979f709 Close storage and readiness punchlist gaps
+
+Security
+[DONE] Discord webhook Ed25519 signature verification added for configured Discord public keys. Telegram + Discord still share one remote_access_token.
+[DONE] /api/settings/ollama-models?baseUrl= explicit overrides now reject unsafe hosts before HTTP.
+[PARTIAL] Newly updated remote/Telegram/Discord secrets persist through encrypted secrets_vault. Broader API/OpenAI/TEI/keychain migration remains open.
+[DONE] code.patch_code and service_process.go subprocess creation now route through centralized gateway command helpers with secret-bearing env scrubbing.
+Bearer token has no rotation, no revocation, no per-actor distinction. Lives at ${FORGE_DATA_DIR}/auth/api_token (mode 0o600), but cannot be rotated without daemon restart.
+[DONE] Approval decisions now require separate approval authority from the request/initiation authority.
+[DONE] Length-prefix timing leak in bearer and remote token comparisons closed with fixed-length hash compares.
+[DONE] Gateway invoke ignores body Initiator/ProvenanceActor for audit authority and uses authenticated context.
+[DONE] chi middleware.Logger replaced with path-only request logging.
+Code quality
+[DONE] watch/manager.go debounce timer/context now cancels on Close().
+[DONE] jobs.Service.process now derives process/execution context from service root cancellation.
+[DONE] SSE token callbacks now check request cancellation and skip final flush on client disconnect.
+[DONE] Direct sql.ErrNoRows equality comparisons under services/core/internal replaced with errors.Is.
+[DONE] SQLite schema_version table added with idempotent non-downgrading initialization.
+Operations
+No installer / no code signing / no auto-update. tauri.conf.json has bundle.targets: "all" with no signing identity, no tauri-plugin-updater. Windows SmartScreen/macOS Gatekeeper block unsigned bundles. Anything shipped today is unsigned, undistributable, and unpatchable.
+No SQLite online backup. backup.Service is logical JSON-export only. No VACUUM, no WAL checkpoint policy, no sqlite3_backup API call. WAL file will grow unbounded on never-checkpointed deployments.
+[DONE] audit_records and gateway_invocations backup exports are no longer capped at LIMIT 5000.
+[DONE] First-run release readiness seeds default lanes when action_lanes is empty.
+[DONE] placeholders_and_stubs.md refreshed on 2026-05-17 with current prompt-pack archive, dangerous-placeholder, gateway capability, and fake-hash posture.
+Architecture (largely unchanged)
+internal/api is still a 36k-LOC god-package (113 files, 38-field Server struct).
+controllane.Processor still constructed in exactly ONE production file (autonomy_maintenance_loop.go:1242). 5 of 11 controllane importers are read-only status routes. Live mutations bypass the kernel.
+hyperlane_no_model_responder.go still has 14 raw s.st.DB.QueryRowContext calls (down from 15). Total raw SQL in API package: 29 across 6 files.
+No /api/v1 versioning. New /metrics and /forge/* endpoints went straight onto root.
+NewServer still mixes wiring + side effects (MkdirAll, EnsureDefaults×5, goroutine spawns, shadow-DB open). Got worse — M5S added more bring-up logic.
+[DONE] M5S review note now documents bearer auth, approval authority separation, wildcard bind, structured errors, /health/detailed, gated /metrics, and remaining gaps while preserving FORGE-K simulator/live boundary language.
+Tests (largely unchanged)
+internal/jobs coverage: 1.6% → 16.2%. Real movement, but still very low. Failure-mode tests (timeout, cancellation, adapter error, retry) absent.
+internal/audit coverage frozen at 32.5%. Two weeks of M5S "security lockdown" with no new audit tests is a smell — audit is the primary security forensics surface.
+internal/automation is 4.9%. New worst-coverage package — production rule engine, one bounds test.
+internal/search is no longer zero-test; focused package coverage measured 91.5%. Other zero/low-coverage packages remain open.
+Race detector scope narrow — CI now runs -race only on ./internal/api. Concurrency-rich packages (jobs, modelruntime, gateway, hostbridge, controllane) still unraced.
+Single-OS CI (ubuntu-latest only). Windows-only tests never run on PRs.
+Still no -coverprofile / coverage gate. Regressions invisible.
+Still no MSW for desktop API mocking — every page test stubs ../lib/api whole-module.
+Desktop
+Bundle split improved on 2026-05-17: route/tool pages now load through React.lazy/Suspense and the Vite production main JS chunk is ~312KB, with page chunks emitted separately. CSS remains ~132KB; no manualChunks policy yet.
+39 empty-deps useEffect hooks across 31 files. Still no ESLint.
+Pages still huge: Settings 1498, Models 1466, Chat 1447, Inspectors 1295. Chat partially split into a subdir but the top-level file is still 1447 lines.
+desktopShellStore multi-window race is unmitigated and now more reachable (multi-window operator shell shipped).
+[DONE] Logout clears apiTokenPromise so subsequent calls from the same window re-read auth state.
+[DONE] aria-live is now present for login errors (`assertive`) and shell status (`polite`) with focused Vitest coverage.
+Desktop TODO/stub count jumped 0 → 90 across 31 files in two weeks.
+Operational hygiene
+[DONE] FORGE_M5S_Security_Lockdown_Prompt_Pack.zip, FORGE_M5A_Authority_Convergence_Pack.zip, and their unzipped pack directories are archived under docs/prompt-packs/.
+[DONE] WindoManager.txt archived as docs/superpowers/specs/2026-05-17-forge-desktop-window-manager.md.
+[DONE] Standalone Docker image defaults to loopback; Compose explicitly opts into container-internal wildcard bind while publishing host ports to 127.0.0.1 by default.

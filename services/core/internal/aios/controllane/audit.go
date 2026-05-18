@@ -11,25 +11,28 @@ import (
 )
 
 type SyscallAuditRecord struct {
-	Timestamp                   int64
-	Action                      domain.SemanticActionType
-	Actor                       string
-	Source                      domain.ActionSource
-	WorkspaceID                 string
-	RequestID                   string
-	CorrelationID               string
-	TraceID                     string
-	DryRun                      bool
-	Success                     bool
-	ApprovalStatus              domain.ApprovalStatus
-	ValidationIssues            []domain.SyscallError
-	CommittedIDs                []string
-	ErrorCode                   domain.SyscallErrorCode
-	KVIdentityEnforcement       map[string]any
-	RefShapeValidation          map[string]any
-	RefShapeComparison          map[string]any
-	SourceObjectAuthority       map[string]any
-	SemanticOperationValidation map[string]any
+	Timestamp                    int64
+	Action                       domain.SemanticActionType
+	Actor                        string
+	Source                       domain.ActionSource
+	WorkspaceID                  string
+	RequestID                    string
+	CorrelationID                string
+	TraceID                      string
+	DryRun                       bool
+	Success                      bool
+	ApprovalStatus               domain.ApprovalStatus
+	ValidationIssues             []domain.SyscallError
+	CommittedIDs                 []string
+	ErrorCode                    domain.SyscallErrorCode
+	KVIdentityEnforcement        map[string]any
+	RefShapeValidation           map[string]any
+	RefShapeComparison           map[string]any
+	SourceObjectAuthority        map[string]any
+	SemanticOperationValidation  map[string]any
+	AdmissionCandidateValidation map[string]any
+	ContextAttributionValidation map[string]any
+	SemanticSyscallEnvelope      map[string]any
 }
 
 type AuditSink interface {
@@ -79,18 +82,21 @@ func (s *CoreAuditSink) Record(ctx context.Context, rec SyscallAuditRecord) (str
 		}(),
 		Summary: fmt.Sprintf("action=%s dryRun=%v source=%s", rec.Action, rec.DryRun, rec.Source),
 		Payload: map[string]any{
-			"workspaceId":                 rec.WorkspaceID,
-			"requestId":                   rec.RequestID,
-			"traceId":                     rec.TraceID,
-			"approvalStatus":              rec.ApprovalStatus,
-			"committedIds":                rec.CommittedIDs,
-			"errorCode":                   rec.ErrorCode,
-			"validationIssues":            rec.ValidationIssues,
-			"kvIdentityEnforcement":       rec.KVIdentityEnforcement,
-			"refShapeValidation":          rec.RefShapeValidation,
-			"refShapeComparison":          rec.RefShapeComparison,
-			"sourceObjectAuthority":       rec.SourceObjectAuthority,
-			"semanticOperationValidation": rec.SemanticOperationValidation,
+			"workspaceId":                  rec.WorkspaceID,
+			"requestId":                    rec.RequestID,
+			"traceId":                      rec.TraceID,
+			"approvalStatus":               rec.ApprovalStatus,
+			"committedIds":                 rec.CommittedIDs,
+			"errorCode":                    rec.ErrorCode,
+			"validationIssues":             rec.ValidationIssues,
+			"kvIdentityEnforcement":        rec.KVIdentityEnforcement,
+			"refShapeValidation":           rec.RefShapeValidation,
+			"refShapeComparison":           rec.RefShapeComparison,
+			"sourceObjectAuthority":        rec.SourceObjectAuthority,
+			"semanticOperationValidation":  rec.SemanticOperationValidation,
+			"admissionCandidateValidation": rec.AdmissionCandidateValidation,
+			"contextAttributionValidation": rec.ContextAttributionValidation,
+			"semanticSyscallEnvelope":      rec.SemanticSyscallEnvelope,
 		},
 	})
 	if err != nil {

@@ -318,7 +318,9 @@ Runtime audit records include, where available:
 - output bytes
 - success/error outcome
 
-Model output remains response evidence. It does not automatically mutate canonical memory or semantic truth state.
+Successful generation results also carry a typed proposal-only envelope. The envelope records model/runtime/provenance/audit metadata, output hash and size, token counts, and explicit authority fields: no canonical commit, no truth mutation, no memory mutation, no evidence admission, no gateway execution, and no model-output authority. The envelope is metadata on the existing modelruntime result; it does not change backend selection, scheduler behavior, route authority, Control Lane commit behavior, or runtime policy.
+
+Model output remains response evidence and proposal material. It does not automatically mutate canonical memory or semantic truth state.
 
 ## Governance Boundary
 
@@ -335,6 +337,7 @@ Still deferred or intentionally bounded:
 - llama.cpp spawn/process supervision
 - gateway `model.*` capability aliasing
 - autonomy charter/budget-aware inference governance beyond current policy hooks
+- admission, consensus, semantic writes, tool execution, or prompt/context authority derived from modelruntime proposal envelopes
 
 ## Safe mode
 

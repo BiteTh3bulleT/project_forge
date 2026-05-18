@@ -220,6 +220,19 @@ func TestAutonomyMaintenanceSweepDryRunNoCommitProducesDeterministicReport(t *te
 	if got := report.Maintenance.Actions[0].Metadata["status"]; got != "repaired" {
 		t.Fatalf("expected repair preview status=repaired, got %#v", got)
 	}
+	for _, phase := range []AutonomyMaintenancePhaseReport{report.Maintenance, report.Improvement} {
+		if phase.Summary["lymphaticMode"] != "proposal_only" || phase.Summary["executesCleanup"] != false {
+			t.Fatalf("expected proposal-only lymphatic phase metadata, got %+v", phase.Summary)
+		}
+		for _, action := range phase.Actions {
+			if action.WouldCommit {
+				t.Fatalf("dry-run lymphatic proposal must not claim commit authority: %+v", action)
+			}
+			if action.Metadata["lymphaticProposal"] != true || action.Metadata["executesCleanup"] != false {
+				t.Fatalf("expected no-execution lymphatic proposal metadata, got %+v", action)
+			}
+		}
+	}
 
 	assertSettingsPrefixCount(t, st, "autonomy_repo.intent.", 0)
 	assertSettingsPrefixCount(t, st, "autonomy_repo.decision.", 0)

@@ -595,6 +595,10 @@ export function ModelsPage() {
               </span>
             </div>
           </div>
+          <div className="mt-2 text-[11px] leading-5 text-forge-mist">
+            GPU acceleration uses the model runtime policy only; DCGM and Intel
+            telemetry stay separate in Settings.
+          </div>
           {health?.degradedReasons?.length || health?.policyWarnings?.length ? (
             <div className="mt-4 grid gap-2 text-xs text-forge-mist md:grid-cols-2">
               {health.degradedReasons?.length ? (

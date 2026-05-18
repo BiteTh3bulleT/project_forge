@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 
 	"forge/projectforge/services/core/internal/aios/domain"
 )
@@ -35,7 +36,7 @@ FROM journal_events WHERE id = ?`, id)
 	var evt domain.JournalEvent
 	var payloadRaw, provRaw, selected, actor, trace string
 	if err := row.Scan(&evt.ID, &evt.Type, &evt.Source, &actor, &evt.Scope.WorkspaceID, &evt.Scope.LaneID, &selected, &payloadRaw, &evt.CorrelationID, &trace, &provRaw, &evt.Timestamp); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return domain.JournalEvent{}, false, nil
 		}
 		return domain.JournalEvent{}, false, err

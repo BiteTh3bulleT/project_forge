@@ -1,10 +1,5 @@
 import type { DashboardSummary } from "@forge/shared";
-import {
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { api } from "../lib/api";
@@ -18,6 +13,8 @@ import {
   listForgeWindows,
   listLinuxWindows,
   listOperatorApps,
+  requestHostPowerAction,
+  type ForgeHostPowerAction,
   type LinuxWindowSnapshot,
   type LinuxWindowAction,
   type OperatorApp,
@@ -63,6 +60,7 @@ type AppShellProps = {
   children: ReactNode;
   isMainWindow: boolean;
   hostLabel?: string;
+  onForgeLogout?: () => void;
 };
 
 type AttentionLevel = "none" | "low" | "medium" | "high";
@@ -488,6 +486,39 @@ export function AppShell(props: AppShellProps) {
     }
   }
 
+  async function handleStartPowerAction(
+    action: "logout" | ForgeHostPowerAction,
+  ) {
+    setStartOpen(false);
+    setStartQuery("");
+
+    if (action === "logout") {
+      props.onForgeLogout?.();
+      if (!props.onForgeLogout) {
+        navigate("/login");
+      }
+      return;
+    }
+
+    const confirmed = window.confirm(
+      action === "reboot"
+        ? "Reboot the FORGE host now?"
+        : "Shut down the FORGE host now?",
+    );
+    if (!confirmed) return;
+
+    try {
+      const result = await requestHostPowerAction(action);
+      setOperatorAppStatus(result.message);
+    } catch (error) {
+      setOperatorAppStatus(
+        error instanceof Error
+          ? error.message
+          : `Unable to request host ${action}.`,
+      );
+    }
+  }
+
   const approvalsPending = summary?.approvalsPending ?? 0;
   const reviewsPending = summary?.reviewsPending ?? 0;
   const recentFailures = Array.isArray(summary?.recentFailures)
@@ -635,7 +666,13 @@ export function AppShell(props: AppShellProps) {
               {focusedTool ? focusedTool.label : "Desktop"}
             </span>
           </div>
-          <div className="forge-os-statusbar__right">
+          <div
+            className="forge-os-statusbar__right"
+            role="status"
+            aria-label="FORGE shell status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             <span
               className={cx(
                 "forge-chip px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]",
@@ -931,7 +968,8 @@ export function AppShell(props: AppShellProps) {
             const isPinned = pinned.includes(tool.id);
             const openWindow =
               windows.find(
-                (w) => w.toolId === tool.id && (w.hostLabel || "main") === hostLabel,
+                (w) =>
+                  w.toolId === tool.id && (w.hostLabel || "main") === hostLabel,
               ) ??
               windows.find((w) => w.toolId === tool.id) ??
               null;
@@ -949,6 +987,7 @@ export function AppShell(props: AppShellProps) {
           workspaceLabel={workspaceLabel}
           uiMode={uiMode}
           pinnedIds={pinned}
+          onPowerAction={(action) => void handleStartPowerAction(action)}
           operatorApps={operatorApps}
           operatorAppStatus={operatorAppStatus}
           onLaunchOperatorApp={(app) => void launchNativeApp(app)}

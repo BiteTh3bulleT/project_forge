@@ -12,6 +12,8 @@ Expanded rule:
 
 **Autonomy proposes or requests. Kernel validates. Charter authorizes. Budget limits. Approval gates escalate. FORGE commits only through syscalls. Everything is audited.**
 
+Phase 14 Lymphatic note: autonomy maintenance dry-run sweeps can expose proposal-only Lymphatic metadata for maintenance reports and cleanup proposals. Those dry-run proposals carry no cleanup execution authority and cannot claim commit authority. Non-dry-run autonomy maintenance remains existing live autonomy authority, not FORGE-K Lymphatic Lane authority.
+
 ## Why this layer exists
 
 Before Phase 5.75, FORGE could process user/system ingest and deterministic rule flows but could not safely self-initiate internal maintenance. The Autonomy Layer adds a constrained internal initiative path for:

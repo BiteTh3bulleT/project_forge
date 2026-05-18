@@ -195,6 +195,8 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 	}
 
 	var semanticOperationDecision SemanticOperationValidationDecision
+	var admissionCandidateDecision AdmissionValidationDecision
+	var contextAttributionDecision ContextAttributionValidationDecision
 	var refShapeDecision RefShapeValidationDecision
 	if req.Action == domain.ActionValidateRefShape {
 		refShapeDecision = EnforceRefShape(req)
@@ -230,6 +232,22 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 		}
 		result.ValidationDetails = append(result.ValidationDetails, detailFor("semantic_operation_validation", nil))
 	}
+	if req.Action == domain.ActionValidateAdmissionCandidate {
+		admissionCandidateDecision = EnforceAdmissionCandidate(req)
+		if !admissionCandidateDecision.Accepted {
+			result.StateSummary = admissionCandidateDecision.ToStateSummary()
+			return p.reject(ctx, req, result, "admission_candidate_validation", []domain.SyscallError{admissionCandidateDecision.ToSyscallError()}), nil
+		}
+		result.ValidationDetails = append(result.ValidationDetails, detailFor("admission_candidate_validation", nil))
+	}
+	if req.Action == domain.ActionValidateContextAttribution {
+		contextAttributionDecision = EnforceContextAttribution(req)
+		if !contextAttributionDecision.Accepted {
+			result.StateSummary = contextAttributionDecision.ToStateSummary()
+			return p.reject(ctx, req, result, "context_attribution_validation", []domain.SyscallError{contextAttributionDecision.ToSyscallError()}), nil
+		}
+		result.ValidationDetails = append(result.ValidationDetails, detailFor("context_attribution_validation", nil))
+	}
 
 	if req.DryRun {
 		result.Success = true
@@ -261,6 +279,18 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 				semanticOperationDecision = EnforceSemanticOperation(req)
 			}
 			result.StateSummary = semanticOperationDecision.ToStateSummary()
+			result.StateSummary["dryRun"] = true
+		} else if req.Action == domain.ActionValidateAdmissionCandidate {
+			if admissionCandidateDecision.Decision == "" {
+				admissionCandidateDecision = EnforceAdmissionCandidate(req)
+			}
+			result.StateSummary = admissionCandidateDecision.ToStateSummary()
+			result.StateSummary["dryRun"] = true
+		} else if req.Action == domain.ActionValidateContextAttribution {
+			if contextAttributionDecision.Decision == "" {
+				contextAttributionDecision = EnforceContextAttribution(req)
+			}
+			result.StateSummary = contextAttributionDecision.ToStateSummary()
 			result.StateSummary["dryRun"] = true
 		}
 		result.Warnings = append(result.Warnings, "dry-run: request validated without commit")
@@ -409,26 +439,35 @@ func (p *Processor) writeAudit(ctx context.Context, req domain.SyscallRequest, r
 	if p.auditSink == nil {
 		return ""
 	}
+	var facade map[string]any
+	if p.registry != nil {
+		if def, ok := p.registry.Get(req.Action); ok {
+			facade = BuildSemanticSyscallFacade(req, def).ToAuditFields()
+		}
+	}
 	id, _ := p.auditSink.Record(ctx, SyscallAuditRecord{
-		Timestamp:                   p.nowMillis(),
-		Action:                      req.Action,
-		Actor:                       req.Actor.ID,
-		Source:                      req.Source,
-		WorkspaceID:                 req.Scope.WorkspaceID,
-		RequestID:                   req.ID,
-		CorrelationID:               req.CorrelationID,
-		TraceID:                     req.TraceID,
-		DryRun:                      req.DryRun,
-		Success:                     result.Success,
-		ApprovalStatus:              result.ApprovalStatus,
-		ValidationIssues:            result.RejectedReasons,
-		CommittedIDs:                result.CommittedObjectIDs,
-		ErrorCode:                   result.DeterministicErrCode,
-		KVIdentityEnforcement:       kvIdentityAuditFields(result.StateSummary),
-		RefShapeValidation:          refShapeAuditFields(result.StateSummary),
-		RefShapeComparison:          refShapeComparisonAuditFields(result.StateSummary),
-		SourceObjectAuthority:       sourceObjectAuthorityAuditFields(result.StateSummary),
-		SemanticOperationValidation: semanticOperationAuditFields(result.StateSummary),
+		Timestamp:                    p.nowMillis(),
+		Action:                       req.Action,
+		Actor:                        req.Actor.ID,
+		Source:                       req.Source,
+		WorkspaceID:                  req.Scope.WorkspaceID,
+		RequestID:                    req.ID,
+		CorrelationID:                req.CorrelationID,
+		TraceID:                      req.TraceID,
+		DryRun:                       req.DryRun,
+		Success:                      result.Success,
+		ApprovalStatus:               result.ApprovalStatus,
+		ValidationIssues:             result.RejectedReasons,
+		CommittedIDs:                 result.CommittedObjectIDs,
+		ErrorCode:                    result.DeterministicErrCode,
+		KVIdentityEnforcement:        kvIdentityAuditFields(result.StateSummary),
+		RefShapeValidation:           refShapeAuditFields(result.StateSummary),
+		RefShapeComparison:           refShapeComparisonAuditFields(result.StateSummary),
+		SourceObjectAuthority:        sourceObjectAuthorityAuditFields(result.StateSummary),
+		SemanticOperationValidation:  semanticOperationAuditFields(result.StateSummary),
+		AdmissionCandidateValidation: admissionCandidateAuditFields(result.StateSummary),
+		ContextAttributionValidation: contextAttributionAuditFields(result.StateSummary),
+		SemanticSyscallEnvelope:      facade,
 	})
 	return id
 }
@@ -498,6 +537,36 @@ func sourceObjectAuthorityAuditFields(summary map[string]any) map[string]any {
 		return nil
 	}
 	fields, _ := summary["sourceObjectAuthorityValidation"].(map[string]any)
+	if fields == nil {
+		return nil
+	}
+	out := make(map[string]any, len(fields))
+	for key, value := range fields {
+		out[key] = value
+	}
+	return out
+}
+
+func admissionCandidateAuditFields(summary map[string]any) map[string]any {
+	if summary == nil {
+		return nil
+	}
+	fields, _ := summary["admissionCandidateValidation"].(map[string]any)
+	if fields == nil {
+		return nil
+	}
+	out := make(map[string]any, len(fields))
+	for key, value := range fields {
+		out[key] = value
+	}
+	return out
+}
+
+func contextAttributionAuditFields(summary map[string]any) map[string]any {
+	if summary == nil {
+		return nil
+	}
+	fields, _ := summary["contextAttributionValidation"].(map[string]any)
 	if fields == nil {
 		return nil
 	}

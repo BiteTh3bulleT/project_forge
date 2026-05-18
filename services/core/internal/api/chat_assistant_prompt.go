@@ -130,6 +130,39 @@ func (s *Server) buildModelRuntimePlainChatMessages(ctx context.Context, th *cha
 }
 
 func assembleBoundedSystemPrompt(base string, sections []string, max int) string {
+	base, protectedSections := splitProtectedChatPromptSections(base)
+	if len(protectedSections) > 0 {
+		protected := strings.Join(protectedSections, "\n\n")
+		if max > 0 {
+			mainMax := max - len(protected) - len("\n\n")
+			if mainMax <= 0 {
+				return trimSummary(protected, max)
+			}
+			main := assembleBoundedSystemPromptUnprotected(base, sections, mainMax)
+			if strings.TrimSpace(main) == "" {
+				return trimSummary(protected, max)
+			}
+			return strings.TrimSpace(main + "\n\n" + protected)
+		}
+		sections = append(sections, protectedSections...)
+	}
+	return assembleBoundedSystemPromptUnprotected(base, sections, max)
+}
+
+func splitProtectedChatPromptSections(prompt string) (string, []string) {
+	prompt = strings.TrimSpace(prompt)
+	protected := []string{}
+	for _, guard := range []string{chatOperationalGroundingGuard, chatAssistantVisibilityGuard} {
+		trimmedGuard := strings.TrimSpace(guard)
+		if strings.Contains(prompt, trimmedGuard) {
+			prompt = strings.TrimSpace(strings.Replace(prompt, trimmedGuard, "", 1))
+			protected = append(protected, trimmedGuard)
+		}
+	}
+	return prompt, protected
+}
+
+func assembleBoundedSystemPromptUnprotected(base string, sections []string, max int) string {
 	base = strings.TrimSpace(base)
 	cleanSections := make([]string, 0, len(sections))
 	for _, section := range sections {

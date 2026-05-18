@@ -5,6 +5,8 @@ $Port = if ($env:FORGE_CORE_PORT) { [int]$env:FORGE_CORE_PORT } else { 18492 }
 $DataDir = Join-Path ([System.IO.Path]::GetTempPath()) "forge-smoke.$([System.Guid]::NewGuid().ToString("N"))"
 $WorkspaceDir = Join-Path ([System.IO.Path]::GetTempPath()) "forge-smoke-ws.$([System.Guid]::NewGuid().ToString("N"))"
 $Log = Join-Path $DataDir "core.log"
+$TokenFile = Join-Path $DataDir "auth/api_token"
+$SmokeApiToken = $null
 $CoreProcess = $null
 $StartedCore = $false
 $Succeeded = $false
@@ -41,7 +43,11 @@ function Invoke-Probe {
   )
   $Uri = "http://127.0.0.1:$Port$Path"
   try {
-    $Response = Invoke-WebRequest -Uri $Uri -UseBasicParsing -TimeoutSec 5
+    $Headers = @{}
+    if ($Path -ne "/health" -and $SmokeApiToken) {
+      $Headers["Authorization"] = "Bearer $SmokeApiToken"
+    }
+    $Response = Invoke-WebRequest -Uri $Uri -Headers $Headers -UseBasicParsing -TimeoutSec 5
     $StatusCode = [int]$Response.StatusCode
     $Body = $Response.Content
   } catch {
@@ -111,6 +117,7 @@ try {
   }
 
   Write-Host "==> probing endpoints"
+  $SmokeApiToken = (Get-Content -Raw -LiteralPath $TokenFile).Trim()
   Invoke-Probe "/health" 200
   Invoke-Probe "/api/meta" 200
   Invoke-Probe "/api/autonomy/status" 200

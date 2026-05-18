@@ -2,6 +2,8 @@ FORGE // MASTER UNIFIED COGNITIVE OS IMPLEMENTATION PROMPT
 
 Status: `[FUTURE]` implementation vision and planning prompt, not current implementation truth. Current behavior is defined by code, ADRs, `AGENTS.md`, `README.md`, status docs, and passing tests. Do not treat unimplemented statements in this file as live daemon status. As of PhaseI2, live KV identity work is `[PARTIAL LIVE ENFORCEMENT]` only and does not enable live KV reuse or FORGE-K live authority.
 
+For current onboarding, start with `docs/onboarding.md`, then `AGENTS.md`, `README.md`, `docs/status/current_authority_sources.md`, and `docs/reviews/current_phase_status.md`.
+
 Production-grade implementation only. No toy abstractions. No parallel kingdoms. No chatbot-wrapper nonsense.
 
 You are implementing the next major FORGE evolution:

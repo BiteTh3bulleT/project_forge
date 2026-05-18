@@ -2,12 +2,14 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"forge/projectforge/services/core/internal/chat"
+	"forge/projectforge/services/core/internal/consensusgate"
 )
 
 func (s *Server) completeAssistantWithModelRuntimeStream(
@@ -111,6 +113,9 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 			"budgetClass":  perf.ContextBudgetClass,
 		},
 	}, func(token ModelRuntimeChatStreamToken) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if token.Done {
 			return nil
 		}
@@ -121,10 +126,15 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 			firstTokenMs = time.Since(modelStart).Milliseconds()
 		}
 		rawStream.WriteString(token.Text)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		flushVisible(false)
 		return nil
 	})
-	flushVisible(true)
+	if !errors.Is(err, context.Canceled) && ctx.Err() == nil {
+		flushVisible(true)
+	}
 	modelRuntimeMs := time.Since(modelStart).Milliseconds()
 	if err != nil {
 		_, code, message := mapModelRuntimeError(err)
@@ -145,6 +155,14 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 	if content == "" {
 		content = assistantContentFallback
 	}
+	consensusDecision := consensusgate.Gate(consensusgate.Input{
+		Content:           content,
+		Surface:           consensusgate.SurfaceChatFinal,
+		WorkspaceID:       workspaceID,
+		CorrelationID:     corr,
+		ModelProposalOnly: result.Proposal != nil,
+	})
+	content = consensusDecision.Content
 	traceExtras := map[string]any{
 		"modelruntime_ms":             modelRuntimeMs,
 		"modelruntime_first_token_ms": firstTokenMs,
@@ -156,6 +174,7 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 		traceExtras[k] = v
 	}
 	trace := chatLatencyTraceWithPrompt(requestStart, perf, promptBudget, traceExtras)
+	s.warnIfChatLatencyBudgetExceeded(ctx, threadID, userMessageID, corr, trace)
 	activity := map[string]any{
 		"userRequestSummary": trimSummary(lastUserContent, 500),
 		"toolManifest":       manifests,
@@ -187,6 +206,7 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 		"toolManifest":         manifests,
 		"toolPipeline":         map[string]any{"stages": stages},
 		"toolGatewayActivity":  activity,
+		"consensusGate":        consensusDecision,
 	}
 	if requested := strings.TrimSpace(requestedModelID); requested != "" {
 		metadata["modelRuntimeRequestedModelId"] = requested
@@ -278,6 +298,14 @@ func (s *Server) completeAssistantWithModelRuntime(
 	if content == "" {
 		content = assistantContentFallback
 	}
+	consensusDecision := consensusgate.Gate(consensusgate.Input{
+		Content:           content,
+		Surface:           consensusgate.SurfaceChatFinal,
+		WorkspaceID:       workspaceID,
+		CorrelationID:     corr,
+		ModelProposalOnly: result.Proposal != nil,
+	})
+	content = consensusDecision.Content
 	traceExtras := map[string]any{
 		"modelruntime_ms":      modelRuntimeMs,
 		"gateway_execution_ms": int64(0),
@@ -288,6 +316,7 @@ func (s *Server) completeAssistantWithModelRuntime(
 		traceExtras[k] = v
 	}
 	trace := chatLatencyTraceWithPrompt(requestStart, perf, promptBudget, traceExtras)
+	s.warnIfChatLatencyBudgetExceeded(ctx, threadID, userMessageID, corr, trace)
 
 	activity := map[string]any{
 		"userRequestSummary": trimSummary(lastUserContent, 500),
@@ -322,6 +351,7 @@ func (s *Server) completeAssistantWithModelRuntime(
 		"toolManifest":         manifests,
 		"toolPipeline":         map[string]any{"stages": stages},
 		"toolGatewayActivity":  activity,
+		"consensusGate":        consensusDecision,
 	}
 	if requested := strings.TrimSpace(requestedModelID); requested != "" {
 		metadata["modelRuntimeRequestedModelId"] = requested

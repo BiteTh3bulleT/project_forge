@@ -395,6 +395,53 @@ FROM audit_records WHERE id = ?`, 604).Scan(&auditCategory, &auditAction, &audit
 	}
 }
 
+func TestAuditHistoryExportIncludesMoreThanLegacyWindow(t *testing.T) {
+	ctx := context.Background()
+	sourceDir := t.TempDir()
+
+	source, err := store.Open(sourceDir)
+	if err != nil {
+		t.Fatalf("open source store: %v", err)
+	}
+	t.Cleanup(func() { _ = source.Close() })
+
+	const rowCount = 5001
+	seedAuditGatewayHistoryRows(t, ctx, source.DB, rowCount)
+
+	srcSvc := New(source.DB, sourceDir)
+	bundle, err := srcSvc.CreateBundle(ctx, CreateBundleRequest{
+		Kind:  "audit_history",
+		Label: "audit-history-window",
+	})
+	if err != nil {
+		t.Fatalf("create audit history bundle: %v", err)
+	}
+
+	raw, err := os.ReadFile(bundle.FilePath)
+	if err != nil {
+		t.Fatalf("read bundle file: %v", err)
+	}
+	var doc BundleDoc
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("decode bundle doc: %v", err)
+	}
+
+	for _, section := range []string{"audit_records", "gateway_invocations"} {
+		if got := doc.EntityCounts[section]; got != rowCount {
+			t.Fatalf("export count mismatch for %s: got %d want %d", section, got, rowCount)
+		}
+		rows := doc.Entities[section]
+		if len(rows) != rowCount {
+			t.Fatalf("entity row count mismatch for %s: got %d want %d", section, len(rows), rowCount)
+		}
+		firstID := intFromBundleRow(t, rows[0], "id")
+		lastID := intFromBundleRow(t, rows[len(rows)-1], "id")
+		if firstID != rowCount || lastID != 1 {
+			t.Fatalf("%s ordering mismatch: first id=%d last id=%d, want newest-first %d..1", section, firstID, lastID, rowCount)
+		}
+	}
+}
+
 func TestRestoreDetectsMissingDreamReportsTable(t *testing.T) {
 	ctx := context.Background()
 	sourceDir := t.TempDir()
@@ -1222,6 +1269,76 @@ VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 INSERT INTO tool_capability_overrides(capability_id, status, reason, actor, updated_at)
 VALUES(?,?,?,?,?)`,
 		"filesystem.write_file", "approval_only", "backup parity fixture", "operator", 2800)
+}
+
+func seedAuditGatewayHistoryRows(t *testing.T, ctx context.Context, db *sql.DB, count int) {
+	t.Helper()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin audit/gateway history seed transaction: %v", err)
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	for i := 1; i <= count; i++ {
+		correlationID := "corr-history"
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO gateway_invocations(
+  id, correlation_id, created_at, completed_at, tool_id, lane_id, job_id, packet_id,
+  approval_request_id, initiator, action, risk_class, write_intent, scope_json, input_json,
+  status, denied_reason, result_json, artifacts_json, permission_profile_id
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			i, correlationID, int64(i), int64(i+1), "tool.history", "", nil, nil,
+			nil, "operator", "inspect", "low", 0, `{}`, `{}`,
+			"completed", "", `{"ok":true}`, `[]`, ""); err != nil {
+			t.Fatalf("seed gateway history row %d: %v", i, err)
+		}
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO audit_records(
+  id, created_at, correlation_id, category, action, actor, subject_type, subject_id,
+  job_id, gateway_invocation_id, approval_request_id, risk_class, outcome, summary, payload_json
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			i, int64(i), correlationID, "gateway", "tool.completed", "operator", "tool", "tool.history",
+			nil, i, nil, "low", "allowed", "history row", `{"ok":true}`); err != nil {
+			t.Fatalf("seed audit history row %d: %v", i, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit audit/gateway history seed transaction: %v", err)
+	}
+	committed = true
+}
+
+func intFromBundleRow(t *testing.T, row any, field string) int {
+	t.Helper()
+	record, ok := row.(map[string]any)
+	if !ok {
+		t.Fatalf("bundle row has type %T, want map[string]any", row)
+	}
+	value, ok := record[field]
+	if !ok {
+		t.Fatalf("bundle row missing field %q: %#v", field, record)
+	}
+	switch v := value.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case json.Number:
+		i, err := v.Int64()
+		if err != nil {
+			t.Fatalf("bundle row field %q is non-integer json number %q: %v", field, v, err)
+		}
+		return int(i)
+	default:
+		t.Fatalf("bundle row field %q has type %T, want numeric", field, value)
+	}
+	return 0
 }
 
 func mustExec(t *testing.T, ctx context.Context, db *sql.DB, query string, args ...any) {

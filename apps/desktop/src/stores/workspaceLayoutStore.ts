@@ -4,6 +4,7 @@ import {
   isTauriDesktop,
   listAvailableMonitors,
   monitorSignature,
+  type MonitorSnapshot,
 } from "../lib/desktop";
 import { getCurrentWindowLabel } from "../lib/windowManager";
 
@@ -30,6 +31,50 @@ import type {
   WorkspaceLayoutState,
 } from "./workspaceLayoutStore/types";
 
+const HYDRATE_TIMEOUT_MS = 1200;
+
+type HydrateResult<T> = {
+  value: T;
+  timedOut: boolean;
+};
+
+function fallbackMonitor(): MonitorSnapshot {
+  const width =
+    typeof window === "undefined" ? 1280 : Math.max(1, window.innerWidth);
+  const height =
+    typeof window === "undefined" ? 720 : Math.max(1, window.innerHeight);
+  return {
+    id: "fallback-main",
+    ordinal: 0,
+    name: "FORGE Shell",
+    position: { x: 0, y: 0 },
+    size: { width, height },
+    workArea: { x: 0, y: 0, width, height },
+    scaleFactor: 1,
+  };
+}
+
+async function withHydrateTimeout<T>(
+  task: Promise<T>,
+  fallback: T,
+): Promise<HydrateResult<T>> {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  const timer = new Promise<HydrateResult<T>>((resolve) => {
+    timeout = setTimeout(
+      () => resolve({ value: fallback, timedOut: true }),
+      HYDRATE_TIMEOUT_MS,
+    );
+  });
+  try {
+    return await Promise.race([
+      task.then((value) => ({ value, timedOut: false })),
+      timer,
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>(
   (set, get) => ({
     ready: false,
@@ -45,18 +90,71 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>(
     fallbackNotice: null,
     hydrate: async (pathname) => {
       const supported = isTauriDesktop();
-      const currentWindowLabel = await getCurrentWindowLabel();
-      const monitors = supported ? await listAvailableMonitors() : [];
+      let currentWindowLabel = "main";
+      let monitors: MonitorSnapshot[] = [fallbackMonitor()];
+      let fallbackNotice: string | null = null;
+      if (supported) {
+        try {
+          const labelResult = await withHydrateTimeout(
+            getCurrentWindowLabel(),
+            "main",
+          );
+          currentWindowLabel = labelResult.value || "main";
+          const monitorResult = await withHydrateTimeout(
+            listAvailableMonitors(),
+            [fallbackMonitor()],
+          );
+          monitors =
+            monitorResult.value.length > 0
+              ? monitorResult.value
+              : [fallbackMonitor()];
+          if (labelResult.timedOut || monitorResult.timedOut) {
+            fallbackNotice =
+              "FORGE desktop started with fallback display metadata.";
+          }
+        } catch (error) {
+          monitors = [fallbackMonitor()];
+          fallbackNotice =
+            error instanceof Error
+              ? `FORGE desktop display fallback: ${error.message}`
+              : "FORGE desktop display fallback is active.";
+        }
+      }
       let doc = loadDoc(monitors);
       doc = ensureActiveLayout(doc);
       if (supported) {
-        doc = await syncCurrentRuntimeWindow(pathname, monitors);
-        if (
-          AUTO_RESTORE_TAURI_LAYOUTS &&
-          currentWindowLabel === "main" &&
-          doc.activeLayoutId
-        ) {
-          doc = await applyLayout(doc.activeLayoutId, true, monitors);
+        try {
+          const syncResult = await withHydrateTimeout(
+            syncCurrentRuntimeWindow(pathname, monitors),
+            doc,
+          );
+          doc = syncResult.value;
+          if (syncResult.timedOut) {
+            fallbackNotice =
+              fallbackNotice ??
+              "FORGE desktop started before layout sync completed.";
+          }
+          if (
+            AUTO_RESTORE_TAURI_LAYOUTS &&
+            currentWindowLabel === "main" &&
+            doc.activeLayoutId
+          ) {
+            const applyResult = await withHydrateTimeout(
+              applyLayout(doc.activeLayoutId, true, monitors),
+              doc,
+            );
+            doc = applyResult.value;
+            if (applyResult.timedOut) {
+              fallbackNotice =
+                fallbackNotice ??
+                "FORGE desktop started before layout restore completed.";
+            }
+          }
+        } catch (error) {
+          fallbackNotice =
+            error instanceof Error
+              ? `FORGE desktop layout fallback: ${error.message}`
+              : "FORGE desktop layout fallback is active.";
         }
       }
       const monitorState = deriveMonitorState(monitors, doc);
@@ -71,7 +169,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>(
         monitors: clone(monitors),
         monitorDesignations: clone(monitorState.monitorDesignations),
         monitorRoleMap: monitorState.monitorRoleMap,
-        fallbackNotice: doc.fallbackNotice,
+        fallbackNotice: fallbackNotice ?? doc.fallbackNotice,
       });
     },
     refreshEnvironment: async () => {

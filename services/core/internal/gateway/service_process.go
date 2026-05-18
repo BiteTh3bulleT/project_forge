@@ -6,8 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
-	"strconv"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -101,14 +100,22 @@ func (t *processRunTool) Execute(ctx context.Context, req Request) (Result, erro
 		return Result{}, err
 	}
 	timeoutMs := normalizeProcessRunTimeoutMs(req.Input)
+	if runtime.GOOS == "windows" {
+		return Result{Data: map[string]any{
+			"command":     command,
+			"timeoutMs":   timeoutMs,
+			"ok":          false,
+			"unsupported": true,
+			"reason":      "proc.run shell execution requires a configured platform command runner on Windows",
+		}, Message: "process execution unsupported on this platform"}, nil
+	}
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
-	cmd := exec.CommandContext(runCtx, "bash", "-lc", command)
 	cwd, err := workspaceDirFromRequest(req.Paths, t.workspace)
 	if err != nil {
 		return Result{}, err
 	}
-	cmd.Dir = cwd
+	cmd := newGatewayCommand(runCtx, cwd, "bash", "-lc", command)
 	stdout := newBoundedOutputBuffer(maxProcessRunOutputBytes)
 	stderr := newBoundedOutputBuffer(maxProcessRunOutputBytes)
 	cmd.Stdout = stdout
@@ -118,7 +125,7 @@ func (t *processRunTool) Execute(ctx context.Context, req Request) (Result, erro
 	endedAt := time.Now()
 	exitCode := 0
 	if err != nil {
-		var exitErr *exec.ExitError
+		var exitErr interface{ ExitCode() int }
 		if errors.As(err, &exitErr) {
 			exitCode = exitErr.ExitCode()
 		} else {
@@ -179,7 +186,14 @@ func (t *processTerminateTool) Execute(ctx context.Context, req Request) (Result
 	if err != nil {
 		return Result{}, errors.New("proc.terminate requires input.pid")
 	}
-	cmd := exec.CommandContext(ctx, "kill", strconv.Itoa(pid))
-	out, err := boundedCombinedOutput(cmd)
-	return Result{Data: map[string]any{"pid": pid, "output": out, "ok": err == nil}, Message: "terminate attempted"}, nil
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return Result{Data: map[string]any{"pid": pid, "ok": false, "error": err.Error()}, Message: "terminate attempted"}, nil
+	}
+	err = proc.Kill()
+	data := map[string]any{"pid": pid, "ok": err == nil}
+	if err != nil {
+		data["error"] = err.Error()
+	}
+	return Result{Data: data, Message: "terminate attempted"}, nil
 }

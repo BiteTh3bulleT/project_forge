@@ -11,7 +11,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
 	"runtime"
@@ -236,8 +235,7 @@ func (t *capabilityBackingTool) executeCode(ctx context.Context, req Request) (R
 		if err != nil {
 			return Result{}, err
 		}
-		cmd := exec.CommandContext(ctx, "git", "apply", "--check", "-")
-		cmd.Dir = t.workspace
+		cmd := newGatewayCommand(ctx, t.workspace, "git", "apply", "--check", "-")
 		cmd.Stdin = strings.NewReader(patch)
 		out, err := boundedCombinedOutput(cmd)
 		return capabilityOK("patch validated", map[string]any{"output": out}), err

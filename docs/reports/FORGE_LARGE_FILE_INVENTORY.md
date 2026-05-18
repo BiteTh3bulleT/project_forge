@@ -2,7 +2,7 @@
 
 **Generated:** 2026-05-11.
 **Companion to:** [FORGE_FULL_REVIEW.md](FORGE_FULL_REVIEW.md).
-**Scope:** Every source file over 700 lines in the repo, across Go, TS/TSX, Rust, Nix, and tests. Plus a recommended order of operations and split strategy per file.
+**Scope:** Every source file over 700 lines in the repo, across Go, TS/TSX, CSS, Rust, Nix, and tests. Plus a recommended order of operations and split strategy per file.
 
 > **Rule of thumb:** A single source file >1,500 lines is an architectural smell. A file >2,500 lines is technical debt actively gating future work. A file >3,000 lines is a refactor that pays for itself on the next bug.
 
@@ -14,56 +14,77 @@
 
 | Lines | File | Domain | Status |
 |---|---|---|---|
-| 805 | `services/core/internal/backup/service.go` | Backup/restore/export | Done — service split below threshold. |
-| 1,488 | `services/core/internal/modelruntime/service.go` | Model runtime lifecycle | Done — service split below threshold. |
-| 1,407 | `services/core/internal/api/autonomy_maintenance_loop.go` | Autonomy maintenance | Done — type/state split landed. |
+| 1,482 | `services/core/internal/api/model_runtime_bridge.go` | API ↔ runtime bridge | Below threshold — watch. |
+| 1,480 | `services/core/internal/modelruntime/service.go` | Model runtime lifecycle | Done — service split below threshold; helpers extracted. |
 | 1,478 | `services/core/internal/aios/controllane/compile_context_restore_scoring.go` | Context restore scoring | Below threshold — watch. |
-| 1,452 | `services/core/internal/jobs/service.go` | Job orchestration | Below threshold — watch. |
 | 1,447 | `services/core/internal/aios/dream/service.go` | Dream lane | Below threshold — watch. |
-| 1,431 | `services/core/internal/store/migrate_schema.go` | SQL migrations | P3 — long is inherent here |
-| 1,424 | `services/core/internal/api/model_runtime_bridge.go` | API ↔ runtime bridge | Below threshold — watch. |
-| 1,297 | `services/core/internal/api/phase5.go` | Phase historical handler | P2 — consider archiving |
-| 1,319 | `services/core/internal/api/chat_post.go` | Chat POST handler | Below threshold — watch. |
+| 1,440 | `services/core/internal/store/migrate_schema.go` | SQL migrations | P3 — long is inherent here |
+| 1,435 | `services/core/internal/api/autonomy_maintenance_loop.go` | Autonomy maintenance | Done — type/state split landed. |
+| 1,373 | `services/core/internal/api/model_runtime.go` | Model runtime API | Below threshold — watch. |
+| 1,332 | `services/core/internal/api/chat_post.go` | Chat POST handler | Below threshold — watch. |
+| 1,299 | `services/core/internal/api/phase5.go` | Phase historical handler | P2 — consider archiving |
+| 1,237 | `services/core/internal/jobs/service.go` | Job orchestration | Done — metadata/helpers extracted below threshold. |
 | 1,193 | `services/core/internal/aios/compute/librarian/cells_phase4.go` | Cell pipeline | Below threshold — watch. |
-| 1,372 | `services/core/internal/api/model_runtime.go` | Model runtime API | Below threshold — watch. |
 | 1,060 | `services/core/internal/aios/truth/engine.go` | Current truth engine | Below threshold — watch. |
 | 1,032 | `services/core/internal/gateway/service.go` | Gateway core (post-split) | P3 |
 | 1,028 | `services/core/internal/retrieval/service.go` | Retrieval service | Below threshold — watch. |
-| 975 | `services/core/internal/gateway/service_helpers.go` | Gateway helpers (post-split) | **Watch** — sibling of recent split |
-| 963 | `services/core/internal/aios/controllane/store.go` | Controllane store glue | P2 |
+| 1,026 | `services/core/internal/backup/section_mappings.go` | Backup section mappings | P3 — generated/static mapping shape. |
+| 989 | `services/core/internal/aios/controllane/store.go` | Controllane store glue | P2 |
+| 968 | `services/core/internal/gateway/service_helpers.go` | Gateway helpers (post-split) | **Watch** — sibling of recent split |
+| 953 | `services/core/internal/aios/controllane/validator.go` | Envelope validator | P3 |
 | 923 | `services/core/internal/api/operator_inspector.go` | Operator inspector API | P3 |
-| 910 | `services/core/internal/aios/controllane/validator.go` | Envelope validator | P3 |
-| 863 | `services/core/internal/memory/vsa_indexer.go` | VSA indexing | P3 |
+| 864 | `services/core/internal/memory/vsa_indexer.go` | VSA indexing | P3 |
 | 842 | `services/core/internal/api/chat_fs_fallback.go` | Chat filesystem fallback | P3 |
+| 822 | `services/core/internal/api/server_settings.go` | Server settings API | P3 |
+| 805 | `services/core/internal/backup/service.go` | Backup/restore/export | Done — service split below threshold. |
 | 803 | `services/core/internal/api/trace_report.go` | Trace reports | P3 |
 | 797 | `services/core/internal/modelruntime/orchestration.go` | Runtime orchestration | P3 |
+| 789 | `services/core/internal/api/remote.go` | Remote API | P3 |
+| 788 | `services/core/internal/aios/controllane/processor_apply.go` | Apply switch | P3 |
 | 782 | `services/core/internal/aios/controllane/compile_context_snapshot.go` | Context snapshots | P3 |
 | 781 | `services/core/internal/api/phase3.go` | Phase historical handler | P3 |
+| 772 | `services/core/internal/embeddings/service.go` | Embeddings service | P3 |
 | 760 | `services/core/internal/aios/compute/librarian/pipeline.go` | Librarian pipeline | P3 |
 | 759 | `services/core/internal/aios/controllane/sqlite_store_helpers.go` | Controllane SQL helpers (post-split) | P3 |
 | 758 | `services/core/internal/gateway/service_filesystem_git.go` | Gateway FS/git tools | P3 |
-| 758 | `services/core/internal/aios/controllane/processor_apply.go` | Apply switch | P3 |
-| 742 | `services/core/internal/embeddings/service.go` | Embeddings service | P3 |
+| 725 | `services/core/internal/api/workspace.go` | Workspace API | P3 |
+| 719 | `services/core/internal/lanes/service.go` | Lane service | P3 |
+| 709 | `services/core/internal/api/chat_assistant_gateway.go` | Chat assistant gateway | P3 |
 
 ### TS/TSX files >700 lines (excl. tests)
 
 | Lines | File | Domain | Status |
 |---|---|---|---|
-| 1,436 | `apps/desktop/src/pages/ChatPage.tsx` | Chat page | Done — composer and inspector surfaces extracted. |
-| 149 | `apps/desktop/src/lib/api.ts` | API client shim | **Done — split into domain modules.** |
+| 1,470 | `apps/desktop/src/pages/ModelsPage.tsx` | Models page | Done — model panels extracted. |
+| 1,454 | `apps/desktop/src/pages/SettingsPage.tsx` | Settings page | Done — settings panels plus display section extracted. |
+| 1,447 | `apps/desktop/src/pages/ChatPage.tsx` | Chat page | Done — composer and inspector surfaces extracted. |
 | 1,295 | `apps/desktop/src/pages/InspectorsPage.tsx` | Inspectors page | Done — inspector panels extracted. |
-| 1,466 | `apps/desktop/src/pages/ModelsPage.tsx` | Models page | Done — model panels extracted. |
-| 1,498 | `apps/desktop/src/pages/SettingsPage.tsx` | Settings page | Done — settings panels extracted. |
-| 998 | `apps/desktop/src/layout/AppShell.tsx` | App shell layout | Done — shell surface components extracted. |
-| 386 | `apps/desktop/src/stores/workspaceLayoutStore.ts` | Workspace layout store | Done — store model/runtime/persistence extracted. |
-| 905 | `apps/desktop/src/pages/DashboardPage.tsx` | Dashboard page | Done — dashboard panels extracted. |
-| 415 | `apps/desktop/src/pages/MemoryPage.tsx` | Memory page | Done — memory panels extracted. |
+| 1,140 | `apps/desktop/src/pages/SystemPage.tsx` | System page | P2 |
+| 1,036 | `apps/desktop/src/layout/AppShell.tsx` | App shell layout | Done — shell surface components extracted. |
+| 1,010 | `apps/desktop/src/lib/api/types.ts` | API shared types | P2 — watch; consider type-domain split if it grows. |
+| 959 | `apps/desktop/src/layout/AppShellSurfaces.tsx` | App shell surfaces | P2 — watch after recent shell work. |
 | 951 | `apps/desktop/src/pages/ToolGatewayPage.tsx` | Tool gateway page | P2 |
+| 905 | `apps/desktop/src/pages/DashboardPage.tsx` | Dashboard page | Done — dashboard panels extracted. |
 | 902 | `apps/desktop/src/pages/JobDetailPage.tsx` | Job detail page | P2 |
+| 876 | `apps/desktop/src/lib/desktop.ts` | Desktop lib | P3 |
+| 848 | `apps/desktop/src/pages/ChatPage/toolGateway.tsx` | Chat tool gateway surface | P3 |
+| 845 | `apps/desktop/src/stores/desktopWindowStore.ts` | Desktop window store | P3 |
 | 799 | `packages/shared/src/index.ts` | Shared types barrel | P3 |
-| 797 | `apps/desktop/src/lib/desktop.ts` | Desktop lib | P3 |
 | 785 | `packages/shared/src/aios.ts` | AIOS shared types | P3 |
 | 753 | `apps/desktop/src/pages/DossiersPage.tsx` | Dossiers page | P3 |
+| 415 | `apps/desktop/src/pages/MemoryPage.tsx` | Memory page | Done — memory panels extracted. |
+| 386 | `apps/desktop/src/stores/workspaceLayoutStore.ts` | Workspace layout store | Done — store model/runtime/persistence extracted. |
+| 149 | `apps/desktop/src/lib/api.ts` | API client shim | **Done — split into domain modules.** |
+
+### CSS files >700 lines
+
+The previous 4,644-line `apps/desktop/src/index.css` is now a Tailwind entry plus ordered imports from `apps/desktop/src/styles/`.
+
+| Lines | File | Domain | Status |
+|---|---|---|---|
+| 911 | `apps/desktop/src/styles/forge-chat.css` | Chat UI styles | Done — below threshold. |
+| 834 | `apps/desktop/src/styles/forge-os-window-login.css` | Window/login styles | Done — below threshold. |
+| 740 | `apps/desktop/src/styles/forge-base.css` | Base tokens/components | Done — below threshold. |
 
 ### Rust files >300 lines
 
@@ -267,7 +288,7 @@ Every split should follow this recipe to keep the tree green between commits:
 
 ## 4. Definition of Done (overall)
 
-- **No single source file in the project exceeds 1,500 lines** except where length is inherent (SQL migrations, validator crates, barrel files).
+- **No single non-test source file in the project exceeds 1,500 lines** except where length is inherent (SQL migrations, validator crates, barrel files). Verified 2026-05-18 across Go/TS/TSX/CSS/Rust/Nix; largest non-exempt source is `services/core/internal/api/model_runtime_bridge.go` at 1,482 lines.
 - **No single React component file exceeds 800 lines.**
 - **`lib/api.ts` is split by domain** with one file per top-level API group.
 - **Old phase handler files** (`phase3.go`, `phase5.go`) are either archived or split.

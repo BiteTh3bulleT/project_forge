@@ -4,9 +4,119 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FORGE</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        background: #020405;
+      }
+
+      html,
+      body,
+      #root {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+      }
+
+      .forge-native-boot {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        color: #f3f7f8;
+        background:
+          linear-gradient(120deg, rgba(54, 220, 232, 0.12), transparent 34%),
+          linear-gradient(210deg, rgba(245, 158, 11, 0.12), transparent 32%),
+          linear-gradient(155deg, #020405 0%, #0b1114 45%, #12181c 100%);
+      }
+
+      .forge-native-boot::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        opacity: 0.32;
+        background-image:
+          linear-gradient(rgba(54, 220, 232, 0.08) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(54, 220, 232, 0.06) 1px, transparent 1px);
+        background-size: 84px 84px;
+      }
+
+      .forge-native-boot__panel {
+        position: relative;
+        display: grid;
+        justify-items: center;
+        gap: 0.8rem;
+        min-width: min(22rem, calc(100vw - 2rem));
+      }
+
+      .forge-native-boot__mark {
+        width: 3.25rem;
+        aspect-ratio: 1;
+        object-fit: contain;
+        filter: drop-shadow(0 0 24px rgba(54, 220, 232, 0.2));
+      }
+
+      .forge-native-boot__title {
+        font-size: clamp(2rem, 7vw, 3.5rem);
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: 0;
+      }
+
+      .forge-native-boot__status {
+        font-size: 0.82rem;
+        color: rgba(214, 226, 230, 0.82);
+      }
+
+      .forge-native-boot__bar {
+        width: min(18rem, 62vw);
+        height: 0.18rem;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(214, 226, 230, 0.12);
+      }
+
+      .forge-native-boot__bar::after {
+        content: "";
+        display: block;
+        width: 38%;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #36dce8, #f5b84a);
+        animation: forge-native-boot-progress 1.4s ease-in-out infinite;
+      }
+
+      @keyframes forge-native-boot-progress {
+        0% {
+          transform: translateX(-115%);
+        }
+
+        100% {
+          transform: translateX(275%);
+        }
+      }
+    </style>
   </head>
   <body class="bg-forge-void text-forge-ash">
-    <div id="root"></div>
+    <div id="root">
+      <div class="forge-native-boot" role="status" aria-live="polite">
+        <div class="forge-native-boot__panel">
+          <img
+            class="forge-native-boot__mark"
+            src="/brand/forge-start-button.png"
+            alt=""
+            draggable="false"
+          />
+          <div class="forge-native-boot__title">FORGE-OS</div>
+          <div class="forge-native-boot__status">Loading operator shell</div>
+          <div class="forge-native-boot__bar" aria-hidden="true"></div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

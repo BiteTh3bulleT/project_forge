@@ -14,7 +14,7 @@ Scope: durable storage + backup/restore parity + restart safety.
 | Artifacts (`artifacts`) | yes | yes | yes (DB row + path metadata) | partial (improved) | no |
 | Semantic syscall journal (`journal_events`) | yes | yes | yes (append-safe idempotent import) | yes | no |
 | Cognitive filesystem core tables | yes | yes | yes | yes | no |
-| Audit/event execution history (`audit_records`, `gateway_invocations`) | yes | yes (limited extract window) | yes (within export window) | yes | no |
+| Audit/event execution history (`audit_records`, `gateway_invocations`) | yes | yes (uncapped deterministic export) | yes | yes | no |
 | Modelruntime registry/lifecycle (`model_manifests`, `model_registry_status`, `model_runtime_loads`) | yes | yes | yes | yes | no |
 | Chat/canvas operator state (`chat_threads`, `chat_messages`, `canvas_boards`, `canvas_notes`) | yes | yes | yes | partial | no |
 | Gateway capability overrides (`tool_capability_overrides`) | yes | yes | yes | partial | no |

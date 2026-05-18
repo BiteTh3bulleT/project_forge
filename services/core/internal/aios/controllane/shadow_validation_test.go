@@ -155,6 +155,41 @@ func TestControlLaneValidationObserverCalledForSourceObjectAuthorityValidation(t
 	assertControlLaneValidationInputNoForbiddenEffects(t, input)
 }
 
+func TestControlLaneValidationObserverCalledForAdmissionCandidateValidation(t *testing.T) {
+	ctx := context.Background()
+	observer := &captureControlLaneValidationObserver{}
+	k := newTestKernelWithControlLaneValidationObserver(observer)
+	req := validAdmissionCandidateRequest()
+	req.ID = "shadow-admission-candidate"
+	req.DryRun = true
+	req.IdempotencyKey = ""
+
+	res, err := k.Process(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.Success {
+		t.Fatalf("expected admission candidate validation success, got %#v", res)
+	}
+	if len(observer.inputs) != 1 {
+		t.Fatalf("observer calls=%d, want 1", len(observer.inputs))
+	}
+	input := observer.inputs[0]
+	if input.Action != string(domain.ActionValidateAdmissionCandidate) || input.ValidationKind != "admission_candidate" {
+		t.Fatalf("unexpected observer action/kind: %#v", input)
+	}
+	if !input.Passed || input.Decision != AdmissionDecisionAccepted {
+		t.Fatalf("unexpected observer decision: %#v", input)
+	}
+	if input.NormalizedRefCount != 1 {
+		t.Fatalf("normalized ref count=%d, want 1", input.NormalizedRefCount)
+	}
+	if len(input.NormalizedRefs) != 1 || input.NormalizedRefs[0].RefID != "note-evidence-a" || input.NormalizedRefs[0].RefType != "memory_note" {
+		t.Fatalf("observer lost normalized admission refs: %#v", input.NormalizedRefs)
+	}
+	assertControlLaneValidationInputNoForbiddenEffects(t, input)
+}
+
 func TestControlLaneValidationObserverNotCalledForNormalSemanticWrite(t *testing.T) {
 	ctx := context.Background()
 	observer := &captureControlLaneValidationObserver{}

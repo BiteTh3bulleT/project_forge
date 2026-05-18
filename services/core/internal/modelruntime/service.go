@@ -2,6 +2,8 @@ package modelruntime
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -990,7 +992,52 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (result Gen
 		Metadata:      req.Metadata,
 	})
 	result.AuditID = auditID
+	result.Proposal = buildProposalEnvelope(req, reqRecord.RequestID, result, auditID, outputBytes)
 	return result, nil
+}
+
+func buildProposalEnvelope(req GenerateRequest, requestID string, result GenerateResult, auditID string, outputBytes int) *ProposalEnvelope {
+	sum := sha256.Sum256([]byte(result.Content))
+	totalTokens := result.PromptTokens + result.CompletionTokens
+	return &ProposalEnvelope{
+		SchemaVersion:          "modelruntime.proposal/v1",
+		ProposalID:             firstNonEmptyProposalValue(requestID, result.AuditID, auditID, req.CorrelationID, req.ModelID) + ":proposal",
+		ProposalKind:           "model_runtime_output",
+		ModelID:                strings.TrimSpace(result.ModelID),
+		Backend:                result.Backend,
+		WorkspaceID:            strings.TrimSpace(req.WorkspaceID),
+		Actor:                  strings.TrimSpace(req.Actor),
+		Source:                 strings.TrimSpace(req.Source),
+		CorrelationID:          strings.TrimSpace(req.CorrelationID),
+		TraceID:                strings.TrimSpace(req.TraceID),
+		RequestID:              strings.TrimSpace(requestID),
+		AuditID:                firstNonEmptyProposalValue(result.AuditID, auditID),
+		OutputHash:             "sha256:" + hex.EncodeToString(sum[:]),
+		OutputBytes:            outputBytes,
+		FinishReason:           strings.TrimSpace(result.FinishReason),
+		PromptTokens:           result.PromptTokens,
+		CompletionTokens:       result.CompletionTokens,
+		TotalTokens:            totalTokens,
+		ProposalOnly:           true,
+		CanonicalCommit:        false,
+		TruthMutation:          false,
+		MemoryMutation:         false,
+		EvidenceAdmission:      false,
+		GatewayExecution:       false,
+		ModelOutputAuthority:   false,
+		RequiresKernelCommit:   true,
+		RequiresValidation:     true,
+		LiveAuthorityMigration: false,
+	}
+}
+
+func firstNonEmptyProposalValue(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return "modelruntime-output"
 }
 
 func (s *Service) SchedulerSnapshot() SchedulerSnapshot {
@@ -1430,59 +1477,4 @@ func (s *Service) addCompletedLocked(record RequestExecutionRecord) {
 	}
 	excess := len(s.completed) - s.completedHistoryLimit
 	s.completed = append([]RequestExecutionRecord(nil), s.completed[excess:]...)
-}
-
-func (s *Service) recordAudit(ctx context.Context, record ModelRuntimeAuditRecord) string {
-	if s.audit == nil {
-		return ""
-	}
-	auditID, err := s.audit.RecordModelRuntime(ctx, record)
-	if err != nil {
-		return ""
-	}
-	return auditID
-}
-
-func (s *Service) hasRunningForBackend(backend ModelBackendKind) bool {
-	s.schedulerMu.Lock()
-	defer s.schedulerMu.Unlock()
-	for _, running := range s.running {
-		if running.Backend == backend {
-			return true
-		}
-	}
-	return false
-}
-
-func withOptionalTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	if timeout <= 0 {
-		return ctx, func() {}
-	}
-	return context.WithTimeout(ctx, timeout)
-}
-
-func approxGeneratePromptTokens(req GenerateRequest) int {
-	if len(req.Messages) > 0 {
-		total := 0
-		for _, msg := range req.Messages {
-			total += len(strings.Fields(msg.Role))
-			total += len(strings.Fields(msg.Content))
-			total += len(strings.Fields(msg.Name))
-		}
-		return total
-	}
-	return len(strings.Fields(req.Prompt))
-}
-
-func positiveOrDefault(value, fallback int) int {
-	if value > 0 {
-		return value
-	}
-	return fallback
-}
-
-func (s *Service) loadedModelCount() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return len(s.loaded)
 }

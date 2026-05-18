@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 
 	"forge/projectforge/services/core/internal/aios/domain"
 )
@@ -22,7 +23,7 @@ FROM semantic_links WHERE id = ?`, id)
 	var link domain.SemanticLink
 	var typ, provRaw, selected string
 	if err := row.Scan(&link.ID, &typ, &link.SourceID, &link.TargetID, &link.Scope.WorkspaceID, &link.Scope.LaneID, &selected, &link.Confidence, &provRaw, &link.CreatedAt); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return domain.SemanticLink{}, false, nil
 		}
 		return domain.SemanticLink{}, false, err

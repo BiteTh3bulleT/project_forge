@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -75,8 +76,23 @@ func TestLegacyMemoryMutationEndpointsAreRetiredAndAudited(t *testing.T) {
 			if rr.Code != http.StatusGone {
 				t.Fatalf("expected gone, got %d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
 			}
-			if got := rr.Body.String(); !strings.Contains(got, "authoritative semantic syscall path") {
-				t.Fatalf("expected semantic syscall guidance message, got %q", got)
+			var body map[string]any
+			if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+				t.Fatalf("decode retired memory response: %v body=%s", err, rr.Body.String())
+			}
+			if body["historyPreserved"] != true {
+				t.Fatalf("expected historyPreserved response, got %#v", body)
+			}
+			if got := rr.Body.String(); !strings.Contains(got, "Courthouse admission review") || !strings.Contains(got, "Control Lane semantic syscall path") {
+				t.Fatalf("expected Courthouse/Kernel migration guidance message, got %q", got)
+			}
+
+			var observationCount int
+			if err := st.DB.QueryRowContext(context.Background(), `SELECT COUNT(1) FROM memory_observations`).Scan(&observationCount); err != nil {
+				t.Fatalf("query memory observation count: %v", err)
+			}
+			if observationCount != 0 {
+				t.Fatalf("retired endpoint must not write memory_observations, got count=%d", observationCount)
 			}
 
 			var retiredCount int
@@ -102,6 +118,9 @@ WHERE category = 'memory' AND action = ? AND subject_id = ? AND outcome = 'denie
 			}
 			if !strings.Contains(payload, `"workspaceId":"`+workspace+`"`) {
 				t.Fatalf("expected workspaceId in legacy memory audit payload, got %s", payload)
+			}
+			if !strings.Contains(payload, `"historyPreserved":true`) || !strings.Contains(payload, `"VALIDATE_ADMISSION_CANDIDATE"`) {
+				t.Fatalf("expected migration review path in legacy memory audit payload, got %s", payload)
 			}
 		})
 	}

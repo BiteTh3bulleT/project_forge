@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -26,6 +27,7 @@ func TestServerRouteInventoryRepresentativeCoverage(t *testing.T) {
 		path   string
 	}{
 		{http.MethodGet, "/health"},
+		{http.MethodGet, "/health/detailed"},
 
 		{http.MethodGet, "/forge/models"},
 		{http.MethodPost, "/forge/models/{id}/load"},
@@ -115,6 +117,14 @@ func TestServerRouteInventoryOpenAICompatConditional(t *testing.T) {
 	assertRouteMounted(t, enabled, http.MethodPost, "/v1/chat/completions")
 }
 
+func TestServerRouteInventoryMetricsEndpointConditional(t *testing.T) {
+	disabled := collectServerRoutes(t, (&Server{}).Handler())
+	assertRouteNotMounted(t, disabled, http.MethodGet, "/metrics")
+
+	enabled := collectServerRoutes(t, (&Server{cfg: config.Config{EnableMetricsEndpoint: true}}).Handler())
+	assertRouteMounted(t, enabled, http.MethodGet, "/metrics")
+}
+
 func TestServerRouteInventoryCompatibilityAndRetiredRoutes(t *testing.T) {
 	srv := &Server{}
 	routes := collectServerRoutes(t, srv.Handler())
@@ -139,6 +149,72 @@ func TestServerRouteInventoryHealthAndMiddlewareSmoke(t *testing.T) {
 	(&Server{}).Handler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("/health status=%d, want %d", rr.Code, http.StatusOK)
+	}
+}
+
+func TestDetailedHealthRequiresBearerTokenWhenConfigured(t *testing.T) {
+	srv := &Server{cfg: config.Config{APIToken: "secret"}}
+
+	publicReq := httptest.NewRequest(http.MethodGet, "/health", nil)
+	publicRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(publicRR, publicReq)
+	if publicRR.Code != http.StatusOK {
+		t.Fatalf("/health status=%d, want %d", publicRR.Code, http.StatusOK)
+	}
+
+	detailedReq := httptest.NewRequest(http.MethodGet, "/health/detailed", nil)
+	detailedRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(detailedRR, detailedReq)
+	if detailedRR.Code != http.StatusUnauthorized {
+		t.Fatalf("/health/detailed status=%d, want %d", detailedRR.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestDetailedHealthReturnsBoundedServiceRollup(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	srv.cfg.APIToken = "secret"
+	srv.modelRuntime = newFakeModelRuntime()
+
+	req := httptest.NewRequest(http.MethodGet, "/health/detailed?api_key=should-not-appear", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	req.Header.Set("Cookie", "session=should-not-appear")
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("/health/detailed status=%d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	var payload struct {
+		OK          bool                      `json:"ok"`
+		Service     string                    `json:"service"`
+		HealthState string                    `json:"healthState"`
+		Services    map[string]map[string]any `json:"services"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode detailed health: %v body=%s", err, rr.Body.String())
+	}
+	if !payload.OK || payload.Service != "forge-core" || payload.HealthState == "" {
+		t.Fatalf("unexpected detailed health envelope: %#v", payload)
+	}
+	for _, name := range []string{"storage", "modelruntime", "gateway", "hostbridge", "forgekshadow", "dream", "autonomy"} {
+		if payload.Services[name] == nil {
+			t.Fatalf("missing service rollup %q in %#v", name, payload.Services)
+		}
+		if payload.Services[name]["status"] == "" {
+			t.Fatalf("service %q missing status: %#v", name, payload.Services[name])
+		}
+	}
+	if payload.Services["storage"]["status"] != "ok" {
+		t.Fatalf("storage status=%v, want ok", payload.Services["storage"]["status"])
+	}
+	if payload.Services["modelruntime"]["status"] != "ready" {
+		t.Fatalf("modelruntime status=%v, want ready", payload.Services["modelruntime"]["status"])
+	}
+	serialized := strings.ToLower(rr.Body.String())
+	for _, forbidden := range []string{"secret", "should-not-appear", "authorization", "cookie", "api_key"} {
+		if strings.Contains(serialized, forbidden) {
+			t.Fatalf("detailed health leaked forbidden fragment %q in %s", forbidden, rr.Body.String())
+		}
 	}
 }
 

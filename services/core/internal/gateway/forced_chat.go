@@ -304,10 +304,25 @@ func wantsWebSearch(user string) bool {
 	if strings.Contains(s, "search the web") || strings.Contains(s, "web search") || strings.Contains(s, "look up") || strings.Contains(s, "google ") {
 		return true
 	}
+	if isCurrentNewsQuery(s) {
+		return true
+	}
 	if strings.Contains(s, "weather") && (strings.Contains(s, " today") || strings.Contains(s, " current") || strings.Contains(s, " forecast")) {
 		return strings.Contains(s, " in ") || strings.Contains(s, " for ") || strings.Contains(s, " at ")
 	}
 	return strings.HasPrefix(s, "search ") && !strings.Contains(s, "/")
+}
+
+func isCurrentNewsQuery(normalizedLower string) bool {
+	if normalizedLower == "" || !strings.Contains(normalizedLower, "news") {
+		return false
+	}
+	for _, marker := range []string{"today", "latest", "current", "headlines", "breaking", "this morning", "this afternoon", "this evening"} {
+		if strings.Contains(normalizedLower, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func wantsURLFetch(user string) bool {
@@ -363,6 +378,9 @@ func ParseWebSearchQuery(user string) (string, bool) {
 				return query, true
 			}
 		}
+	}
+	if isCurrentNewsQuery(lower) {
+		return "latest notable news headlines today", true
 	}
 	return s, true
 }

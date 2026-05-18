@@ -5,6 +5,34 @@
   ...
 }:
 
+let
+  forgePlymouthTheme = pkgs.runCommand "forge-plymouth-theme" { } ''
+    theme_dir="$out/share/plymouth/themes/forge"
+    mkdir -p "$theme_dir"
+    cat > "$theme_dir/forge.plymouth" <<'EOF'
+[Plymouth Theme]
+Name=FORGE
+Description=FORGE-OS Runtime boot screen
+ModuleName=script
+
+[script]
+ImageDir=/share/plymouth/themes/forge
+ScriptFile=/share/plymouth/themes/forge/forge.script
+EOF
+    cat > "$theme_dir/forge.script" <<'EOF'
+Window.SetBackgroundTopColor(0.02, 0.03, 0.035);
+Window.SetBackgroundBottomColor(0.0, 0.0, 0.0);
+
+title = Text("FORGE-OS", 0.95, 0.98, 1.0);
+subtitle = Text("Operator Runtime", 0.55, 0.68, 0.72);
+
+title.SetX(Window.GetWidth() / 2 - title.GetWidth() / 2);
+title.SetY(Window.GetHeight() / 2 - title.GetHeight() / 2 - 24);
+subtitle.SetX(Window.GetWidth() / 2 - subtitle.GetWidth() / 2);
+subtitle.SetY(Window.GetHeight() / 2 + 18);
+EOF
+  '';
+in
 {
   imports = [
     ../modules/forge-os.nix
@@ -17,10 +45,59 @@
   system.stateVersion = "25.11";
 
   boot.loader.grub.devices = lib.mkDefault [ "/dev/sda" ];
+  boot.loader.timeout = lib.mkDefault 0;
+  boot.consoleLogLevel = lib.mkDefault 3;
+  boot.initrd.verbose = lib.mkDefault false;
+  boot.kernelParams = lib.mkDefault [
+    "quiet"
+    "splash"
+    "loglevel=3"
+    "udev.log_priority=3"
+    "systemd.show_status=false"
+    "rd.systemd.show_status=false"
+  ];
+  boot.plymouth = {
+    enable = lib.mkDefault true;
+    theme = lib.mkForce "forge";
+    themePackages = lib.mkDefault [ forgePlymouthTheme ];
+    extraConfig = ''
+      ShowDelay=0
+    '';
+  };
+  boot.tmp.cleanOnBoot = lib.mkDefault true;
+
+  nix = {
+    settings = {
+      experimental-features = lib.mkDefault [
+        "nix-command"
+        "flakes"
+      ];
+      max-jobs = lib.mkDefault 6;
+      cores = lib.mkDefault 0;
+      auto-optimise-store = lib.mkDefault true;
+    };
+    gc = {
+      automatic = lib.mkDefault true;
+      dates = lib.mkDefault "weekly";
+      options = lib.mkDefault "--delete-older-than 14d";
+    };
+  };
+
   fileSystems."/" = {
     device = lib.mkDefault "/dev/disk/by-label/nixos";
     fsType = lib.mkDefault "ext4";
   };
+
+  services.fstrim.enable = lib.mkDefault true;
+  zramSwap = {
+    enable = lib.mkDefault true;
+    memoryPercent = lib.mkDefault 25;
+  };
+
+  services.journald.extraConfig = lib.mkDefault ''
+    SystemMaxUse=512M
+    RuntimeMaxUse=128M
+  '';
 
   networking.hostName = "forge-operator-vm";
   networking.networkmanager.enable = lib.mkDefault true;
@@ -34,7 +111,7 @@
 
   services.forge-core = {
     bindHost = lib.mkDefault "127.0.0.1";
-    enableModelRuntime = true;
+    enableModelRuntime = lib.mkDefault true;
     safeModeForceCPUOnly = lib.mkDefault true;
     extraEnvironment = {
       OLLAMA_BASE_URL = lib.mkDefault "http://127.0.0.1:11434";
@@ -80,6 +157,8 @@
     FORGE_SHELL_MODEL_MUTATION=false
     FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false
     FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false
+    FORGE_BOOT_SPLASH=plymouth
+    FORGE_BOOT_LOGIN=greetd-regreet
   '';
 
   services.getty.helpLine = ''
@@ -92,8 +171,8 @@
 
   virtualisation.vmVariant = {
     virtualisation = {
-      memorySize = lib.mkDefault 4096;
-      cores = lib.mkDefault 4;
+      memorySize = lib.mkDefault 12288;
+      cores = lib.mkDefault 6;
       diskSize = lib.mkDefault 32768;
       graphics = lib.mkDefault true;
     };
@@ -103,6 +182,14 @@
     {
       assertion = config.services.displayManager.autoLogin.enable == false;
       message = "FORGE operator VM must not enable display-manager autologin.";
+    }
+    {
+      assertion = config.services.greetd.enable == true;
+      message = "FORGE operator VM must start the graphical FORGE session through greetd.";
+    }
+    {
+      assertion = config.boot.plymouth.enable == true;
+      message = "FORGE operator VM must present the FORGE boot splash by default.";
     }
     {
       assertion = config.forge.shellSession.safeMode == true;

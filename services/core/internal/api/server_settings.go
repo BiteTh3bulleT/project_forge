@@ -4,7 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
 	"net/http"
+	"net/netip"
+	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,7 +21,10 @@ import (
 	"forge/projectforge/services/core/internal/ingest"
 )
 
-const redactedSettingSecret = "[redacted]"
+const (
+	redactedSettingSecret = "[redacted]"
+	localOllamaBaseURL    = "http://127.0.0.1:11434"
+)
 
 func redactedSettingSecretValue(value string) string {
 	if strings.TrimSpace(value) == "" {
@@ -33,7 +40,7 @@ func shouldPersistSettingSecret(value string) bool {
 func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	ext := loadSetting(s.st.DB, "extensions_csv", ingest.DefaultExtensionsCSV())
 	theme := loadSetting(s.st.DB, "theme", "dark")
-	ollamaBase := loadSetting(s.st.DB, "ollama_base_url", "http://127.0.0.1:11434")
+	ollamaBase := effectiveOllamaBaseURL(s.st.DB)
 	ollamaModel := normalizeOllamaModel(loadSetting(s.st.DB, "ollama_model", ""))
 	embeddingProvider := loadSetting(s.st.DB, "embedding_provider", "local_hash")
 	embeddingModel := loadSetting(s.st.DB, "embedding_model", "")
@@ -52,13 +59,13 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	retrievalVSAMaxAdditive := loadSetting(s.st.DB, "retrieval_vsa_max_additive", "0.12")
 	chatPersonalityPrompt := loadSetting(s.st.DB, "chat_personality_prompt", defaultChatOperatorSystemPrompt())
 	remoteAccessEnabled := parseRemoteBool(loadSetting(s.st.DB, remoteAccessEnabledKey, "false"))
-	remoteAccessToken := strings.TrimSpace(loadSetting(s.st.DB, remoteAccessTokenKey, ""))
+	remoteAccessToken := strings.TrimSpace(loadSecretSetting(r.Context(), s.st.DB, s.cfg.DataDir, remoteAccessTokenKey, ""))
 	remoteCrossChatContext := parseRemoteBool(loadSetting(s.st.DB, remoteCrossChatContextKey, "false"))
-	telegramBotToken := strings.TrimSpace(loadSetting(s.st.DB, telegramBotTokenKey, ""))
+	telegramBotToken := strings.TrimSpace(loadSecretSetting(r.Context(), s.st.DB, s.cfg.DataDir, telegramBotTokenKey, ""))
 	telegramDefaultChatID := strings.TrimSpace(loadSetting(s.st.DB, telegramDefaultChatIDKey, ""))
-	discordBotToken := strings.TrimSpace(loadSetting(s.st.DB, discordBotTokenKey, ""))
+	discordBotToken := strings.TrimSpace(loadSecretSetting(r.Context(), s.st.DB, s.cfg.DataDir, discordBotTokenKey, ""))
 	discordDefaultChannelID := strings.TrimSpace(loadSetting(s.st.DB, discordDefaultChannelIDKey, ""))
-	discordWebhookURL := strings.TrimSpace(loadSetting(s.st.DB, discordWebhookURLKey, ""))
+	discordWebhookURL := strings.TrimSpace(loadSecretSetting(r.Context(), s.st.DB, s.cfg.DataDir, discordWebhookURLKey, ""))
 	discordCrossChatContext := parseRemoteBool(loadSetting(s.st.DB, discordGatewayCrossChatContextKey, "false"))
 	remoteDefaultThreadID := strings.TrimSpace(loadSetting(s.st.DB, remoteDefaultThreadIDKey, ""))
 	dreamModeEnabled := parseRemoteBool(loadSetting(s.st.DB, "dream_mode_enabled", "true"))
@@ -141,98 +148,98 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	telegramConfigChanged := false
 	if v, ok := body["extensionsCsv"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, "extensions_csv", v); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 		s.ingest.SetExtensionsCSV(v)
 	}
 	if v, ok := body["theme"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, "theme", v); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
 	if v, ok := body["ollamaBaseUrl"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, "ollama_base_url", v); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
 	if v, ok := body["ollamaModel"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, "ollama_model", normalizeOllamaModel(v)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
 	if v, ok := body["embeddingProvider"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, "embedding_provider", v); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
 	if v, ok := body["embeddingModel"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, "embedding_model", v); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
 	switch v := body["embeddingDims"].(type) {
 	case string:
 		if err := upsertSetting(ctx, s.st.DB, "embedding_dims", v); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	case float64:
 		if err := upsertSetting(ctx, s.st.DB, "embedding_dims", strconv.Itoa(int(v))); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
 	if v, ok := body["embeddingTeiEndpoint"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, "embedding_tei_endpoint", v); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
 	if v, ok := body["embeddingTeiApiKey"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, "embedding_tei_api_key", v); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
 	switch v := body["embeddingTeiTimeoutMs"].(type) {
 	case string:
 		if err := upsertSetting(ctx, s.st.DB, "embedding_tei_timeout_ms", v); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	case float64:
 		if err := upsertSetting(ctx, s.st.DB, "embedding_tei_timeout_ms", strconv.Itoa(int(v))); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
 	switch v := body["retrievalWeightKeyword"].(type) {
 	case string:
 		if err := upsertSetting(ctx, s.st.DB, "retrieval_weight_keyword", v); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	case float64:
 		if err := upsertSetting(ctx, s.st.DB, "retrieval_weight_keyword", strconv.FormatFloat(v, 'f', 4, 64)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
 	switch v := body["retrievalWeightSemantic"].(type) {
 	case string:
 		if err := upsertSetting(ctx, s.st.DB, "retrieval_weight_semantic", v); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	case float64:
 		if err := upsertSetting(ctx, s.st.DB, "retrieval_weight_semantic", strconv.FormatFloat(v, 'f', 4, 64)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
@@ -246,7 +253,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 			mode = "off"
 		}
 		if err := upsertSetting(ctx, s.st.DB, "retrieval_vsa_mode", mode); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
@@ -257,12 +264,12 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	switch v := dimsRaw.(type) {
 	case string:
 		if err := upsertSetting(ctx, s.st.DB, "retrieval_vsa_dims", strings.TrimSpace(v)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	case float64:
 		if err := upsertSetting(ctx, s.st.DB, "retrieval_vsa_dims", strconv.Itoa(int(v))); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
@@ -273,12 +280,12 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	switch v := seedRaw.(type) {
 	case string:
 		if err := upsertSetting(ctx, s.st.DB, "retrieval_vsa_seed", strings.TrimSpace(v)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	case float64:
 		if err := upsertSetting(ctx, s.st.DB, "retrieval_vsa_seed", strconv.Itoa(int(v))); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
@@ -305,12 +312,12 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 			switch v := raw.(type) {
 			case string:
 				if err := upsertSetting(ctx, s.st.DB, item.SettingKey, strings.TrimSpace(v)); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
+					writeAPIRequestError(w, http.StatusInternalServerError, err)
 					return
 				}
 			case float64:
 				if err := upsertSetting(ctx, s.st.DB, item.SettingKey, strconv.FormatFloat(v, 'f', 4, 64)); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
+					writeAPIRequestError(w, http.StatusInternalServerError, err)
 					return
 				}
 			}
@@ -318,7 +325,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if v, ok := body["remoteAccessEnabled"]; ok {
 		if err := upsertSetting(ctx, s.st.DB, remoteAccessEnabledKey, parseRemoteBoolValue(v)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 		discordConfigChanged = true
@@ -326,35 +333,35 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if v, ok := body["remoteAccessToken"].(string); ok {
 		if shouldPersistSettingSecret(v) {
-			if err := upsertSetting(ctx, s.st.DB, remoteAccessTokenKey, strings.TrimSpace(v)); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+			if err := upsertSecretSetting(ctx, s.st.DB, s.cfg.DataDir, remoteAccessTokenKey, v); err != nil {
+				writeAPIRequestError(w, http.StatusInternalServerError, err)
 				return
 			}
 		}
 	}
 	if v, ok := body["remoteCrossChatContext"]; ok {
 		if err := upsertSetting(ctx, s.st.DB, remoteCrossChatContextKey, parseRemoteBoolValue(v)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
 	if raw, ok := body["remoteDefaultThreadId"]; ok {
 		if v := parseAnyInt64(raw); v > 0 {
 			if err := upsertSetting(ctx, s.st.DB, remoteDefaultThreadIDKey, strconv.FormatInt(v, 10)); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				writeAPIRequestError(w, http.StatusInternalServerError, err)
 				return
 			}
 		} else if threadIDRaw, ok := raw.(string); ok && strings.TrimSpace(threadIDRaw) == "" {
 			if err := upsertSetting(ctx, s.st.DB, remoteDefaultThreadIDKey, ""); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				writeAPIRequestError(w, http.StatusInternalServerError, err)
 				return
 			}
 		}
 	}
 	if v, ok := body["telegramBotToken"].(string); ok {
 		if shouldPersistSettingSecret(v) {
-			if err := upsertSetting(ctx, s.st.DB, telegramBotTokenKey, strings.TrimSpace(v)); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+			if err := upsertSecretSetting(ctx, s.st.DB, s.cfg.DataDir, telegramBotTokenKey, v); err != nil {
+				writeAPIRequestError(w, http.StatusInternalServerError, err)
 				return
 			}
 			telegramConfigChanged = true
@@ -362,14 +369,14 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if v, ok := body["telegramDefaultChatId"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, telegramDefaultChatIDKey, strings.TrimSpace(v)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
 	if v, ok := body["discordBotToken"].(string); ok {
 		if shouldPersistSettingSecret(v) {
-			if err := upsertSetting(ctx, s.st.DB, discordBotTokenKey, strings.TrimSpace(v)); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+			if err := upsertSecretSetting(ctx, s.st.DB, s.cfg.DataDir, discordBotTokenKey, v); err != nil {
+				writeAPIRequestError(w, http.StatusInternalServerError, err)
 				return
 			}
 			discordConfigChanged = true
@@ -377,15 +384,15 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if v, ok := body["discordDefaultChannelId"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, discordDefaultChannelIDKey, strings.TrimSpace(v)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 		discordConfigChanged = true
 	}
 	if v, ok := body["discordWebhookUrl"].(string); ok {
 		if shouldPersistSettingSecret(v) {
-			if err := upsertSetting(ctx, s.st.DB, discordWebhookURLKey, strings.TrimSpace(v)); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+			if err := upsertSecretSetting(ctx, s.st.DB, s.cfg.DataDir, discordWebhookURLKey, v); err != nil {
+				writeAPIRequestError(w, http.StatusInternalServerError, err)
 				return
 			}
 			discordConfigChanged = true
@@ -393,7 +400,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if v, ok := body["discordCrossChatContext"]; ok {
 		if err := upsertSetting(ctx, s.st.DB, discordGatewayCrossChatContextKey, parseRemoteBoolValue(v)); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 		discordConfigChanged = true
@@ -404,7 +411,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 			next = defaultChatOperatorSystemPrompt()
 		}
 		if err := upsertSetting(ctx, s.st.DB, "chat_personality_prompt", next); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
 	}
@@ -426,7 +433,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		} {
 			if v, ok := dreamMode[item.bodyKey]; ok {
 				if err := upsertSetting(ctx, s.st.DB, item.settingKey, parseRemoteBoolValue(v)); err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
+					writeAPIRequestError(w, http.StatusInternalServerError, err)
 					return
 				}
 			}
@@ -439,7 +446,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 				mode = "microdream"
 			}
 			if err := upsertSetting(ctx, s.st.DB, "dream_mode_mode", mode); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				writeAPIRequestError(w, http.StatusInternalServerError, err)
 				return
 			}
 		}
@@ -453,7 +460,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 			if raw, ok := dreamMode[item.bodyKey]; ok {
 				if value := parseAnyInt64(raw); value > 0 {
 					if err := upsertSetting(ctx, s.st.DB, item.settingKey, strconv.FormatInt(value, 10)); err != nil {
-						http.Error(w, err.Error(), http.StatusInternalServerError)
+						writeAPIRequestError(w, http.StatusInternalServerError, err)
 						return
 					}
 				}
@@ -461,7 +468,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := s.patchShadowMode(ctx, body); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
 	if discordConfigChanged {
@@ -471,7 +478,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		s.reloadTelegramGateway(ctx)
 	}
 	if err := s.patchRuntimeControls(ctx, body); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	_ = s.log.Emit(ctx, "command.executed", map[string]any{"command": "settings.patch"})
@@ -480,9 +487,22 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGetOllamaModels(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	baseURL := strings.TrimSpace(r.URL.Query().Get("baseUrl"))
+	configuredBaseURL := strings.TrimSpace(effectiveOllamaBaseURL(s.st.DB))
+	baseURLOverride := strings.TrimSpace(r.URL.Query().Get("baseUrl"))
+	baseURL := baseURLOverride
+	if baseURLOverride == "" {
+		baseURL = configuredBaseURL
+	} else if !sameOllamaModelsBaseURL(baseURLOverride, configuredBaseURL) {
+		if err := validateOllamaModelsBaseURLOverride(ctx, baseURLOverride); err != nil {
+			writeAPIRequestError(w, http.StatusBadRequest, fmt.Errorf("invalid baseUrl: %w", err))
+			return
+		}
+	} else if configuredBaseURL != "" {
+		baseURL = configuredBaseURL
+	}
 	if baseURL == "" {
-		baseURL = strings.TrimSpace(loadSetting(s.st.DB, "ollama_base_url", "http://127.0.0.1:11434"))
+		writeAPIRequestError(w, http.StatusBadRequest, fmt.Errorf("invalid baseUrl: must not be empty"))
+		return
 	}
 	// Always allow best-effort discovery so settings UX can render even if Ollama is offline.
 	resp := map[string]any{
@@ -519,6 +539,105 @@ func (s *Server) handleGetOllamaModels(w http.ResponseWriter, r *http.Request) {
 	resp["status"] = "ready"
 	resp["models"] = models
 	writeJSON(w, http.StatusOK, resp)
+}
+
+const maxOllamaModelsBaseURLOverrideLength = 2048
+
+func validateOllamaModelsBaseURLOverride(ctx context.Context, raw string) error {
+	baseURL := strings.TrimSpace(raw)
+	if baseURL == "" {
+		return fmt.Errorf("must not be empty")
+	}
+	if len(baseURL) > maxOllamaModelsBaseURLOverrideLength {
+		return fmt.Errorf("is too long")
+	}
+
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return err
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("scheme must be http or https")
+	}
+	if parsed.User != nil {
+		return fmt.Errorf("must not include userinfo")
+	}
+
+	host := strings.TrimSpace(parsed.Hostname())
+	if host == "" {
+		return fmt.Errorf("host is required")
+	}
+	if strings.Contains(host, "%") {
+		return fmt.Errorf("host zone identifiers are not allowed")
+	}
+	if isLocalhostName(host) {
+		return fmt.Errorf("localhost hosts are not allowed")
+	}
+
+	if addr, err := netip.ParseAddr(host); err == nil {
+		if !isAllowedOllamaModelsBaseURLAddr(addr) {
+			return fmt.Errorf("host address is not allowed")
+		}
+		return nil
+	}
+
+	addrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+	if err != nil {
+		return fmt.Errorf("resolve host: %w", err)
+	}
+	if len(addrs) == 0 {
+		return fmt.Errorf("host resolved no addresses")
+	}
+	for _, addr := range addrs {
+		if !isAllowedOllamaModelsBaseURLAddr(addr) {
+			return fmt.Errorf("host resolves to an address that is not allowed")
+		}
+	}
+	return nil
+}
+
+func isLocalhostName(host string) bool {
+	normalized := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(host)), ".")
+	return normalized == "localhost" || strings.HasSuffix(normalized, ".localhost")
+}
+
+func isAllowedOllamaModelsBaseURLAddr(addr netip.Addr) bool {
+	return addr.IsValid() &&
+		addr.IsGlobalUnicast() &&
+		!addr.IsLoopback() &&
+		!addr.IsPrivate() &&
+		!addr.IsLinkLocalUnicast() &&
+		!addr.IsMulticast() &&
+		!addr.IsUnspecified()
+}
+
+func sameOllamaModelsBaseURL(a, b string) bool {
+	left := strings.TrimRight(strings.TrimSpace(a), "/")
+	right := strings.TrimRight(strings.TrimSpace(b), "/")
+	if left == "" || right == "" {
+		return false
+	}
+	return strings.EqualFold(left, right)
+}
+
+func defaultOllamaBaseURL() string {
+	if value := strings.TrimSpace(os.Getenv("OLLAMA_BASE_URL")); value != "" {
+		return value
+	}
+	return localOllamaBaseURL
+}
+
+func effectiveOllamaBaseURL(db *sql.DB) string {
+	envDefault := defaultOllamaBaseURL()
+	stored := strings.TrimSpace(loadSetting(db, "ollama_base_url", ""))
+	if stored == "" {
+		return envDefault
+	}
+	if !sameOllamaModelsBaseURL(envDefault, localOllamaBaseURL) && sameOllamaModelsBaseURL(stored, localOllamaBaseURL) {
+		return envDefault
+	}
+	return stored
 }
 
 func normalizeOllamaModel(raw string) string {

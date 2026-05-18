@@ -1,0 +1,12 @@
+---
+description: Three-pass execution loop
+alwaysApply: true
+---
+
+Use three passes:
+
+1. Understand/map.
+2. Execute smallest safe change.
+3. Verify/report.
+
+Stop if scope requires touching protected areas not listed in the phase.

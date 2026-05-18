@@ -184,6 +184,8 @@ export function SystemPage() {
   const proposalRows = status?.forgeh?.proposals ?? [];
   const executionRows = status?.forgeh?.executions?.items ?? [];
   const kernelActivation = status?.kernel_activation;
+  const subsystemRows = kernelActivation?.authority_matrix ?? [];
+  const cutoverReadiness = status?.storage?.cutover_readiness;
   const authorityRows = status?.authority?.rows ?? [];
   const authorityBlockers = status?.authority?.blockers ?? [];
   const approvalQueueReason = status?.approval_queue?.reason;
@@ -219,6 +221,64 @@ export function SystemPage() {
     ];
     return Array.from(new Set(values.filter(Boolean))).slice(0, 8);
   }, [status]);
+  const cockpitRows = useMemo(
+    () => [
+      {
+        id: "authority_gates",
+        label: "Authority gates",
+        status: `${kernelActivation?.authority_ready_gates ?? 0} ready / ${kernelActivation?.authority_blocked_gates ?? 0} blocked`,
+        liveOwner: kernelActivation?.live_owner ?? "aios.controllane",
+        targetOwner: "FORGE-K Kernel",
+        source: "kernel_activation.authority_gates",
+      },
+      {
+        id: "cases",
+        label: "Cases",
+        status: "simulator/planned",
+        liveOwner: "not live-wired",
+        targetOwner: "FORGE-K case packets",
+        source: "planned Courthouse case surface",
+      },
+      {
+        id: "context_bundles",
+        label: "Context bundles",
+        status: "shadow/inspector",
+        liveOwner: "context snapshots/restore inspector",
+        targetOwner: "FORGE-K Context Compiler",
+        source: "/inspectors",
+      },
+      {
+        id: "proposals",
+        label: "Proposals",
+        status: `${proposalRows.length} resource proposals`,
+        liveOwner: "forgeh plus autonomy dry-run reports",
+        targetOwner: "proposal lanes",
+        source: "forgeh.proposals",
+      },
+      {
+        id: "journal_replay",
+        label: "Journal/replay",
+        status: "trace/inspector",
+        liveOwner: "audit/journal trace APIs",
+        targetOwner: "FORGE-K Kernel replay",
+        source: "/inspectors",
+      },
+      {
+        id: "lymphatic_reports",
+        label: "Lymphatic reports",
+        status: "proposal-only",
+        liveOwner: "autonomy maintenance dry-run reports",
+        targetOwner: "FORGE-K Lymphatic Lane",
+        source: "autonomy maintenance dry-run",
+      },
+    ],
+    [
+      kernelActivation?.authority_blocked_gates,
+      kernelActivation?.authority_ready_gates,
+      kernelActivation?.live_owner,
+      proposalRows.length,
+    ],
+  );
 
   if (error && !status) {
     return (
@@ -527,6 +587,45 @@ export function SystemPage() {
             </div>
           </Panel>
 
+          <Panel title="Operator Cockpit Index">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[840px] text-left text-xs">
+                <thead className="text-forge-mist/70">
+                  <tr>
+                    <th className="py-2 pr-3">Surface</th>
+                    <th className="py-2 pr-3">Status</th>
+                    <th className="py-2 pr-3">Live owner</th>
+                    <th className="py-2 pr-3">Target owner</th>
+                    <th className="py-2 pr-3">Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cockpitRows.map((row) => (
+                    <tr key={row.id} className="border-t border-white/10">
+                      <td className="py-2 pr-3 font-mono text-forge-ash">
+                        {row.label}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <span className={statusClass(row.status)}>
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-forge-mist">
+                        {row.liveOwner}
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-forge-mist">
+                        {row.targetOwner}
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-forge-mist">
+                        {row.source}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
+
           <Panel
             title="FORGE-K Activation Readiness"
             detail={kernelActivation?.summary}
@@ -661,6 +760,54 @@ export function SystemPage() {
                 </tbody>
               </table>
             </div>
+          </Panel>
+
+          <Panel title="FORGE-K Subsystem Cockpit">
+            {subsystemRows.length === 0 ? (
+              <div className="rounded border border-dashed border-white/10 bg-black/20 p-3 text-xs leading-5 text-forge-mist/70">
+                Subsystem readiness matrix not reported.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-left text-xs">
+                  <thead className="text-forge-mist/70">
+                    <tr>
+                      <th className="py-2 pr-3">Subsystem</th>
+                      <th className="py-2 pr-3">Status</th>
+                      <th className="py-2 pr-3">Live owner</th>
+                      <th className="py-2 pr-3">Target owner</th>
+                      <th className="py-2 pr-3">Blocker</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {subsystemRows.map((entry) => (
+                      <tr
+                        key={entry.subsystem ?? entry.target_owner}
+                        className="border-t border-white/10"
+                      >
+                        <td className="py-2 pr-3 font-mono text-forge-ash">
+                          {valueText(entry.subsystem)}
+                        </td>
+                        <td className="py-2 pr-3">
+                          <span className={statusClass(entry.current_status)}>
+                            {valueText(entry.current_status)}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-3 font-mono text-forge-mist">
+                          {valueText(entry.live_owner)}
+                        </td>
+                        <td className="py-2 pr-3 font-mono text-forge-mist">
+                          {valueText(entry.target_owner)}
+                        </td>
+                        <td className="py-2 pr-3 text-forge-mist">
+                          {formatList(entry.blockers)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Panel>
 
           <Panel
@@ -899,6 +1046,30 @@ export function SystemPage() {
               <DetailRow label="Redis truth" value={status?.storage?.redis?.truth_authority} />
               <DetailRow label="Qdrant truth" value={status?.storage?.qdrant?.truth_authority} />
             </div>
+          </Panel>
+
+          <Panel title="Storage Cutover Readiness">
+            {cutoverReadiness ? (
+              <div className="space-y-2 text-xs text-forge-mist">
+                <DetailRow label="Status" value={cutoverReadiness.status} tone={cutoverReadiness.status} />
+                <DetailRow label="Selected domain" value={cutoverReadiness.selected_domain} />
+                <DetailRow label="Canonical default" value={cutoverReadiness.canonical_default} />
+                <DetailRow label="Requested backend" value={cutoverReadiness.requested_backend} />
+                <DetailRow label="Dual-write ready" value={cutoverReadiness.ready_for_dual_write} />
+                <DetailRow label="Read-compare ready" value={cutoverReadiness.ready_for_read_compare} />
+                <DetailRow label="Cutover proposal ready" value={cutoverReadiness.ready_for_cutover_proposal} />
+                <DetailRow label="Redis truth" value={cutoverReadiness.redis_truth_authority} />
+                <DetailRow label="Qdrant truth" value={cutoverReadiness.qdrant_truth_authority} />
+                <DetailRow label="Rollback" value={cutoverReadiness.rollback_path} />
+                <div className="rounded border border-forge-amber/20 bg-forge-amber/10 p-2 leading-5">
+                  {formatList(cutoverReadiness.blockers)}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded border border-dashed border-white/10 bg-black/20 p-3 text-xs leading-5 text-forge-mist/70">
+                storage cutover readiness not reported
+              </div>
+            )}
           </Panel>
 
           <Panel title="Approval Queue">

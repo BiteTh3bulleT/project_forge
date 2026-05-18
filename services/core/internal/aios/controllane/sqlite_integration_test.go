@@ -490,6 +490,147 @@ func TestSQLiteFutureIrisCannotBypassKernel(t *testing.T) {
 	}
 }
 
+func TestSQLiteCreateNoteIsLowRiskKernelStyleCommit(t *testing.T) {
+	ctx := context.Background()
+	k, txRunner, st := newSQLiteKernel(t, nil)
+	req := validSQLiteRequest(domain.ActionCreateNote, "phase11-note-commit", "ws-phase11")
+	req.Payload = map[string]any{
+		"id":      "phase11-note",
+		"type":    string(domain.NoteFact),
+		"title":   "Phase 11 note",
+		"content": "low-risk object committed through Control Lane",
+	}
+
+	res, err := k.Process(ctx, req)
+	if err != nil || !res.Success {
+		t.Fatalf("create note failed: err=%v res=%+v", err, res)
+	}
+	if !stringInSlice(res.CommittedObjectIDs, "phase11-note") || !stringInSlice(res.CommittedObjectIDs, "phase11-note-commit:journal_event") {
+		t.Fatalf("expected note and journal event committed ids, got %v", res.CommittedObjectIDs)
+	}
+	note, ok := txRunner.read.FindNote("phase11-note")
+	if !ok {
+		t.Fatalf("expected note to be queryable through semantic read store")
+	}
+	if note.Scope.WorkspaceID != req.Scope.WorkspaceID || note.Provenance.TraceID != req.TraceID {
+		t.Fatalf("unexpected note scope/provenance: %#v", note)
+	}
+
+	var eventType, eventSource, eventCorr string
+	if err := st.DB.QueryRowContext(ctx, `SELECT type, source, correlation_id FROM journal_events WHERE id = ?`, "phase11-note-commit:journal_event").Scan(&eventType, &eventSource, &eventCorr); err != nil {
+		t.Fatalf("query journal event: %v", err)
+	}
+	if eventType != "semantic_syscall.create_note" || eventSource != "forge_kernel" || eventCorr != req.CorrelationID {
+		t.Fatalf("unexpected journal event type/source/corr: %q %q %q", eventType, eventSource, eventCorr)
+	}
+
+	var committedBy, syscallID, correlationID, auditID string
+	if err := st.DB.QueryRowContext(ctx, `SELECT committed_by, syscall_id, correlation_id, audit_id FROM memory_notes WHERE id = ?`, "phase11-note").Scan(&committedBy, &syscallID, &correlationID, &auditID); err != nil {
+		t.Fatalf("query note lineage: %v", err)
+	}
+	if committedBy != "forge_kernel" || syscallID != req.ID || correlationID != req.CorrelationID || auditID == "" {
+		t.Fatalf("unexpected note lineage committed=%q syscall=%q corr=%q audit=%q", committedBy, syscallID, correlationID, auditID)
+	}
+}
+
+func TestSQLiteStateAndLoopsAreGovernedKernelStyleCommits(t *testing.T) {
+	ctx := context.Background()
+	k, txRunner, st := newSQLiteKernel(t, nil)
+	scope := "ws-phase12"
+
+	stateReq := validSQLiteRequest(domain.ActionUpdateState, "phase12-state-commit", scope)
+	stateReq.Payload = map[string]any{
+		"key":         "forge.phase12.mode",
+		"value":       map[string]any{"status": "tracking"},
+		"derivedFrom": []string{"phase12-evidence"},
+	}
+	stateRes, err := k.Process(ctx, stateReq)
+	if err != nil || !stateRes.Success {
+		t.Fatalf("state update failed: err=%v res=%+v", err, stateRes)
+	}
+	if !stringInSlice(stateRes.CommittedObjectIDs, "phase12-state-commit:state") || !stringInSlice(stateRes.CommittedObjectIDs, "phase12-state-commit:journal_event") {
+		t.Fatalf("expected state and journal event committed ids, got %v", stateRes.CommittedObjectIDs)
+	}
+
+	state, ok, err := txRunner.read.GetCurrent(ctx, "forge.phase12.mode", ScopeFilter{WorkspaceID: scope, LaneID: "control.semantic"})
+	if err != nil || !ok {
+		t.Fatalf("expected state to be queryable through semantic read store: err=%v ok=%v", err, ok)
+	}
+	if state.ID != "phase12-state-commit:state" || state.Value["status"] != "tracking" {
+		t.Fatalf("unexpected state readback: %#v", state)
+	}
+	var stateCommittedBy, stateSyscallID, stateCorrelationID, stateAuditID string
+	if err := st.DB.QueryRowContext(ctx, `SELECT committed_by, syscall_id, correlation_id, audit_id FROM state_items WHERE id = ?`, "phase12-state-commit:state").Scan(&stateCommittedBy, &stateSyscallID, &stateCorrelationID, &stateAuditID); err != nil {
+		t.Fatalf("query state lineage: %v", err)
+	}
+	if stateCommittedBy != "forge_kernel" || stateSyscallID != stateReq.ID || stateCorrelationID != stateReq.CorrelationID || stateAuditID == "" {
+		t.Fatalf("unexpected state lineage committed=%q syscall=%q corr=%q audit=%q", stateCommittedBy, stateSyscallID, stateCorrelationID, stateAuditID)
+	}
+	var stateVersionCount int
+	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM state_versions WHERE state_item_id = ? AND syscall_id = ? AND audit_id <> ''`, "phase12-state-commit:state", stateReq.ID).Scan(&stateVersionCount); err != nil {
+		t.Fatalf("query state version count: %v", err)
+	}
+	if stateVersionCount != 1 {
+		t.Fatalf("expected one audited state version, got %d", stateVersionCount)
+	}
+
+	openReq := validSQLiteRequest(domain.ActionOpenLoop, "phase12-loop-open", scope)
+	openReq.Payload = map[string]any{
+		"id":         "phase12-loop",
+		"title":      "Phase 12 loop",
+		"state":      string(domain.LoopOpen),
+		"priority":   "high",
+		"nextAction": "verify commit closure",
+	}
+	openRes, err := k.Process(ctx, openReq)
+	if err != nil || !openRes.Success {
+		t.Fatalf("open loop failed: err=%v res=%+v", err, openRes)
+	}
+	if !stringInSlice(openRes.CommittedObjectIDs, "phase12-loop") || !stringInSlice(openRes.CommittedObjectIDs, "phase12-loop-open:journal_event") {
+		t.Fatalf("expected loop and journal event committed ids, got %v", openRes.CommittedObjectIDs)
+	}
+
+	closeReq := validSQLiteRequest(domain.ActionCloseLoop, "phase12-loop-close", scope)
+	closeReq.Payload = map[string]any{"loopId": "phase12-loop", "reason": "phase complete"}
+	closeRes, err := k.Process(ctx, closeReq)
+	if err != nil || !closeRes.Success {
+		t.Fatalf("close loop failed: err=%v res=%+v", err, closeRes)
+	}
+	if !stringInSlice(closeRes.CommittedObjectIDs, "phase12-loop") || !stringInSlice(closeRes.CommittedObjectIDs, "phase12-loop-close:journal_event") {
+		t.Fatalf("expected closed loop and journal event committed ids, got %v", closeRes.CommittedObjectIDs)
+	}
+	loop, ok := txRunner.read.FindLoop("phase12-loop")
+	if !ok || loop.State != domain.LoopResolved || loop.Scope.WorkspaceID != scope {
+		t.Fatalf("expected resolved loop through semantic read store, got ok=%v loop=%#v", ok, loop)
+	}
+
+	var loopState, loopCommittedBy, loopSyscallID, loopCorrelationID, loopAuditID string
+	if err := st.DB.QueryRowContext(ctx, `SELECT state, committed_by, syscall_id, correlation_id, audit_id FROM open_loops WHERE id = ?`, "phase12-loop").Scan(&loopState, &loopCommittedBy, &loopSyscallID, &loopCorrelationID, &loopAuditID); err != nil {
+		t.Fatalf("query loop lineage: %v", err)
+	}
+	if loopState != string(domain.LoopResolved) || loopCommittedBy != "forge_kernel" || loopSyscallID != closeReq.ID || loopCorrelationID != closeReq.CorrelationID || loopAuditID == "" {
+		t.Fatalf("unexpected loop lineage state=%q committed=%q syscall=%q corr=%q audit=%q", loopState, loopCommittedBy, loopSyscallID, loopCorrelationID, loopAuditID)
+	}
+
+	for _, tc := range []struct {
+		id        string
+		eventType string
+		corr      string
+	}{
+		{id: "phase12-state-commit:journal_event", eventType: "semantic_syscall.update_state", corr: stateReq.CorrelationID},
+		{id: "phase12-loop-open:journal_event", eventType: "semantic_syscall.open_loop", corr: openReq.CorrelationID},
+		{id: "phase12-loop-close:journal_event", eventType: "semantic_syscall.close_loop", corr: closeReq.CorrelationID},
+	} {
+		var eventType, eventSource, eventCorr string
+		if err := st.DB.QueryRowContext(ctx, `SELECT type, source, correlation_id FROM journal_events WHERE id = ?`, tc.id).Scan(&eventType, &eventSource, &eventCorr); err != nil {
+			t.Fatalf("query journal event %s: %v", tc.id, err)
+		}
+		if eventType != tc.eventType || eventSource != "forge_kernel" || eventCorr != tc.corr {
+			t.Fatalf("unexpected journal event %s type/source/corr: %q %q %q", tc.id, eventType, eventSource, eventCorr)
+		}
+	}
+}
+
 func TestSQLiteContextCompileDryRunAndReadOnlyPath(t *testing.T) {
 	ctx := context.Background()
 	k, txRunner, _ := newSQLiteKernel(t, nil)
@@ -522,6 +663,15 @@ func TestSQLiteContextCompileDryRunAndReadOnlyPath(t *testing.T) {
 	if pkt.ID == "" || !strings.Contains(pkt.ID, "ctx-") {
 		t.Fatalf("unexpected context packet id: %q", pkt.ID)
 	}
+}
+
+func stringInSlice(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSQLiteContextCompilePersistsSnapshotEvidence(t *testing.T) {

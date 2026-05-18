@@ -1,4 +1,5 @@
 import {
+  Suspense,
   useMemo,
   useRef,
   type CSSProperties,
@@ -8,6 +9,7 @@ import {
 
 import {
   iconAssetUrl,
+  type ForgeHostPowerAction,
   type LinuxWindowAction,
   type LinuxWindowSnapshot,
   type OperatorApp,
@@ -217,8 +219,10 @@ export function FloatingWindow(props: {
     const onMove = (e: PointerEvent) => {
       if (!dragRef.current) return;
       props.onMove(
-        dragRef.current.windowStartX + (e.clientX - dragRef.current.pointerStartX),
-        dragRef.current.windowStartY + (e.clientY - dragRef.current.pointerStartY),
+        dragRef.current.windowStartX +
+          (e.clientX - dragRef.current.pointerStartX),
+        dragRef.current.windowStartY +
+          (e.clientY - dragRef.current.pointerStartY),
       );
     };
     const onUp = () => {
@@ -356,7 +360,13 @@ export function FloatingWindow(props: {
       </div>
       <div className="forge-os-window__body">
         <div className="forge-os-window__content">
-          {Component ? <Component /> : <UnsupportedToolNotice toolId={tool?.id} />}
+          {Component ? (
+            <Suspense fallback={<ToolLoadingFallback />}>
+              <Component />
+            </Suspense>
+          ) : (
+            <UnsupportedToolNotice toolId={tool?.id} />
+          )}
         </div>
       </div>
       {!props.window.maximized ? (
@@ -367,6 +377,18 @@ export function FloatingWindow(props: {
         />
       ) : null}
     </section>
+  );
+}
+
+function ToolLoadingFallback() {
+  return (
+    <div
+      className="forge-route-loading"
+      role="status"
+      aria-label="Loading tool"
+    >
+      <span />
+    </div>
   );
 }
 
@@ -396,6 +418,7 @@ export function StartMenu(props: {
   workspaceLabel: string;
   uiMode: "cognitive" | "metrics";
   pinnedIds: ShellToolId[];
+  onPowerAction: (action: "logout" | ForgeHostPowerAction) => void;
   operatorApps: OperatorApp[];
   operatorAppStatus: string | null;
   onLaunchOperatorApp: (app: OperatorApp) => void;
@@ -635,6 +658,32 @@ export function StartMenu(props: {
             </div>
           </div>
         </div>
+        <footer className="forge-os-startmenu__power">
+          <button
+            type="button"
+            className="forge-os-startmenu__power-btn"
+            onClick={() => props.onPowerAction("logout")}
+          >
+            <span className="forge-os-startmenu__power-icon">LO</span>
+            <span>Logout</span>
+          </button>
+          <button
+            type="button"
+            className="forge-os-startmenu__power-btn"
+            onClick={() => props.onPowerAction("reboot")}
+          >
+            <span className="forge-os-startmenu__power-icon">RB</span>
+            <span>Reboot</span>
+          </button>
+          <button
+            type="button"
+            className="forge-os-startmenu__power-btn forge-os-startmenu__power-btn--danger"
+            onClick={() => props.onPowerAction("shutdown")}
+          >
+            <span className="forge-os-startmenu__power-icon">SD</span>
+            <span>Shutdown</span>
+          </button>
+        </footer>
       </section>
     </>
   );
@@ -722,7 +771,10 @@ function shellToolCategory(id: ShellToolId) {
   return "Tools";
 }
 
-export function OperatorAppIcon(props: { app: OperatorApp; className?: string }) {
+export function OperatorAppIcon(props: {
+  app: OperatorApp;
+  className?: string;
+}) {
   const iconPath = props.app.iconPath?.trim();
   if (iconPath) {
     return (

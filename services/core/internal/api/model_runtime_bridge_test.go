@@ -253,6 +253,9 @@ func TestInitModelRuntimeServiceDiscoversLocalOllamaModels(t *testing.T) {
 	if result.Content != "ollama ok" || result.Backend != "ollama_compat" {
 		t.Fatalf("unexpected chat result: %#v", result)
 	}
+	if result.Proposal == nil || !result.Proposal.ProposalOnly || result.Proposal.CanonicalCommit || result.Proposal.ModelOutputAuthority {
+		t.Fatalf("chat result did not preserve proposal-only envelope: %#v", result.Proposal)
+	}
 }
 
 func TestModelRuntimeListRefreshDiscoversNewLocalOllamaModels(t *testing.T) {
@@ -337,6 +340,9 @@ func TestModelRuntimeListRefreshDiscoversNewLocalOllamaModels(t *testing.T) {
 	}
 	if result.Content != "local loop ok" || result.Backend != "ollama_compat" {
 		t.Fatalf("unexpected refreshed chat result: %#v", result)
+	}
+	if result.Proposal == nil || !result.Proposal.ProposalOnly || result.Proposal.CanonicalCommit || result.Proposal.ModelOutputAuthority {
+		t.Fatalf("refreshed chat result did not preserve proposal-only envelope: %#v", result.Proposal)
 	}
 }
 

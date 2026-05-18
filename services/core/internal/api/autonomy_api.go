@@ -25,22 +25,22 @@ func (s *Server) handleAutonomyStatus(w http.ResponseWriter, r *http.Request) {
 
 	activeIntents, err := s.autonomy.ListIntents(ctx, "active", 200)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	activeCharters, err := s.autonomy.ListCharters(ctx, true)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	budgets, err := s.autonomy.ListBudgets(ctx)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	decisions, err := s.autonomy.ListDecisions(ctx, 200)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 
@@ -67,7 +67,7 @@ func (s *Server) handleAutonomyIntents(w http.ResponseWriter, r *http.Request) {
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
 	rows, err := s.autonomy.ListIntents(r.Context(), status, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"intents": rows})
@@ -85,7 +85,7 @@ func (s *Server) handleAutonomyIntentExplain(w http.ResponseWriter, r *http.Requ
 	}
 	explanation, err := s.autonomy.ExplainIntent(r.Context(), intentID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, explanation)
@@ -99,7 +99,7 @@ func (s *Server) handleAutonomyDecisions(w http.ResponseWriter, r *http.Request)
 	limit := parseAutonomyLimit(r, 100)
 	rows, err := s.autonomy.ListDecisions(r.Context(), limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"decisions": rows})
@@ -112,7 +112,7 @@ func (s *Server) handleAutonomyBudgets(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.autonomy.ListBudgets(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"budgets": rows})
@@ -126,7 +126,7 @@ func (s *Server) handleAutonomyCharters(w http.ResponseWriter, r *http.Request) 
 	activeOnly := parseBoolSetting(r.URL.Query().Get("activeOnly"), false)
 	rows, err := s.autonomy.ListCharters(r.Context(), activeOnly)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"charters": rows})
@@ -140,7 +140,7 @@ func (s *Server) handleAutonomyEvents(w http.ResponseWriter, r *http.Request) {
 	limit := parseAutonomyLimit(r, 120)
 	rows, err := listAutonomyEvents(r.Context(), s.st.DB, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"events": rows})
@@ -158,7 +158,7 @@ func (s *Server) handleAutonomyMaintenanceSweep(w http.ResponseWriter, r *http.R
 	}
 	report, err := s.autonomy.RunSweep(r.Context(), body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	status := http.StatusOK

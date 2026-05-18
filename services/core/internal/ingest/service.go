@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -97,8 +98,7 @@ func (s *Service) upsertFile(ctx context.Context, sourceID int64, abs, rel strin
 	var oldHash string
 	row := tx.QueryRowContext(ctx,
 		`SELECT id, content_sha256 FROM files WHERE source_id = ? AND rel_path = ?`, sourceID, rel)
-	switch err := row.Scan(&fileID, &oldHash); err {
-	case sql.ErrNoRows:
+	if err := row.Scan(&fileID, &oldHash); errors.Is(err, sql.ErrNoRows) {
 		res, err := tx.ExecContext(ctx,
 			`INSERT INTO files (source_id, rel_path, abs_path, size_bytes, mtime_ns, content_sha256, indexed_at)
 			 VALUES (?,?,?,?,?,?,?)`,
@@ -127,7 +127,7 @@ func (s *Service) upsertFile(ctx context.Context, sourceID int64, abs, rel strin
 		}
 		_ = s.log.Emit(ctx, "file.ingested", map[string]any{"sourceId": sourceID, "path": abs, "relPath": rel, "chunks": len(parts)})
 		return true, false, nil
-	case nil:
+	} else if err == nil {
 		if oldHash == hash {
 			return false, false, nil
 		}
@@ -158,7 +158,7 @@ func (s *Service) upsertFile(ctx context.Context, sourceID int64, abs, rel strin
 		}
 		_ = s.log.Emit(ctx, "file.reindexed", map[string]any{"sourceId": sourceID, "path": abs, "relPath": rel, "chunks": len(parts)})
 		return false, true, nil
-	default:
+	} else {
 		return false, false, err
 	}
 }

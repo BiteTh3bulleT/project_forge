@@ -74,7 +74,7 @@ func (s *Server) handleRestoreOutcomeList(w http.ResponseWriter, r *http.Request
 		Limit:       limit,
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"outcomes": events})
@@ -90,7 +90,7 @@ func (s *Server) handleRestoreOutcomeGet(w http.ResponseWriter, r *http.Request)
 	store := controllane.NewSQLiteSemanticStore(s.st.DB)
 	event, ok, err := store.GetRestoreOutcome(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	if !ok || !restoreOutcomeInAPIScope(event, workspaceID, laneID) {
@@ -138,7 +138,7 @@ func (s *Server) handleRestoreOutcomeFeedback(w http.ResponseWriter, r *http.Req
 			http.Error(w, "restore outcome not found", http.StatusNotFound)
 			return
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
 	meta := requestAuditMetaForBackup(r, body.CorrelationID, body.TraceID, workspaceID, "restore.outcome.feedback")

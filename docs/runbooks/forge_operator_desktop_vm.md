@@ -2,8 +2,9 @@
 
 Status: Phase G6 native desktop runtime bring-up
 
-Last verified: 2026-05-11 on VirtualBox VM `FORGE-OS` for the manual
-operator-session recovery path. Native boot splash/login evidence is pending.
+Last verified: 2026-05-16 on VirtualBox VM `FORGE-OS` for the appliance-style
+FORGE shell loading/login path. Native graphical password login evidence is
+pending for the canonical Nix VM target.
 
 In-repo evidence record:
 [docs/evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md](../evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md)
@@ -72,6 +73,9 @@ The VM keeps SSH disabled by default and does not enable autologin. Password
 login is required. TTY access and Nix generation rollback must remain available.
 Change the local password before exposing the VM beyond the host-only/local
 development boundary.
+The packaged desktop shows a FORGE loading screen before the FORGE login screen
+at boot. The current VM greeter is a local operator UX gate, not a PAM-backed
+security boundary yet.
 
 ## Boundaries
 
@@ -87,15 +91,32 @@ development boundary.
 
 ## Normal Native Desktop Login
 
+Expected normal path:
+
+```text
+firmware / bootloader
+-> Plymouth FORGE-OS splash
+-> greetd/ReGreet graphical password login
+-> labwc compositor
+-> forge-shell-session
+-> packaged forge-desktop-shell
+-> FORGE shell loading screen
+-> FORGE login screen
+-> empty FORGE operator desktop
+```
+
 1. Start the VM.
 2. Confirm the FORGE-OS Runtime boot splash appears during boot.
 3. Log in through the graphical greeter as `operator`.
 4. Confirm the login starts the FORGE native desktop session.
-5. Open terminal/files/toolbelt apps from FORGE.
-6. Lock or log out through the desktop path when done.
+5. At the FORGE login screen, sign in with the local VM operator credentials above when the shell presents it.
+6. Open terminal/files/toolbelt apps from FORGE.
+7. Lock or log out through the desktop path when done.
 
-Do not mark a new native desktop boot as verified without screenshot/log
-evidence showing the splash/login/session path.
+The shell clears restored in-shell FORGE windows during login so the first
+desktop view is wallpaper plus the pinned dock only. Do not mark a new native
+desktop boot as verified without screenshot/log evidence showing the
+splash/login/session path.
 
 ## Verify FORGE Core
 
@@ -188,7 +209,7 @@ Installed layout:
 - Operator user: `operator`, in `wheel`, `networkmanager`, `video`, `render`, and `vboxsf`.
 - This manual VM has SSH enabled for key-based access.
 - Manual VM host access uses VirtualBox NAT forwarding: `ssh -p 2222 operator@127.0.0.1`.
-- Automatic login remains disabled.
+- Display-manager automatic login remains disabled.
 - ISO is detached and disk is first in the VirtualBox boot order.
 - The packaged Tauri shell defaults to `1180x680` as a fallback, and the locked
   operator session fits the shell window to the detected monitor bounds before

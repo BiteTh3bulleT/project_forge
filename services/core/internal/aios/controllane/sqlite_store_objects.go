@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"forge/projectforge/services/core/internal/aios/domain"
@@ -69,7 +70,7 @@ FROM artifact_refs WHERE id = ?`, id)
 	var ref domain.ArtifactRef
 	var selected, provRaw, metaRaw string
 	if err := row.Scan(&ref.ID, &ref.Type, &ref.URI, &ref.ContentHash, &ref.Scope.WorkspaceID, &ref.Scope.LaneID, &selected, &provRaw, &ref.CreatedAt, &metaRaw); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return domain.ArtifactRef{}, false, nil
 		}
 		return domain.ArtifactRef{}, false, err
@@ -204,7 +205,7 @@ FROM contradiction_records WHERE id = ?`, id)
 	var r ContradictionRecord
 	var metaRaw, provRaw string
 	if err := row.Scan(&r.ID, &r.LeftID, &r.LeftKind, &r.RightID, &r.RightKind, &r.Reason, &r.Severity, &r.Confidence, &r.WorkspaceID, &r.CorrelationID, &r.TraceID, &r.SyscallID, &r.AuditID, &r.ProposedBy, &r.CommittedBy, &metaRaw, &r.CreatedAt, &provRaw); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return ContradictionRecord{}, false, nil
 		}
 		return ContradictionRecord{}, false, err
@@ -277,7 +278,7 @@ FROM supersession_records WHERE id = ?`, id)
 	var r SupersessionRecord
 	var metaRaw, provRaw string
 	if err := row.Scan(&r.ID, &r.OldID, &r.OldKind, &r.NewID, &r.NewKind, &r.Reason, &r.WorkspaceID, &r.CorrelationID, &r.TraceID, &r.SyscallID, &r.AuditID, &r.ProposedBy, &r.CommittedBy, &metaRaw, &r.CreatedAt, &provRaw); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return SupersessionRecord{}, false, nil
 		}
 		return SupersessionRecord{}, false, err

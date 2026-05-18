@@ -51,6 +51,48 @@ func TestValidateKVIdentityLiveSyscallSucceedsWithoutMemoryMutation(t *testing.T
 	}
 }
 
+func TestValidateKVIdentityAllowsExactIdentityCanaryWithoutBackendReuse(t *testing.T) {
+	ctx := context.Background()
+	store := NewInMemorySemanticStore()
+	auditSink := NewInMemoryAuditSink()
+	counters := NewKVIdentityEnforcementCounters()
+	k := NewProcessor(ProcessorOptions{
+		Registry:          NewStaticActionRegistry(),
+		Validator:         NewDeterministicValidator(),
+		Capabilities:      NewStaticCapabilityService(),
+		ApprovalGate:      NewStaticApprovalGate(),
+		TxRunner:          NewInMemoryTransactionRunner(store),
+		AuditSink:         auditSink,
+		NowMillis:         func() int64 { return 1760000000000 },
+		KVIdentityMetrics: counters,
+	})
+	req := validKVIdentityRequest()
+	req.ID = "kv-identity-canary"
+	req.Payload["liveKVReuse"] = true
+	req.Payload["kvReuseCanary"] = true
+	req.Payload["canary_path"] = "control_lane_validation_only"
+	req.Payload["manifest"].(map[string]any)["final_token_ids_hash"] = "final-token-hash"
+	req.Payload["request"].(map[string]any)["final_token_ids_hash"] = "final-token-hash"
+
+	res, err := k.Process(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !res.Success {
+		t.Fatalf("expected canary success, got %#v", res)
+	}
+	if res.StateSummary["canaryKVReuse"] != true || res.StateSummary["liveKVReuse"] != false || res.StateSummary["backendReuse"] != false {
+		t.Fatalf("canary must be validation-only without backend reuse: %#v", res.StateSummary)
+	}
+	auditDecision := auditSink.Records[len(auditSink.Records)-1].KVIdentityEnforcement
+	if auditDecision["decision"] != KVIdentityDecisionCanaryReuse || auditDecision["canaryKVReuse"] != true || auditDecision["backendReuse"] != false {
+		t.Fatalf("audit missing canary decision: %#v", auditDecision)
+	}
+	if got := counters.Snapshot(); got.Accepted != 1 || got.UnsupportedLiveReuse != 0 {
+		t.Fatalf("unexpected counters after canary accept: %#v", got)
+	}
+}
+
 func TestValidateKVIdentityRejectsMismatchWithoutStateMutation(t *testing.T) {
 	ctx := context.Background()
 	store := NewInMemorySemanticStore()
@@ -96,6 +138,36 @@ func TestValidateKVIdentityRejectsMismatchWithoutStateMutation(t *testing.T) {
 	}
 	if got := counters.Snapshot(); got.Accepted != 0 || got.Rejected != 1 {
 		t.Fatalf("unexpected counters after rejection: %#v", got)
+	}
+}
+
+func TestValidateKVIdentityCanaryRequiresFinalTokenIdentity(t *testing.T) {
+	ctx := context.Background()
+	k, store, auditSink := newTestKernel()
+	req := validKVIdentityRequest()
+	req.ID = "kv-identity-canary-placeholder"
+	req.IdempotencyKey = "kv-canary-placeholder"
+	req.Payload["liveKVReuse"] = true
+	req.Payload["kvReuseCanary"] = true
+	req.Payload["canary_path"] = "control_lane_validation_only"
+	res, err := k.Process(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Success {
+		t.Fatalf("expected canary without final token ids to fail")
+	}
+	if res.DeterministicErrCode != domain.ErrInvalidPayload {
+		t.Fatalf("expected invalid payload, got %s", res.DeterministicErrCode)
+	}
+	if res.StateSummary["canaryKVReuse"] != false || res.StateSummary["backendReuse"] != false {
+		t.Fatalf("failed canary must not claim reuse: %#v", res.StateSummary)
+	}
+	if _, ok := store.GetIdempotency(req.IdempotencyKey); ok {
+		t.Fatal("failed canary validation must not persist idempotency state")
+	}
+	if auditSink.Records[len(auditSink.Records)-1].KVIdentityEnforcement["decision"] != KVIdentityDecisionRejected {
+		t.Fatalf("expected rejected canary audit, got %#v", auditSink.Records[len(auditSink.Records)-1].KVIdentityEnforcement)
 	}
 }
 

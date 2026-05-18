@@ -281,6 +281,21 @@ func TestActionValidationMatrix(t *testing.T) {
 			}(),
 			wantErr: true,
 		},
+		{
+			name: "valid admission candidate",
+			req: func() domain.SyscallRequest {
+				return validAdmissionCandidateRequest()
+			}(),
+		},
+		{
+			name: "invalid admission candidate",
+			req: func() domain.SyscallRequest {
+				r := validBaseRequest(domain.ActionValidateAdmissionCandidate)
+				r.Payload = map[string]any{"workspace_id": "ws-main"}
+				return r
+			}(),
+			wantErr: true,
+		},
 	}
 
 	for _, tc := range tests {

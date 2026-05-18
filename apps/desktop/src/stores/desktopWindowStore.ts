@@ -69,6 +69,8 @@ type DesktopWindowState = {
   // Pinned management
   pin: (toolId: ShellToolId) => void;
   unpin: (toolId: ShellToolId) => void;
+  showDesktop: () => void;
+  resetDesktopSession: () => void;
   // Window lifecycle (always go through these — they pick the right backend)
   openWindow: (toolId: ShellToolId, opts?: OpenOpts) => Promise<string | null>;
   closeWindow: (id: string) => Promise<void>;
@@ -370,6 +372,23 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
     set((s) => {
       if (!s.pinned.includes(toolId)) return s;
       const next = { ...s, pinned: s.pinned.filter((id) => id !== toolId) };
+      persist(next);
+      return next;
+    }),
+
+  showDesktop: () =>
+    set((s) => {
+      const windows = s.windows.map((window_) =>
+        window_.minimized ? window_ : withUpdatedAt({ ...window_, minimized: true }),
+      );
+      const next = { ...s, windows, focusedId: null };
+      persist(next);
+      return next;
+    }),
+
+  resetDesktopSession: () =>
+    set((s) => {
+      const next = { ...s, windows: [], focusedId: null };
       persist(next);
       return next;
     }),

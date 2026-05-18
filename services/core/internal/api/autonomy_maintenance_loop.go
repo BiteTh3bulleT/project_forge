@@ -6,8 +6,8 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -357,6 +357,9 @@ func (l *AutonomyMaintenanceLoop) runSweepInternal(ctx context.Context, trigger,
 	var firstErr error
 	if includeMaintenance {
 		phase, err := l.executeMaintenancePhase(ctx, report.IdleReason, dryRun)
+		if dryRun {
+			markLymphaticProposalOnlyPhase(&phase)
+		}
 		report.Maintenance = phase
 		if err != nil && firstErr == nil {
 			firstErr = err
@@ -369,6 +372,9 @@ func (l *AutonomyMaintenanceLoop) runSweepInternal(ctx context.Context, trigger,
 	}
 	if includeImprovement {
 		phase, err := l.executeImprovementPhase(ctx, report.IdleReason, dryRun)
+		if dryRun {
+			markLymphaticProposalOnlyPhase(&phase)
+		}
 		report.Improvement = phase
 		if err != nil && firstErr == nil {
 			firstErr = err
@@ -867,7 +873,7 @@ LIMIT ?`, cutoff, limit)
 				ID:          fmt.Sprintf("memory-observation-%d", obs.ID),
 				Kind:        "memory.observation_repair",
 				Summary:     "repair preview failed: " + err.Error(),
-				WouldCommit: true,
+				WouldCommit: false,
 				Metadata: map[string]any{
 					"observationId": obs.ID,
 					"status":        "failed",
@@ -889,7 +895,7 @@ func (l *AutonomyMaintenanceLoop) previewMemoryRepairObservation(ctx context.Con
 		resultID, parseErr := strconv.ParseInt(strings.TrimSpace(obs.OriginID), 10, 64)
 		if parseErr == nil && resultID > 0 {
 			var snippet sql.NullString
-			if err := l.db.QueryRowContext(ctx, `SELECT snippet FROM retrieval_results WHERE id = ?`, resultID).Scan(&snippet); err != nil && err != sql.ErrNoRows {
+			if err := l.db.QueryRowContext(ctx, `SELECT snippet FROM retrieval_results WHERE id = ?`, resultID).Scan(&snippet); err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return AutonomyMaintenanceAction{}, err
 			} else if snippet.Valid {
 				fresh := strings.TrimSpace(snippet.String)
@@ -924,7 +930,7 @@ func (l *AutonomyMaintenanceLoop) previewMemoryRepairObservation(ctx context.Con
 		ID:          fmt.Sprintf("memory-observation-%d", obs.ID),
 		Kind:        "memory.observation_repair",
 		Summary:     note,
-		WouldCommit: true,
+		WouldCommit: false,
 		Metadata: map[string]any{
 			"observationId":      obs.ID,
 			"status":             status,
@@ -936,6 +942,28 @@ func (l *AutonomyMaintenanceLoop) previewMemoryRepairObservation(ctx context.Con
 			"wouldUpdateSummary": changed && strings.TrimSpace(obs.Summary) != newSummary,
 		},
 	}, nil
+}
+
+func markLymphaticProposalOnlyPhase(phase *AutonomyMaintenancePhaseReport) {
+	if phase == nil {
+		return
+	}
+	if phase.Summary == nil {
+		phase.Summary = map[string]any{}
+	}
+	phase.Summary["lymphaticMode"] = "proposal_only"
+	phase.Summary["cleanupProposalCount"] = len(phase.Actions)
+	phase.Summary["executesCleanup"] = false
+	for i := range phase.Actions {
+		phase.Actions[i].WouldCommit = false
+		if phase.Actions[i].Metadata == nil {
+			phase.Actions[i].Metadata = map[string]any{}
+		}
+		phase.Actions[i].Metadata["lymphaticProposal"] = true
+		phase.Actions[i].Metadata["proposalFirst"] = true
+		phase.Actions[i].Metadata["executesCleanup"] = false
+		phase.Actions[i].Metadata["requiresReview"] = true
+	}
 }
 
 func (l *AutonomyMaintenanceLoop) buildImprovementPlan(now int64, idleReason string, activeCount, blockedCount, staleCount, contradictionCount int) (domain.AutonomyIntent, []domain.SyscallRequest, string) {
@@ -1264,7 +1292,7 @@ func newDefaultAutonomyMaintenanceLoop(db *sql.DB, cfg config.Config, ev *events
 	})
 	bundle, err := autonomy.NewSQLiteBundleStrict(db)
 	if err != nil {
-		log.Printf("autonomy maintenance loop disabled: %v", err)
+		apiLogWarn("autonomy maintenance loop disabled", apiLogErr(err))
 		return nil
 	}
 	for _, budget := range autonomy.DefaultBudgets(scope, nowFn(), "forge.autonomy") {

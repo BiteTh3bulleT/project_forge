@@ -13,6 +13,7 @@ import {
   DiagnosticsSection,
   WorkspacePathsSection,
 } from "./SettingsPage/DiagnosticsSections";
+import { DisplaySettingsSection } from "./SettingsPage/DisplaySettingsSection";
 import { ChatPromptSection } from "./SettingsPage/ChatPromptSection";
 import {
   MetricTile,
@@ -618,75 +619,98 @@ export function SettingsPage() {
 
           <Panel
             title="Runtime Controls"
-            subtitle="GPU acceleration and cloud model visibility for modelruntime."
+            subtitle="GPU acceleration is separate from optional vendor telemetry."
           >
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="flex items-center gap-2 rounded border border-white/10 bg-black/20 p-3">
-                <input
-                  type="checkbox"
-                  checked={runtimeGpuEnabled}
-                  onChange={(e) => setRuntimeGpuEnabled(e.target.checked)}
-                />
-                <span>
-                  <span className="block text-xs font-semibold tracking-wide text-forge-mist">
-                    GPU acceleration
-                  </span>
-                  <span className="block text-[11px] text-forge-ash">
-                    Use GPU-aware scheduling when hardware policy allows it.
-                  </span>
-                </span>
-              </label>
-              <label className="flex items-center gap-2 rounded border border-white/10 bg-black/20 p-3">
-                <input
-                  type="checkbox"
-                  checked={runtimeAllowOllamaCloudModels}
-                  onChange={(e) =>
-                    setRuntimeAllowOllamaCloudModels(e.target.checked)
-                  }
-                />
-                <span>
-                  <span className="block text-xs font-semibold tracking-wide text-forge-mist">
-                    Ollama cloud models
-                  </span>
-                  <span className="block text-[11px] text-forge-ash">
-                    Show remote Ollama cloud entries in the model list.
-                  </span>
-                </span>
-              </label>
-              <label className="flex items-center gap-2 rounded border border-white/10 bg-black/20 p-3">
-                <input
-                  type="checkbox"
-                  checked={runtimeNvidiaDcgmEnabled}
-                  onChange={(e) =>
-                    setRuntimeNvidiaDcgmEnabled(e.target.checked)
-                  }
-                />
-                <span>
-                  <span className="block text-xs font-semibold tracking-wide text-forge-mist">
-                    NVIDIA DCGM telemetry
-                  </span>
-                  <span className="block text-[11px] text-forge-ash">
-                    Enable DCGM health and VRAM admission checks.
-                  </span>
-                </span>
-              </label>
-              <label className="flex items-center gap-2 rounded border border-white/10 bg-black/20 p-3">
-                <input
-                  type="checkbox"
-                  checked={runtimeIntelLevelZeroEnabled}
-                  onChange={(e) =>
-                    setRuntimeIntelLevelZeroEnabled(e.target.checked)
-                  }
-                />
-                <span>
-                  <span className="block text-xs font-semibold tracking-wide text-forge-mist">
-                    Intel Level Zero telemetry
-                  </span>
-                  <span className="block text-[11px] text-forge-ash">
-                    Enable local Intel GPU telemetry probes.
-                  </span>
-                </span>
-              </label>
+            <div className="space-y-4">
+              <div>
+                <div className="text-xs font-semibold tracking-wide text-forge-ash">
+                  GPU acceleration and model visibility
+                </div>
+                <div className="mt-1 text-[11px] leading-5 text-forge-mist">
+                  Enable this for host GPU/model acceleration. This does not
+                  enable vendor telemetry.
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="flex items-center gap-2 rounded border border-white/10 bg-black/20 p-3">
+                    <input
+                      type="checkbox"
+                      checked={runtimeGpuEnabled}
+                      onChange={(e) => setRuntimeGpuEnabled(e.target.checked)}
+                    />
+                    <span>
+                      <span className="block text-xs font-semibold tracking-wide text-forge-mist">
+                        GPU acceleration
+                      </span>
+                      <span className="block text-[11px] text-forge-ash">
+                        Use GPU-aware scheduling when hardware policy allows it.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-2 rounded border border-white/10 bg-black/20 p-3">
+                    <input
+                      type="checkbox"
+                      checked={runtimeAllowOllamaCloudModels}
+                      onChange={(e) =>
+                        setRuntimeAllowOllamaCloudModels(e.target.checked)
+                      }
+                    />
+                    <span>
+                      <span className="block text-xs font-semibold tracking-wide text-forge-mist">
+                        Ollama cloud models
+                      </span>
+                      <span className="block text-[11px] text-forge-ash">
+                        Show remote Ollama cloud entries in the model list.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="rounded border border-white/10 bg-black/10 p-3">
+                <div className="text-xs font-semibold tracking-wide text-forge-ash">
+                  Optional telemetry probes
+                </div>
+                <div className="mt-1 text-[11px] leading-5 text-forge-mist">
+                  Leave these off unless NVIDIA DCGM or Intel Level Zero
+                  telemetry is installed and reachable.
+                </div>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <label className="flex items-center gap-2 rounded border border-white/10 bg-black/20 p-3">
+                    <input
+                      type="checkbox"
+                      checked={runtimeNvidiaDcgmEnabled}
+                      onChange={(e) =>
+                        setRuntimeNvidiaDcgmEnabled(e.target.checked)
+                      }
+                    />
+                    <span>
+                      <span className="block text-xs font-semibold tracking-wide text-forge-mist">
+                        NVIDIA DCGM telemetry
+                      </span>
+                      <span className="block text-[11px] text-forge-ash">
+                        Enable only when a DCGM exporter is configured.
+                      </span>
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-2 rounded border border-white/10 bg-black/20 p-3">
+                    <input
+                      type="checkbox"
+                      checked={runtimeIntelLevelZeroEnabled}
+                      onChange={(e) =>
+                        setRuntimeIntelLevelZeroEnabled(e.target.checked)
+                      }
+                    />
+                    <span>
+                      <span className="block text-xs font-semibold tracking-wide text-forge-mist">
+                        Intel Level Zero telemetry
+                      </span>
+                      <span className="block text-[11px] text-forge-ash">
+                        Enable only when Level Zero probes are available.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </div>
             </div>
             <div className="mt-3 grid gap-2 rounded border border-white/10 bg-black/20 p-3 text-xs md:grid-cols-3">
               <RemoteStateChip
@@ -1401,86 +1425,18 @@ export function SettingsPage() {
       ) : null}
 
       {settingsView === "all" || settingsView === "display" ? (
-        <FoldSection
-          title="Display and Workspace"
-          subtitle="Theme, readability, and local paths."
-          defaultOpen
-        >
-          <Panel
-            title="Theme"
-            subtitle="Dark is the intended operator default."
-          >
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                className={
-                  theme === "dark"
-                    ? "forge-btn forge-btn--primary"
-                    : "forge-btn forge-btn--ghost"
-                }
-                onClick={() => setTheme("dark")}
-              >
-                Dark
-              </button>
-              <button
-                type="button"
-                className={
-                  theme === "light"
-                    ? "forge-btn forge-btn--primary"
-                    : "forge-btn forge-btn--ghost"
-                }
-                onClick={() => setTheme("light")}
-              >
-                Light
-              </button>
-              <PrimaryButton
-                onClick={async () => {
-                  await api.settings.patch({ theme });
-                  setStatus("Theme preference saved.");
-                }}
-              >
-                Save theme
-              </PrimaryButton>
-            </div>
-          </Panel>
-
-          <Panel
-            title="Display Preferences"
-            subtitle="Local contrast and visual effects for operator readability."
-          >
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="text-xs font-semibold tracking-wide text-forge-mist">
-                Contrast
-                <select
-                  className="forge-input mt-1"
-                  value={contrastPreference}
-                  onChange={(e) =>
-                    setContrastPreference(e.target.value as "high" | "normal")
-                  }
-                >
-                  <option value="high">High</option>
-                  <option value="normal">Normal</option>
-                </select>
-              </label>
-              <label className="text-xs font-semibold tracking-wide text-forge-mist">
-                Effects
-                <select
-                  className="forge-input mt-1"
-                  value={effectsPreference}
-                  onChange={(e) =>
-                    setEffectsPreference(e.target.value as "subtle" | "off")
-                  }
-                >
-                  <option value="subtle">Subtle</option>
-                  <option value="off">Off</option>
-                </select>
-              </label>
-            </div>
-            <div className="mt-2 text-xs text-forge-mist">
-              Changes are local and persist on this machine.
-            </div>
-          </Panel>
-        </FoldSection>
+        <DisplaySettingsSection
+          theme={theme}
+          setTheme={setTheme}
+          contrastPreference={contrastPreference}
+          effectsPreference={effectsPreference}
+          setContrastPreference={setContrastPreference}
+          setEffectsPreference={setEffectsPreference}
+          saveTheme={async () => {
+            await api.settings.patch({ theme });
+            setStatus("Theme preference saved.");
+          }}
+        />
       ) : null}
 
       {settingsView === "all" || settingsView === "diagnostics" ? (
