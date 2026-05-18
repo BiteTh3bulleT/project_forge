@@ -23,6 +23,7 @@ This file maps the current authority docs for FORGE. It is a navigation document
 | Approvals and audit | `services/core/internal/approvals`, `services/core/internal/audit`, `docs/POLICY_AND_APPROVALS.md`, `docs/AUDIT_AND_TRACE.md` | Approval decisions and audit records remain separated and durable. |
 | Jobs and artifacts | `services/core/internal/jobs`, `docs/JOBS_AND_APPROVALS.md`, `docs/TASK_PACKETS.md` | Job streams and task packets are projection/evidence surfaces, not direct truth mutation. |
 | Operator bring-up | `docs/runbooks/current_forge_bringup.md`, `docs/runbooks/config_reference.md`, `docs/runbooks/forge_operator_desktop_vm.md` | Runbooks are the operator path for starting and diagnosing current FORGE and the Nix-first operator VM. |
+| Windows WSL Nix setup | `docs/status/windows_wsl_nix_install_status.md`, `docs/architecture/nix_substrate.md` | Records the local Windows/WSL Nix development install and verification evidence; host setup only, not daemon authority. |
 
 ## FORGE-K Boundary
 
