@@ -101,6 +101,43 @@ func TestForgeSystemStatusReadOnlySurface(t *testing.T) {
 	if qdrant := asMap(t, storage["qdrant"]); qdrant["truth_authority"] != false {
 		t.Fatalf("storage.qdrant.truth_authority=%v, want false", qdrant["truth_authority"])
 	}
+
+	legacy := asMap(t, payload["legacy_retirement"])
+	if legacy["status"] != "direct_mutation_retired" {
+		t.Fatalf("legacy_retirement.status=%v, want direct_mutation_retired", legacy["status"])
+	}
+	if legacy["direct_mutation_disabled"] != true ||
+		legacy["rollback_proof_required"] != true ||
+		legacy["no_forge_k_simulator_authority"] != true {
+		t.Fatalf("legacy retirement flags wrong: %#v", legacy)
+	}
+	entries, ok := legacy["entries"].([]any)
+	if !ok || len(entries) != 2 {
+		t.Fatalf("legacy retirement entries=%#v, want two entries", legacy["entries"])
+	}
+	byID := map[string]map[string]any{}
+	for _, raw := range entries {
+		entry := asMap(t, raw)
+		id, ok := entry["id"].(string)
+		if !ok || id == "" {
+			t.Fatalf("legacy retirement entry missing id: %#v", entry)
+		}
+		for _, key := range []string{"live_owner", "target_forge_k_owner", "default_live_replacement", "rollback_proof"} {
+			if entry[key] == "" {
+				t.Fatalf("legacy retirement entry %s missing %s: %#v", id, key, entry)
+			}
+		}
+		if entry["mutation_allowed"] != false {
+			t.Fatalf("legacy retirement entry %s allows mutation: %#v", id, entry)
+		}
+		byID[id] = entry
+	}
+	if byID["legacy_adapter_direct_invoke"]["route_state"] != "unrouted" {
+		t.Fatalf("legacy adapter route state wrong: %#v", byID["legacy_adapter_direct_invoke"])
+	}
+	if byID["legacy_memory_observation_mutation"]["route_state"] != "gone_audited" {
+		t.Fatalf("legacy memory route state wrong: %#v", byID["legacy_memory_observation_mutation"])
+	}
 }
 
 func TestForgeSystemStatusDoesNotExposeMutationMethod(t *testing.T) {

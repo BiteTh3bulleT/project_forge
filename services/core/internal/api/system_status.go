@@ -26,6 +26,7 @@ type forgeSystemStatusResponse struct {
 	Kernel        controllane.ForgeKActivationReadinessReport `json:"kernel_activation"`
 	ModelRuntime  forgeSystemModelRuntime                     `json:"modelruntime"`
 	Storage       forgeSystemStorageStatus                    `json:"storage"`
+	Legacy        forgeSystemLegacyRetirement                 `json:"legacy_retirement"`
 	ApprovalQueue forgeSystemApprovalQueue                    `json:"approval_queue"`
 	Warnings      []string                                    `json:"warnings,omitempty"`
 	Errors        []string                                    `json:"errors,omitempty"`
@@ -118,6 +119,30 @@ type forgeSystemApprovalQueue struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+type forgeSystemLegacyRetirement struct {
+	Status                     string                             `json:"status"`
+	LiveOwner                  string                             `json:"live_owner"`
+	TargetForgeKOwner          string                             `json:"target_forge_k_owner"`
+	DirectMutationDisabled     bool                               `json:"direct_mutation_disabled"`
+	RollbackProofRequired      bool                               `json:"rollback_proof_required"`
+	NoForgeKSimulatorAuthority bool                               `json:"no_forge_k_simulator_authority"`
+	Entries                    []forgeSystemLegacyRetirementEntry `json:"entries"`
+}
+
+type forgeSystemLegacyRetirementEntry struct {
+	ID                     string `json:"id"`
+	Status                 string `json:"status"`
+	LiveOwner              string `json:"live_owner"`
+	TargetForgeKOwner      string `json:"target_forge_k_owner"`
+	RetiredRoute           string `json:"retired_route"`
+	RouteState             string `json:"route_state"`
+	MutationAllowed        bool   `json:"mutation_allowed"`
+	DefaultLiveReplacement string `json:"default_live_replacement"`
+	RollbackProof          string `json:"rollback_proof"`
+	AuditExpectation       string `json:"audit_expectation"`
+	Notes                  string `json:"notes"`
+}
+
 type shellSystemStatusCommandRunner struct{}
 
 func (shellSystemStatusCommandRunner) LookPath(name string) (string, error) {
@@ -206,10 +231,50 @@ func (s *Server) handleForgeSystemStatus(w http.ResponseWriter, r *http.Request)
 		Kernel:        s.forgeKActivationReadiness(now),
 		ModelRuntime:  s.shellSystemModelRuntime(r),
 		Storage:       s.shellSystemStorage(snapshot),
+		Legacy:        shellSystemLegacyRetirement(),
 		ApprovalQueue: forgeSystemApprovalQueue{Wired: true, Reason: "use governed approvals surface for decisions; G6 status is read-only"},
 		Warnings:      warnings,
 	}
 	writeJSON(w, http.StatusOK, payload)
+}
+
+func shellSystemLegacyRetirement() forgeSystemLegacyRetirement {
+	return forgeSystemLegacyRetirement{
+		Status:                     "direct_mutation_retired",
+		LiveOwner:                  "gateway/api route inventory",
+		TargetForgeKOwner:          "future FORGE-K capability and admission boundary",
+		DirectMutationDisabled:     true,
+		RollbackProofRequired:      true,
+		NoForgeKSimulatorAuthority: true,
+		Entries: []forgeSystemLegacyRetirementEntry{
+			{
+				ID:                     "legacy_adapter_direct_invoke",
+				Status:                 "retired",
+				LiveOwner:              "gateway",
+				TargetForgeKOwner:      "future FORGE-K gateway/capability boundary",
+				RetiredRoute:           "POST /api/adapters/{id}/invoke",
+				RouteState:             "unrouted",
+				MutationAllowed:        false,
+				DefaultLiveReplacement: "POST /api/gateway/invoke with tool legacy.adapter.invoke, lane/capability checks, permissions, and audit",
+				RollbackProof:          "direct adapter ingress must remain absent from route inventory; gateway wrapper remains the bounded compatibility path",
+				AuditExpectation:       "removed route produces no adapter invocation, no gateway invocation, and no audit write",
+				Notes:                  "Adapter execution authority stays with Gateway; this report does not change adapter behavior.",
+			},
+			{
+				ID:                     "legacy_memory_observation_mutation",
+				Status:                 "retired",
+				LiveOwner:              "aios.controllane",
+				TargetForgeKOwner:      "future FORGE-K Courthouse and Kernel syscall boundary",
+				RetiredRoute:           "POST/PATCH /api/memory/observations*",
+				RouteState:             "gone_audited",
+				MutationAllowed:        false,
+				DefaultLiveReplacement: "Courthouse admission review plus Control Lane semantic syscall validation",
+				RollbackProof:          "legacy mutation handlers must keep returning 410 Gone, preserve historical rows, and emit denied audit records",
+				AuditExpectation:       "denied memory audit records include trace/workspace context and migration guidance",
+				Notes:                  "Historical observation reads remain evidence; semantic writes must use governed canonical paths.",
+			},
+		},
+	}
 }
 
 func shellSystemCoreURL(r *http.Request) string {

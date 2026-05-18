@@ -58,6 +58,8 @@ Current storage cutover-related work is read-only readiness metadata through `se
 
 Current operator cockpit work is read-only desktop visibility through `apps/desktop/src/pages/SystemPage.tsx` and existing `GET /forge/system/status` plus inspector pointers. It summarizes gates, planned cases, context bundle inspector posture, proposals, journal/replay inspector posture, lymphatic proposal-only posture, subsystem authority matrix rows, and storage cutover readiness. It does not add action controls, new routes, approval execution, cleanup execution, tool execution, storage switching, or FORGE-K live authority.
 
+Current legacy-retirement work is read-only proof metadata through `GET /forge/system/status`. It records that direct adapter invocation remains unrouted, legacy memory observation mutation remains `410 Gone` and audited, and each retired surface has a default-live replacement and rollback proof. It does not reopen retired routes, execute adapters, write memory, change gateway or Control Lane authority, or make FORGE-K simulator services live authority.
+
 See `docs/reviews/current_phase_status.md` and `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
 
 ## Planning And Historical Docs

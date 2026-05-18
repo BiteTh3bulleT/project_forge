@@ -2,7 +2,7 @@
 
 Phase G6 adds read-only FORGE-OS visibility to the graphical shell. The shell surface is operator visibility only; it is not a host control plane and is not a second authority path.
 
-FORGE-K Online Phase 17 extends this surface with a read-only Operator Cockpit Index and display-only FORGE-K subsystem/storage readiness rows. It still does not add commands, approval execution, cleanup execution, storage switching, or FORGE-K live authority.
+FORGE-K Online Phase 17 extends this surface with a read-only Operator Cockpit Index and display-only FORGE-K subsystem/storage readiness rows. Phase 18 adds read-only legacy-retirement proof metadata for retired direct mutation surfaces. It still does not add commands, approval execution, cleanup execution, storage switching, legacy mutation, or FORGE-K live authority.
 
 ## Endpoint
 
@@ -22,6 +22,7 @@ The endpoint is read-only and bounded. It returns summaries for:
 - operator cockpit index for gates, cases, context bundles, proposals, journal/replay, and lymphatic reports
 - FORGE-K subsystem authority matrix rows when reported
 - storage posture and read-only cutover readiness blockers
+- legacy retirement proof for retired adapter and memory mutation surfaces
 - approval queue wiring
 - recent warnings
 
@@ -40,6 +41,7 @@ It does not expose request bodies, prompts, model outputs, raw host logs, raw me
 | Modelruntime | Existing runtime health path when configured | Unavailable/degraded | No load/unload controls |
 | FORGE-K activation readiness | Live Control Lane readiness report via `kernel_activation` | Show unavailable/error if core status is unavailable | Shows validation lane readiness, authority gate blockers, and disabled authority flags; no Kernel authority migration |
 | Storage | SQLite/data-root status, disk summary, and storagebackend cutover readiness | Unavailable pressure if stat fails; blocked readiness if cutover evidence is missing | Shows used/free and readiness blockers when safely available; SQLite remains live truth authority |
+| Legacy retirement | Static API retirement report backed by route/memory tests | Omit only if core status is unavailable | Shows retired route state, replacement path, and rollback proof; no route registration or mutation |
 | Approval queue | Existing approvals surface wiring | Placeholder when unavailable | Decisions stay in governed approvals UI |
 
 ## Refresh Policy

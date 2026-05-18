@@ -31,3 +31,15 @@ Scope: final disposition for legacy adapter invocation ingress.
 - Legacy adapter ingress endpoint has been removed from router wiring.
 - Adapter/tool execution remains available only through `/api/gateway/invoke`.
 - No direct adapter execution path remains under `/api/adapters/{id}/invoke`; requests receive `404`.
+
+## Phase 18 Read-Only Proof
+
+`GET /forge/system/status` now includes `legacy_retirement.entries[]` metadata for this retired surface. The entry records:
+
+- live owner: Gateway
+- target FORGE-K owner: future gateway/capability boundary
+- route state: `unrouted`
+- default-live replacement: `/api/gateway/invoke` with `toolId=legacy.adapter.invoke`
+- rollback proof: the direct adapter route must remain absent from route inventory while the Gateway compatibility wrapper remains bounded
+
+This status metadata is read-only and does not reintroduce the route.
