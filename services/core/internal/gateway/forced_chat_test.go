@@ -69,6 +69,7 @@ func TestShouldAttachChatTools(t *testing.T) {
 		{name: "mkdir write enabled", in: `create a file labeled "test.txt" inside scratch/not_another_test/ and inside said file the words "This is a test file"`, want: true},
 		{name: "shell run enabled", in: "run go test ./...", want: true},
 		{name: "web search enabled", in: "search the web for forge ai os", want: true},
+		{name: "current news enabled", in: "Was there anything exciting in the news today?", want: true},
 		{name: "weather with location enabled", in: "what is the weather in Chicago today?", want: true},
 		{name: "weather without location disabled", in: "what is the weather looking like today?", want: false},
 		{name: "browser open enabled", in: "open browser https://example.com", want: true},
@@ -95,6 +96,7 @@ func TestForcedChatModelNameWebAndBrowser(t *testing.T) {
 		want string
 	}{
 		{name: "web search", in: "search the web for FORGE docs", want: ChatModelName("web.search")},
+		{name: "current news", in: "Was there anything exciting in the news today?", want: ChatModelName("web.search")},
 		{name: "weather with location", in: "what is the weather in Chicago today?", want: ChatModelName("web.search")},
 		{name: "fetch url", in: "fetch https://example.com", want: ChatModelName("net.fetch")},
 		{name: "open browser", in: "open browser https://example.com", want: ChatModelName("desktop.open")},
@@ -120,6 +122,10 @@ func TestParseWebSearchQueryAndURL(t *testing.T) {
 	query, ok := ParseWebSearchQuery("search the web for model runtime adapters")
 	if !ok || query != "model runtime adapters" {
 		t.Fatalf("ParseWebSearchQuery got %q ok=%v", query, ok)
+	}
+	query, ok = ParseWebSearchQuery("Was there anything exciting in the news today?")
+	if !ok || query != "latest notable news headlines today" {
+		t.Fatalf("ParseWebSearchQuery current news got %q ok=%v", query, ok)
 	}
 	rawURL, ok := ParseURLFromText("open browser https://example.com/test.")
 	if !ok || rawURL != "https://example.com/test" {

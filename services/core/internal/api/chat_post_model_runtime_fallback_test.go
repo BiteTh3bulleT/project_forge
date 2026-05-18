@@ -651,6 +651,16 @@ func TestSanitizeAssistantVisibleContentStripsThinkingBlocksAndTraceability(t *t
 	}
 }
 
+func TestSanitizeAssistantVisibleContentStripsWeNeedReasoningLeak(t *testing.T) {
+	content, warnings := sanitizeAssistantVisibleContent("We need to parse the operator's statement. I should inspect tools before answering.")
+	if content != "" {
+		t.Fatalf("expected reasoning leak to be fully stripped, got=%q", content)
+	}
+	if !containsString(warnings, "stripped_reasoning_scaffold") {
+		t.Fatalf("expected stripped_reasoning_scaffold warning, got=%#v", warnings)
+	}
+}
+
 func TestSanitizeAssistantVisibleContentStripsSyntheticUserTurnAndNormalizesIdentity(t *testing.T) {
 	content, warnings := sanitizeAssistantVisibleContent("I am Phi, the AI conversational partner.\nUSER: Can we implement a feature?")
 	if content != "I am FORGE." {
