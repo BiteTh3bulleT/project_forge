@@ -158,6 +158,38 @@ type GenerateResult struct {
 	Artifacts        []ArtifactReference `json:"artifacts,omitempty"`
 	Warnings         []string            `json:"warnings,omitempty"`
 	Errors           []string            `json:"errors,omitempty"`
+	Proposal         *ProposalEnvelope   `json:"proposal,omitempty"`
+}
+
+type ProposalEnvelope struct {
+	SchemaVersion          string           `json:"schemaVersion"`
+	ProposalID             string           `json:"proposalId"`
+	ProposalKind           string           `json:"proposalKind"`
+	ModelID                string           `json:"modelId"`
+	Backend                ModelBackendKind `json:"backend"`
+	WorkspaceID            string           `json:"workspaceId,omitempty"`
+	Actor                  string           `json:"actor,omitempty"`
+	Source                 string           `json:"source,omitempty"`
+	CorrelationID          string           `json:"correlationId,omitempty"`
+	TraceID                string           `json:"traceId,omitempty"`
+	RequestID              string           `json:"requestId,omitempty"`
+	AuditID                string           `json:"auditId,omitempty"`
+	OutputHash             string           `json:"outputHash"`
+	OutputBytes            int              `json:"outputBytes"`
+	FinishReason           string           `json:"finishReason,omitempty"`
+	PromptTokens           int              `json:"promptTokens,omitempty"`
+	CompletionTokens       int              `json:"completionTokens,omitempty"`
+	TotalTokens            int              `json:"totalTokens,omitempty"`
+	ProposalOnly           bool             `json:"proposalOnly"`
+	CanonicalCommit        bool             `json:"canonicalCommit"`
+	TruthMutation          bool             `json:"truthMutation"`
+	MemoryMutation         bool             `json:"memoryMutation"`
+	EvidenceAdmission      bool             `json:"evidenceAdmission"`
+	GatewayExecution       bool             `json:"gatewayExecution"`
+	ModelOutputAuthority   bool             `json:"modelOutputAuthority"`
+	RequiresKernelCommit   bool             `json:"requiresKernelCommit"`
+	RequiresValidation     bool             `json:"requiresValidation"`
+	LiveAuthorityMigration bool             `json:"liveAuthorityMigration"`
 }
 
 // TokenEvent captures incremental streaming output.

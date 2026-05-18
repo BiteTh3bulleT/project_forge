@@ -1776,6 +1776,7 @@ func (f *fakeStreamingModelRuntime) StreamChat(_ context.Context, req ModelRunti
 		Backend:    "openai_compat",
 		ModelID:    req.ModelID,
 		AuditID:    "audit-stream",
+		Proposal:   testModelRuntimeProposal(req, content, "audit-stream", len([]byte(content))),
 	}, nil
 }
 

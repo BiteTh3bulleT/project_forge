@@ -906,6 +906,7 @@ func (b *modelRuntimeBridge) Chat(ctx context.Context, req ModelRuntimeChatReque
 		Checkpoint:   &checkpoint,
 		Artifacts:    toArtifactIDs(result.Artifacts),
 		Warnings:     append([]string(nil), result.Warnings...),
+		Proposal:     result.Proposal,
 	}, nil
 }
 
@@ -1014,6 +1015,7 @@ func (b *modelRuntimeBridge) StreamChat(ctx context.Context, req ModelRuntimeCha
 		Checkpoint:   &checkpoint,
 		Artifacts:    toArtifactIDs(result.Artifacts),
 		Warnings:     append([]string(nil), result.Warnings...),
+		Proposal:     result.Proposal,
 	}, nil
 }
 

@@ -42,6 +42,8 @@ Current Memory Palace-related live work is mirror-only through existing disabled
 
 Current Context Compiler-related live work is shadow-only through existing disabled-by-default `services/core/internal/forgekshadow` Control Lane validation diagnostics. It can create a typed shadow ContextBundle shape from accepted `VALIDATE_ADMISSION_CANDIDATE` refs, but those refs are candidate-validation refs rather than live admitted evidence. It does not replace `COMPILE_CONTEXT`, create prompt text, call modelruntime, run retrieval/search/embeddings, write memory, admit evidence, change routes/APIs, or make `services/core/internal/forgek/contextcompiler` live authority.
 
+Current Runtime Boundary-related live work is proposal-envelope metadata only through existing `services/core/internal/modelruntime` generation results and API bridge translation. Successful modelruntime output carries a typed proposal-only envelope with provenance, audit, output hash/size, token counts, and explicit no-authority flags. It does not admit model output as evidence, commit truth, mutate memory, execute gateway tools, compile context, change backend selection/scheduling, enable live KV reuse, change Control Lane commit behavior, or make `services/core/internal/forgek/runtime` live authority.
+
 See `docs/reviews/current_phase_status.md` and `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
 
 ## Planning And Historical Docs

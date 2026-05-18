@@ -3,6 +3,8 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +16,7 @@ import (
 	"time"
 
 	"forge/projectforge/services/core/internal/config"
+	"forge/projectforge/services/core/internal/modelruntime"
 	"forge/projectforge/services/core/internal/store"
 )
 
@@ -233,6 +236,7 @@ func (f *fakeModelRuntime) Chat(_ context.Context, req ModelRuntimeChatRequest) 
 	if strings.TrimSpace(f.chatContent) != "" {
 		content = f.chatContent
 	}
+	proposal := testModelRuntimeProposal(req, content, "audit-test", len([]byte(content)))
 	return ModelRuntimeChatResult{
 		Content:      content,
 		FinishReason: "stop",
@@ -245,7 +249,34 @@ func (f *fakeModelRuntime) Chat(_ context.Context, req ModelRuntimeChatRequest) 
 		Backend:    "fake",
 		ModelID:    req.ModelID,
 		AuditID:    "audit-test",
+		Proposal:   proposal,
 	}, nil
+}
+
+func testModelRuntimeProposal(req ModelRuntimeChatRequest, content, auditID string, outputBytes int) *modelruntime.ProposalEnvelope {
+	sum := sha256.Sum256([]byte(content))
+	return &modelruntime.ProposalEnvelope{
+		SchemaVersion:        "modelruntime.proposal/v1",
+		ProposalID:           "test-proposal",
+		ProposalKind:         "model_runtime_output",
+		ModelID:              strings.TrimSpace(req.ModelID),
+		Backend:              modelruntime.ModelBackendKind(firstNonEmptyTest(req.Backend, "fake")),
+		WorkspaceID:          strings.TrimSpace(req.Meta.WorkspaceID),
+		Actor:                strings.TrimSpace(req.Actor),
+		Source:               strings.TrimSpace(req.Source),
+		CorrelationID:        strings.TrimSpace(req.Meta.CorrelationID),
+		TraceID:              strings.TrimSpace(req.Meta.TraceID),
+		AuditID:              auditID,
+		OutputHash:           "sha256:" + hex.EncodeToString(sum[:]),
+		OutputBytes:          outputBytes,
+		FinishReason:         "stop",
+		PromptTokens:         4,
+		CompletionTokens:     6,
+		TotalTokens:          10,
+		ProposalOnly:         true,
+		RequiresKernelCommit: true,
+		RequiresValidation:   true,
+	}
 }
 
 func (f *fakeModelRuntime) Compatibility(_ context.Context, modelID string, _ ModelRuntimeRequestMeta) (ModelRuntimeCompatibility, error) {
@@ -781,6 +812,9 @@ func TestForgeModelRuntimeStreamingEmitsSSEEvents(t *testing.T) {
 	}
 	if !strings.Contains(body, "event: result") || !strings.Contains(body, `"content":"forge stream"`) {
 		t.Fatalf("expected final result event, got body=%s", body)
+	}
+	if !strings.Contains(body, `"proposalOnly":true`) || strings.Contains(body, `"canonicalCommit":true`) || strings.Contains(body, `"modelOutputAuthority":true`) {
+		t.Fatalf("expected final stream result to preserve proposal-only envelope, got body=%s", body)
 	}
 	if !fake.lastChat.Stream || fake.lastChat.Meta.CorrelationID != "corr-forge-stream" || fake.lastChat.Meta.WorkspaceID != "ws-forge-stream" {
 		t.Fatalf("forge stream request not propagated correctly: %#v", fake.lastChat)

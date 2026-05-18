@@ -103,6 +103,7 @@ func TestService_LifecycleAndSchedulerBoundary(t *testing.T) {
 	if genA.AuditID == "" {
 		t.Fatalf("expected audit id on successful generate")
 	}
+	assertProposalEnvelopeNoAuthority(t, genA.Proposal, genA, genReq)
 
 	if _, err := svc.Load(context.Background(), "model-b"); err != nil {
 		t.Fatalf("load model-b: %v", err)
@@ -137,6 +138,60 @@ func TestService_LifecycleAndSchedulerBoundary(t *testing.T) {
 	records := audit.Records()
 	if len(records) < 5 {
 		t.Fatalf("expected multiple audit records, got %d", len(records))
+	}
+}
+
+func TestService_GenerateWrapsOutputAsProposalOnly(t *testing.T) {
+	backend := NewFakeBackend(FakeBackendOptions{Healthy: true})
+	svc, err := NewService(ServiceOptions{
+		Backends:       []ModelBackend{backend},
+		Models:         []ModelManifest{completionManifest("proposal-model", BackendFake)},
+		DefaultTimeout: 2 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+	if _, err := svc.Load(context.Background(), "proposal-model"); err != nil {
+		t.Fatalf("load model: %v", err)
+	}
+	req := baseGenerateRequest("proposal-model")
+	req.CorrelationID = "corr-proposal"
+	req.TraceID = "trace-proposal"
+	result, err := svc.Generate(context.Background(), req)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	assertProposalEnvelopeNoAuthority(t, result.Proposal, result, req)
+	if result.Proposal.CorrelationID != "corr-proposal" || result.Proposal.TraceID != "trace-proposal" {
+		t.Fatalf("proposal lost trace identity: %#v", result.Proposal)
+	}
+	if result.Proposal.OutputHash == "" || result.Proposal.OutputBytes != len([]byte(result.Content)) {
+		t.Fatalf("proposal output metadata mismatch: proposal=%#v content=%q", result.Proposal, result.Content)
+	}
+}
+
+func assertProposalEnvelopeNoAuthority(t *testing.T, proposal *ProposalEnvelope, result GenerateResult, req GenerateRequest) {
+	t.Helper()
+	if proposal == nil {
+		t.Fatalf("expected proposal envelope")
+	}
+	if proposal.SchemaVersion != "modelruntime.proposal/v1" || proposal.ProposalKind != "model_runtime_output" {
+		t.Fatalf("unexpected proposal identity: %#v", proposal)
+	}
+	if proposal.ModelID != result.ModelID || proposal.Backend != result.Backend || proposal.WorkspaceID != req.WorkspaceID {
+		t.Fatalf("proposal lost runtime identity: proposal=%#v result=%#v req=%#v", proposal, result, req)
+	}
+	if !proposal.ProposalOnly ||
+		proposal.CanonicalCommit ||
+		proposal.TruthMutation ||
+		proposal.MemoryMutation ||
+		proposal.EvidenceAdmission ||
+		proposal.GatewayExecution ||
+		proposal.ModelOutputAuthority ||
+		!proposal.RequiresKernelCommit ||
+		!proposal.RequiresValidation ||
+		proposal.LiveAuthorityMigration {
+		t.Fatalf("proposal envelope claimed forbidden authority: %#v", proposal)
 	}
 }
 

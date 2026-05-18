@@ -1,10 +1,10 @@
 # Model Runtime Status (M3/M4 Runtime Profile)
 
-Snapshot date: 2026-05-13.
+Snapshot date: 2026-05-18.
 
 ## Executive Status
 
-Model Runtime M3 is implemented in this branch. M4 closes the external vLLM-compatible backend profile as a governed, disabled-by-default modelruntime profile, adds public SSE streaming over the existing governed chat paths when the selected backend supports token streaming, and adds the approval-required destructive delete-file flow for managed model directories. FORGE now treats models as managed runtime assets instead of loose local manifests: local GGUF or manifest-backed imports can be registered into FORGE model home, persistent model state is tracked across import/verify/disable/archive/remove-registration/delete-file operations, runtime selection spans multiple pluggable backends, and the service exposes management, compatibility, usage, backend, queue, loaded, health, non-streaming chat, and streaming chat views while keeping inference policy-governed, auditable, and non-authoritative over semantic truth.
+Model Runtime M3 is implemented in this branch. M4 closes the external vLLM-compatible backend profile as a governed, disabled-by-default modelruntime profile, adds public SSE streaming over the existing governed chat paths when the selected backend supports token streaming, and adds the approval-required destructive delete-file flow for managed model directories. FORGE now treats models as managed runtime assets instead of loose local manifests: local GGUF or manifest-backed imports can be registered into FORGE model home, persistent model state is tracked across import/verify/disable/archive/remove-registration/delete-file operations, runtime selection spans multiple pluggable backends, and the service exposes management, compatibility, usage, backend, queue, loaded, health, non-streaming chat, and streaming chat views while keeping inference policy-governed, auditable, and non-authoritative over semantic truth. FORGE-K Online Phase 09 adds proposal-only output envelopes to successful modelruntime generation results as metadata; this does not make model output canonical truth or move Runtime Boundary authority into FORGE-K.
 
 ## Implemented
 
@@ -23,6 +23,7 @@ Model Runtime M3 is implemented in this branch. M4 closes the external vLLM-comp
 | OpenAI-compatible backend adapter | real | `services/core/internal/modelruntime/backend_openai_compat.go`, `backend_openai_compat_test.go` |
 | vLLM-compatible endpoint path | partial/live external profile | `services/core/internal/api/model_runtime_bridge.go`, `backend_openai_compat.go`, `docs/architecture/nix_rust_vllm_runtime.md` |
 | Streaming chat responses | real | `services/core/internal/api/model_runtime.go`, `model_runtime_test.go`, `backend_openai_compat.go`, `backend_openai_compat_test.go` |
+| Proposal-only output envelopes | real / metadata-only | `services/core/internal/modelruntime/types.go`, `service.go`, `service_test.go`, `services/core/internal/api/model_runtime_bridge.go` |
 | Runtime scheduler and queue admission | real | `services/core/internal/modelruntime/service.go`, `service_test.go` |
 | Runtime compatibility / usage / backend inspection | real | `services/core/internal/modelruntime/management.go`, `model_runtime_m3_test.go` |
 | Internal FORGE model management API | real | `services/core/internal/api/model_runtime.go`, `server.go` |
@@ -119,6 +120,8 @@ Recorded where available:
 - output bytes
 - success/error outcome
 
+Successful inference results carry a `modelruntime.proposal/v1` envelope with model/runtime/provenance/audit metadata, output hash and size, token counts, and explicit no-authority flags. The envelope marks output as proposal-only and records that it is not a canonical commit, truth mutation, memory mutation, evidence admission, gateway execution, or model-output authority.
+
 Model output remains response evidence. It does not automatically mutate canonical memory or semantic truth state.
 
 ## Configuration
@@ -173,6 +176,7 @@ Safe default posture:
 | OpenAI-compatible backend adapter | real | Endpoint-backed path is implemented. |
 | vLLM-compatible backend path | partial/live external profile | Uses the OpenAI-compatible transport shape, is disabled when unset, and exposes backend status through modelruntime. No separate managed vLLM service or deep vLLM orchestration is added. |
 | Streaming chat responses | real | `/forge/models/{id}/chat` and gated `/v1/chat/completions` support SSE when the runtime service/backend supports token streaming. |
+| Proposal-only output envelopes | real / metadata-only | Successful generation results carry typed proposal metadata. They do not add evidence admission, semantic writes, tool execution, prompt/context authority, or FORGE-K Runtime Boundary live authority. |
 | llama.cpp spawn mode | deferred | Spawn flag exists; runtime returns structured unsupported behavior. |
 | Embeddings/rerank/vision runtime paths | deferred | Taxonomy remains documented; execution not implemented. |
 | Gateway `model.*` capability registration | partial / policy-visible | Registry aliases now exist with active, approval_only, and deferred statuses. They do not add a second runtime execution path; `/forge/models*` remains authoritative. |

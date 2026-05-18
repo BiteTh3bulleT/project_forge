@@ -60,3 +60,9 @@ Phase 9 has no live daemon authority. It does not change:
 - live snapshot, context, or KV behavior
 
 Any real model backend integration, live KV reuse, streaming runtime output, or live daemon route change requires a later explicitly scoped `LIVE_INTEGRATION` phase with design, tests, and documentation updates.
+
+## Online Phase 09 Live Proposal Envelope
+
+FORGE-K Online Phase 09 adds a narrow live modelruntime-owned proposal envelope to successful `services/core/internal/modelruntime` generation results and preserves that envelope through the API chat bridge. This is `RUNTIME_PROPOSAL_BOUNDARY / LIVE_MODELRUNTIME_OWNED / MODEL_OUTPUT_PROPOSAL_ONLY / NO_FORGE_K_RUNTIME_AUTHORITY`.
+
+The live envelope mirrors the simulator doctrine that model output is proposal material only. It records provenance, audit ids, output hash/size, token counts, and explicit no-authority flags. It does not import or invoke `services/core/internal/forgek/runtime`, does not make the simulator Runtime Boundary live authority, does not admit evidence, does not write canonical truth, does not execute tools, and does not change modelruntime backend selection or scheduling.

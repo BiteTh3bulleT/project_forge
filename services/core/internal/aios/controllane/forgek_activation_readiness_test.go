@@ -154,8 +154,8 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	if matrix["Context Compiler"].CurrentStatus != "CONTEXT_COMPILER_SHADOW_ONLY" {
 		t.Fatalf("context compiler matrix status=%q, want CONTEXT_COMPILER_SHADOW_ONLY", matrix["Context Compiler"].CurrentStatus)
 	}
-	if matrix["Runtime Boundary"].CurrentStatus != "BLOCKED" {
-		t.Fatalf("runtime boundary status=%q, want BLOCKED", matrix["Runtime Boundary"].CurrentStatus)
+	if matrix["Runtime Boundary"].CurrentStatus != "RUNTIME_PROPOSAL_BOUNDARY" {
+		t.Fatalf("runtime boundary status=%q, want RUNTIME_PROPOSAL_BOUNDARY", matrix["Runtime Boundary"].CurrentStatus)
 	}
 }
 

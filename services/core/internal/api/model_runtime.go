@@ -136,6 +136,7 @@ type ModelRuntimeChatResult struct {
 	AuditID      string                                `json:"auditId,omitempty"`
 	Artifacts    []string                              `json:"artifacts,omitempty"`
 	Warnings     []string                              `json:"warnings,omitempty"`
+	Proposal     *modelruntime.ProposalEnvelope        `json:"proposal,omitempty"`
 }
 
 type ModelRuntimeChatStreamToken struct {
