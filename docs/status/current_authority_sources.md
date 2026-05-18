@@ -54,6 +54,8 @@ Current Lymphatic-related live work is proposal-only metadata on autonomy mainte
 
 Current KV-related live work includes a validation-only exact-identity canary through `VALIDATE_KV_IDENTITY` in `services/core/internal/aios/controllane`. The canary requires explicit `kvReuseCanary=true`, `canary_path=control_lane_validation_only`, `STRICT_PREFIX`, matching `final_token_ids_hash`, and all identity gates passing. It records canary eligibility only; it does not enable backend KV tensor reuse, runtime cache reuse, modelruntime behavior changes, memory mutation, or `services/core/internal/forgek/kv` live authority.
 
+Current storage cutover-related work is read-only readiness metadata through `services/core/internal/storagebackend` and `GET /forge/system/status`. SQLite remains the live truth authority and default backend. Postgres is future durable relational infrastructure gated by parity, rollback, read-compare, dual-write comparison, and operator approval evidence. Redis remains ephemeral coordination only, and Qdrant remains vector shadow/acceleration only. This does not enable dual-write, read switching, storage authority migration, Redis canonical truth, Qdrant truth/admissibility, or FORGE-K persistence authority.
+
 See `docs/reviews/current_phase_status.md` and `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
 
 ## Planning And Historical Docs

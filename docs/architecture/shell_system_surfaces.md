@@ -17,7 +17,7 @@ The endpoint is read-only and bounded. It returns summaries for:
 - bounded execution availability
 - modelruntime availability
 - FORGE-K activation readiness and authority gate blockers
-- storage posture
+- storage posture and read-only cutover readiness blockers
 - approval queue wiring
 - recent warnings
 
@@ -35,7 +35,7 @@ It does not expose request bodies, prompts, model outputs, raw host logs, raw me
 | FORGE-H executions | Execution ledger availability | Not wired unless governed store exists | Shows bounded/mutation/side-effect fields when available; no execution from shell |
 | Modelruntime | Existing runtime health path when configured | Unavailable/degraded | No load/unload controls |
 | FORGE-K activation readiness | Live Control Lane readiness report via `kernel_activation` | Show unavailable/error if core status is unavailable | Shows validation lane readiness, authority gate blockers, and disabled authority flags; no Kernel authority migration |
-| Storage | SQLite/data-root status and disk summary | Unavailable pressure if stat fails | Shows used/free when safely available; SQLite remains live truth authority |
+| Storage | SQLite/data-root status, disk summary, and storagebackend cutover readiness | Unavailable pressure if stat fails; blocked readiness if cutover evidence is missing | Shows used/free and readiness blockers when safely available; SQLite remains live truth authority |
 | Approval queue | Existing approvals surface wiring | Placeholder when unavailable | Decisions stay in governed approvals UI |
 
 ## Refresh Policy
@@ -55,6 +55,7 @@ The System surface must not:
 - execute tools
 - approve, reject, or execute resource proposals
 - write semantic memory
+- switch storage backends, enable dual-write, or switch reads
 - expose raw logs or memory dumps
 - make FORGE-K simulator services live daemon authority
 

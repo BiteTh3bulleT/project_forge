@@ -1,6 +1,6 @@
 # Storage Backend Migration
 
-Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds the first Postgres schema foundation and parity tests for storage metadata plus disabled shadow diagnostic schema only. Phase 13D-E adds an opt-in diagnostic persistence repository and retrieval metadata relational adapter scaffold. Phase 13F-G adds a disabled-by-default Qdrant shadow vector adapter and shadow index scaffold. Phase 13H adds a disabled-by-default Redis ephemeral coordination boundary. Phase 13I adds the store cutover readiness review. Phase 14A adds FORGE-K operational cutover design. These phases do not migrate live data.
+Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds the first Postgres schema foundation and parity tests for storage metadata plus disabled shadow diagnostic schema only. Phase 13D-E adds an opt-in diagnostic persistence repository and retrieval metadata relational adapter scaffold. Phase 13F-G adds a disabled-by-default Qdrant shadow vector adapter and shadow index scaffold. Phase 13H adds a disabled-by-default Redis ephemeral coordination boundary. Phase 13I adds the store cutover readiness review. Phase 14A adds FORGE-K operational cutover design. FORGE-K Online Phase 16 adds a pure cutover readiness report and exposes it read-only through system status. These phases do not migrate live data.
 
 ## Current Live State
 
@@ -11,6 +11,7 @@ Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds t
 - Docker-managed Postgres, Redis, and Qdrant are infrastructure-ready but not live authority.
 - Qdrant shadow indexing defaults disabled and is not part of live retrieval.
 - Redis ephemeral coordination defaults disabled and is not part of live jobs, gateway, modelruntime, retrieval, memory, or public API behavior.
+- `GET /forge/system/status` reports `storage.cutover_readiness` from `services/core/internal/storagebackend`. The report is read-only metadata and does not enable dual-write, read-compare, read switching, or backend mutation.
 
 ## Backend Selection
 
@@ -21,7 +22,7 @@ Phase 13A adds the application-side storage backend boundary. Phase 13B-C adds t
 
 Unset `FORGE_STORE_BACKEND` means `sqlite`. Redis and Qdrant endpoint variables do not imply a backend switch.
 
-Phase 13D-E intentionally keeps the live runtime on SQLite. Phase 13I records that Postgres is foundation-ready but not canonical-ready. A later cutover phase must add explicit adapter tests, migration tests, rollback tests, and operator runbooks before Postgres can become live.
+Phase 13D-E intentionally keeps the live runtime on SQLite. Phase 13I records that Postgres is foundation-ready but not canonical-ready. Phase 16 encodes those blockers in a pure readiness report. A later cutover phase must add explicit adapter tests, migration tests, rollback tests, and operator runbooks before Postgres can become live.
 
 ## Phase 13B-C Foundation Schema
 
@@ -128,6 +129,7 @@ Qdrant:
 8. Phase 13H: Redis queue/cache boundary with loss-safe behavior, disabled by default and non-canonical.
 9. Phase 13I: store cutover readiness review.
 10. Phase 14A: operational cutover design; no backend switch or live authority migration.
+11. FORGE-K Online Phase 16: pure cutover readiness status; no backend switch, no dual-write, no read switch, no storage authority migration.
 
 ## Parity Strategy
 
@@ -152,6 +154,7 @@ No read switch happens until:
 - Dual-write comparison is clean.
 - Backup and rollback are documented.
 - Operator-visible config clearly selects the backend.
+- Operator-visible readiness status stays blocked until all evidence for the selected table group is present and approval is recorded.
 
 ## Rollback Strategy
 

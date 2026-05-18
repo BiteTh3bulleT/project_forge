@@ -12,6 +12,7 @@ import (
 	"forge/projectforge/services/core/internal/aios/controllane"
 	"forge/projectforge/services/core/internal/forgeh"
 	"forge/projectforge/services/core/internal/hostbridge"
+	"forge/projectforge/services/core/internal/storagebackend"
 )
 
 const shellSystemStatusProposalLimit = 12
@@ -92,17 +93,18 @@ type forgeSystemModelRuntime struct {
 }
 
 type forgeSystemStorageStatus struct {
-	Root           string                   `json:"root"`
-	DataDir        string                   `json:"data_dir,omitempty"`
-	DBPath         string                   `json:"db_path,omitempty"`
-	TruthAuthority string                   `json:"truth_authority"`
-	PingOK         bool                     `json:"ping_ok"`
-	TotalBytes     uint64                   `json:"total_bytes,omitempty"`
-	UsedBytes      uint64                   `json:"used_bytes,omitempty"`
-	FreeBytes      uint64                   `json:"free_bytes,omitempty"`
-	PressureLevel  string                   `json:"pressure_level"`
-	Redis          forgeSystemExternalStore `json:"redis"`
-	Qdrant         forgeSystemExternalStore `json:"qdrant"`
+	Root           string                                `json:"root"`
+	DataDir        string                                `json:"data_dir,omitempty"`
+	DBPath         string                                `json:"db_path,omitempty"`
+	TruthAuthority string                                `json:"truth_authority"`
+	PingOK         bool                                  `json:"ping_ok"`
+	TotalBytes     uint64                                `json:"total_bytes,omitempty"`
+	UsedBytes      uint64                                `json:"used_bytes,omitempty"`
+	FreeBytes      uint64                                `json:"free_bytes,omitempty"`
+	PressureLevel  string                                `json:"pressure_level"`
+	Redis          forgeSystemExternalStore              `json:"redis"`
+	Qdrant         forgeSystemExternalStore              `json:"qdrant"`
+	Cutover        storagebackend.CutoverReadinessReport `json:"cutover_readiness"`
 }
 
 type forgeSystemExternalStore struct {
@@ -236,8 +238,16 @@ func (s *Server) shellSystemStorageRoot() string {
 
 func (s *Server) shellSystemStorage(snapshot hostbridge.Snapshot) forgeSystemStorageStatus {
 	dataDir := ""
+	storeBackend := "sqlite"
+	postgresDSN := ""
+	redisAddr := ""
+	qdrantURL := ""
 	if s != nil {
 		dataDir = s.cfg.DataDir
+		storeBackend = s.cfg.StoreBackend
+		postgresDSN = s.cfg.PostgresDSN
+		redisAddr = s.cfg.RedisAddr
+		qdrantURL = s.cfg.QdrantURL
 	}
 	dbPath := ""
 	if dataDir != "" {
@@ -246,6 +256,15 @@ func (s *Server) shellSystemStorage(snapshot hostbridge.Snapshot) forgeSystemSto
 	pingOK := false
 	if s != nil && s.st != nil && s.st.DB != nil {
 		pingOK = s.st.DB.Ping() == nil
+	}
+	backendCfg, err := storagebackend.NewConfig(storagebackend.ConfigInput{
+		Backend:     storeBackend,
+		PostgresDSN: postgresDSN,
+		RedisAddr:   redisAddr,
+		QdrantURL:   qdrantURL,
+	})
+	if err != nil {
+		backendCfg, _ = storagebackend.NewConfig(storagebackend.ConfigInput{})
 	}
 	return forgeSystemStorageStatus{
 		Root:           snapshot.Disk.Path,
@@ -267,6 +286,9 @@ func (s *Server) shellSystemStorage(snapshot hostbridge.Snapshot) forgeSystemSto
 			TruthAuthority: false,
 			Role:           "optional vector index only; not live truth authority in G6",
 		},
+		Cutover: storagebackend.EvaluateCutoverReadiness(storagebackend.CutoverReadinessInput{
+			Backend: backendCfg,
+		}),
 	}
 }
 

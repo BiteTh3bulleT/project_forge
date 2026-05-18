@@ -85,6 +85,16 @@ func TestForgeSystemStatusReadOnlySurface(t *testing.T) {
 	if storage["truth_authority"] != "sqlite" {
 		t.Fatalf("storage.truth_authority=%v, want sqlite", storage["truth_authority"])
 	}
+	cutover := asMap(t, storage["cutover_readiness"])
+	if cutover["status"] != "blocked" {
+		t.Fatalf("storage.cutover_readiness.status=%v, want blocked", cutover["status"])
+	}
+	if cutover["canonical_default"] != "sqlite" || cutover["requested_backend"] != "sqlite" {
+		t.Fatalf("storage cutover changed backend defaults: %#v", cutover)
+	}
+	if cutover["live_owner"] == "" || cutover["target_owner"] == "" {
+		t.Fatalf("storage cutover readiness missing owner fields: %#v", cutover)
+	}
 	if redis := asMap(t, storage["redis"]); redis["truth_authority"] != false {
 		t.Fatalf("storage.redis.truth_authority=%v, want false", redis["truth_authority"])
 	}
