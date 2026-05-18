@@ -1,5 +1,5 @@
 import type { DashboardSummary } from "@forge/shared";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { api } from "../lib/api";
@@ -105,6 +105,7 @@ const EMPTY_TELEMETRY: ShellTelemetry = {
   contextSnapshots: [],
   error: null,
 };
+const NATIVE_LAUNCH_PENDING_TTL_MS = 30_000;
 
 function getWorkspaceLabel(workspaceDir: string | null | undefined) {
   if (!workspaceDir) return "Workspace unavailable";
@@ -356,6 +357,7 @@ export function AppShell(props: AppShellProps) {
   const [runningOperatorApps, setRunningOperatorApps] = useState<
     RunningOperatorApp[]
   >([]);
+  const launchingOperatorAppIdsRef = useRef<Set<string>>(new Set());
   const [linuxWindows, setLinuxWindows] = useState<LinuxWindowSnapshot[]>([]);
   const [telemetry, setTelemetry] = useState<ShellTelemetry>(EMPTY_TELEMETRY);
   const [statusDetailsOpen, setStatusDetailsOpen] = useState(false);
@@ -653,8 +655,20 @@ export function AppShell(props: AppShellProps) {
 
   async function launchNativeApp(app: OperatorApp) {
     setStartOpen(false);
+    if (
+      launchingOperatorAppIdsRef.current.has(app.id) ||
+      runningOperatorApps.some((item) => item.app.id === app.id)
+    ) {
+      setOperatorAppStatus(`${app.label} launch is already pending.`);
+      return;
+    }
+    launchingOperatorAppIdsRef.current.add(app.id);
     try {
       const result = await launchOperatorApp(app.id);
+      if (!result.launched) {
+        setOperatorAppStatus(result.message);
+        return;
+      }
       setRunningOperatorApps((items) => {
         const next: RunningOperatorApp = {
           app,
@@ -672,6 +686,8 @@ export function AppShell(props: AppShellProps) {
       setOperatorAppStatus(
         error instanceof Error ? error.message : String(error),
       );
+    } finally {
+      launchingOperatorAppIdsRef.current.delete(app.id);
     }
   }
 
@@ -683,7 +699,12 @@ export function AppShell(props: AppShellProps) {
       action === "focus"
         ? await focusLinuxWindow(window_.id)
         : await controlLinuxWindow(window_.id, action);
-    if (!ok) return;
+    if (!ok) {
+      setOperatorAppStatus(
+        `${window_.title} did not accept the ${action} request.`,
+      );
+      return;
+    }
     const nextWindows = await listLinuxWindows();
     setLinuxWindows(nextWindows);
   }
@@ -925,10 +946,51 @@ export function AppShell(props: AppShellProps) {
     );
   }, [linuxWindows]);
 
+  useEffect(() => {
+    const pending = runningOperatorApps.filter(
+      (item) =>
+        !linuxWindows.some((window_) =>
+          linuxWindowResolvesOperatorLaunch(item, window_),
+        ),
+    );
+    if (pending.length === 0) return;
+    const nextExpirationDelay = Math.max(
+      0,
+      Math.min(
+        ...pending.map(
+          (item) =>
+            NATIVE_LAUNCH_PENDING_TTL_MS - (Date.now() - item.launchedAtMs),
+        ),
+      ),
+    );
+    const timeout = window.setTimeout(() => {
+      const expiredLabels: string[] = [];
+      setRunningOperatorApps((items) =>
+        items.filter((item) => {
+          const resolved = linuxWindows.some((window_) =>
+            linuxWindowResolvesOperatorLaunch(item, window_),
+          );
+          if (resolved) return false;
+          const expired =
+            Date.now() - item.launchedAtMs >= NATIVE_LAUNCH_PENDING_TTL_MS;
+          if (expired) expiredLabels.push(item.app.label);
+          return !expired;
+        }),
+      );
+      if (expiredLabels.length > 0) {
+        setOperatorAppStatus(
+          `${expiredLabels[0]} launch did not report a compositor window.`,
+        );
+      }
+    }, nextExpirationDelay);
+    return () => window.clearTimeout(timeout);
+  }, [linuxWindows, runningOperatorApps]);
+
   const pendingOperatorApps = useMemo(
     () =>
       runningOperatorApps.filter(
         (item) =>
+          Date.now() - item.launchedAtMs < NATIVE_LAUNCH_PENDING_TTL_MS &&
           !linuxWindows.some((window_) =>
             linuxWindowResolvesOperatorLaunch(item, window_),
           ),
@@ -1293,7 +1355,14 @@ export function AppShell(props: AppShellProps) {
                 <button
                   key={window_.id}
                   type="button"
-                  onClick={() => void focusLinuxWindow(window_.id)}
+                  onClick={() =>
+                    void runNativeWindowAction(
+                      window_,
+                      window_.focused && !window_.minimized
+                        ? "minimize"
+                        : "focus",
+                    )
+                  }
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setNativeContextMenu({

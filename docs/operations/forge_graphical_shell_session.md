@@ -1,6 +1,6 @@
 # FORGE Graphical Shell Session
 
-This runbook describes the Phase G1/G2/G3/G3.5/G4/G5/G6 graphical shell session contract.
+This runbook describes the Phase G1/G2/G3/G3.5/G4/G5/G6/G8 graphical shell session contract.
 
 G1 defines how an opt-in NixOS session should launch FORGE as the primary visible shell while preserving the existing FORGE authority boundaries. G2 adds a launchable `forge-shell-session` wrapper package and flake app. G3 adds the target package contract for a Nix-built desktop shell package named `forge-desktop-shell`, while preserving the G2 safe wrapper and local-binary fallback behavior.
 
@@ -11,6 +11,8 @@ G4 is the opt-in Wayland shell session integration lane. It should make FORGE Sh
 G5 adds a test-only, opt-in VirtualBox/minimal NixOS graphics profile at `nix/nixos/profiles/forge-vbox-graphics-test.nix`. It is for manual TTY launch in a minimal VM and is documented in `docs/operations/virtualbox_forge_shell_test.md`. It does not install a full graphical desktop environment, enable automatic login, replace the user's desktop, remove TTY fallback, or grant wrappers host-control authority.
 
 G6 adds a read-only System surface inside the graphical shell. It displays bounded `forge-core`, shell-session, HostBridge, FORGE-H, modelruntime, storage, approval, and warning state through governed read-only paths. It does not add restart, shutdown, rebuild, model load/unload, proposal approval, proposal execution, cleanup, or memory-write controls.
+
+G8 verifies and polishes the operator desktop shell UX while preserving labwc as the compositor substrate. It tightens native app pending-launch lifecycle behavior, taskbar focus/minimize/close semantics, and bounded failure diagnostics. The G8 report, status, and manual smoke checklist live at `docs/reports/phase_g8_desktop_shell_verification.md`, `docs/status/phase_g8_desktop_shell_verification.md`, and `docs/runbooks/desktop_shell_operator_smoke_test.md`.
 
 ## Operator Meaning
 
@@ -477,3 +479,5 @@ G4 validation must include Nix package/app evaluation, desktop shell package che
 - no direct modelruntime mutation
 - no direct semantic memory writes
 - no FORGE-K live authority routing
+
+For the G8 operator UX smoke pass, run `docs/runbooks/desktop_shell_operator_smoke_test.md` after the shell is built and the VM/session is running. Record skipped manual checks honestly; code-level tests do not replace VM-native launch evidence.

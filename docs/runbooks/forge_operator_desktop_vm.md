@@ -1,6 +1,6 @@
 # FORGE Operator Desktop VM Runbook
 
-Status: Phase G6 native desktop runtime bring-up
+Status: Phase G8 native desktop runtime and operator shell UX bring-up
 
 Last verified: 2026-05-16 on VirtualBox VM `FORGE-OS` for the appliance-style
 FORGE shell loading/login path. Native graphical password login evidence is
@@ -11,6 +11,12 @@ In-repo evidence record:
 
 Latest render evidence:
 [docs/evidence/vm_boot/2026-05-18-live-start/README.md](../evidence/vm_boot/2026-05-18-live-start/README.md)
+
+Phase G8 desktop shell verification:
+[docs/status/phase_g8_desktop_shell_verification.md](../status/phase_g8_desktop_shell_verification.md)
+
+Operator smoke checklist:
+[docs/runbooks/desktop_shell_operator_smoke_test.md](desktop_shell_operator_smoke_test.md)
 
 ## Purpose
 
