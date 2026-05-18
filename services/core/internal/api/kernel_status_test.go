@@ -67,6 +67,45 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 			t.Fatalf("blocked authority gate lacks next step: %#v", gate)
 		}
 	}
+
+	matrix, ok := payload["authority_matrix"].([]any)
+	if !ok || len(matrix) != 10 {
+		t.Fatalf("expected ten authority matrix entries, got %#v", payload["authority_matrix"])
+	}
+	seen := map[string]bool{}
+	for _, raw := range matrix {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected authority matrix entry shape: %#v", raw)
+		}
+		subsystem, _ := entry["subsystem"].(string)
+		seen[subsystem] = true
+		if entry["operator_visible"] != true {
+			t.Fatalf("authority matrix entry must be operator visible: %#v", entry)
+		}
+		if entry["live_owner"] == "" || entry["target_owner"] == "" || entry["rollback_path"] == "" {
+			t.Fatalf("authority matrix entry missing owner/rollback fields: %#v", entry)
+		}
+		if _, ok := entry["tests_required"].([]any); !ok {
+			t.Fatalf("authority matrix entry missing tests_required: %#v", entry)
+		}
+	}
+	for _, subsystem := range []string{
+		"Kernel",
+		"Courthouse",
+		"Memory Palace",
+		"Semantic Algebra",
+		"Snapshots",
+		"Context Compiler",
+		"KV System",
+		"Runtime Boundary",
+		"Lymphatic Lane",
+		"Consensus Mesh",
+	} {
+		if !seen[subsystem] {
+			t.Fatalf("missing authority matrix subsystem %q in %#v", subsystem, matrix)
+		}
+	}
 }
 
 func TestForgeKernelStatusDoesNotExposeMutationMethod(t *testing.T) {

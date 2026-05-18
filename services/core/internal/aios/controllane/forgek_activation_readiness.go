@@ -23,6 +23,7 @@ type ForgeKActivationReadinessReport struct {
 	AuthorityReadyGates       int                               `json:"authority_ready_gates"`
 	AuthorityBlockedGates     int                               `json:"authority_blocked_gates"`
 	AuthorityGates            []ForgeKAuthorityGateReadiness    `json:"authority_gates"`
+	AuthorityMatrix           []ForgeKAuthorityGateMatrixEntry  `json:"authority_matrix"`
 	Gates                     []ForgeKActivationReadinessGate   `json:"gates"`
 	NoEffect                  map[string]any                    `json:"no_effect"`
 	SimulatorAuthority        bool                              `json:"simulator_authority"`
@@ -62,6 +63,19 @@ type ForgeKAuthorityGateReadiness struct {
 	MutationAuthority        bool   `json:"mutation_authority"`
 	Reason                   string `json:"reason"`
 	NextStep                 string `json:"next_step"`
+}
+
+type ForgeKAuthorityGateMatrixEntry struct {
+	Subsystem       string   `json:"subsystem"`
+	CurrentStatus   string   `json:"current_status"`
+	LiveOwner       string   `json:"live_owner"`
+	TargetOwner     string   `json:"target_owner"`
+	FeatureFlag     string   `json:"feature_flag"`
+	RollbackPath    string   `json:"rollback_path"`
+	TestsRequired   []string `json:"tests_required"`
+	TestsPassing    []string `json:"tests_passing"`
+	Blockers        []string `json:"blockers"`
+	OperatorVisible bool     `json:"operator_visible"`
 }
 
 func ForgeKActivationReadiness(reg ActionRegistry, now time.Time) ForgeKActivationReadinessReport {
@@ -143,6 +157,7 @@ func ForgeKActivationReadiness(reg ActionRegistry, now time.Time) ForgeKActivati
 		AuthorityReadyGates:   authorityReady,
 		AuthorityBlockedGates: authorityBlocked,
 		AuthorityGates:        authorityGates,
+		AuthorityMatrix:       forgeKAuthorityGateMatrixReadiness(ready),
 		Gates: []ForgeKActivationReadinessGate{
 			{Name: "live_owner_explicit", Passed: true, Reason: "live owner remains aios.controllane"},
 			{Name: "validation_actions_registered", Passed: registered, Reason: "required validation actions are registered in the live Control Lane registry"},
@@ -163,6 +178,146 @@ func ForgeKActivationReadiness(reg ActionRegistry, now time.Time) ForgeKActivati
 			"partial live validation is running through the existing Control Lane owner",
 			"this is not full FORGE-K Kernel live authority",
 			"semantic writes, retrieval, gateway execution, modelruntime calls, and evidence admission remain outside this surface",
+		},
+	}
+}
+
+func forgeKAuthorityGateMatrixReadiness(validationReady bool) []ForgeKAuthorityGateMatrixEntry {
+	validationStatus := "BLOCKED"
+	validationTests := []string{}
+	validationBlockers := []string{"required live validation actions are not all closed"}
+	if validationReady {
+		validationStatus = "PARTIAL_LIVE_VALIDATION"
+		validationTests = []string{"Control Lane validation action registry tests", "kernel status read-only activation tests"}
+		validationBlockers = []string{"full Kernel mutation authority remains disabled"}
+	}
+
+	return []ForgeKAuthorityGateMatrixEntry{
+		{
+			Subsystem:       "Kernel",
+			CurrentStatus:   validationStatus,
+			LiveOwner:       ForgeKActivationOwnerControlLane,
+			TargetOwner:     "forgek.kernel",
+			FeatureFlag:     "n/a; live surface is validation-only Control Lane metadata",
+			RollbackPath:    "remove validation readiness exposure and keep existing Control Lane behavior",
+			TestsRequired:   []string{"Control Lane validation registry tests", "read-only kernel status API tests", "forbidden simulator import tests"},
+			TestsPassing:    validationTests,
+			Blockers:        validationBlockers,
+			OperatorVisible: true,
+		},
+		{
+			Subsystem:     "Courthouse",
+			CurrentStatus: "SIMULATOR_ONLY",
+			LiveOwner:     "existing audit/approval/evidence-adjacent live paths",
+			TargetOwner:   "forgek.court",
+			FeatureFlag:   "not implemented",
+			RollbackPath:  "leave live evidence handling on existing non-FORGE-K paths",
+			TestsRequired: []string{"read-only evidence mirror tests", "no admission decision change tests", "no simulator service live import tests"},
+			TestsPassing:  []string{},
+			Blockers: []string{
+				"live evidence admission is not routed through a governed FORGE-K Courthouse boundary",
+				"admission cannot change decisions until shadow and validation gates exist",
+			},
+			OperatorVisible: true,
+		},
+		{
+			Subsystem:     "Memory Palace",
+			CurrentStatus: "SIMULATOR_ONLY",
+			LiveOwner:     "services/core/internal/memory and services/core/internal/retrieval",
+			TargetOwner:   "forgek.palace",
+			FeatureFlag:   "not implemented",
+			RollbackPath:  "keep memory and retrieval on existing live stores",
+			TestsRequired: []string{"memory mirror read-only tests", "retrieval no-execution tests", "provenance preservation tests"},
+			TestsPassing:  []string{},
+			Blockers: []string{
+				"live memory writes remain outside FORGE-K",
+				"retrieval/search/embeddings are not FORGE-K-owned live authority",
+			},
+			OperatorVisible: true,
+		},
+		{
+			Subsystem:       "Semantic Algebra",
+			CurrentStatus:   validationStatus,
+			LiveOwner:       ForgeKActivationOwnerControlLane,
+			TargetOwner:     "forgek.semantic",
+			FeatureFlag:     "n/a; validation-only semantic operation shape checks",
+			RollbackPath:    "remove semantic operation validation action and keep existing Control Lane mutation paths",
+			TestsRequired:   []string{"semantic operation validation tests", "forbidden authority claim tests", "no semantic commit tests"},
+			TestsPassing:    validationTests,
+			Blockers:        []string{"semantic algebra does not execute live semantic operations"},
+			OperatorVisible: true,
+		},
+		{
+			Subsystem:       "Snapshots",
+			CurrentStatus:   "SIMULATOR_ONLY",
+			LiveOwner:       "services/core/internal/backup and existing snapshot/restore paths",
+			TargetOwner:     "forgek.snapshots",
+			FeatureFlag:     "not implemented",
+			RollbackPath:    "keep backup/restore on existing live services",
+			TestsRequired:   []string{"restore non-execution tests", "snapshot shape-not-truth tests", "rollback proof tests"},
+			TestsPassing:    []string{},
+			Blockers:        []string{"FORGE-K snapshots are not live truth or restore authority"},
+			OperatorVisible: true,
+		},
+		{
+			Subsystem:       "Context Compiler",
+			CurrentStatus:   "BLOCKED",
+			LiveOwner:       "services/core/internal/aios/controllane legacy COMPILE_CONTEXT paths",
+			TargetOwner:     "forgek.contextcompiler",
+			FeatureFlag:     "not implemented",
+			RollbackPath:    "keep live prompt/context assembly on existing paths",
+			TestsRequired:   []string{"read-only context mirror tests", "prompt parity tests", "no modelruntime call tests"},
+			TestsPassing:    []string{},
+			Blockers:        []string{"live prompt/context assembly remains outside FORGE-K Context Compiler authority"},
+			OperatorVisible: true,
+		},
+		{
+			Subsystem:       "KV System",
+			CurrentStatus:   validationStatus,
+			LiveOwner:       ForgeKActivationOwnerControlLane,
+			TargetOwner:     "forgek.kv",
+			FeatureFlag:     "n/a; KV identity validation only",
+			RollbackPath:    "remove VALIDATE_KV_IDENTITY live validation and keep no live KV reuse",
+			TestsRequired:   []string{"KV identity validation tests", "no live KV reuse tests", "cache-not-memory tests"},
+			TestsPassing:    validationTests,
+			Blockers:        []string{"live KV reuse and runtime cache reuse remain disabled"},
+			OperatorVisible: true,
+		},
+		{
+			Subsystem:       "Runtime Boundary",
+			CurrentStatus:   "BLOCKED",
+			LiveOwner:       "services/core/internal/modelruntime",
+			TargetOwner:     "forgek.runtime",
+			FeatureFlag:     "not implemented",
+			RollbackPath:    "keep model execution and lifecycle inside existing modelruntime",
+			TestsRequired:   []string{"runtime trace-only identity tests", "no backend behavior change tests", "proposal-only output tests"},
+			TestsPassing:    []string{},
+			Blockers:        []string{"live modelruntime remains outside FORGE-K runtime driver authority"},
+			OperatorVisible: true,
+		},
+		{
+			Subsystem:       "Lymphatic Lane",
+			CurrentStatus:   "SIMULATOR_ONLY",
+			LiveOwner:       "existing dream/autonomy/maintenance paths",
+			TargetOwner:     "forgek.lymphatic",
+			FeatureFlag:     "not implemented",
+			RollbackPath:    "keep cleanup and maintenance on existing live paths",
+			TestsRequired:   []string{"maintenance report mirror tests", "cleanup proposal no-execution tests", "no silent mutation tests"},
+			TestsPassing:    []string{},
+			Blockers:        []string{"FORGE-K Lymphatic Lane does not run live cleanup or maintenance actions"},
+			OperatorVisible: true,
+		},
+		{
+			Subsystem:       "Consensus Mesh",
+			CurrentStatus:   "SIMULATOR_ONLY",
+			LiveOwner:       "existing response/policy/approval paths",
+			TargetOwner:     "forgek.consensus",
+			FeatureFlag:     "not implemented",
+			RollbackPath:    "keep live decisions on existing policy, approval, and operator gates",
+			TestsRequired:   []string{"proposal-only consensus tests", "no decision authority tests", "approval separation tests"},
+			TestsPassing:    []string{},
+			Blockers:        []string{"Consensus Mesh is not live decision authority"},
+			OperatorVisible: true,
 		},
 	}
 }
