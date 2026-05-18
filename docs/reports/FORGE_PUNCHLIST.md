@@ -147,7 +147,7 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 - [ ] **Make CI integration env required.** No more silent skips on Postgres/Qdrant/Redis env vars.
 - [x] **Add scoped `go test -race` to weekly CI.** 2026-05-17: added weekly/manual race workflow for concurrency-heavy core packages (`api`, `jobs`, `modelruntime`, `gateway`, `hostbridge`, `aios/controllane`). Full `./...` race coverage remains optional because it is expensive.
 - [x] **Add fuzz tests** on URL/path/mode/ref/PID validators (5 fuzz targets in `gateway/`). 2026-05-17: added fuzz coverage for outbound HTTP URL, workspace path, chmod mode, git checkout ref, and terminate PID validators.
-- [ ] **Cross-platform smoke port.** Move `scripts/forge-smoke.mjs` off bash so it runs on Windows.
+- [x] **Cross-platform smoke port.** 2026-05-18: `npm run smoke` dispatches through `scripts/forge-smoke.mjs` to `forge-smoke.ps1` on Windows and `forge-smoke.sh` elsewhere.
 
 ---
 
@@ -245,9 +245,9 @@ Continue the proven pattern (kvidentity, refvalidation, semanticvalidation). Pic
 
 - [x] **Move `PhaseM4.txt` out of repo root** (also in Section 1).
 - [x] **Renumber duplicate ADR 0001** (also in Section 1).
-- [ ] **Add `docs/onboarding.md`.** Single-page answer to "where do I start as a new dev / collaborator / future me?"
-- [ ] **Generate `docs/api/routes.md`** from chi route inventory. Run once, commit, regenerate when routes change.
-- [ ] **Cross-link AGENTS.md and CODEX.md and README.md.** First-time reader should know which to start with.
+- [x] **Add `docs/onboarding.md`.** 2026-05-18: single-page first-read path for collaborators, operators, and future agents.
+- [x] **Generate `docs/api/routes.md`** from chi route inventory. 2026-05-18: generated route inventory is present and guarded by `npm run docs:routes:check`.
+- [x] **Cross-link AGENTS.md and CODEX.md and README.md.** 2026-05-18: root guidance files now point first-time readers to onboarding and current authority sources.
 - [ ] **Consolidate near-duplicate architecture docs.** `forge_ai_os.md`, `forge_k_overview.md`, `core_doctrine.md`, `control_lane_kernel.md` all touch the same kernel concept — add a "read this if you want X" header to each.
 - [ ] **Tag superseded ADRs explicitly** if any.
 

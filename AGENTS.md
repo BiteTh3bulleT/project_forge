@@ -33,6 +33,7 @@ Last convergence sweep update: 2026-05-14 (current authority/status alignment).
 - Do not route live state mutation through FORGE-K without an explicit integration phase, design, tests, and documentation updates. See `docs/adr/0001-forge-k-is-a-cognitive-microkernel.md` and `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
 
 ## Current Status Guidance
+- Start with `docs/onboarding.md` when orienting a new collaborator, future operator session, or agent.
 - Use `docs/reviews/current_phase_status.md` for current phase truth and FORGE-K simulator/live boundary status.
 - Use `docs/status/current_authority_sources.md` for the current authority-source map before treating older reviews, phase prompts, or roadmaps as active.
 - Use `docs/status/implementation_matrix.md` for live AI-OS and daemon implementation status; it is not the FORGE-K simulator phase matrix.

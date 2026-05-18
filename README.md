@@ -6,6 +6,7 @@ FORGE is a local-first AI workspace for inspectable, approval-gated engineering 
 
 Start here for current truth:
 
+- `docs/onboarding.md` - first-read path for collaborators, operators, and future agents.
 - `docs/reviews/current_phase_status.md` - current phase status and FORGE-K simulator/live boundary.
 - `docs/status/current_authority_sources.md` - map of live authority docs, operator docs, and non-authoritative planning docs.
 - `AGENTS.md` - agent working rules, branch/worktree policy, and status guidance.
@@ -97,6 +98,7 @@ Nix remains optional. Do not require vLLM, CUDA, GPU hardware, or a managed mode
 ## More Docs
 
 - `docs/onboarding.md`
+- `docs/api/routes.md`
 - `docs/USER_MANUAL.md`
 - `docs/DESKTOP_SHELL.md`
 - `docs/architecture/forge_ai_os.md`
