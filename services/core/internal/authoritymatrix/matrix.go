@@ -100,7 +100,7 @@ func DefaultRows() []Row {
 		controlLaneValidationRow("controllane.validate_semantic_operation", "VALIDATE_SEMANTIC_OPERATION", "semantic_operation"),
 
 		memoryRow("memory.observations.read", "GET", "/api/memory/observations", "memory.observations.list", false, false, ApprovalNone, "Reads legacy memory observation surfaces; output is evidence, not automatic truth."),
-		memoryRow("memory.observations.write", "POST/PATCH", "/api/memory/observations*", "legacy.memory.observation.mutate", true, true, ApprovalLegacyMemoryGate, "Legacy memory mutation is gated; canonical semantic writes must use Control Lane syscall paths."),
+		memoryRow("memory.observations.write", "POST/PATCH", "/api/memory/observations*", "legacy.memory.observation.mutate", true, true, ApprovalLegacyMemoryGate, "Legacy memory mutation endpoints are retired and audited; canonical semantic writes must use Courthouse review and Control Lane syscall paths."),
 		memoryRow("memory.retrieval.read", "GET", "/api/retrieval/runs*", "memory.retrieval.read", false, false, ApprovalNone, "Retrieval surfaces read evidence/search results and do not own truth mutation."),
 		memoryRow("memory.retrieval.write", "POST", "/api/retrieval/runs", "memory.retrieval.run", true, false, ApprovalNone, "Creates retrieval run evidence; Qdrant/search output is not canonical truth."),
 		memoryRow("memory.embeddings.status", "GET", "/api/embeddings/status", "embeddings.status", false, false, ApprovalNone, "Embedding provider status is diagnostic and not truth authority."),

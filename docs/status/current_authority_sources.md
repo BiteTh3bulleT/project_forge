@@ -48,6 +48,8 @@ Current Consensus Mesh-related live work is a narrow modelruntime-backed final-r
 
 Current low-risk Kernel-style commit work includes `CREATE_NOTE`, `UPDATE_STATE`, `OPEN_LOOP`, and `CLOSE_LOOP` through existing `services/core/internal/aios/controllane` syscall transactions. Notes, state records, state history, and open-loop records persist with journal, audit, provenance, scope, and semantic read-store visibility. This does not make `services/core/internal/forgek` live Kernel authority and does not migrate links, tags, memory observations, gateway execution, modelruntime proposals, or evidence admission.
 
+Current memory observation migration work keeps legacy `POST/PATCH /api/memory/observations*` mutation endpoints retired through `services/core/internal/api`. Existing `memory_observations` rows remain historical/retrieval evidence, and retired write attempts receive structured guidance/audit metadata pointing to Courthouse admission-candidate validation plus Control Lane semantic syscalls. This does not admit evidence, write memory, run a batch migrator, or make `services/core/internal/forgek` live authority.
+
 See `docs/reviews/current_phase_status.md` and `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
 
 ## Planning And Historical Docs

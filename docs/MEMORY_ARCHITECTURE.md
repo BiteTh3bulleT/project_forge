@@ -39,6 +39,8 @@ Phase 13A introduces `FORGE_STORE_BACKEND=sqlite|postgres` and backend capabilit
 
 Primary table: `memory_observations`.
 
+Write status: legacy observation mutation endpoints are retired. Existing rows remain readable historical/retrieval evidence, but new canonical memory must be submitted through Courthouse admission-candidate validation and committed through Control Lane semantic syscalls. See `docs/architecture/memory_observation_migration.md`.
+
 Observation records include:
 - id/timestamps
 - type
