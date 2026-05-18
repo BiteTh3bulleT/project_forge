@@ -75,6 +75,50 @@ func TestChatPostSyncFallsBackToModelRuntimeWhenOllamaModelMissing(t *testing.T)
 	}
 }
 
+func TestChatPostModelRuntimeConsensusGateWithholdsUnsupportedActionClaim(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.chatContent = "I deleted the workspace file."
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "runtime consensus gate", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+
+	raw := []byte(`{"content":"did you delete the file?","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message in response")
+	}
+	if strings.Contains(payload.AssistantMessage.Content, "I deleted the workspace file") {
+		t.Fatalf("unsupported action claim was not withheld: %q", payload.AssistantMessage.Content)
+	}
+	gate, ok := payload.AssistantMessage.Metadata["consensusGate"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected consensusGate metadata, got %#v", payload.AssistantMessage.Metadata["consensusGate"])
+	}
+	if got := strings.TrimSpace(asString(gate["status"])); got != "withheld" {
+		t.Fatalf("consensus gate status=%q, gate=%#v", got, gate)
+	}
+	for _, key := range []string{"canonicalTruth", "memoryMutation", "evidenceAdmission", "gatewayExecution", "liveAuthorityMigration"} {
+		if value, _ := gate[key].(bool); value {
+			t.Fatalf("consensus gate claimed forbidden authority %s=true: %#v", key, gate)
+		}
+	}
+}
+
 func TestChatPostSyncPrefersModelRuntimeBeforeOllamaFallbackWhenConfigured(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	fakeRuntime := newFakeModelRuntime()

@@ -44,6 +44,8 @@ Current Context Compiler-related live work is shadow-only through existing disab
 
 Current Runtime Boundary-related live work is proposal-envelope metadata only through existing `services/core/internal/modelruntime` generation results and API bridge translation. Successful modelruntime output carries a typed proposal-only envelope with provenance, audit, output hash/size, token counts, and explicit no-authority flags. It does not admit model output as evidence, commit truth, mutate memory, execute gateway tools, compile context, change backend selection/scheduling, enable live KV reuse, change Control Lane commit behavior, or make `services/core/internal/forgek/runtime` live authority.
 
+Current Consensus Mesh-related live work is a narrow modelruntime-backed final-response guard through `services/core/internal/api` and pure `services/core/internal/consensusgate`. It can withhold unsupported high-risk action claims from model proposal output before assistant message persistence, and records response-composition metadata only. It does not make `services/core/internal/forgek/consensus` live authority, admit evidence, commit truth, mutate memory, execute gateway tools, approve actions, call modelruntime, compile context, or fully gate gateway/Ollama/streaming token surfaces.
+
 See `docs/reviews/current_phase_status.md` and `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
 
 ## Planning And Historical Docs

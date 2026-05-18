@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"forge/projectforge/services/core/internal/chat"
+	"forge/projectforge/services/core/internal/consensusgate"
 )
 
 func (s *Server) completeAssistantWithModelRuntimeStream(
@@ -154,6 +155,14 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 	if content == "" {
 		content = assistantContentFallback
 	}
+	consensusDecision := consensusgate.Gate(consensusgate.Input{
+		Content:           content,
+		Surface:           consensusgate.SurfaceChatFinal,
+		WorkspaceID:       workspaceID,
+		CorrelationID:     corr,
+		ModelProposalOnly: result.Proposal != nil,
+	})
+	content = consensusDecision.Content
 	traceExtras := map[string]any{
 		"modelruntime_ms":             modelRuntimeMs,
 		"modelruntime_first_token_ms": firstTokenMs,
@@ -197,6 +206,7 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 		"toolManifest":         manifests,
 		"toolPipeline":         map[string]any{"stages": stages},
 		"toolGatewayActivity":  activity,
+		"consensusGate":        consensusDecision,
 	}
 	if requested := strings.TrimSpace(requestedModelID); requested != "" {
 		metadata["modelRuntimeRequestedModelId"] = requested
@@ -288,6 +298,14 @@ func (s *Server) completeAssistantWithModelRuntime(
 	if content == "" {
 		content = assistantContentFallback
 	}
+	consensusDecision := consensusgate.Gate(consensusgate.Input{
+		Content:           content,
+		Surface:           consensusgate.SurfaceChatFinal,
+		WorkspaceID:       workspaceID,
+		CorrelationID:     corr,
+		ModelProposalOnly: result.Proposal != nil,
+	})
+	content = consensusDecision.Content
 	traceExtras := map[string]any{
 		"modelruntime_ms":      modelRuntimeMs,
 		"gateway_execution_ms": int64(0),
@@ -333,6 +351,7 @@ func (s *Server) completeAssistantWithModelRuntime(
 		"toolManifest":         manifests,
 		"toolPipeline":         map[string]any{"stages": stages},
 		"toolGatewayActivity":  activity,
+		"consensusGate":        consensusDecision,
 	}
 	if requested := strings.TrimSpace(requestedModelID); requested != "" {
 		metadata["modelRuntimeRequestedModelId"] = requested
