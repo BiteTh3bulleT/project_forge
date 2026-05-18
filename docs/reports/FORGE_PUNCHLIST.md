@@ -19,9 +19,9 @@
   - `gateway`: 18.8%
   - `api`: 22.6%
 - **Untested packages:** 18 (down from 27).
-- **Largest source file:** `backup/service.go` at 2,005 lines (down from `gateway/service.go` at 4,709).
-- **In flight:** `lib/api.ts` split underway (3 commits in, chat/runtime/memory surfaces extracted).
-- **Working tree:** clean. Pushed.
+- **Largest non-test source file:** `services/core/internal/api/model_runtime_bridge.go` at 1,482 lines (down from `gateway/service.go` at 4,709). SQL migrations, validator crates, barrels, and test files remain tracked separately.
+- **In flight:** Section 2 file split threshold is satisfied; next refactors should be domain-driven rather than size-driven.
+- **Working tree:** Section 2 final split pass verified and pushed to `main`.
 
 ---
 
@@ -63,6 +63,9 @@ Detail in [FORGE_LARGE_FILE_INVENTORY.md](FORGE_LARGE_FILE_INVENTORY.md). Summar
   - 2026-05-14 progress: extracted compact board, import/registration panel, and shared model widgets into `ModelsPage/`; `ModelsPage.tsx` is now 1,466 lines.
 - [x] **`apps/desktop/src/pages/SettingsPage.tsx` (1,825).** Split by settings domain.
   - 2026-05-14 progress: extracted prompt, diagnostics, shared components, and local settings types into `SettingsPage/`; `SettingsPage.tsx` is now 1,498 lines.
+  - 2026-05-18 progress: extracted display/theme controls into `SettingsPage/DisplaySettingsSection.tsx`; `SettingsPage.tsx` is now 1,454 lines.
+- [x] **`apps/desktop/src/index.css` (4,644).** Split into ordered stylesheet chunks under `apps/desktop/src/styles/`.
+  - 2026-05-18 progress: retained the Tailwind entry in `index.css` and split base, shell, chat, ops, OS shell, Start menu, window, and login styles into files under 1,000 lines each.
 - [x] **`apps/desktop/src/layout/AppShell.tsx` (1,648).** Split into Sidebar/TopBar/StatusBar/WindowFrame + extract window manager.
   - 2026-05-14 progress: extracted wallpaper, floating window, Start menu, icon, and context-menu surfaces into `AppShellSurfaces.tsx`; `AppShell.tsx` is now 998 lines.
 - [x] **`apps/desktop/src/stores/workspaceLayoutStore.ts` (1,374).** Split store into model + actions + selectors.
@@ -79,12 +82,14 @@ Detail in [FORGE_LARGE_FILE_INVENTORY.md](FORGE_LARGE_FILE_INVENTORY.md). Summar
   - 2026-05-13 progress: extracted restore section policy helpers into `restore_sections.go`; `service.go` is now 805 lines.
 - [x] **`services/core/internal/modelruntime/service.go` (1,581).** Split by lifecycle stage: `service.go`, `lifecycle.go`, `selection.go`, `queue.go`, `usage.go`, `policy.go`.
   - 2026-05-14 progress: extracted runtime health/supervision into `service_health.go`; `service.go` is now 1,488 lines.
+  - 2026-05-18 progress: extracted scheduler/audit/token helper functions into `scheduler_helpers.go`; `service.go` is now 1,480 lines.
 - [x] **`services/core/internal/api/autonomy_maintenance_loop.go` (1,545).** Split by phase: loop driver + phase implementations + charters + budgets.
   - 2026-05-14 progress: extracted public report/status types and loop state into `autonomy_maintenance_loop_types.go`; `autonomy_maintenance_loop.go` is now 1,407 lines.
 - [x] **`services/core/internal/aios/controllane/compile_context_restore_scoring.go` (1,478).** Split into `listing`, `ranking`, `threshold`, `fallback`, `persistence`.
   - 2026-05-14 threshold review: remains below the 1,500-line Section 2 stop condition; defer further split until it grows or changes materially.
 - [x] **`services/core/internal/jobs/service.go` (1,452).** Split by lifecycle (queue/exec/result/events).
   - 2026-05-14 threshold review: remains below the 1,500-line Section 2 stop condition; defer further split until it grows or changes materially.
+  - 2026-05-18 progress: extracted metadata, scanning, ID, and typed metadata readers into `metadata_helpers.go`; `service.go` is now 1,237 lines.
 - [x] **`services/core/internal/aios/dream/service.go` (1,447).** Watch first; if it stays at 1,447 in a week, split by dream phase.
   - 2026-05-14 threshold review: watch item accepted below the Section 2 stop condition.
 - [x] **`services/core/internal/api/model_runtime_bridge.go` (1,413).** Split into translation + lifecycle bridge + status bridge.
@@ -109,7 +114,7 @@ Detail in [FORGE_LARGE_FILE_INVENTORY.md](FORGE_LARGE_FILE_INVENTORY.md). Summar
 
 No single non-inherent source file >1,500 lines. SQL migrations, validator crates, and barrel files are exempt.
 
-2026-05-14 status: satisfied. Current largest non-exempt source is `apps/desktop/src/pages/SettingsPage.tsx` at 1,498 lines.
+2026-05-18 status: satisfied. Current largest non-test, non-exempt source is `services/core/internal/api/model_runtime_bridge.go` at 1,482 lines.
 
 ---
 
@@ -269,7 +274,7 @@ Continue the proven pattern (kvidentity, refvalidation, semanticvalidation). Pic
 
 The project is "wired and working properly" when:
 
-- [ ] No source file >1,500 lines (except SQL migrations, validator crates, barrel files).
+- [x] No source file >1,500 lines (except SQL migrations, validator crates, barrel files). 2026-05-18: verified across non-test Go/TS/TSX/Rust/Nix/CSS sources; largest non-exempt source is `services/core/internal/api/model_runtime_bridge.go` at 1,482 lines.
 - [ ] Memory, controllane, autonomy, gateway, api all at 25%+ test/source.
 - [ ] All Section 1 hygiene items closed.
 - [x] `/health/detailed` and `/metrics` endpoints live.
