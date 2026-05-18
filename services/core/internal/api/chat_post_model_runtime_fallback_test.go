@@ -739,6 +739,42 @@ func TestChatPostSyncAnswersIdentityWithoutModel(t *testing.T) {
 	}
 }
 
+func TestChatPostSyncAnswersOperatorNameFromCommitMemoryClaim(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "operator name deterministic", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	if _, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "Commit to memory, I am Robert.", nil); err != nil {
+		t.Fatalf("append name claim: %v", err)
+	}
+
+	raw := []byte(`{"content":"Who am I?","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message")
+	}
+	if got := strings.TrimSpace(payload.AssistantMessage.Content); got != "Your name is Robert." {
+		t.Fatalf("expected remembered operator name, got=%q", got)
+	}
+	if fakeRuntime.chatCalls != 0 {
+		t.Fatalf("expected no model runtime calls, got %d", fakeRuntime.chatCalls)
+	}
+}
+
 func TestChatPostSyncAsksWeatherLocationWithoutModel(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	fakeRuntime := newFakeModelRuntime()

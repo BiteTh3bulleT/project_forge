@@ -55,11 +55,32 @@ func parseOperatorNameClaim(content string) string {
 		return ""
 	}
 	lower := strings.ToLower(text)
-	idx := strings.LastIndex(lower, "my name is")
-	if idx < 0 {
-		return ""
+	patterns := []string{
+		"my name is",
+		"call me",
+		"i am",
+		"i'm",
 	}
-	rest := strings.TrimSpace(text[idx+len("my name is"):])
+	for _, pattern := range patterns {
+		idx := strings.LastIndex(lower, pattern)
+		if idx < 0 {
+			continue
+		}
+		if idx > 0 && isASCIIWordByte(lower[idx-1]) {
+			continue
+		}
+		end := idx + len(pattern)
+		if end < len(lower) && isASCIIWordByte(lower[end]) {
+			continue
+		}
+		if name := extractOperatorName(text[end:]); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+func extractOperatorName(rest string) string {
 	rest = strings.Trim(rest, " \t\r\n:,-")
 	if rest == "" {
 		return ""
@@ -77,7 +98,38 @@ func parseOperatorNameClaim(content string) string {
 			break
 		}
 	}
-	return strings.TrimSpace(strings.Join(parts, " "))
+	name := strings.TrimSpace(strings.Join(parts, " "))
+	if !looksLikeOperatorName(name) {
+		return ""
+	}
+	return name
+}
+
+func looksLikeOperatorName(name string) bool {
+	fields := strings.Fields(name)
+	if len(fields) == 0 || len(fields) > 3 {
+		return false
+	}
+	blockedFirst := map[string]struct{}{
+		"a": {}, "an": {}, "at": {}, "for": {}, "going": {}, "here": {}, "in": {}, "not": {}, "on": {}, "ready": {}, "the": {}, "to": {},
+	}
+	if _, blocked := blockedFirst[strings.ToLower(fields[0])]; blocked {
+		return false
+	}
+	for _, field := range fields {
+		if field == "" {
+			return false
+		}
+		first := field[0]
+		if first < 'A' || first > 'Z' {
+			return false
+		}
+	}
+	return true
+}
+
+func isASCIIWordByte(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
 }
 
 func normalizeAssistantIntent(content string) string {
