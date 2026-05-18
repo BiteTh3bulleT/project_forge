@@ -523,3 +523,36 @@
     flex: 1 1 0;
   }
 }
+
+html[data-render-profile="vm-safe"] .forge-os-startmenu__backdrop,
+html[data-render-profile="vm-safe"] .forge-os-startmenu {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+html[data-render-profile="vm-safe"] .forge-os-startmenu__backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+html[data-render-profile="vm-safe"] .forge-os-startmenu {
+  animation: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 55%),
+    rgba(10, 13, 16, 0.98);
+  box-shadow: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-os-startmenu__avatar img {
+  filter: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-os-startmenu__tile:hover,
+html[data-render-profile="vm-safe"] .forge-os-startmenu__tile--active {
+  transform: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-os-startmenu__input:focus,
+html[data-render-profile="vm-safe"] .forge-os-startmenu__power-btn:hover,
+html[data-render-profile="vm-safe"] .forge-os-startmenu__power-btn--danger:hover {
+  box-shadow: none;
+}

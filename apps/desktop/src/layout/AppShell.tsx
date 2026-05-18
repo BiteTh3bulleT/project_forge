@@ -333,9 +333,10 @@ export function AppShell(props: AppShellProps) {
   const restore = useDesktopWindowStore((s) => s.restore);
   const focus = useDesktopWindowStore((s) => s.focus);
   const toggleMaximize = useDesktopWindowStore((s) => s.toggleMaximize);
-  const move = useDesktopWindowStore((s) => s.move);
-  const moveToHost = useDesktopWindowStore((s) => s.moveToHost);
-  const resize = useDesktopWindowStore((s) => s.resize);
+  const moveLive = useDesktopWindowStore((s) => s.moveLive);
+  const moveToHostLive = useDesktopWindowStore((s) => s.moveToHostLive);
+  const resizeLive = useDesktopWindowStore((s) => s.resizeLive);
+  const commitGeometry = useDesktopWindowStore((s) => s.commitGeometry);
   const reconcileHostAvailability = useDesktopWindowStore(
     (s) => s.reconcileHostAvailability,
   );
@@ -728,7 +729,7 @@ export function AppShell(props: AppShellProps) {
               }),
             )
           : { x: transferred.x, y: transferred.y };
-      moveToHost(
+      moveToHostLive(
         win.id,
         transferred.hostLabel,
         targetPlacement.x,
@@ -737,7 +738,7 @@ export function AppShell(props: AppShellProps) {
       );
       return;
     }
-    move(win.id, transferred.x, transferred.y);
+    moveLive(win.id, transferred.x, transferred.y);
   }
 
   function focusFromDock(window_: DesktopWindow) {
@@ -1020,14 +1021,16 @@ export function AppShell(props: AppShellProps) {
                   onClose={() => void closeWindow(win.id)}
                   onToggleMaximize={() => toggleMaximize(win.id)}
                   onMove={(x, y) => moveAcrossShellHosts(win, x, y)}
-                  onResize={(w, h) => resize(win.id, w, h)}
+                  onMoveCommit={() => commitGeometry(win.id)}
+                  onResize={(w, h) => resizeLive(win.id, w, h)}
+                  onResizeCommit={() => commitGeometry(win.id)}
                 />
               ))
             : null}
 
           {/* Hidden router-driven children for deep-link routes. Detached
               Tauri compatibility renders routes in separate webviews. */}
-          {!detachedTauriShell ? (
+          {!detachedTauriShell && shellRenderedWindows.length === 0 ? (
             <div className="forge-os-router-sink" aria-hidden>
               {props.children}
             </div>

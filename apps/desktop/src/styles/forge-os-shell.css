@@ -873,3 +873,68 @@
 }
 
 /* Start menu */
+
+html[data-render-profile="vm-safe"] .forge-os-wallpaper__art img,
+html[data-render-profile="vm-safe"] .forge-os-hero__anvil,
+html[data-render-profile="vm-safe"] .forge-os-taskbar__anvil {
+  filter: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-os-wallpaper__grid,
+html[data-render-profile="vm-safe"] .forge-os-wallpaper__glow {
+  display: none;
+  background: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-os-wallpaper__gradient {
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.24), rgba(0, 0, 0, 0.1) 48%, rgba(0, 0, 0, 0.28)),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.24));
+}
+
+html[data-render-profile="vm-safe"] .forge-os-statusbar,
+html[data-render-profile="vm-safe"] .forge-os-context-inspector,
+html[data-render-profile="vm-safe"] .forge-os-activity-log,
+html[data-render-profile="vm-safe"] .forge-os-hero__panel,
+html[data-render-profile="vm-safe"] .forge-os-window,
+html[data-render-profile="vm-safe"] .forge-os-taskbar {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-os-statusbar,
+html[data-render-profile="vm-safe"] .forge-os-taskbar,
+html[data-render-profile="vm-safe"] .forge-os-window,
+html[data-render-profile="vm-safe"] .forge-os-hero__panel,
+html[data-render-profile="vm-safe"] .forge-os-context-inspector,
+html[data-render-profile="vm-safe"] .forge-os-activity-log {
+  background-image: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-os-statusbar {
+  background-color: rgba(5, 7, 9, 0.88);
+}
+
+html[data-render-profile="vm-safe"] .forge-os-context-inspector,
+html[data-render-profile="vm-safe"] .forge-os-activity-log,
+html[data-render-profile="vm-safe"] .forge-os-hero__panel,
+html[data-render-profile="vm-safe"] .forge-os-window {
+  background-color: rgba(8, 11, 14, 0.96);
+}
+
+html[data-render-profile="vm-safe"] .forge-os-taskbar {
+  background-color: rgba(5, 7, 9, 0.96);
+}
+
+html[data-render-profile="vm-safe"] .forge-os-taskbar__item--active::after {
+  box-shadow: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-os-taskbar__start:hover,
+html[data-render-profile="vm-safe"] .forge-os-taskbar__start--active,
+html[data-render-profile="vm-safe"] .forge-os-taskbar__item:hover {
+  transform: none;
+}

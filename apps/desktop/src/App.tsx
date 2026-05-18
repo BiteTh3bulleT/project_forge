@@ -18,6 +18,7 @@ import { ForgeErrorBoundary } from "./components/ForgeErrorBoundary";
 import { AppShell } from "./layout/AppShell";
 import { clearForgeApiTokenCache } from "./lib/api/client";
 import { isTauriDesktop, isShellHostWindowLabel } from "./lib/desktop";
+import { configuredRenderProfile } from "./lib/renderProfile";
 import {
   subscribeToCurrentWindowLifecycle,
   subscribeToWorkspaceLayoutSync,
@@ -268,6 +269,7 @@ export default function App() {
     layoutReady && isShellHostWindowLabel(currentWindowLabel || "main");
   const contrastPreference = useUiStore((s) => s.contrastPreference);
   const effectsPreference = useUiStore((s) => s.effectsPreference);
+  const renderProfile = configuredRenderProfile();
   const [forgeLoginUnlocked, setForgeLoginUnlocked] = useState(() => {
     if (!FORGE_BOOT_LOGIN_REQUIRED) return true;
     return (
@@ -341,7 +343,8 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.contrast = contrastPreference;
     document.documentElement.dataset.effects = effectsPreference;
-  }, [contrastPreference, effectsPreference]);
+    document.documentElement.dataset.renderProfile = renderProfile;
+  }, [contrastPreference, effectsPreference, renderProfile]);
 
   useEffect(() => {
     document.documentElement.dataset.forgeBootSurface = showingForgeBootSurface

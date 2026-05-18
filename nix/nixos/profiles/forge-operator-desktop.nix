@@ -7,7 +7,9 @@
 }:
 
 let
-  forgeDesktopShell = pkgs.callPackage ../../packages/forge-desktop-shell.nix { };
+  forgeDesktopShell = pkgs.callPackage ../../packages/forge-desktop-shell.nix {
+    renderProfile = "vm-safe";
+  };
   forgeShellSession = pkgs.callPackage ../../packages/forge-shell-session.nix {
     forgeDesktopShell = forgeDesktopShell;
   };
@@ -111,6 +113,8 @@ in
     FORGE_SHELL_MODEL_MUTATION = "false";
     FORGE_SHELL_SEMANTIC_MEMORY_WRITE = "false";
     FORGE_SHELL_FORGE_K_LIVE_AUTHORITY = "false";
+    FORGE_RENDER_PROFILE = lib.mkDefault "vm-safe";
+    VITE_FORGE_RENDER_PROFILE = lib.mkDefault "vm-safe";
     FORGE_CORE_URL = lib.mkDefault "http://127.0.0.1:18492";
     VITE_FORGE_API_URL = lib.mkDefault "http://127.0.0.1:18492";
     XDG_SESSION_TYPE = "wayland";

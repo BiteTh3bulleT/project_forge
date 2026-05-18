@@ -748,6 +748,19 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(screen.getAllByTestId("mock-tool-content")).toHaveLength(1);
   });
 
+  it("does not keep routed children mounted behind an active shell window", () => {
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div>Deep linked chat route payload</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("mock-tool-content")).toBeTruthy();
+    expect(screen.queryByText("Deep linked chat route payload")).toBeNull();
+  });
+
   it("keeps Start open when a background surface only changes search params", () => {
     render(
       <MemoryRouter initialEntries={["/"]}>

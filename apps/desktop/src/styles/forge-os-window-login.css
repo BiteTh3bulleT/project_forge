@@ -832,3 +832,74 @@
     0 14px 32px rgba(0, 0, 0, 0.36),
     0 0 34px rgba(var(--forge-cyan-rgb), 0.24);
 }
+
+html[data-render-profile="vm-safe"] .forge-os-window,
+html[data-render-profile="vm-safe"] .forge-os-context-menu,
+html[data-render-profile="vm-safe"] .forge-login-panel {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-os-window,
+html[data-render-profile="vm-safe"] .forge-os-window--focused,
+html[data-render-profile="vm-safe"] .forge-os-context-menu,
+html[data-render-profile="vm-safe"] .forge-login-panel {
+  background-image: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-os-window {
+  background-color: rgba(10, 13, 16, 0.98);
+}
+
+html[data-render-profile="vm-safe"] .forge-os-window--focused {
+  box-shadow: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-os-context-menu,
+html[data-render-profile="vm-safe"] .forge-login-panel {
+  background-color: rgba(10, 13, 16, 0.98);
+}
+
+html[data-render-profile="vm-safe"] .forge-boot-screen,
+html[data-render-profile="vm-safe"] .forge-login-screen {
+  background:
+    linear-gradient(
+      115deg,
+      rgba(var(--forge-amber-rgb), 0.035),
+      transparent 24%
+    ),
+    linear-gradient(155deg, #020405 0%, #071014 48%, #030506 100%);
+}
+
+html[data-render-profile="vm-safe"] .forge-boot-screen::before,
+html[data-render-profile="vm-safe"] .forge-boot-screen::after,
+html[data-render-profile="vm-safe"] .forge-login-screen::before,
+html[data-render-profile="vm-safe"] .forge-login-screen::after,
+html[data-render-profile="vm-safe"] .forge-boot-screen__brand::before,
+html[data-render-profile="vm-safe"] .forge-login-screen__brand::before {
+  content: none;
+  display: none;
+  background: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-boot-screen__mark,
+html[data-render-profile="vm-safe"] .forge-login-screen__mark {
+  filter: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-boot-screen__status,
+html[data-render-profile="vm-safe"] .forge-route-loading > span,
+html[data-render-profile="vm-safe"] .forge-login-field input:focus,
+html[data-render-profile="vm-safe"] .forge-login-panel__submit,
+html[data-render-profile="vm-safe"] .forge-login-panel__submit:hover {
+  box-shadow: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-boot-screen__line {
+  width: 100%;
+  transform: none;
+  will-change: auto;
+}

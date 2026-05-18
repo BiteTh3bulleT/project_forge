@@ -183,7 +183,9 @@ export function FloatingWindow(props: {
   onClose: () => void;
   onToggleMaximize: () => void;
   onMove: (x: number, y: number) => void;
+  onMoveCommit: () => void;
   onResize: (width: number, height: number) => void;
+  onResizeCommit: () => void;
 }) {
   const tool = useMemo(
     () => allShellTools.find((t) => t.id === props.window.toolId) ?? null,
@@ -227,6 +229,7 @@ export function FloatingWindow(props: {
     };
     const onUp = () => {
       dragRef.current = null;
+      props.onMoveCommit();
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
@@ -259,6 +262,7 @@ export function FloatingWindow(props: {
     };
     const onUp = () => {
       resizeRef.current = null;
+      props.onResizeCommit();
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };

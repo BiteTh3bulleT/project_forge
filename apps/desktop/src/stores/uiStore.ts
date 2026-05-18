@@ -1,8 +1,13 @@
 import { create } from "zustand";
 
+import {
+  configuredRenderProfile,
+  initialEffectsPreference,
+  type EffectsPreference,
+} from "../lib/renderProfile";
+
 type UiMode = "cognitive" | "metrics";
 type ContrastPreference = "normal" | "high";
-type EffectsPreference = "off" | "subtle";
 type ThemePreference = "dark" | "light";
 type AccentPreference = "cyan" | "amber" | "mint";
 
@@ -21,10 +26,12 @@ function loadContrast(): ContrastPreference {
 }
 
 function loadEffects(): EffectsPreference {
-  if (typeof window === "undefined") return "subtle";
-  const raw = window.localStorage.getItem("forge.ui.effects");
-  if (raw === "off" || raw === "subtle") return raw;
-  return "subtle";
+  const profile = configuredRenderProfile();
+  const raw =
+    typeof window === "undefined"
+      ? null
+      : window.localStorage.getItem("forge.ui.effects");
+  return initialEffectsPreference(profile, raw);
 }
 
 function loadTheme(): ThemePreference {
