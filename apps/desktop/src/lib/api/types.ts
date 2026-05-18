@@ -832,6 +832,18 @@ export type ForgeSystemStatus = {
       reason?: string;
       next_step?: string;
     }>;
+    authority_matrix?: Array<{
+      subsystem?: string;
+      current_status?: string;
+      live_owner?: string;
+      target_owner?: string;
+      feature_flag?: string;
+      rollback_path?: string;
+      tests_required?: string[];
+      tests_passing?: string[];
+      blockers?: string[];
+      operator_visible?: boolean;
+    }>;
     gates?: Array<{
       name?: string;
       passed?: boolean;
@@ -874,6 +886,25 @@ export type ForgeSystemStatus = {
       enabled?: boolean;
       truth_authority?: boolean;
       role?: string;
+    };
+    cutover_readiness?: {
+      status?: string;
+      selected_domain?: string;
+      canonical_default?: string;
+      requested_backend?: string;
+      live_owner?: string;
+      target_owner?: string;
+      ready_for_dual_write?: boolean;
+      ready_for_read_compare?: boolean;
+      ready_for_cutover_proposal?: boolean;
+      postgres_canonical_ready?: boolean;
+      redis_truth_authority?: boolean;
+      qdrant_truth_authority?: boolean;
+      tests_required?: string[];
+      tests_passing?: string[];
+      blockers?: string[];
+      rollback_path?: string;
+      no_effect?: Record<string, boolean>;
     };
   };
   authority?: {

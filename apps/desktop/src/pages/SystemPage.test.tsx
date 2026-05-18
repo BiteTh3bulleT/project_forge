@@ -201,6 +201,44 @@ describe("SystemPage", () => {
             next_step: "keep source-object authority lookup read-only while evidence admission and mutation routing gates are designed",
           },
         ],
+        authority_matrix: [
+          {
+            subsystem: "Courthouse",
+            current_status: "ADMISSION_CANDIDATE_ONLY",
+            live_owner: "aios.controllane",
+            target_owner: "forgek.court",
+            feature_flag: "n/a; admission candidate validation only",
+            rollback_path: "remove admission candidate validation",
+            tests_required: ["admission candidate validation tests"],
+            tests_passing: ["Control Lane validation action registry tests"],
+            blockers: ["live evidence admission and ruling authority remain disabled"],
+            operator_visible: true,
+          },
+          {
+            subsystem: "Context Compiler",
+            current_status: "CONTEXT_COMPILER_SHADOW_ONLY",
+            live_owner: "services/core/internal/forgekshadow",
+            target_owner: "forgek.contextcompiler",
+            feature_flag: "FORGE_K_SHADOW_MODE_ENABLED",
+            rollback_path: "remove shadow ContextBundle projection",
+            tests_required: ["read-only context mirror tests"],
+            tests_passing: ["ContextBundle shadow tests"],
+            blockers: ["live prompt/context assembly remains outside FORGE-K"],
+            operator_visible: true,
+          },
+          {
+            subsystem: "Lymphatic Lane",
+            current_status: "LYMPHATIC_PROPOSAL_ONLY_ONLINE",
+            live_owner: "existing dream/autonomy/maintenance paths",
+            target_owner: "forgek.lymphatic",
+            feature_flag: "n/a; dry-run metadata only",
+            rollback_path: "remove proposal-only lymphatic metadata",
+            tests_required: ["cleanup proposal no-execution tests"],
+            tests_passing: ["autonomy maintenance dry-run proposal-only tests"],
+            blockers: ["FORGE-K Lymphatic Lane does not run live cleanup"],
+            operator_visible: true,
+          },
+        ],
         no_effect: {
           memoryMutation: false,
           runtimeMutation: false,
@@ -238,6 +276,29 @@ describe("SystemPage", () => {
           enabled: false,
           truth_authority: false,
           role: "optional vector index",
+        },
+        cutover_readiness: {
+          status: "blocked",
+          selected_domain: "none",
+          canonical_default: "sqlite",
+          requested_backend: "sqlite",
+          live_owner: "services/core/internal/store.Open with SQLite at ${FORGE_DATA_DIR}/forge.sqlite",
+          target_owner: "future storagebackend Postgres repository adapters",
+          ready_for_dual_write: false,
+          ready_for_read_compare: false,
+          ready_for_cutover_proposal: false,
+          postgres_canonical_ready: false,
+          redis_truth_authority: false,
+          qdrant_truth_authority: false,
+          tests_required: ["SQLite baseline tests"],
+          tests_passing: [],
+          blockers: ["postgres backend not explicitly selected for a cutover proposal"],
+          rollback_path: "leave FORGE_STORE_BACKEND unset or set to sqlite",
+          no_effect: {
+            canonicalDefaultChanged: false,
+            dualWriteEnabled: false,
+            readSwitchEnabled: false,
+          },
         },
       },
       authority: {
@@ -378,6 +439,19 @@ describe("SystemPage", () => {
     expect(screen.getByText("control_lane_approval_fingerprint.v1")).toBeTruthy();
     expect(screen.getByText("approval fingerprint seam is deterministic")).toBeTruthy();
     expect(screen.getByText("Enforcement wired")).toBeTruthy();
+    expect(screen.getByText("Operator Cockpit Index")).toBeTruthy();
+    expect(screen.getByText("Authority gates")).toBeTruthy();
+    expect(screen.getByText("2 ready / 4 blocked")).toBeTruthy();
+    expect(screen.getByText("Cases")).toBeTruthy();
+    expect(screen.getByText("FORGE-K case packets")).toBeTruthy();
+    expect(screen.getByText("Context bundles")).toBeTruthy();
+    expect(screen.getByText("context snapshots/restore inspector")).toBeTruthy();
+    expect(screen.getByText("Proposals")).toBeTruthy();
+    expect(screen.getByText("1 resource proposals")).toBeTruthy();
+    expect(screen.getByText("Journal/replay")).toBeTruthy();
+    expect(screen.getByText("audit/journal trace APIs")).toBeTruthy();
+    expect(screen.getByText("Lymphatic reports")).toBeTruthy();
+    expect(screen.getByText("autonomy maintenance dry-run reports")).toBeTruthy();
     expect(screen.getAllByText("partial_live_validation_ready").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("5/5")).toBeTruthy();
     expect(screen.getByText("Simulator authority disabled")).toBeTruthy();
@@ -388,6 +462,14 @@ describe("SystemPage", () => {
     expect(screen.getByText("Blocked: 4")).toBeTruthy();
     expect(screen.getByText("source_object_authority_lookup")).toBeTruthy();
     expect(screen.getByText("keep source-object authority lookup read-only while evidence admission and mutation routing gates are designed")).toBeTruthy();
+    expect(screen.getByText("FORGE-K Subsystem Cockpit")).toBeTruthy();
+    expect(screen.getByText("Courthouse")).toBeTruthy();
+    expect(screen.getByText("ADMISSION_CANDIDATE_ONLY")).toBeTruthy();
+    expect(screen.getByText("Context Compiler")).toBeTruthy();
+    expect(screen.getByText("CONTEXT_COMPILER_SHADOW_ONLY")).toBeTruthy();
+    expect(screen.getByText("Lymphatic Lane")).toBeTruthy();
+    expect(screen.getByText("LYMPHATIC_PROPOSAL_ONLY_ONLINE")).toBeTruthy();
+    expect(screen.getByText("FORGE-K Lymphatic Lane does not run live cleanup")).toBeTruthy();
     expect(screen.getByText("VALIDATE_KV_IDENTITY")).toBeTruthy();
     expect(screen.getByText("VALIDATE_SOURCE_OBJECT_AUTHORITY")).toBeTruthy();
     expect(screen.getByText("ref.shape.validate")).toBeTruthy();
@@ -411,6 +493,9 @@ describe("SystemPage", () => {
     expect(screen.getByText("Modelruntime mutation: no")).toBeTruthy();
     expect(screen.getByText("Side effects: operator_notification")).toBeTruthy();
     expect(screen.getByText("Used")).toBeTruthy();
+    expect(screen.getByText("Storage Cutover Readiness")).toBeTruthy();
+    expect(screen.getByText("Canonical default")).toBeTruthy();
+    expect(screen.getByText("postgres backend not explicitly selected for a cutover proposal")).toBeTruthy();
     expect(screen.getByText("Pending approvals")).toBeTruthy();
     expect(screen.getAllByText("1").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Latest Validation Evidence")).toBeTruthy();

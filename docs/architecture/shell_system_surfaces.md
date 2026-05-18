@@ -2,6 +2,8 @@
 
 Phase G6 adds read-only FORGE-OS visibility to the graphical shell. The shell surface is operator visibility only; it is not a host control plane and is not a second authority path.
 
+FORGE-K Online Phase 17 extends this surface with a read-only Operator Cockpit Index and display-only FORGE-K subsystem/storage readiness rows. It still does not add commands, approval execution, cleanup execution, storage switching, or FORGE-K live authority.
+
 ## Endpoint
 
 The desktop shell reads `GET /forge/system/status`. The route reports the
@@ -17,6 +19,8 @@ The endpoint is read-only and bounded. It returns summaries for:
 - bounded execution availability
 - modelruntime availability
 - FORGE-K activation readiness and authority gate blockers
+- operator cockpit index for gates, cases, context bundles, proposals, journal/replay, and lymphatic reports
+- FORGE-K subsystem authority matrix rows when reported
 - storage posture and read-only cutover readiness blockers
 - approval queue wiring
 - recent warnings
