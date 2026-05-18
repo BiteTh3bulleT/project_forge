@@ -148,6 +148,9 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	if matrix["Courthouse"].CurrentStatus != "ADMISSION_CANDIDATE_ONLY" {
 		t.Fatalf("courthouse matrix status=%q, want ADMISSION_CANDIDATE_ONLY", matrix["Courthouse"].CurrentStatus)
 	}
+	if matrix["Memory Palace"].CurrentStatus != "MEMORY_PALACE_MIRROR_ONLY" {
+		t.Fatalf("memory palace matrix status=%q, want MEMORY_PALACE_MIRROR_ONLY", matrix["Memory Palace"].CurrentStatus)
+	}
 	if matrix["Runtime Boundary"].CurrentStatus != "BLOCKED" {
 		t.Fatalf("runtime boundary status=%q, want BLOCKED", matrix["Runtime Boundary"].CurrentStatus)
 	}

@@ -81,10 +81,20 @@ func TestRetrievalMetadataEnabledStoresDiagnosticReportWithoutContent(t *testing
 	if report.RetrievalMetadata == nil {
 		t.Fatalf("expected typed retrieval metadata observation")
 	}
+	if report.MemoryPalaceMirror == nil {
+		t.Fatalf("expected memory palace mirror metadata")
+	}
 	retrieval := report.RetrievalMetadata
 	if retrieval.RetrievalRunID != "run-42" || retrieval.RetrievalResultID != "result-101" || retrieval.SourceRefID != "chunk-7" {
 		t.Fatalf("unexpected retrieval refs: %#v", retrieval)
 	}
+	if !hasMirrorRef(*report.MemoryPalaceMirror, "diagnostic_report", retrieval.ObservationID) ||
+		!hasMirrorRef(*report.MemoryPalaceMirror, "retrieval_run", "run-42") ||
+		!hasMirrorRef(*report.MemoryPalaceMirror, "retrieval_result", "result-101") ||
+		!hasMirrorRef(*report.MemoryPalaceMirror, "semantic_object", "chunk-7") {
+		t.Fatalf("memory palace mirror did not retain metadata refs: %#v", report.MemoryPalaceMirror)
+	}
+	assertMemoryPalaceMirrorNoForbiddenEffects(t, *report.MemoryPalaceMirror)
 	if retrieval.ResultCount != 3 || retrieval.SelectedCount != 1 || retrieval.RankingPosition != 1 || retrieval.DurationMS != 14 {
 		t.Fatalf("unexpected retrieval counts/timing: %#v", retrieval)
 	}

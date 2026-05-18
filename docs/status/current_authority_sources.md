@@ -38,6 +38,8 @@ Current partial live integrations are narrow validation/enforcement seams throug
 
 Current Courthouse-related live work is admission-candidate validation only through `VALIDATE_ADMISSION_CANDIDATE` in the existing Control Lane. It does not admit evidence, reject evidence, issue rulings, or make `services/core/internal/forgek/court` live authority.
 
+Current Memory Palace-related live work is mirror-only through existing disabled-by-default `services/core/internal/forgekshadow` retrieval metadata diagnostics. It mirrors bounded metadata refs only and does not run retrieval/search/embeddings, read raw source/chunk/memory content, write memory, admit evidence, compile context, change routes/APIs, or make `services/core/internal/forgek/palace` live authority.
+
 See `docs/reviews/current_phase_status.md` and `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
 
 ## Planning And Historical Docs

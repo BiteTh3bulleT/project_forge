@@ -22,6 +22,7 @@ type DiagnosticReport struct {
 	RouteEnvelope         *RouteEnvelopeObservation
 	ChatMetadata          *ChatMetadataObservation
 	RetrievalMetadata     *RetrievalMetadataObservation
+	MemoryPalaceMirror    *MemoryPalaceMirrorReport
 	ControlLaneValidation *ControlLaneValidationObservation
 	Advisory              *ShadowAdvisoryReport
 	StoredAt              time.Time

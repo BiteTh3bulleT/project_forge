@@ -286,12 +286,21 @@ func (o *Observer) observeAt(ctx context.Context, input ObservationInput, now ti
 	if err := shadowharness.ValidateNoEffect(o.policy, report); err != nil {
 		return err
 	}
+	var memoryPalaceMirror *MemoryPalaceMirrorReport
+	if retrievalMetadata != nil && strings.TrimSpace(retrievalMetadata.WorkspaceID) != "" {
+		mirror, err := BuildMemoryPalaceMirrorFromRetrievalMetadata(*retrievalMetadata)
+		if err != nil {
+			return err
+		}
+		memoryPalaceMirror = &mirror
+	}
 	diagnostic := DiagnosticReport{
 		Observation:           obs,
 		Comparison:            report,
 		RouteEnvelope:         routeEnvelope,
 		ChatMetadata:          chatMetadata,
 		RetrievalMetadata:     retrievalMetadata,
+		MemoryPalaceMirror:    memoryPalaceMirror,
 		ControlLaneValidation: controlLaneValidation,
 		StoredAt:              now,
 	}

@@ -31,6 +31,9 @@ var allowedRefTypes = []string{
 	"semantic_object",
 	"semantic_operation",
 	"diagnostic_report",
+	"retrieval_run",
+	"retrieval_result",
+	"memory_observation",
 }
 
 var allowedRefTypeSet = buildAllowedRefTypeSet(allowedRefTypes)
