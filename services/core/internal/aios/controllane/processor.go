@@ -409,6 +409,12 @@ func (p *Processor) writeAudit(ctx context.Context, req domain.SyscallRequest, r
 	if p.auditSink == nil {
 		return ""
 	}
+	var facade map[string]any
+	if p.registry != nil {
+		if def, ok := p.registry.Get(req.Action); ok {
+			facade = BuildSemanticSyscallFacade(req, def).ToAuditFields()
+		}
+	}
 	id, _ := p.auditSink.Record(ctx, SyscallAuditRecord{
 		Timestamp:                   p.nowMillis(),
 		Action:                      req.Action,
@@ -429,6 +435,7 @@ func (p *Processor) writeAudit(ctx context.Context, req domain.SyscallRequest, r
 		RefShapeComparison:          refShapeComparisonAuditFields(result.StateSummary),
 		SourceObjectAuthority:       sourceObjectAuthorityAuditFields(result.StateSummary),
 		SemanticOperationValidation: semanticOperationAuditFields(result.StateSummary),
+		SemanticSyscallEnvelope:     facade,
 	})
 	return id
 }
