@@ -35,20 +35,26 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	}
 
 	actions, ok := payload["validation_actions"].([]any)
-	if !ok || len(actions) != 5 {
-		t.Fatalf("expected five validation actions, got %#v", payload["validation_actions"])
+	if !ok || len(actions) != 6 {
+		t.Fatalf("expected six validation actions, got %#v", payload["validation_actions"])
 	}
+	seenActions := map[string]bool{}
 	for _, raw := range actions {
 		action, ok := raw.(map[string]any)
 		if !ok {
 			t.Fatalf("unexpected action shape: %#v", raw)
 		}
+		name, _ := action["action"].(string)
+		seenActions[name] = true
 		if action["registered"] != true || action["mutating"] != false || action["approval_possible"] != false {
 			t.Fatalf("validation action is not read-only closed: %#v", action)
 		}
 	}
+	if !seenActions["VALIDATE_ADMISSION_CANDIDATE"] {
+		t.Fatalf("missing admission candidate validation action: %#v", actions)
+	}
 
-	if payload["authority_ready_gates"] != float64(2) || payload["authority_blocked_gates"] != float64(4) {
+	if payload["authority_ready_gates"] != float64(3) || payload["authority_blocked_gates"] != float64(3) {
 		t.Fatalf("unexpected authority gate counts: %#v", payload)
 	}
 	gates, ok := payload["authority_gates"].([]any)
@@ -82,6 +88,9 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 		seen[subsystem] = true
 		if entry["operator_visible"] != true {
 			t.Fatalf("authority matrix entry must be operator visible: %#v", entry)
+		}
+		if subsystem == "Courthouse" && entry["current_status"] != "ADMISSION_CANDIDATE_ONLY" {
+			t.Fatalf("courthouse must remain candidate-only, got %#v", entry)
 		}
 		if entry["live_owner"] == "" || entry["target_owner"] == "" || entry["rollback_path"] == "" {
 			t.Fatalf("authority matrix entry missing owner/rollback fields: %#v", entry)

@@ -25,6 +25,7 @@ func TestRegistryIncludesStarterActions(t *testing.T) {
 		domain.ActionCompareRefShape,
 		domain.ActionValidateSourceObject,
 		domain.ActionValidateSemanticOperation,
+		domain.ActionValidateAdmissionCandidate,
 	}
 	for _, action := range required {
 		def, ok := reg.Get(action)

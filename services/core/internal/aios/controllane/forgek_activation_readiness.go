@@ -94,6 +94,7 @@ func ForgeKActivationReadiness(reg ActionRegistry, now time.Time) ForgeKActivati
 		domain.ActionCompareRefShape,
 		domain.ActionValidateSourceObject,
 		domain.ActionValidateSemanticOperation,
+		domain.ActionValidateAdmissionCandidate,
 	}
 	actions := make([]ForgeKActivationActionReadiness, 0, len(required))
 	registered := true
@@ -206,18 +207,20 @@ func forgeKAuthorityGateMatrixReadiness(validationReady bool) []ForgeKAuthorityG
 			OperatorVisible: true,
 		},
 		{
-			Subsystem:     "Courthouse",
-			CurrentStatus: "SIMULATOR_ONLY",
-			LiveOwner:     "existing audit/approval/evidence-adjacent live paths",
-			TargetOwner:   "forgek.court",
-			FeatureFlag:   "not implemented",
-			RollbackPath:  "leave live evidence handling on existing non-FORGE-K paths",
-			TestsRequired: []string{"read-only evidence mirror tests", "no admission decision change tests", "no simulator service live import tests"},
-			TestsPassing:  []string{},
-			Blockers: []string{
-				"live evidence admission is not routed through a governed FORGE-K Courthouse boundary",
-				"admission cannot change decisions until shadow and validation gates exist",
-			},
+			Subsystem: "Courthouse",
+			CurrentStatus: func() string {
+				if validationReady {
+					return "ADMISSION_CANDIDATE_ONLY"
+				}
+				return "BLOCKED"
+			}(),
+			LiveOwner:       ForgeKActivationOwnerControlLane,
+			TargetOwner:     "forgek.court",
+			FeatureFlag:     "n/a; admission candidate validation only",
+			RollbackPath:    "remove VALIDATE_ADMISSION_CANDIDATE and leave live evidence handling on existing non-FORGE-K paths",
+			TestsRequired:   []string{"admission candidate validation tests", "no evidence admission tests", "no simulator service live import tests"},
+			TestsPassing:    validationTests,
+			Blockers:        []string{"live evidence admission and ruling authority remain disabled"},
 			OperatorVisible: true,
 		},
 		{
@@ -345,6 +348,14 @@ func forgeKAuthorityGateReadiness(validationReady bool) []ForgeKAuthorityGateRea
 		controlLaneReason = "validation-only Control Lane enforcement is connected and non-mutating"
 		controlLaneNext = "keep validation-only enforcement in the live Control Lane while later gates are designed"
 	}
+	courthouseStatus := "blocked"
+	courthouseReason := "admission candidate validation is not fully closed"
+	courthouseNext := "connect admission candidate validation without importing simulator Courthouse services"
+	if validationReady {
+		courthouseStatus = "ready"
+		courthouseReason = "admission candidate validation is connected through the live Control Lane and does not admit evidence"
+		courthouseNext = "keep admission candidate validation non-authoritative while evidence admission and ruling authority remain disabled"
+	}
 
 	return []ForgeKAuthorityGateReadiness{
 		{
@@ -377,12 +388,12 @@ func forgeKAuthorityGateReadiness(validationReady bool) []ForgeKAuthorityGateRea
 		},
 		{
 			Name:                     "courthouse_admission_integration",
-			Status:                   "blocked",
-			LiveOwner:                "future.live_authority_owner",
+			Status:                   courthouseStatus,
+			LiveOwner:                ForgeKActivationOwnerControlLane,
 			RequiredForLiveAuthority: true,
 			MutationAuthority:        false,
-			Reason:                   "live evidence admission is not routed through a governed FORGE-K Courthouse boundary",
-			NextStep:                 "map live evidence records to an admission boundary without making simulator Courthouse services live authority",
+			Reason:                   courthouseReason,
+			NextStep:                 courthouseNext,
 		},
 		{
 			Name:                     "live_context_compiler_authority",

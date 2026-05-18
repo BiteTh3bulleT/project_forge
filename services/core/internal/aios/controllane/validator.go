@@ -66,6 +66,8 @@ func (v *DeterministicValidator) ValidatePayload(req domain.SyscallRequest, def 
 		return validateSourceObjectAuthority(req)
 	case domain.ActionValidateSemanticOperation:
 		return validateSemanticOperation(req)
+	case domain.ActionValidateAdmissionCandidate:
+		return validateAdmissionCandidate(req)
 	default:
 		return []domain.SyscallError{errField(domain.ErrUnsupportedAction, "action", "unsupported action")}
 	}
@@ -471,6 +473,23 @@ func validateKVIdentity(req domain.SyscallRequest) []domain.SyscallError {
 	}
 	if manifest != nil && strings.TrimSpace(readString(manifest, "status")) == "" {
 		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.manifest.status", "status is required"))
+	}
+	return issues
+}
+
+func validateAdmissionCandidate(req domain.SyscallRequest) []domain.SyscallError {
+	var issues []domain.SyscallError
+	if strings.TrimSpace(readString(req.Payload, "workspace_id")) == "" {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.workspace_id", "workspace_id is required"))
+	}
+	if strings.TrimSpace(readString(req.Payload, "case_id")) == "" {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.case_id", "case_id is required"))
+	}
+	if strings.TrimSpace(readString(req.Payload, "admission_mode")) == "" {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.admission_mode", "admission_mode is required"))
+	}
+	if _, ok := req.Payload["evidence_refs"]; !ok {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.evidence_refs", "evidence_refs are required"))
 	}
 	return issues
 }

@@ -66,6 +66,8 @@ func (p *Processor) apply(ctx context.Context, store SemanticStore, req domain.S
 		return applyValidateSourceObjectAuthority(store, req)
 	case domain.ActionValidateSemanticOperation:
 		return applyValidateSemanticOperation(req)
+	case domain.ActionValidateAdmissionCandidate:
+		return applyValidateAdmissionCandidate(req)
 	default:
 		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrUnsupportedAction, Field: "action", Message: "unsupported action"}}
 	}
@@ -105,6 +107,14 @@ func applyValidateSourceObjectAuthority(store SemanticReadStore, req domain.Sysc
 
 func applyValidateSemanticOperation(req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {
 	decision := EnforceSemanticOperation(req)
+	if !decision.Accepted {
+		return nil, nil, nil, []domain.SyscallError{decision.ToSyscallError()}
+	}
+	return nil, decision.ToStateSummary(), decision.Warnings, nil
+}
+
+func applyValidateAdmissionCandidate(req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {
+	decision := EnforceAdmissionCandidate(req)
 	if !decision.Accepted {
 		return nil, nil, nil, []domain.SyscallError{decision.ToSyscallError()}
 	}

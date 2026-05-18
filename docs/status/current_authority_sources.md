@@ -36,6 +36,8 @@ Current partial live integrations are narrow validation/enforcement seams throug
 - admit evidence, compile live context, execute semantic operations, or write canonical truth outside existing live authority paths
 - enable live KV reuse or runtime cache reuse
 
+Current Courthouse-related live work is admission-candidate validation only through `VALIDATE_ADMISSION_CANDIDATE` in the existing Control Lane. It does not admit evidence, reject evidence, issue rulings, or make `services/core/internal/forgek/court` live authority.
+
 See `docs/reviews/current_phase_status.md` and `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
 
 ## Planning And Historical Docs

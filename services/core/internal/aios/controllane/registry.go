@@ -8,21 +8,22 @@ import (
 )
 
 const (
-	CapMemoryNoteCreate          = "memory.note.create"
-	CapMemoryNoteArchive         = "memory.note.archive"
-	CapMemoryLinkCreate          = "memory.link.create"
-	CapStateUpdate               = "state.update"
-	CapLoopOpen                  = "loop.open"
-	CapLoopClose                 = "loop.close"
-	CapMemoryContradictionReg    = "memory.contradiction.register"
-	CapMemorySupersessionMark    = "memory.supersession.mark"
-	CapModelDerive               = "model.derive"
-	CapContextCompile            = "context.compile"
-	CapKVIdentityValidate        = "kv.identity.validate"
-	CapRefShapeValidate          = "ref.shape.validate"
-	CapRefShapeCompare           = "ref.shape.compare"
-	CapSourceObjectValidate      = "source.object.authority.validate"
-	CapSemanticOperationValidate = "semantic.operation.validate"
+	CapMemoryNoteCreate           = "memory.note.create"
+	CapMemoryNoteArchive          = "memory.note.archive"
+	CapMemoryLinkCreate           = "memory.link.create"
+	CapStateUpdate                = "state.update"
+	CapLoopOpen                   = "loop.open"
+	CapLoopClose                  = "loop.close"
+	CapMemoryContradictionReg     = "memory.contradiction.register"
+	CapMemorySupersessionMark     = "memory.supersession.mark"
+	CapModelDerive                = "model.derive"
+	CapContextCompile             = "context.compile"
+	CapKVIdentityValidate         = "kv.identity.validate"
+	CapRefShapeValidate           = "ref.shape.validate"
+	CapRefShapeCompare            = "ref.shape.compare"
+	CapSourceObjectValidate       = "source.object.authority.validate"
+	CapSemanticOperationValidate  = "semantic.operation.validate"
+	CapAdmissionCandidateValidate = "admission.candidate.validate"
 )
 
 type ActionDefinition struct {
@@ -180,6 +181,15 @@ func NewStaticActionRegistry() *StaticActionRegistry {
 			ApprovalPossible: false,
 			TargetObjectType: "semantic_operation_validation",
 			AuditEventName:   "semantic_syscall.validate_semantic_operation",
+		},
+		domain.ActionValidateAdmissionCandidate: {
+			Action:           domain.ActionValidateAdmissionCandidate,
+			Capability:       CapAdmissionCandidateValidate,
+			Mutating:         false,
+			SupportsDryRun:   true,
+			ApprovalPossible: false,
+			TargetObjectType: "admission_candidate_validation",
+			AuditEventName:   "semantic_syscall.validate_admission_candidate",
 		},
 	}
 	return &StaticActionRegistry{definitions: defs}

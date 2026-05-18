@@ -33,6 +33,7 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 		CapRefShapeCompare,
 		CapSourceObjectValidate,
 		CapSemanticOperationValidate,
+		CapAdmissionCandidateValidate,
 	)
 	return &StaticCapabilityService{
 		sourceCapabilities: map[domain.ActionSource]map[string]struct{}{
@@ -55,6 +56,7 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 				CapRefShapeCompare,
 				CapSourceObjectValidate,
 				CapSemanticOperationValidate,
+				CapAdmissionCandidateValidate,
 			),
 			domain.SourceAdapter: setOf(
 				CapMemoryNoteCreate,
@@ -65,6 +67,7 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 				CapRefShapeCompare,
 				CapSourceObjectValidate,
 				CapSemanticOperationValidate,
+				CapAdmissionCandidateValidate,
 			),
 			domain.SourceFutureIRIS: setOf(
 				CapMemoryNoteCreate,
