@@ -276,6 +276,13 @@ func (p *IngestPipeline) processActions(
 		call := action
 		call.DryRun = dryRun
 		call = p.withIdempotency(req, call)
+		if !p.processActionValidationSeams(ctx, req, event, call, result) {
+			if stopOnFailure {
+				result.Warnings = append(result.Warnings, "commit phase stopped after validation seam rejection")
+				return
+			}
+			continue
+		}
 		res, err := p.kernel.Process(ctx, call)
 		if err != nil {
 			result.Success = false
@@ -320,6 +327,326 @@ func (p *IngestPipeline) processActions(
 		}
 		_ = event
 	}
+}
+
+func (p *IngestPipeline) processActionValidationSeams(
+	ctx context.Context,
+	req domain.IngestRequest,
+	event domain.JournalEvent,
+	action domain.SyscallRequest,
+	result *domain.IngestResult,
+) bool {
+	if result == nil || p.kernel == nil {
+		return true
+	}
+	validations := p.validationSeamRequests(req, event, action)
+	if len(validations) == 0 {
+		return true
+	}
+	accepted := true
+	for _, validation := range validations {
+		call := p.withIdempotency(req, validation)
+		res, err := p.kernel.Process(ctx, call)
+		if err != nil {
+			result.Success = false
+			result.Errors = append(result.Errors, domain.IngestError{
+				Code:    domain.IngestErrKernel,
+				Field:   string(call.Action),
+				Message: err.Error(),
+			})
+			accepted = false
+			continue
+		}
+		appendValidationSeamDiagnostic(result, call, res)
+		if strings.TrimSpace(res.AuditID) != "" {
+			result.AuditIDs = append(result.AuditIDs, res.AuditID)
+		}
+		if !res.Success {
+			result.Success = false
+			result.RejectedActions = append(result.RejectedActions, domain.IngestActionOutcome{
+				Action:         call,
+				Result:         res,
+				CellName:       readStringAny(action.Metadata, "cellName"),
+				CellVersion:    readStringAny(action.Metadata, "cellVersion"),
+				CandidateBatch: readStringAny(action.Metadata, "candidateBatch"),
+			})
+			accepted = false
+		}
+	}
+	return accepted
+}
+
+func (p *IngestPipeline) validationSeamRequests(req domain.IngestRequest, event domain.JournalEvent, action domain.SyscallRequest) []domain.SyscallRequest {
+	if isValidationSeamAction(action.Action) {
+		return nil
+	}
+	workspaceID := firstNonEmptyString(action.Scope.WorkspaceID, req.Scope.WorkspaceID)
+	if strings.TrimSpace(workspaceID) == "" {
+		return nil
+	}
+	refs := validationRefs(workspaceID, event.ID, action.ID)
+	if len(refs) == 0 {
+		return nil
+	}
+	sourceRefs := []any{refs[0]}
+	if len(refs) > 1 {
+		sourceRefs = append(sourceRefs, refs[1:]...)
+	}
+	reasons := selectionReasonsForRefs(refs)
+	out := []domain.SyscallRequest{
+		p.validationSeamRequest(req, action, domain.ActionValidateRefShape, "ref-shape", map[string]any{
+			"workspace_id": workspaceID,
+			"refs":         refs,
+		}),
+		p.validationSeamRequest(req, action, domain.ActionCompareRefShape, "compare-ref-shape", map[string]any{
+			"workspace_id":    workspaceID,
+			"candidate_refs":  refs,
+			"observed_refs":   refs,
+			"comparison_mode": "candidate_preflight",
+		}),
+		p.validationSeamRequest(req, action, domain.ActionValidateSemanticOperation, "semantic-operation", map[string]any{
+			"workspace_id":    workspaceID,
+			"operation_type":  validationOperationType(action.Action),
+			"source_refs":     sourceRefs,
+			"derived_refs":    []any{objectRefPayload("semantic_operation", action.ID, workspaceID)},
+			"provenance_refs": []any{objectRefPayload("diagnostic_report", event.ID, workspaceID)},
+			"claims":          noAuthorityClaims(),
+		}),
+		p.validationSeamRequest(req, action, domain.ActionValidateAdmissionCandidate, "admission-candidate", map[string]any{
+			"workspace_id":    workspaceID,
+			"case_id":         "case-" + safeValidationID(action.ID),
+			"admission_mode":  "admission_candidate",
+			"evidence_refs":   refs,
+			"source_refs":     sourceRefs,
+			"provenance_refs": []any{objectRefPayload("diagnostic_report", event.ID, workspaceID)},
+			"claims":          noAuthorityClaims(),
+		}),
+		p.validationSeamRequest(req, action, domain.ActionValidateContextAttribution, "context-attribution", map[string]any{
+			"workspace_id":        workspaceID,
+			"query":               validationAttributionQuery(req, action),
+			"context_purpose":     "diagnostic_attribution",
+			"source_refs":         refs,
+			"selection_reasons":   reasons,
+			"claims":              noAuthorityClaims(),
+			"downstream_action":   string(action.Action),
+			"candidate_action_id": action.ID,
+		}),
+	}
+	if kvPayload, ok := kvIdentityValidationPayload(action.Metadata); ok {
+		out = append(out, p.validationSeamRequest(req, action, domain.ActionValidateKVIdentity, "kv-identity", kvPayload))
+	}
+	return out
+}
+
+func (p *IngestPipeline) validationSeamRequest(req domain.IngestRequest, action domain.SyscallRequest, validationAction domain.SemanticActionType, suffix string, payload map[string]any) domain.SyscallRequest {
+	scope := action.Scope
+	if strings.TrimSpace(scope.WorkspaceID) == "" {
+		scope = req.Scope
+	}
+	idBase := strings.TrimSpace(action.ID)
+	if idBase == "" {
+		idBase = "candidate-" + shortHash(string(action.Action), payloadFingerprint(action.Payload))
+	}
+	return domain.SyscallRequest{
+		ID:     idBase + ":validation:" + suffix,
+		Action: validationAction,
+		Actor: domain.ActorIdentity{
+			ID:   "forge.validation.seam",
+			Kind: "system",
+		},
+		Source:  domain.SourceSystem,
+		Scope:   scope,
+		Payload: payload,
+		Provenance: domain.Provenance{
+			Actor:     "forge.validation.seam",
+			ActorType: "system",
+			Source:    "control_lane_validation_preflight",
+			TraceID:   firstNonEmptyString(action.TraceID, req.TraceID),
+		},
+		CorrelationID: firstNonEmptyString(action.CorrelationID, req.CorrelationID),
+		TraceID:       firstNonEmptyString(action.TraceID, req.TraceID),
+		DryRun:        true,
+		RequestedAt:   nonZeroInt64(action.RequestedAt, req.RequestedAt),
+		Metadata: map[string]any{
+			"validationPreflight": true,
+			"parentActionId":      idBase,
+			"parentAction":        string(action.Action),
+		},
+	}
+}
+
+func appendValidationSeamDiagnostic(result *domain.IngestResult, call domain.SyscallRequest, res domain.SyscallResult) {
+	if result.TruthDiagnostics == nil {
+		result.TruthDiagnostics = map[string]any{}
+	}
+	raw, _ := result.TruthDiagnostics["validationSeams"].([]map[string]any)
+	raw = append(raw, map[string]any{
+		"action":         string(call.Action),
+		"requestId":      call.ID,
+		"parentActionId": readStringAny(call.Metadata, "parentActionId"),
+		"parentAction":   readStringAny(call.Metadata, "parentAction"),
+		"success":        res.Success,
+		"dryRun":         res.DryRun,
+		"auditId":        res.AuditID,
+		"stateSummary":   cloneMap(res.StateSummary),
+	})
+	result.TruthDiagnostics["validationSeams"] = raw
+}
+
+func isValidationSeamAction(action domain.SemanticActionType) bool {
+	switch action {
+	case domain.ActionValidateKVIdentity,
+		domain.ActionValidateRefShape,
+		domain.ActionCompareRefShape,
+		domain.ActionValidateSemanticOperation,
+		domain.ActionValidateAdmissionCandidate,
+		domain.ActionValidateContextAttribution:
+		return true
+	default:
+		return false
+	}
+}
+
+func validationRefs(workspaceID, eventID, actionID string) []any {
+	refs := []any{}
+	if strings.TrimSpace(eventID) != "" {
+		refs = append(refs, objectRefPayload("diagnostic_report", eventID, workspaceID))
+	}
+	if strings.TrimSpace(actionID) != "" {
+		refs = append(refs, objectRefPayload("semantic_operation", actionID, workspaceID))
+	}
+	return refs
+}
+
+func objectRefPayload(refType, refID, workspaceID string) map[string]any {
+	return map[string]any{
+		"ref_type":     strings.TrimSpace(refType),
+		"ref_id":       safeValidationID(refID),
+		"workspace_id": strings.TrimSpace(workspaceID),
+	}
+}
+
+func selectionReasonsForRefs(refs []any) map[string]any {
+	out := map[string]any{}
+	for _, item := range refs {
+		ref, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		refType := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", ref["ref_type"])))
+		refID := strings.TrimSpace(fmt.Sprintf("%v", ref["ref_id"]))
+		if refType == "" || refID == "" {
+			continue
+		}
+		out[refType+":"+refID] = "candidate action preflight provenance"
+	}
+	return out
+}
+
+func validationOperationType(action domain.SemanticActionType) string {
+	switch action {
+	case domain.ActionCompileContext:
+		return "context_prepare"
+	case domain.ActionCreateLink:
+		return "link"
+	case domain.ActionRegisterContradict:
+		return "contradiction_check"
+	case domain.ActionMarkSuperseded, domain.ActionArchiveNote, domain.ActionCloseLoop:
+		return "supersede"
+	case domain.ActionDeriveModel:
+		return "derive"
+	case domain.ActionCreateNote, domain.ActionUpdateState, domain.ActionOpenLoop:
+		return "classify"
+	default:
+		return "classify"
+	}
+}
+
+func validationAttributionQuery(req domain.IngestRequest, action domain.SyscallRequest) string {
+	if query := strings.TrimSpace(readStringAny(action.Payload, "query")); query != "" {
+		return query
+	}
+	if content := strings.TrimSpace(req.Content); content != "" {
+		return content
+	}
+	return "candidate action validation preflight"
+}
+
+func noAuthorityClaims() map[string]any {
+	return map[string]any{
+		"commit":                   false,
+		"write_memory":             false,
+		"memory_mutation":          false,
+		"admit_evidence":           false,
+		"call_modelruntime":        false,
+		"gateway_execution":        false,
+		"compile_context":          false,
+		"live_kv_reuse":            false,
+		"live_authority_migration": false,
+	}
+}
+
+func kvIdentityValidationPayload(metadata map[string]any) (map[string]any, bool) {
+	raw, ok := metadata["kvIdentityValidation"]
+	if !ok {
+		raw, ok = metadata["kv_identity_validation"]
+	}
+	payload, ok := raw.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	manifest, manifestOK := payload["manifest"].(map[string]any)
+	request, requestOK := payload["request"].(map[string]any)
+	if !manifestOK || !requestOK {
+		return nil, false
+	}
+	out := cloneMap(payload)
+	out["manifest"] = cloneMap(manifest)
+	out["request"] = cloneMap(request)
+	return out, true
+}
+
+func safeValidationID(value string) string {
+	clean := strings.TrimSpace(value)
+	if clean == "" {
+		return "unknown"
+	}
+	var b strings.Builder
+	for _, r := range clean {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
+			b.WriteRune(r)
+			continue
+		}
+		switch r {
+		case '-', '_', ':', '.', '/':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	out := b.String()
+	if len(out) > 240 {
+		return out[:240]
+	}
+	return out
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func nonZeroInt64(values ...int64) int64 {
+	for _, value := range values {
+		if value > 0 {
+			return value
+		}
+	}
+	return domain.NowMillis()
 }
 
 func (p *IngestPipeline) appendOrVirtualizeEvent(ctx context.Context, req domain.IngestRequest) (domain.JournalEvent, bool, bool, error) {

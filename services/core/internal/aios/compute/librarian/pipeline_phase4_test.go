@@ -205,6 +205,46 @@ func (c runtimeCellStub) Run(_ context.Context, _ CellRunContext) (CellRunResult
 	return CellRunResult{CellName: c.name, CellVersion: "test-v1"}, nil
 }
 
+type actionCellStub struct {
+	runtimeCellStub
+	actions []domain.SyscallRequest
+}
+
+func (c actionCellStub) Run(_ context.Context, _ CellRunContext) (CellRunResult, error) {
+	return CellRunResult{
+		CellName:        c.name,
+		CellVersion:     "test-v1",
+		ProposedActions: append([]domain.SyscallRequest{}, c.actions...),
+	}, nil
+}
+
+type recordingKernel struct {
+	calls []domain.SyscallRequest
+}
+
+func (k *recordingKernel) Process(_ context.Context, req domain.SyscallRequest) (domain.SyscallResult, error) {
+	k.calls = append(k.calls, req)
+	return domain.SyscallResult{
+		Success:            true,
+		Action:             req.Action,
+		RequestID:          req.ID,
+		CorrelationID:      req.CorrelationID,
+		TraceID:            req.TraceID,
+		DryRun:             req.DryRun,
+		ApprovalStatus:     domain.ApprovalAllowed,
+		CommittedObjectIDs: []string{req.ID},
+		StateSummary:       map[string]any{"action": string(req.Action)},
+	}, nil
+}
+
+func actionSequence(calls []domain.SyscallRequest) []domain.SemanticActionType {
+	out := make([]domain.SemanticActionType, 0, len(calls))
+	for _, call := range calls {
+		out = append(out, call.Action)
+	}
+	return out
+}
+
 func TestPipelineConstructsWithDefaultsAndNoopInference(t *testing.T) {
 	h := newPipelineHarness(t, nil, nil, nil)
 	if h.pipeline == nil {
@@ -235,6 +275,104 @@ func TestPipelineRejectsDependencyCycles(t *testing.T) {
 	}
 	if len(res.Errors) == 0 || res.Errors[0].Code != domain.IngestErrCellDependency {
 		t.Fatalf("expected dependency error, got %+v", res.Errors)
+	}
+}
+
+func TestPipelineCallsValidationSeamsBeforeCandidateAction(t *testing.T) {
+	kernel := &recordingKernel{}
+	kvManifest := map[string]any{
+		"cache_id":            "cache-a",
+		"cache_mode":          "BACKEND_COMPOSITIONAL",
+		"workspace_id":        "ws-main",
+		"bundle_id":           "bundle-a",
+		"model_id":            "model-a",
+		"model_revision":      "rev-a",
+		"tokenizer_id":        "tokenizer-a",
+		"tokenizer_revision":  "tok-rev-a",
+		"chat_template_hash":  "chat-template",
+		"prompt_layout_hash":  "layout",
+		"policy_schema_hash":  "policy",
+		"syscall_schema_hash": "syscall",
+		"token_input_hash":    "token-input",
+		"runtime_backend":     "ollama",
+		"runtime_version":     "0.0.1",
+		"attention_backend":   "default",
+		"rope_config_hash":    "rope",
+		"kv_precision":        "fp16",
+		"cache_salt":          "salt",
+		"status":              "available",
+	}
+	kvRequest := map[string]any{}
+	for key, value := range kvManifest {
+		if key == "cache_id" || key == "status" {
+			continue
+		}
+		kvRequest[key] = value
+	}
+	pipeline := NewIngestPipeline(IngestPipelineOptions{
+		Kernel: kernel,
+		Cells: []RuntimeCell{
+			actionCellStub{
+				runtimeCellStub: runtimeCellStub{name: "ValidationProbe"},
+				actions: []domain.SyscallRequest{{
+					ID:     "candidate-compile-context",
+					Action: domain.ActionCompileContext,
+					Payload: map[string]any{
+						"query": "validate production seams",
+					},
+					Metadata: map[string]any{
+						"kvIdentityValidation": map[string]any{
+							"manifest": kvManifest,
+							"request":  kvRequest,
+						},
+					},
+				}},
+			},
+		},
+		NowMillis: func() int64 { return 1761000010000 },
+	})
+
+	res, err := pipeline.Run(context.Background(), domain.IngestRequest{
+		ID:        "ingest-validation-seams",
+		InputKind: domain.IngestSystemEvent,
+		Content:   "validate production seams",
+		Actor:     domain.ActorIdentity{ID: "operator", Kind: "user"},
+		Source:    domain.SourceUser,
+		Scope:     domain.ForgeScope{WorkspaceID: "ws-main", LaneID: "control.semantic"},
+		Provenance: domain.Provenance{
+			Actor:     "operator",
+			ActorType: "user",
+			Source:    "test",
+		},
+		CommitMode:  domain.IngestValidateOnly,
+		RequestedAt: 1761000010000,
+	})
+	if err != nil {
+		t.Fatalf("pipeline run: %v", err)
+	}
+	if !res.Success {
+		t.Fatalf("expected validation-only pipeline success, got errors=%+v rejected=%+v", res.Errors, res.RejectedActions)
+	}
+
+	want := []domain.SemanticActionType{
+		domain.ActionValidateRefShape,
+		domain.ActionCompareRefShape,
+		domain.ActionValidateSemanticOperation,
+		domain.ActionValidateAdmissionCandidate,
+		domain.ActionValidateContextAttribution,
+		domain.ActionValidateKVIdentity,
+		domain.ActionCompileContext,
+	}
+	if got := actionSequence(kernel.calls); fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("kernel action sequence = %v, want %v", got, want)
+	}
+	for _, call := range kernel.calls[:len(want)-1] {
+		if !call.DryRun {
+			t.Fatalf("validation seam %s must be dry-run", call.Action)
+		}
+		if call.Source != domain.SourceSystem {
+			t.Fatalf("validation seam %s source = %s, want system", call.Action, call.Source)
+		}
 	}
 }
 

@@ -308,6 +308,9 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(status.textContent).toContain("Core:");
     expect(status.textContent).toContain("Runtime:");
     expect(status.textContent).toContain("Queue:");
+    expect(screen.queryByRole("complementary", {
+      name: "Shell context inspector",
+    })).toBeNull();
   });
 
   it("summarizes model runtime, autonomy, latest audit, and workspace in the shell status bar", async () => {
@@ -362,13 +365,25 @@ describe("AppShell confined Tauri tool surfaces", () => {
 
     await waitFor(
       () => {
-        expect(status.textContent).toContain("Workspace:");
-        expect(status.textContent).toContain("Modelruntime: healthy");
-        expect(status.textContent).toContain("Autonomy: active");
-        expect(status.textContent).toContain("Audit: tool.executed ok");
+        expect(status.textContent).toContain("Core:");
+        expect(status.textContent).toContain("Runtime:");
+        expect(status.textContent).toContain("Queue:");
       },
       { timeout: 3000 },
     );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open shell status details" }),
+    );
+    const inspector = screen.getByRole("complementary", {
+      name: "Shell context inspector",
+    });
+    await waitFor(() => {
+      expect(within(inspector).getByText("healthy · queue 2")).toBeTruthy();
+      expect(within(inspector).getByText("active")).toBeTruthy();
+      expect(
+        within(inspector).getAllByText("tool.executed ok").length,
+      ).toBeGreaterThan(0);
+    });
     expect(apiMocks.auditList).toHaveBeenCalledWith({ limit: 20 });
   });
 
@@ -432,6 +447,9 @@ describe("AppShell confined Tauri tool surfaces", () => {
       </MemoryRouter>,
     );
 
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open shell status details" }),
+    );
     const inspector = await screen.findByRole("complementary", {
       name: "Shell context inspector",
     });
@@ -508,6 +526,9 @@ describe("AppShell confined Tauri tool surfaces", () => {
       </MemoryRouter>,
     );
 
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open shell status details" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Switch shell theme" }));
     fireEvent.change(screen.getByLabelText("Shell accent"), {
       target: { value: "amber" },

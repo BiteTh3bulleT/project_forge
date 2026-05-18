@@ -513,6 +513,121 @@ func extractPreflightObjectRefs(action domain.SyscallRequest, fallbackScope doma
 				"workspace_id": workspaceID,
 			},
 		}
+	case domain.ActionMarkSuperseded:
+		oldID := extractFirstStringField(action.Payload, "oldObjectId")
+		newID := extractFirstStringField(action.Payload, "newObjectId")
+		if oldID == "" || newID == "" {
+			return nil
+		}
+		return []any{
+			map[string]any{
+				"ref_type":     preflightObjectRefType(extractFirstStringField(action.Payload, "oldObjectKind")),
+				"ref_id":       oldID,
+				"workspace_id": workspaceID,
+			},
+			map[string]any{
+				"ref_type":     preflightObjectRefType(extractFirstStringField(action.Payload, "newObjectKind")),
+				"ref_id":       newID,
+				"workspace_id": workspaceID,
+			},
+		}
+	case domain.ActionRegisterContradict:
+		refs := make([]any, 0, 2)
+		if leftID := extractFirstStringField(action.Payload, "leftObjectId"); leftID != "" {
+			if leftType, ok := resolvablePreflightRefType(extractFirstStringField(action.Payload, "leftObjectKind")); ok {
+				refs = append(refs, map[string]any{
+					"ref_type":     leftType,
+					"ref_id":       leftID,
+					"workspace_id": workspaceID,
+				})
+			}
+		}
+		if rightID := extractFirstStringField(action.Payload, "rightObjectId"); rightID != "" {
+			if rightType, ok := resolvablePreflightRefType(extractFirstStringField(action.Payload, "rightObjectKind")); ok {
+				refs = append(refs, map[string]any{
+					"ref_type":     rightType,
+					"ref_id":       rightID,
+					"workspace_id": workspaceID,
+				})
+			}
+		}
+		if len(refs) == 0 {
+			return nil
+		}
+		return refs
+	case domain.ActionDeriveModel:
+		ids := extractStringSliceField(action.Payload, "derivedFrom")
+		if len(ids) == 0 {
+			return nil
+		}
+		refs := make([]any, 0, len(ids))
+		for _, id := range ids {
+			refs = append(refs, map[string]any{
+				"ref_type":     "semantic_object",
+				"ref_id":       id,
+				"workspace_id": workspaceID,
+			})
+		}
+		return refs
+	}
+	return nil
+}
+
+// preflightObjectRefType maps an action-supplied object kind to a ref_type the
+// Control Lane source-object-authority resolver understands. Unknown or default
+// kinds fall back to "semantic_object" which lets the resolver try all governed
+// cognitive object families.
+func preflightObjectRefType(kind string) string {
+	switch strings.TrimSpace(kind) {
+	case "memory_note", "semantic_link", "state_item", "open_loop", "derived_model":
+		return strings.TrimSpace(kind)
+	}
+	return "semantic_object"
+}
+
+// resolvablePreflightRefType maps a kind to a ref_type only when the resolver
+// can actually look it up. Used for actions like REGISTER_CONTRADICT where one
+// side may reference non-governed evidence (e.g. journal_event) that cannot be
+// preflighted; those sides must be skipped rather than rejected.
+func resolvablePreflightRefType(kind string) (string, bool) {
+	switch strings.TrimSpace(kind) {
+	case "memory_note", "semantic_link", "state_item", "open_loop", "derived_model":
+		return strings.TrimSpace(kind), true
+	case "semantic_object":
+		return "semantic_object", true
+	}
+	return "", false
+}
+
+func extractStringSliceField(payload map[string]any, key string) []string {
+	if len(payload) == 0 {
+		return nil
+	}
+	raw, ok := payload[key]
+	if !ok {
+		return nil
+	}
+	switch v := raw.(type) {
+	case []string:
+		out := make([]string, 0, len(v))
+		for _, s := range v {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	case []any:
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				s = strings.TrimSpace(s)
+				if s != "" {
+					out = append(out, s)
+				}
+			}
+		}
+		return out
 	}
 	return nil
 }

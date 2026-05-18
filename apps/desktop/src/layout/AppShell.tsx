@@ -106,12 +106,6 @@ const EMPTY_TELEMETRY: ShellTelemetry = {
   error: null,
 };
 
-function corePill(core: "online" | "offline" | "unknown") {
-  if (core === "online") return "forge-chip--ok";
-  if (core === "offline") return "forge-chip--warn";
-  return "forge-chip--muted";
-}
-
 function getWorkspaceLabel(workspaceDir: string | null | undefined) {
   if (!workspaceDir) return "Workspace unavailable";
   const parts = workspaceDir.split(/[\\/]/).filter(Boolean);
@@ -211,6 +205,23 @@ function contextSnapshotLabel(
     snapshot.id?.trim() ||
     "Context snapshot"
   );
+}
+
+function desktopHeroError(message: string | null | undefined) {
+  const trimmed = message?.trim();
+  if (!trimmed) return null;
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.includes("unauthorized") ||
+    lower.includes("bearer token") ||
+    lower.includes("missing or invalid")
+  ) {
+    return null;
+  }
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    return "FORGE core reported an API error.";
+  }
+  return trimmed.length > 180 ? `${trimmed.slice(0, 177)}...` : trimmed;
 }
 
 function attentionLevel(
@@ -346,6 +357,7 @@ export function AppShell(props: AppShellProps) {
   >([]);
   const [linuxWindows, setLinuxWindows] = useState<LinuxWindowSnapshot[]>([]);
   const [telemetry, setTelemetry] = useState<ShellTelemetry>(EMPTY_TELEMETRY);
+  const [statusDetailsOpen, setStatusDetailsOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [contextMenu, setContextMenu] = useState<DockContextMenu | null>(null);
@@ -584,6 +596,14 @@ export function AppShell(props: AppShellProps) {
       const tag = target?.tagName?.toLowerCase();
       const editing = tag === "input" || tag === "textarea" || tag === "select";
       if (event.key === "Escape") {
+        if (statusDetailsOpen) {
+          setStatusDetailsOpen(false);
+          return;
+        }
+        if (activityOpen) {
+          setActivityOpen(false);
+          return;
+        }
         if (contextMenu) {
           setContextMenu(null);
           return;
@@ -606,7 +626,7 @@ export function AppShell(props: AppShellProps) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [startOpen, focusedId, minimize, contextMenu]);
+  }, [activityOpen, statusDetailsOpen, startOpen, focusedId, minimize, contextMenu]);
 
   useEffect(() => {
     setStartOpen(false);
@@ -788,6 +808,12 @@ export function AppShell(props: AppShellProps) {
   const autonomyText = autonomySummary(telemetry.autonomyStatus);
   const activeLoopText = activeLoopSummary(telemetry.autonomyStatus);
   const pendingApprovalsText = `${approvalsPending} pending`;
+  const queueText =
+    level === "none" ? "clear" : `attention ${attentionCount}`;
+  const statusSummary = `Core: ${
+    core === "online" ? "online" : core === "offline" ? "offline" : "checking"
+  } · Runtime: ${runtimeState} · Queue: ${queueText}`;
+  const heroError = desktopHeroError(lastErr);
 
   // Dock = pinned tools (in pinned order) + global open windows. Hosts render
   // only their local desktop windows, but the taskbar remains globally aware.
@@ -935,62 +961,19 @@ export function AppShell(props: AppShellProps) {
             aria-live="polite"
             aria-atomic="true"
           >
-            <span className="forge-os-statusbar__chip forge-chip forge-chip--muted">
-              Workspace: {workspaceLabel}
-            </span>
-            <span
-              className={cx(
-                "forge-os-statusbar__chip forge-chip",
-                corePill(core),
-              )}
-            >
-              Core:{" "}
-              {core === "online"
-                ? "online"
-                : core === "offline"
-                  ? "offline"
-                  : "checking"}
-            </span>
-            <span
-              className={cx(
-                "forge-os-statusbar__chip forge-chip",
-                runtimeState === "degraded"
-                  ? "forge-chip--warn"
-                  : "forge-chip--muted",
-              )}
-            >
-              Runtime: {runtimeState}
-            </span>
-            <span
-              className={cx(
-                "forge-os-statusbar__chip forge-chip",
-                level === "none"
-                  ? "forge-chip--muted"
-                  : level === "high"
-                    ? "forge-chip--warn"
-                    : "forge-chip--info",
-              )}
-              title={
-                level === "none"
-                  ? "Queue clear"
-                  : `Approvals ${approvalsPending} · Reviews ${reviewsPending} · Failures ${recentFailures.length}`
-              }
-            >
-              Queue:{" "}
-              {level === "none" ? "clear" : `attention ${attentionCount}`}
-            </span>
-            <span className="forge-os-statusbar__chip forge-chip forge-chip--muted">
-              Modelruntime: {modelRuntimeText.split(" · ")[0]}
-            </span>
-            <span className="forge-os-statusbar__chip forge-chip forge-chip--muted">
-              Autonomy: {autonomyText}
-            </span>
-            <span className="forge-os-statusbar__chip forge-chip forge-chip--muted">
-              Audit: {auditSummary(latestAudit)}
-            </span>
+            <span className="forge-os-statusbar__summary">{statusSummary}</span>
             <span className="forge-os-statusbar__mode forge-os-statusbar__chip forge-chip forge-chip--muted">
               Mode: {uiMode}
             </span>
+            <button
+              type="button"
+              className="forge-os-statusbar__button"
+              onClick={() => setStatusDetailsOpen((value) => !value)}
+              aria-label="Open shell status details"
+              aria-expanded={statusDetailsOpen}
+            >
+              Status
+            </button>
             <button
               type="button"
               className="forge-os-statusbar__button"
@@ -1000,31 +983,6 @@ export function AppShell(props: AppShellProps) {
             >
               Activity
             </button>
-            <button
-              type="button"
-              className="forge-os-statusbar__button"
-              onClick={() => toggleThemePreference()}
-              aria-label="Switch shell theme"
-              title={`Theme: ${themePreference}`}
-            >
-              {themePreference === "dark" ? "Dark" : "Light"}
-            </button>
-            <label className="forge-os-statusbar__select-label">
-              <span>Accent</span>
-              <select
-                aria-label="Shell accent"
-                value={accentPreference}
-                onChange={(event) =>
-                  setAccentPreference(
-                    event.target.value as "cyan" | "amber" | "mint",
-                  )
-                }
-              >
-                <option value="cyan">Cyan</option>
-                <option value="amber">Amber</option>
-                <option value="mint">Mint</option>
-              </select>
-            </label>
           </div>
         </header>
       ) : null}
@@ -1046,7 +1004,7 @@ export function AppShell(props: AppShellProps) {
         <main className="forge-os-desktop">
           {/* Wallpaper-only when no visible FORGE windows are present. */}
           {shellRenderedWindows.length === 0 ? (
-            <ForgeHero lastErr={lastErr} />
+            <ForgeHero lastErr={heroError} />
           ) : null}
 
           {!detachedTauriShell
@@ -1075,7 +1033,7 @@ export function AppShell(props: AppShellProps) {
             </div>
           ) : null}
         </main>
-        {isMainWindow ? (
+        {isMainWindow && statusDetailsOpen ? (
           <aside
             className="forge-os-context-inspector"
             role="complementary"
@@ -1092,6 +1050,28 @@ export function AppShell(props: AppShellProps) {
                 {telemetry.error ? "degraded" : "live"}
               </span>
             </div>
+            <section className="forge-os-context-inspector__section">
+              <h3>Shell Status</h3>
+              <p>{statusSummary}</p>
+              <dl>
+                <div>
+                  <dt>Workspace</dt>
+                  <dd>{workspaceLabel}</dd>
+                </div>
+                <div>
+                  <dt>Modelruntime</dt>
+                  <dd>{modelRuntimeText}</dd>
+                </div>
+                <div>
+                  <dt>Autonomy</dt>
+                  <dd>{autonomyText}</dd>
+                </div>
+                <div>
+                  <dt>Audit</dt>
+                  <dd>{auditSummary(latestAudit)}</dd>
+                </div>
+              </dl>
+            </section>
             <section className="forge-os-context-inspector__section">
               <h3>Compiling Context</h3>
               <p>{contextSnapshotLabel(latestContextSnapshot)}</p>
@@ -1135,6 +1115,43 @@ export function AppShell(props: AppShellProps) {
                   <dd>{pendingApprovalsText}</dd>
                 </div>
               </dl>
+            </section>
+            <section className="forge-os-context-inspector__section">
+              <h3>Appearance</h3>
+              <div className="forge-os-context-inspector__controls">
+                <button
+                  type="button"
+                  className="forge-os-statusbar__button"
+                  onClick={() => toggleThemePreference()}
+                  aria-label="Switch shell theme"
+                  title={`Theme: ${themePreference}`}
+                >
+                  {themePreference === "dark" ? "Dark" : "Light"}
+                </button>
+                <label className="forge-os-statusbar__select-label">
+                  <span>Accent</span>
+                  <select
+                    aria-label="Shell accent"
+                    value={accentPreference}
+                    onChange={(event) =>
+                      setAccentPreference(
+                        event.target.value as "cyan" | "amber" | "mint",
+                      )
+                    }
+                  >
+                    <option value="cyan">Cyan</option>
+                    <option value="amber">Amber</option>
+                    <option value="mint">Mint</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="forge-os-statusbar__button"
+                  onClick={() => setStatusDetailsOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
             </section>
           </aside>
         ) : null}

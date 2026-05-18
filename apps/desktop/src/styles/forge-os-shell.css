@@ -148,6 +148,19 @@
   text-transform: uppercase;
 }
 
+.forge-os-statusbar__summary {
+  min-width: 0;
+  max-width: min(28rem, 44vw);
+  overflow: hidden;
+  color: rgba(var(--forge-text-rgb), 0.82);
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .forge-os-statusbar__button,
 .forge-os-statusbar__select-label select {
   min-height: 1.75rem;
@@ -337,6 +350,13 @@
   font-size: 0.7rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.forge-os-context-inspector__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .forge-os-activity-log {

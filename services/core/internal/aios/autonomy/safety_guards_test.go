@@ -190,6 +190,321 @@ func TestExtractPreflightObjectRefsFallsBackToIntentScope(t *testing.T) {
 	}
 }
 
+func TestExtractPreflightObjectRefsBuildsMarkSupersededRefs(t *testing.T) {
+	t.Parallel()
+	scope := domain.ForgeScope{WorkspaceID: "ws-1"}
+	action := domain.SyscallRequest{
+		Action: domain.ActionMarkSuperseded,
+		Scope:  scope,
+		Payload: map[string]any{
+			"oldObjectId":   "obj-old",
+			"oldObjectKind": "memory_note",
+			"newObjectId":   "obj-new",
+			"newObjectKind": "memory_note",
+		},
+	}
+	refs := extractPreflightObjectRefs(action, scope)
+	if len(refs) != 2 {
+		t.Fatalf("expected 2 refs, got %d", len(refs))
+	}
+	if got := refs[0].(map[string]any); got["ref_id"] != "obj-old" || got["ref_type"] != "memory_note" {
+		t.Fatalf("old ref unexpected: %+v", got)
+	}
+	if got := refs[1].(map[string]any); got["ref_id"] != "obj-new" || got["ref_type"] != "memory_note" {
+		t.Fatalf("new ref unexpected: %+v", got)
+	}
+}
+
+func TestExtractPreflightObjectRefsMarkSupersededDefaultKindFallsBackToSemanticObject(t *testing.T) {
+	t.Parallel()
+	scope := domain.ForgeScope{WorkspaceID: "ws-1"}
+	action := domain.SyscallRequest{
+		Action: domain.ActionMarkSuperseded,
+		Scope:  scope,
+		Payload: map[string]any{
+			"oldObjectId":   "obj-old",
+			"oldObjectKind": "object",
+			"newObjectId":   "obj-new",
+		},
+	}
+	refs := extractPreflightObjectRefs(action, scope)
+	if len(refs) != 2 {
+		t.Fatalf("expected 2 refs, got %d", len(refs))
+	}
+	for idx, raw := range refs {
+		ref := raw.(map[string]any)
+		if ref["ref_type"] != "semantic_object" {
+			t.Fatalf("ref #%d expected semantic_object fallback, got %v", idx, ref["ref_type"])
+		}
+	}
+}
+
+func TestExtractPreflightObjectRefsSkipsMarkSupersededWithoutBothIds(t *testing.T) {
+	t.Parallel()
+	scope := domain.ForgeScope{WorkspaceID: "ws-1"}
+	for label, payload := range map[string]map[string]any{
+		"missing_new": {"oldObjectId": "obj-old"},
+		"missing_old": {"newObjectId": "obj-new"},
+		"empty":       {"oldObjectId": "", "newObjectId": ""},
+	} {
+		action := domain.SyscallRequest{Action: domain.ActionMarkSuperseded, Scope: scope, Payload: payload}
+		if refs := extractPreflightObjectRefs(action, scope); refs != nil {
+			t.Fatalf("case %s: expected no refs, got %+v", label, refs)
+		}
+	}
+}
+
+func TestExtractPreflightObjectRefsBuildsDeriveModelRefs(t *testing.T) {
+	t.Parallel()
+	scope := domain.ForgeScope{WorkspaceID: "ws-1"}
+	action := domain.SyscallRequest{
+		Action: domain.ActionDeriveModel,
+		Scope:  scope,
+		Payload: map[string]any{
+			"derivedFrom": []any{"src-1", "src-2", "src-3"},
+		},
+	}
+	refs := extractPreflightObjectRefs(action, scope)
+	if len(refs) != 3 {
+		t.Fatalf("expected 3 refs, got %d", len(refs))
+	}
+	for idx, raw := range refs {
+		ref := raw.(map[string]any)
+		if ref["ref_type"] != "semantic_object" {
+			t.Fatalf("ref #%d expected semantic_object, got %v", idx, ref["ref_type"])
+		}
+	}
+}
+
+func TestExtractPreflightObjectRefsSkipsDeriveModelWithEmptySources(t *testing.T) {
+	t.Parallel()
+	scope := domain.ForgeScope{WorkspaceID: "ws-1"}
+	for label, payload := range map[string]map[string]any{
+		"missing":     {},
+		"empty_slice": {"derivedFrom": []any{}},
+		"only_blank":  {"derivedFrom": []any{"  ", ""}},
+	} {
+		action := domain.SyscallRequest{Action: domain.ActionDeriveModel, Scope: scope, Payload: payload}
+		if refs := extractPreflightObjectRefs(action, scope); refs != nil {
+			t.Fatalf("case %s: expected no refs, got %+v", label, refs)
+		}
+	}
+}
+
+func TestPreflightObjectRefTypeMapsKnownKindsAndDefaultsRest(t *testing.T) {
+	t.Parallel()
+	known := []string{"memory_note", "semantic_link", "state_item", "open_loop", "derived_model"}
+	for _, kind := range known {
+		if got := preflightObjectRefType(kind); got != kind {
+			t.Fatalf("kind %q: expected pass-through, got %q", kind, got)
+		}
+	}
+	for _, kind := range []string{"", "object", "artifact", "unknown_kind"} {
+		if got := preflightObjectRefType(kind); got != "semantic_object" {
+			t.Fatalf("kind %q: expected semantic_object fallback, got %q", kind, got)
+		}
+	}
+}
+
+func TestCommitAllowedActionsPreflightBlocksMarkSupersededOfMissingObject(t *testing.T) {
+	h := newAutonomyHarness(t)
+	ctx := context.Background()
+
+	intent := h.newIntent("intent-supersede-missing", domain.IntentSourceForge, "charter_memory_maintenance")
+	decision := domain.AutonomyDecision{
+		ID: "decision-supersede-missing",
+		AllowedActions: []domain.SyscallRequest{
+			{
+				ID:     "act-supersede-missing-target",
+				Action: domain.ActionMarkSuperseded,
+				Actor:  domain.ActorIdentity{ID: "forge.autonomy", Kind: "autonomy"},
+				Source: domain.SourceSystem,
+				Scope:  h.scope,
+				Payload: map[string]any{
+					"oldObjectId":   "obj-never-created-old",
+					"oldObjectKind": "memory_note",
+					"newObjectId":   "obj-never-created-new",
+					"newObjectKind": "memory_note",
+					"reason":        "preflight_missing_objects",
+				},
+				RequestedAt: h.nextMillis(),
+			},
+		},
+	}
+
+	results, committedIDs, errs := h.runner.commitAllowedActions(ctx, intent, decision)
+	if len(results) != 0 {
+		t.Fatalf("expected no syscall result when preflight rejects missing objects, got %+v", results)
+	}
+	if len(committedIDs) != 0 {
+		t.Fatalf("expected no committed ids when preflight rejects missing objects, got %+v", committedIDs)
+	}
+	if len(errs) == 0 {
+		t.Fatalf("expected preflight rejection error for missing supersession objects")
+	}
+	if !strings.Contains(errs[0].Message, "source object authority preflight failed") {
+		t.Fatalf("expected preflight rejection message, got %+v", errs[0])
+	}
+}
+
+func TestCommitAllowedActionsPreflightBlocksDeriveModelWithMissingSources(t *testing.T) {
+	h := newAutonomyHarness(t)
+	ctx := context.Background()
+
+	intent := h.newIntent("intent-derive-missing-source", domain.IntentSourceForge, "charter_memory_maintenance")
+	decision := domain.AutonomyDecision{
+		ID: "decision-derive-missing-source",
+		AllowedActions: []domain.SyscallRequest{
+			{
+				ID:     "act-derive-missing-source",
+				Action: domain.ActionDeriveModel,
+				Actor:  domain.ActorIdentity{ID: "forge.autonomy", Kind: "autonomy"},
+				Source: domain.SourceSystem,
+				Scope:  h.scope,
+				Payload: map[string]any{
+					"id":           "model-preflight-fail",
+					"type":         "context_policy_preference",
+					"expression":   map[string]any{"formula": "test"},
+					"derivedFrom":  []any{"src-never-created"},
+					"supportCount": 1,
+					"confidence":   0.5,
+				},
+				RequestedAt: h.nextMillis(),
+			},
+		},
+	}
+
+	results, committedIDs, errs := h.runner.commitAllowedActions(ctx, intent, decision)
+	if len(results) != 0 {
+		t.Fatalf("expected no syscall result when preflight rejects derive-model with missing source, got %+v", results)
+	}
+	if len(committedIDs) != 0 {
+		t.Fatalf("expected no committed ids when preflight rejects derive-model, got %+v", committedIDs)
+	}
+	if len(errs) == 0 {
+		t.Fatalf("expected preflight rejection error for missing derive-model source")
+	}
+	if !strings.Contains(errs[0].Message, "source object authority preflight failed") {
+		t.Fatalf("expected preflight rejection message, got %+v", errs[0])
+	}
+}
+
+func TestExtractPreflightObjectRefsRegisterContradictPreflightsOnlyGovernedSides(t *testing.T) {
+	t.Parallel()
+	scope := domain.ForgeScope{WorkspaceID: "ws-1"}
+	action := domain.SyscallRequest{
+		Action: domain.ActionRegisterContradict,
+		Scope:  scope,
+		Payload: map[string]any{
+			"leftObjectId":    "state-current",
+			"leftObjectKind":  "state_item",
+			"rightObjectId":   "journal-event-42",
+			"rightObjectKind": "journal_event",
+		},
+	}
+	refs := extractPreflightObjectRefs(action, scope)
+	if len(refs) != 1 {
+		t.Fatalf("expected only governed left side to be preflighted, got %d refs: %+v", len(refs), refs)
+	}
+	ref := refs[0].(map[string]any)
+	if ref["ref_id"] != "state-current" || ref["ref_type"] != "state_item" {
+		t.Fatalf("unexpected ref: %+v", ref)
+	}
+}
+
+func TestExtractPreflightObjectRefsRegisterContradictSkipsWhenBothSidesUnresolvable(t *testing.T) {
+	t.Parallel()
+	scope := domain.ForgeScope{WorkspaceID: "ws-1"}
+	action := domain.SyscallRequest{
+		Action: domain.ActionRegisterContradict,
+		Scope:  scope,
+		Payload: map[string]any{
+			"leftObjectId":    "journal-event-1",
+			"leftObjectKind":  "journal_event",
+			"rightObjectId":   "artifact-2",
+			"rightObjectKind": "artifact_ref",
+		},
+	}
+	if refs := extractPreflightObjectRefs(action, scope); refs != nil {
+		t.Fatalf("expected no refs when both kinds are unresolvable, got %+v", refs)
+	}
+}
+
+func TestExtractPreflightObjectRefsRegisterContradictPreflightsBothGovernedSides(t *testing.T) {
+	t.Parallel()
+	scope := domain.ForgeScope{WorkspaceID: "ws-1"}
+	action := domain.SyscallRequest{
+		Action: domain.ActionRegisterContradict,
+		Scope:  scope,
+		Payload: map[string]any{
+			"leftObjectId":    "note-a",
+			"leftObjectKind":  "memory_note",
+			"rightObjectId":   "note-b",
+			"rightObjectKind": "memory_note",
+		},
+	}
+	refs := extractPreflightObjectRefs(action, scope)
+	if len(refs) != 2 {
+		t.Fatalf("expected both governed sides to be preflighted, got %d", len(refs))
+	}
+}
+
+func TestResolvablePreflightRefTypeMatchesResolverKinds(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"memory_note", "semantic_link", "state_item", "open_loop", "derived_model", "semantic_object"} {
+		if got, ok := resolvablePreflightRefType(kind); !ok || got != kind {
+			t.Fatalf("kind %q: expected (%q,true), got (%q,%v)", kind, kind, got, ok)
+		}
+	}
+	for _, kind := range []string{"", "object", "journal_event", "artifact_ref", "evidence", "unknown"} {
+		if got, ok := resolvablePreflightRefType(kind); ok || got != "" {
+			t.Fatalf("kind %q: expected ('',false), got (%q,%v)", kind, got, ok)
+		}
+	}
+}
+
+func TestCommitAllowedActionsPreflightBlocksRegisterContradictOnMissingLeftObject(t *testing.T) {
+	h := newAutonomyHarness(t)
+	ctx := context.Background()
+
+	intent := h.newIntent("intent-contradict-missing-left", domain.IntentSourceForge, "charter_memory_maintenance")
+	decision := domain.AutonomyDecision{
+		ID: "decision-contradict-missing-left",
+		AllowedActions: []domain.SyscallRequest{
+			{
+				ID:     "act-contradict-missing-left",
+				Action: domain.ActionRegisterContradict,
+				Actor:  domain.ActorIdentity{ID: "forge.autonomy", Kind: "autonomy"},
+				Source: domain.SourceSystem,
+				Scope:  h.scope,
+				Payload: map[string]any{
+					"leftObjectId":    "note-never-created-left",
+					"leftObjectKind":  "memory_note",
+					"rightObjectId":   "journal-evt-rhs",
+					"rightObjectKind": "journal_event",
+					"reason":          "preflight_missing_left",
+					"severity":        "low",
+				},
+				RequestedAt: h.nextMillis(),
+			},
+		},
+	}
+
+	results, committedIDs, errs := h.runner.commitAllowedActions(ctx, intent, decision)
+	if len(results) != 0 {
+		t.Fatalf("expected no syscall result when preflight rejects missing left, got %+v", results)
+	}
+	if len(committedIDs) != 0 {
+		t.Fatalf("expected no committed ids when preflight rejects missing left, got %+v", committedIDs)
+	}
+	if len(errs) == 0 {
+		t.Fatalf("expected preflight rejection error for missing contradiction left object")
+	}
+	if !strings.Contains(errs[0].Message, "source object authority preflight failed") {
+		t.Fatalf("expected preflight rejection message, got %+v", errs[0])
+	}
+}
+
 func TestCommitAllowedActionsPreflightBlocksArchiveOfMissingNote(t *testing.T) {
 	h := newAutonomyHarness(t)
 	ctx := context.Background()
