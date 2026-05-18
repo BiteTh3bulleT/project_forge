@@ -233,11 +233,11 @@ These are the items between "wired" and "works the way I want."
 
 Continue the proven pattern (kvidentity, refvalidation, semanticvalidation). Pick one more narrow seam.
 
-- [ ] **Pick the next migration target.** Candidates: lymphatic cleanup proposal validation, context compile attribution check, neural neuron proposal validation, consensus mesh claim check. Smallest seam wins.
-- [ ] **Create the shared pure package** (`services/core/internal/<name>validation/`) with forbidden-imports test.
-- [ ] **Add the live Control Lane syscall** (validation-only, `[PARTIAL LIVE VALIDATION]` tagged).
-- [ ] **Update `AGENTS.md` and `docs/reviews/live_integration_reality_check.md`.**
-- [ ] **One phase review doc** under `docs/reviews/`.
+- [x] **Pick the next migration target.** 2026-05-18: chose context attribution validation as the smallest next seam.
+- [x] **Create the shared pure package** (`services/core/internal/<name>validation/`) with forbidden-imports test. 2026-05-18: added `services/core/internal/contextattribution`.
+- [x] **Add the live Control Lane syscall** (validation-only, `[PARTIAL LIVE VALIDATION]` tagged). 2026-05-18: added `VALIDATE_CONTEXT_ATTRIBUTION` with no-effect audit/readiness metadata.
+- [x] **Update `AGENTS.md` and `docs/reviews/live_integration_reality_check.md`.** 2026-05-18: updated authority/status docs for Phase 19.
+- [x] **One phase review doc** under `docs/reviews/`. 2026-05-18: current phase review now records Online Phase 19; detailed evidence lives in `docs/reports/phase_19_context_attribution_validation.md`.
 
 ---
 

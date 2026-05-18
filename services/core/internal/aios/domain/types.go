@@ -238,6 +238,7 @@ const (
 	ActionValidateSourceObject       SemanticActionType = "VALIDATE_SOURCE_OBJECT_AUTHORITY"
 	ActionValidateSemanticOperation  SemanticActionType = "VALIDATE_SEMANTIC_OPERATION"
 	ActionValidateAdmissionCandidate SemanticActionType = "VALIDATE_ADMISSION_CANDIDATE"
+	ActionValidateContextAttribution SemanticActionType = "VALIDATE_CONTEXT_ATTRIBUTION"
 )
 
 type SyscallRequest struct {

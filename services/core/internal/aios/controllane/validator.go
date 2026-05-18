@@ -68,6 +68,8 @@ func (v *DeterministicValidator) ValidatePayload(req domain.SyscallRequest, def 
 		return validateSemanticOperation(req)
 	case domain.ActionValidateAdmissionCandidate:
 		return validateAdmissionCandidate(req)
+	case domain.ActionValidateContextAttribution:
+		return validateContextAttribution(req)
 	default:
 		return []domain.SyscallError{errField(domain.ErrUnsupportedAction, "action", "unsupported action")}
 	}
@@ -490,6 +492,26 @@ func validateAdmissionCandidate(req domain.SyscallRequest) []domain.SyscallError
 	}
 	if _, ok := req.Payload["evidence_refs"]; !ok {
 		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.evidence_refs", "evidence_refs are required"))
+	}
+	return issues
+}
+
+func validateContextAttribution(req domain.SyscallRequest) []domain.SyscallError {
+	var issues []domain.SyscallError
+	if strings.TrimSpace(readString(req.Payload, "workspace_id")) == "" {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.workspace_id", "workspace_id is required"))
+	}
+	if strings.TrimSpace(readString(req.Payload, "query")) == "" {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.query", "query is required"))
+	}
+	if strings.TrimSpace(readString(req.Payload, "context_purpose")) == "" {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.context_purpose", "context_purpose is required"))
+	}
+	if _, ok := req.Payload["source_refs"]; !ok {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.source_refs", "source_refs are required"))
+	}
+	if _, ok := req.Payload["selection_reasons"]; !ok {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.selection_reasons", "selection_reasons are required"))
 	}
 	return issues
 }

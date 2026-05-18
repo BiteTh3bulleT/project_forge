@@ -1,6 +1,6 @@
 # Live Integration Reality Check
 
-Status: Phase i1/PhaseI2/Phase 14B/Phase 14C/Phase 14D/Phase 14E reality alignment.
+Status: Phase i1/PhaseI2/Phase 14B/Phase 14C/Phase 14D/Phase 14E/Online Phase 19 reality alignment.
 
 Date: 2026-05-09.
 
@@ -20,7 +20,9 @@ Phase 14D adds disabled-by-default internal shadow reporting for those validatio
 
 Phase 14E wires live Control Lane validation results into that observer through an optional best-effort processor dependency. It still requires both shadow flags and does not alter Control Lane decisions.
 
-These seams are validation and diagnostics only. They do not enable live KV reuse, backend cache reuse, object truth lookup, evidence admission, semantic operation execution, context compilation, retrieval/search/embedding execution, modelruntime mutation, tokenizer-specific token identity, public routes, public APIs, user-visible output changes, or FORGE-K live authority.
+Online Phase 19 adds context attribution validation through the live Control Lane action `VALIDATE_CONTEXT_ATTRIBUTION` and the pure package `services/core/internal/contextattribution`. It validates planned source refs and selection reasons only.
+
+These seams are validation and diagnostics only. They do not enable live KV reuse, backend cache reuse, object truth lookup, evidence admission, semantic operation execution, context compilation, prompt assembly replacement, retrieval/search/embedding execution, modelruntime mutation, tokenizer-specific token identity, public routes, public APIs, user-visible output changes, or FORGE-K live authority.
 
 ## Before This Pass
 
@@ -43,6 +45,8 @@ These seams are validation and diagnostics only. They do not enable live KV reus
 - `[LIVE]` Added Control Lane `COMPARE_REF_SHAPE`, capability `ref.shape.compare`, structured audit fields, and no-mutation state summaries.
 - `[LIVE]` Added Control Lane `VALIDATE_SEMANTIC_OPERATION`, capability `semantic.operation.validate`, structured audit fields, and no-mutation state summaries.
 - `[LIVE]` Added disabled-by-default internal shadow reporting support for Control Lane validation summaries under `services/core/internal/forgekshadow`, gated by `FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED`.
+- `[PARTIAL]` Added deterministic context attribution validation in `services/core/internal/contextattribution`.
+- `[LIVE]` Added Control Lane `VALIDATE_CONTEXT_ATTRIBUTION`, capability `context.attribution.validate`, structured audit fields, readiness metadata, and no-context-compilation state summaries.
 
 ## What Did Not Change
 
@@ -59,6 +63,7 @@ These seams are validation and diagnostics only. They do not enable live KV reus
 - `[LIVE]` Phase 14C does not use comparison drift as user-visible decisioning, execute semantic operations, admit evidence, compile context, execute retrieval/search/embeddings, write memory, call modelruntime, execute tools, or route live mutation through FORGE-K simulator services.
 - `[LIVE]` Phase 14D does not add public diagnostics routes, change route behavior, alter Control Lane validation decisions, write memory, admit evidence, compile context, execute retrieval/search/embeddings, call modelruntime, execute tools, or route live mutation through FORGE-K simulator services.
 - `[LIVE]` Phase 14E does not add new validation decisions, public routes, user-visible output, memory writes, evidence admission, context compilation, retrieval/search/embedding execution, modelruntime calls, tool execution, gateway behavior changes, or FORGE-K simulator live authority.
+- `[LIVE]` Online Phase 19 does not replace `COMPILE_CONTEXT`, generate prompt text, compile live context, call modelruntime, run retrieval/search/embeddings, write memory, admit evidence, change routes/APIs, execute tools, or route live mutation through FORGE-K simulator services.
 
 ## Current Live Status
 
@@ -68,10 +73,12 @@ These seams are validation and diagnostics only. They do not enable live KV reus
 | AI-OS Control Lane ref-shape validation | `[LIVE] / VALIDATION_ONLY` | `VALIDATE_REF_SHAPE` validates deterministic ref shape, normalizes refs, and fails closed on unsafe or unsupported refs. |
 | AI-OS Control Lane ref-shape comparison | `[LIVE] / DIAGNOSTIC_VALIDATION_ONLY` | `COMPARE_REF_SHAPE` reports match/drift between candidate and observed refs. |
 | AI-OS Control Lane semantic operation validation | `[LIVE] / VALIDATION_ONLY` | `VALIDATE_SEMANTIC_OPERATION` validates operation envelope shape and rejects forbidden authority claims. |
+| AI-OS Control Lane context attribution validation | `[LIVE] / VALIDATION_ONLY / NO_CONTEXT_COMPILATION` | `VALIDATE_CONTEXT_ATTRIBUTION` validates planned context source refs and selection reasons without compiling prompt context. |
 | Control Lane validation shadow reports | `[LIVE] / READ_ONLY / DISABLED_BY_DEFAULT / INTERNAL_DIAGNOSTIC_ONLY` | Stores bounded validation summaries only when both shadow flags are enabled; Phase 14E emits live validation results into this observer best-effort, with no public route or response influence. |
 | Shared KV identity gate logic | `[PARTIAL]` | Used by live Control Lane validation and simulator KV package. |
 | Shared ref-shape logic | `[PARTIAL]` | Used by live Control Lane validation only; object lookup and evidence admission remain future work. |
 | Shared semantic-operation shape logic | `[PARTIAL]` | Used by live Control Lane validation only; operation execution remains future work. |
+| Shared context-attribution logic | `[PARTIAL]` | Used by live Control Lane validation only; prompt compilation authority remains future work. |
 | FORGE-K KV service | `[SIMULATOR-ONLY]` | Still owns simulator manifests, lookups, tiers, and hit/miss metadata only. |
 | Runtime KV reuse | `[FUTURE]` | Requires tokenizer-specific token IDs, runtime-driver identity capture, backend cache wiring, and explicit authority tests. |
 | Public diagnostics/API route | `[FUTURE]` | No route added in this pass. |
@@ -91,6 +98,7 @@ Required behavior covered by tests:
 - ref-shape validation reports no memory mutation, no runtime mutation, and no live authority migration
 - ref-shape comparison reports deterministic added/removed/unchanged refs without mutating state
 - semantic operation validation rejects forbidden authority claims and reports no memory mutation, no modelruntime call, no evidence admission, no context compilation, and no live authority migration
+- context attribution validation rejects missing selection reasons and forbidden authority claims while reporting no memory mutation, no modelruntime call, no context compilation, no gateway execution, and no live authority migration
 - Control Lane validation shadow reporting requires dual flags, rejects forbidden effect claims, rejects unsafe metadata, preserves no-effect policy, and stores bounded scalar summaries only
 - Control Lane validation shadow emission is best-effort, result-preserving, and isolated from observer panic/failure
 
@@ -101,6 +109,7 @@ Required behavior covered by tests:
 - `[FUTURE]` Live modelruntime runtime-assumption capture remains a prerequisite before any backend KV reuse can be considered.
 - `[FUTURE]` Ref-shape validation does not prove object existence or authority; object lookup, evidence admission, and context compilation require separate phases.
 - `[FUTURE]` Semantic operation validation does not execute semantic operations; execution requires a separate authority migration phase.
+- `[FUTURE]` Context attribution validation does not compile prompts or select live context; prompt authority requires a separate Context Compiler migration phase.
 - `[FUTURE]` Control Lane validation shadow reports are not currently a public diagnostics surface and must not become one without a separate API design and authorization review.
 
 ## Not Authorized
@@ -114,4 +123,5 @@ Required behavior covered by tests:
 - Do not turn FORGE-K simulator services into live daemon authority through the ref-shape seam.
 - Do not use ref-shape comparison drift to alter user-visible output without a separate design.
 - Do not treat semantic-operation validation as semantic operation execution.
+- Do not treat context attribution validation as live prompt compilation, source truth, evidence admission, retrieval execution, or FORGE-K Context Compiler authority.
 - Do not use Control Lane validation shadow reports to alter validation decisions, route behavior, user-visible output, memory writes, retrieval, modelruntime behavior, or FORGE-K live authority.

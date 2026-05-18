@@ -119,6 +119,8 @@ func controlLaneValidationShadowKind(action domain.SemanticActionType) (string, 
 		return "semantic_operation", "semanticOperationValidation", true
 	case domain.ActionValidateAdmissionCandidate:
 		return "admission_candidate", "admissionCandidateValidation", true
+	case domain.ActionValidateContextAttribution:
+		return "context_attribution", "contextAttributionValidation", true
 	default:
 		return "", "", false
 	}

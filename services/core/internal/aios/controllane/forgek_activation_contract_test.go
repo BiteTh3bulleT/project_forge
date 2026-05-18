@@ -73,6 +73,15 @@ func TestForgeKActivationContractForControlLaneValidationActions(t *testing.T) {
 			},
 			summaryID: "admissionCandidateValidation",
 		},
+		{
+			name:    "context attribution",
+			action:  domain.ActionValidateContextAttribution,
+			request: validContextAttributionRequest,
+			audit: func(rec SyscallAuditRecord) map[string]any {
+				return rec.ContextAttributionValidation
+			},
+			summaryID: "contextAttributionValidation",
+		},
 	}
 
 	for _, tc := range cases {

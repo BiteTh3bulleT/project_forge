@@ -77,7 +77,7 @@ func TestForgeSystemStatusReadOnlySurface(t *testing.T) {
 		kernel["mutation_controls_available"] != false {
 		t.Fatalf("kernel_activation claimed forbidden authority or mutation controls: %#v", kernel)
 	}
-	if kernel["authority_ready_gates"] != float64(3) || kernel["authority_blocked_gates"] != float64(3) {
+	if kernel["authority_ready_gates"] != float64(4) || kernel["authority_blocked_gates"] != float64(3) {
 		t.Fatalf("kernel_activation authority gate counts unexpected: %#v", kernel)
 	}
 

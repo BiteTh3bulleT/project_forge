@@ -196,6 +196,7 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 
 	var semanticOperationDecision SemanticOperationValidationDecision
 	var admissionCandidateDecision AdmissionValidationDecision
+	var contextAttributionDecision ContextAttributionValidationDecision
 	var refShapeDecision RefShapeValidationDecision
 	if req.Action == domain.ActionValidateRefShape {
 		refShapeDecision = EnforceRefShape(req)
@@ -239,6 +240,14 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 		}
 		result.ValidationDetails = append(result.ValidationDetails, detailFor("admission_candidate_validation", nil))
 	}
+	if req.Action == domain.ActionValidateContextAttribution {
+		contextAttributionDecision = EnforceContextAttribution(req)
+		if !contextAttributionDecision.Accepted {
+			result.StateSummary = contextAttributionDecision.ToStateSummary()
+			return p.reject(ctx, req, result, "context_attribution_validation", []domain.SyscallError{contextAttributionDecision.ToSyscallError()}), nil
+		}
+		result.ValidationDetails = append(result.ValidationDetails, detailFor("context_attribution_validation", nil))
+	}
 
 	if req.DryRun {
 		result.Success = true
@@ -276,6 +285,12 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 				admissionCandidateDecision = EnforceAdmissionCandidate(req)
 			}
 			result.StateSummary = admissionCandidateDecision.ToStateSummary()
+			result.StateSummary["dryRun"] = true
+		} else if req.Action == domain.ActionValidateContextAttribution {
+			if contextAttributionDecision.Decision == "" {
+				contextAttributionDecision = EnforceContextAttribution(req)
+			}
+			result.StateSummary = contextAttributionDecision.ToStateSummary()
 			result.StateSummary["dryRun"] = true
 		}
 		result.Warnings = append(result.Warnings, "dry-run: request validated without commit")
@@ -451,6 +466,7 @@ func (p *Processor) writeAudit(ctx context.Context, req domain.SyscallRequest, r
 		SourceObjectAuthority:        sourceObjectAuthorityAuditFields(result.StateSummary),
 		SemanticOperationValidation:  semanticOperationAuditFields(result.StateSummary),
 		AdmissionCandidateValidation: admissionCandidateAuditFields(result.StateSummary),
+		ContextAttributionValidation: contextAttributionAuditFields(result.StateSummary),
 		SemanticSyscallEnvelope:      facade,
 	})
 	return id
@@ -536,6 +552,21 @@ func admissionCandidateAuditFields(summary map[string]any) map[string]any {
 		return nil
 	}
 	fields, _ := summary["admissionCandidateValidation"].(map[string]any)
+	if fields == nil {
+		return nil
+	}
+	out := make(map[string]any, len(fields))
+	for key, value := range fields {
+		out[key] = value
+	}
+	return out
+}
+
+func contextAttributionAuditFields(summary map[string]any) map[string]any {
+	if summary == nil {
+		return nil
+	}
+	fields, _ := summary["contextAttributionValidation"].(map[string]any)
 	if fields == nil {
 		return nil
 	}

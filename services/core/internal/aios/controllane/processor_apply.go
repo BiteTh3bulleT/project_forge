@@ -68,6 +68,8 @@ func (p *Processor) apply(ctx context.Context, store SemanticStore, req domain.S
 		return applyValidateSemanticOperation(req)
 	case domain.ActionValidateAdmissionCandidate:
 		return applyValidateAdmissionCandidate(req)
+	case domain.ActionValidateContextAttribution:
+		return applyValidateContextAttribution(req)
 	default:
 		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrUnsupportedAction, Field: "action", Message: "unsupported action"}}
 	}
@@ -115,6 +117,14 @@ func applyValidateSemanticOperation(req domain.SyscallRequest) ([]string, map[st
 
 func applyValidateAdmissionCandidate(req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {
 	decision := EnforceAdmissionCandidate(req)
+	if !decision.Accepted {
+		return nil, nil, nil, []domain.SyscallError{decision.ToSyscallError()}
+	}
+	return nil, decision.ToStateSummary(), decision.Warnings, nil
+}
+
+func applyValidateContextAttribution(req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {
+	decision := EnforceContextAttribution(req)
 	if !decision.Accepted {
 		return nil, nil, nil, []domain.SyscallError{decision.ToSyscallError()}
 	}

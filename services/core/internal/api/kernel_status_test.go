@@ -35,8 +35,8 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	}
 
 	actions, ok := payload["validation_actions"].([]any)
-	if !ok || len(actions) != 6 {
-		t.Fatalf("expected six validation actions, got %#v", payload["validation_actions"])
+	if !ok || len(actions) != 7 {
+		t.Fatalf("expected seven validation actions, got %#v", payload["validation_actions"])
 	}
 	seenActions := map[string]bool{}
 	for _, raw := range actions {
@@ -53,13 +53,16 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	if !seenActions["VALIDATE_ADMISSION_CANDIDATE"] {
 		t.Fatalf("missing admission candidate validation action: %#v", actions)
 	}
+	if !seenActions["VALIDATE_CONTEXT_ATTRIBUTION"] {
+		t.Fatalf("missing context attribution validation action: %#v", actions)
+	}
 
-	if payload["authority_ready_gates"] != float64(3) || payload["authority_blocked_gates"] != float64(3) {
+	if payload["authority_ready_gates"] != float64(4) || payload["authority_blocked_gates"] != float64(3) {
 		t.Fatalf("unexpected authority gate counts: %#v", payload)
 	}
 	gates, ok := payload["authority_gates"].([]any)
-	if !ok || len(gates) != 6 {
-		t.Fatalf("expected six authority gates, got %#v", payload["authority_gates"])
+	if !ok || len(gates) != 7 {
+		t.Fatalf("expected seven authority gates, got %#v", payload["authority_gates"])
 	}
 	for _, raw := range gates {
 		gate, ok := raw.(map[string]any)

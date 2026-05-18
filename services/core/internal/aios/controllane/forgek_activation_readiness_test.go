@@ -10,8 +10,8 @@ import (
 func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	report := ForgeKActivationReadiness(NewStaticActionRegistry(), time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC))
 
-	if report.Phase != "14M" {
-		t.Fatalf("phase=%q, want 14M", report.Phase)
+	if report.Phase != "19" {
+		t.Fatalf("phase=%q, want 19", report.Phase)
 	}
 	if report.Status != "partial_live_validation_ready" {
 		t.Fatalf("status=%q, want partial_live_validation_ready", report.Status)
@@ -28,11 +28,11 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	if report.MutationControlsAvailable {
 		t.Fatalf("readiness report exposed mutation controls: %#v", report)
 	}
-	if report.ClosedValidationLanes != 6 || report.TotalValidationLanes != 6 {
-		t.Fatalf("validation lane counts = %d/%d, want 6/6", report.ClosedValidationLanes, report.TotalValidationLanes)
+	if report.ClosedValidationLanes != 7 || report.TotalValidationLanes != 7 {
+		t.Fatalf("validation lane counts = %d/%d, want 7/7", report.ClosedValidationLanes, report.TotalValidationLanes)
 	}
-	if report.AuthorityReadyGates != 3 || report.AuthorityBlockedGates != 3 {
-		t.Fatalf("authority gate counts = ready %d blocked %d, want 3/3", report.AuthorityReadyGates, report.AuthorityBlockedGates)
+	if report.AuthorityReadyGates != 4 || report.AuthorityBlockedGates != 3 {
+		t.Fatalf("authority gate counts = ready %d blocked %d, want 4/3", report.AuthorityReadyGates, report.AuthorityBlockedGates)
 	}
 	if len(report.AuthorityMatrix) != 10 {
 		t.Fatalf("authority matrix entries=%d, want 10: %#v", len(report.AuthorityMatrix), report.AuthorityMatrix)
@@ -49,6 +49,7 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 		domain.ActionValidateSourceObject,
 		domain.ActionValidateSemanticOperation,
 		domain.ActionValidateAdmissionCandidate,
+		domain.ActionValidateContextAttribution,
 	} {
 		got, ok := actions[action]
 		if !ok {
@@ -82,6 +83,9 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	}
 	if authorityGates["courthouse_admission_integration"].Status != "ready" {
 		t.Fatalf("courthouse admission candidate gate not ready: %#v", authorityGates["courthouse_admission_integration"])
+	}
+	if authorityGates["context_attribution_validation"].Status != "ready" {
+		t.Fatalf("context attribution validation gate not ready: %#v", authorityGates["context_attribution_validation"])
 	}
 	for _, name := range []string{
 		"live_context_compiler_authority",
@@ -151,8 +155,8 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	if matrix["Memory Palace"].CurrentStatus != "MEMORY_PALACE_MIRROR_ONLY" {
 		t.Fatalf("memory palace matrix status=%q, want MEMORY_PALACE_MIRROR_ONLY", matrix["Memory Palace"].CurrentStatus)
 	}
-	if matrix["Context Compiler"].CurrentStatus != "CONTEXT_COMPILER_SHADOW_ONLY" {
-		t.Fatalf("context compiler matrix status=%q, want CONTEXT_COMPILER_SHADOW_ONLY", matrix["Context Compiler"].CurrentStatus)
+	if matrix["Context Compiler"].CurrentStatus != "CONTEXT_ATTRIBUTION_VALIDATION_ONLY" {
+		t.Fatalf("context compiler matrix status=%q, want CONTEXT_ATTRIBUTION_VALIDATION_ONLY", matrix["Context Compiler"].CurrentStatus)
 	}
 	if matrix["Runtime Boundary"].CurrentStatus != "RUNTIME_PROPOSAL_BOUNDARY" {
 		t.Fatalf("runtime boundary status=%q, want RUNTIME_PROPOSAL_BOUNDARY", matrix["Runtime Boundary"].CurrentStatus)
@@ -171,11 +175,11 @@ func TestForgeKActivationReadinessFailsClosedWhenActionMissing(t *testing.T) {
 	if report.Status != "blocked" {
 		t.Fatalf("status=%q, want blocked", report.Status)
 	}
-	if report.ClosedValidationLanes != 0 || report.TotalValidationLanes != 6 {
-		t.Fatalf("validation lane counts = %d/%d, want 0/6", report.ClosedValidationLanes, report.TotalValidationLanes)
+	if report.ClosedValidationLanes != 0 || report.TotalValidationLanes != 7 {
+		t.Fatalf("validation lane counts = %d/%d, want 0/7", report.ClosedValidationLanes, report.TotalValidationLanes)
 	}
-	if report.AuthorityReadyGates != 0 || report.AuthorityBlockedGates != 6 {
-		t.Fatalf("authority gate counts = ready %d blocked %d, want 0/6", report.AuthorityReadyGates, report.AuthorityBlockedGates)
+	if report.AuthorityReadyGates != 0 || report.AuthorityBlockedGates != 7 {
+		t.Fatalf("authority gate counts = ready %d blocked %d, want 0/7", report.AuthorityReadyGates, report.AuthorityBlockedGates)
 	}
 	if len(report.AuthorityMatrix) != 10 {
 		t.Fatalf("authority matrix entries=%d, want 10", len(report.AuthorityMatrix))

@@ -6,7 +6,7 @@ import (
 	"forge/projectforge/services/core/internal/aios/domain"
 )
 
-const ForgeKActivationReadinessPhase = "14M"
+const ForgeKActivationReadinessPhase = "19"
 
 type ForgeKActivationReadinessReport struct {
 	GeneratedAt               time.Time                         `json:"generated_at"`
@@ -95,6 +95,7 @@ func ForgeKActivationReadiness(reg ActionRegistry, now time.Time) ForgeKActivati
 		domain.ActionValidateSourceObject,
 		domain.ActionValidateSemanticOperation,
 		domain.ActionValidateAdmissionCandidate,
+		domain.ActionValidateContextAttribution,
 	}
 	actions := make([]ForgeKActivationActionReadiness, 0, len(required))
 	registered := true
@@ -269,14 +270,14 @@ func forgeKAuthorityGateMatrixReadiness(validationReady bool) []ForgeKAuthorityG
 		},
 		{
 			Subsystem:       "Context Compiler",
-			CurrentStatus:   "CONTEXT_COMPILER_SHADOW_ONLY",
-			LiveOwner:       "services/core/internal/forgekshadow plus services/core/internal/aios/controllane legacy COMPILE_CONTEXT paths",
+			CurrentStatus:   "CONTEXT_ATTRIBUTION_VALIDATION_ONLY",
+			LiveOwner:       ForgeKActivationOwnerControlLane + " plus services/core/internal/forgekshadow and legacy COMPILE_CONTEXT paths",
 			TargetOwner:     "forgek.contextcompiler",
-			FeatureFlag:     "FORGE_K_SHADOW_MODE_ENABLED + FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED for admission-candidate canary observation",
-			RollbackPath:    "remove shadow ContextBundle projection and keep live prompt/context assembly on existing paths",
-			TestsRequired:   []string{"read-only context mirror tests", "prompt parity tests", "no modelruntime call tests"},
-			TestsPassing:    []string{"ContextBundle shadow tests", "Control Lane admission-candidate observer tests", "forbidden simulator Context Compiler import tests"},
-			Blockers:        []string{"live prompt/context assembly remains outside FORGE-K Context Compiler authority", "shadow ContextBundle is diagnostic shape only and does not replace COMPILE_CONTEXT"},
+			FeatureFlag:     "n/a; VALIDATE_CONTEXT_ATTRIBUTION is validation-only, while FORGE_K_SHADOW_MODE_ENABLED gates shadow observation",
+			RollbackPath:    "remove VALIDATE_CONTEXT_ATTRIBUTION and keep live prompt/context assembly on existing paths",
+			TestsRequired:   []string{"context attribution validation tests", "read-only context mirror tests", "prompt parity tests", "no modelruntime call tests"},
+			TestsPassing:    []string{"context attribution validation tests", "ContextBundle shadow tests", "Control Lane admission-candidate observer tests", "forbidden simulator Context Compiler import tests"},
+			Blockers:        []string{"live prompt/context assembly remains outside FORGE-K Context Compiler authority", "context attribution validates refs and reasons only and does not replace COMPILE_CONTEXT"},
 			OperatorVisible: true,
 		},
 		{
@@ -356,10 +357,16 @@ func forgeKAuthorityGateReadiness(validationReady bool) []ForgeKAuthorityGateRea
 	courthouseStatus := "blocked"
 	courthouseReason := "admission candidate validation is not fully closed"
 	courthouseNext := "connect admission candidate validation without importing simulator Courthouse services"
+	contextAttributionStatus := "blocked"
+	contextAttributionReason := "context attribution validation is not fully closed"
+	contextAttributionNext := "connect context attribution validation without importing simulator Context Compiler services"
 	if validationReady {
 		courthouseStatus = "ready"
 		courthouseReason = "admission candidate validation is connected through the live Control Lane and does not admit evidence"
 		courthouseNext = "keep admission candidate validation non-authoritative while evidence admission and ruling authority remain disabled"
+		contextAttributionStatus = "ready"
+		contextAttributionReason = "context attribution validation is connected through the live Control Lane and does not compile prompts"
+		contextAttributionNext = "keep attribution validation non-authoritative while live Context Compiler prompt authority remains blocked"
 	}
 
 	return []ForgeKAuthorityGateReadiness{
@@ -408,6 +415,15 @@ func forgeKAuthorityGateReadiness(validationReady bool) []ForgeKAuthorityGateRea
 			MutationAuthority:        false,
 			Reason:                   "live prompt/context assembly remains outside FORGE-K Context Compiler authority",
 			NextStep:                 "add a read-only mirror and parity tests before any context compilation authority migration",
+		},
+		{
+			Name:                     "context_attribution_validation",
+			Status:                   contextAttributionStatus,
+			LiveOwner:                ForgeKActivationOwnerControlLane,
+			RequiredForLiveAuthority: true,
+			MutationAuthority:        false,
+			Reason:                   contextAttributionReason,
+			NextStep:                 contextAttributionNext,
 		},
 		{
 			Name:                     "governed_semantic_mutation_routing",

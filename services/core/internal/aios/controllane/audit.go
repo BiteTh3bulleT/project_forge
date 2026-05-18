@@ -31,6 +31,7 @@ type SyscallAuditRecord struct {
 	SourceObjectAuthority        map[string]any
 	SemanticOperationValidation  map[string]any
 	AdmissionCandidateValidation map[string]any
+	ContextAttributionValidation map[string]any
 	SemanticSyscallEnvelope      map[string]any
 }
 
@@ -94,6 +95,7 @@ func (s *CoreAuditSink) Record(ctx context.Context, rec SyscallAuditRecord) (str
 			"sourceObjectAuthority":        rec.SourceObjectAuthority,
 			"semanticOperationValidation":  rec.SemanticOperationValidation,
 			"admissionCandidateValidation": rec.AdmissionCandidateValidation,
+			"contextAttributionValidation": rec.ContextAttributionValidation,
 			"semanticSyscallEnvelope":      rec.SemanticSyscallEnvelope,
 		},
 	})

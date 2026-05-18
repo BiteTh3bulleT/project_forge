@@ -124,7 +124,7 @@ describe("SystemPage", () => {
         },
       },
       kernel_activation: {
-        phase: "14M",
+        phase: "19",
         status: "partial_live_validation_ready",
         summary:
           "FORGE-K is active only as live Control Lane validation metadata.",
@@ -132,8 +132,8 @@ describe("SystemPage", () => {
         live_owner: "aios.controllane",
         policy_version: "phase-14f-control-lane-enforcement-v1",
         kernel_runtime_state: "partial_live_validation",
-        closed_validation_lanes: 5,
-        total_validation_lanes: 5,
+        closed_validation_lanes: 7,
+        total_validation_lanes: 7,
         validation_actions: [
           {
             action: "VALIDATE_KV_IDENTITY",
@@ -171,6 +171,18 @@ describe("SystemPage", () => {
             simulator_authority: false,
             live_kernel_authority: false,
           },
+          {
+            action: "VALIDATE_CONTEXT_ATTRIBUTION",
+            capability: "context.attribution.validate",
+            registered: true,
+            mutating: false,
+            approval_possible: false,
+            supports_dry_run: true,
+            closed: true,
+            live_owner: "aios.controllane",
+            simulator_authority: false,
+            live_kernel_authority: false,
+          },
         ],
         gates: [
           {
@@ -179,8 +191,8 @@ describe("SystemPage", () => {
             reason: "live owner remains aios.controllane",
           },
         ],
-        authority_ready_gates: 2,
-        authority_blocked_gates: 4,
+        authority_ready_gates: 4,
+        authority_blocked_gates: 3,
         authority_gates: [
           {
             name: "control_lane_validation_enforcement",
@@ -216,13 +228,13 @@ describe("SystemPage", () => {
           },
           {
             subsystem: "Context Compiler",
-            current_status: "CONTEXT_COMPILER_SHADOW_ONLY",
-            live_owner: "services/core/internal/forgekshadow",
+            current_status: "CONTEXT_ATTRIBUTION_VALIDATION_ONLY",
+            live_owner: "aios.controllane plus services/core/internal/forgekshadow and legacy COMPILE_CONTEXT paths",
             target_owner: "forgek.contextcompiler",
-            feature_flag: "FORGE_K_SHADOW_MODE_ENABLED",
-            rollback_path: "remove shadow ContextBundle projection",
-            tests_required: ["read-only context mirror tests"],
-            tests_passing: ["ContextBundle shadow tests"],
+            feature_flag: "n/a; VALIDATE_CONTEXT_ATTRIBUTION is validation-only",
+            rollback_path: "remove context attribution validation",
+            tests_required: ["context attribution validation tests"],
+            tests_passing: ["context attribution validation tests"],
             blockers: ["live prompt/context assembly remains outside FORGE-K"],
             operator_visible: true,
           },
@@ -305,7 +317,7 @@ describe("SystemPage", () => {
         matrix_available: true,
         matrix_rows: 18,
         live_authority_rows: 12,
-        partial_validation_rows: 5,
+        partial_validation_rows: 7,
         forge_k_live_authority_rows: 0,
         host_mutation_rows: 0,
         semantic_memory_write_rows: 4,
@@ -441,7 +453,7 @@ describe("SystemPage", () => {
     expect(screen.getByText("Enforcement wired")).toBeTruthy();
     expect(screen.getByText("Operator Cockpit Index")).toBeTruthy();
     expect(screen.getByText("Authority gates")).toBeTruthy();
-    expect(screen.getByText("2 ready / 4 blocked")).toBeTruthy();
+    expect(screen.getByText("4 ready / 3 blocked")).toBeTruthy();
     expect(screen.getByText("Cases")).toBeTruthy();
     expect(screen.getByText("FORGE-K case packets")).toBeTruthy();
     expect(screen.getByText("Context bundles")).toBeTruthy();
@@ -453,25 +465,26 @@ describe("SystemPage", () => {
     expect(screen.getByText("Lymphatic reports")).toBeTruthy();
     expect(screen.getByText("autonomy maintenance dry-run reports")).toBeTruthy();
     expect(screen.getAllByText("partial_live_validation_ready").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("5/5")).toBeTruthy();
+    expect(screen.getByText("7/7")).toBeTruthy();
     expect(screen.getByText("Simulator authority disabled")).toBeTruthy();
     expect(screen.getByText("Live Kernel authority disabled")).toBeTruthy();
     expect(screen.getByText("Mutation controls absent")).toBeTruthy();
     expect(screen.getByText("Kernel Authority Gates")).toBeTruthy();
-    expect(screen.getByText("Ready: 2")).toBeTruthy();
-    expect(screen.getByText("Blocked: 4")).toBeTruthy();
+    expect(screen.getByText("Ready: 4")).toBeTruthy();
+    expect(screen.getByText("Blocked: 3")).toBeTruthy();
     expect(screen.getByText("source_object_authority_lookup")).toBeTruthy();
     expect(screen.getByText("keep source-object authority lookup read-only while evidence admission and mutation routing gates are designed")).toBeTruthy();
     expect(screen.getByText("FORGE-K Subsystem Cockpit")).toBeTruthy();
     expect(screen.getByText("Courthouse")).toBeTruthy();
     expect(screen.getByText("ADMISSION_CANDIDATE_ONLY")).toBeTruthy();
     expect(screen.getByText("Context Compiler")).toBeTruthy();
-    expect(screen.getByText("CONTEXT_COMPILER_SHADOW_ONLY")).toBeTruthy();
+    expect(screen.getByText("CONTEXT_ATTRIBUTION_VALIDATION_ONLY")).toBeTruthy();
     expect(screen.getByText("Lymphatic Lane")).toBeTruthy();
     expect(screen.getByText("LYMPHATIC_PROPOSAL_ONLY_ONLINE")).toBeTruthy();
     expect(screen.getByText("FORGE-K Lymphatic Lane does not run live cleanup")).toBeTruthy();
     expect(screen.getByText("VALIDATE_KV_IDENTITY")).toBeTruthy();
     expect(screen.getByText("VALIDATE_SOURCE_OBJECT_AUTHORITY")).toBeTruthy();
+    expect(screen.getByText("VALIDATE_CONTEXT_ATTRIBUTION")).toBeTruthy();
     expect(screen.getByText("ref.shape.validate")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /approve/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /reject/i })).toBeNull();
