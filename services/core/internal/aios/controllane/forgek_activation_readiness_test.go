@@ -139,8 +139,8 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 			t.Fatalf("missing authority matrix subsystem %q in %#v", subsystem, report.AuthorityMatrix)
 		}
 	}
-	if matrix["Kernel"].CurrentStatus != "LOW_RISK_NOTE_COMMIT_LIVE" {
-		t.Fatalf("kernel matrix status=%q, want LOW_RISK_NOTE_COMMIT_LIVE", matrix["Kernel"].CurrentStatus)
+	if matrix["Kernel"].CurrentStatus != "STATE_AND_LOOP_COMMIT_LIVE" {
+		t.Fatalf("kernel matrix status=%q, want STATE_AND_LOOP_COMMIT_LIVE", matrix["Kernel"].CurrentStatus)
 	}
 	if matrix["KV System"].CurrentStatus != "PARTIAL_LIVE_VALIDATION" {
 		t.Fatalf("kv matrix status=%q, want PARTIAL_LIVE_VALIDATION", matrix["KV System"].CurrentStatus)

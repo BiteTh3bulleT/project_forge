@@ -46,7 +46,7 @@ Current Runtime Boundary-related live work is proposal-envelope metadata only th
 
 Current Consensus Mesh-related live work is a narrow modelruntime-backed final-response guard through `services/core/internal/api` and pure `services/core/internal/consensusgate`. It can withhold unsupported high-risk action claims from model proposal output before assistant message persistence, and records response-composition metadata only. It does not make `services/core/internal/forgek/consensus` live authority, admit evidence, commit truth, mutate memory, execute gateway tools, approve actions, call modelruntime, compile context, or fully gate gateway/Ollama/streaming token surfaces.
 
-Current low-risk Kernel-style commit work is limited to `CREATE_NOTE` through existing `services/core/internal/aios/controllane` syscall transactions. Notes persist as `memory_notes` with journal, audit, provenance, scope, and semantic read-store visibility. This does not make `services/core/internal/forgek` live Kernel authority and does not migrate links, tags, memory observations, gateway execution, modelruntime proposals, or evidence admission.
+Current low-risk Kernel-style commit work includes `CREATE_NOTE`, `UPDATE_STATE`, `OPEN_LOOP`, and `CLOSE_LOOP` through existing `services/core/internal/aios/controllane` syscall transactions. Notes, state records, state history, and open-loop records persist with journal, audit, provenance, scope, and semantic read-store visibility. This does not make `services/core/internal/forgek` live Kernel authority and does not migrate links, tags, memory observations, gateway execution, modelruntime proposals, or evidence admission.
 
 See `docs/reviews/current_phase_status.md` and `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
 
