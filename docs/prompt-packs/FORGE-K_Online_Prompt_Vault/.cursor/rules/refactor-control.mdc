@@ -1,0 +1,6 @@
+---
+description: Prevent broad refactors during FORGE-K authority migration
+alwaysApply: true
+---
+
+Refactor only when required by the active phase. Preserve behavior unless phase explicitly changes it. No opportunistic rewrites.

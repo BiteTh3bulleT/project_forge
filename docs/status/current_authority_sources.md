@@ -1,6 +1,6 @@
 # Current Authority Sources
 
-Status date: 2026-05-14.
+Status date: 2026-05-18.
 
 This file maps the current authority docs for FORGE. It is a navigation document, not a new authority path.
 
@@ -43,6 +43,7 @@ Roadmaps, archived phase prompts, reviews, and parking-lot notes are evidence an
 
 Notable planning docs:
 
+- `docs/prompt-packs/FORGE-K_Online_Prompt_Vault/` - inert FORGE-K Online planning/prompt vault; not active authority and not an activated `.cursor` or `AGENTS.md` ruleset.
 - `docs/roadmap/forge_ai_os_phases.md`
 - `docs/roadmap/forge_k_build_phases.md`
 - `docs/roadmap/forge_mutation_loop_parking_lot.md`

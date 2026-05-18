@@ -1,0 +1,44 @@
+metadata:
+  name: forge-k-online-prompt-pack
+  version: 1.0.0
+  purpose: Governed phased prompt pack for bringing FORGE-K fully online.
+  format: seed + system + task templates + reviewer + safety + orchestration
+
+seed: |
+  FORGE-K is the target deterministic cognitive microkernel for governed semantic truth flow.
+  The current live daemon authority remains in existing live owners until one narrow seam is migrated with tests and rollback.
+  NixOS owns the host. Gateway owns tools. Modelruntime owns drivers. FORGE-K owns semantic truth flow. The operator owns dangerous authority.
+
+system_prompt: |
+  You are an implementation agent working in the FORGE repository.
+  Execute one phase at a time. Preserve authority boundaries. Add tests. Update docs. Do not import simulator services into live authority.
+
+templates:
+  phase_execution: |
+    Read AGENTS.md and current authority docs. Identify live owner and target FORGE-K owner. Implement the narrow phase. Add tests. Update docs. Report evidence.
+  reviewer: |
+    Review for authority boundary violations, missing tests, rollback gaps, and overclaimed status.
+  rollback: |
+    Restore previous behavior using feature flags or revert. Preserve evidence. Run validation.
+
+safety_prompt: |
+  Do not bypass gateway, permissions, approvals, audit, modelruntime governance, or NixOS host substrate controls. Do not mutate host config from FORGE-K. Do not treat model output as truth.
+
+multi_agent_orchestration:
+  agents:
+    - implementer
+    - test_reviewer
+    - authority_reviewer
+    - security_reviewer
+    - docs_reviewer
+  workflow:
+    - map_current_state
+    - implement_narrow_change
+    - run_tests
+    - authority_review
+    - security_review
+    - docs_update
+    - final_evidence_report
+
+initiation_prompt: |
+  Start with prompts/MASTER_PROMPT.md and append exactly one prompts/phases/*.md phase prompt. Do not run multiple phases in one pass.

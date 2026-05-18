@@ -1,5 +1,7 @@
 # FORGE-K Current Phase Status
 
+Latest FORGE-K Online note: Phase 00 repo orientation is closed as `DOCS_ONLY / ORIENTATION / NO_LIVE_AUTHORITY_CHANGE`. The FORGE-K Online prompt vault is imported under `docs/prompt-packs/FORGE-K_Online_Prompt_Vault/` as inert planning context only; its root `AGENTS.md`, `.cursor/rules`, ADR templates, status templates, and phase prompts are not active repository authority. The source pack manifest has one `PACK_TREE.md` mismatch that must be resolved before claiming full pack integrity.
+
 Latest workstation/runtime note: M4 external vLLM profile is closed as `PARTIAL / DISABLED_BY_DEFAULT / NO_LIVE_AUTHORITY_CHANGE`, and M5 is closed as `DESIGN_ONLY / READINESS_REVIEW / PARTIAL_PURE_LABELS / NO_LIVE_AUTHORITY_CHANGE` for the FORGE Workstation substrate, governed Nix mutation proposals, modelruntime backend profiles, FORGE-H VRAM/CUDA governance, safe-mode recovery profiles, and read-only system cockpit planning. M5 adds pure backend-profile labels under `services/core/internal/modelruntime` and pure GPU work-class labels under `services/core/internal/forgeh`; it does not add host mutation, `systemctl`, `nixos-rebuild`, shell mutation controls, model load/unload behavior change, semantic memory write, storage cutover, or FORGE-K live authority migration.
 
 Companion to `docs/reviews/full_project_review.md` (2026-05-03).
@@ -8,6 +10,7 @@ This is a concise status read of FORGE-K phases against the current repository. 
 
 | Phase | Title | Status | Where It Lives | Tests / Evidence | Open Work |
 | --- | --- | --- | --- | --- | --- |
+| Online 00 | FORGE-K Online Repo Orientation | CLOSED; DOCS_ONLY / ORIENTATION / NO_LIVE_AUTHORITY_CHANGE | `docs/prompt-packs/FORGE-K_Online_Prompt_Vault/`, `docs/reports/phase_00_repo_orientation.md`, `docs/status/phase_00_repo_orientation.md`. | Prompt pack structure reviewed and imported inertly; manifest verification found a `PACK_TREE.md` mismatch recorded as a blocker. Final validation commands are recorded in the Phase 00 report. | Resolve/regenerate the `PACK_TREE.md` manifest mismatch before claiming full pack integrity; run future phase prompts one at a time. |
 | 0 | Architecture Baseline | IMPLEMENTED | `docs/architecture/*`, ADRs 0001-0005, glossary, roadmap, DoD, diagrams. | Documentation is present and internally consistent. | Keep live-authority boundary visible in future phase reports. |
 | 1 | Kernel Simulator | IMPLEMENTED + TESTED | `services/core/internal/forgek/{kernel,types,objects,syscalls,journal,capabilities,providers,case_syscalls}.go`. | `go test ./internal/forgek/...` passes. | Persistence and live daemon integration deferred. |
 | 2 | Neuron Fabric | IMPLEMENTED + TESTED | `services/core/internal/forgek/neurons/*`. | Manifest, envelope, scheduler, neural/rule, syscall boundary tests pass. | Runtime/model neurons deferred. |
