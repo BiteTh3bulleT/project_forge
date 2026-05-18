@@ -8,12 +8,12 @@
 {
   imports = [
     ../modules/forge-os.nix
-    ../profiles/forge-operator-desktop.nix
+    ../profiles/forge-native-desktop-runtime.nix
   ];
 
-  # Canonical local VM target for Nix-first FORGE operator bring-up.
-  # This is intentionally conservative: manual login, safe mode, local core
-  # bind, no display-manager autologin, and no FORGE UI host-mutation path.
+  # Canonical local VM target for Nix-first FORGE native desktop bring-up.
+  # This is intentionally conservative: boot splash, graphical password login,
+  # safe mode, local core bind, no autologin, and no FORGE UI host-mutation path.
   system.stateVersion = "25.11";
 
   boot.loader.grub.devices = lib.mkDefault [ "/dev/sda" ];
@@ -85,7 +85,8 @@
   services.getty.helpLine = ''
     FORGE operator VM
     Login: operator / forge
-    Start shell: forge-operator-session
+    Native desktop: graphical password login starts FORGE
+    Recovery shell: forge-operator-session
     Health: curl -fsS http://127.0.0.1:18492/health
   '';
 

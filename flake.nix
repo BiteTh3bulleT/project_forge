@@ -95,6 +95,7 @@
             forgeOperatorToolbelt = self.packages.${system}.forge-operator-toolbelt;
           };
           forge-operator-desktop = pkgs.callPackage ./nix/checks/forge-operator-desktop.nix { };
+          forge-native-desktop-runtime = pkgs.callPackage ./nix/checks/forge-native-desktop-runtime.nix { };
           forge-operator-vm = pkgs.callPackage ./nix/checks/forge-operator-vm.nix { };
           forge-vbox-graphics-test = pkgs.callPackage ./nix/checks/forge-vbox-graphics-test.nix { };
           forge-shadow-env = pkgs.callPackage ./nix/checks/forge-shadow-env.nix { };
@@ -118,6 +119,7 @@
         forge-shell-session = import ./nix/nixos/modules/forge-shell-session.nix;
         forge-vbox-graphics-test = import ./nix/nixos/profiles/forge-vbox-graphics-test.nix;
         forge-operator-desktop = import ./nix/nixos/profiles/forge-operator-desktop.nix;
+        forge-native-desktop-runtime = import ./nix/nixos/profiles/forge-native-desktop-runtime.nix;
         default = self.nixosModules.forge-os;
       };
 

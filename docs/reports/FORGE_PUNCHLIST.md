@@ -1,6 +1,6 @@
 # FORGE Punch List — Path to "Everything Wired and Working Properly"
 
-**Generated:** 2026-05-11.
+**Generated:** 2026-05-11. Updated 2026-05-15 for native desktop runtime docs.
 **Companions:** [FORGE_FULL_REVIEW.md](FORGE_FULL_REVIEW.md), [FORGE_LARGE_FILE_INVENTORY.md](FORGE_LARGE_FILE_INVENTORY.md).
 **Goal:** Reach the point where FORGE is functionally complete for personal daily use. Not "feature-finished forever" — wired correctly, splits done, coverage at sane levels, no latency cliffs, no architectural smells gating future work.
 **Target window:** ~2 weeks at current velocity.
@@ -206,10 +206,16 @@ These are the items between "wired" and "works the way I want."
 - [x] Operator toolbelt with ollama + tools landed
 - [x] Start menu + taskbar working
 - [x] Window tracking working
-- [ ] **Verify ollama-in-toolbelt actually works end-to-end.** Boot, launch foot, run `ollama pull phi4-mini`, run `ollama run phi4-mini`. No PATH issues, no read-only systemd surprises.
-- [ ] **Chat-to-model loop using toolbelt ollama.** Configure FORGE's modelruntime to talk to the toolbelt-provided ollama. Verify chat works inside the operator session.
+- [x] **Verify ollama-in-toolbelt actually works end-to-end.** Verified from the operator VM: launch terminal/toolbelt, confirm `ollama` is on `PATH`, pull/run a local model, and avoid read-only systemd surprises.
+- [x] **Chat-to-model loop using toolbelt ollama.** Verified from the operator VM: governed modelruntime talks to the toolbelt-provided local Ollama endpoint, Chat refresh discovers the model, and a prompt receives a normal assistant reply.
 - [x] **Operator VM local Ollama modelruntime wiring.** Canonical VM now enables governed modelruntime with `ollama_compat` pointed at local toolbelt Ollama.
 - [x] **Post-start Ollama model discovery.** Modelruntime list/scan now re-discovers newly pulled local Ollama models without restarting `forge-core`.
+- [x] **Native desktop runtime spec drafted.** `docs/superpowers/specs/2026-05-15-forge-native-desktop-runtime.md` defines the preferred `FORGE-OS Runtime boot splash -> graphical password login -> FORGE native desktop session` path.
+- [x] **Native desktop runtime implementation plan drafted.** `docs/superpowers/plans/2026-05-15-forge-native-desktop-runtime.md` defines the planned Nix profile, checks, runbook updates, and VM verification.
+- [x] **Native desktop runtime profile implemented.** The focused native runtime profile composes the existing operator desktop profile and keeps password login/no-autologin/TTY fallback assertions.
+- [x] **Canonical VM imports native desktop runtime profile.** The canonical VM imports the native runtime profile instead of making manual TTY `forge-operator-session` the normal path.
+- [x] **Native desktop static checks wired.** Static checks assert Plymouth/regreet/greetd path, no autologin, TTY fallback preserved, and no forbidden host mutation strings.
+- [ ] **VM boot evidence: splash/login/FORGE desktop.** Capture screenshot/log evidence showing FORGE-OS Runtime boot splash, graphical password login, successful `operator` login, and FORGE native desktop session.
 - [ ] **Status bar across the shell.** One-line summary of modelruntime + autonomy + last journal entry + workspace. Data already exists.
 - [ ] **Right-side context inspector.** Shows current context being compiled, recent journal entries, active loops/approvals.
 - [ ] **Activity log surface.** Last 20 audit events, popover or accordion.
@@ -279,7 +285,8 @@ The project is "wired and working properly" when:
 - [ ] Hyperlane routing real traffic deterministically.
 - [ ] Chat latency cliff diagnosed and resolved or accepted.
 - [ ] Cross-session memory recall verified working.
-- [ ] Operator desktop session running with toolbelt-provided ollama as the model backend.
+- [x] Operator desktop session running with toolbelt-provided ollama as the model backend.
+- [ ] Native desktop runtime boots through FORGE-OS Runtime splash, graphical password login, and FORGE native desktop session with VM evidence.
 - [ ] One more simulator-to-live migration landed.
 - [ ] CI is strict (integration env required, race detector weekly, fuzz on validators).
 - [ ] No remaining items in Sections 1, 4, 5, 6.

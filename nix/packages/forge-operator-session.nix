@@ -9,10 +9,11 @@ let
   defaultCompositor = if labwc != null then "${labwc}/bin/labwc" else "";
   shellSession = "${forge-shell-session}/bin/forge-shell-session";
 in
-writeShellApplication {
-  name = "forge-operator-session";
+(
+  writeShellApplication {
+    name = "forge-operator-session";
 
-  text = ''
+    text = ''
         set -euo pipefail
 
         export FORGE_SHELL_SESSION_ENABLED=true
@@ -87,12 +88,30 @@ writeShellApplication {
     EOF
 
         exec "$compositor" --config "$labwc_config_file" --startup "$shell_session" "$@"
-  '';
+    '';
 
-  meta = with lib; {
-    description = "Opt-in FORGE operator desktop session launcher using labwc";
-    license = licenses.mit;
-    mainProgram = "forge-operator-session";
-    platforms = platforms.linux;
-  };
-}
+    meta = with lib; {
+      description = "Opt-in FORGE operator desktop session launcher using labwc";
+      license = licenses.mit;
+      mainProgram = "forge-operator-session";
+      platforms = platforms.linux;
+    };
+  }
+).overrideAttrs
+  (old: {
+    providedSessions = [ "forge-operator" ];
+    postInstall = (old.postInstall or "") + ''
+      mkdir -p "$out/share/wayland-sessions"
+      cat > "$out/share/wayland-sessions/forge-operator.desktop" <<EOF
+      [Desktop Entry]
+      Name=FORGE Operator
+      Comment=FORGE native desktop session
+      Type=Application
+      DesktopNames=FORGE
+      Exec=$out/bin/forge-operator-session
+      X-FORGE-Mode=operator-desktop
+      X-FORGE-SafeMode=true
+      X-FORGE-AutoStart=false
+      EOF
+    '';
+  })

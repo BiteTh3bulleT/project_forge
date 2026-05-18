@@ -43,10 +43,19 @@ stdenv.mkDerivation {
     runHook preInstall
 
     real_wrapper="${forge-operator-session}/bin/forge-operator-session"
+    real_session="${forge-operator-session}/share/wayland-sessions/forge-operator.desktop"
     wrapper="${testOperatorSession}/bin/forge-operator-session"
 
     test -x "$real_wrapper"
+    test -f "$real_session"
     test -x "$wrapper"
+
+    grep -F 'Name=FORGE Operator' "$real_session"
+    grep -F 'DesktopNames=FORGE' "$real_session"
+    grep -F "Exec=${forge-operator-session}/bin/forge-operator-session" "$real_session"
+    grep -F 'X-FORGE-Mode=operator-desktop' "$real_session"
+    grep -F 'X-FORGE-SafeMode=true' "$real_session"
+    grep -F 'X-FORGE-AutoStart=false' "$real_session"
 
     grep -F 'FORGE_SHELL_MODE=operator-desktop' "$wrapper"
     grep -F 'FORGE_SHELL_FULLSCREEN=false' "$wrapper"

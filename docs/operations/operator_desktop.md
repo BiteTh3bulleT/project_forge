@@ -1,15 +1,25 @@
 # FORGE Operator Desktop
 
-Status date: 2026-05-11.
+Status date: 2026-05-15.
 
-The FORGE operator desktop is an opt-in NixOS session profile for running the FORGE graphical shell as an operator workstation. NixOS remains the substrate. FORGE remains the shell/operator surface. The profile is defined at `nix/nixos/profiles/forge-operator-desktop.nix`.
+The FORGE operator desktop is the native desktop session for running the FORGE
+graphical shell as an operator workstation. NixOS remains the substrate for
+boot, graphical login, display plumbing, rollback, and emergency access. FORGE
+remains the shell/operator surface.
+
+The preferred native runtime is defined by
+`nix/nixos/profiles/forge-native-desktop-runtime.nix`, which composes the
+operator desktop profile at `nix/nixos/profiles/forge-operator-desktop.nix`.
 
 ## Launch Model
 
-The intended session chain is:
+The preferred VM session chain is:
 
 ```text
-TTY or display-manager session
+Power on
+-> FORGE-OS Runtime boot splash
+-> graphical password login
+-> FORGE native desktop session
 -> forge-operator-session
 -> labwc
 -> forge-shell-session
@@ -17,9 +27,15 @@ TTY or display-manager session
 -> local forge-core
 ```
 
+Password login is required. Autologin is not allowed. TTY access and Nix
+generation rollback remain preserved recovery paths.
+
 `FORGE_SHELL_BINARY` remains a development fallback for non-operator shell
 sessions. The `operator-desktop` path rejects that override and requires the
 Nix-packaged `forge-desktop-shell`.
+
+Manual TTY launch of `forge-operator-session` is recovery/fallback only. It is
+not the normal operator path for the native desktop runtime.
 
 ## Nix-First VM
 
@@ -30,14 +46,18 @@ nix build .#nixosConfigurations.forge-operator-vm.config.system.build.vm
 ./result/bin/run-forge-operator-vm-vm
 ```
 
-That VM target imports the FORGE-OS module and the operator desktop profile. It
-is the preferred reproducible bring-up path because it includes the daemon,
-desktop shell, session wrapper, operator toolbelt, and safe defaults in one
-NixOS system closure.
+That VM target is expected to import the FORGE-OS module and the native desktop
+runtime profile. It is the preferred reproducible bring-up path because it
+includes the boot splash, graphical password login, daemon, desktop shell,
+session wrapper, operator toolbelt, and safe defaults in one NixOS system
+closure.
 
 The session remains safe by default:
 
 - no automatic login
+- password login required
+- TTY fallback preserved
+- Nix generation rollback preserved
 - no autostart replacement of an existing desktop
 - no direct system-control authority
 - no model mutation authority
@@ -69,11 +89,13 @@ To enable an Ollama service later, add an explicit NixOS configuration change an
 
 If an app fails to launch:
 
-- confirm the profile imports `nix/nixos/profiles/forge-operator-desktop.nix`
+- confirm the VM imports `nix/nixos/profiles/forge-native-desktop-runtime.nix`
+- confirm the native runtime profile composes `nix/nixos/profiles/forge-operator-desktop.nix`
 - confirm `forge-operator-toolbelt` is installed in `environment.systemPackages`
 - launch a terminal and check that the wrapper exists with `command -v forge-operator-core-status`
 - for Ollama, check `command -v ollama` and then use the fixed `Ollama Status` launcher
 - for chat, confirm `OLLAMA_BASE_URL=http://127.0.0.1:11434`, pull a local model from the terminal, refresh Chat models, and select the discovered `ollama_compat` model
+- if graphical login fails, switch to TTY and run `forge-operator-session` as the recovery path
 
 Core operator tools are required by the Nix package. Platform-specific tools,
 such as GPU telemetry, are optional and may be absent.

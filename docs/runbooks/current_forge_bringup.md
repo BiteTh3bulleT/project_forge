@@ -1,7 +1,7 @@
 # Current FORGE Bring-Up Runbook
 
 _The authoritative operator path to start, verify, and shut down the
-current FORGE system. Updated 2026-04-22 against branch `main`._
+current FORGE system. Updated 2026-05-15 against branch `main`._
 
 ## 0. Prerequisites
 
@@ -105,19 +105,36 @@ starts desktop in the background. Logs at `.forge/logs/core.log` and
 compiling. On cold caches, the Tauri window takes 30–120 s to appear.
 Tail `.forge/logs/desktop.log` if you think something went wrong.
 
-## 3a. Current NixOS VM checkpoint (2026-05-11)
+## 3a. Native Desktop VM Path (2026-05-15)
 
-The `FORGE-OS` VirtualBox VM is installed and running the opt-in operator
-desktop profile from `/projectforge/nix/nixos/profiles/forge-operator-desktop.nix`.
-The host checkout is mounted in the guest at `/projectforge`; FORGE data is
-stored in the guest at `/forge`.
+The preferred FORGE operator VM path is now the native desktop runtime:
+
+```text
+Power on
+-> FORGE-OS Runtime boot splash
+-> graphical password login
+-> FORGE native desktop session
+```
+
+The normal path must require password login. Autologin is not allowed. TTY
+access and Nix generation rollback remain preserved recovery mechanisms.
+
+The native runtime implementation is tracked against the preferred profile
+`/projectforge/nix/nixos/profiles/forge-native-desktop-runtime.nix`, which
+composes the operator desktop profile. Manual TTY launch of
+`forge-operator-session` is recovery/fallback only, not the normal operator
+path.
+
+The `FORGE-OS` VirtualBox VM host checkout is mounted in the guest at
+`/projectforge`; FORGE data is stored in the guest at `/forge`.
 
 Manual VM evidence is tracked in
 [docs/evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md](../evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md).
-That artifact is operator validation evidence only; it does not grant the shell
-service-control or rebuild authority.
+That artifact validates the older manual operator-session checkpoint only. It
+does not grant the shell service-control or rebuild authority, and it is not
+native boot splash/login evidence.
 
-Current verified state:
+Manual recovery checkpoint:
 
 - NixOS generation:
   `/nix/store/iy4v4h28zl65x0a5nw64332cvllfxx5v-nixos-system-forge-os-vm-25.11.10470.0c88e1f2bdb9`
@@ -134,7 +151,7 @@ Current verified state:
 - Storage meta: `/api/meta` returns `/forge/data`, `/forge/data/forge.sqlite`,
   and `/forge/workspaces/default`.
 
-Start from VM TTY:
+Recovery launch from VM TTY:
 
 ```sh
 mkdir -p "$HOME/forge-session-logs"
@@ -260,6 +277,8 @@ See [no_gpu_boot_and_recovery.md](no_gpu_boot_and_recovery.md) for full degraded
    disabled with a reason (not 5xx).
 6. Desktop window opens (manual verification) and the top-right
    status indicator shows connected.
+7. Native VM path reaches FORGE-OS Runtime boot splash, graphical password
+   login, and FORGE native desktop session, with screenshot/log evidence.
 
 ## 7. Known degraded areas
 
@@ -328,3 +347,4 @@ Next `go run .` starts against a clean DB.
 | `/api/autonomy/status` shows `available: false` | Autonomy loop never started | Check `.forge/logs/core.log` for a goroutine init error |
 | Desktop window never opens | Tauri/Vite still compiling; or missing native deps | Tail `.forge/logs/desktop.log`; verify `node scripts/check-desktop-deps.mjs` passes |
 | Ollama adapter `not ready` | Local Ollama not running | Start Ollama or ignore; other adapters still work |
+| Graphical login does not appear | Native desktop runtime/display-manager issue | Use TTY recovery, inspect session logs, or roll back to the previous Nix generation |
