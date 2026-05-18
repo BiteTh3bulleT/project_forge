@@ -1,8 +1,12 @@
 # FORGE No-GPU Boot and Recovery Runbook
 
-Status date: 2026-04-24.
+Status date: 2026-05-18.
 
 This runbook describes how to run FORGE in CPU-authoritative degraded safe mode when no GPU is available or GPU runtime paths are unstable.
+
+For the NixOS/operator VM safe-mode posture, also see
+`docs/runbooks/forge_operator_desktop_vm.md` and
+`docs/runbooks/forge_safe_mode_recovery_profiles.md`.
 
 ## Invariants
 

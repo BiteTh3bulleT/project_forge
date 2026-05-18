@@ -37,8 +37,10 @@ capsules and service composition.
   invocations.
 - **No autonomy integration.** Autonomy charters do not reference Nix.
 - **No tool capsules.** `nix/tool-capsules/` is a README scaffold only.
-- **No NixOS modules.** `nix/modules/` and `nix/profiles/` are
-  README scaffolds only.
+- **NixOS modules are opt-in only.** The repository now carries private
+  NixOS module/profile scaffolding under `nix/nixos/`, but it is not the
+  default developer path, not mandatory for contributors, and not a host
+  mutation authority.
 - **No release snapshots or deployment.** Service deployment still uses
   the existing `npm run up` / systemd path.
 - **No replacement of npm/go/cargo workflows.** Everything the repo did
@@ -104,8 +106,10 @@ authoritative build path for now.
 - `go-tests` — `go test ./...` in `services/core`.
 - `go-vet` — `go vet ./...` in `services/core`.
 - `js-build` — `npm run build:desktop`.
+- Host-envelope safety checks for the exposed NixOS modules, shell/session
+  wrappers, operator VM, workspace default, and forge-core bind posture.
 
-All three report concrete failures when required inputs are missing in the
+These report concrete failures when required inputs are missing in the
 active environment. For authoritative non-Nix validation today, run:
 
 ```sh
@@ -134,7 +138,12 @@ Exposed modules:
 These modules are opt-in scaffolds. They define `/forge` directories,
 a `forge` user/group, a default-safe `forge-core` systemd service shape,
 and a disabled-by-default read-only Host Kernel Bridge report directory
-and environment file.
+and environment file. FORGE-K Online Phase 01 hardens the `forge-core`
+service envelope with an explicit Nix-level wildcard bind opt-in,
+`FORGE_ALLOW_WILDCARD_BIND=false` by default, and additional systemd
+sandboxing. The service remains local-only by default and does not gain
+host mutation, service-control, rebuild, package-manager, modelruntime
+mutation, or FORGE-K live authority.
 
 Phase N3 implements the Host Kernel Bridge diagnostic snapshot library
 in `services/core/internal/hostbridge`. The NixOS module remains
@@ -195,6 +204,9 @@ nix run .#forge-core
 
 # Checks
 nix flake check
+
+# Targeted host-envelope check
+nix build .#checks.x86_64-linux.forge-core-bind-host
 
 # Format Nix files
 nix fmt

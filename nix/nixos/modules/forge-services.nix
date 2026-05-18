@@ -43,6 +43,12 @@ in
       description = "HTTP bind host for forge-core. Use 0.0.0.0 only when an enclosing network boundary intentionally exposes the service.";
     };
 
+    allowWildcardBind = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Explicit opt-in required before forge-core may bind all interfaces from the NixOS service envelope.";
+    };
+
     dataDir = lib.mkOption {
       type = lib.types.str;
       default = "${config.forge.storage.root}/data";
@@ -91,6 +97,7 @@ in
         FORGE_DATA_DIR = toString cfg.dataDir;
         FORGE_CORE_PORT = toString cfg.port;
         FORGE_CORE_BIND_HOST = toString cfg.bindHost;
+        FORGE_ALLOW_WILDCARD_BIND = boolString cfg.allowWildcardBind;
         FORGE_MODEL_HOME = toString cfg.modelHome;
         FORGE_WORKSPACE_DIR = toString cfg.workspaceDir;
         FORGE_ENABLE_MODEL_RUNTIME = boolString cfg.enableModelRuntime;
@@ -116,12 +123,36 @@ in
         Restart = "on-failure";
         RestartSec = "5s";
         NoNewPrivileges = true;
+        CapabilityBoundingSet = "";
         PrivateTmp = true;
+        PrivateDevices = true;
         ProtectSystem = "strict";
         ProtectHome = "read-only";
+        ProtectClock = true;
+        ProtectControlGroups = true;
+        ProtectKernelLogs = true;
+        ProtectKernelModules = true;
+        ProtectKernelTunables = true;
+        RestrictAddressFamilies = [
+          "AF_UNIX"
+          "AF_INET"
+          "AF_INET6"
+        ];
+        RestrictRealtime = true;
+        RestrictSUIDSGID = true;
+        LockPersonality = true;
+        SystemCallArchitectures = "native";
+        UMask = "0077";
         ReadWritePaths = [ (toString config.forge.storage.root) ];
         WorkingDirectory = cfg.dataDir;
       };
     };
+
+    assertions = [
+      {
+        assertion = cfg.allowWildcardBind || !(lib.elem cfg.bindHost [ "0.0.0.0" "::" ]);
+        message = "services.forge-core.bindHost may not bind all interfaces unless services.forge-core.allowWildcardBind = true.";
+      }
+    ];
   };
 }

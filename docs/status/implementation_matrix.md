@@ -1,6 +1,6 @@
 # FORGE Implementation Matrix (Current Live Authority Snapshot)
 
-Observed against this branch on 2026-05-14.
+Observed against this branch on 2026-05-18.
 
 Top note: this matrix tracks legacy/live AI-OS implementation status and current daemon authority paths. It is not the FORGE-K simulator phase matrix. For current phase status and FORGE-K simulator/live authority boundaries, see `docs/reviews/current_phase_status.md`, `docs/status/current_authority_sources.md`, and ADR 0005 (`docs/adr/0005-forge-k-simulator-vs-live-authority.md`).
 
@@ -21,7 +21,7 @@ Status values: `real`, `partial`, `legacy-boundary`, `blocked`, `scaffold`, `def
 | Rule-agent layer | propose-only runtime with 2 agents | partial (explicitly narrow) | `rule_agents.go`, safety guard tests, `docs/architecture/rule_based_agents.md` | broader deterministic agents deferred until signal, policy, test, and trace coverage exists |
 | Desktop/backend mutation boundary | desktop -> backend `/api/*` | real | `apps/desktop/src/lib/api.ts`, API server wiring | dedicated trace/explain UI remains partial |
 | JS/TS validation surface | root `test:js`/`lint:js`/`validate:js` + desktop Vitest/typecheck/build | partial (improved) | `package.json`, `apps/desktop/package.json` | lint is TypeScript-only; no ESLint lane or non-desktop package tests yet |
-| Nix foundation | flake/check definitions present | blocked in this env | command outputs in `test_gap_analysis.md` | daemon unavailable for authoritative validation |
+| Nix foundation and host envelope | flake/check definitions present; opt-in NixOS modules/operator VM present | partial; blocked in this env for authoritative Nix execution | `nix/nixos/modules/*`, `nix/nixos/configurations/forge-operator-vm.nix`, `docs/status/nix_foundation_status.md`, `docs/runbooks/forge_operator_desktop_vm.md`, command outputs in `test_gap_analysis.md` | run Nix checks on a Nix-enabled host; keep host envelope opt-in and non-mutating |
 | Fresh-clone boot integrity | core build path + VSA preflight scripts | real (guarded) | `scripts/check-vsa-files.sh`, `scripts/forge-core.sh`, `scripts/forge-smoke.sh`, tracked `services/core/internal/memory/vsa_*.go` | VSA status is authoritative source; maintain tracked files and `--require-tracked` preflight guard |
 
 ## Convergence highlights in this pass

@@ -1,7 +1,7 @@
-# Nix Foundation Status (Phase N1 truth check)
+# Nix Foundation Status
 
-Date: 2026-05-08
-Scope: light Nix foundation plus G3.5 graphical shell package status and G4 Wayland session lane
+Date: 2026-05-18
+Scope: light Nix foundation, opt-in NixOS host envelope, graphical shell/session lanes, and canonical operator VM status
 
 ## Presence and structure
 
@@ -15,8 +15,8 @@ Scope: light Nix foundation plus G3.5 graphical shell package status and G4 Wayl
 | `forge-desktop-shell` package/app | present, validated | Phase G3.5 stable command for the desktop shell package surface; the package advertises `passthru.containsTauriBinary = true`, builds the real Linux Tauri app, and exposes both `forge-desktop-shell` and `forge_desktop`. |
 | checks | present | `go-tests`, `go-vet`, `js-build`, plus shell-session wrapper checks when exposed by the current flake. |
 | tool capsules | README-only | Deferred scaffold. |
-| NixOS modules | present for shell session scaffolding | The G4 lane documents opt-in Wayland session integration on top of this substrate; implementation must remain disabled by default. |
-| profiles | README-only | Deferred scaffold. |
+| NixOS modules | present, opt-in only | `forge-os`, `forge-services`, `forge-storage`, `forge-host-kernel`, and `forge-shell-session` remain disabled unless imported/enabled by an operator NixOS configuration. |
+| profiles | present, opt-in only | VirtualBox graphics test, operator desktop, and canonical operator VM composition are available for explicit NixOS use. |
 
 ## Fake-hash status
 
@@ -41,6 +41,19 @@ Not complete yet:
 - Clean `forge-core` Nix build path.
 - Deeper compositor/window-manager behavior beyond the first G4 fullscreen Wayland session. The implemented G4 path is selectable session -> Cage substrate -> `forge-shell-session` -> packaged `forge-desktop-shell`; it must not autostart or replace the user's desktop.
 - Tool capsules/profiles execution integration.
+
+## Phase 01 NixOS host envelope
+
+FORGE-K Online Phase 01 records the current NixOS host envelope as
+`PARTIAL / OPT_IN_ONLY / NO_HOST_MUTATION`. The `services.forge-core`
+module now keeps localhost binding as the default, requires
+`services.forge-core.allowWildcardBind = true` before `0.0.0.0` or `::`
+can be used, exports `FORGE_ALLOW_WILDCARD_BIND=false` by default, and
+adds stricter systemd sandboxing for the service unit.
+
+This does not make NixOS mandatory, enable autologin, remove TTY/fallback
+access, run `nixos-rebuild`, run `systemctl`, mutate host state, load or
+unload models, write semantic memory, or make FORGE-K live authority.
 
 ## G3.5 graphical shell package commands
 

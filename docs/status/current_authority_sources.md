@@ -22,7 +22,7 @@ This file maps the current authority docs for FORGE. It is a navigation document
 | Memory and retrieval | `services/core/internal/memory`, `services/core/internal/retrieval`, `docs/MEMORY_ARCHITECTURE.md`, `docs/RETRIEVAL_PIPELINE.md` | Tool/model output is evidence, not automatic truth. |
 | Approvals and audit | `services/core/internal/approvals`, `services/core/internal/audit`, `docs/POLICY_AND_APPROVALS.md`, `docs/AUDIT_AND_TRACE.md` | Approval decisions and audit records remain separated and durable. |
 | Jobs and artifacts | `services/core/internal/jobs`, `docs/JOBS_AND_APPROVALS.md`, `docs/TASK_PACKETS.md` | Job streams and task packets are projection/evidence surfaces, not direct truth mutation. |
-| Operator bring-up | `docs/runbooks/current_forge_bringup.md`, `docs/runbooks/config_reference.md` | Runbooks are the operator path for starting and diagnosing current FORGE. |
+| Operator bring-up | `docs/runbooks/current_forge_bringup.md`, `docs/runbooks/config_reference.md`, `docs/runbooks/forge_operator_desktop_vm.md` | Runbooks are the operator path for starting and diagnosing current FORGE and the Nix-first operator VM. |
 
 ## FORGE-K Boundary
 
