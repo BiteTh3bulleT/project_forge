@@ -307,6 +307,158 @@ func TestRecommendDefaultsAndValidation(t *testing.T) {
 	})
 }
 
+func TestRecommendStrategySelectionModes(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name                 string
+		request              RecommendRequest
+		wantStrategyID       string
+		wantAdapter          string
+		wantRetrievalMode    string
+		wantApprovalPreset   string
+		wantApprovalRequired bool
+	}{
+		{
+			name:                 "task type match selects enabled strategy",
+			request:              RecommendRequest{TaskType: "review_workflow"},
+			wantStrategyID:       "review_workflow",
+			wantAdapter:          "forge",
+			wantRetrievalMode:    "keyword",
+			wantApprovalPreset:   "balanced",
+			wantApprovalRequired: false,
+		},
+		{
+			name:                 "forced strategy trims and overrides task type",
+			request:              RecommendRequest{TaskType: "review_workflow", StrategyID: stringPtr(" codex_implementation_handoff ")},
+			wantStrategyID:       "codex_implementation_handoff",
+			wantAdapter:          "codex",
+			wantRetrievalMode:    "hybrid",
+			wantApprovalPreset:   "conservative",
+			wantApprovalRequired: true,
+		},
+		{
+			name:                 "unknown task without profile falls back to first enabled strategy by name",
+			request:              RecommendRequest{TaskType: "does_not_match"},
+			wantStrategyID:       "claude_refactor_planning",
+			wantAdapter:          "claude_code",
+			wantRetrievalMode:    "hybrid",
+			wantApprovalPreset:   "conservative",
+			wantApprovalRequired: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, _ := newTestService(t, ctx)
+
+			recommendation, err := svc.Recommend(ctx, tc.request)
+			if err != nil {
+				t.Fatalf("Recommend: %v", err)
+			}
+			if recommendation.StrategyID == nil || *recommendation.StrategyID != tc.wantStrategyID {
+				t.Fatalf("StrategyID=%v, want %s", recommendation.StrategyID, tc.wantStrategyID)
+			}
+			if recommendation.TargetAdapter != tc.wantAdapter {
+				t.Fatalf("TargetAdapter=%q, want %q", recommendation.TargetAdapter, tc.wantAdapter)
+			}
+			if recommendation.RetrievalMode != tc.wantRetrievalMode {
+				t.Fatalf("RetrievalMode=%q, want %q", recommendation.RetrievalMode, tc.wantRetrievalMode)
+			}
+			if recommendation.ApprovalPresetID == nil || *recommendation.ApprovalPresetID != tc.wantApprovalPreset {
+				t.Fatalf("ApprovalPresetID=%v, want %s", recommendation.ApprovalPresetID, tc.wantApprovalPreset)
+			}
+			if recommendation.ApprovalRequired != tc.wantApprovalRequired {
+				t.Fatalf("ApprovalRequired=%v, want %v", recommendation.ApprovalRequired, tc.wantApprovalRequired)
+			}
+		})
+	}
+}
+
+func TestRecommendSelectionErrorsDoNotPersistRecommendation(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("forced unknown strategy returns error", func(t *testing.T) {
+		svc, db := newTestService(t, ctx)
+
+		if _, err := svc.Recommend(ctx, RecommendRequest{TaskType: "review_workflow", StrategyID: stringPtr("missing_strategy")}); err == nil {
+			t.Fatalf("expected forced missing strategy error")
+		}
+		assertRecommendationCount(t, ctx, db, 0)
+	})
+
+	t.Run("no enabled strategies returns error", func(t *testing.T) {
+		svc, db := newTestService(t, ctx)
+		if _, err := db.ExecContext(ctx, `UPDATE execution_strategies SET enabled = 0`); err != nil {
+			t.Fatalf("disable strategies: %v", err)
+		}
+
+		if _, err := svc.Recommend(ctx, RecommendRequest{TaskType: "review_workflow"}); err == nil {
+			t.Fatalf("expected no enabled strategies error")
+		}
+		assertRecommendationCount(t, ctx, db, 0)
+	})
+}
+
+func TestListRecommendationsOrdersNewestFirstAndHonorsLimit(t *testing.T) {
+	ctx := context.Background()
+	svc, _ := newTestService(t, ctx)
+
+	first, err := svc.Recommend(ctx, RecommendRequest{TaskType: "review_workflow"})
+	if err != nil {
+		t.Fatalf("Recommend first: %v", err)
+	}
+	second, err := svc.Recommend(ctx, RecommendRequest{TaskType: "context_regeneration"})
+	if err != nil {
+		t.Fatalf("Recommend second: %v", err)
+	}
+	third, err := svc.Recommend(ctx, RecommendRequest{TaskType: "local_summarize"})
+	if err != nil {
+		t.Fatalf("Recommend third: %v", err)
+	}
+
+	recommendations, err := svc.ListRecommendations(ctx, 2, nil)
+	if err != nil {
+		t.Fatalf("ListRecommendations: %v", err)
+	}
+	if len(recommendations) != 2 {
+		t.Fatalf("recommendation count=%d, want 2", len(recommendations))
+	}
+	if recommendations[0].ID != third.ID || recommendations[1].ID != second.ID {
+		t.Fatalf("recommendation order ids=%d,%d; want %d,%d", recommendations[0].ID, recommendations[1].ID, third.ID, second.ID)
+	}
+	if first.ID >= second.ID || second.ID >= third.ID {
+		t.Fatalf("setup ids not increasing: first=%d second=%d third=%d", first.ID, second.ID, third.ID)
+	}
+}
+
+func TestDossierProfileValidationAndMissingGlobalDefault(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("save rejects missing dossier id", func(t *testing.T) {
+		svc, _ := newTestService(t, ctx)
+
+		if _, err := svc.SaveDossierProfile(ctx, SaveDossierProfileRequest{DossierID: 0}); err == nil {
+			t.Fatalf("expected missing dossier id error")
+		}
+	})
+
+	t.Run("global preset returns empty string when setting is absent", func(t *testing.T) {
+		svc, db := newTestService(t, ctx)
+		if _, err := db.ExecContext(ctx, `DELETE FROM settings WHERE key = 'approval_preset_global'`); err != nil {
+			t.Fatalf("delete global preset setting: %v", err)
+		}
+
+		global, err := svc.GlobalApprovalPreset(ctx)
+		if err != nil {
+			t.Fatalf("GlobalApprovalPreset: %v", err)
+		}
+		if global != "" {
+			t.Fatalf("global preset=%q, want empty", global)
+		}
+	})
+}
+
 type evaluationRun struct {
 	success bool
 	quality int
@@ -411,6 +563,18 @@ func assertJSONEqual(t *testing.T, raw json.RawMessage, want any) {
 	}
 	if !jsonEqual(got, normalizedWant) {
 		t.Fatalf("JSON=%#v, want %#v", got, normalizedWant)
+	}
+}
+
+func assertRecommendationCount(t *testing.T, ctx context.Context, db *sql.DB, want int) {
+	t.Helper()
+
+	var got int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM routing_policy_recommendations`).Scan(&got); err != nil {
+		t.Fatalf("count recommendations: %v", err)
+	}
+	if got != want {
+		t.Fatalf("recommendation count=%d, want %d", got, want)
 	}
 }
 

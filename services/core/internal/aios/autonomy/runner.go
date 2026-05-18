@@ -283,6 +283,10 @@ func (r *SelfInitiatedSyscallRunner) commitAllowedActions(ctx context.Context, i
 			errs = append(errs, *guardErr)
 			continue
 		}
+		if preErr := r.preflightSourceObjectAuthority(ctx, intent, action); preErr != nil {
+			errs = append(errs, *preErr)
+			continue
+		}
 		call := annotateSelfAction(action, intent, decision.ID)
 		call.DryRun = false
 		res, err := r.kernel.Process(ctx, call)
@@ -425,6 +429,111 @@ func isDestructiveAutonomyAction(action domain.SemanticActionType) bool {
 		}
 	}
 	return false
+}
+
+// preflightSourceObjectAuthority runs a dry-run VALIDATE_SOURCE_OBJECT through
+// the kernel for mutating actions whose payload references a canonical object.
+// Wires the Control Lane source-object-authority seam into the autonomy commit
+// path so destructive or reference-bearing actions cannot commit against an
+// unknown or out-of-scope target. Returns nil when no preflight applies.
+func (r *SelfInitiatedSyscallRunner) preflightSourceObjectAuthority(ctx context.Context, intent domain.AutonomyIntent, action domain.SyscallRequest) *domain.AutonomyError {
+	if r == nil || r.kernel == nil {
+		return nil
+	}
+	refs := extractPreflightObjectRefs(action, intent.Scope)
+	if len(refs) == 0 {
+		return nil
+	}
+	workspaceID := strings.TrimSpace(action.Scope.WorkspaceID)
+	if workspaceID == "" {
+		workspaceID = strings.TrimSpace(intent.Scope.WorkspaceID)
+	}
+	if workspaceID == "" {
+		return nil
+	}
+	scope := action.Scope
+	if strings.TrimSpace(scope.WorkspaceID) == "" {
+		scope = intent.Scope
+	}
+	preflight := annotateSelfAction(domain.SyscallRequest{
+		ID:     "preflight-source-object-" + shortHash(action.ID, string(action.Action)),
+		Action: domain.ActionValidateSourceObject,
+		Actor:  action.Actor,
+		Source: action.Source,
+		Scope:  scope,
+		Payload: map[string]any{
+			"workspace_id": workspaceID,
+			"refs":         refs,
+		},
+		Provenance:    action.Provenance,
+		CorrelationID: action.CorrelationID,
+		TraceID:       action.TraceID,
+		RequestedAt:   r.nowMillis(),
+		Metadata: map[string]any{
+			"preflightOf":       string(action.Action),
+			"preflightTargetId": action.ID,
+		},
+	}, intent, "preflight")
+	preflight.DryRun = true
+	res, err := r.kernel.Process(ctx, preflight)
+	if err != nil {
+		// Best-effort: a kernel transport error on preflight should not double-fail
+		// the mutation. The mutation kernel call below will surface the same error
+		// through the standard commit path.
+		return nil
+	}
+	if !res.Success {
+		return &domain.AutonomyError{
+			Code:    domain.AutonomyErrKernelBlocked,
+			Field:   string(action.Action),
+			Message: "source object authority preflight failed: " + summarizeSyscallFailure(res),
+		}
+	}
+	return nil
+}
+
+// extractPreflightObjectRefs returns the canonical object refs that should be
+// pre-validated for a given mutating action. Returns nil when the action does
+// not carry a recognizable target ref or is not yet wired for preflight.
+func extractPreflightObjectRefs(action domain.SyscallRequest, fallbackScope domain.ForgeScope) []any {
+	workspaceID := strings.TrimSpace(action.Scope.WorkspaceID)
+	if workspaceID == "" {
+		workspaceID = strings.TrimSpace(fallbackScope.WorkspaceID)
+	}
+	switch action.Action {
+	case domain.ActionArchiveNote:
+		target := extractFirstStringField(action.Payload, "noteId", "id", "targetId", "objectId")
+		if target == "" {
+			return nil
+		}
+		return []any{
+			map[string]any{
+				"ref_type":     "memory_note",
+				"ref_id":       target,
+				"workspace_id": workspaceID,
+			},
+		}
+	}
+	return nil
+}
+
+func extractFirstStringField(payload map[string]any, keys ...string) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	for _, key := range keys {
+		raw, ok := payload[key]
+		if !ok {
+			continue
+		}
+		if s, ok := raw.(string); ok {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				return s
+			}
+		}
+	}
+	return ""
 }
 
 func hasPlaceholderArchiveTarget(payload map[string]any) bool {

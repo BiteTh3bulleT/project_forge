@@ -3,6 +3,8 @@ import { create } from "zustand";
 type UiMode = "cognitive" | "metrics";
 type ContrastPreference = "normal" | "high";
 type EffectsPreference = "off" | "subtle";
+type ThemePreference = "dark" | "light";
+type AccentPreference = "cyan" | "amber" | "mint";
 
 function loadMode(): UiMode {
   if (typeof window === "undefined") return "cognitive";
@@ -25,6 +27,20 @@ function loadEffects(): EffectsPreference {
   return "subtle";
 }
 
+function loadTheme(): ThemePreference {
+  if (typeof window === "undefined") return "dark";
+  const raw = window.localStorage.getItem("forge.ui.theme");
+  if (raw === "dark" || raw === "light") return raw;
+  return "dark";
+}
+
+function loadAccent(): AccentPreference {
+  if (typeof window === "undefined") return "cyan";
+  const raw = window.localStorage.getItem("forge.ui.accent");
+  if (raw === "cyan" || raw === "amber" || raw === "mint") return raw;
+  return "cyan";
+}
+
 type UiState = {
   commandDraft: string;
   setCommandDraft: (v: string) => void;
@@ -37,6 +53,11 @@ type UiState = {
   setContrastPreference: (value: ContrastPreference) => void;
   effectsPreference: EffectsPreference;
   setEffectsPreference: (value: EffectsPreference) => void;
+  themePreference: ThemePreference;
+  setThemePreference: (value: ThemePreference) => void;
+  toggleThemePreference: () => void;
+  accentPreference: AccentPreference;
+  setAccentPreference: (value: AccentPreference) => void;
   toggleContrastPreference: () => void;
   toggleEffectsPreference: () => void;
 };
@@ -69,6 +90,31 @@ export const useUiStore = create<UiState>((set) => ({
         window.localStorage.setItem("forge.ui.effects", value);
       }
       return { effectsPreference: value };
+    }),
+  themePreference: loadTheme(),
+  setThemePreference: (value) =>
+    set(() => {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("forge.ui.theme", value);
+      }
+      return { themePreference: value };
+    }),
+  toggleThemePreference: () =>
+    set((s) => {
+      const next: ThemePreference =
+        s.themePreference === "dark" ? "light" : "dark";
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("forge.ui.theme", next);
+      }
+      return { themePreference: next };
+    }),
+  accentPreference: loadAccent(),
+  setAccentPreference: (value) =>
+    set(() => {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("forge.ui.accent", value);
+      }
+      return { accentPreference: value };
     }),
   toggleUiMode: () =>
     set((s) => {

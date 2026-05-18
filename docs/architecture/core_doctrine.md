@@ -2,6 +2,10 @@
 
 Status: Phase 0 architecture baseline.
 
+## Read This If You Want
+
+Read this if you want the compact FORGE-K doctrine: the permanent authority rules, control models, and short-form boundaries that other architecture docs expand.
+
 FORGE-K is a deterministic cognitive microkernel. The model is not the operating system. The model is a driver attached to the operating system. FORGE-K owns truth.
 
 ## Permanent Doctrine

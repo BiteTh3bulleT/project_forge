@@ -99,7 +99,7 @@ const OPERATOR_APPS: &[OperatorAppDefinition] = &[
         executable: "foot",
         category: "Workspace",
         desktop_ids: &["foot.desktop"],
-        launch_args: &["--working-directory=/projectforge"],
+        launch_args: &["--working-directory=/forge/workspaces/default"],
     },
     OperatorAppDefinition {
         id: "files",
@@ -108,16 +108,16 @@ const OPERATOR_APPS: &[OperatorAppDefinition] = &[
         executable: "pcmanfm",
         category: "Workspace",
         desktop_ids: &["pcmanfm.desktop"],
-        launch_args: &["/projectforge"],
+        launch_args: &["/forge/workspaces/default"],
     },
     OperatorAppDefinition {
         id: "editor",
         label: "Editor",
-        description: "Open the fixed operator text editor wrapper for the FORGE workspace.",
-        executable: "foot",
+        description: "Open the native Mousepad text editor.",
+        executable: "mousepad",
         category: "Workspace",
-        desktop_ids: &[],
-        launch_args: &["-e", "forge-operator-editor"],
+        desktop_ids: &["org.xfce.mousepad.desktop", "mousepad.desktop"],
+        launch_args: &[],
     },
     OperatorAppDefinition {
         id: "archive-manager",
@@ -597,7 +597,6 @@ mod tests {
     #[test]
     fn operator_cli_apps_use_fixed_forge_wrappers() {
         for app_id in [
-            "editor",
             "ollama-status",
             "modelruntime-status",
             "system-monitor",
@@ -623,9 +622,19 @@ mod tests {
     }
 
     #[test]
+    fn operator_editor_uses_native_gui_editor() {
+        let app = OPERATOR_APPS
+            .iter()
+            .find(|candidate| candidate.id == "editor")
+            .expect("editor launcher should exist");
+        assert_eq!(app.executable, "mousepad");
+        assert!(app.desktop_ids.contains(&"org.xfce.mousepad.desktop"));
+        assert!(app.launch_args.is_empty());
+    }
+
+    #[test]
     fn operator_wrapper_apps_cover_all_toolbelt_wrappers() {
         for wrapper in [
-            "forge-operator-editor",
             "forge-operator-ollama-status",
             "forge-operator-models",
             "forge-operator-btop",
@@ -640,6 +649,34 @@ mod tests {
                     .iter()
                     .any(|app| app.executable == "foot" && app.launch_args == &["-e", wrapper]),
                 "missing fixed operator launcher for {wrapper}"
+            );
+        }
+    }
+
+    #[test]
+    fn operator_workspace_launchers_use_forge_workspace_path() {
+        let terminal = OPERATOR_APPS
+            .iter()
+            .find(|candidate| candidate.id == "terminal")
+            .expect("terminal launcher should exist");
+        assert_eq!(
+            terminal.launch_args,
+            &["--working-directory=/forge/workspaces/default"]
+        );
+
+        let files = OPERATOR_APPS
+            .iter()
+            .find(|candidate| candidate.id == "files")
+            .expect("files launcher should exist");
+        assert_eq!(files.launch_args, &["/forge/workspaces/default"]);
+
+        for app in OPERATOR_APPS {
+            assert!(
+                app.launch_args
+                    .iter()
+                    .all(|arg| !arg.contains("/projectforge")),
+                "{} still depends on missing /projectforge path",
+                app.id
             );
         }
     }

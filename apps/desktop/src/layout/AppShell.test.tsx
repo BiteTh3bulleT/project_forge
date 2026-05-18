@@ -52,6 +52,23 @@ const desktopMocks = vi.hoisted(() => ({
   iconAssetUrl: vi.fn((path: string) => `asset://${path}`),
 }));
 
+const apiMocks = vi.hoisted(() => ({
+  dashboardSummary: vi.fn<() => Promise<unknown>>(
+    () => new Promise(() => {}),
+  ),
+  autonomyStatus: vi.fn<() => Promise<unknown>>(() => new Promise(() => {})),
+  auditList: vi.fn<() => Promise<unknown>>(() => new Promise(() => {})),
+  modelRuntimeQueue: vi.fn<() => Promise<unknown>>(
+    () => new Promise(() => {}),
+  ),
+  modelRuntimeBackends: vi.fn<() => Promise<unknown>>(
+    () => new Promise(() => {}),
+  ),
+  contextSnapshots: vi.fn<() => Promise<unknown>>(
+    () => new Promise(() => {}),
+  ),
+}));
+
 function resolvedOperatorApps() {
   desktopMocks.listOperatorApps.mockResolvedValue([
     {
@@ -118,7 +135,20 @@ vi.mock("../lib/desktop", () => ({
 vi.mock("../lib/api", () => ({
   api: {
     dashboard: {
-      summary: vi.fn(() => new Promise<never>(() => {})),
+      summary: apiMocks.dashboardSummary,
+    },
+    autonomy: {
+      status: apiMocks.autonomyStatus,
+    },
+    audit: {
+      list: apiMocks.auditList,
+    },
+    modelRuntime: {
+      queue: apiMocks.modelRuntimeQueue,
+      backends: apiMocks.modelRuntimeBackends,
+    },
+    contextInspector: {
+      listSnapshots: apiMocks.contextSnapshots,
     },
   },
 }));
@@ -159,6 +189,28 @@ describe("AppShell confined Tauri tool surfaces", () => {
     desktopMocks.iconAssetUrl.mockClear();
     desktopMocks.minimizeTauriWindow.mockClear();
     desktopMocks.controlLinuxWindow.mockClear();
+    apiMocks.dashboardSummary.mockReset();
+    apiMocks.dashboardSummary.mockImplementation(
+      () => new Promise(() => {}),
+    );
+    apiMocks.autonomyStatus.mockReset();
+    apiMocks.autonomyStatus.mockImplementation(
+      () => new Promise<never>(() => {}),
+    );
+    apiMocks.auditList.mockReset();
+    apiMocks.auditList.mockImplementation(() => new Promise<never>(() => {}));
+    apiMocks.modelRuntimeQueue.mockReset();
+    apiMocks.modelRuntimeQueue.mockImplementation(
+      () => new Promise<never>(() => {}),
+    );
+    apiMocks.modelRuntimeBackends.mockReset();
+    apiMocks.modelRuntimeBackends.mockImplementation(
+      () => new Promise<never>(() => {}),
+    );
+    apiMocks.contextSnapshots.mockReset();
+    apiMocks.contextSnapshots.mockImplementation(
+      () => new Promise<never>(() => {}),
+    );
     useDesktopWindowStore.setState({
       pinned: ["chat", "jobs", "memory", "models", "approvals", "settings"],
       windows: [
@@ -188,6 +240,7 @@ describe("AppShell confined Tauri tool surfaces", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     cleanup();
   });
 
@@ -255,6 +308,217 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(status.textContent).toContain("Core:");
     expect(status.textContent).toContain("Runtime:");
     expect(status.textContent).toContain("Queue:");
+  });
+
+  it("summarizes model runtime, autonomy, latest audit, and workspace in the shell status bar", async () => {
+    apiMocks.dashboardSummary.mockResolvedValue({
+      activeJobs: [],
+      approvalsPending: 1,
+      reviewsPending: 0,
+      recentFailures: [],
+      recentImports: [],
+      dossierHealth: [],
+      automationActivity: [],
+      routingRecommendations: [],
+      systemStatus: {},
+    });
+    apiMocks.modelRuntimeQueue.mockResolvedValue({
+      queue: { depth: 2, active: { chat: "running" }, scheduler: "weighted" },
+    });
+    apiMocks.modelRuntimeBackends.mockResolvedValue({
+      backends: [
+        { kind: "ollama", name: "local", healthy: true, loadedModel: "qwen" },
+      ],
+    });
+    apiMocks.autonomyStatus.mockResolvedValue({
+      enabled: true,
+      maintenanceLoop: { active: true },
+    });
+    apiMocks.auditList.mockResolvedValue({
+      records: [
+        {
+          id: 42,
+          createdAtMs: 1700000000000,
+          category: "gateway",
+          action: "tool.executed",
+          outcome: "ok",
+          summary: "Shell probe completed",
+        },
+      ],
+    });
+    apiMocks.contextSnapshots.mockResolvedValue({ snapshots: [] });
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const status = await screen.findByRole("status", {
+      name: "FORGE shell status",
+    });
+
+    await waitFor(
+      () => {
+        expect(status.textContent).toContain("Workspace:");
+        expect(status.textContent).toContain("Modelruntime: healthy");
+        expect(status.textContent).toContain("Autonomy: active");
+        expect(status.textContent).toContain("Audit: tool.executed ok");
+      },
+      { timeout: 3000 },
+    );
+    expect(apiMocks.auditList).toHaveBeenCalledWith({ limit: 20 });
+  });
+
+  it("shows a right-side context inspector with context, audit, loops, and approvals", async () => {
+    apiMocks.dashboardSummary.mockResolvedValue({
+      activeJobs: [
+        {
+          id: "job-context",
+          title: "Compile operator context",
+          status: "running",
+          targetAdapter: "context",
+          createdAtMs: 1700000000100,
+        },
+      ],
+      approvalsPending: 2,
+      reviewsPending: 0,
+      recentFailures: [],
+      recentImports: [],
+      dossierHealth: [],
+      automationActivity: [],
+      routingRecommendations: [],
+      systemStatus: {},
+    });
+    apiMocks.modelRuntimeQueue.mockResolvedValue({ queue: { depth: 0 } });
+    apiMocks.modelRuntimeBackends.mockResolvedValue({ backends: [] });
+    apiMocks.autonomyStatus.mockResolvedValue({
+      enabled: true,
+      maintenanceLoop: { active: true, mode: "dry_run" },
+    });
+    apiMocks.auditList.mockResolvedValue({
+      records: [
+        {
+          id: 7,
+          createdAtMs: 1700000000000,
+          category: "context",
+          action: "context.compiled",
+          outcome: "ok",
+          summary: "Compiled FORGE_PUNCHLIST context",
+        },
+      ],
+    });
+    apiMocks.contextSnapshots.mockResolvedValue({
+      snapshots: [
+        {
+          id: "ctx-1",
+          createdAtMs: 1700000000000,
+          workspaceId: "default",
+          laneId: "control",
+          snapshotKind: "compile",
+          label: "FORGE_PUNCHLIST Section 6",
+          summary: "Shell UI compile package",
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const inspector = await screen.findByRole("complementary", {
+      name: "Shell context inspector",
+    });
+
+    expect(within(inspector).getByText("Context Inspector")).toBeTruthy();
+    await waitFor(() => {
+      expect(
+        within(inspector).getByText("FORGE_PUNCHLIST Section 6"),
+      ).toBeTruthy();
+      expect(
+        within(inspector).getByText("Compiled FORGE_PUNCHLIST context"),
+      ).toBeTruthy();
+      expect(within(inspector).getByText("maintenance active")).toBeTruthy();
+      expect(within(inspector).getByText("2 pending")).toBeTruthy();
+    });
+  });
+
+  it("opens the activity log surface with the last 20 audit events", async () => {
+    apiMocks.auditList.mockResolvedValue({
+      records: [
+        {
+          id: 1,
+          createdAtMs: 1700000000000,
+          category: "gateway",
+          action: "tool.executed",
+          outcome: "ok",
+          summary: "First event",
+        },
+        {
+          id: 2,
+          createdAtMs: 1700000001000,
+          category: "modelruntime",
+          action: "model.runtime.chat",
+          outcome: "authorized",
+          summary: "Second event",
+        },
+      ],
+    });
+    apiMocks.autonomyStatus.mockResolvedValue({
+      available: true,
+      dream: { active: false },
+    });
+    apiMocks.modelRuntimeQueue.mockResolvedValue({ queue: { depth: 0 } });
+    apiMocks.modelRuntimeBackends.mockResolvedValue({ backends: [] });
+    apiMocks.contextSnapshots.mockResolvedValue({ snapshots: [] });
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open activity log" }),
+    );
+
+    const log = screen.getByRole("dialog", { name: "Activity log" });
+    await waitFor(() => {
+      expect(within(log).getByText("First event")).toBeTruthy();
+      expect(within(log).getByText("Second event")).toBeTruthy();
+    });
+    expect(within(log).getByText("model.runtime.chat")).toBeTruthy();
+    expect(apiMocks.auditList).toHaveBeenCalledWith({ limit: 20 });
+  });
+
+  it("persists a CSS-variable shell theme and accent from the status controls", async () => {
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch shell theme" }));
+    fireEvent.change(screen.getByLabelText("Shell accent"), {
+      target: { value: "amber" },
+    });
+
+    await waitFor(() => {
+      expect(document.documentElement.dataset.theme).toBe("light");
+      expect(document.documentElement.dataset.forgeAccent).toBe("amber");
+      expect(window.localStorage.getItem("forge.ui.theme")).toBe("light");
+      expect(window.localStorage.getItem("forge.ui.accent")).toBe("amber");
+    });
   });
 
   it("renders each in-shell window only on its assigned desktop host", () => {
@@ -638,6 +902,64 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(screen.getByText("PID 4242")).toBeTruthy();
   });
 
+  it("removes launched native placeholders after the Linux window appears", async () => {
+    resolvedOperatorApps();
+    desktopMocks.listLinuxWindows.mockResolvedValue([]);
+    desktopMocks.launchOperatorApp.mockResolvedValue({
+      appId: "files",
+      label: "Files",
+      executable: "pcmanfm",
+      launched: true,
+      pid: 4343,
+      message: "Files launch requested",
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Files/ }));
+
+    await waitFor(() => {
+      expect(desktopMocks.launchOperatorApp).toHaveBeenCalledWith("files");
+    });
+    expect(
+      screen.getByRole("button", { name: "Files native app" }),
+    ).toBeTruthy();
+
+    desktopMocks.listLinuxWindows.mockResolvedValue([
+      {
+        id: "pcmanfm-window",
+        title: "default - File Manager",
+        appId: "pcmanfm-qt",
+        iconName: "system-file-manager",
+        iconPath: null,
+        focused: false,
+        minimized: false,
+        native: true,
+        firstSeenMs: Date.now() + 100,
+        lastSeenMs: Date.now() + 100,
+      },
+    ]);
+
+    await waitFor(
+      () => {
+        expect(
+          screen.queryByRole("button", { name: "Files native app" }),
+        ).toBeNull();
+      },
+      { timeout: 2500 },
+    );
+    expect(
+      screen.getByRole("button", { name: "default - File Manager linux app" }),
+    ).toBeTruthy();
+  });
+
   it("shows compositor-reported Linux apps on the taskbar", async () => {
     desktopMocks.listLinuxWindows.mockResolvedValue([
       {
@@ -710,6 +1032,45 @@ describe("AppShell confined Tauri tool surfaces", () => {
       expect(desktopMocks.controlLinuxWindow).toHaveBeenCalledWith(
         "firefox-window",
         "minimize",
+      );
+    });
+  });
+
+  it("middle-click closes compositor Linux taskbar windows", async () => {
+    desktopMocks.listLinuxWindows.mockResolvedValue([
+      {
+        id: "firefox-window",
+        title: "Mozilla Firefox",
+        appId: "firefox",
+        iconName: "firefox",
+        iconPath: null,
+        focused: false,
+        minimized: false,
+        native: true,
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const firefox = await screen.findByRole("button", {
+      name: "Mozilla Firefox linux app",
+    });
+
+    fireEvent(
+      firefox,
+      new MouseEvent("auxclick", { bubbles: true, button: 1 }),
+    );
+
+    await waitFor(() => {
+      expect(desktopMocks.controlLinuxWindow).toHaveBeenCalledWith(
+        "firefox-window",
+        "close",
       );
     });
   });

@@ -68,14 +68,14 @@ The session remains safe by default:
 
 The desktop Start menu is an allowlist. It exposes categorized launchers:
 
-- Workspace: terminal, files, editor, archive manager
+- Workspace: terminal, files, native Mousepad editor, archive manager
 - Internet: browser and fixed core health/API probe
 - AI Runtime: Ollama status and governed modelruntime status
 - System: process monitor, logs, network diagnostics, hardware diagnostics
 - Developer: SQLite browser and Git UI
 - FORGE: local FORGE status
 
-CLI tools are launched through fixed `forge-operator-*` wrappers in a terminal. The UI passes only an allowlisted app ID to Tauri; it does not accept arbitrary command text or user-provided launch arguments.
+CLI tools are launched through fixed `forge-operator-*` wrappers in a terminal. Native GUI apps such as Mousepad, PCManFM, Xarchiver, and Firefox launch directly from the allowlist. The UI passes only an allowlisted app ID to Tauri; it does not accept arbitrary command text or user-provided launch arguments.
 
 ## Runtime Services
 

@@ -111,12 +111,19 @@ in
 
   services.forge-core = {
     bindHost = lib.mkDefault "127.0.0.1";
-    enableModelRuntime = lib.mkDefault true;
+    enableModelRuntime = true;
     safeModeForceCPUOnly = lib.mkDefault true;
     extraEnvironment = {
       OLLAMA_BASE_URL = lib.mkDefault "http://127.0.0.1:11434";
       FORGE_MODEL_DEFAULT_BACKEND = lib.mkDefault "ollama_compat";
     };
+  };
+
+  services.ollama = {
+    enable = lib.mkDefault true;
+    home = lib.mkDefault "/forge/models/ollama";
+    host = lib.mkDefault "127.0.0.1";
+    port = lib.mkDefault 11434;
   };
 
   services.openssh.enable = lib.mkDefault false;

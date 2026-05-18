@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -133,6 +134,7 @@ type RequestExecutionRecord struct {
 	DurationMs          int64                 `json:"durationMs,omitempty"`
 	QueueDepthAtEnqueue int                   `json:"queueDepthAtEnqueue,omitempty"`
 	RunningAtAdmission  int                   `json:"runningAtAdmission,omitempty"`
+	BackpressureReason  string                `json:"backpressureReason,omitempty"`
 	PromptTokens        int                   `json:"promptTokens,omitempty"`
 	CompletionTokens    int                   `json:"completionTokens,omitempty"`
 	OutputBytes         int                   `json:"outputBytes,omitempty"`
@@ -169,9 +171,30 @@ type RuntimeHealth struct {
 	RuntimeEnabled  bool                               `json:"runtimeEnabled"`
 	GPUAware        bool                               `json:"gpuAware"`
 	GPUTelemetry    *GPUTelemetrySnapshot              `json:"gpuTelemetry,omitempty"`
+	ResourceLimits  RuntimeResourceLimits              `json:"resourceLimits"`
 	Backends        map[ModelBackendKind]BackendHealth `json:"backends"`
 	Loaded          map[ModelBackendKind]string        `json:"loaded"`
 	Scheduler       SchedulerSnapshot                  `json:"scheduler"`
+}
+
+type RuntimeResourceLimits struct {
+	MaxLoadedModels                    int   `json:"maxLoadedModels"`
+	MaxQueueDepth                      int   `json:"maxQueueDepth"`
+	MaxConcurrentRequests              int   `json:"maxConcurrentRequests"`
+	CompletedHistoryLimit              int   `json:"completedHistoryLimit"`
+	MaxPromptTokens                    int   `json:"maxPromptTokens,omitempty"`
+	MaxOutputTokens                    int   `json:"maxOutputTokens,omitempty"`
+	MaxOutputBytes                     int   `json:"maxOutputBytes,omitempty"`
+	DefaultTimeoutMs                   int64 `json:"defaultTimeoutMs"`
+	LoadTimeoutMs                      int64 `json:"loadTimeoutMs,omitempty"`
+	UnloadTimeoutMs                    int64 `json:"unloadTimeoutMs,omitempty"`
+	GPUEnabled                         bool  `json:"gpuEnabled"`
+	GPURequiredForInteractiveInference bool  `json:"gpuRequiredForInteractiveInference"`
+	GPUBackgroundJobsEnabled           bool  `json:"gpuBackgroundJobsEnabled"`
+	GPUMaxBackgroundJobs               int   `json:"gpuMaxBackgroundJobs"`
+	GPUBackgroundIdleThresholdMs       int64 `json:"gpuBackgroundIdleThresholdMs,omitempty"`
+	GPUVRAMHeadroomPercent             int   `json:"gpuVRAMHeadroomPercent"`
+	DegradeOnUnavailableGPU            bool  `json:"degradeOnUnavailableGPU"`
 }
 
 type Service struct {
@@ -839,7 +862,7 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (result Gen
 			QueueWaitMs:   reqRecord.QueueWaitMs,
 			QueueDepth:    reqRecord.QueueDepthAtEnqueue,
 			DurationMs:    s.clock().Sub(started).Milliseconds(),
-			Outcome:       "error",
+			Outcome:       executionOutcomeForError(admissionErr),
 			Error:         admissionErr.Error(),
 			Metadata:      req.Metadata,
 		})
@@ -941,7 +964,7 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (result Gen
 			QueueDepth:    reqRecord.QueueDepthAtEnqueue,
 			RunningCount:  reqRecord.RunningAtAdmission,
 			DurationMs:    durationMs,
-			Outcome:       "error",
+			Outcome:       executionOutcomeForError(err),
 			Error:         err.Error(),
 			Metadata:      req.Metadata,
 		})
@@ -1218,8 +1241,13 @@ func (s *Service) finishExecutionSlot(record *RequestExecutionRecord, result *Ge
 	}
 
 	if runErr != nil && *runErr != nil {
-		record.State = RequestStateCompleted
-		record.Outcome = "error"
+		if errors.Is(*runErr, context.Canceled) {
+			record.State = RequestStateCanceled
+			record.Outcome = "canceled"
+		} else {
+			record.State = RequestStateCompleted
+			record.Outcome = "error"
+		}
 		record.Error = (*runErr).Error()
 	} else {
 		record.State = RequestStateCompleted
@@ -1251,13 +1279,15 @@ func (s *Service) schedulerSnapshotLocked(now time.Time) SchedulerSnapshot {
 		Completed:             make([]RequestExecutionRecord, len(s.completed)),
 	}
 	for _, q := range s.queued {
-		out.Queued = append(out.Queued, *q)
+		queued := *q
+		queued.BackpressureReason = s.queuedBackpressureReasonLocked(q, now)
+		out.Queued = append(out.Queued, queued)
 		if q.WorkloadClass.IsInteractive() {
 			out.InteractiveQueued++
 		}
 		if q.WorkloadClass.IsBackground() {
 			out.BackgroundQueued++
-			if s.isBackgroundBlockedLocked(q, now) {
+			if queued.BackpressureReason != "" {
 				out.CooldownJobs++
 			}
 		}
@@ -1299,9 +1329,6 @@ func (s *Service) canAdmitLocked(requestID string) bool {
 	}
 	next := s.queued[0]
 	if next.WorkloadClass.IsBackground() {
-		if s.schedulingInteractivePriorityOverBackground && s.hasInteractiveRunningLocked() {
-			return false
-		}
 		if runningBackgroundCount := s.backgroundRunningCountLocked(); runningBackgroundCount >= maxInt(1, s.gpuMaxBackgroundJobs) {
 			return false
 		}
@@ -1339,14 +1366,39 @@ func (s *Service) updateCooldownStateLocked(now time.Time) {
 }
 
 func (s *Service) isBackgroundBlockedLocked(record *RequestExecutionRecord, now time.Time) bool {
+	return s.backgroundBackpressureReasonLocked(record, now) != ""
+}
+
+func (s *Service) queuedBackpressureReasonLocked(record *RequestExecutionRecord, now time.Time) string {
+	if record == nil {
+		return ""
+	}
+	if len(s.running) >= s.maxConcurrentRequests {
+		return "concurrency_limit"
+	}
+	for _, running := range s.running {
+		if running.Backend == record.Backend {
+			return "backend_busy"
+		}
+	}
+	if record.WorkloadClass.IsBackground() {
+		if runningBackgroundCount := s.backgroundRunningCountLocked(); runningBackgroundCount >= maxInt(1, s.gpuMaxBackgroundJobs) {
+			return "background_concurrency_limit"
+		}
+		return s.backgroundBackpressureReasonLocked(record, now)
+	}
+	return ""
+}
+
+func (s *Service) backgroundBackpressureReasonLocked(record *RequestExecutionRecord, now time.Time) string {
 	if !record.WorkloadClass.IsBackground() {
-		return false
+		return ""
 	}
 	if !s.gpuBackgroundJobsEnabled {
-		return true
+		return "background_workloads_disabled"
 	}
 	if s.schedulingInteractivePriorityOverBackground && s.hasInteractiveRunningLocked() {
-		return true
+		return "interactive_request_running"
 	}
 	if s.schedulingInteractivePriorityOverBackground {
 		for _, q := range s.queued {
@@ -1354,14 +1406,14 @@ func (s *Service) isBackgroundBlockedLocked(record *RequestExecutionRecord, now 
 				break
 			}
 			if q.WorkloadClass.IsInteractive() {
-				return true
+				return "interactive_request_queued_ahead"
 			}
 		}
 	}
 	if s.underCooldown && now.Before(s.backgroundCoolDownUntil) {
-		return true
+		return "background_cooldown_active"
 	}
-	return false
+	return ""
 }
 
 func (s *Service) hasInteractiveRunningLocked() bool {
@@ -1385,6 +1437,28 @@ func (s *Service) backgroundRunningCountLocked() int {
 
 func (s *Service) healthNeedsOverloadedSignalLocked() bool {
 	return len(s.queued) >= maxInt(1, s.maxQueueDepth) || len(s.running) > s.maxConcurrentRequests
+}
+
+func schedulerSnapshotHasBackpressure(snapshot SchedulerSnapshot) bool {
+	if len(snapshot.Queued) >= maxInt(1, snapshot.MaxQueueDepth) {
+		return true
+	}
+	if len(snapshot.Running) >= maxInt(1, snapshot.MaxConcurrentRequests) && len(snapshot.Queued) > 0 {
+		return true
+	}
+	for _, queued := range snapshot.Queued {
+		if queued.BackpressureReason != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func executionOutcomeForError(err error) string {
+	if errors.Is(err, context.Canceled) {
+		return "canceled"
+	}
+	return "error"
 }
 
 func (s *Service) gpuCurrentlyAvailableLocked() bool {

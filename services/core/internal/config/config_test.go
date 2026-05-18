@@ -58,6 +58,53 @@ func TestLoadGeneratesAPITokenFileUnderDataDir(t *testing.T) {
 	if string(body) != cfg.APIToken+"\n" {
 		t.Fatalf("token file did not match loaded token")
 	}
+	authDirInfo, err := os.Stat(filepath.Join(dataDir, "auth"))
+	if err != nil {
+		t.Fatalf("expected generated auth directory: %v", err)
+	}
+	if got := authDirInfo.Mode().Perm(); got != 0o750 {
+		t.Fatalf("expected auth directory mode 0750, got %04o", got)
+	}
+	tokenInfo, err := os.Stat(filepath.Join(dataDir, "auth", "api_token"))
+	if err != nil {
+		t.Fatalf("expected generated token file stat: %v", err)
+	}
+	if got := tokenInfo.Mode().Perm(); got != 0o640 {
+		t.Fatalf("expected token file mode 0640, got %04o", got)
+	}
+}
+
+func TestLoadRepairsExistingAPITokenFilePermissions(t *testing.T) {
+	dataDir := t.TempDir()
+	tokenPath := filepath.Join(dataDir, "auth", "api_token")
+	if err := os.MkdirAll(filepath.Dir(tokenPath), 0o700); err != nil {
+		t.Fatalf("create auth dir: %v", err)
+	}
+	if err := os.WriteFile(tokenPath, []byte("existing-token\n"), 0o600); err != nil {
+		t.Fatalf("write token: %v", err)
+	}
+	t.Setenv("FORGE_DATA_DIR", dataDir)
+	t.Setenv("FORGE_API_TOKEN", "")
+	t.Setenv("FORGE_API_TOKEN_FILE", "")
+
+	cfg := Load()
+	if cfg.APIToken != "existing-token" {
+		t.Fatalf("expected existing token, got %q", cfg.APIToken)
+	}
+	authDirInfo, err := os.Stat(filepath.Dir(tokenPath))
+	if err != nil {
+		t.Fatalf("expected auth directory stat: %v", err)
+	}
+	if got := authDirInfo.Mode().Perm(); got != 0o750 {
+		t.Fatalf("expected repaired auth directory mode 0750, got %04o", got)
+	}
+	tokenInfo, err := os.Stat(tokenPath)
+	if err != nil {
+		t.Fatalf("expected token file stat: %v", err)
+	}
+	if got := tokenInfo.Mode().Perm(); got != 0o640 {
+		t.Fatalf("expected repaired token file mode 0640, got %04o", got)
+	}
 }
 
 func TestLoadRespectsCoreBindHostOverride(t *testing.T) {

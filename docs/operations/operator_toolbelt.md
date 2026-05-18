@@ -10,6 +10,7 @@ Workspace:
 
 - `foot`
 - `pcmanfm`
+- `mousepad`
 - `micro` or `helix`
 - `xarchiver`
 
@@ -68,7 +69,6 @@ The operator desktop launches CLI tools through fixed wrappers:
 - `forge-operator-core-logs`
 - `forge-operator-network-diagnostics`
 - `forge-operator-hardware-diagnostics`
-- `forge-operator-editor`
 
 These wrappers run fixed commands only. They do not accept command text, executable paths, package install instructions, rebuild requests, service restart requests, model load/unload requests, or semantic memory writes.
 

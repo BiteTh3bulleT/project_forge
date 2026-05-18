@@ -62,6 +62,28 @@ Current legacy-retirement work is read-only proof metadata through `GET /forge/s
 
 See `docs/reviews/current_phase_status.md` and `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
 
+## FORGE-K Validation Seam Wiring Matrix
+
+Status date: 2026-05-18 audit.
+
+Seven validation seams are wired in the live Control Lane. All are `[PARTIAL LIVE VALIDATION]`: registered in `services/core/internal/aios/controllane/registry.go`, dispatched from `services/core/internal/aios/controllane/processor.go`, and observable via the disabled-by-default `services/core/internal/forgekshadow` observer. One seam (`VALIDATE_SOURCE_OBJECT`) now has a live production caller — see `services/core/internal/aios/autonomy/runner.go:preflightSourceObjectAuthority`, which submits a dry-run preflight before any `ARCHIVE_NOTE` commit in `commitAllowedActions`. The other six seams remain reachable only from tests and direct syscall construction.
+
+| Seam | Live handler | Pure pkg | Pure-pkg purity test | Simulator import | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `VALIDATE_KV_IDENTITY` | `aios/controllane/kv_enforcement.go` | `kvidentity` | yes | `forgek/kv/gates.go` | Only seam genuinely shared with simulator. |
+| `VALIDATE_REF_SHAPE` | `aios/controllane/ref_validation.go` | `refvalidation` | yes | none | Live + shadow only; see ADR 0015 for simulator unification. |
+| `COMPARE_REF_SHAPE` | `aios/controllane/ref_shape_compare.go` | `refvalidation/compare.go` | yes (shared with above) | none | Live + shadow only. |
+| `VALIDATE_SOURCE_OBJECT` | `aios/controllane/source_object_authority.go` | none (intentional) | n/a | none | Intrinsically store-dependent; pure portion already shared via `refvalidation`. **Live production caller**: `autonomy/runner.go:preflightSourceObjectAuthority` (ARCHIVE_NOTE preflight). |
+| `VALIDATE_SEMANTIC_OPERATION` | `aios/controllane/semantic_operation_validation.go` | `semanticvalidation` | yes | none | Live + shadow only. |
+| `VALIDATE_ADMISSION_CANDIDATE` | `aios/controllane/admission_validation.go` | `admissionvalidation` | yes | none | Live + shadow only. |
+| `VALIDATE_CONTEXT_ATTRIBUTION` | `aios/controllane/context_attribution_validation.go` | `contextattribution` | yes | none | Live + shadow only. |
+
+Notes on intentional exceptions:
+
+- `VALIDATE_SOURCE_OBJECT` does not have a separate pure validator package. The handler in `services/core/internal/aios/controllane/source_object_authority.go` requires a `SemanticReadStore` to verify that referenced objects exist in canonical state (lines 47, 79-103, 153-194). Ref-shape validation is delegated to `refvalidation`. There is no meaningful pure extraction beyond what already exists.
+- Four pure validator packages (`refvalidation`, `semanticvalidation`, `contextattribution`, `admissionvalidation`) are "shared" in the sense of being reusable infrastructure across live Control Lane handlers and the live `forgekshadow` observer. They are not currently imported by the FORGE-K simulator under `services/core/internal/forgek/`. The simulator uses opaque `[]string` source refs, while the pure validators consume structured `refvalidation.ObjectRef`. ADR 0015 proposes the simulator ref-model migration that would make these seams literally shared between simulator and live.
+- All pure validator packages forbid imports of `forgek`, `controllane`, `gateway`, `modelruntime`, `retrieval`, `search`, `embeddings`, `memory`, and `api` via per-package `forbidden_imports_test.go`. CI enforces purity.
+
 ## Planning And Historical Docs
 
 Roadmaps, archived phase prompts, reviews, and parking-lot notes are evidence and planning context. They are not current authority unless this file, `AGENTS.md`, or `docs/reviews/current_phase_status.md` points to them as current.

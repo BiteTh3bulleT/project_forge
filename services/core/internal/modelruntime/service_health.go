@@ -16,6 +16,7 @@ func (s *Service) Health(ctx context.Context) (RuntimeHealth, error) {
 		GPUAware:        s.gpuEnabled,
 		DegradedReasons: nil,
 		PolicyWarnings:  nil,
+		ResourceLimits:  s.resourceLimitsSnapshot(),
 		Backends:        map[ModelBackendKind]BackendHealth{},
 		Loaded:          map[ModelBackendKind]string{},
 		Scheduler:       s.SchedulerSnapshot(),
@@ -84,7 +85,7 @@ func (s *Service) Health(ctx context.Context) (RuntimeHealth, error) {
 	if health.State == RuntimeHealthAvailable && !health.Healthy {
 		health.State = RuntimeHealthDegraded
 	}
-	if s.healthNeedsOverloadedSignalLocked() && health.State == RuntimeHealthAvailable {
+	if schedulerSnapshotHasBackpressure(health.Scheduler) && health.State == RuntimeHealthAvailable {
 		health.State = RuntimeHealthOverloaded
 	}
 
@@ -106,21 +107,58 @@ func (s *Service) recordBackendSupervision(kind ModelBackendKind, health Backend
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	snapshot := s.backendSupervision[kind]
-	snapshot.LastProbeAt = s.clock().UTC()
+	now := s.clock().UTC()
+	snapshot.LastProbeAt = now
+	snapshot.ProbeCount++
+	snapshot.SupervisionMode = "unmanaged_external_backend"
+	snapshot.RestartPolicy = "operator_managed_restart"
 	snapshot.RestartSupported = false
 	snapshot.RestartAttempted = false
-	snapshot.RestartReason = "unmanaged_backend"
 	if probeErr != nil || !health.Healthy {
+		snapshot.State = "degraded"
+		snapshot.LastFailureAt = now
 		snapshot.ConsecutiveFailures++
+		snapshot.RestartReason = "backend_health_probe_failed"
 		if probeErr != nil {
 			snapshot.LastError = probeErr.Error()
 		} else {
 			snapshot.LastError = strings.TrimSpace(health.Detail)
 		}
+		if snapshot.ConsecutiveFailures >= 2 {
+			snapshot.RestartRecommended = true
+			snapshot.RequiresOperatorAction = true
+		}
 	} else {
+		snapshot.State = "healthy"
+		snapshot.LastHealthyAt = now
 		snapshot.ConsecutiveFailures = 0
 		snapshot.LastError = ""
+		snapshot.RestartRecommended = false
+		snapshot.RequiresOperatorAction = false
+		snapshot.RestartReason = ""
 	}
 	s.backendSupervision[kind] = snapshot
 	return snapshot
+}
+
+func (s *Service) resourceLimitsSnapshot() RuntimeResourceLimits {
+	return RuntimeResourceLimits{
+		MaxLoadedModels:                    s.maxLoadedModels,
+		MaxQueueDepth:                      s.maxQueueDepth,
+		MaxConcurrentRequests:              s.maxConcurrentRequests,
+		CompletedHistoryLimit:              s.completedHistoryLimit,
+		MaxPromptTokens:                    s.maxPromptTokens,
+		MaxOutputTokens:                    s.maxOutputTokens,
+		MaxOutputBytes:                     s.maxOutputBytes,
+		DefaultTimeoutMs:                   s.defaultTimeout.Milliseconds(),
+		LoadTimeoutMs:                      s.loadTimeout.Milliseconds(),
+		UnloadTimeoutMs:                    s.unloadTimeout.Milliseconds(),
+		GPUEnabled:                         s.gpuEnabled,
+		GPURequiredForInteractiveInference: s.gpuRequiredForInteractiveInference,
+		GPUBackgroundJobsEnabled:           s.gpuBackgroundJobsEnabled,
+		GPUMaxBackgroundJobs:               s.gpuMaxBackgroundJobs,
+		GPUBackgroundIdleThresholdMs:       s.gpuBackgroundIdleThreshold.Milliseconds(),
+		GPUVRAMHeadroomPercent:             int(s.gpuVRAMHeadroomFraction * 100),
+		DegradeOnUnavailableGPU:            s.gpuDegradeOnUnavailable,
+	}
 }

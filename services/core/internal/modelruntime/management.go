@@ -69,17 +69,18 @@ type RuntimeBackendStatus struct {
 }
 
 type RuntimeUsageSummary struct {
-	Registered int                                 `json:"registered"`
-	Imported   int                                 `json:"imported"`
-	Verified   int                                 `json:"verified"`
-	Available  int                                 `json:"available"`
-	Disabled   int                                 `json:"disabled"`
-	Archived   int                                 `json:"archived"`
-	Loaded     int                                 `json:"loaded"`
-	QueueDepth int                                 `json:"queueDepth"`
-	Running    int                                 `json:"running"`
-	Completed  int                                 `json:"completed"`
-	Backends   map[ModelBackendKind]map[string]any `json:"backends,omitempty"`
+	Registered     int                                 `json:"registered"`
+	Imported       int                                 `json:"imported"`
+	Verified       int                                 `json:"verified"`
+	Available      int                                 `json:"available"`
+	Disabled       int                                 `json:"disabled"`
+	Archived       int                                 `json:"archived"`
+	Loaded         int                                 `json:"loaded"`
+	QueueDepth     int                                 `json:"queueDepth"`
+	Running        int                                 `json:"running"`
+	Completed      int                                 `json:"completed"`
+	ResourceLimits RuntimeResourceLimits               `json:"resourceLimits"`
+	Backends       map[ModelBackendKind]map[string]any `json:"backends,omitempty"`
 }
 
 func (s *Service) ImportModel(ctx context.Context, req ImportRequest) (ImportResult, error) {
@@ -335,7 +336,7 @@ func (s *Service) Usage(ctx context.Context) (RuntimeUsageSummary, error) {
 		return RuntimeUsageSummary{}, err
 	}
 	snapshot := s.SchedulerSnapshot()
-	usage := RuntimeUsageSummary{Registered: len(infos), QueueDepth: len(snapshot.Queued), Running: len(snapshot.Running), Completed: len(snapshot.Completed), Loaded: len(s.LoadedModels()), Backends: map[ModelBackendKind]map[string]any{}}
+	usage := RuntimeUsageSummary{Registered: len(infos), QueueDepth: len(snapshot.Queued), Running: len(snapshot.Running), Completed: len(snapshot.Completed), Loaded: len(s.LoadedModels()), ResourceLimits: s.resourceLimitsSnapshot(), Backends: map[ModelBackendKind]map[string]any{}}
 	for _, info := range infos {
 		switch info.Status {
 		case StatusImported:

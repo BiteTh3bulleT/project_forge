@@ -28,6 +28,7 @@ let
   coreToolNames = [
     "foot"
     "pcmanfm"
+    "mousepad"
     "firefox"
     "ollama"
     "btop"
@@ -96,28 +97,6 @@ let
         cd /projectforge
       fi
       exec lazygit
-    '';
-  };
-
-  operatorEditor = writeShellApplication {
-    name = "forge-operator-editor";
-    runtimeInputs = optionalPackages [
-      "micro"
-      "helix"
-    ];
-    text = ''
-      target=/projectforge
-      if [ ! -d "$target" ]; then
-        target="$PWD"
-      fi
-      if command -v micro >/dev/null 2>&1; then
-        exec micro "$target"
-      fi
-      if command -v hx >/dev/null 2>&1; then
-        exec hx "$target"
-      fi
-      echo "No micro/helix editor package is available in this operator profile." >&2
-      ${terminalPause}
     '';
   };
 
@@ -236,7 +215,6 @@ let
   wrappers = [
     operatorBtop
     operatorLazygit
-    operatorEditor
     operatorOllamaStatus
     operatorModels
     operatorCoreStatus

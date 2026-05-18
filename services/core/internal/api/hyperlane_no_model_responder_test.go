@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"forge/projectforge/services/core/internal/aios/hyperlane"
 	"forge/projectforge/services/core/internal/store"
 )
 
@@ -26,6 +27,54 @@ func TestHyperlaneNoModelStatusQuery(t *testing.T) {
 	assertNoModelRuntimeCalls(t, fake)
 	assertGatewayInvocationCount(t, st, 0)
 	assertCanonicalCounts(t, st, before)
+}
+
+func TestHyperlaneNoModelReportsIntentDistributionTelemetry(t *testing.T) {
+	srv, _, _ := newHyperlaneNoModelHarness(t)
+	resp := postHyperlaneChat(t, srv, "what is forge core status?")
+
+	telemetry := hyperlaneTelemetryMetadata(t, resp)
+	intentCounts := metadataMap(telemetry, "intent_counts")
+	if got := numericMetadataValue(intentCounts["status_query"]); got < 1 {
+		t.Fatalf("expected status_query telemetry count, got telemetry=%#v", telemetry)
+	}
+	outcomeCounts := metadataMap(telemetry, "outcome_counts")
+	if got := numericMetadataValue(outcomeCounts["no_model"]); got < 1 {
+		t.Fatalf("expected no_model telemetry count, got telemetry=%#v", telemetry)
+	}
+	if got := numericMetadataValue(telemetry["total_observed"]); got < 1 {
+		t.Fatalf("expected bounded total_observed telemetry, got telemetry=%#v", telemetry)
+	}
+}
+
+func TestHyperlaneNoModelShadowObservationWindowNotReadyBeforeSevenDays(t *testing.T) {
+	srv, _, fake := newHyperlaneNoModelHarness(t)
+	resp := postHyperlaneChat(t, srv, "what is forge core status?")
+
+	telemetry := hyperlaneTelemetryMetadata(t, resp)
+	report := metadataMap(telemetry, "shadow_observation")
+	if report == nil {
+		t.Fatalf("expected shadow_observation report, telemetry=%#v", telemetry)
+	}
+	if got := numericMetadataValue(report["required_min_window_days"]); got != 7 {
+		t.Fatalf("required_min_window_days=%d want 7 report=%#v", got, report)
+	}
+	if got := strings.TrimSpace(asString(report["started_at"])); got == "" {
+		t.Fatalf("expected started_at report=%#v", report)
+	}
+	if ready, _ := report["ready_to_flip"].(bool); ready {
+		t.Fatalf("shadow observation should not be ready before seven days, report=%#v", report)
+	}
+	if got := numericMetadataValue(report["deterministic_no_model_count"]); got < 1 {
+		t.Fatalf("expected deterministic no-model count, report=%#v", report)
+	}
+	if got := numericMetadataValue(report["elapsed_ms"]); got < 0 || got >= int64((7*24*time.Hour).Milliseconds()) {
+		t.Fatalf("expected elapsed_ms within first seven days, got %d report=%#v", got, report)
+	}
+	if got := strings.TrimSpace(asString(report["current_behavior"])); !strings.Contains(got, "active") {
+		t.Fatalf("expected honest active-route current_behavior, got %q report=%#v", got, report)
+	}
+	assertNoModelRuntimeCalls(t, fake)
 }
 
 func TestHyperlaneNoModelDiagnosticsQuery(t *testing.T) {
@@ -153,6 +202,66 @@ func TestHyperlaneUnknownQueryFallsThroughToModelPath(t *testing.T) {
 	}
 }
 
+func TestHyperlaneUnknownFallthroughRecordsShadowTelemetryWithoutChangingBehavior(t *testing.T) {
+	srv, _, fake := newHyperlaneNoModelHarness(t)
+	resp := postHyperlaneChat(t, srv, "explain how this repository is structured")
+
+	if _, ok := resp.AssistantMessage.Metadata["hyperlane_intent_type"]; ok {
+		t.Fatalf("unknown query should still fall through without hyperlane response metadata: %#v", resp.AssistantMessage.Metadata)
+	}
+	if fake.chatCalls == 0 {
+		t.Fatalf("expected model runtime chat call for unknown query")
+	}
+
+	statusResp := postHyperlaneChat(t, srv, "what is forge core status?")
+	telemetry := hyperlaneTelemetryMetadata(t, statusResp)
+	outcomeCounts := metadataMap(telemetry, "outcome_counts")
+	if got := numericMetadataValue(outcomeCounts["fallthrough"]); got < 1 {
+		t.Fatalf("expected fallthrough telemetry count, got telemetry=%#v", telemetry)
+	}
+	if !containsUnknownFallthroughShadowDecision(telemetry["recent_shadow_decisions"]) {
+		t.Fatalf("expected recent unknown fallthrough shadow decision, got telemetry=%#v", telemetry)
+	}
+}
+
+func TestHyperlaneShadowObservationBoundsRecentComparisons(t *testing.T) {
+	var telemetry hyperlaneTelemetryStore
+	var snapshot map[string]any
+	for i := 0; i < hyperlaneTelemetryMaxShadowDecisions+5; i++ {
+		if i%2 == 0 {
+			snapshot = telemetry.record(hyperlane.Intent{
+				ID:          "deterministic-" + strconv.Itoa(i),
+				Type:        hyperlane.IntentStatusQuery,
+				Confidence:  0.86,
+				Route:       hyperlane.RouteStructuredStatus,
+				MatchedRule: "status_query",
+				Trace: hyperlane.IntentTrace{
+					ParserVersion: hyperlane.ParserVersion,
+					MatchedRule:   "status_query",
+					Confidence:    0.86,
+					Route:         hyperlane.RouteStructuredStatus,
+				},
+			}, hyperlaneTelemetryOutcomeNoModel, true)
+			continue
+		}
+		snapshot = telemetry.record(hyperlane.UnknownIntent("fallthrough-"+strconv.Itoa(i), "requires legacy fallback", nil), hyperlaneTelemetryOutcomeFallthrough, false)
+	}
+
+	report := metadataMap(snapshot, "shadow_observation")
+	if report == nil {
+		t.Fatalf("expected shadow_observation report, snapshot=%#v", snapshot)
+	}
+	if got := recentComparisonCount(report["recent_comparisons"]); got != hyperlaneTelemetryMaxShadowDecisions {
+		t.Fatalf("recent comparisons=%d want %d report=%#v", got, hyperlaneTelemetryMaxShadowDecisions, report)
+	}
+	if got := numericMetadataValue(report["deterministic_no_model_count"]); got == 0 {
+		t.Fatalf("expected deterministic no-model comparisons, report=%#v", report)
+	}
+	if got := numericMetadataValue(report["fallthrough_count"]); got == 0 {
+		t.Fatalf("expected fallthrough comparisons, report=%#v", report)
+	}
+}
+
 func TestHyperlaneNoModelDoesNotLeakWrongWorkspaceDataAndHandlesEmptyState(t *testing.T) {
 	srv, st, fake := newHyperlaneNoModelHarness(t)
 	now := time.Now().UnixMilli()
@@ -226,6 +335,7 @@ func TestHyperlaneNoModelAssistantStreamReturnsStructuredResponse(t *testing.T) 
 
 func newHyperlaneNoModelHarness(t *testing.T) (*Server, *store.Store, *fakeModelRuntime) {
 	t.Helper()
+	resetProcessHyperlaneTelemetryForTest(t)
 	srv, st := newBackupAuditHarness(t)
 	fake := newFakeModelRuntime()
 	srv.modelRuntime = fake
@@ -379,4 +489,70 @@ func mustExecHyperlane(t *testing.T, st *store.Store, query string, args ...any)
 	if _, err := st.DB.Exec(query, args...); err != nil {
 		t.Fatalf("exec %q: %v", query, err)
 	}
+}
+
+func hyperlaneTelemetryMetadata(t *testing.T, resp chatPostResponse) map[string]any {
+	t.Helper()
+	meta := resp.AssistantMessage.Metadata
+	telemetry, ok := meta["hyperlane_telemetry"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected hyperlane_telemetry metadata, got %#v", meta)
+	}
+	return telemetry
+}
+
+func numericMetadataValue(v any) int64 {
+	switch n := v.(type) {
+	case int:
+		return int64(n)
+	case int64:
+		return n
+	case float64:
+		return int64(n)
+	default:
+		return 0
+	}
+}
+
+func containsUnknownFallthroughShadowDecision(v any) bool {
+	recent, ok := v.([]any)
+	if !ok {
+		return false
+	}
+	for _, item := range recent {
+		row, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if asString(row["intent_type"]) == "unknown" &&
+			asString(row["outcome"]) == "fallthrough" &&
+			asString(row["rejected_reason"]) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func recentComparisonCount(v any) int {
+	switch recent := v.(type) {
+	case []map[string]any:
+		return len(recent)
+	case []any:
+		return len(recent)
+	default:
+		return 0
+	}
+}
+
+func resetProcessHyperlaneTelemetryForTest(t *testing.T) {
+	t.Helper()
+	processHyperlaneTelemetry.mu.Lock()
+	processHyperlaneTelemetry.startedAt = time.Time{}
+	processHyperlaneTelemetry.totalObserved = 0
+	processHyperlaneTelemetry.intentCounts = nil
+	processHyperlaneTelemetry.routeCounts = nil
+	processHyperlaneTelemetry.matchedRuleCounts = nil
+	processHyperlaneTelemetry.outcomeCounts = nil
+	processHyperlaneTelemetry.recentShadowDecisions = nil
+	processHyperlaneTelemetry.mu.Unlock()
 }

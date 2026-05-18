@@ -6,6 +6,10 @@ Implementation location:
 
 - `services/core/internal/aios/controllane`
 
+## Read This If You Want
+
+Read this if you want the live Control Lane implementation boundary: how semantic syscalls are validated, authorized, committed, audited, and where partial FORGE-K validation/enforcement seams currently live without making the simulator live authority.
+
 ## Responsibilities
 
 Control Lane owns:

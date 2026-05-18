@@ -3,6 +3,10 @@
 Status date: 2026-04-23  
 Scope: branch-local architecture baseline after code inspection of the current Phase 3-5 surfaces.
 
+## Read This If You Want
+
+Read this if you want the current live FORGE AI-OS authority map: which runtime surfaces own semantic mutation, gateway execution, modelruntime, approvals, audit, and deterministic routing today.
+
 ## Core rule
 
 FORGE is the AI-OS.  

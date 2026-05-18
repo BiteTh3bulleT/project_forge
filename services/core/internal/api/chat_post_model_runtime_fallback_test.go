@@ -279,6 +279,86 @@ func TestChatPostSyncUsesRequestedModelRuntimeModel(t *testing.T) {
 	}
 }
 
+func TestChatPostSyncUsesSelectedLocalOllamaModelWhenSettingsModelBlank(t *testing.T) {
+	t.Setenv("OLLAMA_MODEL", "")
+	srv, st := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.chatErr = errors.New("runtime cold start timeout")
+	fakeRuntime.models["gemma4:e4b"] = ModelRuntimeModel{
+		ID:           "gemma4:e4b",
+		DisplayName:  "Gemma 4",
+		Backend:      "ollama_compat",
+		Format:       "gguf",
+		Status:       "available",
+		Capabilities: []string{"chat", "completion"},
+		Metadata: map[string]any{
+			"provider": "ollama",
+			"remote":   false,
+		},
+	}
+	srv.modelRuntime = fakeRuntime
+
+	var sawModel string
+	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/chat" {
+			t.Fatalf("unexpected ollama path %s", r.URL.Path)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode ollama body: %v", err)
+		}
+		sawModel = strings.TrimSpace(asString(body["model"]))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"message":{"role":"assistant","content":"native selected"}}`))
+	}))
+	defer ollama.Close()
+
+	ctx := context.Background()
+	if err := upsertSetting(ctx, st.DB, "ollama_base_url", ollama.URL); err != nil {
+		t.Fatalf("set ollama base url: %v", err)
+	}
+	if err := upsertSetting(ctx, st.DB, "ollama_model", ""); err != nil {
+		t.Fatalf("clear ollama model: %v", err)
+	}
+
+	thread, err := srv.chat.CreateThread(ctx, "selected native fallback", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+
+	raw := []byte(`{"content":"use selected ollama model","requestAssistant":true,"syncAssistant":true,"modelId":"gemma4:e4b"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message in response")
+	}
+	if strings.TrimSpace(payload.AssistantMessage.Content) != "native selected" {
+		t.Fatalf("expected native ollama response, got %q", payload.AssistantMessage.Content)
+	}
+	if sawModel != "gemma4:e4b" {
+		t.Fatalf("expected native ollama call to use selected model gemma4:e4b, got %q", sawModel)
+	}
+	if ok, _ := payload.AssistantMessage.Metadata["ollamaOk"].(bool); !ok {
+		t.Fatalf("expected ollamaOk metadata, got %#v", payload.AssistantMessage.Metadata["ollamaOk"])
+	}
+	if got := strings.TrimSpace(asString(payload.AssistantMessage.Metadata["ollamaModelSource"])); got != "selected_model" {
+		t.Fatalf("expected ollamaModelSource=selected_model, got %q", got)
+	}
+	if fakeRuntime.chatCalls != 0 {
+		t.Fatalf("expected selected local ollama model to bypass model runtime chat, got %d calls", fakeRuntime.chatCalls)
+	}
+}
+
 func TestChatPostSyncBoundsPlainModelRuntimePrompt(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	fakeRuntime := newFakeModelRuntime()
@@ -477,6 +557,55 @@ func TestChatLLMMessagesIncludeMemoryObservations(t *testing.T) {
 	_, user := srv.buildChatLLMMessages(context.Background(), detail)
 	if !strings.Contains(user, "MEMORY OBSERVATIONS") || !strings.Contains(user, "compact context cards") {
 		t.Fatalf("expected memory observations in user prompt, got %q", user)
+	}
+}
+
+func TestChatLLMMessagesIncludeMemoryObservationsAfterStoreReopen(t *testing.T) {
+	ctx := context.Background()
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st1, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open initial store: %v", err)
+	}
+	memorySvc := memory.New(st1.DB)
+	if _, err := memorySvc.RecordObservation(ctx, memory.RecordObservationRequest{
+		Type:              "decision",
+		Summary:           "Cross-session recall marker: remember the basalt notebook.",
+		RawContent:        "The basalt notebook belongs in reopened chat memory.",
+		OriginKind:        "test",
+		OriginID:          "cross-session-memory-observation",
+		Confidence:        0.95,
+		VerificationState: "observed",
+	}); err != nil {
+		t.Fatalf("record observation before reopen: %v", err)
+	}
+	if err := st1.Close(); err != nil {
+		t.Fatalf("close initial store: %v", err)
+	}
+
+	st2, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	t.Cleanup(func() { _ = st2.Close() })
+	srv2 := NewServer(st2, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv2.ShutdownWatch() })
+
+	thread, err := srv2.chat.CreateThread(ctx, "reopened memory observations", nil)
+	if err != nil {
+		t.Fatalf("create reopened thread: %v", err)
+	}
+	if _, err := srv2.chat.AppendMessage(ctx, thread.ID, "user", "what should you remember after reopen?", nil); err != nil {
+		t.Fatalf("append reopened message: %v", err)
+	}
+	detail, err := srv2.chat.GetThread(ctx, thread.ID)
+	if err != nil {
+		t.Fatalf("get reopened thread: %v", err)
+	}
+	_, user := srv2.buildChatLLMMessages(ctx, detail)
+	if !strings.Contains(user, "MEMORY OBSERVATIONS") || !strings.Contains(user, "basalt notebook") {
+		t.Fatalf("expected reopened memory observation in user prompt, got %q", user)
 	}
 }
 

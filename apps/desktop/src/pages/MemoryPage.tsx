@@ -15,6 +15,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useUiStore } from "../stores/uiStore";
 import { MemoryControlsPanel } from "./MemoryPage/MemoryControlsPanel";
+import { MemoryNoteComposer } from "./MemoryPage/MemoryNoteComposer";
 import {
   ObservationDetailPanel,
   ObservationsPanel,
@@ -348,6 +349,17 @@ export function MemoryPage() {
         onApplyObservationFilters={() => void loadObservations()}
         onRefreshVSARuns={() => void loadVSARuns()}
       />
+
+      {memoryView === "all" || memoryView === "inspect" ? (
+        <MemoryNoteComposer
+          dossierId={dossierId}
+          loadObservations={loadObservations}
+          setSelectedObsId={setSelectedObsId}
+          setErr={setErr}
+          setStatus={setStatus}
+          setStatusLine={setStatusLine}
+        />
+      ) : null}
 
       {memoryView === "all" || memoryView === "inspect" ? (
         <div className="grid gap-6 xl:grid-cols-2">

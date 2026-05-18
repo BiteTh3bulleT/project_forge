@@ -59,12 +59,20 @@ type BackendHealth struct {
 }
 
 type BackendSupervisionSnapshot struct {
-	LastProbeAt         time.Time `json:"lastProbeAt,omitempty"`
-	ConsecutiveFailures int       `json:"consecutiveFailures"`
-	LastError           string    `json:"lastError,omitempty"`
-	RestartSupported    bool      `json:"restartSupported"`
-	RestartAttempted    bool      `json:"restartAttempted"`
-	RestartReason       string    `json:"restartReason,omitempty"`
+	LastProbeAt            time.Time `json:"lastProbeAt,omitempty"`
+	LastHealthyAt          time.Time `json:"lastHealthyAt,omitempty"`
+	LastFailureAt          time.Time `json:"lastFailureAt,omitempty"`
+	ProbeCount             int       `json:"probeCount"`
+	ConsecutiveFailures    int       `json:"consecutiveFailures"`
+	LastError              string    `json:"lastError,omitempty"`
+	State                  string    `json:"state,omitempty"`
+	SupervisionMode        string    `json:"supervisionMode,omitempty"`
+	RestartPolicy          string    `json:"restartPolicy,omitempty"`
+	RestartSupported       bool      `json:"restartSupported"`
+	RestartAttempted       bool      `json:"restartAttempted"`
+	RestartRecommended     bool      `json:"restartRecommended"`
+	RestartReason          string    `json:"restartReason,omitempty"`
+	RequiresOperatorAction bool      `json:"requiresOperatorAction"`
 }
 
 type BackendInspectResult struct {

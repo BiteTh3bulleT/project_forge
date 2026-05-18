@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"forge/projectforge/services/core/internal/aios/hyperlane"
@@ -28,6 +29,32 @@ type hyperlaneResponderResult struct {
 	Details                 map[string]any
 }
 
+const (
+	hyperlaneTelemetryMaxKeys                   = 32
+	hyperlaneTelemetryMaxShadowDecisions        = 16
+	hyperlaneShadowRequiredMinWindowDays        = 7
+	hyperlaneTelemetryOutcomeNoModel            = "no_model"
+	hyperlaneTelemetryOutcomeFallthrough        = "fallthrough"
+	hyperlaneTelemetryOtherKey                  = "other"
+	hyperlaneTelemetryUnknownKey                = "unknown"
+	hyperlaneTelemetryShadowBehaviorFallthrough = "fallthrough_model_path"
+	hyperlaneTelemetryShadowBehaviorNoModel     = "deterministic_no_model_active"
+	hyperlaneTelemetryShadowComparisonMode      = "classifier_vs_legacy_fallback"
+)
+
+type hyperlaneTelemetryStore struct {
+	mu                    sync.Mutex
+	startedAt             time.Time
+	totalObserved         int64
+	intentCounts          map[string]int64
+	routeCounts           map[string]int64
+	matchedRuleCounts     map[string]int64
+	outcomeCounts         map[string]int64
+	recentShadowDecisions []map[string]any
+}
+
+var processHyperlaneTelemetry hyperlaneTelemetryStore
+
 func (s *Server) maybeRespondHyperlaneNoModel(
 	ctx context.Context,
 	threadID, userMessageID int64,
@@ -35,9 +62,12 @@ func (s *Server) maybeRespondHyperlaneNoModel(
 ) (*chat.Message, bool) {
 	start := time.Now()
 	intent := gateway.ParseHyperlaneIntent(lastUserContent)
-	if intent.RequiresModel || !gateway.SupportsNoModelHyperlaneRoute(intent) {
+	supportedNoModel := !intent.RequiresModel && gateway.SupportsNoModelHyperlaneRoute(intent)
+	if !supportedNoModel {
+		processHyperlaneTelemetry.record(intent, hyperlaneTelemetryOutcomeFallthrough, false)
 		return nil, false
 	}
+	telemetry := processHyperlaneTelemetry.record(intent, hyperlaneTelemetryOutcomeNoModel, supportedNoModel)
 
 	result := s.respondHyperlaneNoModel(ctx, intent)
 	latency := time.Since(start).Milliseconds()
@@ -67,6 +97,7 @@ func (s *Server) maybeRespondHyperlaneNoModel(
 		"hyperlane_confidence":    result.Confidence,
 		"hyperlane_matched_rule":  result.MatchedRule,
 		"hyperlane_trace":         intentTrace,
+		"hyperlane_telemetry":     telemetry,
 		"modelruntime_avoided":    true,
 		"context_compile_avoided": result.ContextCompileAvoided,
 		"gateway_avoided":         true,
@@ -79,6 +110,7 @@ func (s *Server) maybeRespondHyperlaneNoModel(
 		"hyperlane_matched_rule":     result.MatchedRule,
 		"hyperlane_parser_version":   intent.Trace.ParserVersion,
 		"hyperlane_trace":            intentTrace,
+		"hyperlane_telemetry":        telemetry,
 		"modelruntime_avoided":       true,
 		"context_compile_avoided":    result.ContextCompileAvoided,
 		"gateway_avoided":            true,
@@ -107,6 +139,167 @@ func (s *Server) maybeRespondHyperlaneNoModel(
 		"gatewayAvoided":      true,
 	})
 	return am, true
+}
+
+func (t *hyperlaneTelemetryStore) record(intent hyperlane.Intent, outcome string, supportedNoModel bool) map[string]any {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	now := time.Now()
+	t.initLocked(now)
+	t.totalObserved++
+	incrementBoundedTelemetryKey(t.intentCounts, string(intent.Type))
+	incrementBoundedTelemetryKey(t.routeCounts, intent.Route)
+	incrementBoundedTelemetryKey(t.matchedRuleCounts, intent.MatchedRule)
+	incrementBoundedTelemetryKey(t.outcomeCounts, outcome)
+
+	t.recentShadowDecisions = append(t.recentShadowDecisions, hyperlaneShadowDecisionSummary(intent, outcome, supportedNoModel, now))
+	if len(t.recentShadowDecisions) > hyperlaneTelemetryMaxShadowDecisions {
+		t.recentShadowDecisions = append([]map[string]any(nil), t.recentShadowDecisions[len(t.recentShadowDecisions)-hyperlaneTelemetryMaxShadowDecisions:]...)
+	}
+
+	return t.snapshotLocked(now)
+}
+
+func (t *hyperlaneTelemetryStore) initLocked(now time.Time) {
+	if t.startedAt.IsZero() {
+		t.startedAt = now
+	}
+	if t.intentCounts == nil {
+		t.intentCounts = map[string]int64{}
+	}
+	if t.routeCounts == nil {
+		t.routeCounts = map[string]int64{}
+	}
+	if t.matchedRuleCounts == nil {
+		t.matchedRuleCounts = map[string]int64{}
+	}
+	if t.outcomeCounts == nil {
+		t.outcomeCounts = map[string]int64{}
+	}
+}
+
+func (t *hyperlaneTelemetryStore) snapshotLocked(now time.Time) map[string]any {
+	return map[string]any{
+		"total_observed":          t.totalObserved,
+		"intent_counts":           copyTelemetryCounts(t.intentCounts),
+		"route_counts":            copyTelemetryCounts(t.routeCounts),
+		"matched_rule_counts":     copyTelemetryCounts(t.matchedRuleCounts),
+		"outcome_counts":          copyTelemetryCounts(t.outcomeCounts),
+		"recent_shadow_decisions": copyShadowDecisions(t.recentShadowDecisions),
+		"shadow_observation":      t.shadowObservationReportLocked(now),
+		"bounded": map[string]any{
+			"max_keys_per_counter":      hyperlaneTelemetryMaxKeys,
+			"max_recent_shadow_records": hyperlaneTelemetryMaxShadowDecisions,
+		},
+	}
+}
+
+func (t *hyperlaneTelemetryStore) shadowObservationReportLocked(now time.Time) map[string]any {
+	started := t.startedAt
+	if started.IsZero() {
+		started = now
+	}
+	elapsed := now.Sub(started)
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	minWindow := time.Duration(hyperlaneShadowRequiredMinWindowDays) * 24 * time.Hour
+	ready := elapsed >= minWindow
+	readyReason := "minimum shadow observation window has elapsed"
+	if !ready {
+		readyReason = "minimum shadow observation window has not elapsed"
+	}
+	return map[string]any{
+		"started_at":                       started.UTC().Format(time.RFC3339Nano),
+		"started_at_ms":                    started.UnixMilli(),
+		"required_min_window_days":         int64(hyperlaneShadowRequiredMinWindowDays),
+		"elapsed":                          elapsed.String(),
+		"elapsed_ms":                       elapsed.Milliseconds(),
+		"elapsed_days":                     elapsed.Hours() / 24,
+		"deterministic_no_model_count":     t.outcomeCounts[hyperlaneTelemetryOutcomeNoModel],
+		"fallthrough_count":                t.outcomeCounts[hyperlaneTelemetryOutcomeFallthrough],
+		"recent_comparisons":               copyShadowDecisions(t.recentShadowDecisions),
+		"max_recent_comparison_records":    int64(hyperlaneTelemetryMaxShadowDecisions),
+		"ready_to_flip":                    ready,
+		"ready_reason":                     readyReason,
+		"comparison_mode":                  hyperlaneTelemetryShadowComparisonMode,
+		"current_behavior":                 "deterministic no-model route is already active for supported intents; unsupported intents still fall through to the legacy model path; this report observes decisions only and does not alter output",
+		"shadow_changes_output":            false,
+		"shadow_calls_modelruntime":        false,
+		"shadow_executes_gateway":          false,
+		"shadow_commits_canonical_state":   false,
+		"legacy_fallback_output_compared":  false,
+		"legacy_fallback_comparison_scope": "decision telemetry only",
+	}
+}
+
+func incrementBoundedTelemetryKey(counts map[string]int64, key string) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		key = hyperlaneTelemetryUnknownKey
+	}
+	if _, ok := counts[key]; ok || len(counts) < hyperlaneTelemetryMaxKeys {
+		counts[key]++
+		return
+	}
+	counts[hyperlaneTelemetryOtherKey]++
+}
+
+func copyTelemetryCounts(in map[string]int64) map[string]int64 {
+	out := make(map[string]int64, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+func copyShadowDecisions(in []map[string]any) []map[string]any {
+	out := make([]map[string]any, 0, len(in))
+	for _, row := range in {
+		next := make(map[string]any, len(row))
+		for k, v := range row {
+			next[k] = v
+		}
+		out = append(out, next)
+	}
+	return out
+}
+
+func hyperlaneShadowDecisionSummary(intent hyperlane.Intent, outcome string, supportedNoModel bool, recordedAt time.Time) map[string]any {
+	behavior := hyperlaneTelemetryShadowBehaviorFallthrough
+	classifierDecision := "fallthrough_legacy_path"
+	legacyFallbackBehavior := "legacy_model_path_preserved"
+	if outcome == hyperlaneTelemetryOutcomeNoModel {
+		behavior = hyperlaneTelemetryShadowBehaviorNoModel
+		classifierDecision = "deterministic_no_model"
+		legacyFallbackBehavior = "not_executed_current_route_active"
+	}
+	return map[string]any{
+		"recorded_at":              recordedAt.UTC().Format(time.RFC3339Nano),
+		"recorded_at_ms":           recordedAt.UnixMilli(),
+		"intent_id":                strings.TrimSpace(intent.ID),
+		"intent_type":              nonEmpty(strings.TrimSpace(string(intent.Type)), hyperlaneTelemetryUnknownKey),
+		"route":                    nonEmpty(strings.TrimSpace(intent.Route), hyperlaneTelemetryUnknownKey),
+		"matched_rule":             nonEmpty(strings.TrimSpace(intent.MatchedRule), hyperlaneTelemetryUnknownKey),
+		"confidence":               intent.Confidence,
+		"parser_version":           strings.TrimSpace(intent.Trace.ParserVersion),
+		"requires_model":           intent.RequiresModel,
+		"requires_gateway":         intent.RequiresGateway,
+		"supports_no_model":        supportedNoModel,
+		"outcome":                  outcome,
+		"behavior":                 behavior,
+		"classifier_decision":      classifierDecision,
+		"comparison_mode":          hyperlaneTelemetryShadowComparisonMode,
+		"legacy_fallback_behavior": legacyFallbackBehavior,
+		"output_altered_by_shadow": false,
+		"rejected_reason":          strings.TrimSpace(intent.Trace.RejectedReason),
+		"warnings_count":           len(intent.Trace.Warnings),
+		"canonical_write":          false,
+		"gateway_execution":        false,
+		"modelruntime_call":        false,
+		"model_output_truth":       false,
+	}
 }
 
 func (s *Server) respondHyperlaneNoModel(ctx context.Context, intent hyperlane.Intent) hyperlaneResponderResult {

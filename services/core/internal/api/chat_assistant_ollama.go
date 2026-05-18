@@ -85,7 +85,7 @@ func (s *Server) completeAssistantWithoutTools(
 	}
 
 	manifests = getManifests()
-	if s.modelRuntime != nil {
+	if s.modelRuntime != nil && !s.nativeOllamaSelectedModelAvailable(ctx, ollamaAdapter, requestedModelID) {
 		recordStage("runtime_primary", map[string]any{"reason": "plain chat prefers model runtime"})
 		if am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "model-runtime-first plain chat path", requestedModelID, requestStart, perf); am != nil {
 			return am
@@ -95,7 +95,7 @@ func (s *Server) completeAssistantWithoutTools(
 	}
 
 	if emit != nil {
-		if am := s.completeAssistantWithNativeOllamaStream(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, corr, getManifests, stages, pushStage, emit, requestStart, perf); am != nil {
+		if am := s.completeAssistantWithNativeOllamaStream(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, corr, getManifests, stages, pushStage, emit, requestStart, perf, requestedModelID); am != nil {
 			return am
 		}
 	}
@@ -125,7 +125,7 @@ func (s *Server) completeAssistantWithoutTools(
 	}
 
 	baseURL := ol.BaseURLForChat(ctx)
-	model := ol.ModelForChat(ctx)
+	model, modelSource := s.resolveNativeOllamaChatModel(ctx, ol, requestedModelID)
 	if strings.TrimSpace(model) == "" {
 		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama model is not configured", requestedModelID, requestStart, perf)
 		if am != nil {
@@ -200,6 +200,7 @@ func (s *Server) completeAssistantWithoutTools(
 		"replyToUserMessageId": userMessageID,
 		"correlationId":        corr,
 		"ollamaOk":             true,
+		"ollamaModelSource":    modelSource,
 		"toolsBypassed":        true,
 		"chatLatencyTrace":     trace,
 		"toolManifest":         manifests,
@@ -211,6 +212,8 @@ func (s *Server) completeAssistantWithoutTools(
 			"toolCallEmitted":    false,
 			"executionState":     "skipped",
 			"latencyTrace":       trace,
+			"model":              model,
+			"modelSource":        modelSource,
 		},
 	}
 	if len(contentWarnings) > 0 {
@@ -234,6 +237,7 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 	emit func(event string, payload map[string]any),
 	requestStart time.Time,
 	perf chatPerformanceDecision,
+	requestedModelID string,
 ) *chat.Message {
 	ol, ok := ollamaAdapter.(adapters.Ollama)
 	if !ok {
@@ -241,7 +245,7 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 		return nil
 	}
 	baseURL := ol.BaseURLForChat(ctx)
-	model := ol.ModelForChat(ctx)
+	model, modelSource := s.resolveNativeOllamaChatModel(ctx, ol, requestedModelID)
 	if strings.TrimSpace(model) == "" {
 		pushStage("ollama_native_stream_unavailable", map[string]any{"reason": "ollama model is not configured"})
 		return nil
@@ -258,6 +262,7 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 
 	pushStage("ollama_native_stream_start", map[string]any{
 		"model":        model,
+		"modelSource":  modelSource,
 		"promptBudget": modelRuntimePromptBudgetMap(promptBudget),
 	})
 
@@ -324,6 +329,7 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 		"correlationId":        corr,
 		"ollamaOk":             true,
 		"ollamaStream":         true,
+		"ollamaModelSource":    modelSource,
 		"chatLatencyTrace":     trace,
 		"streamBatching": map[string]any{
 			"flushChars":      assistantStreamFlushChars,
@@ -341,6 +347,7 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 			"executionState":     "skipped",
 			"fallback":           "ollama_native_stream",
 			"model":              model,
+			"modelSource":        modelSource,
 			"promptBudget":       modelRuntimePromptBudgetMap(promptBudget),
 			"latencyTrace":       trace,
 			"contextBudgetClass": perf.ContextBudgetClass,
@@ -358,4 +365,46 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 	}
 	pushStage("ollama_native_stream_done", map[string]any{"messageId": am.ID})
 	return am
+}
+
+func (s *Server) resolveNativeOllamaChatModel(ctx context.Context, ol adapters.Ollama, requestedModelID string) (string, string) {
+	if configured := strings.TrimSpace(ol.ModelForChat(ctx)); configured != "" {
+		return configured, "settings"
+	}
+	requested := strings.TrimSpace(requestedModelID)
+	if requested == "" || s.modelRuntime == nil {
+		return "", ""
+	}
+	models, err := s.modelRuntime.ListModels(ctx, ModelRuntimeListRequest{})
+	if err != nil {
+		return "", ""
+	}
+	for _, model := range models {
+		if !strings.EqualFold(strings.TrimSpace(model.ID), requested) {
+			continue
+		}
+		if !modelRuntimeModelSupportsChat(model) || !modelRuntimeModelUsableForChat(model) {
+			return "", ""
+		}
+		if strings.ToLower(strings.TrimSpace(model.Backend)) != "ollama_compat" {
+			return "", ""
+		}
+		if remote, ok := model.Metadata["remote"].(bool); ok && remote {
+			return "", ""
+		}
+		if provider, ok := model.Metadata["provider"].(string); ok && strings.TrimSpace(provider) != "" && !strings.EqualFold(strings.TrimSpace(provider), "ollama") {
+			return "", ""
+		}
+		return strings.TrimSpace(model.ID), "selected_model"
+	}
+	return "", ""
+}
+
+func (s *Server) nativeOllamaSelectedModelAvailable(ctx context.Context, ollamaAdapter adapters.Adapter, requestedModelID string) bool {
+	ol, ok := ollamaAdapter.(adapters.Ollama)
+	if !ok {
+		return false
+	}
+	model, source := s.resolveNativeOllamaChatModel(ctx, ol, requestedModelID)
+	return strings.TrimSpace(model) != "" && source == "selected_model"
 }

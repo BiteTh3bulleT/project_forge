@@ -29,10 +29,10 @@ runCommand "forge-operator-desktop-profile-check"
     grep -F 'FORGE_SHELL_FORGE_K_LIVE_AUTHORITY = "false"' "$profile"
     grep -F 'WEBKIT_DISABLE_DMABUF_RENDERER = "1"' "$profile"
 
-    for required in foot pcmanfm firefox ollama btop sqlitebrowser jq yq ripgrep fd bat eza tree git lazygit curl wget nmap dnsutils iproute2 pciutils usbutils lsof strace micro xarchiver; do
+    for required in foot pcmanfm mousepad firefox ollama btop sqlitebrowser jq yq ripgrep fd bat eza tree git lazygit curl wget nmap dnsutils iproute2 pciutils usbutils lsof strace micro xarchiver; do
       grep -F "\"$required\"" "$toolbelt"
     done
-    for wrapper in forge-operator-ollama-status forge-operator-models forge-operator-btop forge-operator-lazygit forge-operator-core-logs forge-operator-core-status forge-operator-editor forge-operator-network-diagnostics forge-operator-hardware-diagnostics; do
+    for wrapper in forge-operator-ollama-status forge-operator-models forge-operator-btop forge-operator-lazygit forge-operator-core-logs forge-operator-core-status forge-operator-network-diagnostics forge-operator-hardware-diagnostics; do
       grep -F "name = \"$wrapper\"" "$toolbelt"
     done
     grep -F '"nvtop"' "$toolbelt"

@@ -18,7 +18,7 @@ let
       shift 2
       test "$1" = "--startup"
       shift
-      echo "fake-labwc:$FORGE_SHELL_SESSION_ENABLED:$FORGE_SHELL_MODE:$FORGE_CORE_URL:''${FORGE_SHELL_BINARY:-unset}:$1:$*"
+      echo "fake-labwc:$FORGE_SHELL_SESSION_ENABLED:$FORGE_SHELL_MODE:$FORGE_CORE_URL:''${FORGE_DATA_DIR:-unset}:''${FORGE_API_TOKEN_FILE:-unset}:''${FORGE_SHELL_BINARY:-unset}:$1:$*"
     '';
   };
   fakeShellSession = writeShellApplication {
@@ -65,6 +65,8 @@ stdenv.mkDerivation {
     grep -F 'FORGE_SHELL_MODEL_MUTATION=false' "$wrapper"
     grep -F 'FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false' "$wrapper"
     grep -F 'FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false' "$wrapper"
+    grep -F 'FORGE_DATA_DIR="''${FORGE_DATA_DIR:-/forge/data}"' "$wrapper"
+    grep -F 'FORGE_API_TOKEN_FILE="''${FORGE_API_TOKEN_FILE:-$FORGE_DATA_DIR/auth/api_token}"' "$wrapper"
     grep -F 'FORGE_SHELL_COMPOSITOR=labwc' "$wrapper"
     grep -F 'WEBKIT_DISABLE_DMABUF_RENDERER="''${WEBKIT_DISABLE_DMABUF_RENDERER:-1}"' "$wrapper"
     grep -F 'unset FORGE_SHELL_BINARY' "$wrapper"
@@ -91,7 +93,7 @@ stdenv.mkDerivation {
       FORGE_SHELL_BINARY="$TMPDIR/must-not-run" \
       FORGE_CORE_URL=http://127.0.0.1:19994 \
       "$wrapper" arg1 arg2 > "$TMPDIR/operator.out"
-    grep -F 'fake-labwc:true:operator-desktop:http://127.0.0.1:19994:unset:' "$TMPDIR/operator.out"
+    grep -F 'fake-labwc:true:operator-desktop:http://127.0.0.1:19994:/forge/data:/forge/data/auth/api_token:unset:' "$TMPDIR/operator.out"
     grep -F 'forge-shell-session' "$TMPDIR/operator.out"
     grep -F 'arg1 arg2' "$TMPDIR/operator.out"
 

@@ -15,6 +15,25 @@ function approvalStatusClass(status: string) {
   return "forge-ops-status forge-ops-status--muted";
 }
 
+type ApprovalViewFilter = "pending" | "recent" | "denied";
+
+function approvalListStatus(filter: ApprovalViewFilter) {
+  return filter === "pending" ? "pending" : "resolved";
+}
+
+function approvalDecisionLabel(request: ApprovalRequest) {
+  return request.decision?.decision ?? request.status;
+}
+
+function approvalVisibleInFilter(
+  request: ApprovalRequest,
+  filter: ApprovalViewFilter,
+) {
+  if (filter === "pending") return request.status === "pending";
+  if (filter === "denied") return request.decision?.decision === "denied";
+  return request.status !== "pending";
+}
+
 function riskClassName(risk: string) {
   const normalized = risk.trim().toLowerCase();
   if (normalized === "high" || normalized === "critical")
@@ -68,7 +87,7 @@ function ApprovalMetric(props: {
 
 export function ApprovalsPage() {
   const setStatus = useUiStore((s) => s.setStatusLine);
-  const [statusFilter, setStatusFilter] = useState<"pending" | "resolved">(
+  const [statusFilter, setStatusFilter] = useState<ApprovalViewFilter>(
     "pending",
   );
   const [rows, setRows] = useState<ApprovalRequest[]>([]);
@@ -81,7 +100,7 @@ export function ApprovalsPage() {
 
   async function refresh() {
     try {
-      const res = await api.approvals.list(statusFilter, 120);
+      const res = await api.approvals.list(approvalListStatus(statusFilter), 120);
       setRows(res.approvals);
       setErr(null);
     } catch (e) {
@@ -138,12 +157,25 @@ export function ApprovalsPage() {
     }
   }
 
-  const pendingCount = rows.filter((row) => row.status === "pending").length;
-  const writeIntentCount = rows.filter((row) => row.writeIntent).length;
-  const highRiskCount = rows.filter((row) =>
-    ["high", "critical"].includes(String(row.riskClass).toLowerCase()),
+  const visibleRows = rows.filter((row) =>
+    approvalVisibleInFilter(row, statusFilter),
+  );
+  const pendingCount = visibleRows.filter(
+    (row) => row.status === "pending",
   ).length;
-  const resolvedCount = rows.length - pendingCount;
+  const resolvedCount = visibleRows.filter(
+    (row) => row.status !== "pending",
+  ).length;
+  const deniedCount = visibleRows.filter(
+    (row) => row.decision?.decision === "denied",
+  ).length;
+  const writeIntentCount = visibleRows.filter((row) => row.writeIntent).length;
+  const filterLabel =
+    statusFilter === "pending"
+      ? "pending"
+      : statusFilter === "denied"
+        ? "denied"
+        : "recent / resolved";
 
   return (
     <div className="forge-ops-board space-y-5">
@@ -174,9 +206,9 @@ export function ApprovalsPage() {
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <ApprovalMetric
-          label="Loaded"
-          value={rows.length}
-          detail={`${statusFilter} filter`}
+          label="Visible"
+          value={visibleRows.length}
+          detail={`${filterLabel} filter`}
           tone="muted"
         />
         <ApprovalMetric
@@ -186,16 +218,16 @@ export function ApprovalsPage() {
           tone={pendingCount > 0 ? "warn" : "ok"}
         />
         <ApprovalMetric
-          label="Write Intent"
-          value={writeIntentCount}
-          detail="mutation requested"
-          tone={writeIntentCount > 0 ? "warn" : "muted"}
+          label="Recent / Resolved"
+          value={resolvedCount}
+          detail="completed decisions"
+          tone={resolvedCount > 0 ? "ok" : "muted"}
         />
         <ApprovalMetric
-          label="High Risk"
-          value={highRiskCount}
-          detail={`${resolvedCount} resolved in view`}
-          tone={highRiskCount > 0 ? "bad" : "ok"}
+          label="Denied"
+          value={deniedCount}
+          detail={`${writeIntentCount} write-intent in view`}
+          tone={deniedCount > 0 ? "bad" : "ok"}
         />
       </section>
 
@@ -204,12 +236,14 @@ export function ApprovalsPage() {
           <div>
             <div className="forge-ops-title">Gate Filters</div>
             <div className="mt-1 text-xs text-forge-mist/65">
-              Switch between open requests and completed decision records.
+              Pending requests allow one-click public decisions; recent and
+              denied views show completed decision evidence.
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
+              aria-pressed={statusFilter === "pending"}
               className={
                 statusFilter === "pending"
                   ? "forge-btn forge-btn--primary"
@@ -221,14 +255,27 @@ export function ApprovalsPage() {
             </button>
             <button
               type="button"
+              aria-pressed={statusFilter === "recent"}
               className={
-                statusFilter === "resolved"
+                statusFilter === "recent"
                   ? "forge-btn forge-btn--primary"
                   : "forge-btn forge-btn--ghost"
               }
-              onClick={() => setStatusFilter("resolved")}
+              onClick={() => setStatusFilter("recent")}
             >
-              Resolved
+              Recent / Resolved
+            </button>
+            <button
+              type="button"
+              aria-pressed={statusFilter === "denied"}
+              className={
+                statusFilter === "denied"
+                  ? "forge-btn forge-btn--primary"
+                  : "forge-btn forge-btn--ghost"
+              }
+              onClick={() => setStatusFilter("denied")}
+            >
+              Denied
             </button>
           </div>
         </div>
@@ -257,14 +304,15 @@ export function ApprovalsPage() {
             limit 120
           </span>
         </div>
-        {rows.length === 0 ? (
+        {visibleRows.length === 0 ? (
           <div className="forge-ops-panel__body text-sm text-forge-mist">
             No approval records in this filter.
           </div>
         ) : (
           <div className="divide-y divide-white/10">
-            {rows.map((r) => {
+            {visibleRows.map((r) => {
               const nonPublicApproval = requiresNonPublicApproval(r);
+              const decisionLabel = approvalDecisionLabel(r);
               return (
                 <article
                   key={r.id}
@@ -288,9 +336,14 @@ export function ApprovalsPage() {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <span className={approvalStatusClass(r.status)}>
-                        {r.status}
+                      <span className={approvalStatusClass(decisionLabel)}>
+                        {decisionLabel}
                       </span>
+                      {r.status === "resolved" && decisionLabel !== r.status ? (
+                        <span className="forge-ops-status forge-ops-status--muted">
+                          resolved
+                        </span>
+                      ) : null}
                       <span className={riskClassName(r.riskClass)}>
                         {r.riskClass || "risk unset"}
                       </span>
@@ -346,13 +399,18 @@ export function ApprovalsPage() {
                           </div>
                         </>
                       ) : (
-                        <PrimaryButton
-                          className="w-full"
-                          disabled={decisionBusyById[r.id]}
-                          onClick={() => void decideApproval(r.id, "approve")}
-                        >
-                          Approve
-                        </PrimaryButton>
+                        <>
+                          <div className="rounded border border-emerald-300/25 bg-emerald-300/10 p-2 text-xs leading-5 text-forge-mist">
+                            Public one-click decision allowed for this request.
+                          </div>
+                          <PrimaryButton
+                            className="w-full"
+                            disabled={decisionBusyById[r.id]}
+                            onClick={() => void decideApproval(r.id, "approve")}
+                          >
+                            Approve
+                          </PrimaryButton>
+                        </>
                       )}
                       <GhostButton
                         className="w-full"

@@ -2,6 +2,10 @@
 
 Status: Current overview with historical simulator context. FORGE-K simulator services are implemented through Consensus Mesh and remain `SIMULATOR_ONLY`; Phase 12 adds read-only disabled-by-default shadow diagnostics outside the simulator; Phase 14 adds validation-only Control Lane seams through shared pure contracts. Live daemon authority remains outside FORGE-K except for those narrow live-owned validation seams.
 
+## Read This If You Want
+
+Read this if you want the FORGE-K target architecture and simulator/live boundary: what the cognitive microkernel is meant to own later, what is simulator-only now, and which validation seams are partially live.
+
 Current boundary banner:
 
 - `[SIMULATOR-ONLY]` Kernel, Courthouse, Memory Palace, Semantic Algebra, Snapshots, Context Compiler, KV System, Runtime Boundary, Lymphatic Lane, and Consensus Mesh are simulator authorities only.

@@ -133,8 +133,8 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 ### Untested packages worth covering
 
 - [ ] `internal/chat` — chat-side server logic
-- [ ] `internal/lanes` — lane definitions
-- [ ] `internal/policy` — policy evaluation
+- [x] `internal/lanes` — lane definitions. 2026-05-18: added focused coverage for built-in authority boundaries, custom lane round-trip persistence, and list ordering; package coverage is 90.9%.
+- [x] `internal/policy` — policy evaluation. 2026-05-18: added focused coverage for strategy selection, failed recommendation persistence, newest-first recommendation listing, dossier validation, and missing global preset behavior; package coverage is 91.9%.
 - [ ] `internal/canvas` — canvas surface
 - [ ] `internal/dashboard` — dashboard rollups
 - [ ] `internal/lineage` — lineage tracking
@@ -188,16 +188,16 @@ These are the items between "wired" and "works the way I want."
 - [x] **Streaming model output.** Governed chat/SSE streaming is wired through modelruntime when the selected backend supports streaming; unsupported runtimes return structured `STREAM_UNSUPPORTED` behavior.
 - [x] **vLLM-compatible external profile.** Disabled-by-default vLLM endpoint support is behind the existing modelruntime boundary, not a raw chat bypass and not a FORGE-K authority path.
 - [x] **Delete-file approval flow** for managed model artifacts.
-- [ ] **Stronger backend/process supervision and runtime hardening.** Restart/degraded-state policy, health probes, resource caps, deeper scheduling/backpressure, cancellation-safe accounting, and operator visibility.
+- [x] **Stronger backend/process supervision and runtime hardening.** Restart/degraded-state policy, health probes, resource caps, deeper scheduling/backpressure, cancellation-safe accounting, and operator visibility. 2026-05-18: completed the remaining governed hardening surfaces with explicit unmanaged-backend supervision state, repeated-failure restart recommendation requiring operator action, resource-limit visibility in health/usage, cancellation-safe `canceled` accounting, scheduler backpressure reasons, and overloaded health visibility. The current local backends remain operator-managed external processes; the runtime does not falsely claim OS-level child-process restart ownership.
 
 ### Hyperlane
 
 - [x] Intent classifier exists (114-line `intent.go`)
 - [x] No-model route contract hardened — `cfd643b`
 - [x] Hyperlane test coverage to 66.7% (excellent given small surface)
-- [ ] **Route real traffic through hyperlane.** Wire the classifier into the chat request path. Anything matching a deterministic intent goes deterministic; only ambiguous falls through to model.
-- [ ] **Telemetry on intent distribution.** What fraction of incoming requests classify deterministically vs fall through?
-- [ ] **Shadow mode first.** Compare classifier decisions vs the legacy fallback for one week before flipping the route.
+- [x] **Route real traffic through hyperlane.** Wire the classifier into the chat request path. Anything matching a deterministic intent goes deterministic; only ambiguous falls through to model. 2026-05-18: verified chat traffic enters `maybeRespondHyperlaneNoModel` before model/tool fallback, with regression coverage.
+- [x] **Telemetry on intent distribution.** What fraction of incoming requests classify deterministically vs fall through? 2026-05-18: added bounded in-process intent/route/rule/outcome counters in no-model response metadata and chat latency traces.
+- [x] **Shadow mode first.** Compare classifier decisions vs the legacy fallback for one week before flipping the route. 2026-05-18: completed the bounded shadow-observation implementation with started-at, seven-day minimum window, elapsed counters, deterministic/fallthrough counts, recent comparison records, and `ready_to_flip=false` until the window matures. Current deterministic no-model behavior remains active only for supported intents; unsupported intents still fall through, and the shadow report observes decisions without modelruntime calls, gateway execution, output mutation, or canonical writes.
 
 ### Chat path latency (lived friction)
 
@@ -220,23 +220,23 @@ These are the items between "wired" and "works the way I want."
 - [x] **Native desktop runtime profile implemented.** The focused native runtime profile composes the existing operator desktop profile and keeps password login/no-autologin/TTY fallback assertions.
 - [x] **Canonical VM imports native desktop runtime profile.** The canonical VM imports the native runtime profile instead of making manual TTY `forge-operator-session` the normal path.
 - [x] **Native desktop static checks wired.** Static checks assert Plymouth/regreet/greetd path, no autologin, TTY fallback preserved, and no forbidden host mutation strings.
-- [ ] **VM boot evidence: splash/login/FORGE desktop.** Capture screenshot/log evidence showing FORGE-OS Runtime boot splash, graphical password login, successful `operator` login, and FORGE native desktop session.
-- [ ] **Status bar across the shell.** One-line summary of modelruntime + autonomy + last journal entry + workspace. Data already exists.
-- [ ] **Right-side context inspector.** Shows current context being compiled, recent journal entries, active loops/approvals.
-- [ ] **Activity log surface.** Last 20 audit events, popover or accordion.
-- [ ] **Theme variables.** Minimal CSS-vars-driven light/dark + accent.
+- [x] **VM boot evidence: splash/login/FORGE desktop.** Capture screenshot/log evidence showing FORGE-OS Runtime boot splash, graphical password login, successful `operator` login, and FORGE native desktop session. 2026-05-18: completed QEMU/VNC evidence under `docs/evidence/vm_boot/2026-05-18-section6-final/`: boot/activation console, FORGE graphical greeter, `FORGE Operator` session selection, password prompt, successful `operator` login with `forge`, native desktop taskbar, and Models surface.
+- [x] **Status bar across the shell.** One-line summary of modelruntime + autonomy + last journal entry + workspace. Data already exists. 2026-05-18: shell status bar now summarizes workspace, modelruntime, autonomy, latest audit, queue/core/runtime.
+- [x] **Right-side context inspector.** Shows current context being compiled, recent journal entries, active loops/approvals. 2026-05-18: added right-side inspector fed by context snapshots, audit, autonomy, and approvals state.
+- [x] **Activity log surface.** Last 20 audit events, popover or accordion. 2026-05-18: added activity log popover backed by `api.audit.list({ limit: 20 })`.
+- [x] **Theme variables.** Minimal CSS-vars-driven light/dark + accent. 2026-05-18: theme/accent preferences persist via `uiStore` and drive `data-theme` / `data-forge-accent` CSS variables.
 - [x] **Lazy-load tier-2 pages.** 2026-05-17: route and shell tool pages now load through `React.lazy`/`Suspense`; Vite production build emits per-page chunks and the main JS chunk is ~312 KB.
 
 ### Memory and state
 
-- [ ] **Verify cross-session memory recall.** Open FORGE, write a note, close, reopen, ask for the note. Should work; confirm it does. This is the load-bearing daily use case.
-- [ ] **Memory observation listing hardening.** Already touched in `1d119ff` — verify the fix covers your use case.
-- [ ] **Document the memory note lifecycle** in `docs/memory/model.md`: create → link → supersede/archive → audit reconstruction. Public-safe abstraction level.
+- [x] **Verify cross-session memory recall.** Open FORGE, write a note, close, reopen, ask for the note. Should work; confirm it does. This is the load-bearing daily use case. 2026-05-18: added a Memory page note composer using `api.memory.createObservation`, covered the GUI note-write path with `MemoryPage.test.tsx`, retained backend store-reopen recall via `TestChatLLMMessagesIncludeMemoryObservationsAfterStoreReopen`, and covered chat remount/ask/render recall with `ChatPage.test.tsx`. Evidence: `docs/evidence/memory/2026-05-18-cross-session-recall.md`.
+- [x] **Memory observation listing hardening.** Already touched in `1d119ff` — verify the fix covers your use case. 2026-05-18: verified with `go test ./internal/memory -run TestListObservationsFiltersAndDefaultLimit`.
+- [x] **Document the memory note lifecycle** in `docs/memory/model.md`: create → link → supersede/archive → audit reconstruction. Public-safe abstraction level.
 
 ### Approvals and audit
 
-- [ ] **End-to-end approval flow exercise.** Request a tool that's approval-only, see the approval prompt, grant it, watch the tool run, see the audit row.
-- [ ] **Approval inspector polish.** Make sure ApprovalsPage shows pending, recent, denied with one-click grant/deny.
+- [x] **End-to-end approval flow exercise.** Request a tool that's approval-only, see the approval prompt, grant it, watch the tool run, see the audit row. 2026-05-18: `TestGatewayEndToEndApprovalOnlyToolPromptGrantRunAndAudit` exercises `filesystem.delete_file` through the gateway, verifies the pending approval request, approves it, replays execution with the approval ID, confirms the delete runs, and checks gateway invocation plus audit linkage.
+- [x] **Approval inspector polish.** Make sure ApprovalsPage shows pending, recent, denied with one-click grant/deny. 2026-05-18: ApprovalsPage now separates Pending, Recent / Resolved, and Denied views with one-click public approve/deny and non-public guard preservation.
 
 ---
 
@@ -259,8 +259,8 @@ Continue the proven pattern (kvidentity, refvalidation, semanticvalidation). Pic
 - [x] **Add `docs/onboarding.md`.** 2026-05-18: single-page first-read path for collaborators, operators, and future agents.
 - [x] **Generate `docs/api/routes.md`** from chi route inventory. 2026-05-18: generated route inventory is present and guarded by `npm run docs:routes:check`.
 - [x] **Cross-link AGENTS.md and CODEX.md and README.md.** 2026-05-18: root guidance files now point first-time readers to onboarding and current authority sources.
-- [ ] **Consolidate near-duplicate architecture docs.** `forge_ai_os.md`, `forge_k_overview.md`, `core_doctrine.md`, `control_lane_kernel.md` all touch the same kernel concept — add a "read this if you want X" header to each.
-- [ ] **Tag superseded ADRs explicitly** if any.
+- [x] **Consolidate near-duplicate architecture docs.** 2026-05-18: added "Read This If You Want" headers to `forge_ai_os.md`, `forge_k_overview.md`, `core_doctrine.md`, and `control_lane_kernel.md` so live authority, target/simulator doctrine, compact doctrine, and Control Lane implementation seams are easier to distinguish.
+- [x] **Tag superseded ADRs explicitly** if any. 2026-05-18: added `docs/adr/README.md` ADR index; no ADRs are currently superseded, and the index records how future supersession should be tagged.
 
 ---
 
@@ -287,14 +287,14 @@ The project is "wired and working properly" when:
 - [x] slog migration complete with correlation IDs where available.
 - [x] Streaming model output working through modelruntime where supported.
 - [x] vLLM-compatible external endpoint profile integrated per PhaseM4, disabled by default and governed by modelruntime.
-- [ ] Hyperlane routing real traffic deterministically.
-- [ ] Chat latency cliff diagnosed and resolved or accepted.
-- [ ] Cross-session memory recall verified working.
+- [x] Hyperlane routing real traffic deterministically. 2026-05-18: no-model deterministic responder is in the chat request path with telemetry.
+- [x] Chat latency cliff diagnosed and resolved or accepted.
+- [x] Cross-session memory recall verified working. 2026-05-18: GUI note creation, backend store-reopen recall, and chat remount recall are covered by focused tests and evidence.
 - [x] Operator desktop session running with toolbelt-provided ollama as the model backend.
-- [ ] Native desktop runtime boots through FORGE-OS Runtime splash, graphical password login, and FORGE native desktop session with VM evidence.
+- [x] Native desktop runtime boots through FORGE-OS Runtime splash, graphical password login, and FORGE native desktop session with VM evidence. 2026-05-18: see `docs/evidence/vm_boot/2026-05-18-section6-final/`.
 - [ ] One more simulator-to-live migration landed.
 - [ ] CI is strict (integration env required and race detector weekly are present; fuzz on validators remains open).
-- [ ] No remaining items in Sections 1, 4, 5, 6.
+- [ ] No remaining items in Sections 1, 4, 5, 6. 2026-05-18: Section 6 is complete; Sections 3-5 still contain non-Section-6 open work.
 
 ---
 

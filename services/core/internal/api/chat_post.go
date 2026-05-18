@@ -1209,7 +1209,7 @@ func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Reques
 		s.writeSSEEvent(w, map[string]any{"assistantMessage": am})
 		return
 	}
-	if _, ok := s.modelRuntime.(modelRuntimeStreamingService); ok && !gateway.ShouldAttachChatTools(umContent) {
+	if _, ok := s.modelRuntime.(modelRuntimeStreamingService); ok && !gateway.ShouldAttachChatTools(umContent) && !s.nativeOllamaSelectedModelAvailable(ctx, ollamaAdapter, requestedModelID) {
 		s.initSSE(w)
 		emitStage := func(stage string, data map[string]any) {
 			row := map[string]any{"stage": stage, "atMs": time.Now().UnixMilli()}
@@ -1256,7 +1256,7 @@ func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Reques
 			s.writeNamedSSEEvent(w, "agent_stage", row)
 		}
 		emitStage("request_received", map[string]any{"userChars": len(umContent)})
-		if _, ok := s.modelRuntime.(modelRuntimeStreamingService); ok && !gateway.ShouldAttachChatTools(umContent) {
+		if _, ok := s.modelRuntime.(modelRuntimeStreamingService); ok && !gateway.ShouldAttachChatTools(umContent) && !s.nativeOllamaSelectedModelAvailable(ctx, ollamaAdapter, requestedModelID) {
 			perf := classifyChatPerformance(umContent)
 			manifests := []map[string]any(nil)
 			if s.gateway != nil {

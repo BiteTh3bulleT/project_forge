@@ -156,6 +156,120 @@ func TestEnsureDefaultsSeedsExpectedLaneInvariants(t *testing.T) {
 	}
 }
 
+func TestEnsureDefaultsSeedsAuthorityBoundaryMatrix(t *testing.T) {
+	ctx := context.Background()
+	workspaceDir := filepath.Join(t.TempDir(), "workspace")
+	svc := newTestService(t)
+
+	if err := svc.EnsureDefaults(ctx, workspaceDir); err != nil {
+		t.Fatalf("EnsureDefaults() error = %v", err)
+	}
+
+	tests := []struct {
+		id               string
+		writeIntent      bool
+		requiresApproval bool
+		riskClass        string
+		maxBytes         int64
+		artifacts        []string
+	}{
+		{
+			id:               "proc.run",
+			requiresApproval: true,
+			riskClass:        "scoped_execute",
+		},
+		{
+			id:               "git.commit",
+			writeIntent:      true,
+			requiresApproval: true,
+			riskClass:        "dangerous",
+		},
+		{
+			id:               "git.write",
+			writeIntent:      true,
+			requiresApproval: true,
+			riskClass:        "dangerous",
+			maxBytes:         2 * 1024 * 1024,
+		},
+		{
+			id:               "system.service_control",
+			writeIntent:      true,
+			requiresApproval: true,
+			riskClass:        "privileged",
+		},
+		{
+			id:        "system.logs",
+			riskClass: "read_only",
+		},
+		{
+			id:               "net.fetch",
+			requiresApproval: true,
+			riskClass:        "scoped_execute",
+		},
+		{
+			id:        "net.dns_lookup",
+			riskClass: "read_only",
+		},
+		{
+			id:          "desktop.notify",
+			writeIntent: true,
+			riskClass:   "safe_write",
+		},
+		{
+			id:               "desktop.open",
+			writeIntent:      true,
+			requiresApproval: true,
+			riskClass:        "safe_write",
+		},
+		{
+			id:               "secret.get",
+			requiresApproval: true,
+			riskClass:        "privileged",
+		},
+		{
+			id:               "fs.copy",
+			writeIntent:      true,
+			requiresApproval: true,
+			riskClass:        "safe_write",
+			maxBytes:         2 * 1024 * 1024,
+			artifacts:        []string{"pathCopied"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.id, func(t *testing.T) {
+			got, err := svc.Get(ctx, tt.id)
+			if err != nil {
+				t.Fatalf("Get(%q) error = %v", tt.id, err)
+			}
+			if !got.Builtin || !got.Enabled {
+				t.Fatalf("Get(%q) builtin/enabled = %v/%v, want true/true", tt.id, got.Builtin, got.Enabled)
+			}
+			if got.ActionType != tt.id {
+				t.Fatalf("ActionType = %q, want %q", got.ActionType, tt.id)
+			}
+			if got.WriteIntent != tt.writeIntent {
+				t.Fatalf("WriteIntent = %v, want %v", got.WriteIntent, tt.writeIntent)
+			}
+			if got.RequiresApproval != tt.requiresApproval {
+				t.Fatalf("RequiresApproval = %v, want %v", got.RequiresApproval, tt.requiresApproval)
+			}
+			if got.RiskClass != tt.riskClass {
+				t.Fatalf("RiskClass = %q, want %q", got.RiskClass, tt.riskClass)
+			}
+			if got.MaxBytes != tt.maxBytes {
+				t.Fatalf("MaxBytes = %d, want %d", got.MaxBytes, tt.maxBytes)
+			}
+			if !reflect.DeepEqual(got.AllowedPaths, []string{workspaceDir}) {
+				t.Fatalf("AllowedPaths = %#v, want workspace path %#v", got.AllowedPaths, []string{workspaceDir})
+			}
+			if tt.artifacts != nil && !reflect.DeepEqual(got.ExpectedArtifacts, tt.artifacts) {
+				t.Fatalf("ExpectedArtifacts = %#v, want %#v", got.ExpectedArtifacts, tt.artifacts)
+			}
+		})
+	}
+}
+
 func TestEnsureDefaultsIfEmptyPreservesExistingLaneState(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestService(t)
@@ -185,6 +299,77 @@ func TestEnsureDefaultsIfEmptyPreservesExistingLaneState(t *testing.T) {
 	}
 	if got[0].ID != created.ID || got[0].Description != created.Description {
 		t.Fatalf("List()[0] = %#v, want preserved custom lane %#v", got[0], created)
+	}
+}
+
+func TestSaveRoundTripsCustomLaneFieldsAndListOrdering(t *testing.T) {
+	ctx := context.Background()
+	workspaceDir := filepath.Join(t.TempDir(), "workspace")
+	svc := newTestService(t)
+
+	if err := svc.EnsureDefaults(ctx, workspaceDir); err != nil {
+		t.Fatalf("EnsureDefaults() error = %v", err)
+	}
+
+	created, err := svc.Save(ctx, lanes.Lane{
+		ID:                "aaa.custom",
+		Name:              "AAA Custom",
+		Description:       "custom lane metadata",
+		ActionType:        "custom.action",
+		AllowedPaths:      []string{filepath.Join(workspaceDir, "allowed")},
+		ForbiddenPaths:    []string{filepath.Join(workspaceDir, "forbidden")},
+		WriteIntent:       true,
+		RequiresApproval:  true,
+		RiskClass:         "safe_write",
+		MaxBytes:          4096,
+		ExpectedArtifacts: []string{"customArtifact"},
+		Enabled:           true,
+	})
+	if err != nil {
+		t.Fatalf("Save() custom lane error = %v", err)
+	}
+
+	got, err := svc.Get(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("Get(%q) error = %v", created.ID, err)
+	}
+	if got.Builtin {
+		t.Fatal("Builtin = true, want custom lane to remain operator-defined")
+	}
+	if got.ActionType != "custom.action" || got.RiskClass != "safe_write" {
+		t.Fatalf("custom lane action/risk = %q/%q, want custom.action/safe_write", got.ActionType, got.RiskClass)
+	}
+	if !got.WriteIntent || !got.RequiresApproval || !got.Enabled {
+		t.Fatalf("custom lane booleans = write:%v approval:%v enabled:%v, want true/true/true", got.WriteIntent, got.RequiresApproval, got.Enabled)
+	}
+	if got.MaxBytes != 4096 {
+		t.Fatalf("MaxBytes = %d, want 4096", got.MaxBytes)
+	}
+	if !reflect.DeepEqual(got.AllowedPaths, []string{filepath.Join(workspaceDir, "allowed")}) {
+		t.Fatalf("AllowedPaths = %#v, want saved path", got.AllowedPaths)
+	}
+	if !reflect.DeepEqual(got.ForbiddenPaths, []string{filepath.Join(workspaceDir, "forbidden")}) {
+		t.Fatalf("ForbiddenPaths = %#v, want saved path", got.ForbiddenPaths)
+	}
+	if !reflect.DeepEqual(got.ExpectedArtifacts, []string{"customArtifact"}) {
+		t.Fatalf("ExpectedArtifacts = %#v, want saved artifact", got.ExpectedArtifacts)
+	}
+
+	listed, err := svc.List(ctx)
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	seenCustom := false
+	for _, lane := range listed {
+		if lane.ID == created.ID {
+			seenCustom = true
+		}
+		if seenCustom && lane.Builtin {
+			t.Fatalf("List() returned builtin lane %q after custom lanes", lane.ID)
+		}
+	}
+	if !seenCustom {
+		t.Fatalf("List() did not include custom lane %q", created.ID)
 	}
 }
 

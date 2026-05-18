@@ -69,8 +69,43 @@ type RunningOperatorApp = {
   pid: number | null;
   launchedAtMs: number;
 };
+type ShellAuditRecord = {
+  id?: number | string;
+  createdAtMs?: number;
+  category?: string;
+  action?: string;
+  outcome?: string;
+  summary?: string;
+  correlationId?: string;
+};
+type ShellContextSnapshot = {
+  id?: string;
+  createdAtMs?: number;
+  workspaceId?: string;
+  laneId?: string;
+  snapshotKind?: string;
+  label?: string;
+  summary?: string;
+};
+type ShellTelemetry = {
+  auditRecords: ShellAuditRecord[];
+  autonomyStatus: Record<string, unknown> | null;
+  modelQueue: Record<string, unknown> | null;
+  modelBackends: Array<Record<string, unknown>>;
+  contextSnapshots: ShellContextSnapshot[];
+  error: string | null;
+};
 
 const HOME_ROUTE = "/";
+const EMPTY_TELEMETRY: ShellTelemetry = {
+  auditRecords: [],
+  autonomyStatus: null,
+  modelQueue: null,
+  modelBackends: [],
+  contextSnapshots: [],
+  error: null,
+};
+
 function corePill(core: "online" | "offline" | "unknown") {
   if (core === "online") return "forge-chip--ok";
   if (core === "offline") return "forge-chip--warn";
@@ -81,6 +116,101 @@ function getWorkspaceLabel(workspaceDir: string | null | undefined) {
   if (!workspaceDir) return "Workspace unavailable";
   const parts = workspaceDir.split(/[\\/]/).filter(Boolean);
   return parts.at(-1) ?? workspaceDir;
+}
+
+function numberField(
+  record: Record<string, unknown> | null | undefined,
+  key: string,
+) {
+  const value = record?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function auditSummary(record: ShellAuditRecord | null | undefined) {
+  if (!record) return "none";
+  const action = record.action?.trim() || record.category?.trim() || "event";
+  const outcome = record.outcome?.trim();
+  return outcome ? `${action} ${outcome}` : action;
+}
+
+function auditDetail(record: ShellAuditRecord | null | undefined) {
+  if (!record) return "No audit events loaded.";
+  return record.summary?.trim() || auditSummary(record);
+}
+
+function modelRuntimeSummary(telemetry: ShellTelemetry) {
+  const queueDepth = numberField(telemetry.modelQueue, "depth") ?? 0;
+  const healthyBackends = telemetry.modelBackends.filter(
+    (backend) => backend.healthy === true,
+  ).length;
+  const unhealthyBackends = telemetry.modelBackends.filter(
+    (backend) => backend.healthy === false,
+  ).length;
+  if (unhealthyBackends > 0) return `degraded · queue ${queueDepth}`;
+  if (healthyBackends > 0) return `healthy · queue ${queueDepth}`;
+  return `unknown · queue ${queueDepth}`;
+}
+
+function autonomySummary(status: Record<string, unknown> | null) {
+  if (!status) return "unknown";
+  const dream = status.dream;
+  const maintenance = status.maintenanceLoop;
+  const dreamActive =
+    typeof dream === "object" &&
+    dream != null &&
+    (dream as Record<string, unknown>).active === true;
+  const maintenanceActive =
+    typeof maintenance === "object" &&
+    maintenance != null &&
+    (maintenance as Record<string, unknown>).active === true;
+  if (dreamActive || maintenanceActive) return "active";
+  if (status.available === false || status.enabled === false) return "disabled";
+  if (status.available === true || status.enabled === true) return "idle";
+  return "unknown";
+}
+
+function activeLoopSummary(status: Record<string, unknown> | null) {
+  if (!status) return "loops unknown";
+  const dream = status.dream;
+  if (
+    typeof dream === "object" &&
+    dream != null &&
+    (dream as Record<string, unknown>).active === true
+  ) {
+    return "dream active";
+  }
+  const maintenance = status.maintenanceLoop;
+  if (
+    typeof maintenance === "object" &&
+    maintenance != null &&
+    (maintenance as Record<string, unknown>).active === true
+  ) {
+    return "maintenance active";
+  }
+  const counts = status.counts;
+  if (typeof counts === "object" && counts != null) {
+    const activeIntents = numberField(
+      counts as Record<string, unknown>,
+      "activeIntents",
+    );
+    if (activeIntents != null && activeIntents > 0) {
+      return `${activeIntents} active intent${activeIntents === 1 ? "" : "s"}`;
+    }
+  }
+  return "no active loops";
+}
+
+function contextSnapshotLabel(
+  snapshot: ShellContextSnapshot | null | undefined,
+) {
+  if (!snapshot) return "No context snapshot loaded.";
+  return (
+    snapshot.label?.trim() ||
+    snapshot.summary?.trim() ||
+    snapshot.snapshotKind?.trim() ||
+    snapshot.id?.trim() ||
+    "Context snapshot"
+  );
 }
 
 function attentionLevel(
@@ -107,6 +237,59 @@ function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
+function normalizeNativeKey(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\.desktop$/, "");
+}
+
+function operatorAppIdentityKeys(app: OperatorApp) {
+  const keys = new Set<string>();
+  for (const value of [
+    app.id,
+    app.label,
+    app.executable,
+    app.iconName ?? "",
+    app.desktopFile?.split(/[\\/]/).at(-1) ?? "",
+  ]) {
+    const key = normalizeNativeKey(value);
+    if (key) keys.add(key);
+  }
+  return keys;
+}
+
+function linuxWindowMatchesOperatorApp(
+  window_: LinuxWindowSnapshot,
+  app: OperatorApp,
+) {
+  const windowAppId = normalizeNativeKey(window_.appId);
+  const windowTitle = normalizeNativeKey(window_.title);
+  const appKeys = operatorAppIdentityKeys(app);
+
+  for (const key of appKeys) {
+    if (windowAppId && windowAppId === key) return true;
+    if (
+      windowAppId &&
+      (windowAppId.includes(key) || key.includes(windowAppId))
+    ) {
+      return true;
+    }
+    if (key !== "foot" && windowTitle.includes(key)) return true;
+  }
+
+  return false;
+}
+
+function linuxWindowResolvesOperatorLaunch(
+  item: RunningOperatorApp,
+  window_: LinuxWindowSnapshot,
+) {
+  if (!linuxWindowMatchesOperatorApp(window_, item.app)) return false;
+  const seenAtMs = window_.firstSeenMs ?? window_.lastSeenMs;
+  return seenAtMs == null || seenAtMs >= item.launchedAtMs - 1500;
+}
+
 export function AppShell(props: AppShellProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -124,6 +307,10 @@ export function AppShell(props: AppShellProps) {
     (s) => s.clearFallbackNotice,
   );
   const uiMode = useUiStore((s) => s.uiMode);
+  const themePreference = useUiStore((s) => s.themePreference);
+  const toggleThemePreference = useUiStore((s) => s.toggleThemePreference);
+  const accentPreference = useUiStore((s) => s.accentPreference);
+  const setAccentPreference = useUiStore((s) => s.setAccentPreference);
 
   const pinned = useDesktopWindowStore((s) => s.pinned);
   const windows = useDesktopWindowStore((s) => s.windows);
@@ -158,6 +345,8 @@ export function AppShell(props: AppShellProps) {
     RunningOperatorApp[]
   >([]);
   const [linuxWindows, setLinuxWindows] = useState<LinuxWindowSnapshot[]>([]);
+  const [telemetry, setTelemetry] = useState<ShellTelemetry>(EMPTY_TELEMETRY);
+  const [activityOpen, setActivityOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [contextMenu, setContextMenu] = useState<DockContextMenu | null>(null);
   const [nativeContextMenu, setNativeContextMenu] =
@@ -267,6 +456,69 @@ export function AppShell(props: AppShellProps) {
       window.clearInterval(id);
     };
   }, [isMainWindow]);
+
+  useEffect(() => {
+    if (!isMainWindow) return;
+    let cancelled = false;
+    async function loadTelemetry() {
+      const [auditRes, autonomyRes, queueRes, backendsRes, contextRes] =
+        await Promise.allSettled([
+          api.audit.list({ limit: 20 }),
+          api.autonomy.status(),
+          api.modelRuntime.queue(),
+          api.modelRuntime.backends(),
+          api.contextInspector.listSnapshots({ limit: 3 }),
+        ]);
+      if (cancelled) return;
+
+      const rejected = [
+        auditRes,
+        autonomyRes,
+        queueRes,
+        backendsRes,
+        contextRes,
+      ].find((result) => result.status === "rejected");
+      setTelemetry({
+        auditRecords:
+          auditRes.status === "fulfilled"
+            ? (auditRes.value.records as ShellAuditRecord[])
+            : [],
+        autonomyStatus:
+          autonomyRes.status === "fulfilled"
+            ? (autonomyRes.value as Record<string, unknown>)
+            : null,
+        modelQueue:
+          queueRes.status === "fulfilled"
+            ? (queueRes.value.queue as Record<string, unknown>)
+            : null,
+        modelBackends:
+          backendsRes.status === "fulfilled"
+            ? (backendsRes.value.backends as Array<Record<string, unknown>>)
+            : [],
+        contextSnapshots:
+          contextRes.status === "fulfilled"
+            ? (contextRes.value.snapshots as ShellContextSnapshot[])
+            : [],
+        error:
+          rejected?.status === "rejected"
+            ? rejected.reason instanceof Error
+              ? rejected.reason.message
+              : String(rejected.reason)
+            : null,
+      });
+    }
+    void loadTelemetry();
+    const id = window.setInterval(() => void loadTelemetry(), 7500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [isMainWindow]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = themePreference;
+    document.documentElement.dataset.forgeAccent = accentPreference;
+  }, [accentPreference, themePreference]);
 
   useEffect(() => {
     if (!isMainWindow || !isTauriDesktop()) return;
@@ -530,6 +782,12 @@ export function AppShell(props: AppShellProps) {
   const workspaceLabel = getWorkspaceLabel(meta?.workspaceDir);
   const runtimeState =
     core === "offline" ? "offline" : shellErr ? "degraded" : "online";
+  const latestAudit = telemetry.auditRecords[0] ?? null;
+  const latestContextSnapshot = telemetry.contextSnapshots[0] ?? null;
+  const modelRuntimeText = modelRuntimeSummary(telemetry);
+  const autonomyText = autonomySummary(telemetry.autonomyStatus);
+  const activeLoopText = activeLoopSummary(telemetry.autonomyStatus);
+  const pendingApprovalsText = `${approvalsPending} pending`;
 
   // Dock = pinned tools (in pinned order) + global open windows. Hosts render
   // only their local desktop windows, but the taskbar remains globally aware.
@@ -627,24 +885,28 @@ export function AppShell(props: AppShellProps) {
         : visibleWindows,
     [detachedTauriShell, visibleWindows],
   );
-  const linuxWindowKeys = useMemo(
-    () =>
-      new Set(
-        linuxWindows.flatMap((window_) => [
-          window_.appId.toLowerCase(),
-          window_.title.toLowerCase(),
-        ]),
+
+  useEffect(() => {
+    if (linuxWindows.length === 0) return;
+    setRunningOperatorApps((items) =>
+      items.filter(
+        (item) =>
+          !linuxWindows.some((window_) =>
+            linuxWindowResolvesOperatorLaunch(item, window_),
+          ),
       ),
-    [linuxWindows],
-  );
+    );
+  }, [linuxWindows]);
+
   const pendingOperatorApps = useMemo(
     () =>
-      runningOperatorApps.filter((item) => {
-        const appKey = item.app.executable.toLowerCase();
-        const labelKey = item.app.label.toLowerCase();
-        return !linuxWindowKeys.has(appKey) && !linuxWindowKeys.has(labelKey);
-      }),
-    [linuxWindowKeys, runningOperatorApps],
+      runningOperatorApps.filter(
+        (item) =>
+          !linuxWindows.some((window_) =>
+            linuxWindowResolvesOperatorLaunch(item, window_),
+          ),
+      ),
+    [linuxWindows, runningOperatorApps],
   );
 
   return (
@@ -673,9 +935,12 @@ export function AppShell(props: AppShellProps) {
             aria-live="polite"
             aria-atomic="true"
           >
+            <span className="forge-os-statusbar__chip forge-chip forge-chip--muted">
+              Workspace: {workspaceLabel}
+            </span>
             <span
               className={cx(
-                "forge-chip px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]",
+                "forge-os-statusbar__chip forge-chip",
                 corePill(core),
               )}
             >
@@ -688,7 +953,7 @@ export function AppShell(props: AppShellProps) {
             </span>
             <span
               className={cx(
-                "forge-chip px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]",
+                "forge-os-statusbar__chip forge-chip",
                 runtimeState === "degraded"
                   ? "forge-chip--warn"
                   : "forge-chip--muted",
@@ -698,7 +963,7 @@ export function AppShell(props: AppShellProps) {
             </span>
             <span
               className={cx(
-                "forge-chip px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]",
+                "forge-os-statusbar__chip forge-chip",
                 level === "none"
                   ? "forge-chip--muted"
                   : level === "high"
@@ -714,9 +979,52 @@ export function AppShell(props: AppShellProps) {
               Queue:{" "}
               {level === "none" ? "clear" : `attention ${attentionCount}`}
             </span>
-            <span className="forge-os-statusbar__mode forge-chip forge-chip--muted px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]">
+            <span className="forge-os-statusbar__chip forge-chip forge-chip--muted">
+              Modelruntime: {modelRuntimeText.split(" · ")[0]}
+            </span>
+            <span className="forge-os-statusbar__chip forge-chip forge-chip--muted">
+              Autonomy: {autonomyText}
+            </span>
+            <span className="forge-os-statusbar__chip forge-chip forge-chip--muted">
+              Audit: {auditSummary(latestAudit)}
+            </span>
+            <span className="forge-os-statusbar__mode forge-os-statusbar__chip forge-chip forge-chip--muted">
               Mode: {uiMode}
             </span>
+            <button
+              type="button"
+              className="forge-os-statusbar__button"
+              onClick={() => setActivityOpen((value) => !value)}
+              aria-label="Open activity log"
+              aria-expanded={activityOpen}
+            >
+              Activity
+            </button>
+            <button
+              type="button"
+              className="forge-os-statusbar__button"
+              onClick={() => toggleThemePreference()}
+              aria-label="Switch shell theme"
+              title={`Theme: ${themePreference}`}
+            >
+              {themePreference === "dark" ? "Dark" : "Light"}
+            </button>
+            <label className="forge-os-statusbar__select-label">
+              <span>Accent</span>
+              <select
+                aria-label="Shell accent"
+                value={accentPreference}
+                onChange={(event) =>
+                  setAccentPreference(
+                    event.target.value as "cyan" | "amber" | "mint",
+                  )
+                }
+              >
+                <option value="cyan">Cyan</option>
+                <option value="amber">Amber</option>
+                <option value="mint">Mint</option>
+              </select>
+            </label>
           </div>
         </header>
       ) : null}
@@ -767,7 +1075,114 @@ export function AppShell(props: AppShellProps) {
             </div>
           ) : null}
         </main>
+        {isMainWindow ? (
+          <aside
+            className="forge-os-context-inspector"
+            role="complementary"
+            aria-label="Shell context inspector"
+          >
+            <div className="forge-os-context-inspector__header">
+              <div>
+                <div className="forge-os-context-inspector__eyebrow">
+                  Shell
+                </div>
+                <h2>Context Inspector</h2>
+              </div>
+              <span className="forge-os-context-inspector__pill">
+                {telemetry.error ? "degraded" : "live"}
+              </span>
+            </div>
+            <section className="forge-os-context-inspector__section">
+              <h3>Compiling Context</h3>
+              <p>{contextSnapshotLabel(latestContextSnapshot)}</p>
+              <dl>
+                <div>
+                  <dt>Workspace</dt>
+                  <dd>
+                    {latestContextSnapshot?.workspaceId?.trim() ||
+                      workspaceLabel}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Lane</dt>
+                  <dd>{latestContextSnapshot?.laneId?.trim() || "default"}</dd>
+                </div>
+              </dl>
+            </section>
+            <section className="forge-os-context-inspector__section">
+              <h3>Journal / Audit</h3>
+              <p>{auditDetail(latestAudit)}</p>
+              <dl>
+                <div>
+                  <dt>Last action</dt>
+                  <dd>{auditSummary(latestAudit)}</dd>
+                </div>
+                <div>
+                  <dt>Loaded</dt>
+                  <dd>{telemetry.auditRecords.length} events</dd>
+                </div>
+              </dl>
+            </section>
+            <section className="forge-os-context-inspector__section">
+              <h3>Loops / Approvals</h3>
+              <dl>
+                <div>
+                  <dt>Loops</dt>
+                  <dd>{activeLoopText}</dd>
+                </div>
+                <div>
+                  <dt>Approvals</dt>
+                  <dd>{pendingApprovalsText}</dd>
+                </div>
+              </dl>
+            </section>
+          </aside>
+        ) : null}
       </div>
+
+      {isMainWindow && activityOpen ? (
+        <section
+          className="forge-os-activity-log"
+          role="dialog"
+          aria-label="Activity log"
+        >
+          <div className="forge-os-activity-log__header">
+            <div>
+              <div className="forge-os-context-inspector__eyebrow">
+                Last 20
+              </div>
+              <h2>Activity log</h2>
+            </div>
+            <button
+              type="button"
+              className="forge-os-statusbar__button"
+              onClick={() => setActivityOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+          <div className="forge-os-activity-log__list">
+            {telemetry.auditRecords.length > 0 ? (
+              telemetry.auditRecords.slice(0, 20).map((record, index) => (
+                <article
+                  key={`${record.id ?? "audit"}:${index}`}
+                  className="forge-os-activity-log__item"
+                >
+                  <div className="forge-os-activity-log__meta">
+                    <span>{record.action?.trim() || "audit.event"}</span>
+                    <span>{record.outcome?.trim() || "unknown"}</span>
+                  </div>
+                  <p>{auditDetail(record)}</p>
+                </article>
+              ))
+            ) : (
+              <p className="forge-os-activity-log__empty">
+                No audit events loaded.
+              </p>
+            )}
+          </div>
+        </section>
+      ) : null}
 
       <footer className="forge-os-taskbar">
         <button
@@ -870,7 +1285,7 @@ export function AppShell(props: AppShellProps) {
                   onAuxClick={(event) => {
                     if (event.button === 1) {
                       event.preventDefault();
-                      void runNativeWindowAction(window_, "minimize");
+                      void runNativeWindowAction(window_, "close");
                     }
                   }}
                   className={cx(

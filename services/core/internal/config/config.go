@@ -370,19 +370,38 @@ func loadAPIToken(dataDir string) string {
 	}
 	path := apiTokenFile(dataDir)
 	if token := readTokenFile(path); token != "" {
+		_ = ensureAPITokenFilePermissions(path)
 		return token
 	}
 	token, err := generateAPIToken()
 	if err != nil {
 		return ""
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err := ensureAPITokenDirPermissions(path); err != nil {
 		return ""
 	}
-	if err := os.WriteFile(path, []byte(token+"\n"), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(token+"\n"), 0o640); err != nil {
+		return ""
+	}
+	if err := ensureAPITokenFilePermissions(path); err != nil {
 		return ""
 	}
 	return token
+}
+
+func ensureAPITokenDirPermissions(path string) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return err
+	}
+	return os.Chmod(dir, 0o750)
+}
+
+func ensureAPITokenFilePermissions(path string) error {
+	if err := ensureAPITokenDirPermissions(path); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o640)
 }
 
 func apiTokenFile(dataDir string) string {

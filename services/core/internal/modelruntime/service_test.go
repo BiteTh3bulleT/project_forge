@@ -2,6 +2,7 @@ package modelruntime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sort"
 	"strings"
@@ -19,6 +20,48 @@ type auditRecorderStub struct {
 type generateOutcome struct {
 	res GenerateResult
 	err error
+}
+
+type contextAwareTestBackend struct {
+	kind     ModelBackendKind
+	generate func(context.Context, GenerateRequest) (GenerateResult, error)
+}
+
+func (b *contextAwareTestBackend) Name() string { return "context-aware-test" }
+
+func (b *contextAwareTestBackend) Kind() ModelBackendKind {
+	if b.kind == "" {
+		return BackendFake
+	}
+	return b.kind
+}
+
+func (b *contextAwareTestBackend) Supports(_ ModelFormat, _ []ModelCapability) bool { return true }
+
+func (b *contextAwareTestBackend) Load(_ context.Context, manifest ModelManifest) (LoadedModel, error) {
+	return LoadedModel{
+		ModelID:  manifest.ID,
+		Backend:  b.Kind(),
+		Status:   StatusLoaded,
+		LoadedAt: time.Now().UTC(),
+	}, nil
+}
+
+func (b *contextAwareTestBackend) Unload(_ context.Context, _ string) error { return nil }
+
+func (b *contextAwareTestBackend) Generate(ctx context.Context, req GenerateRequest) (GenerateResult, error) {
+	if b.generate != nil {
+		return b.generate(ctx, req)
+	}
+	return GenerateResult{Content: "ok", ModelID: req.ModelID, Backend: b.Kind()}, nil
+}
+
+func (b *contextAwareTestBackend) Health(_ context.Context) (BackendHealth, error) {
+	return BackendHealth{Name: b.Name(), Kind: b.Kind(), Healthy: true}, nil
+}
+
+func (b *contextAwareTestBackend) Inspect(_ context.Context, modelID string) (BackendInspectResult, error) {
+	return BackendInspectResult{ModelID: modelID, Backend: b.Kind(), Found: true}, nil
 }
 
 func (a *auditRecorderStub) RecordModelRuntime(_ context.Context, record ModelRuntimeAuditRecord) (string, error) {
@@ -502,6 +545,134 @@ func TestService_SchedulerAdmissionAndAuditAccounting(t *testing.T) {
 	}
 }
 
+func TestService_RunningCancellationRecordsCanceledAccounting(t *testing.T) {
+	backend := &contextAwareTestBackend{
+		kind: BackendFake,
+		generate: func(ctx context.Context, req GenerateRequest) (GenerateResult, error) {
+			<-ctx.Done()
+			return GenerateResult{}, ctx.Err()
+		},
+	}
+	audit := &auditRecorderStub{}
+	svc, err := NewService(ServiceOptions{
+		Backends:              []ModelBackend{backend},
+		Models:                []ModelManifest{completionManifest("cancel-model", BackendFake)},
+		AutoLoad:              true,
+		Audit:                 audit,
+		CompletedHistoryLimit: 4,
+	})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan generateOutcome, 1)
+	go func() {
+		res, err := svc.Generate(ctx, baseGenerateRequest("cancel-model"))
+		done <- generateOutcome{res: res, err: err}
+	}()
+
+	waitForSchedulerState(t, svc, func(s SchedulerSnapshot) bool {
+		return len(s.Running) == 1
+	}, "expected request to enter running state")
+	cancel()
+	out := waitForGenerateResult(t, done, "canceled request")
+	if !errors.Is(out.err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", out.err)
+	}
+
+	snapshot := svc.SchedulerSnapshot()
+	if len(snapshot.Running) != 0 || len(snapshot.Completed) != 1 {
+		t.Fatalf("expected one completed cancellation and no running requests, got %+v", snapshot)
+	}
+	completed := snapshot.Completed[0]
+	if completed.State != RequestStateCanceled || completed.Outcome != "canceled" {
+		t.Fatalf("expected canceled scheduler accounting, got %+v", completed)
+	}
+
+	records := audit.Records()
+	var generateAudit *ModelRuntimeAuditRecord
+	for i := range records {
+		if records[i].Operation == "generate" {
+			generateAudit = &records[i]
+		}
+	}
+	if generateAudit == nil {
+		t.Fatalf("expected generate audit record, got %+v", records)
+	}
+	if generateAudit.Outcome != "canceled" || !strings.Contains(generateAudit.Error, context.Canceled.Error()) {
+		t.Fatalf("expected canceled audit accounting, got %+v", *generateAudit)
+	}
+}
+
+func TestService_SchedulerSnapshotShowsBackpressureReason(t *testing.T) {
+	startedCh := make(chan struct{}, 1)
+	releaseCh := make(chan struct{}, 1)
+	backend := NewFakeBackend(FakeBackendOptions{
+		Healthy: true,
+		Generate: func(req GenerateRequest) (GenerateResult, error) {
+			startedCh <- struct{}{}
+			<-releaseCh
+			return GenerateResult{Content: "ok"}, nil
+		},
+	})
+	svc, err := NewService(ServiceOptions{
+		Backends:              []ModelBackend{backend},
+		Models:                []ModelManifest{completionManifest("pressure-visible", BackendFake)},
+		AutoLoad:              true,
+		GPUEnabled:            true,
+		GPUBkgJobsEnabled:     true,
+		GPUMaxBackgroundJobs:  1,
+		MaxQueueDepth:         4,
+		MaxConcurrentRequests: 1,
+		SchedulingInteractivePriorityOverBackground: true,
+	})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+
+	interactiveDone := make(chan generateOutcome, 1)
+	interactiveReq := baseGenerateRequest("pressure-visible")
+	interactiveReq.WorkloadClass = GPUWorkloadInteractiveInference
+	go func() {
+		res, err := svc.Generate(context.Background(), interactiveReq)
+		interactiveDone <- generateOutcome{res: res, err: err}
+	}()
+	waitForSignal(t, startedCh, "interactive request did not start")
+
+	backgroundDone := make(chan generateOutcome, 1)
+	backgroundReq := baseGenerateRequest("pressure-visible")
+	backgroundReq.WorkloadClass = GPUWorkloadBackgroundEmbedding
+	go func() {
+		res, err := svc.Generate(context.Background(), backgroundReq)
+		backgroundDone <- generateOutcome{res: res, err: err}
+	}()
+
+	waitForSchedulerState(t, svc, func(s SchedulerSnapshot) bool {
+		return len(s.Running) == 1 &&
+			len(s.Queued) == 1 &&
+			s.Queued[0].BackpressureReason == "concurrency_limit"
+	}, "expected queued background request to expose concurrency backpressure")
+
+	health, err := svc.Health(context.Background())
+	if err != nil {
+		t.Fatalf("health: %v", err)
+	}
+	if health.State != RuntimeHealthOverloaded {
+		t.Fatalf("expected overloaded health while request is backpressured, got %+v", health)
+	}
+
+	releaseCh <- struct{}{}
+	if out := waitForGenerateResult(t, interactiveDone, "interactive request"); out.err != nil {
+		t.Fatalf("interactive request error: %v", out.err)
+	}
+	waitForSignal(t, startedCh, "background request did not start")
+	releaseCh <- struct{}{}
+	if out := waitForGenerateResult(t, backgroundDone, "background request"); out.err != nil {
+		t.Fatalf("background request error: %v", out.err)
+	}
+}
+
 func TestService_MaxOutputBytesBound(t *testing.T) {
 	backend := NewFakeBackend(FakeBackendOptions{
 		Healthy: true,
@@ -713,6 +884,117 @@ func TestService_HealthTracksBackendSupervisionFailures(t *testing.T) {
 	}
 }
 
+func TestService_HealthSupervisionRecommendsOperatorRestartForRepeatedUnmanagedFailures(t *testing.T) {
+	now := time.Date(2026, 5, 18, 12, 0, 0, 0, time.UTC)
+	backend := NewFakeBackend(FakeBackendOptions{
+		Healthy:      false,
+		Kind:         BackendFake,
+		HealthDetail: "probe failed",
+		HealthErr:    errors.New("probe failed"),
+	})
+	svc, err := NewService(ServiceOptions{
+		Backends: []ModelBackend{backend},
+		Models:   []ModelManifest{completionManifest("operator-restart-model", BackendFake)},
+		Clock:    func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+
+	if _, err := svc.Health(context.Background()); err != nil {
+		t.Fatalf("first health probe should return degraded payload: %v", err)
+	}
+	health, err := svc.Health(context.Background())
+	if err != nil {
+		t.Fatalf("second health probe should return degraded payload: %v", err)
+	}
+
+	raw, err := json.Marshal(health.Backends[BackendFake].Supervision)
+	if err != nil {
+		t.Fatalf("marshal supervision: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("unmarshal supervision: %v", err)
+	}
+	if payload["state"] != "degraded" {
+		t.Fatalf("expected degraded supervision state, got %#v", payload)
+	}
+	if payload["supervisionMode"] != "unmanaged_external_backend" {
+		t.Fatalf("expected explicit unmanaged supervision mode, got %#v", payload)
+	}
+	if payload["restartPolicy"] != "operator_managed_restart" || payload["restartReason"] != "backend_health_probe_failed" {
+		t.Fatalf("expected operator restart policy/reason, got %#v", payload)
+	}
+	if payload["restartRecommended"] != true || payload["requiresOperatorAction"] != true {
+		t.Fatalf("expected restart recommendation requiring operator action, got %#v", payload)
+	}
+	if payload["restartSupported"] != false || payload["restartAttempted"] != false {
+		t.Fatalf("unmanaged backend must not claim automated restart support, got %#v", payload)
+	}
+}
+
+func TestService_HealthExposesResourceLimits(t *testing.T) {
+	backend := NewFakeBackend(FakeBackendOptions{Healthy: true, Kind: BackendFake})
+	svc, err := NewService(ServiceOptions{
+		Backends:                           []ModelBackend{backend},
+		Models:                             []ModelManifest{completionManifest("limits-model", BackendFake)},
+		DefaultTimeout:                     4 * time.Second,
+		MaxPromptTokens:                    8192,
+		MaxOutputTokens:                    512,
+		MaxOutputBytes:                     4096,
+		MaxLoadedModels:                    3,
+		LoadTimeout:                        1500 * time.Millisecond,
+		UnloadTimeout:                      2500 * time.Millisecond,
+		MaxQueueDepth:                      7,
+		MaxConcurrentRequests:              2,
+		CompletedHistoryLimit:              11,
+		GPUEnabled:                         true,
+		GPURequiredForInteractiveInference: true,
+		GPUBkgJobsEnabled:                  true,
+		GPUMaxBackgroundJobs:               2,
+		GPUBkgIdleThreshold:                750 * time.Millisecond,
+		GPUVRAMHeadroomFraction:            0.25,
+		DegradeOnUnavailableGPU:            true,
+	})
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+
+	health, err := svc.Health(context.Background())
+	if err != nil {
+		t.Fatalf("health: %v", err)
+	}
+	raw, err := json.Marshal(health)
+	if err != nil {
+		t.Fatalf("marshal health: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("unmarshal health: %v", err)
+	}
+	limits, ok := payload["resourceLimits"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected resourceLimits in health payload, got %#v", payload)
+	}
+	assertJSONNumber(t, limits, "maxLoadedModels", 3)
+	assertJSONNumber(t, limits, "maxQueueDepth", 7)
+	assertJSONNumber(t, limits, "maxConcurrentRequests", 2)
+	assertJSONNumber(t, limits, "completedHistoryLimit", 11)
+	assertJSONNumber(t, limits, "maxPromptTokens", 8192)
+	assertJSONNumber(t, limits, "maxOutputTokens", 512)
+	assertJSONNumber(t, limits, "maxOutputBytes", 4096)
+	assertJSONNumber(t, limits, "defaultTimeoutMs", 4000)
+	assertJSONNumber(t, limits, "loadTimeoutMs", 1500)
+	assertJSONNumber(t, limits, "unloadTimeoutMs", 2500)
+	assertJSONNumber(t, limits, "gpuMaxBackgroundJobs", 2)
+	assertJSONNumber(t, limits, "gpuBackgroundIdleThresholdMs", 750)
+	assertJSONNumber(t, limits, "gpuVRAMHeadroomPercent", 25)
+	if limits["gpuEnabled"] != true || limits["gpuRequiredForInteractiveInference"] != true || limits["gpuBackgroundJobsEnabled"] != true || limits["degradeOnUnavailableGPU"] != true {
+		t.Fatalf("expected GPU policy limits to be visible, got %#v", limits)
+	}
+}
+
 func TestService_GPUTelemetryPressureBlocksBackgroundJobs(t *testing.T) {
 	backend := NewFakeBackend(FakeBackendOptions{Healthy: true, Kind: BackendFake})
 	svc, err := NewService(ServiceOptions{
@@ -780,6 +1062,14 @@ func waitForGenerateResult(t *testing.T, ch <-chan generateOutcome, label string
 	case <-time.After(2 * time.Second):
 		t.Fatalf("timed out waiting for %s result", label)
 		return generateOutcome{}
+	}
+}
+
+func assertJSONNumber(t *testing.T, payload map[string]any, key string, want float64) {
+	t.Helper()
+	got, ok := payload[key].(float64)
+	if !ok || got != want {
+		t.Fatalf("%s=%#v, want %v in %#v", key, payload[key], want, payload)
 	}
 }
 

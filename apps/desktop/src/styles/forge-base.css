@@ -13,6 +13,7 @@
   --forge-cyan-rgb: 54 220 232;
   --forge-mint-rgb: 34 197 94;
   --forge-amber-rgb: 245 158 11;
+  --forge-accent-rgb: var(--forge-cyan-rgb);
   --forge-amber-soft-rgb: 255 184 77;
   --forge-danger-rgb: 239 68 68;
   --forge-focus-rgb: 255 122 24;
@@ -33,6 +34,18 @@
   );
   --forge-grid-opacity: 0.22;
   --forge-noise-opacity: 0.18;
+}
+
+html[data-forge-accent="cyan"] {
+  --forge-accent-rgb: var(--forge-cyan-rgb);
+}
+
+html[data-forge-accent="amber"] {
+  --forge-accent-rgb: var(--forge-amber-rgb);
+}
+
+html[data-forge-accent="mint"] {
+  --forge-accent-rgb: var(--forge-mint-rgb);
 }
 
 * {

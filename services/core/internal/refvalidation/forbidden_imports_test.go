@@ -12,6 +12,7 @@ import (
 func TestRefValidationDoesNotImportSimulatorOrLiveStatePackages(t *testing.T) {
 	forbidden := []string{
 		"forge/projectforge/services/core/internal/forgek",
+		"forge/projectforge/services/core/internal/aios/controllane",
 		"forge/projectforge/services/core/internal/gateway",
 		"forge/projectforge/services/core/internal/modelruntime",
 		"forge/projectforge/services/core/internal/retrieval",

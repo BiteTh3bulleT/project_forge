@@ -1191,6 +1191,137 @@ func TestGatewayApprovalOnlyCapabilityProducesNeedsApprovalAudit(t *testing.T) {
 	assertAuditContext(t, payload, correlationID, "trace-approval-only", "workspace:test")
 }
 
+func TestGatewayEndToEndApprovalOnlyToolPromptGrantRunAndAudit(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	gw, st, workspace := newToolSurfaceGatewayHarness(t)
+
+	capability, ok := gw.capabilities.Get("filesystem.delete_file")
+	if !ok {
+		t.Fatalf("missing capability filesystem.delete_file")
+	}
+	if capability.Status != domain.ToolCapabilityApprovalOnly {
+		t.Fatalf("expected filesystem.delete_file to be approval_only, got %s", capability.Status)
+	}
+
+	targetRel := "scratch/section6-delete-after-approval.txt"
+	targetAbs := filepath.Join(workspace, targetRel)
+	if err := os.WriteFile(targetAbs, []byte("delete after approval"), 0o644); err != nil {
+		t.Fatalf("seed delete target: %v", err)
+	}
+
+	req := Request{
+		ToolID:              "filesystem.delete_file",
+		LaneID:              "fs.write.bounded",
+		CorrelationID:       "corr-section6-e2e-approval",
+		TraceID:             "trace-section6-e2e-approval",
+		Source:              "user",
+		WorkspaceID:         "workspace:section6",
+		ProvenanceActor:     "operator-a",
+		ProvenanceActorType: "user",
+		Paths:               []string{targetRel},
+		Initiator:           "operator-a",
+	}
+
+	first, err := gw.Execute(ctx, req)
+	if err != nil {
+		t.Fatalf("initial approval-only execute: %v", err)
+	}
+	if first.Status != StatusNeedsApprov {
+		t.Fatalf("expected initial request to require approval, got %s (%s)", first.Status, first.DeniedReason)
+	}
+	if first.PolicyOutcome != OutcomeRequireApproval || first.Allowed {
+		t.Fatalf("expected approval prompt outcome, got outcome=%s allowed=%v", first.PolicyOutcome, first.Allowed)
+	}
+	if _, err := os.Stat(targetAbs); err != nil {
+		t.Fatalf("approval prompt should not execute delete before grant: %v", err)
+	}
+
+	approvalID := approvalRequestIDFromResult(first)
+	if approvalID <= 0 {
+		t.Fatalf("missing approval request id in initial result: %#v", first.Data)
+	}
+	jobID := strings.TrimSpace(asString(first.Data["jobId"]))
+	if jobID == "" {
+		t.Fatalf("missing approval job id in initial result: %#v", first.Data)
+	}
+	approvalReq, err := gw.approvals.GetRequest(ctx, approvalID)
+	if err != nil {
+		t.Fatalf("get approval request: %v", err)
+	}
+	if approvalReq.Status != "pending" {
+		t.Fatalf("expected pending approval request, got %s", approvalReq.Status)
+	}
+	if approvalReq.JobID != jobID {
+		t.Fatalf("approval request job = %q want %q", approvalReq.JobID, jobID)
+	}
+	if approvalReq.RequestedAdapter != "gateway" || approvalReq.RequestedAction != "filesystem.delete_path" {
+		t.Fatalf("unexpected approval request adapter/action: %s %s", approvalReq.RequestedAdapter, approvalReq.RequestedAction)
+	}
+	if !approvalReq.WriteIntent {
+		t.Fatalf("approval request should preserve write intent")
+	}
+
+	if _, err := gw.approvals.Decide(ctx, approvalID, "operator-reviewer", "approved", "section 6 end-to-end approval flow"); err != nil {
+		t.Fatalf("approve request: %v", err)
+	}
+
+	req.ApprovalID = strconv.FormatInt(approvalID, 10)
+	req.JobID = &jobID
+	second, err := gw.Execute(ctx, req)
+	if err != nil {
+		t.Fatalf("approved replay execute: %v", err)
+	}
+	if second.Status != StatusOK {
+		t.Fatalf("expected approved replay to execute, got %s (%s)", second.Status, second.DeniedReason)
+	}
+	if _, err := os.Stat(targetAbs); !os.IsNotExist(err) {
+		t.Fatalf("approved delete should remove target, stat err=%v", err)
+	}
+
+	invocations, err := gw.ListInvocationsByCorrelation(ctx, req.CorrelationID, 10)
+	if err != nil {
+		t.Fatalf("list invocations: %v", err)
+	}
+	if len(invocations) != 2 {
+		t.Fatalf("expected approval prompt and approved execution invocations, got %d", len(invocations))
+	}
+	if invocations[0].Status != StatusNeedsApprov || invocations[0].ApprovalRequestID == nil || *invocations[0].ApprovalRequestID != approvalID {
+		t.Fatalf("first invocation should be approval prompt tied to request %d, got %#v", approvalID, invocations[0])
+	}
+	if invocations[1].Status != StatusOK || invocations[1].ApprovalRequestID != nil {
+		t.Fatalf("second invocation should be approved execution without opening a new approval, got %#v", invocations[1])
+	}
+
+	needsPayload := mustAuditPayloadByActionAndCorrelation(t, st, "tool.needs_approval", req.CorrelationID)
+	assertAuditContext(t, needsPayload, req.CorrelationID, req.TraceID, req.WorkspaceID)
+	executedPayload := mustAuditPayloadByActionAndCorrelation(t, st, "tool.executed", req.CorrelationID)
+	assertAuditContext(t, executedPayload, req.CorrelationID, req.TraceID, req.WorkspaceID)
+
+	var needsAuditApprovalID, needsAuditInvocationID int64
+	if err := st.DB.QueryRowContext(ctx, `
+SELECT approval_request_id, gateway_invocation_id
+FROM audit_records
+WHERE correlation_id = ? AND action = 'tool.needs_approval'
+ORDER BY id DESC LIMIT 1`, req.CorrelationID).Scan(&needsAuditApprovalID, &needsAuditInvocationID); err != nil {
+		t.Fatalf("query needs_approval audit linkage: %v", err)
+	}
+	if needsAuditApprovalID != approvalID || needsAuditInvocationID != invocations[0].ID {
+		t.Fatalf("needs_approval audit linkage = approval %d invocation %d, want approval %d invocation %d", needsAuditApprovalID, needsAuditInvocationID, approvalID, invocations[0].ID)
+	}
+	var executedAuditInvocationID int64
+	if err := st.DB.QueryRowContext(ctx, `
+SELECT gateway_invocation_id
+FROM audit_records
+WHERE correlation_id = ? AND action = 'tool.executed'
+ORDER BY id DESC LIMIT 1`, req.CorrelationID).Scan(&executedAuditInvocationID); err != nil {
+		t.Fatalf("query executed audit linkage: %v", err)
+	}
+	if executedAuditInvocationID != invocations[1].ID {
+		t.Fatalf("executed audit invocation = %d want %d", executedAuditInvocationID, invocations[1].ID)
+	}
+}
+
 func TestGatewayPrivilegedToolRequiresApprovalWithoutCapabilityPolicy(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

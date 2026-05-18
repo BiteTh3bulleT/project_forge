@@ -35,6 +35,38 @@ const pendingApproval: ApprovalRequest = {
   requestSummary: "Write a governed file",
 };
 
+const approvedApproval: ApprovalRequest = {
+  ...pendingApproval,
+  id: 9,
+  jobId: "job-approval-9",
+  status: "resolved",
+  requestSummary: "Approved governed file write",
+  decision: {
+    id: 91,
+    requestId: 9,
+    createdAtMs: Date.UTC(2026, 4, 10, 12, 5, 0),
+    actor: "operator-a",
+    decision: "approved",
+    note: "approved after review",
+  },
+};
+
+const deniedApproval: ApprovalRequest = {
+  ...pendingApproval,
+  id: 10,
+  jobId: "job-approval-10",
+  status: "resolved",
+  requestSummary: "Denied governed file write",
+  decision: {
+    id: 101,
+    requestId: 10,
+    createdAtMs: Date.UTC(2026, 4, 10, 12, 6, 0),
+    actor: "operator-b",
+    decision: "denied",
+    note: "denied after review",
+  },
+};
+
 describe("ApprovalsPage decision controls", () => {
   beforeEach(() => {
     mocks.list.mockReset();
@@ -147,5 +179,44 @@ describe("ApprovalsPage decision controls", () => {
     });
     expect(deny.disabled).toBe(false);
     expect(mocks.approve).not.toHaveBeenCalled();
+  });
+
+  it("separates pending, recent resolved, and denied approval views", async () => {
+    // Desktop-side evidence for the approval flow: a pending public request
+    // exposes one-click controls, then resolved decision records remain visible.
+    mocks.list.mockImplementation((status: string) => {
+      if (status === "resolved") {
+        return Promise.resolve({
+          approvals: [approvedApproval, deniedApproval],
+        });
+      }
+      return Promise.resolve({ approvals: [pendingApproval] });
+    });
+
+    render(
+      <MemoryRouter>
+        <ApprovalsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Write a governed file")).toBeTruthy();
+    expect(
+      screen.getByText("Public one-click decision allowed for this request."),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Deny" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Recent / Resolved" }));
+
+    expect(await screen.findByText("Approved governed file write")).toBeTruthy();
+    expect(screen.getByText("Denied governed file write")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Denied" }));
+
+    expect(await screen.findByText("Denied governed file write")).toBeTruthy();
+    expect(screen.queryByText("Approved governed file write")).toBeNull();
+    expect(screen.getByText("denied after review")).toBeTruthy();
+    expect(mocks.list).toHaveBeenLastCalledWith("resolved", 120);
   });
 });

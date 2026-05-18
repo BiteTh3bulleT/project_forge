@@ -52,13 +52,13 @@ export const FALLBACK_OPERATOR_APPS: OperatorApp[] = [
   {
     id: "editor",
     label: "Editor",
-    description: "Open the fixed operator editor wrapper",
-    executable: "foot",
+    description: "Open the native Mousepad text editor",
+    executable: "mousepad",
     category: "Workspace",
     iconName: "accessories-text-editor",
     iconPath: null,
-    desktopFile: null,
-    native: false,
+    desktopFile: "/run/current-system/sw/share/applications/org.xfce.mousepad.desktop",
+    native: true,
   },
   {
     id: "browser",

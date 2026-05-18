@@ -19,6 +19,7 @@ apps/desktop/src-tauri/gen/
 .vm-*
 .vm-nix-store/
 .vm-nix-tmp/
+*.qcow2
 operator_toolbelt.txt
 .claude/settings.local.json
 .claude/worktrees/

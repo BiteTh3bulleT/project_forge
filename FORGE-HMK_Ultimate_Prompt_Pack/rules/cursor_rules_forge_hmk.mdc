@@ -1,0 +1,23 @@
+---
+description: FORGE-HMK implementation rules
+globs:
+  - "**/*"
+alwaysApply: false
+---
+
+# FORGE-HMK Cursor Rules
+
+Do not put implementation code in chat. Make file changes directly.
+
+Rules:
+
+- FORGE-HMK is shadow-first.
+- FORGE-K / Control Lane remains canonical authority.
+- FORGE-T schedules and governs; it does not commit truth.
+- Neuron Mesh workers are propose-only.
+- Crucible validates; it does not directly commit.
+- HKV is acceleration only.
+- Vector/VSA outputs are evidence only.
+- Snapshots are historical shape, not current truth.
+- Every promotable claim needs provenance.
+- Every new behavior needs tests.
