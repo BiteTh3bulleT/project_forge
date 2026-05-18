@@ -664,6 +664,29 @@ func TestSanitizeAssistantVisibleContentStripsSyntheticUserTurnAndNormalizesIden
 	}
 }
 
+func TestSanitizeAssistantVisibleContentStripsCopiedThreadTranscript(t *testing.T) {
+	content, warnings := sanitizeAssistantVisibleContent("I am FORGE.\n\n---\nTHREAD TITLE: copied context\n---\nUSER: Who are you?")
+	if content != "I am FORGE." {
+		t.Fatalf("expected copied transcript to be stripped, got=%q", content)
+	}
+	if !containsString(warnings, "stripped_synthetic_transcript_turn") {
+		t.Fatalf("expected synthetic transcript warning, got=%#v", warnings)
+	}
+
+	content, warnings = sanitizeAssistantVisibleContent("I am FORGE.\n\n---\nUSER: copied context\n\n---\nASSISTANT #1: copied answer")
+	if content != "I am FORGE." {
+		t.Fatalf("expected copied user transcript to be stripped, got=%q", content)
+	}
+	if !containsString(warnings, "stripped_synthetic_transcript_turn") {
+		t.Fatalf("expected synthetic transcript warning for copied user block, got=%#v", warnings)
+	}
+
+	content, warnings = sanitizeAssistantVisibleContent("I AM FORGE.\n\n---")
+	if content != "I am FORGE." {
+		t.Fatalf("expected canonical FORGE identity without trailing fence, got=%q", content)
+	}
+}
+
 func TestStripSyntheticTranscriptContinuation(t *testing.T) {
 	content, cut := stripSyntheticTranscriptContinuation("The answer is 42.\nAssistant: Let me ask myself another question.")
 	if !cut {
@@ -685,23 +708,31 @@ func TestChatPostSyncAnswersIdentityWithoutModel(t *testing.T) {
 		t.Fatalf("create thread: %v", err)
 	}
 
-	raw := []byte(`{"content":"What is your name?","requestAssistant":true,"syncAssistant":true}`)
-	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
-	rr := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rr, req)
+	for _, content := range []string{
+		"What is your name?",
+		"Who are you? Start your answer with exactly: I am FORGE.",
+	} {
+		raw, err := json.Marshal(map[string]any{"content": content, "requestAssistant": true, "syncAssistant": true})
+		if err != nil {
+			t.Fatalf("marshal request: %v", err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+		rr := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
-	}
-	var payload chatPostResponse
-	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
-	}
-	if payload.AssistantMessage == nil {
-		t.Fatalf("expected assistant message")
-	}
-	if got := strings.TrimSpace(payload.AssistantMessage.Content); got != "I am FORGE." {
-		t.Fatalf("expected deterministic FORGE identity, got=%q", got)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+		}
+		var payload chatPostResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+		}
+		if payload.AssistantMessage == nil {
+			t.Fatalf("expected assistant message")
+		}
+		if got := strings.TrimSpace(payload.AssistantMessage.Content); got != "I am FORGE." {
+			t.Fatalf("expected deterministic FORGE identity for %q, got=%q", content, got)
+		}
 	}
 	if fakeRuntime.chatCalls != 0 {
 		t.Fatalf("expected no model runtime calls, got %d", fakeRuntime.chatCalls)

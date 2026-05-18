@@ -89,9 +89,20 @@ Operational constraints:
 func (s *Server) chatOperatorSystemPrompt() string {
 	override := strings.TrimSpace(loadSetting(s.st.DB, "chat_personality_prompt", ""))
 	if override != "" {
-		return override + chatOperationalGroundingGuard + chatAssistantVisibilityGuard
+		return appendChatPromptGuards(override)
 	}
-	return defaultChatOperatorSystemPrompt() + chatAssistantVisibilityGuard
+	return appendChatPromptGuards(defaultChatOperatorSystemPrompt())
+}
+
+func appendChatPromptGuards(prompt string) string {
+	prompt = strings.TrimSpace(prompt)
+	if !strings.Contains(prompt, "Operational grounding:") {
+		prompt += chatOperationalGroundingGuard
+	}
+	if !strings.Contains(prompt, "Visibility boundary:") {
+		prompt += chatAssistantVisibilityGuard
+	}
+	return strings.TrimSpace(prompt)
 }
 
 func (s *Server) buildChatPrompt(ctx context.Context, th *chat.ThreadDetail) string {

@@ -17,9 +17,10 @@ func forgeAuthorityToolOmissionMessage(forcedModel string) string {
 
 func deterministicNoToolChatReply(th *chat.ThreadDetail, content string) (string, bool) {
 	normalized := normalizeAssistantIntent(content)
-	switch normalized {
-	case "what is your name", "whats your name", "who are you", "what are you":
+	if isAssistantIdentityQuery(normalized) {
 		return "I am FORGE.", true
+	}
+	switch normalized {
 	case "what is my name", "whats my name", "who am i":
 		if name := latestOperatorNameFromThread(th); name != "" {
 			return "Your name is " + name + ".", true
@@ -128,6 +129,10 @@ func sanitizeAssistantVisibleContent(content string) (string, []string) {
 		out = strings.TrimSpace(strippedOut)
 		warnings = append(warnings, "stripped_synthetic_transcript_turn")
 	}
+	if trimmedFence := strings.TrimSpace(out); strings.HasSuffix(trimmedFence, "\n---") || trimmedFence == "---" {
+		out = strings.TrimSpace(strings.TrimSuffix(trimmedFence, "\n---"))
+		warnings = append(warnings, "stripped_synthetic_transcript_turn")
+	}
 	out, stripped = normalizeAssistantVisibleIdentity(out)
 	if stripped {
 		warnings = append(warnings, "normalized_model_identity")
@@ -137,6 +142,31 @@ func sanitizeAssistantVisibleContent(content string) (string, []string) {
 }
 
 func stripSyntheticTranscriptContinuation(content string) (string, bool) {
+	lower := strings.ToLower(content)
+	for _, marker := range []string{
+		"\n---\nthread title:",
+		"\r\n---\r\nthread title:",
+		"\n---\nuser:",
+		"\r\n---\r\nuser:",
+		"\n---\nassistant",
+		"\r\n---\r\nassistant",
+	} {
+		if idx := strings.Index(lower, marker); idx >= 0 {
+			return strings.TrimSpace(content[:idx]), true
+		}
+	}
+	for _, marker := range []string{
+		"---\nthread title:",
+		"---\r\nthread title:",
+		"---\nuser:",
+		"---\r\nuser:",
+		"---\nassistant",
+		"---\r\nassistant",
+	} {
+		if strings.HasPrefix(lower, marker) {
+			return "", true
+		}
+	}
 	markers := []string{
 		"USER",
 		"YOU",
@@ -170,6 +200,9 @@ func normalizeAssistantVisibleIdentity(content string) (string, bool) {
 			}
 			return "I am FORGE.", true
 		}
+	}
+	if lower == "i am forge." || lower == "i am forge" {
+		return "I am FORGE.", out != "I am FORGE."
 	}
 	return out, false
 }

@@ -156,13 +156,23 @@ func isSupportedNoModelHyperlaneIntent(intent hyperlane.Intent) bool {
 }
 
 func deterministicNoModelIntent(normalized string) bool {
-	if normalized == "what is your name" || normalized == "whats your name" || normalized == "who are you" || normalized == "what are you" {
+	if isAssistantIdentityQuery(normalized) {
 		return true
 	}
 	if normalized == "what is my name" || normalized == "whats my name" || normalized == "who am i" {
 		return true
 	}
 	return isWeatherWithoutLocationQuery(normalized)
+}
+
+func isAssistantIdentityQuery(normalized string) bool {
+	if normalized == "what is your name" || normalized == "whats your name" || normalized == "who are you" || normalized == "what are you" {
+		return true
+	}
+	return strings.Contains(normalized, "who are you") ||
+		strings.Contains(normalized, "what are you") ||
+		strings.Contains(normalized, "what is your name") ||
+		strings.Contains(normalized, "whats your name")
 }
 
 func isStatusLikeIntent(normalized string) bool {
