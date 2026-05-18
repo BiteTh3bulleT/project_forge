@@ -10,12 +10,13 @@ import (
 
 const (
 	KVIdentityDecisionAccepted      = "accepted"
+	KVIdentityDecisionCanaryReuse   = "accepted_canary_reuse"
 	KVIdentityDecisionRejected      = "rejected"
 	KVIdentityDecisionMalformed     = "malformed"
 	KVIdentityDecisionUnsupported   = "unsupported_live_reuse"
 	KVIdentityDecisionInternalError = "internal_error"
 
-	KVIdentityPolicyVersion    = "phase-i2-v1"
+	KVIdentityPolicyVersion    = "phase-15-canary-v1"
 	KVIdentityValidatorVersion = "kvidentity-v1"
 )
 
@@ -32,6 +33,8 @@ type KVIdentityEnforcementDecision struct {
 	MemoryMutation   bool                        `json:"memoryMutation"`
 	RuntimeMutation  bool                        `json:"runtimeMutation"`
 	LiveKVReuse      bool                        `json:"liveKVReuse"`
+	CanaryKVReuse    bool                        `json:"canaryKVReuse"`
+	BackendReuse     bool                        `json:"backendReuse"`
 	ValidatorVersion string                      `json:"validatorVersion"`
 	PolicyVersion    string                      `json:"policyVersion"`
 	ValidationResult kvidentity.ValidationResult `json:"validationResult"`
@@ -65,7 +68,7 @@ func (c *KVIdentityEnforcementCounters) Record(decision KVIdentityEnforcementDec
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	switch decision.Decision {
-	case KVIdentityDecisionAccepted:
+	case KVIdentityDecisionAccepted, KVIdentityDecisionCanaryReuse:
 		c.snapshot.Accepted++
 	case KVIdentityDecisionRejected:
 		c.snapshot.Rejected++
@@ -94,13 +97,17 @@ func EnforceKVIdentity(req domain.SyscallRequest) KVIdentityEnforcementDecision 
 		MemoryMutation:   false,
 		RuntimeMutation:  false,
 		LiveKVReuse:      false,
+		CanaryKVReuse:    false,
+		BackendReuse:     false,
 		ValidatorVersion: KVIdentityValidatorVersion,
 		PolicyVersion:    KVIdentityPolicyVersion,
 	}
-	if unsupportedLiveReuseRequested(req.Payload) {
+	liveReuseRequested := unsupportedLiveReuseRequested(req.Payload)
+	canaryReuseRequested := kvReuseCanaryRequested(req.Payload)
+	if liveReuseRequested && !canaryReuseRequested {
 		base.Accepted = false
 		base.Decision = KVIdentityDecisionUnsupported
-		base.Reason = "live KV reuse is not implemented"
+		base.Reason = "live KV reuse is not implemented outside the exact-identity canary path"
 		return base
 	}
 	if issues := validateKVIdentity(req); len(issues) > 0 {
@@ -118,6 +125,20 @@ func EnforceKVIdentity(req domain.SyscallRequest) KVIdentityEnforcementDecision 
 	base.FailedGates = append([]string{}, result.FailedGates...)
 	base.Warnings = append([]string{}, result.Warnings...)
 	if result.Passed {
+		if canaryReuseRequested {
+			if reason := validateKVReuseCanary(req.Payload, manifest, request, liveReuseRequested); reason != "" {
+				base.Accepted = false
+				base.Decision = KVIdentityDecisionRejected
+				base.Reason = reason
+				base.FailedGates = appendUniqueString(base.FailedGates, "kv_reuse_canary_exact_identity")
+				return base
+			}
+			base.Accepted = true
+			base.Decision = KVIdentityDecisionCanaryReuse
+			base.Reason = "KV reuse canary accepted after exact final-token identity proof; backend reuse not executed"
+			base.CanaryKVReuse = true
+			return base
+		}
 		base.Accepted = true
 		base.Decision = KVIdentityDecisionAccepted
 		base.Reason = "KV identity validation accepted"
@@ -141,6 +162,8 @@ func (d KVIdentityEnforcementDecision) ToStateSummary() map[string]any {
 		"memoryMutation":        d.MemoryMutation,
 		"runtimeMutation":       d.RuntimeMutation,
 		"liveKVReuse":           d.LiveKVReuse,
+		"canaryKVReuse":         d.CanaryKVReuse,
+		"backendReuse":          d.BackendReuse,
 		"forgeKActivation":      forgeKActivationSummary(string(domain.ActionValidateKVIdentity)),
 		"forgeKNoEffect":        forgeKNoEffectSummary(),
 	}
@@ -162,6 +185,8 @@ func (d KVIdentityEnforcementDecision) ToAuditFields() map[string]any {
 		"memoryMutation":   d.MemoryMutation,
 		"runtimeMutation":  d.RuntimeMutation,
 		"liveKVReuse":      d.LiveKVReuse,
+		"canaryKVReuse":    d.CanaryKVReuse,
+		"backendReuse":     d.BackendReuse,
 		"validatorVersion": d.ValidatorVersion,
 		"policyVersion":    d.PolicyVersion,
 		"forgeKActivation": forgeKActivationSummary(string(domain.ActionValidateKVIdentity)),
@@ -198,6 +223,35 @@ func unsupportedLiveReuseRequested(payload map[string]any) bool {
 	return false
 }
 
+func kvReuseCanaryRequested(payload map[string]any) bool {
+	if truthyClaim(payload, "kvReuseCanary") || truthyClaim(payload, "kv_reuse_canary") {
+		return true
+	}
+	if request, ok := payload["request"].(map[string]any); ok {
+		return truthyClaim(request, "kvReuseCanary") || truthyClaim(request, "kv_reuse_canary")
+	}
+	return false
+}
+
+func validateKVReuseCanary(payload map[string]any, manifest kvidentity.ManifestIdentity, request kvidentity.RequestIdentity, liveReuseRequested bool) string {
+	if !liveReuseRequested {
+		return "KV reuse canary requires an explicit live reuse request"
+	}
+	if strings.TrimSpace(readString(payload, "canary_path")) != "control_lane_validation_only" {
+		return "KV reuse canary requires canary_path=control_lane_validation_only"
+	}
+	if manifest.CacheMode != "STRICT_PREFIX" || request.CacheMode != "STRICT_PREFIX" {
+		return "KV reuse canary requires STRICT_PREFIX cache mode"
+	}
+	if manifest.FinalTokenIDsHash == "" || request.FinalTokenIDsHash == "" {
+		return "KV reuse canary requires exact final_token_ids_hash identity"
+	}
+	if manifest.FinalTokenIDsHash != request.FinalTokenIDsHash {
+		return "KV reuse canary final_token_ids_hash mismatch"
+	}
+	return ""
+}
+
 func truthyClaim(values map[string]any, key string) bool {
 	if values == nil {
 		return false
@@ -225,4 +279,13 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func appendUniqueString(values []string, value string) []string {
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
 }

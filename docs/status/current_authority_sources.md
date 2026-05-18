@@ -52,6 +52,8 @@ Current memory observation migration work keeps legacy `POST/PATCH /api/memory/o
 
 Current Lymphatic-related live work is proposal-only metadata on autonomy maintenance dry-run reports through `services/core/internal/api`. Dry-run maintenance and improvement actions are marked as cleanup proposals that cannot execute cleanup and cannot claim commit authority. This does not run `services/core/internal/forgek/lymphatic` as live authority, mutate memory, delete/archive data, execute tools, call modelruntime, admit evidence, or change non-dry-run autonomy ownership.
 
+Current KV-related live work includes a validation-only exact-identity canary through `VALIDATE_KV_IDENTITY` in `services/core/internal/aios/controllane`. The canary requires explicit `kvReuseCanary=true`, `canary_path=control_lane_validation_only`, `STRICT_PREFIX`, matching `final_token_ids_hash`, and all identity gates passing. It records canary eligibility only; it does not enable backend KV tensor reuse, runtime cache reuse, modelruntime behavior changes, memory mutation, or `services/core/internal/forgek/kv` live authority.
+
 See `docs/reviews/current_phase_status.md` and `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
 
 ## Planning And Historical Docs

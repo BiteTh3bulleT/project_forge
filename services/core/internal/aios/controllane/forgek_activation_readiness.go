@@ -190,8 +190,8 @@ func forgeKAuthorityGateMatrixReadiness(validationReady bool) []ForgeKAuthorityG
 	kernelTests := []string{}
 	kernelBlockers := []string{"required live validation actions are not all closed"}
 	if validationReady {
-		validationStatus = "PARTIAL_LIVE_VALIDATION"
-		validationTests = []string{"Control Lane validation action registry tests", "kernel status read-only activation tests"}
+		validationStatus = "KV_REUSE_CANARY_VALIDATION_ONLY"
+		validationTests = []string{"Control Lane validation action registry tests", "kernel status read-only activation tests", "exact-identity KV reuse canary tests"}
 		kernelStatus = "STATE_AND_LOOP_COMMIT_LIVE"
 		kernelTests = []string{"Control Lane validation action registry tests", "kernel status read-only activation tests", "low-risk note kernel-style commit test", "state and loop kernel-style commit test"}
 		kernelBlockers = []string{"FORGE-K Kernel simulator is not live authority", "links/tags/operator facades remain future bounded phases", "broader object families remain future bounded phases"}
@@ -284,11 +284,11 @@ func forgeKAuthorityGateMatrixReadiness(validationReady bool) []ForgeKAuthorityG
 			CurrentStatus:   validationStatus,
 			LiveOwner:       ForgeKActivationOwnerControlLane,
 			TargetOwner:     "forgek.kv",
-			FeatureFlag:     "n/a; KV identity validation only",
-			RollbackPath:    "remove VALIDATE_KV_IDENTITY live validation and keep no live KV reuse",
-			TestsRequired:   []string{"KV identity validation tests", "no live KV reuse tests", "cache-not-memory tests"},
+			FeatureFlag:     "n/a; exact-identity canary requires explicit kvReuseCanary + canary_path=control_lane_validation_only",
+			RollbackPath:    "remove KV reuse canary acceptance and keep VALIDATE_KV_IDENTITY validation-only without canary reuse",
+			TestsRequired:   []string{"KV identity validation tests", "exact final-token canary tests", "no backend KV reuse tests", "cache-not-memory tests"},
 			TestsPassing:    validationTests,
-			Blockers:        []string{"live KV reuse and runtime cache reuse remain disabled"},
+			Blockers:        []string{"backend KV reuse and runtime cache reuse remain disabled", "canary is validation-only and does not store or reuse live KV tensors"},
 			OperatorVisible: true,
 		},
 		{

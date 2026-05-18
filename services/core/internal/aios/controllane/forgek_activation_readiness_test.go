@@ -142,8 +142,8 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	if matrix["Kernel"].CurrentStatus != "STATE_AND_LOOP_COMMIT_LIVE" {
 		t.Fatalf("kernel matrix status=%q, want STATE_AND_LOOP_COMMIT_LIVE", matrix["Kernel"].CurrentStatus)
 	}
-	if matrix["KV System"].CurrentStatus != "PARTIAL_LIVE_VALIDATION" {
-		t.Fatalf("kv matrix status=%q, want PARTIAL_LIVE_VALIDATION", matrix["KV System"].CurrentStatus)
+	if matrix["KV System"].CurrentStatus != "KV_REUSE_CANARY_VALIDATION_ONLY" {
+		t.Fatalf("kv matrix status=%q, want KV_REUSE_CANARY_VALIDATION_ONLY", matrix["KV System"].CurrentStatus)
 	}
 	if matrix["Courthouse"].CurrentStatus != "ADMISSION_CANDIDATE_ONLY" {
 		t.Fatalf("courthouse matrix status=%q, want ADMISSION_CANDIDATE_ONLY", matrix["Courthouse"].CurrentStatus)
