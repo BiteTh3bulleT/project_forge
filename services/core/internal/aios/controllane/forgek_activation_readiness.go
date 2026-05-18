@@ -186,24 +186,28 @@ func ForgeKActivationReadiness(reg ActionRegistry, now time.Time) ForgeKActivati
 func forgeKAuthorityGateMatrixReadiness(validationReady bool) []ForgeKAuthorityGateMatrixEntry {
 	validationStatus := "BLOCKED"
 	validationTests := []string{}
-	validationBlockers := []string{"required live validation actions are not all closed"}
+	kernelStatus := "BLOCKED"
+	kernelTests := []string{}
+	kernelBlockers := []string{"required live validation actions are not all closed"}
 	if validationReady {
 		validationStatus = "PARTIAL_LIVE_VALIDATION"
 		validationTests = []string{"Control Lane validation action registry tests", "kernel status read-only activation tests"}
-		validationBlockers = []string{"full Kernel mutation authority remains disabled"}
+		kernelStatus = "LOW_RISK_NOTE_COMMIT_LIVE"
+		kernelTests = []string{"Control Lane validation action registry tests", "kernel status read-only activation tests", "low-risk note kernel-style commit test"}
+		kernelBlockers = []string{"FORGE-K Kernel simulator is not live authority", "links/tags/operator facades remain future bounded phases"}
 	}
 
 	return []ForgeKAuthorityGateMatrixEntry{
 		{
 			Subsystem:       "Kernel",
-			CurrentStatus:   validationStatus,
+			CurrentStatus:   kernelStatus,
 			LiveOwner:       ForgeKActivationOwnerControlLane,
 			TargetOwner:     "forgek.kernel",
-			FeatureFlag:     "n/a; live surface is validation-only Control Lane metadata",
-			RollbackPath:    "remove validation readiness exposure and keep existing Control Lane behavior",
-			TestsRequired:   []string{"Control Lane validation registry tests", "read-only kernel status API tests", "forbidden simulator import tests"},
-			TestsPassing:    validationTests,
-			Blockers:        validationBlockers,
+			FeatureFlag:     "n/a; CREATE_NOTE commits through existing Control Lane syscall transaction path",
+			RollbackPath:    "keep existing Control Lane note commit path or revert Phase 11 docs/tests/readiness metadata",
+			TestsRequired:   []string{"Control Lane validation registry tests", "read-only kernel status API tests", "low-risk note commit tests", "forbidden simulator import tests"},
+			TestsPassing:    kernelTests,
+			Blockers:        kernelBlockers,
 			OperatorVisible: true,
 		},
 		{

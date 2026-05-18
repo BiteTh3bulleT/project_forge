@@ -490,6 +490,49 @@ func TestSQLiteFutureIrisCannotBypassKernel(t *testing.T) {
 	}
 }
 
+func TestSQLiteCreateNoteIsLowRiskKernelStyleCommit(t *testing.T) {
+	ctx := context.Background()
+	k, txRunner, st := newSQLiteKernel(t, nil)
+	req := validSQLiteRequest(domain.ActionCreateNote, "phase11-note-commit", "ws-phase11")
+	req.Payload = map[string]any{
+		"id":      "phase11-note",
+		"type":    string(domain.NoteFact),
+		"title":   "Phase 11 note",
+		"content": "low-risk object committed through Control Lane",
+	}
+
+	res, err := k.Process(ctx, req)
+	if err != nil || !res.Success {
+		t.Fatalf("create note failed: err=%v res=%+v", err, res)
+	}
+	if !stringInSlice(res.CommittedObjectIDs, "phase11-note") || !stringInSlice(res.CommittedObjectIDs, "phase11-note-commit:journal_event") {
+		t.Fatalf("expected note and journal event committed ids, got %v", res.CommittedObjectIDs)
+	}
+	note, ok := txRunner.read.FindNote("phase11-note")
+	if !ok {
+		t.Fatalf("expected note to be queryable through semantic read store")
+	}
+	if note.Scope.WorkspaceID != req.Scope.WorkspaceID || note.Provenance.TraceID != req.TraceID {
+		t.Fatalf("unexpected note scope/provenance: %#v", note)
+	}
+
+	var eventType, eventSource, eventCorr string
+	if err := st.DB.QueryRowContext(ctx, `SELECT type, source, correlation_id FROM journal_events WHERE id = ?`, "phase11-note-commit:journal_event").Scan(&eventType, &eventSource, &eventCorr); err != nil {
+		t.Fatalf("query journal event: %v", err)
+	}
+	if eventType != "semantic_syscall.create_note" || eventSource != "forge_kernel" || eventCorr != req.CorrelationID {
+		t.Fatalf("unexpected journal event type/source/corr: %q %q %q", eventType, eventSource, eventCorr)
+	}
+
+	var committedBy, syscallID, correlationID, auditID string
+	if err := st.DB.QueryRowContext(ctx, `SELECT committed_by, syscall_id, correlation_id, audit_id FROM memory_notes WHERE id = ?`, "phase11-note").Scan(&committedBy, &syscallID, &correlationID, &auditID); err != nil {
+		t.Fatalf("query note lineage: %v", err)
+	}
+	if committedBy != "forge_kernel" || syscallID != req.ID || correlationID != req.CorrelationID || auditID == "" {
+		t.Fatalf("unexpected note lineage committed=%q syscall=%q corr=%q audit=%q", committedBy, syscallID, correlationID, auditID)
+	}
+}
+
 func TestSQLiteContextCompileDryRunAndReadOnlyPath(t *testing.T) {
 	ctx := context.Background()
 	k, txRunner, _ := newSQLiteKernel(t, nil)
@@ -522,6 +565,15 @@ func TestSQLiteContextCompileDryRunAndReadOnlyPath(t *testing.T) {
 	if pkt.ID == "" || !strings.Contains(pkt.ID, "ctx-") {
 		t.Fatalf("unexpected context packet id: %q", pkt.ID)
 	}
+}
+
+func stringInSlice(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSQLiteContextCompilePersistsSnapshotEvidence(t *testing.T) {
