@@ -50,6 +50,8 @@ Current low-risk Kernel-style commit work includes `CREATE_NOTE`, `UPDATE_STATE`
 
 Current memory observation migration work keeps legacy `POST/PATCH /api/memory/observations*` mutation endpoints retired through `services/core/internal/api`. Existing `memory_observations` rows remain historical/retrieval evidence, and retired write attempts receive structured guidance/audit metadata pointing to Courthouse admission-candidate validation plus Control Lane semantic syscalls. This does not admit evidence, write memory, run a batch migrator, or make `services/core/internal/forgek` live authority.
 
+Current Lymphatic-related live work is proposal-only metadata on autonomy maintenance dry-run reports through `services/core/internal/api`. Dry-run maintenance and improvement actions are marked as cleanup proposals that cannot execute cleanup and cannot claim commit authority. This does not run `services/core/internal/forgek/lymphatic` as live authority, mutate memory, delete/archive data, execute tools, call modelruntime, admit evidence, or change non-dry-run autonomy ownership.
+
 See `docs/reviews/current_phase_status.md` and `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
 
 ## Planning And Historical Docs

@@ -157,6 +157,9 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	if matrix["Runtime Boundary"].CurrentStatus != "RUNTIME_PROPOSAL_BOUNDARY" {
 		t.Fatalf("runtime boundary status=%q, want RUNTIME_PROPOSAL_BOUNDARY", matrix["Runtime Boundary"].CurrentStatus)
 	}
+	if matrix["Lymphatic Lane"].CurrentStatus != "LYMPHATIC_PROPOSAL_ONLY_ONLINE" {
+		t.Fatalf("lymphatic lane status=%q, want LYMPHATIC_PROPOSAL_ONLY_ONLINE", matrix["Lymphatic Lane"].CurrentStatus)
+	}
 	if matrix["Consensus Mesh"].CurrentStatus != "CONSENSUS_GATE_MODEL_RUNTIME_ONLY" {
 		t.Fatalf("consensus mesh status=%q, want CONSENSUS_GATE_MODEL_RUNTIME_ONLY", matrix["Consensus Mesh"].CurrentStatus)
 	}
