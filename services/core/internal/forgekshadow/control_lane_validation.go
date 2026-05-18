@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"forge/projectforge/services/core/internal/refvalidation"
 )
 
 const (
@@ -31,6 +33,10 @@ func normalizeControlLaneValidationInput(input ControlLaneValidationInput, now t
 	}
 	if input.MemoryMutation || input.RuntimeMutation || input.ModelRuntimeCall || input.EvidenceAdmission || input.ContextCompilation || input.UserVisibleOutput || input.LiveAuthorityMigration {
 		return ControlLaneValidationObservation{}, nil, fmt.Errorf("%w: control lane validation observation claims forbidden effects", ErrPolicyRejected)
+	}
+	normalizedRefs, err := normalizeControlLaneValidationRefs(input.WorkspaceID, input.NormalizedRefs)
+	if err != nil {
+		return ControlLaneValidationObservation{}, nil, err
 	}
 	durationMS := input.Duration.Milliseconds()
 	if durationMS < 0 {
@@ -110,8 +116,28 @@ func normalizeControlLaneValidationInput(input ControlLaneValidationInput, now t
 		LiveAuthorityMigration: false,
 		DurationMS:             durationMS,
 		Warnings:               warnings,
+		NormalizedRefs:         normalizedRefs,
 		Metadata:               safe,
 	}, safe, nil
+}
+
+func normalizeControlLaneValidationRefs(workspaceID string, refs []refvalidation.ObjectRef) ([]refvalidation.ObjectRef, error) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" {
+		return nil, fmt.Errorf("%w: control lane validation refs require workspace_id", ErrUnsafeMetadata)
+	}
+	result := refvalidation.ValidateRefs(refvalidation.ValidationRequest{
+		ResultID:    "control_lane_validation_refs",
+		WorkspaceID: workspaceID,
+		Refs:        refs,
+	})
+	if !result.Passed {
+		return nil, fmt.Errorf("%w: control lane validation refs rejected", ErrUnsafeMetadata)
+	}
+	return append([]refvalidation.ObjectRef{}, result.NormalizedRefs...), nil
 }
 
 func addCount(metadata map[string]any, key string, value int) {

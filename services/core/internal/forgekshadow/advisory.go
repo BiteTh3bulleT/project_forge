@@ -126,6 +126,17 @@ func buildConsensusAdvisory(safeRefCount int) ShadowConsensusAdvisory {
 }
 
 func buildContextCompilerAdvisory(report DiagnosticReport, safeRefs []string) ShadowContextCompilerAdvisory {
+	if report.ContextBundleShadow != nil {
+		return ShadowContextCompilerAdvisory{
+			Status:     "shadow_context_bundle_created",
+			BundleHash: report.ContextBundleShadow.BundleHash,
+			BlockCount: len(report.ContextBundleShadow.Blocks),
+			CacheEligibilitySummary: map[string]int{
+				"shape_only_cacheable": len(report.ContextBundleShadow.Blocks),
+				"do_not_cache":         0,
+			},
+		}
+	}
 	if len(safeRefs) == 0 {
 		return ShadowContextCompilerAdvisory{
 			Status:     "insufficient_safe_metadata",

@@ -40,6 +40,8 @@ Current Courthouse-related live work is admission-candidate validation only thro
 
 Current Memory Palace-related live work is mirror-only through existing disabled-by-default `services/core/internal/forgekshadow` retrieval metadata diagnostics. It mirrors bounded metadata refs only and does not run retrieval/search/embeddings, read raw source/chunk/memory content, write memory, admit evidence, compile context, change routes/APIs, or make `services/core/internal/forgek/palace` live authority.
 
+Current Context Compiler-related live work is shadow-only through existing disabled-by-default `services/core/internal/forgekshadow` Control Lane validation diagnostics. It can create a typed shadow ContextBundle shape from accepted `VALIDATE_ADMISSION_CANDIDATE` refs, but those refs are candidate-validation refs rather than live admitted evidence. It does not replace `COMPILE_CONTEXT`, create prompt text, call modelruntime, run retrieval/search/embeddings, write memory, admit evidence, change routes/APIs, or make `services/core/internal/forgek/contextcompiler` live authority.
+
 See `docs/reviews/current_phase_status.md` and `docs/adr/0005-forge-k-simulator-vs-live-authority.md`.
 
 ## Planning And Historical Docs

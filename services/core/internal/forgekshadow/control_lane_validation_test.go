@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"forge/projectforge/services/core/internal/forgek/shadowharness"
+	"forge/projectforge/services/core/internal/refvalidation"
 )
 
 func TestControlLaneValidationRequiresGlobalAndValidationFlags(t *testing.T) {
@@ -73,6 +74,27 @@ func TestControlLaneValidationStoresDiagnosticOnlySummary(t *testing.T) {
 		if strings.Contains(serialized, forbidden) {
 			t.Fatalf("control lane validation leaked forbidden fragment %q in %s", forbidden, serialized)
 		}
+	}
+}
+
+func TestControlLaneValidationStoresNormalizedRefs(t *testing.T) {
+	observer := NewObserverWithSink(Config{Enabled: true, ControlLaneValidationEnabled: true}, nil, fixedNow)
+	input := sampleControlLaneValidationInput()
+	input.Action = "VALIDATE_ADMISSION_CANDIDATE"
+	input.ValidationKind = "admission_candidate"
+	input.Decision = "accepted"
+	input.NormalizedRefs = []refvalidation.ObjectRef{
+		{RefType: "memory_note", RefID: "note-1", WorkspaceID: "workspace-a"},
+	}
+	if err := observer.ObserveControlLaneValidation(context.Background(), input); err != nil {
+		t.Fatalf("observe control lane validation: %v", err)
+	}
+	validation := observer.Reports()[0].ControlLaneValidation
+	if len(validation.NormalizedRefs) != 1 || validation.NormalizedRefs[0].RefID != "note-1" {
+		t.Fatalf("normalized refs were not retained: %#v", validation.NormalizedRefs)
+	}
+	if observer.Reports()[0].ContextBundleShadow == nil {
+		t.Fatalf("accepted admission candidate should create shadow context bundle")
 	}
 }
 

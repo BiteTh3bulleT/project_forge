@@ -18,6 +18,7 @@ func TestForgeKShadowDoesNotImportLiveAuthorityPackages(t *testing.T) {
 		"forge/projectforge/services/core/internal/embeddings",
 		"forge/projectforge/services/core/internal/memory",
 		"forge/projectforge/services/core/internal/aios/controllane",
+		"forge/projectforge/services/core/internal/forgek/contextcompiler",
 		"forge/projectforge/services/core/internal/forgek/court",
 		"forge/projectforge/services/core/internal/forgek/palace",
 	}

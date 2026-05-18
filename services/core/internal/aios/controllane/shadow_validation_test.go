@@ -184,6 +184,9 @@ func TestControlLaneValidationObserverCalledForAdmissionCandidateValidation(t *t
 	if input.NormalizedRefCount != 1 {
 		t.Fatalf("normalized ref count=%d, want 1", input.NormalizedRefCount)
 	}
+	if len(input.NormalizedRefs) != 1 || input.NormalizedRefs[0].RefID != "note-evidence-a" || input.NormalizedRefs[0].RefType != "memory_note" {
+		t.Fatalf("observer lost normalized admission refs: %#v", input.NormalizedRefs)
+	}
 	assertControlLaneValidationInputNoForbiddenEffects(t, input)
 }
 

@@ -151,6 +151,9 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	if matrix["Memory Palace"].CurrentStatus != "MEMORY_PALACE_MIRROR_ONLY" {
 		t.Fatalf("memory palace matrix status=%q, want MEMORY_PALACE_MIRROR_ONLY", matrix["Memory Palace"].CurrentStatus)
 	}
+	if matrix["Context Compiler"].CurrentStatus != "CONTEXT_COMPILER_SHADOW_ONLY" {
+		t.Fatalf("context compiler matrix status=%q, want CONTEXT_COMPILER_SHADOW_ONLY", matrix["Context Compiler"].CurrentStatus)
+	}
 	if matrix["Runtime Boundary"].CurrentStatus != "BLOCKED" {
 		t.Fatalf("runtime boundary status=%q, want BLOCKED", matrix["Runtime Boundary"].CurrentStatus)
 	}

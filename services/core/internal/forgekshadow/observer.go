@@ -294,6 +294,16 @@ func (o *Observer) observeAt(ctx context.Context, input ObservationInput, now ti
 		}
 		memoryPalaceMirror = &mirror
 	}
+	var contextBundleShadow *ContextBundleShadowReport
+	if controlLaneValidation != nil {
+		bundle, ok, err := BuildContextBundleShadowFromControlLaneValidation(*controlLaneValidation)
+		if err != nil {
+			return err
+		}
+		if ok {
+			contextBundleShadow = &bundle
+		}
+	}
 	diagnostic := DiagnosticReport{
 		Observation:           obs,
 		Comparison:            report,
@@ -302,6 +312,7 @@ func (o *Observer) observeAt(ctx context.Context, input ObservationInput, now ti
 		RetrievalMetadata:     retrievalMetadata,
 		MemoryPalaceMirror:    memoryPalaceMirror,
 		ControlLaneValidation: controlLaneValidation,
+		ContextBundleShadow:   contextBundleShadow,
 		StoredAt:              now,
 	}
 	if o.cfg.AdvisoryEnabled {

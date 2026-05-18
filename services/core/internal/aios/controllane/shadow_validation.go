@@ -6,6 +6,7 @@ import (
 
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/forgekshadow"
+	"forge/projectforge/services/core/internal/refvalidation"
 )
 
 func (p *Processor) observeControlLaneValidation(ctx context.Context, req domain.SyscallRequest, result domain.SyscallResult) {
@@ -44,6 +45,7 @@ func controlLaneValidationShadowInput(req domain.SyscallRequest, result domain.S
 		UnchangedRefCount:      controlLaneValidationCount(result.StateSummary, summary, "unchangedRefs", "unchangedRefCount"),
 		FailureCount:           len(result.RejectedReasons),
 		WarningCount:           len(result.Warnings),
+		NormalizedRefs:         controlLaneValidationSummaryRefs(result.StateSummary, summary),
 		MemoryMutation:         false,
 		RuntimeMutation:        false,
 		ModelRuntimeCall:       false,
@@ -55,6 +57,52 @@ func controlLaneValidationShadowInput(req domain.SyscallRequest, result domain.S
 			"dry_run": result.DryRun,
 		},
 	}, true
+}
+
+func controlLaneValidationSummaryRefs(state, summary map[string]any) []refvalidation.ObjectRef {
+	refs := objectRefsFromSummary(summary["normalizedRefs"])
+	if len(refs) > 0 {
+		return refs
+	}
+	return objectRefsFromSummary(state["normalizedRefs"])
+}
+
+func objectRefsFromSummary(raw any) []refvalidation.ObjectRef {
+	items, ok := raw.([]map[string]string)
+	if ok {
+		out := make([]refvalidation.ObjectRef, 0, len(items))
+		for _, item := range items {
+			ref := refvalidation.ObjectRef{
+				RefType:     strings.TrimSpace(item["ref_type"]),
+				RefID:       strings.TrimSpace(item["ref_id"]),
+				WorkspaceID: strings.TrimSpace(item["workspace_id"]),
+			}
+			if ref.RefType != "" || ref.RefID != "" || ref.WorkspaceID != "" {
+				out = append(out, ref)
+			}
+		}
+		return out
+	}
+	anyItems, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]refvalidation.ObjectRef, 0, len(anyItems))
+	for _, item := range anyItems {
+		values, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		ref := refvalidation.ObjectRef{
+			RefType:     readString(values, "ref_type"),
+			RefID:       readString(values, "ref_id"),
+			WorkspaceID: readString(values, "workspace_id"),
+		}
+		if ref.RefType != "" || ref.RefID != "" || ref.WorkspaceID != "" {
+			out = append(out, ref)
+		}
+	}
+	return out
 }
 
 func controlLaneValidationShadowKind(action domain.SemanticActionType) (string, string, bool) {
