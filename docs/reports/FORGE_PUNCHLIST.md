@@ -10,15 +10,15 @@
 ## Current State Snapshot
 
 - **Build:** 54 Go packages, 0 fails, vet clean, ~20s test wall time.
-- **Coverage on load-bearing packages:**
-  - `memory`: 11.0% — was 6.5%
-  - `aios/controllane`: 13.9% — was 12.1%
-  - `aios/autonomy`: 9.2% — unchanged
-  - `aios/dream`: 20.5% — was 17.2%
+- **Coverage on load-bearing packages:** verified 2026-05-18.
+  - `memory`: 68.9%
+  - `aios/controllane`: 70.9%
+  - `aios/autonomy`: 47.5%
+  - `aios/dream`: 86.5%
   - `aios/hyperlane`: **66.7%** — was 0%
-  - `gateway`: 18.8%
-  - `api`: 22.6%
-- **Untested packages:** 18 (down from 27).
+  - `gateway`: 67.6%
+  - `api`: 52.5%
+- **Untested packages:** active Section 3 "worth covering" package list is closed. Remaining no-test packages are lower-traffic/deferred: `internal/failurepatterns`, `internal/packetopt`, `internal/packets`, `internal/reconciliation`, `internal/reviews`, `internal/strategies`.
 - **Largest non-test source file:** `services/core/internal/api/model_runtime_bridge.go` at 1,482 lines (down from `gateway/service.go` at 4,709). SQL migrations, validator crates, barrels, and test files remain tracked separately.
 - **In flight:** Section 2 file split threshold is satisfied; next refactors should be domain-driven rather than size-driven.
 - **Working tree:** Section 2 final split pass verified and pushed to `main`.
@@ -124,11 +124,12 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 
 ### Load-bearing (P0)
 
-- [ ] **`services/core/internal/memory/`** — 11% → 25%. The canonical-truth store. Pick the top 10 most-called functions and write substantive table-driven tests.
-- [ ] **`services/core/internal/aios/controllane/`** — 14% → 25%. Focus on `processor.go`, `validator.go`, `apply_*.go`.
-- [ ] **`services/core/internal/aios/autonomy/`** — 9% → 20%. Charter/budget/proposal cycle.
-- [ ] **`services/core/internal/aios/dream/`** — 21% → 25%. Almost there.
-- [ ] **`services/core/internal/gateway/`** — 19% → 25%. Coverage on the recent split files.
+- [x] **`services/core/internal/memory/`** — 68.9% verified 2026-05-18.
+- [x] **`services/core/internal/aios/controllane/`** — 70.9% verified 2026-05-18.
+- [x] **`services/core/internal/aios/autonomy/`** — 47.5% verified 2026-05-18.
+- [x] **`services/core/internal/aios/dream/`** — 86.5% verified 2026-05-18.
+- [x] **`services/core/internal/gateway/`** — 67.6% verified 2026-05-18.
+- [x] **`services/core/internal/api/`** — 52.5% verified 2026-05-18.
 
 ### Untested packages worth covering
 
@@ -281,7 +282,7 @@ Continue the proven pattern (kvidentity, refvalidation, semanticvalidation). Pic
 The project is "wired and working properly" when:
 
 - [x] No source file >1,500 lines (except SQL migrations, validator crates, barrel files). 2026-05-18: verified across non-test Go/TS/TSX/Rust/Nix/CSS sources; largest non-exempt source is `services/core/internal/api/model_runtime_bridge.go` at 1,482 lines.
-- [ ] Memory, controllane, autonomy, gateway, api all at 25%+ test/source.
+- [x] Memory, controllane, autonomy, gateway, api all at 25%+ statement coverage. 2026-05-18 verification: memory 68.9%, controllane 70.9%, autonomy 47.5%, gateway 67.6%, api 52.5%.
 - [ ] All Section 1 hygiene items closed.
 - [x] `/health/detailed` and `/metrics` endpoints live.
 - [x] slog migration complete with correlation IDs where available.
