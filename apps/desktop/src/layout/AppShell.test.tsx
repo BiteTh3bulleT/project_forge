@@ -1116,6 +1116,56 @@ describe("AppShell confined Tauri tool surfaces", () => {
     ).toBeTruthy();
   });
 
+  it("does not resolve a new native launch against an already visible matching window", async () => {
+    resolvedOperatorApps();
+    const firstSeenMs = Date.now();
+    desktopMocks.listLinuxWindows.mockResolvedValue([
+      {
+        id: "terminal-existing",
+        title: "Terminal",
+        appId: "foot",
+        iconName: "foot",
+        iconPath: null,
+        focused: false,
+        minimized: false,
+        native: true,
+        firstSeenMs,
+        lastSeenMs: firstSeenMs,
+      },
+    ]);
+    desktopMocks.launchOperatorApp.mockResolvedValue({
+      appId: "terminal",
+      label: "Terminal",
+      executable: "foot",
+      launched: true,
+      pid: 5151,
+      message: "Terminal launch requested",
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Terminal linux app" }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+    fireEvent.click(
+      await within(
+        screen.getByRole("dialog", { name: "FORGE Start" }),
+      ).findByRole("button", { name: /Terminal/ }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Terminal native app" }),
+    ).toBeTruthy();
+  });
+
   it("shows compositor-reported Linux apps on the taskbar", async () => {
     desktopMocks.listLinuxWindows.mockResolvedValue([
       {
@@ -1151,6 +1201,87 @@ describe("AppShell confined Tauri tool surfaces", () => {
         "firefox-window",
       );
     });
+  });
+
+  it("keeps multiple compositor windows from the same native app separate", async () => {
+    desktopMocks.listLinuxWindows.mockResolvedValue([
+      {
+        id: "terminal-one",
+        title: "Terminal",
+        appId: "foot",
+        iconName: "foot",
+        iconPath: null,
+        focused: false,
+        minimized: false,
+        native: true,
+      },
+      {
+        id: "terminal-two",
+        title: "Terminal",
+        appId: "foot",
+        iconName: "foot",
+        iconPath: null,
+        focused: false,
+        minimized: false,
+        native: true,
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findAllByRole("button", { name: "Terminal linux app" }),
+    ).toHaveLength(2);
+  });
+
+  it("does not render compositor windows marked closed", async () => {
+    desktopMocks.listLinuxWindows.mockResolvedValue([
+      {
+        id: "terminal-closed",
+        title: "Terminal",
+        appId: "foot",
+        iconName: "foot",
+        iconPath: null,
+        focused: false,
+        minimized: false,
+        native: true,
+        lifecycle: "closed",
+      },
+      {
+        id: "firefox-window",
+        title: "Mozilla Firefox",
+        appId: "firefox",
+        iconName: "firefox",
+        iconPath: null,
+        focused: false,
+        minimized: false,
+        native: true,
+        lifecycle: "active",
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Mozilla Firefox linux app",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Terminal linux app" }),
+    ).toBeNull();
   });
 
   it("minimizes focused native Linux taskbar windows on left click", async () => {

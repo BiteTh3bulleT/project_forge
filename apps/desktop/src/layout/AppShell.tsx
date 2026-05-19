@@ -68,6 +68,7 @@ type RunningOperatorApp = {
   app: OperatorApp;
   pid: number | null;
   launchedAtMs: number;
+  ignoredWindowIds: string[];
 };
 type ShellAuditRecord = {
   id?: number | string;
@@ -195,6 +196,12 @@ function activeLoopSummary(status: Record<string, unknown> | null) {
   return "no active loops";
 }
 
+function activeLinuxWindowSnapshots(
+  windows: LinuxWindowSnapshot[],
+): LinuxWindowSnapshot[] {
+  return windows.filter((window_) => window_.lifecycle !== "closed");
+}
+
 function contextSnapshotLabel(
   snapshot: ShellContextSnapshot | null | undefined,
 ) {
@@ -297,6 +304,7 @@ function linuxWindowResolvesOperatorLaunch(
   item: RunningOperatorApp,
   window_: LinuxWindowSnapshot,
 ) {
+  if (item.ignoredWindowIds.includes(window_.id)) return false;
   if (!linuxWindowMatchesOperatorApp(window_, item.app)) return false;
   const seenAtMs = window_.firstSeenMs ?? window_.lastSeenMs;
   return seenAtMs == null || seenAtMs >= item.launchedAtMs - 1500;
@@ -541,7 +549,7 @@ export function AppShell(props: AppShellProps) {
     async function loadLinuxWindows() {
       const nextWindows = await listLinuxWindows();
       if (cancelled) return;
-      setLinuxWindows(nextWindows);
+      setLinuxWindows(activeLinuxWindowSnapshots(nextWindows));
     }
     void loadLinuxWindows();
     const id = window.setInterval(() => void loadLinuxWindows(), 1500);
@@ -663,6 +671,9 @@ export function AppShell(props: AppShellProps) {
       return;
     }
     launchingOperatorAppIdsRef.current.add(app.id);
+    const ignoredWindowIds = linuxWindows
+      .filter((window_) => linuxWindowMatchesOperatorApp(window_, app))
+      .map((window_) => window_.id);
     try {
       const result = await launchOperatorApp(app.id);
       if (!result.launched) {
@@ -674,6 +685,7 @@ export function AppShell(props: AppShellProps) {
           app,
           pid: result.pid ?? null,
           launchedAtMs: Date.now(),
+          ignoredWindowIds,
         };
         return [next, ...items.filter((item) => item.app.id !== app.id)];
       });
@@ -706,7 +718,7 @@ export function AppShell(props: AppShellProps) {
       return;
     }
     const nextWindows = await listLinuxWindows();
-    setLinuxWindows(nextWindows);
+    setLinuxWindows(activeLinuxWindowSnapshots(nextWindows));
   }
 
   function resolveTransferredWindow(

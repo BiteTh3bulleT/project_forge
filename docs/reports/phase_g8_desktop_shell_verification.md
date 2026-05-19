@@ -24,7 +24,9 @@ labwc remains the Wayland compositor substrate. It owns native window placement,
 | Stale native launch placeholders expire | Fixed and verified | Pending placeholders expire after 30 seconds without a matching compositor window; focused AppShell tests cover the behavior. |
 | Left click on focused native taskbar entries minimizes the window | Fixed and verified | Native taskbar clicks now route through bounded compositor actions; focused AppShell tests cover the behavior. |
 | Unsupported native window actions fail visibly | Fixed and verified | Failed bounded compositor requests now surface a user-visible status message. |
-| Multiple compositor-reported native windows can be represented separately | Verified by implementation shape | Taskbar keys native entries by compositor window id. Broader manual VM multi-window smoke remains open. |
+| Multiple compositor-reported native windows can be represented separately | Fixed and verified | Taskbar keys native entries by compositor window id; focused AppShell tests cover two same-app compositor windows. Broader manual VM multi-window smoke remains open. |
+| Closed compositor snapshots are ignored by the taskbar | Fixed and verified | The shell filters `lifecycle:"closed"` snapshots before taskbar rendering and post-action refresh; focused AppShell tests cover the behavior. |
+| Repeated native launches do not resolve against already-visible matching windows | Fixed and verified | Pending launch records exclude matching compositor window ids visible at launch time; focused AppShell tests cover the rapid repeat-launch case. |
 
 ## What Was Fixed
 
@@ -33,7 +35,9 @@ labwc remains the Wayland compositor substrate. It owns native window placement,
 - Pending native placeholders expire after 30 seconds if no compositor window appears.
 - Native taskbar left-click behavior now focuses/restores inactive windows and minimizes focused non-minimized windows through the bounded compositor action path.
 - Bounded compositor action failures now set an operator-visible status message instead of silently returning.
-- `apps/desktop/src/layout/AppShell.test.tsx` now covers refused launches, duplicate pending launches, stale placeholder expiration, active-window minimize behavior, and bounded failure diagnostics.
+- Closed compositor snapshots are filtered before the taskbar treats them as active native windows.
+- Pending launches now record matching native window ids visible at launch time and will not resolve against those pre-existing windows.
+- `apps/desktop/src/layout/AppShell.test.tsx` now covers refused launches, duplicate pending launches, stale placeholder expiration, active-window minimize behavior, multiple same-app native windows, repeated same-app launches, closed compositor snapshots, and bounded failure diagnostics.
 
 ## Native App UX Findings
 
@@ -59,7 +63,7 @@ labwc remains the Wayland compositor substrate. It owns native window placement,
 ## Tests Run
 
 - Red focused test run before implementation: `npm -w @forge/desktop run test -- AppShell.test.tsx` failed 5 expected new cases.
-- Green focused test run after implementation: `npm -w @forge/desktop run test -- AppShell.test.tsx` passed 30 tests.
+- Green focused test run after implementation: `npm -w @forge/desktop run test -- AppShell.test.tsx` passed 33 tests.
 - Desktop validation: `npm run validate:desktop` passed.
 - Core tests: `npm test` passed after making config file-mode assertions platform-aware for Windows.
 - Core vet/static check: `npm run lint` passed.
