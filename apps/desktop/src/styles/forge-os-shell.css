@@ -715,7 +715,6 @@
   border-radius: 14px;
   background: rgba(0, 0, 0, 0.22);
   border: 1px solid rgba(var(--forge-border-strong-rgb), 0.08);
-  scrollbar-width: none;
 }
 
 .forge-os-taskbar__items::-webkit-scrollbar {

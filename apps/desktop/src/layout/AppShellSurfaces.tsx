@@ -1,8 +1,8 @@
 import {
   Suspense,
+  useLayoutEffect,
   useMemo,
   useRef,
-  type CSSProperties,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
@@ -145,9 +145,37 @@ function cx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
+function applyFloatingWindowGeometry(
+  node: HTMLElement | null,
+  windowState: DesktopWindow,
+  placement: DesktopPlacement,
+  interactive: boolean,
+) {
+  if (!node) return;
+  if (windowState.maximized) {
+    node.style.left = "0px";
+    node.style.top = "0px";
+    node.style.width = "100%";
+    node.style.height = "100%";
+  } else {
+    node.style.left = `${placement.x}px`;
+    node.style.top = `${placement.y}px`;
+    node.style.width = `${windowState.width}px`;
+    node.style.height = `${windowState.height}px`;
+  }
+  node.style.zIndex = String(windowState.z);
+  node.style.pointerEvents = interactive ? "" : "none";
+}
+
+function applyMenuGeometry(node: HTMLElement | null, left: number, top: number) {
+  if (!node) return;
+  node.style.left = `${left}px`;
+  node.style.top = `${top}px`;
+}
+
 export function DesktopWallpaper() {
   return (
-    <div className="forge-os-wallpaper" aria-hidden>
+    <div className="forge-os-wallpaper" aria-hidden="true">
       <picture className="forge-os-wallpaper__art">
         <source
           media="(orientation: portrait)"
@@ -270,34 +298,36 @@ export function FloatingWindow(props: {
     window.addEventListener("pointerup", onUp);
   }
 
-  if (props.window.minimized) return null;
+  const windowNodeRef = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    applyFloatingWindowGeometry(
+      windowNodeRef.current,
+      props.window,
+      props.placement,
+      props.interactive,
+    );
+  }, [
+    props.interactive,
+    props.placement.x,
+    props.placement.y,
+    props.window.height,
+    props.window.maximized,
+    props.window.minimized,
+    props.window.width,
+    props.window.z,
+  ]);
 
-  const style: CSSProperties = props.window.maximized
-    ? {
-        left: 0,
-        top: 0,
-        width: "100%",
-        height: "100%",
-        zIndex: props.window.z,
-      }
-    : {
-        left: props.placement.x,
-        top: props.placement.y,
-        width: props.window.width,
-        height: props.window.height,
-        zIndex: props.window.z,
-        pointerEvents: props.interactive ? undefined : "none",
-      };
+  if (props.window.minimized) return null;
 
   return (
     <section
+      ref={windowNodeRef}
       className={cx(
         "forge-os-window",
         props.focused && "forge-os-window--focused",
         props.window.maximized && "forge-os-window--maximized",
       )}
-      style={style}
-      aria-hidden={props.interactive ? undefined : true}
+      {...(props.interactive ? {} : { inert: "" })}
       onPointerDown={() => {
         if (props.interactive && !props.focused) props.onFocus();
       }}
@@ -377,7 +407,7 @@ export function FloatingWindow(props: {
         <div
           className="forge-os-window__resize"
           onPointerDown={startResize}
-          aria-hidden
+          aria-hidden="true"
         />
       ) : null}
     </section>
@@ -494,6 +524,7 @@ export function StartMenu(props: {
           <div className="forge-os-startmenu__search">
             <input
               type="text"
+              aria-label="Search FORGE surfaces"
               value={props.query}
               onChange={(event) => props.onQueryChange(event.target.value)}
               placeholder="Search FORGE surfaces"
@@ -837,6 +868,7 @@ export function DockContextMenuView(props: {
   onClose: () => void;
   onAction: (action: "open" | "close" | "pin" | "unpin") => void;
 }) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const left = Math.min(
     props.menu.x,
     typeof window !== "undefined" ? window.innerWidth - 220 : props.menu.x,
@@ -847,11 +879,14 @@ export function DockContextMenuView(props: {
       ? Math.min(props.menu.y - 8, window.innerHeight - 220)
       : props.menu.y - 8,
   );
+  useLayoutEffect(() => {
+    applyMenuGeometry(menuRef.current, left, top);
+  }, [left, top]);
   return (
     <div
+      ref={menuRef}
       role="menu"
       className="forge-os-context-menu"
-      style={{ left, top }}
       onMouseDown={(event) => event.stopPropagation()}
     >
       <div className="forge-os-context-menu__title">
@@ -911,6 +946,7 @@ export function NativeWindowContextMenuView(props: {
   onClose: () => void;
   onAction: (action: LinuxWindowAction) => void;
 }) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const left = Math.min(
     props.menu.x,
     typeof window !== "undefined" ? window.innerWidth - 240 : props.menu.x,
@@ -921,11 +957,14 @@ export function NativeWindowContextMenuView(props: {
       ? Math.min(props.menu.y - 8, window.innerHeight - 260)
       : props.menu.y - 8,
   );
+  useLayoutEffect(() => {
+    applyMenuGeometry(menuRef.current, left, top);
+  }, [left, top]);
   return (
     <div
+      ref={menuRef}
       role="menu"
       className="forge-os-context-menu"
-      style={{ left, top }}
       onMouseDown={(event) => event.stopPropagation()}
     >
       <div className="forge-os-context-menu__title">

@@ -705,12 +705,16 @@ export function ModelsPage() {
             </span>
           </div>
           <div className="relative z-20 mt-4 overflow-visible rounded border border-white/10 bg-black/20 p-3">
-            <label className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-forge-mist">
+            <label
+              htmlFor="models-chat-preference"
+              className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-forge-mist"
+            >
               Preferred chat model
             </label>
             <div className="mt-2 flex flex-col gap-2 sm:flex-row">
               <div className="relative z-20 min-w-0 flex-1 overflow-visible">
                 <select
+                  id="models-chat-preference"
                   className="forge-input relative z-20 h-11 w-full min-w-0 py-2 text-sm"
                   value={chatSelectedModelId}
                   onChange={(event) => {
@@ -846,72 +850,70 @@ export function ModelsPage() {
                     null;
                   const busyPrefix = actionBusy?.split(":")[0] ?? "";
                   const isBusy = actionBusy?.endsWith(`:${model.id}`) ?? false;
-                  return (
-                    <div
-                      key={model.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setSelectedModelId(model.id)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          setSelectedModelId(model.id);
-                        }
-                      }}
-                      className={cx(
-                        "w-full rounded border px-4 py-4 text-left transition focus:outline-none focus:ring-2 focus:ring-forge-accent/40",
-                        isSelected
-                          ? "border-forge-accent/55 bg-[linear-gradient(135deg,rgba(27,29,31,0.9),rgba(9,10,11,0.92))] shadow-[0_0_0_1px_rgba(215,181,109,0.06)]"
-                          : "border-white/10 bg-black/20 hover:border-forge-accent/40 hover:bg-black/25",
-                      )}
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <div className="break-all font-mono text-sm text-forge-ash">
-                              {model.id}
-                            </div>
-                            {chatSelectedModelId === model.id ? (
-                              <span className="rounded-full border border-forge-electric/35 bg-forge-electric/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-forge-electric">
-                                Chat preferred
-                              </span>
-                            ) : null}
-                            {isSelected ? (
-                              <span className="rounded-full border border-forge-accent/35 bg-forge-accent/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-forge-accent">
-                                Selected
-                              </span>
-                            ) : null}
-                          </div>
-                          <div className="mt-1 break-words text-xs leading-5 text-forge-mist">
-                            {model.displayName || "Unnamed model"} ·{" "}
-                            {model.family || "family unknown"} ·{" "}
-                            {model.backend || "backend unset"} ·{" "}
-                            {model.format || "format unknown"}
-                          </div>
-                        </div>
-                        <span
-                          className={cx(
-                            "rounded-full border px-2 py-1 text-[11px] font-medium",
-                            badgeClass(model.status),
-                          )}
-                        >
-                          {model.status || "unknown"}
-                        </span>
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-forge-mist">
-                        <span className="min-w-0 rounded-full border border-white/10 bg-black/25 px-2 py-1">
-                          Capabilities:{" "}
-                          <span className="break-words text-forge-ash">
-                            {summarizeList(model.capabilities)}
-                          </span>
-                        </span>
-                        <span className="rounded-full border border-white/10 bg-black/25 px-2 py-1">
-                          Loaded:{" "}
-                          <span className="text-forge-ash">
-                            {loadedRecord?.status || "not loaded"}
-                          </span>
-                        </span>
-                      </div>
+	                  return (
+	                    <div
+	                      key={model.id}
+	                      className={cx(
+	                        "w-full rounded border px-4 py-4 text-left transition",
+	                        isSelected
+	                          ? "border-forge-accent/55 bg-[linear-gradient(135deg,rgba(27,29,31,0.9),rgba(9,10,11,0.92))] shadow-[0_0_0_1px_rgba(215,181,109,0.06)]"
+	                          : "border-white/10 bg-black/20 hover:border-forge-accent/40 hover:bg-black/25",
+	                      )}
+	                    >
+	                      <button
+	                        type="button"
+	                        onClick={() => setSelectedModelId(model.id)}
+	                        className="block w-full rounded text-left focus:outline-none focus:ring-2 focus:ring-forge-accent/40"
+	                        aria-pressed={isSelected ? "true" : "false"}
+	                      >
+	                        <span className="flex flex-wrap items-start justify-between gap-3">
+	                          <span className="min-w-0">
+	                            <span className="flex flex-wrap items-center gap-2">
+	                              <span className="break-all font-mono text-sm text-forge-ash">
+	                                {model.id}
+	                              </span>
+	                              {chatSelectedModelId === model.id ? (
+	                                <span className="rounded-full border border-forge-electric/35 bg-forge-electric/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-forge-electric">
+	                                  Chat preferred
+	                                </span>
+	                              ) : null}
+	                              {isSelected ? (
+	                                <span className="rounded-full border border-forge-accent/35 bg-forge-accent/10 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-forge-accent">
+	                                  Selected
+	                                </span>
+	                              ) : null}
+	                            </span>
+	                            <span className="mt-1 block break-words text-xs leading-5 text-forge-mist">
+	                              {model.displayName || "Unnamed model"} ·{" "}
+	                              {model.family || "family unknown"} ·{" "}
+	                              {model.backend || "backend unset"} ·{" "}
+	                              {model.format || "format unknown"}
+	                            </span>
+	                          </span>
+	                          <span
+	                            className={cx(
+	                              "rounded-full border px-2 py-1 text-[11px] font-medium",
+	                              badgeClass(model.status),
+	                            )}
+	                          >
+	                            {model.status || "unknown"}
+	                          </span>
+	                        </span>
+	                        <span className="mt-3 flex flex-wrap gap-2 text-[11px] text-forge-mist">
+	                          <span className="min-w-0 rounded-full border border-white/10 bg-black/25 px-2 py-1">
+	                            Capabilities:{" "}
+	                            <span className="break-words text-forge-ash">
+	                              {summarizeList(model.capabilities)}
+	                            </span>
+	                          </span>
+	                          <span className="rounded-full border border-white/10 bg-black/25 px-2 py-1">
+	                            Loaded:{" "}
+	                            <span className="text-forge-ash">
+	                              {loadedRecord?.status || "not loaded"}
+	                            </span>
+	                          </span>
+	                        </span>
+	                      </button>
                       <div className="mt-4 flex flex-wrap gap-2">
                         <GhostButton
                           className="min-h-10 px-3"

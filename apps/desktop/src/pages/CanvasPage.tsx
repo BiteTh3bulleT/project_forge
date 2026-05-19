@@ -1,5 +1,11 @@
 import { GhostButton, PrimaryButton } from "@forge/ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useSearchParams } from "react-router-dom";
 
 import {
@@ -20,6 +26,24 @@ function normalizeBoardDetail(v: CanvasBoardDetail): CanvasBoardDetail {
     ...v,
     notes: Array.isArray(v.notes) ? v.notes : [],
   };
+}
+
+function applyNoteGeometry(
+  node: HTMLDivElement | null,
+  geometry: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    pinned: boolean;
+  },
+) {
+  if (!node) return;
+  node.style.left = `${geometry.x}px`;
+  node.style.top = `${geometry.y}px`;
+  node.style.width = `${geometry.width}px`;
+  node.style.height = `${geometry.height}px`;
+  node.style.zIndex = geometry.pinned ? "2" : "1";
 }
 
 export function CanvasPage() {
@@ -503,7 +527,18 @@ function NoteCard(props: {
     currentW: number;
     currentH: number;
   } | null>(null);
+  const noteNodeRef = useRef<HTMLDivElement | null>(null);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useLayoutEffect(() => {
+    applyNoteGeometry(noteNodeRef.current, {
+      x,
+      y,
+      width: w,
+      height: h,
+      pinned,
+    });
+  }, [h, pinned, w, x, y]);
 
   useEffect(() => {
     setTitle(note.title);
@@ -631,6 +666,7 @@ function NoteCard(props: {
 
   return (
     <div
+      ref={noteNodeRef}
       className={[
         "absolute overflow-hidden rounded border bg-forge-iron/95 shadow-[0_18px_44px_rgba(0,0,0,0.38)] backdrop-blur",
         selected
@@ -638,13 +674,6 @@ function NoteCard(props: {
           : "border-forge-platinum/15 hover:border-forge-platinum/25",
         dragging || resizing ? "ring-1 ring-inset ring-forge-ember/40" : "",
       ].join(" ")}
-      style={{
-        left: x,
-        top: y,
-        width: w,
-        height: h,
-        zIndex: note.pinned ? 2 : 1,
-      }}
       onPointerDown={() => onSelect()}
     >
       <div

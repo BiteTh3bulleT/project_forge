@@ -1028,7 +1028,7 @@ export function AppShell(props: AppShellProps) {
         <header className="forge-os-statusbar">
           <div className="forge-os-statusbar__left">
             <span className="forge-os-statusbar__crumb">{workspaceLabel}</span>
-            <span className="forge-os-statusbar__sep" aria-hidden>
+            <span className="forge-os-statusbar__sep" aria-hidden="true">
               ›
             </span>
             <span className="forge-os-statusbar__crumb forge-os-statusbar__crumb--active">
@@ -1046,24 +1046,48 @@ export function AppShell(props: AppShellProps) {
             <span className="forge-os-statusbar__mode forge-os-statusbar__chip forge-chip forge-chip--muted">
               Mode: {uiMode}
             </span>
-            <button
-              type="button"
-              className="forge-os-statusbar__button"
-              onClick={() => setStatusDetailsOpen((value) => !value)}
-              aria-label="Open shell status details"
-              aria-expanded={statusDetailsOpen}
-            >
-              Status
-            </button>
-            <button
-              type="button"
-              className="forge-os-statusbar__button"
-              onClick={() => setActivityOpen((value) => !value)}
-              aria-label="Open activity log"
-              aria-expanded={activityOpen}
-            >
-              Activity
-            </button>
+            {statusDetailsOpen ? (
+              <button
+                type="button"
+                className="forge-os-statusbar__button"
+                onClick={() => setStatusDetailsOpen((value) => !value)}
+                aria-label="Open shell status details"
+                aria-expanded="true"
+              >
+                Status
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="forge-os-statusbar__button"
+                onClick={() => setStatusDetailsOpen((value) => !value)}
+                aria-label="Open shell status details"
+                aria-expanded="false"
+              >
+                Status
+              </button>
+            )}
+            {activityOpen ? (
+              <button
+                type="button"
+                className="forge-os-statusbar__button"
+                onClick={() => setActivityOpen((value) => !value)}
+                aria-label="Open activity log"
+                aria-expanded="true"
+              >
+                Activity
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="forge-os-statusbar__button"
+                onClick={() => setActivityOpen((value) => !value)}
+                aria-label="Open activity log"
+                aria-expanded="false"
+              >
+                Activity
+              </button>
+            )}
           </div>
         </header>
       ) : null}
@@ -1159,7 +1183,7 @@ export function AppShell(props: AppShellProps) {
           {!detachedTauriShell &&
           !routedDetailOpen &&
           shellRenderedWindows.length === 0 ? (
-            <div className="forge-os-router-sink" aria-hidden>
+            <div className="forge-os-router-sink" aria-hidden="true">
               {props.children}
             </div>
           ) : null}
@@ -1333,24 +1357,39 @@ export function AppShell(props: AppShellProps) {
       ) : null}
 
       <footer className="forge-os-taskbar">
-        <button
-          type="button"
-          onClick={() => setStartOpen((value) => !value)}
-          className={cx(
-            "forge-os-taskbar__start",
-            startOpen && "forge-os-taskbar__start--active",
-          )}
-          aria-label="Open Start menu"
-          aria-expanded={startOpen}
-        >
-          <img
-            className="forge-os-taskbar__anvil"
-            src="/brand/forge-start-button.png"
-            alt=""
-            draggable={false}
-          />
-          <span className="forge-os-taskbar__label">FORGE</span>
-        </button>
+        {startOpen ? (
+          <button
+            type="button"
+            onClick={() => setStartOpen((value) => !value)}
+            className="forge-os-taskbar__start forge-os-taskbar__start--active"
+            aria-label="Open Start menu"
+            aria-expanded="true"
+          >
+            <img
+              className="forge-os-taskbar__anvil"
+              src="/brand/forge-start-button.png"
+              alt=""
+              draggable={false}
+            />
+            <span className="forge-os-taskbar__label">FORGE</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setStartOpen((value) => !value)}
+            className="forge-os-taskbar__start"
+            aria-label="Open Start menu"
+            aria-expanded="false"
+          >
+            <img
+              className="forge-os-taskbar__anvil"
+              src="/brand/forge-start-button.png"
+              alt=""
+              draggable={false}
+            />
+            <span className="forge-os-taskbar__label">FORGE</span>
+          </button>
+        )}
 
         <div className="forge-os-taskbar__items">
           {dockTiles.map((tile) => {
