@@ -272,7 +272,7 @@ Continue the proven pattern (kvidentity, refvalidation, semanticvalidation). Pic
 - [x] Multi-monitor support
 - [ ] **Extract shared components from pages.** 46 pages, 4 shared components — most pages duplicate fetch/error/loading. Lift `<AsyncState>`, `<KeyValueList>`, `<Panel>`, `<Toast>` into `apps/desktop/src/components/`.
   - 2026-05-19 progress: added shared `OpsPanel` and `AsyncState` components with component tests, then migrated Automation, Autonomy, Policy, and Project Context away from local duplicated panel/error wrappers.
-- [ ] **Page-level test coverage**. ~8 of 46 pages have `.test.tsx`. Target: render test for every page.
+- [x] **Page-level test coverage**. Target: render test for every page. 2026-05-19: every desktop `*Page.tsx` now has a matching `.test.tsx` render test.
   - 2026-05-19 progress: added first-pass render coverage for `CommandPage`, `EventsPage`, and `ReleasePage`, covering static command surfaces plus API-backed event/release data rendering.
   - 2026-05-19 progress: added first-pass render coverage for `AdaptersPage`, `ProjectContextPage`, `BackupPage`, `StrategiesPage`, and `ActionLanesPage` using narrow API mocks and no native/destructive interactions.
   - 2026-05-19 progress: added first-pass render coverage for `JobsPage`, `StartPage`, and `LineagePage` with router wrappers and empty-state API mocks.
@@ -281,7 +281,7 @@ Continue the proven pattern (kvidentity, refvalidation, semanticvalidation). Pic
   - 2026-05-19 progress: added first-pass render coverage for `PolicyPage` and `RetrievalRunsPage` around loaded-empty policy, guidance, recommendation, and retrieval-run states.
   - 2026-05-19 progress: added first-pass render coverage for `DossiersPage`, `ReviewsPage`, and `SourcesPage` around loaded-empty dossier, review/reconciliation, and source-ingestion states.
   - 2026-05-19 progress: added first-pass render coverage for `AutonomyPage`, `InspectorsPage`, and `JobDetailPage` around inactive autonomy, empty inspector, and loaded job-projection states.
-- [ ] **Command palette polish.** `CommandBar.tsx` exists; flesh out the actions surface.
+- [x] **Command palette polish.** 2026-05-19: expanded `CommandBar.tsx` with a categorized action surface for route, knowledge, job, and runtime commands plus component tests for staging and executing routed commands.
 - [ ] **Accessibility audit pass.** Focus management, keyboard nav, ARIA labels on the operator-critical surfaces (Chat, Approvals, Operator Apps).
 
 ---

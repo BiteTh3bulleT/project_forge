@@ -9,6 +9,89 @@ function normalizeCmd(raw: string) {
   return raw.trim().replace(/\s+/g, " ");
 }
 
+type CommandAction = {
+  id: string;
+  category: string;
+  label: string;
+  command: string;
+};
+
+const commandActions: CommandAction[] = [
+  { id: "go-chat", category: "Open", label: "Chat", command: "go /chat" },
+  { id: "go-jobs", category: "Open", label: "Jobs", command: "go /jobs" },
+  {
+    id: "go-approvals",
+    category: "Open",
+    label: "Approvals",
+    command: "go /approvals",
+  },
+  {
+    id: "go-models",
+    category: "Open",
+    label: "Models",
+    command: "go /models",
+  },
+  {
+    id: "go-sources",
+    category: "Open",
+    label: "Sources",
+    command: "go /sources",
+  },
+  {
+    id: "search-memory",
+    category: "Knowledge",
+    label: "Search Memory",
+    command: "search ",
+  },
+  {
+    id: "hybrid-retrieval",
+    category: "Knowledge",
+    label: "Hybrid Retrieval",
+    command: "hybrid project context",
+  },
+  {
+    id: "normalize-context",
+    category: "Knowledge",
+    label: "Normalize Context",
+    command: "context normalize ",
+  },
+  {
+    id: "packet-job",
+    category: "Jobs",
+    label: "Packet Job",
+    command: "job Build context packet",
+  },
+  {
+    id: "codex-packet",
+    category: "Jobs",
+    label: "Codex Packet",
+    command: "codex packet Prepare Codex handoff packet",
+  },
+  {
+    id: "ollama-summary",
+    category: "Runtime",
+    label: "Ollama Summary",
+    command: "ollama summary Summarize project context",
+  },
+  {
+    id: "reindex",
+    category: "Runtime",
+    label: "Re-index",
+    command: ":reindex",
+  },
+];
+
+function groupActions(actions: CommandAction[]) {
+  const groups = new Map<string, CommandAction[]>();
+  for (const action of actions) {
+    groups.set(action.category, [
+      ...(groups.get(action.category) ?? []),
+      action,
+    ]);
+  }
+  return Array.from(groups, ([category, items]) => ({ category, items }));
+}
+
 export function CommandBar(props: { compact?: boolean }) {
   const navigate = useNavigate();
   const draft = useUiStore((s) => s.commandDraft);
@@ -24,6 +107,19 @@ export function CommandBar(props: { compact?: boolean }) {
         ? "Cognitive mode keeps command entry focused on search, jobs, approvals, and current context."
         : "Metrics mode accepts route jumps plus diagnostics commands: go /path, :reindex, job <query>, ollama summary <query>.",
     [uiMode],
+  );
+  const visibleActions = useMemo(() => {
+    const needle = normalizeCmd(draft).toLowerCase();
+    if (!needle) return commandActions;
+    return commandActions.filter((action) =>
+      `${action.category} ${action.label} ${action.command}`
+        .toLowerCase()
+        .includes(needle),
+    );
+  }, [draft]);
+  const actionGroups = useMemo(
+    () => groupActions(visibleActions),
+    [visibleActions],
   );
 
   async function runQuick(id: string) {
@@ -406,6 +502,47 @@ export function CommandBar(props: { compact?: boolean }) {
         </div>
       </div>
       <p className="text-[10px] leading-relaxed text-forge-mist/45">{hint}</p>
+      <div className="grid gap-2 rounded border border-forge-platinum/10 bg-black/15 p-2">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-forge-mist/55">
+            Actions
+          </span>
+          <span className="text-[10px] text-forge-mist/45">
+            {visibleActions.length}
+          </span>
+        </div>
+        {actionGroups.length === 0 ? (
+          <div className="rounded border border-dashed border-forge-platinum/10 px-2 py-1.5 text-[11px] text-forge-mist/55">
+            No command actions match.
+          </div>
+        ) : (
+          actionGroups.map((group) => (
+            <div
+              key={group.category}
+              className="grid gap-1 sm:grid-cols-[5.5rem_minmax(0,1fr)]"
+            >
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-forge-mist/45">
+                {group.category}
+              </div>
+              <div className="flex min-w-0 flex-wrap gap-1.5">
+                {group.items.map((action) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    className="forge-chip forge-chip--muted max-w-full px-2 py-1 text-[10px] font-medium"
+                    onClick={() => setDraft(action.command)}
+                    disabled={busy}
+                    title={action.command}
+                    aria-label={`Use command ${action.label}`}
+                  >
+                    <span className="truncate">{action.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }
