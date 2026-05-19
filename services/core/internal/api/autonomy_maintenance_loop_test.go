@@ -95,6 +95,43 @@ func TestAutonomyMaintenanceLoopDefaultsToObserve(t *testing.T) {
 	}
 }
 
+func TestAutonomyMaintenanceLoopRunStopsOnContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	loop := NewAutonomyMaintenanceLoop(AutonomyMaintenanceLoopOptions{
+		Scope:     domain.ForgeScope{WorkspaceID: "ws-stop-context", LaneID: "control.semantic"},
+		TickEvery: time.Hour,
+	})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		loop.Run(ctx)
+	}()
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatalf("autonomy loop did not stop after context cancellation")
+	}
+}
+
+func TestAutonomyMaintenanceLoopRunStopsOnManualStop(t *testing.T) {
+	loop := NewAutonomyMaintenanceLoop(AutonomyMaintenanceLoopOptions{
+		Scope:     domain.ForgeScope{WorkspaceID: "ws-stop-manual", LaneID: "control.semantic"},
+		TickEvery: time.Hour,
+	})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		loop.Run(context.Background())
+	}()
+	loop.Stop()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatalf("autonomy loop did not stop after manual stop")
+	}
+}
+
 func TestAutonomyDreamLoopBusyJobBlocksEntry(t *testing.T) {
 	st, err := store.Open(t.TempDir())
 	if err != nil {
