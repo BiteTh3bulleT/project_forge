@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { HumanDataView } from "../components/HumanDataView";
+import { Toast } from "../components/Toast";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -280,21 +281,14 @@ export function ApprovalsPage() {
           </div>
         </div>
         {err ? (
-          <div
-            className="m-4 rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash"
-            role="alert"
-          >
+          <Toast tone="danger" className="m-4">
             {err}
-          </div>
+          </Toast>
         ) : null}
         {decisionNotice ? (
-          <div
-            className="m-4 rounded border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-forge-ash"
-            role="status"
-            aria-live="polite"
-          >
+          <Toast tone="warning" className="m-4">
             {decisionNotice}
-          </div>
+          </Toast>
         ) : null}
       </section>
 

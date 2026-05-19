@@ -270,7 +270,7 @@ Continue the proven pattern (kvidentity, refvalidation, semanticvalidation). Pic
 - [x] Operator start menu
 - [x] Taskbar tracking
 - [x] Multi-monitor support
-- [ ] **Extract shared components from pages.** 46 pages, 4 shared components — most pages duplicate fetch/error/loading. Lift `<AsyncState>`, `<KeyValueList>`, `<Panel>`, `<Toast>` into `apps/desktop/src/components/`.
+- [x] **Extract shared components from pages.** 2026-05-19: shared `AsyncState`, `OpsPanel`, `KeyValueList`, and `Toast` components are present with component tests; representative duplicated panel/error/status/key-value patterns are migrated in Automation, Autonomy, Policy, Project Context, Approvals, Operator Apps, and Job Detail.
   - 2026-05-19 progress: added shared `OpsPanel` and `AsyncState` components with component tests, then migrated Automation, Autonomy, Policy, and Project Context away from local duplicated panel/error wrappers.
 - [x] **Page-level test coverage**. Target: render test for every page. 2026-05-19: every desktop `*Page.tsx` now has a matching `.test.tsx` render test.
   - 2026-05-19 progress: added first-pass render coverage for `CommandPage`, `EventsPage`, and `ReleasePage`, covering static command surfaces plus API-backed event/release data rendering.

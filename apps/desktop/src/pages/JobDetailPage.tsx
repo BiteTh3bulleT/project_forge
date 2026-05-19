@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { HumanDataView } from "../components/HumanDataView";
+import { KeyValueList } from "../components/KeyValueList";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -303,19 +304,23 @@ export function JobDetailPage() {
               </div>
             </div>
             <div className="forge-ops-panel__body">
-              <SectionRows
+              <KeyValueList
                 rows={[
-                  ["Action", j.requestedAction],
-                  ["Boundary", j.executionBoundary],
-                  ["Adapter", j.targetAdapter],
-                  ["Initiator", j.initiatingSource],
-                  [
-                    "Packet",
-                    j.taskPacketId != null ? String(j.taskPacketId) : "none",
-                  ],
-                  ["Cancel requested", String(j.cancelRequested)],
-                  ["Created", formatTime(j.createdAtMs)],
-                  ["Updated", formatTime(j.updatedAtMs)],
+                  { label: "Action", value: j.requestedAction },
+                  { label: "Boundary", value: j.executionBoundary },
+                  { label: "Adapter", value: j.targetAdapter },
+                  { label: "Initiator", value: j.initiatingSource },
+                  {
+                    label: "Packet",
+                    value:
+                      j.taskPacketId != null ? String(j.taskPacketId) : "none",
+                  },
+                  {
+                    label: "Cancel requested",
+                    value: String(j.cancelRequested),
+                  },
+                  { label: "Created", value: formatTime(j.createdAtMs) },
+                  { label: "Updated", value: formatTime(j.updatedAtMs) },
                 ]}
               />
               {j.resultSummary ? (
@@ -403,15 +408,21 @@ export function JobDetailPage() {
                 <span className={statusPillClass("pending")}>pending</span>
               </div>
               <div className="forge-ops-panel__body">
-                <SectionRows
+                <KeyValueList
                   rows={[
-                    ["Action", detail.approvalRequest.requestedAction],
-                    ["Adapter", detail.approvalRequest.requestedAdapter],
-                    ["Risk", detail.approvalRequest.riskClass],
-                    [
-                      "Write intent",
-                      String(detail.approvalRequest.writeIntent),
-                    ],
+                    {
+                      label: "Action",
+                      value: detail.approvalRequest.requestedAction,
+                    },
+                    {
+                      label: "Adapter",
+                      value: detail.approvalRequest.requestedAdapter,
+                    },
+                    { label: "Risk", value: detail.approvalRequest.riskClass },
+                    {
+                      label: "Write intent",
+                      value: String(detail.approvalRequest.writeIntent),
+                    },
                   ]}
                 />
                 <div className="mt-3 max-h-44 overflow-auto rounded-md border border-forge-platinum/10 bg-black/30 p-3 text-[11px] text-forge-mist">
@@ -697,24 +708,6 @@ function CompactPanel(props: {
         </div>
       </div>
       <div className="forge-ops-panel__body">{props.children}</div>
-    </div>
-  );
-}
-
-function SectionRows(props: { rows: Array<[string, string]> }) {
-  return (
-    <div className="grid gap-2 md:grid-cols-2">
-      {props.rows.map(([label, value]) => (
-        <div
-          key={label}
-          className="flex min-h-10 items-center justify-between gap-3 rounded-md border border-forge-platinum/10 bg-black/20 px-3 py-2 text-xs"
-        >
-          <span className="text-forge-mist/65">{label}</span>
-          <span className="min-w-0 truncate text-right font-semibold text-forge-ash">
-            {value}
-          </span>
-        </div>
-      ))}
     </div>
   );
 }

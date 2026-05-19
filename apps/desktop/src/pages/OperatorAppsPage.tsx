@@ -1,6 +1,7 @@
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
 
+import { Toast } from "../components/Toast";
 import {
   isTauriDesktop,
   iconAssetUrl,
@@ -172,17 +173,9 @@ export function OperatorAppsPage() {
         title="Allowlisted Launch Surface"
         subtitle="Fixed terminal and file manager entries for the current desktop session."
       >
-        <div
-          className={
-            tauriAvailable
-              ? "rounded-md border border-forge-electric/25 bg-forge-electric/10 p-3 text-sm text-forge-ash"
-              : "rounded-md border border-forge-amber/30 bg-forge-amber/10 p-3 text-sm text-forge-ash"
-          }
-          role="status"
-          aria-live="polite"
-        >
+        <Toast tone={tauriAvailable ? "info" : "warning"}>
           {status}
-        </div>
+        </Toast>
 
         <div className="mt-4 space-y-4">
           {groupAppsByCategory(apps).map((group) => (
