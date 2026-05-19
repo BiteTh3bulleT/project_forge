@@ -52,7 +52,17 @@ Excluded by scope:
 
 ## 3. Relationship to CA1
 
-No CA1 audit artefact was found in the repository (`docs/reports/phase_ca1_full_codebase_integrity_audit.md` does not exist; `docs/archive/phases/` contains only `PhaseCA2.txt`; the root-level `Full-Code-Review.md` is a prompt template, not an executed review). Per CA2's own "if CA1 exists" instruction, CA1 items are recorded as **unable to verify** — there are none. CA2 stands alone as the baseline for future CA3 comparison. See `docs/reviews/ca2_scratch/pass2_ca1_compare.md`.
+At the time CA2's auditors began work, no CA1 artefact was present locally (`docs/reports/phase_ca1_full_codebase_integrity_audit.md` did not exist; `docs/archive/phases/` contained only `PhaseCA2.txt`). During the audit window, a remote merge brought commit `3a671b4 Add CA1 codebase integrity audit` into the working tree, adding `docs/reviews/full_codebase_integrity_audit.md`, `docs/reports/phase_ca1_full_codebase_integrity_audit.md`, `docs/status/phase_ca1_full_codebase_integrity_audit.md`, the CA1 CSV, fix queue, and `docs/archive/phases/PhaseCA1.txt`. CA2 was performed independently of CA1's findings.
+
+Post-hoc overlap (CA1 ID ↔ CA2 ID):
+
+- CA1-001 (Critical — desktop host shutdown/reboot bypass) ↔ **CA2 M-1** (docs drift on `FORGE_SHELL_DIRECT_SYSTEM_CONTROL`). CA2 verified the binary-level policy gate and unit tests, downgraded from Critical to Medium, and recorded the same docs-supersession action.
+- CA1-010 (Medium — operator app catalog duplication) ↔ **CA2 H-2** (`FALLBACK_OPERATOR_APPS` duplicate). Same finding; CA3 fix pass resolved it on operator decision (adopted `AppShellSurfaces` as source of truth).
+- CA1-011 (Medium — deep-link routes orphaned in shell window mode) ↔ **CA2 L-2** (detail-route fragility via `pathname.startsWith`).
+- CA1-002..009, CA1-012..017 — broader configuration-security scope (workspace authority, Docker wildcard bind, legacy adapter/Ollama, hardcoded shell login, SSRF, plain `http.Error`, dashboard zero vs unavailable, lane metadata duplication, supersession banners). Not directly in CA2's findings list. **Recommended:** treat the CA1 fix queue as the authoritative remediation list for those items; CA2 does not re-litigate them.
+- **CA2-only findings not in CA1**: H-3 (hostbridge timing test), H-4 (ChatPage test, already green at HEAD), M-2 (`os.Exit` from goroutine), M-3 (empty-token startup warn), M-5 (autonomy ID-prefix filter contract). CA1 reported tests as passing; the H-3 timing fragility surfaced under CA2's environment.
+
+See `docs/reviews/ca2_scratch/pass2_ca1_compare.md` for the full overlap table.
 
 ## 4. Commands Run
 
