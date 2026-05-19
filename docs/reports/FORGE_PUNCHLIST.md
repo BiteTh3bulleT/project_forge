@@ -274,6 +274,7 @@ Continue the proven pattern (kvidentity, refvalidation, semanticvalidation). Pic
   - 2026-05-19 progress: added shared `OpsPanel` and `AsyncState` components with component tests, then migrated Automation, Autonomy, Policy, and Project Context away from local duplicated panel/error wrappers.
 - [ ] **Page-level test coverage**. ~8 of 46 pages have `.test.tsx`. Target: render test for every page.
   - 2026-05-19 progress: added first-pass render coverage for `CommandPage`, `EventsPage`, and `ReleasePage`, covering static command surfaces plus API-backed event/release data rendering.
+  - 2026-05-19 progress: added first-pass render coverage for `AdaptersPage`, `ProjectContextPage`, `BackupPage`, `StrategiesPage`, and `ActionLanesPage` using narrow API mocks and no native/destructive interactions.
 - [ ] **Command palette polish.** `CommandBar.tsx` exists; flesh out the actions surface.
 - [ ] **Accessibility audit pass.** Focus management, keyboard nav, ARIA labels on the operator-critical surfaces (Chat, Approvals, Operator Apps).
 
