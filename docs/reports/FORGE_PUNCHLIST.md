@@ -172,7 +172,7 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 
 - [x] Chat gateway tool argument bounds — `d2b3d77 fix: bound chat gateway tool arguments`
 - [ ] **Complete chat assistant prompt-injection audit.** Trace every assignment from a model response field to `chat_assistant_*.go` files into (a) command args, (b) file paths, (c) URLs, (d) capability inputs. Verify validator coverage on each.
-- [ ] **Remote token (`X-Forge-Remote-Token`) lifecycle.** Verify rotation, storage, revocation paths are tested.
+- [x] **Remote token (`X-Forge-Remote-Token`) lifecycle.** 2026-05-18: header-only authentication, query-token rejection, fixed-length hash comparison, encrypted settings storage, redacted reads, redacted-placeholder preservation, explicit replacement/rotation, and empty-token revocation are covered by `remote_auth_test.go` and `settings_test.go`; `TestPatchSettingsRemoteTokenRotationAndRevocationAffectIngress` proves rotated tokens affect mounted remote ingress immediately and revoked tokens fail closed.
 - [ ] **Dangerous capabilities audit.** Run [docs/status/dangerous_capabilities.md](../status/dangerous_capabilities.md) against current `tool_capability_registry.go` — every approval-only capability still gated?
 - [ ] **Wildcard bind hardening** (also in Section 1).
 - [x] **Audit `chat_post.go` body-bound coverage.** 2026-05-18: `handleChatMessagePost` uses `decodeWorkspaceJSONBody`; direct handler coverage is in `TestWorkspaceJSONHandlersRejectOversizeRequestBodies`, route-level coverage is in `TestChatMessagePostRouteRejectsOversizeRequestBody`, and `TestProductionAPIHandlersDoNotDecodeRequestBodyDirectly` guards production handlers from direct unbounded `r.Body` decoding.

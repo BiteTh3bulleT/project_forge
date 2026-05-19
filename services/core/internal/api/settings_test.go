@@ -497,3 +497,117 @@ func TestPatchSettingsExplicitRemoteSecretUpdatesStoredValue(t *testing.T) {
 		t.Fatalf("vaulted remote secret stored plaintext ciphertext=%q", ciphertext)
 	}
 }
+
+func TestPatchSettingsEmptyRemoteSecretRevokesStoredValue(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	ctx := t.Context()
+	if err := upsertSecretSetting(ctx, st.DB, dataDir, remoteAccessTokenKey, "old-secret"); err != nil {
+		t.Fatalf("seed vaulted remote secret: %v", err)
+	}
+	if err := upsertSetting(ctx, st.DB, remoteAccessTokenKey, "legacy-old-secret"); err != nil {
+		t.Fatalf("seed legacy remote secret: %v", err)
+	}
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/settings", bytes.NewReader([]byte(`{"remoteAccessToken":""}`)))
+	patchRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(patchRR, patchReq)
+	if patchRR.Code != http.StatusOK {
+		t.Fatalf("patch settings status=%d body=%s", patchRR.Code, patchRR.Body.String())
+	}
+
+	if got := loadSecretSetting(ctx, st.DB, dataDir, remoteAccessTokenKey, ""); got != "" {
+		t.Fatalf("revoked remote secret still loads as %q", got)
+	}
+	if got := loadSetting(st.DB, remoteAccessTokenKey, ""); got != "" {
+		t.Fatalf("revoked remote secret left legacy plaintext setting %q", got)
+	}
+	var vaultCount int
+	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM secrets_vault WHERE name = ?`, secretSettingVaultName(remoteAccessTokenKey)).Scan(&vaultCount); err != nil {
+		t.Fatalf("query vaulted remote secret count: %v", err)
+	}
+	if vaultCount != 0 {
+		t.Fatalf("revoked remote secret left %d vaulted rows", vaultCount)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(patchRR.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode settings response: %v", err)
+	}
+	if payload["remoteAccessTokenConfigured"] != false || payload["remoteAccessToken"] != "" {
+		t.Fatalf("expected revoked remote token to report unconfigured, got token=%#v configured=%#v", payload["remoteAccessToken"], payload["remoteAccessTokenConfigured"])
+	}
+}
+
+func TestPatchSettingsRemoteTokenRotationAndRevocationAffectIngress(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	ctx := t.Context()
+	if err := upsertSetting(ctx, st.DB, remoteAccessEnabledKey, "true"); err != nil {
+		t.Fatalf("seed remote enabled: %v", err)
+	}
+	if err := upsertSecretSetting(ctx, st.DB, dataDir, remoteAccessTokenKey, "old-secret"); err != nil {
+		t.Fatalf("seed old remote token: %v", err)
+	}
+	if err := upsertSecretSetting(ctx, st.DB, dataDir, discordWebhookURLKey, "https://discord.example/webhook"); err != nil {
+		t.Fatalf("seed discord webhook: %v", err)
+	}
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	patchRemoteTokenForTest(t, srv, `{"remoteAccessToken":"new-secret"}`)
+
+	oldTokenRR := postRemoteDiscordForTest(srv, "old-secret")
+	if oldTokenRR.Code != http.StatusUnauthorized {
+		t.Fatalf("old token status=%d want=%d body=%s", oldTokenRR.Code, http.StatusUnauthorized, oldTokenRR.Body.String())
+	}
+
+	newTokenRR := postRemoteDiscordForTest(srv, "new-secret")
+	if newTokenRR.Code != http.StatusBadRequest {
+		t.Fatalf("new token status=%d want=%d body=%s", newTokenRR.Code, http.StatusBadRequest, newTokenRR.Body.String())
+	}
+	if !strings.Contains(newTokenRR.Body.String(), "content required") {
+		t.Fatalf("new token should pass auth and reach payload validation, got %s", newTokenRR.Body.String())
+	}
+
+	patchRemoteTokenForTest(t, srv, `{"remoteAccessToken":""}`)
+
+	revokedTokenRR := postRemoteDiscordForTest(srv, "new-secret")
+	if revokedTokenRR.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked token status=%d want=%d body=%s", revokedTokenRR.Code, http.StatusUnauthorized, revokedTokenRR.Body.String())
+	}
+}
+
+func patchRemoteTokenForTest(t *testing.T, srv *Server, body string) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPatch, "/api/settings", strings.NewReader(body))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("patch settings status=%d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func postRemoteDiscordForTest(srv *Server, token string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, "/api/remote/discord", strings.NewReader(`{"content":"","channel_id":"channel-1"}`))
+	req.Header.Set("X-Forge-Remote-Token", token)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	return rr
+}
