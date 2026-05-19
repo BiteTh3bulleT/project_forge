@@ -140,7 +140,7 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 - [x] `internal/lineage` — lineage tracking. 2026-05-18: added focused coverage for relation creation, default/normalized relation type, upsert behavior, parent/child/related job summaries, blank/missing-job rejection, no-relation responses, and JSON-serializable change summaries; package coverage is 90.4%.
 - [ ] `internal/insights` — insight surface
 - [x] `internal/dossiers` — dossier service. 2026-05-18: added payload-bound hardening and lifecycle coverage for create/update/list detail, source links, job attachment, brief generation, and rejected oversized dossier JSON fields; package coverage is 63.2%.
-- [ ] `internal/evaluations` — evaluation pipeline
+- [x] `internal/evaluations` — evaluation pipeline. 2026-05-18: added focused coverage for rating validation, scorer defaults, latest/list filtering, dossier-scoped records, and adapter metrics; package coverage is 91.9%.
 - [x] `internal/search` — search service. 2026-05-17: focused coverage is 91.5%.
 
 ### Untested packages worth leaving for later
