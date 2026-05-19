@@ -175,7 +175,7 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 - [ ] **Remote token (`X-Forge-Remote-Token`) lifecycle.** Verify rotation, storage, revocation paths are tested.
 - [ ] **Dangerous capabilities audit.** Run [docs/status/dangerous_capabilities.md](../status/dangerous_capabilities.md) against current `tool_capability_registry.go` — every approval-only capability still gated?
 - [ ] **Wildcard bind hardening** (also in Section 1).
-- [ ] **Audit `chat_post.go` (1,319 lines) for body-bound coverage.** Already has `request_body_bounds_test.go` series — verify the new chat surface didn't introduce unbounded paths.
+- [x] **Audit `chat_post.go` body-bound coverage.** 2026-05-18: `handleChatMessagePost` uses `decodeWorkspaceJSONBody`; direct handler coverage is in `TestWorkspaceJSONHandlersRejectOversizeRequestBodies`, route-level coverage is in `TestChatMessagePostRouteRejectsOversizeRequestBody`, and `TestProductionAPIHandlersDoNotDecodeRequestBodyDirectly` guards production handlers from direct unbounded `r.Body` decoding.
 
 ---
 
