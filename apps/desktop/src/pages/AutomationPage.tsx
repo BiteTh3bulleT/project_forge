@@ -1,8 +1,10 @@
 import type { AutomationHistory, AutomationRule } from "@forge/shared";
 import { GhostButton, PrimaryButton } from "@forge/ui";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 
+import { AsyncState } from "../components/AsyncState";
 import { HumanDataView } from "../components/HumanDataView";
+import { OpsPanel } from "../components/OpsPanel";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -81,15 +83,11 @@ export function AutomationPage() {
         </div>
       </header>
 
-      <Panel
+      <OpsPanel
         title="Automation Rules"
         subtitle="Bounded automations with trigger + condition + action contracts, history, and dry-run preview support."
       >
-        {err ? (
-          <div className="rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
-            {err}
-          </div>
-        ) : null}
+        <AsyncState error={err} />
 
         <div className="grid gap-3 md:grid-cols-3">
           <div>
@@ -217,10 +215,10 @@ export function AutomationPage() {
             run as dry-run
           </label>
         </div>
-      </Panel>
+      </OpsPanel>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Panel
+        <OpsPanel
           title="Rules"
           subtitle="Persisted automation contracts. Select one to edit or run."
         >
@@ -256,9 +254,9 @@ export function AutomationPage() {
               ))}
             </div>
           )}
-        </Panel>
+        </OpsPanel>
 
-        <Panel
+        <OpsPanel
           title="Automation History"
           subtitle="Immutable run history with preview and result snapshots."
         >
@@ -286,10 +284,10 @@ export function AutomationPage() {
               ))}
             </div>
           )}
-        </Panel>
+        </OpsPanel>
       </div>
 
-      <Panel
+      <OpsPanel
         title="Last Run Details"
         subtitle="Most recent rule run preview or execution result."
       >
@@ -302,7 +300,7 @@ export function AutomationPage() {
             <HumanDataView value={runResult} />
           </div>
         )}
-      </Panel>
+      </OpsPanel>
     </div>
   );
 }
@@ -324,34 +322,6 @@ function ReadableMapInput(props: {
         Use one key: value rule per line.
       </div>
     </div>
-  );
-}
-
-function Panel(props: {
-  title: string;
-  subtitle?: string;
-  actions?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className="forge-ops-panel">
-      <div className="forge-ops-panel__head">
-        <div>
-          <div className="forge-ops-title">{props.title}</div>
-          {props.subtitle ? (
-            <div className="mt-1 text-xs text-forge-mist/65">
-              {props.subtitle}
-            </div>
-          ) : null}
-        </div>
-        {props.actions ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {props.actions}
-          </div>
-        ) : null}
-      </div>
-      <div className="forge-ops-panel__body">{props.children}</div>
-    </section>
   );
 }
 

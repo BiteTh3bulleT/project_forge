@@ -271,6 +271,7 @@ Continue the proven pattern (kvidentity, refvalidation, semanticvalidation). Pic
 - [x] Taskbar tracking
 - [x] Multi-monitor support
 - [ ] **Extract shared components from pages.** 46 pages, 4 shared components — most pages duplicate fetch/error/loading. Lift `<AsyncState>`, `<KeyValueList>`, `<Panel>`, `<Toast>` into `apps/desktop/src/components/`.
+  - 2026-05-19 progress: added shared `OpsPanel` and `AsyncState` components with component tests, then migrated Automation, Autonomy, Policy, and Project Context away from local duplicated panel/error wrappers.
 - [ ] **Page-level test coverage**. ~8 of 46 pages have `.test.tsx`. Target: render test for every page.
 - [ ] **Command palette polish.** `CommandBar.tsx` exists; flesh out the actions surface.
 - [ ] **Accessibility audit pass.** Focus management, keyboard nav, ARIA labels on the operator-critical surfaces (Chat, Approvals, Operator Apps).

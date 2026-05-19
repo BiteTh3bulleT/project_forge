@@ -6,9 +6,11 @@ import type {
   PolicyRecommendation,
 } from "@forge/shared";
 import { GhostButton, PrimaryButton } from "@forge/ui";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 
+import { AsyncState } from "../components/AsyncState";
 import { HumanDataView } from "../components/HumanDataView";
+import { OpsPanel } from "../components/OpsPanel";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -96,8 +98,8 @@ export function PolicyPage() {
       </header>
 
       {err ? (
-        <div className="forge-ops-panel border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
-          {err}
+        <div className="forge-ops-panel p-3">
+          <AsyncState error={err} />
         </div>
       ) : null}
 
@@ -504,26 +506,6 @@ export function PolicyPage() {
         </div>
       </OpsPanel>
     </div>
-  );
-}
-
-function OpsPanel(props: {
-  title: string;
-  subtitle: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="forge-ops-panel">
-      <div className="forge-ops-panel__head">
-        <div>
-          <div className="forge-ops-title">{props.title}</div>
-          <div className="mt-1 text-xs text-forge-mist/65">
-            {props.subtitle}
-          </div>
-        </div>
-      </div>
-      <div className="forge-ops-panel__body">{props.children}</div>
-    </section>
   );
 }
 

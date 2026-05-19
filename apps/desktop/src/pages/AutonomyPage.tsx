@@ -1,11 +1,13 @@
 import type { ForgeEvent } from "@forge/shared";
 import { GhostButton } from "@forge/ui";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 
+import { AsyncState } from "../components/AsyncState";
 import {
   HumanDataView,
   summarizeHumanValue,
 } from "../components/HumanDataView";
+import { OpsPanel } from "../components/OpsPanel";
 import {
   api,
   type AutonomyBudgetRecord,
@@ -125,15 +127,11 @@ export function AutonomyPage() {
         </div>
       </header>
 
-      <Panel
+      <OpsPanel
         title="Autonomy"
         subtitle="Track dream-state, maintenance/improvement activity, intents, decisions, budgets, and charters."
       >
-        {err ? (
-          <div className="rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
-            {err}
-          </div>
-        ) : null}
+        <AsyncState error={err} />
         {!status?.available ? (
           <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-forge-ash">
             Autonomy loop is not active
@@ -172,10 +170,10 @@ export function AutonomyPage() {
             />
           </div>
         )}
-      </Panel>
+      </OpsPanel>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <Panel
+        <OpsPanel
           title="Intents"
           subtitle="Self-initiated and agent-fed intent queue."
         >
@@ -218,9 +216,9 @@ export function AutonomyPage() {
               ))
             )}
           </div>
-        </Panel>
+        </OpsPanel>
 
-        <Panel
+        <OpsPanel
           title="Intent Explanation"
           subtitle="Structured explain output for selected intent."
         >
@@ -233,11 +231,11 @@ export function AutonomyPage() {
               Select an intent to inspect explain details.
             </div>
           )}
-        </Panel>
+        </OpsPanel>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <Panel
+        <OpsPanel
           title="Decisions"
           subtitle="Autonomy policy decisions with risk and outcome."
         >
@@ -274,9 +272,9 @@ export function AutonomyPage() {
               ))
             )}
           </div>
-        </Panel>
+        </OpsPanel>
 
-        <Panel
+        <OpsPanel
           title="Autonomy Events"
           subtitle="Recent autonomy.* event stream."
         >
@@ -306,11 +304,11 @@ export function AutonomyPage() {
               ))
             )}
           </div>
-        </Panel>
+        </OpsPanel>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2">
-        <Panel
+        <OpsPanel
           title="Budgets"
           subtitle="Freedom budget usage and reset windows."
         >
@@ -339,9 +337,9 @@ export function AutonomyPage() {
               ))
             )}
           </div>
-        </Panel>
+        </OpsPanel>
 
-        <Panel
+        <OpsPanel
           title="Charters"
           subtitle="Scope-bounded action authority definitions."
         >
@@ -374,7 +372,7 @@ export function AutonomyPage() {
               ))
             )}
           </div>
-        </Panel>
+        </OpsPanel>
       </section>
     </div>
   );
@@ -388,33 +386,5 @@ function MetricCard(props: { label: string; value: string }) {
         {props.value}
       </div>
     </div>
-  );
-}
-
-function Panel(props: {
-  title: string;
-  subtitle?: string;
-  actions?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className="forge-ops-panel">
-      <div className="forge-ops-panel__head">
-        <div>
-          <div className="forge-ops-title">{props.title}</div>
-          {props.subtitle ? (
-            <div className="mt-1 text-xs text-forge-mist/65">
-              {props.subtitle}
-            </div>
-          ) : null}
-        </div>
-        {props.actions ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {props.actions}
-          </div>
-        ) : null}
-      </div>
-      <div className="forge-ops-panel__body">{props.children}</div>
-    </section>
   );
 }
