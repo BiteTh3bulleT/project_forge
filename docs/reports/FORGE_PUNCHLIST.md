@@ -280,6 +280,7 @@ Continue the proven pattern (kvidentity, refvalidation, semanticvalidation). Pic
   - 2026-05-19 progress: added first-pass render coverage for `MemoryDetailPage` and `WorkspaceLayoutsPage` with route/API and workspace layout store mocks.
   - 2026-05-19 progress: added first-pass render coverage for `PolicyPage` and `RetrievalRunsPage` around loaded-empty policy, guidance, recommendation, and retrieval-run states.
   - 2026-05-19 progress: added first-pass render coverage for `DossiersPage`, `ReviewsPage`, and `SourcesPage` around loaded-empty dossier, review/reconciliation, and source-ingestion states.
+  - 2026-05-19 progress: added first-pass render coverage for `AutonomyPage`, `InspectorsPage`, and `JobDetailPage` around inactive autonomy, empty inspector, and loaded job-projection states.
 - [ ] **Command palette polish.** `CommandBar.tsx` exists; flesh out the actions surface.
 - [ ] **Accessibility audit pass.** Focus management, keyboard nav, ARIA labels on the operator-critical surfaces (Chat, Approvals, Operator Apps).
 
