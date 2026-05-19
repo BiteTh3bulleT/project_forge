@@ -132,7 +132,7 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 
 ### Untested packages worth covering
 
-- [ ] `internal/chat` — chat-side server logic
+- [x] `internal/chat` — chat-side server logic. 2026-05-18: added focused coverage for thread/message persistence, role/content validation, auto-title rules, reply lookup metadata, malformed metadata hardening, deterministic thread ordering, transcript bounds, and delete cascade; package coverage is 77.7%.
 - [x] `internal/lanes` — lane definitions. 2026-05-18: added focused coverage for built-in authority boundaries, custom lane round-trip persistence, and list ordering; package coverage is 90.9%.
 - [x] `internal/policy` — policy evaluation. 2026-05-18: added focused coverage for strategy selection, failed recommendation persistence, newest-first recommendation listing, dossier validation, and missing global preset behavior; package coverage is 91.9%.
 - [ ] `internal/canvas` — canvas surface

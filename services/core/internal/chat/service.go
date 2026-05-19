@@ -94,7 +94,7 @@ func (s *Service) ListThreads(ctx context.Context, limit int) ([]ThreadSummary, 
 		limit = 80
 	}
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, title, created_at, updated_at, dossier_id FROM chat_threads ORDER BY updated_at DESC LIMIT ?`, limit)
+		`SELECT id, title, created_at, updated_at, dossier_id FROM chat_threads ORDER BY updated_at DESC, id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,10 @@ func (s *Service) AppendMessage(ctx context.Context, threadID int64, role, conte
 	if metadata == nil {
 		metadata = map[string]any{}
 	}
-	raw, _ := json.Marshal(metadata)
+	raw, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, fmt.Errorf("metadata must be JSON serializable: %w", err)
+	}
 	now := time.Now().UnixMilli()
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO chat_messages(thread_id, role, content, created_at, metadata_json) VALUES(?,?,?,?,?)`,
@@ -238,9 +241,11 @@ func suggestTitle(content string) string {
 // FindAssistantReplyTo returns an assistant message that replies to the given user message id, if stored with replyToUserMessageId metadata.
 func (s *Service) FindAssistantReplyTo(ctx context.Context, threadID, userMessageID int64) (*Message, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT id, thread_id, role, content, created_at, metadata_json FROM chat_messages
-WHERE thread_id = ? AND role = 'assistant'
-AND json_extract(metadata_json, '$.replyToUserMessageId') IS NOT NULL
+SELECT id, thread_id, role, content, created_at, metadata_json FROM (
+	SELECT id, thread_id, role, content, created_at, metadata_json FROM chat_messages
+	WHERE thread_id = ? AND role = 'assistant' AND json_valid(metadata_json) = 1
+)
+WHERE json_extract(metadata_json, '$.replyToUserMessageId') IS NOT NULL
 AND CAST(json_extract(metadata_json, '$.replyToUserMessageId') AS INTEGER) = ?
 ORDER BY id DESC LIMIT 1`, threadID, userMessageID)
 	var m Message
