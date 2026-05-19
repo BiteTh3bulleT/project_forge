@@ -4,10 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 )
+
+const maxDossierPayloadBytes = 128 << 10
+
+var errDossierPayloadTooLarge = errors.New("dossier payload too large")
 
 type Dossier struct {
 	ID                int64           `json:"id"`
@@ -96,11 +101,26 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (*Dossier, erro
 			primary = paths
 		}
 	}
-	primaryJSON, _ := json.Marshal(primary)
-	relatedJSON, _ := json.Marshal(req.RelatedRepos)
-	constraintsJSON, _ := json.Marshal(req.Constraints)
-	adaptersJSON, _ := json.Marshal(req.PreferredAdapters)
-	importantJSON, _ := json.Marshal(req.ImportantFiles)
+	primaryJSON, err := marshalDossierPayload("primaryPaths", primary)
+	if err != nil {
+		return nil, err
+	}
+	relatedJSON, err := marshalDossierPayload("relatedRepos", req.RelatedRepos)
+	if err != nil {
+		return nil, err
+	}
+	constraintsJSON, err := marshalDossierPayload("constraints", req.Constraints)
+	if err != nil {
+		return nil, err
+	}
+	adaptersJSON, err := marshalDossierPayload("preferredAdapters", req.PreferredAdapters)
+	if err != nil {
+		return nil, err
+	}
+	importantJSON, err := marshalDossierPayload("importantFiles", req.ImportantFiles)
+	if err != nil {
+		return nil, err
+	}
 
 	res, err := s.db.ExecContext(ctx, `
 INSERT INTO dossiers(
@@ -136,23 +156,38 @@ func (s *Service) Update(ctx context.Context, dossierID int64, req UpdateRequest
 		current.Description = strings.TrimSpace(*req.Description)
 	}
 	if req.PrimaryPaths != nil {
-		b, _ := json.Marshal(choosePaths(*req.PrimaryPaths))
+		b, err := marshalDossierPayload("primaryPaths", choosePaths(*req.PrimaryPaths))
+		if err != nil {
+			return nil, err
+		}
 		current.PrimaryPaths = b
 	}
 	if req.RelatedRepos != nil {
-		b, _ := json.Marshal(*req.RelatedRepos)
+		b, err := marshalDossierPayload("relatedRepos", *req.RelatedRepos)
+		if err != nil {
+			return nil, err
+		}
 		current.RelatedRepos = b
 	}
 	if req.Constraints != nil {
-		b, _ := json.Marshal(*req.Constraints)
+		b, err := marshalDossierPayload("constraints", *req.Constraints)
+		if err != nil {
+			return nil, err
+		}
 		current.Constraints = b
 	}
 	if req.PreferredAdapters != nil {
-		b, _ := json.Marshal(*req.PreferredAdapters)
+		b, err := marshalDossierPayload("preferredAdapters", *req.PreferredAdapters)
+		if err != nil {
+			return nil, err
+		}
 		current.PreferredAdapters = b
 	}
 	if req.ImportantFiles != nil {
-		b, _ := json.Marshal(*req.ImportantFiles)
+		b, err := marshalDossierPayload("importantFiles", *req.ImportantFiles)
+		if err != nil {
+			return nil, err
+		}
 		current.ImportantFiles = b
 	}
 	if req.RoutingNotes != nil {
@@ -462,6 +497,17 @@ func choosePaths(in []string) []string {
 		out = append(out, trim)
 	}
 	return out
+}
+
+func marshalDossierPayload(label string, payload []string) ([]byte, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxDossierPayloadBytes {
+		return nil, fmt.Errorf("%w: %s %d > %d bytes", errDossierPayloadTooLarge, strings.TrimSpace(label), len(body), maxDossierPayloadBytes)
+	}
+	return body, nil
 }
 
 func placeholders(n int) string {
