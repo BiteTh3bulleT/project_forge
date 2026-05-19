@@ -36,7 +36,7 @@ NewServer still mixes wiring + side effects (MkdirAll, EnsureDefaults×5, gorout
 Tests (largely unchanged)
 internal/jobs coverage: 1.6% → 16.2%. Real movement, but still very low. Failure-mode tests (timeout, cancellation, adapter error, retry) absent.
 internal/audit coverage frozen at 32.5%. Two weeks of M5S "security lockdown" with no new audit tests is a smell — audit is the primary security forensics surface.
-internal/automation is 4.9%. New worst-coverage package — production rule engine, one bounds test.
+[DONE] internal/automation coverage raised from 4.9% to 86.8% with focused tests for idempotent default rule seeding, save/update/list ordering, persisted condition evaluation, dry-run execution, executor failure recording, and history JSON. EnsureDefaults is now idempotent, ListRules uses a deterministic id DESC tie-breaker for same-timestamp rows, and Run evaluates the persisted `always`, `source`, and `pathContains` conditions before matching/execution.
 internal/search is no longer zero-test; focused package coverage measured 91.5%. Other zero/low-coverage packages remain open.
 Race detector scope narrow — CI now runs -race only on ./internal/api. Concurrency-rich packages (jobs, modelruntime, gateway, hostbridge, controllane) still unraced.
 Single-OS CI (ubuntu-latest only). Windows-only tests never run on PRs.
