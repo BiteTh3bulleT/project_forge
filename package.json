@@ -24,6 +24,7 @@
     "docs:routes": "node ./scripts/generate-api-routes.mjs",
     "docs:routes:check": "node ./scripts/generate-api-routes.mjs --check",
     "test:integration:env": "node ./scripts/check-integration-env.mjs --allow-missing",
+    "test:integration:env:required": "node ./scripts/check-integration-env.mjs",
     "test:integration": "node ./scripts/check-integration-env.mjs && cd services/core && go test ./...",
     "validate:local": "npm run test:integration:env && npm run validate:desktop && npm run validate:forgek && npm run build:core",
     "test:core": "node ./scripts/check-vsa-files.mjs --require-tracked && cd services/core && go test ./...",

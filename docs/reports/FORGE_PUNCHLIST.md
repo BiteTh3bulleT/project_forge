@@ -150,7 +150,7 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 
 ### Test infrastructure
 
-- [ ] **Make CI integration env required.** No more silent skips on Postgres/Qdrant/Redis env vars.
+- [x] **Make CI integration env required.** 2026-05-19: CI now provisions Postgres, Qdrant, and Redis, exports the required integration env vars, runs `npm run test:integration:env:required`, and the env-gated Go integration tests fail in CI/GitHub Actions if their required env var is missing while preserving local optional skips.
 - [x] **Add scoped `go test -race` to weekly CI.** 2026-05-17: added weekly/manual race workflow for concurrency-heavy core packages (`api`, `jobs`, `modelruntime`, `gateway`, `hostbridge`, `aios/controllane`). Full `./...` race coverage remains optional because it is expensive.
 - [x] **Add fuzz tests** on URL/path/mode/ref/PID validators (5 fuzz targets in `gateway/`). 2026-05-17: added fuzz coverage for outbound HTTP URL, workspace path, chmod mode, git checkout ref, and terminate PID validators.
 - [x] **Cross-platform smoke port.** 2026-05-18: `npm run smoke` dispatches through `scripts/forge-smoke.mjs` to `forge-smoke.ps1` on Windows and `forge-smoke.sh` elsewhere.
@@ -174,7 +174,7 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 - [x] **Complete chat assistant prompt-injection audit.** 2026-05-19: refreshed [docs/reports/chat_assistant_gateway_audit.md](chat_assistant_gateway_audit.md) with a model-output trace matrix for function names, arguments, paths, command-like inputs, URLs, capability inputs, and model prose; added dispatch regressions for unknown functions, malformed arguments, and path traversal before gateway invocation, plus desktop URL validation coverage for the remaining URL sink.
 - [x] **Remote token (`X-Forge-Remote-Token`) lifecycle.** 2026-05-18: header-only authentication, query-token rejection, fixed-length hash comparison, encrypted settings storage, redacted reads, redacted-placeholder preservation, explicit replacement/rotation, and empty-token revocation are covered by `remote_auth_test.go` and `settings_test.go`; `TestPatchSettingsRemoteTokenRotationAndRevocationAffectIngress` proves rotated tokens affect mounted remote ingress immediately and revoked tokens fail closed.
 - [x] **Dangerous capabilities audit.** 2026-05-18: refreshed [docs/status/dangerous_capabilities.md](../status/dangerous_capabilities.md) against `tool_capability_registry.go`; default dangerous capabilities are not freely active, every `approval_only` capability now has broad policy coverage via `TestToolCapabilityRegistryApprovalOnlyDefaultsRequireApproval`, direct dangerous activation remains approval-gated, and gateway execution/audit coverage confirms approval-only tools return `needs_approval`.
-- [ ] **Wildcard bind hardening** (also in Section 1).
+- [x] **Wildcard bind hardening** (also in Section 1). 2026-05-19: confirmed duplicate closed by Section 1/M5S evidence: standalone core image defaults to loopback, `validateCoreListenConfig` rejects wildcard binds unless `FORGE_ALLOW_WILDCARD_BIND=true` and a non-empty API token is present, and the npm Docker helpers create/pass a local ignored token before Compose starts.
 - [x] **Audit `chat_post.go` body-bound coverage.** 2026-05-18: `handleChatMessagePost` uses `decodeWorkspaceJSONBody`; direct handler coverage is in `TestWorkspaceJSONHandlersRejectOversizeRequestBodies`, route-level coverage is in `TestChatMessagePostRouteRejectsOversizeRequestBody`, and `TestProductionAPIHandlersDoNotDecodeRequestBodyDirectly` guards production handlers from direct unbounded `r.Body` decoding.
 
 ---
@@ -283,7 +283,7 @@ The project is "wired and working properly" when:
 
 - [x] No source file >1,500 lines (except SQL migrations, validator crates, barrel files). 2026-05-18: verified across non-test Go/TS/TSX/Rust/Nix/CSS sources; largest non-exempt source is `services/core/internal/api/model_runtime_bridge.go` at 1,482 lines.
 - [x] Memory, controllane, autonomy, gateway, api all at 25%+ statement coverage. 2026-05-18 verification: memory 68.9%, controllane 70.9%, autonomy 47.5%, gateway 67.6%, api 52.5%.
-- [ ] All Section 1 hygiene items closed.
+- [x] All Section 1 hygiene items closed. 2026-05-19: Section 1 and its duplicate Section 5 wildcard bind item are closed.
 - [x] `/health/detailed` and `/metrics` endpoints live.
 - [x] slog migration complete with correlation IDs where available.
 - [x] Streaming model output working through modelruntime where supported.
@@ -293,9 +293,9 @@ The project is "wired and working properly" when:
 - [x] Cross-session memory recall verified working. 2026-05-18: GUI note creation, backend store-reopen recall, and chat remount recall are covered by focused tests and evidence.
 - [x] Operator desktop session running with toolbelt-provided ollama as the model backend.
 - [x] Native desktop runtime boots through FORGE-OS Runtime splash, graphical password login, and FORGE native desktop session with VM evidence. 2026-05-18: see `docs/evidence/vm_boot/2026-05-18-section6-final/`.
-- [ ] One more simulator-to-live migration landed.
-- [ ] CI is strict (integration env required and race detector weekly are present; fuzz on validators remains open).
-- [ ] No remaining items in Sections 1, 4, 5, 6. 2026-05-18: Section 6 is complete; Sections 3-5 still contain non-Section-6 open work.
+- [x] One more simulator-to-live migration landed. 2026-05-18: context attribution validation landed as the next narrow `[PARTIAL LIVE VALIDATION]` seam.
+- [x] CI is strict. 2026-05-19: integration env is required in CI, scoped weekly race coverage is present, and validator fuzz targets are present.
+- [x] No remaining items in Sections 1, 4, 5, 6. 2026-05-19: Section 1 hygiene, Section 4 observability/reliability, Section 5 security/safety, and Section 6 daily-use functional completeness are closed.
 
 ---
 

@@ -35,22 +35,23 @@ Every phase report should include:
 
 ## Integration Test Environment
 
-Default validation must not require external Postgres, Qdrant, or Redis services. Integration tests that need those services must be explicitly gated and documented.
+Default local validation must not require external Postgres, Qdrant, or Redis services. Integration tests that need those services must be explicitly gated and documented locally, but CI must provision those services and fail when the required integration environment is absent.
 
 Environment variables:
 
-- `FORGE_POSTGRES_TEST_DSN`: enables optional Postgres integration tests.
-- `FORGE_QDRANT_TEST_URL`: enables optional Qdrant shadow-vector integration tests.
-- `FORGE_REDIS_TEST_ADDR`: enables optional Redis ephemeral-boundary integration tests.
+- `FORGE_POSTGRES_TEST_DSN`: enables local Postgres integration tests and is required in CI.
+- `FORGE_QDRANT_TEST_URL`: enables local Qdrant shadow-vector integration tests and is required in CI.
+- `FORGE_REDIS_TEST_ADDR`: enables local Redis ephemeral-boundary integration tests and is required in CI.
 
 Commands:
 
 - `npm test`: default Go core test path; must not require external services.
 - `npm run test:integration:env`: reports integration environment visibility without failing when services are absent.
+- `npm run test:integration:env:required`: fails if any integration environment variable is missing; this is the CI preflight.
 - `npm run test:integration`: requires all integration environment variables before running the Go core test suite.
 - `npm run test:forgek:parity`: explicit Go/Rust FORGE-K parity validation; root `npm test` does not depend on Rust.
 
-CI should expose integration environment visibility so skipped external-service tests are visible, but default CI should remain runnable without local database/vector/Redis services unless a workflow explicitly provisions them.
+CI provisions Postgres, Qdrant, and Redis, runs the required integration preflight, and treats missing integration environment as a failure instead of allowing silent skips. Local developer workflows keep the lenient visibility command so `npm test` remains usable without Docker services.
 
 ## Status Markers
 

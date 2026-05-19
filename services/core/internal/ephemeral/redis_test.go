@@ -147,10 +147,7 @@ func TestNormalizeProgressReadLimitBoundsDefaultAndMaximum(t *testing.T) {
 }
 
 func TestRedisIntegrationOptional(t *testing.T) {
-	addr := os.Getenv("FORGE_REDIS_TEST_ADDR")
-	if addr == "" {
-		t.Skip("FORGE_REDIS_TEST_ADDR not set")
-	}
+	addr := requireIntegrationEnvOrSkip(t, "FORGE_REDIS_TEST_ADDR")
 	ctx := context.Background()
 	policy := DefaultKeyPolicy("forge-test")
 	store, err := NewRedisStore(RedisConfig{
@@ -201,4 +198,17 @@ func TestRedisIntegrationOptional(t *testing.T) {
 	if err := store.ReleaseLock(ctx, lockKey, "owner"); err != nil {
 		t.Fatalf("release lock: %v", err)
 	}
+}
+
+func requireIntegrationEnvOrSkip(t *testing.T, name string) string {
+	t.Helper()
+	value := strings.TrimSpace(os.Getenv(name))
+	if value != "" {
+		return value
+	}
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+		t.Fatalf("%s must be set in CI for integration coverage", name)
+	}
+	t.Skipf("%s not set", name)
+	return ""
 }

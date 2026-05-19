@@ -163,10 +163,7 @@ func TestDiagnosticPersistenceDoesNotStoreRawContent(t *testing.T) {
 }
 
 func TestPostgresDiagnosticRepositoryIntegrationOptional(t *testing.T) {
-	dsn := strings.TrimSpace(os.Getenv("FORGE_POSTGRES_TEST_DSN"))
-	if dsn == "" {
-		t.Skip("FORGE_POSTGRES_TEST_DSN not set")
-	}
+	dsn := requireIntegrationEnvOrSkip(t, "FORGE_POSTGRES_TEST_DSN")
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		t.Fatalf("open postgres test database: %v", err)
@@ -209,6 +206,19 @@ func TestPostgresDiagnosticRepositoryIntegrationOptional(t *testing.T) {
 	if len(expired) == 0 {
 		t.Fatalf("expected retention expiry query to find persisted record")
 	}
+}
+
+func requireIntegrationEnvOrSkip(t *testing.T, name string) string {
+	t.Helper()
+	value := strings.TrimSpace(os.Getenv(name))
+	if value != "" {
+		return value
+	}
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+		t.Fatalf("%s must be set in CI for integration coverage", name)
+	}
+	t.Skipf("%s not set", name)
+	return ""
 }
 
 type recordingDiagnosticPersistenceSink struct {
