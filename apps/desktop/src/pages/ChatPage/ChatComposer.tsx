@@ -8,7 +8,13 @@ import { Link } from "react-router-dom";
 
 import type { ChatAttachment, ModelRuntimeModel } from "../../lib/api";
 
-type InspectorMode = "thinking" | "code" | "files" | "terminal" | "browser";
+type InspectorMode =
+  | "thinking"
+  | "reasoning"
+  | "code"
+  | "files"
+  | "terminal"
+  | "browser";
 
 export function ChatComposer(props: {
   pendingAttachments: ChatAttachment[];

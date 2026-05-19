@@ -140,11 +140,12 @@ type ModelRuntimeChatResult struct {
 }
 
 type ModelRuntimeChatStreamToken struct {
-	Text    string `json:"text,omitempty"`
-	Index   int    `json:"index,omitempty"`
-	Done    bool   `json:"done,omitempty"`
-	Backend string `json:"backend,omitempty"`
-	ModelID string `json:"modelId,omitempty"`
+	Text      string `json:"text,omitempty"`
+	Reasoning string `json:"reasoning,omitempty"`
+	Index     int    `json:"index,omitempty"`
+	Done      bool   `json:"done,omitempty"`
+	Backend   string `json:"backend,omitempty"`
+	ModelID   string `json:"modelId,omitempty"`
 }
 
 type ModelRuntimeHealth struct {
@@ -1047,7 +1048,18 @@ func (s *Server) handleV1ChatCompletions(w http.ResponseWriter, r *http.Request)
 func (s *Server) streamForgeModelChat(w http.ResponseWriter, r *http.Request, runtimeSvc modelRuntimeStreamingService, req ModelRuntimeChatRequest) {
 	prepareModelRuntimeSSE(w)
 	result, err := runtimeSvc.StreamChat(r.Context(), req, func(token ModelRuntimeChatStreamToken) error {
-		if token.Done || strings.TrimSpace(token.Text) == "" {
+		if token.Done {
+			return nil
+		}
+		if strings.TrimSpace(token.Reasoning) != "" {
+			return writeModelRuntimeSSE(w, "reasoning", map[string]any{
+				"text":    token.Reasoning,
+				"index":   token.Index,
+				"backend": token.Backend,
+				"modelId": token.ModelID,
+			})
+		}
+		if strings.TrimSpace(token.Text) == "" {
 			return nil
 		}
 		return writeModelRuntimeSSE(w, "token", token)
@@ -1081,11 +1093,34 @@ func (s *Server) streamOpenAICompatChatCompletions(w http.ResponseWriter, r *htt
 	created := time.Now().Unix()
 	modelID := strings.TrimSpace(req.ModelID)
 	result, err := runtimeSvc.StreamChat(r.Context(), req, func(token ModelRuntimeChatStreamToken) error {
-		if token.Done || strings.TrimSpace(token.Text) == "" {
+		if token.Done {
 			return nil
 		}
 		if strings.TrimSpace(token.ModelID) != "" {
 			modelID = strings.TrimSpace(token.ModelID)
+		}
+		if strings.TrimSpace(token.Reasoning) != "" {
+			return writeModelRuntimeSSEData(w, map[string]any{
+				"id":      id,
+				"object":  "chat.completion.chunk",
+				"created": created,
+				"model":   modelID,
+				"choices": []map[string]any{
+					{
+						"index": token.Index,
+						"delta": map[string]any{
+							"reasoning": token.Reasoning,
+						},
+						"finish_reason": nil,
+					},
+				},
+				"correlationId": req.Meta.CorrelationID,
+				"traceId":       req.Meta.TraceID,
+				"workspaceId":   req.Meta.WorkspaceID,
+			})
+		}
+		if strings.TrimSpace(token.Text) == "" {
+			return nil
 		}
 		return writeModelRuntimeSSEData(w, map[string]any{
 			"id":      id,

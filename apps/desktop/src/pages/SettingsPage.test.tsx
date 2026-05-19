@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SettingsPage } from "./SettingsPage";
@@ -88,6 +89,14 @@ const baseSettings = {
   },
 };
 
+function renderSettingsPage() {
+  return render(
+    <MemoryRouter>
+      <SettingsPage />
+    </MemoryRouter>,
+  );
+}
+
 describe("SettingsPage remote secrets", () => {
   beforeEach(() => {
     for (const mock of Object.values(mocks)) {
@@ -122,7 +131,7 @@ describe("SettingsPage remote secrets", () => {
   });
 
   it("does not send redacted remote secret placeholders back to core", async () => {
-    render(<SettingsPage />);
+    renderSettingsPage();
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Save remote access" }),
@@ -146,7 +155,7 @@ describe("SettingsPage remote secrets", () => {
   });
 
   it("sends a changed remote token value to core", async () => {
-    render(<SettingsPage />);
+    renderSettingsPage();
 
     const remoteToken = await screen.findByPlaceholderText(
       "Share with Telegram/Discord webhook callers",
@@ -161,7 +170,7 @@ describe("SettingsPage remote secrets", () => {
   });
 
   it("separates GPU acceleration from optional telemetry controls", async () => {
-    render(<SettingsPage />);
+    renderSettingsPage();
 
     expect(
       await screen.findByText("GPU acceleration and model visibility"),
@@ -177,5 +186,12 @@ describe("SettingsPage remote secrets", () => {
         "Leave these off unless NVIDIA DCGM or Intel Level Zero telemetry is installed and reachable.",
       ),
     ).toBeTruthy();
+  });
+
+  it("links model lifecycle work to the Models surface", async () => {
+    renderSettingsPage();
+
+    expect(await screen.findByText("Model Lifecycle")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open Models" })).toBeTruthy();
   });
 });

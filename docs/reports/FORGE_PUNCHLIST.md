@@ -187,9 +187,11 @@ These are the items between "wired" and "works the way I want."
 
 - [x] PhaseM4 plan drafted
 - [x] **Streaming model output.** Governed chat/SSE streaming is wired through modelruntime when the selected backend supports streaming; unsupported runtimes return structured `STREAM_UNSUPPORTED` behavior.
+- [x] **Provider reasoning inspector stream.** 2026-05-19: OpenAI-compatible reasoning-only stream chunks now stay outside final assistant content and emit governed `reasoning` SSE events; Chat renders them in a dedicated right-panel Reasoning tab with empty/loading states while preserving FORGE Thinking for pipeline telemetry.
 - [x] **vLLM-compatible external profile.** Disabled-by-default vLLM endpoint support is behind the existing modelruntime boundary, not a raw chat bypass and not a FORGE-K authority path.
 - [x] **Delete-file approval flow** for managed model artifacts.
 - [x] **Stronger backend/process supervision and runtime hardening.** Restart/degraded-state policy, health probes, resource caps, deeper scheduling/backpressure, cancellation-safe accounting, and operator visibility. 2026-05-18: completed the remaining governed hardening surfaces with explicit unmanaged-backend supervision state, repeated-failure restart recommendation requiring operator action, resource-limit visibility in health/usage, cancellation-safe `canceled` accounting, scheduler backpressure reasons, and overloaded health visibility. The current local backends remain operator-managed external processes; the runtime does not falsely claim OS-level child-process restart ownership.
+- [x] **Desktop model load approval loop.** 2026-05-19: Models compact and registry views expose selected-model load/unload controls, surface approval-required responses with the approval request number, support opening the approvals queue, and support explicit one-click public approval plus governed replay with `approvalId`. This keeps model loading behind the existing model-management approval gate instead of bypassing runtime governance.
 
 ### Hyperlane
 

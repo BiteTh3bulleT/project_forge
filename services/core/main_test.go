@@ -105,22 +105,22 @@ func TestValidateCoreConfigAllowsRootWorkspaceWithExplicitOptIn(t *testing.T) {
 	}
 }
 
-func TestDockerComposeCoreDefaultsDoNotOptIntoWildcardBind(t *testing.T) {
+func TestDockerComposeCoreDefaultsUseContainerWildcardWithAuth(t *testing.T) {
 	body, err := os.ReadFile(filepath.Join("..", "..", "docker-compose.yml"))
 	if err != nil {
 		t.Fatalf("read docker-compose.yml: %v", err)
 	}
 	compose := string(body)
-	if strings.Contains(compose, `FORGE_CORE_BIND_HOST: "${FORGE_CORE_BIND_HOST:-0.0.0.0}"`) {
-		t.Fatal("docker-compose.yml must not default FORGE_CORE_BIND_HOST to 0.0.0.0")
+	if !strings.Contains(compose, `FORGE_CORE_BIND_HOST: "${FORGE_CORE_BIND_HOST:-0.0.0.0}"`) {
+		t.Fatal("docker-compose.yml must default FORGE_CORE_BIND_HOST to 0.0.0.0 for container port publishing")
 	}
-	if strings.Contains(compose, `FORGE_ALLOW_WILDCARD_BIND: "${FORGE_ALLOW_WILDCARD_BIND:-true}"`) {
-		t.Fatal("docker-compose.yml must not default FORGE_ALLOW_WILDCARD_BIND to true")
+	if !strings.Contains(compose, `FORGE_ALLOW_WILDCARD_BIND: "${FORGE_ALLOW_WILDCARD_BIND:-true}"`) {
+		t.Fatal("docker-compose.yml must explicitly opt into wildcard bind for the container profile")
 	}
-	if !strings.Contains(compose, `FORGE_CORE_BIND_HOST: "${FORGE_CORE_BIND_HOST:-127.0.0.1}"`) {
-		t.Fatal("docker-compose.yml must default FORGE_CORE_BIND_HOST to 127.0.0.1")
+	if !strings.Contains(compose, `FORGE_API_TOKEN: "${FORGE_API_TOKEN:-}"`) {
+		t.Fatal("docker-compose.yml must keep wildcard-bound API surfaces auth-gated by FORGE_API_TOKEN")
 	}
-	if !strings.Contains(compose, `FORGE_ALLOW_WILDCARD_BIND: "${FORGE_ALLOW_WILDCARD_BIND:-false}"`) {
-		t.Fatal("docker-compose.yml must default FORGE_ALLOW_WILDCARD_BIND to false")
+	if !strings.Contains(compose, `${FORGE_DOCKER_BIND_HOST:-127.0.0.1}`) {
+		t.Fatal("docker-compose.yml must keep host-published ports loopback-bound by default")
 	}
 }

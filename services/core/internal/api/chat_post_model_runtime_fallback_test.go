@@ -1914,7 +1914,8 @@ func TestChatAssistantStreamPrefersModelRuntimePlainBeforeNativeOllamaStream(t *
 
 type fakeStreamingModelRuntime struct {
 	*fakeModelRuntime
-	streamCalls int
+	streamCalls     int
+	reasoningTokens []string
 }
 
 func (f *fakeStreamingModelRuntime) StreamChat(_ context.Context, req ModelRuntimeChatRequest, onToken func(ModelRuntimeChatStreamToken) error) (ModelRuntimeChatResult, error) {
@@ -1924,12 +1925,18 @@ func (f *fakeStreamingModelRuntime) StreamChat(_ context.Context, req ModelRunti
 	f.lastChat = req
 	streamErr := f.streamErr
 	tokens := append([]string(nil), f.streamTokens...)
+	reasoningTokens := append([]string(nil), f.reasoningTokens...)
 	if len(tokens) == 0 {
 		tokens = []string{"cloud ", "stream"}
 	}
 	f.mu.Unlock()
 	if streamErr != nil {
 		return ModelRuntimeChatResult{}, streamErr
+	}
+	for i, token := range reasoningTokens {
+		if err := onToken(ModelRuntimeChatStreamToken{Reasoning: token, Index: i}); err != nil {
+			return ModelRuntimeChatResult{}, err
+		}
 	}
 	for i, token := range tokens {
 		if err := onToken(ModelRuntimeChatStreamToken{Text: token, Index: i}); err != nil {
@@ -2089,6 +2096,49 @@ func TestChatAssistantStreamUsesModelRuntimeStreamingWhenOllamaUnavailable(t *te
 	}
 	if fakeRuntime.chatCalls != 0 {
 		t.Fatalf("expected streaming path to avoid sync chat call, got %d", fakeRuntime.chatCalls)
+	}
+}
+
+func TestChatAssistantStreamEmitsModelRuntimeReasoningEvents(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := &fakeStreamingModelRuntime{
+		fakeModelRuntime: newFakeModelRuntime(),
+		reasoningTokens:  []string{"checking facts"},
+	}
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "runtime reasoning stream", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	um, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "hello via runtime stream", map[string]any{"source": "operator"})
+	if err != nil {
+		t.Fatalf("append user message: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/assistant-stream?userMessageId="+strconv.FormatInt(um.ID, 10),
+		nil,
+	)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "event: reasoning") || !strings.Contains(body, `"text":"checking facts"`) {
+		t.Fatalf("expected reasoning SSE event, got body=%s", body)
+	}
+	if !strings.Contains(body, "event: token") || !strings.Contains(body, `"text":"cloud "`) || !strings.Contains(body, `"text":"stream"`) {
+		t.Fatalf("expected visible token SSE events, got body=%s", body)
+	}
+	if strings.Contains(body, `"content":"checking factscloud stream"`) || strings.Contains(body, `"content":"checking facts cloud stream"`) {
+		t.Fatalf("reasoning leaked into assistant message content, got body=%s", body)
+	}
+	if strings.Contains(body, "stream_downgrade") {
+		t.Fatalf("did not expect stream downgrade for reasoning-capable runtime stream, got body=%s", body)
 	}
 }
 

@@ -118,16 +118,25 @@ export function writeCachedChatModelSelection(value: string) {
   }
 }
 
-export function modelManagementRequest(metadata?: Record<string, unknown>) {
-  return {
+export function modelManagementRequest(
+  metadata?: Record<string, unknown>,
+  approvalId?: string,
+) {
+  const request = {
     actor: CONTROL_ACTOR,
     source: CONTROL_SOURCE,
     capabilityId: MODEL_MANAGEMENT_CAPABILITY,
     metadata,
   };
+  const normalizedApprovalId = approvalId?.trim();
+  if (!normalizedApprovalId) return request;
+  return {
+    ...request,
+    approvalId: normalizedApprovalId,
+  };
 }
 
-type ModelGovernanceDecision = {
+export type ModelGovernanceDecision = {
   requiresApproval?: boolean;
   approved?: boolean;
   dryRun?: boolean;
@@ -136,11 +145,18 @@ type ModelGovernanceDecision = {
   reason?: string;
 };
 
-export function modelGovernanceMessage(payload: unknown, label: string) {
+export function modelGovernanceDecision(
+  payload: unknown,
+): ModelGovernanceDecision | null {
   if (!payload || typeof payload !== "object") return null;
   const governance = (payload as { governance?: unknown }).governance;
   if (!governance || typeof governance !== "object") return null;
-  const decision = governance as ModelGovernanceDecision;
+  return governance as ModelGovernanceDecision;
+}
+
+export function modelGovernanceMessage(payload: unknown, label: string) {
+  const decision = modelGovernanceDecision(payload);
+  if (!decision) return null;
   const approvalId =
     typeof decision.approvalRequestId === "number"
       ? ` #${decision.approvalRequestId}`

@@ -1,6 +1,6 @@
 import { GhostButton, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { HumanDataView } from "../components/HumanDataView";
 import {
@@ -25,6 +25,7 @@ import {
   emptyModelRuntimeUsage,
   Metric,
   modelGovernanceMessage,
+  modelGovernanceDecision,
   modelManagementRequest,
   normalizeStatus,
   readCachedChatModelSelection,
@@ -36,9 +37,25 @@ import {
   writeCachedChatModelSelection,
 } from "./ModelsPage/shared";
 
+type ModelAction =
+  | "verify"
+  | "enable"
+  | "disable"
+  | "archive"
+  | "remove"
+  | "load"
+  | "unload";
+
+type PendingModelApproval = {
+  modelId: string;
+  action: ModelAction;
+  approvalRequestId: number;
+};
+
 export function ModelsPage() {
   const setStatus = useUiStore((s) => s.setStatusLine);
   const uiMode = useUiStore((s) => s.uiMode);
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [models, setModels] = useState<ModelRuntimeModel[]>([]);
   const [selectedModelId, setSelectedModelId] = useState("");
@@ -64,6 +81,9 @@ export function ModelsPage() {
   const [importBusy, setImportBusy] = useState(false);
   const [scanBusy, setScanBusy] = useState(false);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [pendingModelApproval, setPendingModelApproval] =
+    useState<PendingModelApproval | null>(null);
+  const [approvalBusy, setApprovalBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number>(Date.now());
   const [chatSelectedModelId, setChatSelectedModelId] = useState<string>(() =>
@@ -267,6 +287,13 @@ export function ModelsPage() {
     writeCachedChatModelSelection(chatSelectedModelId);
   }, [chatSelectedModelId]);
 
+  function selectChatModelPreference(modelId: string) {
+    setChatSelectedModelId(modelId);
+    if (modelId) {
+      setSelectedModelId(modelId);
+    }
+  }
+
   async function handleImport() {
     if (!runtimeAvailable) {
       setErr("Model runtime unavailable; import controls are read-only.");
@@ -341,20 +368,18 @@ export function ModelsPage() {
 
   async function runAction(
     modelId: string,
-    action:
-      | "verify"
-      | "enable"
-      | "disable"
-      | "archive"
-      | "remove"
-      | "load"
-      | "unload",
+    action: ModelAction,
   ) {
     if (!runtimeAvailable) {
       setErr("Model runtime unavailable; lifecycle controls are read-only.");
       return;
     }
     const busyKey = `${action}:${modelId}`;
+    const approvalId =
+      pendingModelApproval?.modelId === modelId &&
+      pendingModelApproval.action === action
+        ? String(pendingModelApproval.approvalRequestId)
+        : undefined;
     setActionBusy(busyKey);
     try {
       let result: unknown = null;
@@ -362,51 +387,63 @@ export function ModelsPage() {
         case "verify":
           result = await api.modelRuntime.verify(
             modelId,
-            modelManagementRequest(),
+            modelManagementRequest(undefined, approvalId),
           );
           break;
         case "enable":
           result = await api.modelRuntime.enable(
             modelId,
-            modelManagementRequest(),
+            modelManagementRequest(undefined, approvalId),
           );
           break;
         case "disable":
           result = await api.modelRuntime.disable(
             modelId,
-            modelManagementRequest(),
+            modelManagementRequest(undefined, approvalId),
           );
           break;
         case "archive":
           result = await api.modelRuntime.archive(
             modelId,
-            modelManagementRequest(),
+            modelManagementRequest(undefined, approvalId),
           );
           break;
         case "remove":
           result = await api.modelRuntime.remove(
             modelId,
-            modelManagementRequest(),
+            modelManagementRequest(undefined, approvalId),
           );
           break;
         case "load":
           result = await api.modelRuntime.load(
             modelId,
-            modelManagementRequest(),
+            modelManagementRequest(undefined, approvalId),
           );
           break;
         case "unload":
           result = await api.modelRuntime.unload(
             modelId,
-            modelManagementRequest(),
+            modelManagementRequest(undefined, approvalId),
           );
           break;
       }
+      const governanceDecision = modelGovernanceDecision(result);
       const governanceMessage = modelGovernanceMessage(
         result,
         `Model ${action}`,
       );
       if (governanceMessage) {
+        if (
+          governanceDecision?.requiresApproval &&
+          !governanceDecision.approved &&
+          typeof governanceDecision.approvalRequestId === "number"
+        ) {
+          setPendingModelApproval({
+            modelId,
+            action,
+            approvalRequestId: governanceDecision.approvalRequestId,
+          });
+        }
         await refreshOverview(true, modelId);
         await refreshSelectedModel(modelId);
         setStatus(governanceMessage);
@@ -416,6 +453,11 @@ export function ModelsPage() {
       if (action === "remove" && selectedModelId === modelId) {
         setSelectedModelId("");
       }
+      setPendingModelApproval((current) =>
+        current?.modelId === modelId && current.action === action
+          ? null
+          : current,
+      );
       const nextSelection =
         selectedModelId === modelId && action === "remove" ? "" : modelId;
       await refreshOverview(true, nextSelection);
@@ -426,6 +468,24 @@ export function ModelsPage() {
       setErr(error instanceof Error ? error.message : String(error));
     } finally {
       setActionBusy(null);
+    }
+  }
+
+  async function approveAndRunPendingModelApproval() {
+    const pending = pendingModelApproval;
+    if (!pending || approvalBusy) return;
+    setApprovalBusy(true);
+    try {
+      await api.approvals.approve(
+        pending.approvalRequestId,
+        `Approved model ${pending.action} from Models page`,
+      );
+      setStatus(`Approved model ${pending.action} request.`);
+      await runAction(pending.modelId, pending.action);
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : String(error));
+    } finally {
+      setApprovalBusy(false);
     }
   }
 
@@ -449,10 +509,21 @@ export function ModelsPage() {
         chatSelectedModelId={chatSelectedModelId}
         models={models}
         selectedModelId={selectedModelId}
+        actionBusy={actionBusy}
+        runtimeControlsDisabled={runtimeControlsDisabled}
+        approvalBusy={approvalBusy}
+        pendingApproval={
+          pendingModelApproval?.modelId === selectedModelId
+            ? pendingModelApproval
+            : null
+        }
         onRefresh={() => void refreshOverview(true)}
         onOpenRegistry={() => setSearchParams({ view: "registry" })}
+        onOpenApprovals={() => navigate("/approvals")}
+        onApprovePending={() => void approveAndRunPendingModelApproval()}
         onSelectModel={setSelectedModelId}
-        onSelectChatModel={setChatSelectedModelId}
+        onSelectChatModel={selectChatModelPreference}
+        onModelAction={(modelId, action) => void runAction(modelId, action)}
         setStatus={setStatus}
       />
     );
@@ -718,7 +789,7 @@ export function ModelsPage() {
                   className="forge-input relative z-20 h-11 w-full min-w-0 py-2 text-sm"
                   value={chatSelectedModelId}
                   onChange={(event) => {
-                    setChatSelectedModelId(event.target.value);
+                    selectChatModelPreference(event.target.value);
                     setStatus(
                       event.target.value
                         ? `Chat model preference set to ${event.target.value}`
@@ -747,7 +818,7 @@ export function ModelsPage() {
               <GhostButton
                 className="min-h-11 shrink-0 px-4"
                 onClick={() => {
-                  setChatSelectedModelId("");
+                  selectChatModelPreference("");
                   setStatus("Chat model preference cleared (auto).");
                 }}
                 disabled={!chatSelectedModelId}
@@ -1234,6 +1305,36 @@ export function ModelsPage() {
                           : "Remove"}
                       </GhostButton>
                     </div>
+                    {pendingModelApproval?.modelId ===
+                    selectedModelSummary.id ? (
+                      <div className="mt-3 rounded border border-forge-amber/30 bg-forge-amber/10 p-3 text-xs leading-5 text-forge-ash">
+                        <div className="font-semibold">
+                          Approval required #
+                          {pendingModelApproval.approvalRequestId}
+                        </div>
+                        <div className="mt-1 text-forge-mist">
+                          Approve the request, then run{" "}
+                          {pendingModelApproval.action} again for this model.
+                        </div>
+                        <GhostButton
+                          className="mt-3"
+                          onClick={() => navigate("/approvals")}
+                        >
+                          Open approvals
+                        </GhostButton>
+                        <PrimaryButton
+                          className="ml-2 mt-3"
+                          onClick={() =>
+                            void approveAndRunPendingModelApproval()
+                          }
+                          disabled={approvalBusy}
+                        >
+                          {approvalBusy
+                            ? "Approving..."
+                            : `Approve and ${pendingModelApproval.action}`}
+                        </PrimaryButton>
+                      </div>
+                    ) : null}
                   </div>
                   {selectedCompatibility ? (
                     <div className="rounded border border-white/10 bg-black/25 p-3 text-xs text-forge-mist">

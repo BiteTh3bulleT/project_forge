@@ -119,6 +119,15 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 		if token.Done {
 			return nil
 		}
+		if strings.TrimSpace(token.Reasoning) != "" {
+			emit("reasoning", map[string]any{
+				"text":    token.Reasoning,
+				"index":   token.Index,
+				"backend": token.Backend,
+				"modelId": token.ModelID,
+			})
+			return nil
+		}
 		if strings.TrimSpace(token.Text) == "" {
 			return nil
 		}

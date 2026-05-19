@@ -163,6 +163,7 @@ export function ChatPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showForgeActions, setShowForgeActions] = useState(false);
   const [streamingText, setStreamingText] = useState<string | null>(null);
+  const [reasoningText, setReasoningText] = useState("");
   const [streamingEvents, setStreamingEvents] = useState<ChatThinkingEvent[]>(
     [],
   );
@@ -176,7 +177,7 @@ export function ChatPage() {
     ChatAttachment[]
   >([]);
   const [inspectorMode, setInspectorMode] = useState<
-    "thinking" | "code" | "files" | "terminal" | "browser"
+    "thinking" | "reasoning" | "code" | "files" | "terminal" | "browser"
   >("thinking");
   const [selectedSnippetKey, setSelectedSnippetKey] = useState<string>("");
   const [selectedAttachmentId, setSelectedAttachmentId] = useState<number>(0);
@@ -465,6 +466,10 @@ export function ChatPage() {
     });
   }, [active?.id, active?.messages.length, streamingText]);
 
+  useEffect(() => {
+    setReasoningText("");
+  }, [active?.id]);
+
   const inspectAttachment = useCallback((artifactId: number) => {
     setInspectorMode("files");
     setSelectedAttachmentId(artifactId);
@@ -554,6 +559,7 @@ export function ChatPage() {
     streamTokenFlushTimerRef.current = null;
     streamTokenBufferRef.current = "";
     setStreamingText(null);
+    setReasoningText("");
     setStreamingEvents([]);
     setStatus("Assistant stream stopped.");
   }
@@ -571,6 +577,7 @@ export function ChatPage() {
     streamTokenFlushTimerRef.current = null;
     streamTokenBufferRef.current = "";
     setStreamingText(null);
+    setReasoningText("");
     setStreamingEvents([]);
     streamEsRef.current?.close();
     streamEsRef.current = null;
@@ -680,6 +687,7 @@ export function ChatPage() {
       const streamController = new AbortController();
       streamEsRef.current = { close: () => streamController.abort() };
       setStreamingEvents([]);
+      setReasoningText("");
       streamTokenBufferRef.current = "";
       if (streamTokenFlushTimerRef.current)
         window.clearTimeout(streamTokenFlushTimerRef.current);
@@ -781,6 +789,19 @@ export function ChatPage() {
             queueToken(token);
           } catch {
             /* ignore malformed token payload */
+          }
+          return;
+        }
+
+        if (event.event === "reasoning") {
+          try {
+            const raw = JSON.parse(event.data) as {
+              text?: string;
+            };
+            const text = typeof raw.text === "string" ? raw.text : "";
+            if (text) setReasoningText((prev) => prev + text);
+          } catch {
+            /* ignore malformed reasoning payload */
           }
           return;
         }
@@ -1128,7 +1149,8 @@ export function ChatPage() {
               </h2>
               <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-forge-mist/80">
                 Create a thread to use the composer, attachments, terminal,
-                browser, code, and thinking inspectors from one surface.
+                browser, code, reasoning, and thinking inspectors from one
+                surface.
               </p>
               <button
                 type="button"
@@ -1447,6 +1469,8 @@ export function ChatPage() {
           onInspectorModeChange={setInspectorMode}
           streamingText={streamingText}
           streamingEvents={streamingEvents}
+          reasoningText={reasoningText}
+          reasoningStreaming={streamingText !== null}
           thinkingEntries={thinkingEntries}
           terminalEntries={terminalEntries}
           browserEntries={browserEntries}

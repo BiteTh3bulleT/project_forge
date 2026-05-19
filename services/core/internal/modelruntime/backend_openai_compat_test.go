@@ -208,6 +208,66 @@ func TestOpenAICompatBackendGenerateStreamEmitsContentDeltas(t *testing.T) {
 	}
 }
 
+func TestOpenAICompatBackendGenerateStreamEmitsReasoningDeltasSeparately(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/chat/completions":
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"checking facts\"}}]}\n\n"))
+			_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"answer\"},\"finish_reason\":\"stop\"}]}\n\n"))
+			_, _ = w.Write([]byte("data: [DONE]\n\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	backend := NewOpenAICompatBackend(OpenAICompatOptions{
+		Endpoint:       server.URL,
+		Kind:           BackendOpenAICompat,
+		RequestTimeout: 2000000000,
+	})
+	_, err := backend.Load(context.Background(), ModelManifest{
+		ID:           "remote-model",
+		Backend:      BackendOpenAICompat,
+		Format:       ModelFormatUnknown,
+		Capabilities: []ModelCapability{CapabilityChat},
+	})
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	reasoning := []string{}
+	tokens := []string{}
+	result, err := backend.GenerateStream(context.Background(), GenerateRequest{
+		ModelID:  "remote-model",
+		Messages: []GenerateMessage{{Role: "user", Content: "hello"}},
+	}, func(event TokenEvent) error {
+		if event.Reasoning != "" {
+			reasoning = append(reasoning, event.Reasoning)
+		}
+		if event.Token != "" {
+			tokens = append(tokens, event.Token)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("stream generate: %v", err)
+	}
+	if got := strings.Join(reasoning, ""); got != "checking facts" {
+		t.Fatalf("unexpected reasoning stream %q from %#v", got, reasoning)
+	}
+	if got := strings.Join(tokens, ""); got != "answer" {
+		t.Fatalf("unexpected visible token stream %q from %#v", got, tokens)
+	}
+	if result.Content != "answer" {
+		t.Fatalf("reasoning leaked into visible content: %+v", result)
+	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("reasoning stream chunks should not create warning spam: %v", result.Warnings)
+	}
+}
+
 func TestOpenAICompatBackendGenerateRejectsOversizeResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {

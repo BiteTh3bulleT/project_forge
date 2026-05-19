@@ -1,4 +1,4 @@
-import { GhostButton } from "@forge/ui";
+import { GhostButton, PrimaryButton } from "@forge/ui";
 
 import type {
   ModelRuntimeHealth,
@@ -15,6 +15,11 @@ import {
 } from "./shared";
 
 type LoadedModelRecord = ModelRuntimeLoadedStatus["models"][number];
+type CompactPendingApproval = {
+  modelId: string;
+  action: string;
+  approvalRequestId: number;
+};
 
 export function CompactModelsBoard(props: {
   err: string | null;
@@ -31,12 +36,26 @@ export function CompactModelsBoard(props: {
   chatSelectedModelId: string;
   models: ModelRuntimeModel[];
   selectedModelId: string;
+  actionBusy: string | null;
+  runtimeControlsDisabled: boolean;
+  approvalBusy: boolean;
+  pendingApproval: CompactPendingApproval | null;
   onRefresh: () => void;
   onOpenRegistry: () => void;
+  onOpenApprovals: () => void;
+  onApprovePending: () => void;
   onSelectModel: (modelId: string) => void;
   onSelectChatModel: (modelId: string) => void;
+  onModelAction: (modelId: string, action: "load" | "unload") => void;
   setStatus: (status: string) => void;
 }) {
+  const selectedModelBusy =
+    props.selectedModelSummary && props.actionBusy?.endsWith(
+      `:${props.selectedModelSummary.id}`,
+    );
+  const selectedModelArchived =
+    props.selectedModelSummary?.status?.toLowerCase().trim() === "archived";
+
   return (
     <div className="forge-ops-board space-y-5">
       <header className="rounded border border-forge-platinum/10 bg-black/20 p-4 lg:flex lg:items-end lg:justify-between">
@@ -47,8 +66,8 @@ export function CompactModelsBoard(props: {
           </h1>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-forge-mist/75">
             Cognitive model view with runtime status, active model,
-            availability, and chat preference. Registry controls open only when
-            requested.
+            availability, chat preference, and selected model lifecycle
+            controls.
           </p>
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2 lg:mt-0 lg:justify-end">
@@ -153,6 +172,78 @@ export function CompactModelsBoard(props: {
                 ]}
               />
             </div>
+            {props.selectedModelSummary ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {props.selectedLoadedRecord ? (
+                  <PrimaryButton
+                    className="min-h-10 px-3"
+                    onClick={() =>
+                      props.onModelAction(
+                        props.selectedModelSummary?.id ?? "",
+                        "unload",
+                      )
+                    }
+                    disabled={
+                      Boolean(selectedModelBusy) ||
+                      props.runtimeControlsDisabled
+                    }
+                  >
+                    {props.actionBusy ===
+                    `unload:${props.selectedModelSummary.id}`
+                      ? "Unloading..."
+                      : "Unload"}
+                  </PrimaryButton>
+                ) : (
+                  <PrimaryButton
+                    className="min-h-10 px-3"
+                    onClick={() =>
+                      props.onModelAction(
+                        props.selectedModelSummary?.id ?? "",
+                        "load",
+                      )
+                    }
+                    disabled={
+                      Boolean(selectedModelBusy) ||
+                      props.runtimeControlsDisabled ||
+                      selectedModelArchived
+                    }
+                  >
+                    {props.actionBusy === `load:${props.selectedModelSummary.id}`
+                      ? "Loading..."
+                      : "Load"}
+                  </PrimaryButton>
+                )}
+                <GhostButton onClick={props.onOpenRegistry}>
+                  Registry
+                </GhostButton>
+              </div>
+            ) : null}
+            {props.pendingApproval ? (
+              <div className="mt-3 rounded border border-forge-amber/30 bg-forge-amber/10 p-3 text-xs leading-5 text-forge-ash">
+                <div className="font-semibold">
+                  Approval required #{props.pendingApproval.approvalRequestId}
+                </div>
+                <div className="mt-1 text-forge-mist">
+                  Approve the request, then run {props.pendingApproval.action}{" "}
+                  again for this model.
+                </div>
+                <GhostButton
+                  className="mt-3"
+                  onClick={props.onOpenApprovals}
+                >
+                  Open approvals
+                </GhostButton>
+                <PrimaryButton
+                  className="ml-2 mt-3"
+                  onClick={props.onApprovePending}
+                  disabled={props.approvalBusy}
+                >
+                  {props.approvalBusy
+                    ? "Approving..."
+                    : `Approve and ${props.pendingApproval.action}`}
+                </PrimaryButton>
+              </div>
+            ) : null}
           </div>
           <div className="rounded border border-forge-platinum/10 bg-black/20 p-4">
             <div className="forge-ops-label">Chat Preference</div>
@@ -191,8 +282,8 @@ export function CompactModelsBoard(props: {
           <div>
             <div className="forge-ops-title">Registry</div>
             <div className="mt-1 text-xs text-forge-mist/65">
-              Compact model list. Select a model or open advanced registry for
-              lifecycle controls.
+              Compact model list. Select a model to focus the active runtime
+              controls.
             </div>
           </div>
           <span className="font-mono text-[11px] text-forge-mist/60">

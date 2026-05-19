@@ -272,4 +272,102 @@ describe("ChatPage cross-session memory recall", () => {
       ).toBe(false);
     });
   });
+
+  it("renders provider reasoning stream events only in the Reasoning inspector tab", async () => {
+    const thread = await apiMocks.createThread({ title: "Reasoning stream" });
+    apiMocks.postMessage.mockResolvedValueOnce({
+      userMessage: {
+        id: 1,
+        threadId: thread.thread.id,
+        role: "user",
+        content: "stream with reasoning",
+        createdAtMs: 1_800_000_001_000,
+        metadata: {},
+      },
+      assistantMessage: null,
+      assistantPending: true,
+      userMessageId: 1,
+      stream: true,
+    } as unknown as Awaited<ReturnType<typeof apiMocks.postMessage>>);
+    apiMocks.assistantStream.mockImplementationOnce(
+      async (
+        _threadId: number,
+        _userMessageId: number,
+        onEvent: unknown,
+      ) => {
+        const emit = onEvent as (event: { event: string; data: string }) => void;
+        emit({
+          event: "reasoning",
+          data: JSON.stringify({
+            text: "Provider private chain summary should stay isolated.",
+          }),
+        });
+        emit({
+          event: "token",
+          data: JSON.stringify({ text: "Final answer only." }),
+        });
+        emit({
+          event: "done",
+          data: JSON.stringify({
+            assistantMessage: {
+              id: 2,
+              threadId: thread.thread.id,
+              role: "assistant",
+              content: "Final answer only.",
+              createdAtMs: 1_800_000_002_000,
+              metadata: { replyToUserMessageId: 1 },
+            },
+          }),
+        });
+      },
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/chat"]}>
+        <ChatPage />
+      </MemoryRouter>,
+    );
+
+    const composer = await screen.findByLabelText("Chat message");
+    fireEvent.change(composer, {
+      target: { value: "stream with reasoning" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Send chat message" }),
+    );
+
+    expect(await screen.findByText("Final answer only.")).toBeTruthy();
+    const chatLog = screen.getByRole("log", { name: "Chat messages" });
+    expect(chatLog.textContent ?? "").not.toContain(
+      "Provider private chain summary should stay isolated.",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Reasoning" }));
+
+    expect(
+      await screen.findByText(
+        "Provider private chain summary should stay isolated.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("shows an empty provider reasoning state when no reasoning has streamed", async () => {
+    await apiMocks.createThread({ title: "No reasoning yet" });
+
+    render(
+      <MemoryRouter initialEntries={["/chat"]}>
+        <ChatPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(apiMocks.listModels).toHaveBeenCalled();
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Reasoning" }));
+
+    expect(
+      screen.getByText("No provider reasoning has streamed in this thread yet."),
+    ).toBeTruthy();
+  });
 });

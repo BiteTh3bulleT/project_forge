@@ -17,13 +17,21 @@ import type {
   MessageCodeSnippet,
 } from "./useChatInspectorData";
 
-type InspectorMode = "thinking" | "code" | "files" | "terminal" | "browser";
+type InspectorMode =
+  | "thinking"
+  | "reasoning"
+  | "code"
+  | "files"
+  | "terminal"
+  | "browser";
 
 export function ChatInspector(props: {
   inspectorMode: InspectorMode;
   onInspectorModeChange: (mode: InspectorMode) => void;
   streamingText: string | null;
   streamingEvents: ChatThinkingEvent[];
+  reasoningText: string;
+  reasoningStreaming: boolean;
   thinkingEntries: ChatThinkingEvent[];
   terminalEntries: ChatToolEntry[];
   browserEntries: ChatToolEntry[];
@@ -53,6 +61,7 @@ export function ChatInspector(props: {
           {(
             [
               ["thinking", "Thinking"],
+              ["reasoning", "Reasoning"],
               ["terminal", "Terminal"],
               ["browser", "Browser"],
               ["code", "Code"],
@@ -94,6 +103,25 @@ export function ChatInspector(props: {
                 : "No FORGE thinking trace in this thread yet."
             }
           />
+        </div>
+      ) : props.inspectorMode === "reasoning" ? (
+        <div className="forge-chat-scroll min-h-0 flex-1 overflow-y-auto p-3">
+          {props.reasoningText.trim() ? (
+            <div className="rounded-lg border border-forge-platinum/10 bg-black/25 p-3">
+              <div className="mb-2 text-[10px] uppercase tracking-[0.14em] text-forge-mist/60">
+                Provider reasoning stream
+              </div>
+              <div className="whitespace-pre-wrap break-words font-mono text-xs leading-6 text-forge-ash">
+                {props.reasoningText}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded border border-dashed border-forge-platinum/10 px-3 py-4 text-xs text-forge-mist">
+              {props.reasoningStreaming
+                ? "Waiting for provider reasoning stream events."
+                : "No provider reasoning has streamed in this thread yet."}
+            </div>
+          )}
         </div>
       ) : props.inspectorMode === "terminal" ? (
         <div className="forge-chat-scroll min-h-0 flex-1 overflow-y-auto p-3">

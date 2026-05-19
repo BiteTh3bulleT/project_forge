@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,6 +14,11 @@ const mocks = vi.hoisted(() => ({
   modelLoaded: vi.fn(),
   modelUsage: vi.fn(),
   modelBackends: vi.fn(),
+  modelGet: vi.fn(),
+  modelCompatibility: vi.fn(),
+  modelLoad: vi.fn(),
+  modelUnload: vi.fn(),
+  approvalApprove: vi.fn(),
   modelScan: vi.fn(),
   modelImport: vi.fn(),
 }));
@@ -32,8 +37,15 @@ vi.mock("../lib/api", () => ({
       loaded: mocks.modelLoaded,
       usage: mocks.modelUsage,
       backends: mocks.modelBackends,
+      get: mocks.modelGet,
+      compatibility: mocks.modelCompatibility,
+      load: mocks.modelLoad,
+      unload: mocks.modelUnload,
       scan: mocks.modelScan,
       import: mocks.modelImport,
+    },
+    approvals: {
+      approve: mocks.approvalApprove,
     },
   },
 }));
@@ -77,6 +89,39 @@ describe("ModelsPage", () => {
       },
     });
     mocks.modelBackends.mockResolvedValue({ backends: [] });
+    mocks.modelGet.mockResolvedValue({
+      model: {
+        id: "llama3.2:3b",
+        displayName: "llama3.2:3b",
+        family: "llama",
+        backend: "ollama_compat",
+        format: "gguf",
+        status: "available",
+        capabilities: ["chat", "completion"],
+      },
+    });
+    mocks.modelCompatibility.mockResolvedValue({
+      compatibility: {
+        modelId: "llama3.2:3b",
+        backend: "ollama_compat",
+        backendHealthy: true,
+        backendConfigured: true,
+        supportedByBackend: true,
+        canGenerate: true,
+        preferred: false,
+        warnings: [],
+        details: {},
+      },
+    });
+    mocks.modelLoad.mockResolvedValue({
+      result: { modelId: "llama3.2:3b", loaded: true, status: "loaded" },
+    });
+    mocks.modelUnload.mockResolvedValue({
+      result: { modelId: "llama3.2:3b", loaded: false, status: "unloaded" },
+    });
+    mocks.approvalApprove.mockResolvedValue({
+      decision: { decision: "approved" },
+    });
   });
 
   it("keeps model runtime controls read-only when runtime is unavailable", async () => {
@@ -144,5 +189,148 @@ describe("ModelsPage", () => {
         "GPU acceleration uses the model runtime policy only; DCGM and Intel telemetry stay separate in Settings.",
       ),
     ).toBeTruthy();
+  });
+
+  it("shows compact lifecycle controls for the selected model", async () => {
+    mocks.health.mockResolvedValue({
+      ok: true,
+      service: "forge-core",
+      modelRuntime: {
+        available: true,
+        status: "ok",
+      },
+    });
+    mocks.modelList.mockResolvedValue({
+      models: [
+        {
+          id: "llama3.2:3b",
+          displayName: "llama3.2:3b",
+          family: "llama",
+          backend: "ollama_compat",
+          format: "gguf",
+          status: "available",
+          capabilities: ["chat", "completion"],
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/models"]}>
+        <ModelsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("button", { name: "Load" })).toBeTruthy();
+  });
+
+  it("reuses pending load approval ids on the next load attempt", async () => {
+    mocks.health.mockResolvedValue({
+      ok: true,
+      service: "forge-core",
+      modelRuntime: {
+        available: true,
+        status: "ok",
+      },
+    });
+    mocks.modelList.mockResolvedValue({
+      models: [
+        {
+          id: "llama3.2:3b",
+          displayName: "llama3.2:3b",
+          family: "llama",
+          backend: "ollama_compat",
+          format: "gguf",
+          status: "available",
+          capabilities: ["chat", "completion"],
+        },
+      ],
+    });
+    mocks.modelLoad
+      .mockResolvedValueOnce({
+        governance: {
+          operation: "load",
+          modelId: "llama3.2:3b",
+          requiresApproval: true,
+          approved: false,
+          approvalRequestId: 7,
+        },
+      })
+      .mockResolvedValueOnce({
+        result: { modelId: "llama3.2:3b", loaded: true, status: "loaded" },
+      });
+
+    render(
+      <MemoryRouter initialEntries={["/models"]}>
+        <ModelsPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Load" }));
+
+    expect(await screen.findByText("Approval required #7")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load" }));
+
+    await waitFor(() => expect(mocks.modelLoad).toHaveBeenCalledTimes(2));
+    expect(mocks.modelLoad.mock.calls[1][1]).toMatchObject({
+      approvalId: "7",
+    });
+  });
+
+  it("can approve and retry pending model loads from the models surface", async () => {
+    mocks.health.mockResolvedValue({
+      ok: true,
+      service: "forge-core",
+      modelRuntime: {
+        available: true,
+        status: "ok",
+      },
+    });
+    mocks.modelList.mockResolvedValue({
+      models: [
+        {
+          id: "llama3.2:3b",
+          displayName: "llama3.2:3b",
+          family: "llama",
+          backend: "ollama_compat",
+          format: "gguf",
+          status: "available",
+          capabilities: ["chat", "completion"],
+        },
+      ],
+    });
+    mocks.modelLoad
+      .mockResolvedValueOnce({
+        governance: {
+          operation: "load",
+          modelId: "llama3.2:3b",
+          requiresApproval: true,
+          approved: false,
+          approvalRequestId: 7,
+        },
+      })
+      .mockResolvedValueOnce({
+        result: { modelId: "llama3.2:3b", loaded: true, status: "loaded" },
+      });
+
+    render(
+      <MemoryRouter initialEntries={["/models"]}>
+        <ModelsPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Load" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Approve and load" }),
+    );
+
+    await waitFor(() => expect(mocks.approvalApprove).toHaveBeenCalledWith(
+      7,
+      "Approved model load from Models page",
+    ));
+    await waitFor(() => expect(mocks.modelLoad).toHaveBeenCalledTimes(2));
+    expect(mocks.modelLoad.mock.calls[1][1]).toMatchObject({
+      approvalId: "7",
+    });
   });
 });

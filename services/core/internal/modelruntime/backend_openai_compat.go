@@ -216,12 +216,28 @@ func (b *OpenAICompatBackend) GenerateStream(ctx context.Context, req GenerateRe
 		if err := json.Unmarshal([]byte(line), &raw); err != nil {
 			return GenerateResult{}, fmt.Errorf("decode openai-compatible stream chunk: %w", err)
 		}
-		chunk, chunkFinish, chunkWarnings := extractOpenAICompatStreamChunk(raw)
+		chunk, reasoning, chunkFinish, chunkWarnings := extractOpenAICompatStreamChunk(raw)
 		if chunkFinish != "" {
 			finishReason = chunkFinish
 		}
 		warnings = append(warnings, chunkWarnings...)
+		if reasoning != "" && onToken != nil {
+			if err := onToken(TokenEvent{
+				Reasoning:     reasoning,
+				Index:         index,
+				Done:          false,
+				Backend:       b.kind,
+				ModelID:       req.ModelID,
+				CorrelationID: req.CorrelationID,
+				TraceID:       req.TraceID,
+			}); err != nil {
+				return GenerateResult{}, err
+			}
+		}
 		if chunk == "" {
+			if reasoning != "" {
+				index++
+			}
 			continue
 		}
 		full.WriteString(chunk)
@@ -290,24 +306,23 @@ func (b *OpenAICompatBackend) chatPayload(req GenerateRequest, stream bool) map[
 	return payload
 }
 
-func extractOpenAICompatStreamChunk(raw map[string]any) (string, string, []string) {
+func extractOpenAICompatStreamChunk(raw map[string]any) (string, string, string, []string) {
 	warnings := []string(nil)
 	finishReason := ""
 	if choices, ok := raw["choices"].([]any); ok && len(choices) > 0 {
 		if first, ok := choices[0].(map[string]any); ok {
 			finishReason, _ = first["finish_reason"].(string)
+			reasoning := openAICompatStreamReasoningFromChoice(first)
 			if content := openAICompatStreamContentFromChoice(first); strings.TrimSpace(content) != "" {
-				return content, finishReason, warnings
+				return content, reasoning, finishReason, warnings
 			}
 			if content := openAICompatContentFromChoice(first, false); strings.TrimSpace(content) != "" {
-				return content, finishReason, warnings
+				return content, reasoning, finishReason, warnings
 			}
-			if content := openAICompatStreamReasoningFromChoice(first); strings.TrimSpace(content) != "" {
-				warnings = append(warnings, "openai-compatible stream skipped reasoning-only chunk")
-			}
+			return "", reasoning, finishReason, warnings
 		}
 	}
-	return "", finishReason, warnings
+	return "", "", finishReason, warnings
 }
 
 func openAICompatStreamContentFromChoice(choice map[string]any) string {

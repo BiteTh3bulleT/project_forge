@@ -1,5 +1,6 @@
 import { GhostButton, PrimaryButton } from "@forge/ui";
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { FoldSection } from "../components/FoldSection";
 import {
@@ -37,6 +38,7 @@ function isRedactedSettingSecret(value: string) {
 }
 
 export function SettingsPage() {
+  const navigate = useNavigate();
   const [extensionsCsv, setExtensionsCsv] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://127.0.0.1:11434");
@@ -563,6 +565,21 @@ export function SettingsPage() {
                 }}
               >
                 Save extensions
+              </PrimaryButton>
+            </div>
+          </Panel>
+
+          <Panel
+            title="Model Lifecycle"
+            subtitle="Governed load, unload, and runtime inspection controls."
+          >
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="text-sm leading-6 text-forge-mist">
+                Registered model loading lives on the Models surface so runtime
+                actions stay behind the model governance path.
+              </div>
+              <PrimaryButton onClick={() => navigate("/models")}>
+                Open Models
               </PrimaryButton>
             </div>
           </Panel>

@@ -7,7 +7,7 @@ mod window_manager;
 use desktop_metadata::{find_desktop_file_for_ids, find_icon_path, parse_desktop_value};
 
 use serde::Serialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use sysinfo::{Disks, Pid, System};
 use tauri::{Manager, PhysicalPosition, PhysicalSize};
@@ -306,6 +306,12 @@ fn forge_api_token_file_from_env() -> Option<PathBuf> {
     None
 }
 
+fn forge_workspace_token_files_from_dir(cwd: &Path) -> Vec<PathBuf> {
+    cwd.ancestors()
+        .map(|dir| dir.join(".forge").join("docker-api-token"))
+        .collect()
+}
+
 fn forge_api_token_files() -> Vec<PathBuf> {
     if let Some(path) = forge_api_token_file_from_env() {
         return vec![path];
@@ -313,7 +319,7 @@ fn forge_api_token_files() -> Vec<PathBuf> {
 
     let mut paths = Vec::new();
     if let Ok(cwd) = std::env::current_dir() {
-        paths.push(cwd.join(".forge").join("docker-api-token"));
+        paths.extend(forge_workspace_token_files_from_dir(&cwd));
     }
     if let Some(path) = forge_data_dir().map(|dir| dir.join("auth").join("api_token")) {
         paths.push(path);
@@ -621,6 +627,22 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn forge_workspace_token_lookup_walks_up_from_desktop_package() {
+        let cwd = PathBuf::from("/repo/apps/desktop");
+        let paths = forge_workspace_token_files_from_dir(&cwd);
+
+        assert_eq!(
+            paths,
+            vec![
+                PathBuf::from("/repo/apps/desktop/.forge/docker-api-token"),
+                PathBuf::from("/repo/apps/.forge/docker-api-token"),
+                PathBuf::from("/repo/.forge/docker-api-token"),
+                PathBuf::from("/.forge/docker-api-token"),
+            ]
+        );
+    }
 
     #[test]
     fn operator_apps_cover_toolbelt_categories() {

@@ -963,11 +963,12 @@ func (b *modelRuntimeBridge) StreamChat(ctx context.Context, req ModelRuntimeCha
 			Stream:        true,
 			StreamHandler: func(event modelruntime.TokenEvent) error {
 				return onToken(ModelRuntimeChatStreamToken{
-					Text:    event.Token,
-					Index:   event.Index,
-					Done:    event.Done,
-					Backend: string(event.Backend),
-					ModelID: event.ModelID,
+					Text:      event.Token,
+					Reasoning: event.Reasoning,
+					Index:     event.Index,
+					Done:      event.Done,
+					Backend:   string(event.Backend),
+					ModelID:   event.ModelID,
 				})
 			},
 			CorrelationID: strings.TrimSpace(req.Meta.CorrelationID),

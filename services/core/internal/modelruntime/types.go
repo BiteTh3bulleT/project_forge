@@ -195,6 +195,7 @@ type ProposalEnvelope struct {
 // TokenEvent captures incremental streaming output.
 type TokenEvent struct {
 	Token         string           `json:"token"`
+	Reasoning     string           `json:"reasoning,omitempty"`
 	Index         int              `json:"index"`
 	Done          bool             `json:"done"`
 	Backend       ModelBackendKind `json:"backend"`
