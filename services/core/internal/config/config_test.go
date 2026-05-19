@@ -7,15 +7,33 @@ import (
 	"testing"
 )
 
-func TestLoadDefaultsWorkspaceToRoot(t *testing.T) {
+func TestLoadDefaultsWorkspaceUnderDataDir(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("FORGE_DATA_DIR", dataDir)
 	t.Setenv("FORGE_WORKSPACE_DIR", "")
 	cfg := Load()
-	want, err := filepath.Abs("/")
+	want, err := filepath.Abs(filepath.Join(dataDir, "workspace"))
 	if err != nil {
 		t.Fatalf("resolve default workspace: %v", err)
 	}
 	if cfg.WorkspaceDir != want {
 		t.Fatalf("expected default workspace %q, got %q", want, cfg.WorkspaceDir)
+	}
+}
+
+func TestLoadDefaultsRootWorkspaceOptInDisabled(t *testing.T) {
+	t.Setenv("FORGE_ALLOW_ROOT_WORKSPACE", "")
+	cfg := Load()
+	if cfg.AllowRootWorkspace {
+		t.Fatal("expected root workspace opt-in to default false")
+	}
+}
+
+func TestLoadRespectsRootWorkspaceOptIn(t *testing.T) {
+	t.Setenv("FORGE_ALLOW_ROOT_WORKSPACE", "true")
+	cfg := Load()
+	if !cfg.AllowRootWorkspace {
+		t.Fatal("expected root workspace opt-in true")
 	}
 }
 

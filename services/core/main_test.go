@@ -2,6 +2,9 @@ package main
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"forge/projectforge/services/core/internal/config"
@@ -78,5 +81,46 @@ func TestValidateCoreListenConfigAllowsLoopbackWithoutOptIn(t *testing.T) {
 		if err != nil {
 			t.Fatalf("host %q unexpected error: %v", host, err)
 		}
+	}
+}
+
+func TestValidateCoreConfigRejectsRootWorkspaceWithoutOptIn(t *testing.T) {
+	err := validateCoreConfig(config.Config{
+		BindHost:     "127.0.0.1",
+		WorkspaceDir: filepath.Clean(string(filepath.Separator)),
+	})
+	if !errors.Is(err, errRootWorkspaceRequiresOptIn) {
+		t.Fatalf("error = %v, want %v", err, errRootWorkspaceRequiresOptIn)
+	}
+}
+
+func TestValidateCoreConfigAllowsRootWorkspaceWithExplicitOptIn(t *testing.T) {
+	err := validateCoreConfig(config.Config{
+		BindHost:           "127.0.0.1",
+		WorkspaceDir:       filepath.Clean(string(filepath.Separator)),
+		AllowRootWorkspace: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDockerComposeCoreDefaultsDoNotOptIntoWildcardBind(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join("..", "..", "docker-compose.yml"))
+	if err != nil {
+		t.Fatalf("read docker-compose.yml: %v", err)
+	}
+	compose := string(body)
+	if strings.Contains(compose, `FORGE_CORE_BIND_HOST: "${FORGE_CORE_BIND_HOST:-0.0.0.0}"`) {
+		t.Fatal("docker-compose.yml must not default FORGE_CORE_BIND_HOST to 0.0.0.0")
+	}
+	if strings.Contains(compose, `FORGE_ALLOW_WILDCARD_BIND: "${FORGE_ALLOW_WILDCARD_BIND:-true}"`) {
+		t.Fatal("docker-compose.yml must not default FORGE_ALLOW_WILDCARD_BIND to true")
+	}
+	if !strings.Contains(compose, `FORGE_CORE_BIND_HOST: "${FORGE_CORE_BIND_HOST:-127.0.0.1}"`) {
+		t.Fatal("docker-compose.yml must default FORGE_CORE_BIND_HOST to 127.0.0.1")
+	}
+	if !strings.Contains(compose, `FORGE_ALLOW_WILDCARD_BIND: "${FORGE_ALLOW_WILDCARD_BIND:-false}"`) {
+		t.Fatal("docker-compose.yml must default FORGE_ALLOW_WILDCARD_BIND to false")
 	}
 }

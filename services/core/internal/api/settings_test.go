@@ -104,6 +104,52 @@ func TestPatchSettingsPersistsRuntimeControls(t *testing.T) {
 	}
 }
 
+func TestPatchSettingsRejectsUnsafePersistedOllamaBaseURL(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/settings", bytes.NewReader([]byte(`{"ollamaBaseUrl":"http://169.254.169.254:11434"}`)))
+	patchRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(patchRR, patchReq)
+	if patchRR.Code != http.StatusBadRequest {
+		t.Fatalf("patch settings status=%d body=%s", patchRR.Code, patchRR.Body.String())
+	}
+	if got := loadSetting(st.DB, "ollama_base_url", ""); got != "" {
+		t.Fatalf("unsafe ollama base URL persisted as %q", got)
+	}
+}
+
+func TestPatchSettingsAllowsLocalPersistedOllamaBaseURL(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/settings", bytes.NewReader([]byte(`{"ollamaBaseUrl":" http://127.0.0.1:11434/ "}`)))
+	patchRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(patchRR, patchReq)
+	if patchRR.Code != http.StatusOK {
+		t.Fatalf("patch settings status=%d body=%s", patchRR.Code, patchRR.Body.String())
+	}
+	if got := loadSetting(st.DB, "ollama_base_url", ""); got != "http://127.0.0.1:11434/" {
+		t.Fatalf("local ollama base URL persisted as %q", got)
+	}
+}
+
 func TestPatchSettingsPersistsAndAppliesShadowMode(t *testing.T) {
 	dataDir := t.TempDir()
 	workspaceDir := t.TempDir()

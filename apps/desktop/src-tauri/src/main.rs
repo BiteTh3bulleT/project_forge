@@ -498,18 +498,46 @@ fn spawn_host_power_command(action: &str) -> Result<(), String> {
         .map_err(|err| format!("failed to request {action}: {err}"))
 }
 
-#[tauri::command]
-fn request_host_power_action(action: String) -> Result<HostPowerActionResult, String> {
+fn direct_system_control_enabled() -> bool {
+    std::env::var("FORGE_SHELL_DIRECT_SYSTEM_CONTROL")
+        .map(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
+        .unwrap_or(false)
+}
+
+fn request_host_power_action_with_policy<F>(
+    action: String,
+    direct_control_enabled: bool,
+    mut runner: F,
+) -> Result<HostPowerActionResult, String>
+where
+    F: FnMut(&str) -> Result<(), String>,
+{
     let normalized = action.trim().to_ascii_lowercase();
     if normalized != "shutdown" && normalized != "reboot" {
         return Err("host power action is not allowlisted".to_string());
     }
 
-    spawn_host_power_command(&normalized)?;
+    if !direct_control_enabled {
+        return Ok(HostPowerActionResult {
+            action: normalized,
+            requested: false,
+            message: "Host power controls are disabled by FORGE_SHELL_DIRECT_SYSTEM_CONTROL policy"
+                .to_string(),
+        });
+    }
+
+    runner(&normalized)?;
     Ok(HostPowerActionResult {
         action: normalized.clone(),
         requested: true,
         message: format!("Host {normalized} requested"),
+    })
+}
+
+#[tauri::command]
+fn request_host_power_action(action: String) -> Result<HostPowerActionResult, String> {
+    request_host_power_action_with_policy(action, direct_system_control_enabled(), |action| {
+        spawn_host_power_command(action)
     })
 }
 
@@ -712,5 +740,35 @@ mod tests {
                 assert!(!arg.contains("|"), "pipe found in {}", app.id);
             }
         }
+    }
+
+    #[test]
+    fn host_power_action_is_policy_disabled_by_default() {
+        let mut called = false;
+        let result = request_host_power_action_with_policy("reboot".to_string(), false, |_| {
+            called = true;
+            Ok(())
+        })
+        .expect("disabled policy should return a successful declined result");
+
+        assert_eq!(result.action, "reboot");
+        assert!(!result.requested);
+        assert!(!called);
+        assert!(result.message.contains("disabled"));
+    }
+
+    #[test]
+    fn host_power_action_uses_runner_only_when_policy_enabled() {
+        let mut requested = String::new();
+        let result =
+            request_host_power_action_with_policy(" shutdown ".to_string(), true, |action| {
+                requested = action.to_string();
+                Ok(())
+            })
+            .expect("enabled policy should call the runner");
+
+        assert_eq!(requested, "shutdown");
+        assert_eq!(result.action, "shutdown");
+        assert!(result.requested);
     }
 }

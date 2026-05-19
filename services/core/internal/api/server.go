@@ -157,9 +157,6 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	_ = os.MkdirAll(filepath.Join(cfg.WorkspaceDir, "scratch"), 0o755)
 	_ = permSvc.EnsureMkdirChatPolicy(bg, cfg.WorkspaceDir)
 	_ = permSvc.EnsureGatewayToolPolicy(bg, cfg.WorkspaceDir)
-	if filepath.Clean(cfg.WorkspaceDir) == string(filepath.Separator) {
-		_, _ = permSvc.Activate(bg, "workspace-write")
-	}
 	_ = laneSvc.EnsureDefaults(bg, cfg.WorkspaceDir)
 	backupSvc := backup.New(st.DB, cfg.DataDir)
 	releaseSvc := release.New(st.DB, cfg.DataDir, cfg.WorkspaceDir)
