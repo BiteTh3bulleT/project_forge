@@ -146,6 +146,90 @@ func TestDispatchRejectsOversizedModelToolArgumentsBeforeGateway(t *testing.T) {
 	assertGatewayInvocationCount(t, st, 0)
 }
 
+func TestDispatchRejectsUnknownModelFunctionBeforeGateway(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
+
+	var stages []string
+	got := srv.dispatchToolCall(
+		context.Background(),
+		"corr-unknown-tool",
+		0,
+		"forge_not_a_registered_tool",
+		`{"path":"sample.txt"}`,
+		"read sample",
+		func(stage string, _ map[string]any) {
+			stages = append(stages, stage)
+		},
+	)
+
+	if got.state != "error" {
+		t.Fatalf("expected unknown model function to fail before gateway, got state=%q text=%q", got.state, got.text)
+	}
+	if !strings.Contains(got.failureReason, "not in gateway chat catalog") {
+		t.Fatalf("failureReason=%q", got.failureReason)
+	}
+	if !containsStage(stages, "resolve_failed") {
+		t.Fatalf("expected resolve_failed stage, got %v", stages)
+	}
+	assertGatewayInvocationCount(t, st, 0)
+}
+
+func TestDispatchRejectsInvalidModelToolArgumentsBeforeGateway(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
+
+	var stages []string
+	got := srv.dispatchToolCall(
+		context.Background(),
+		"corr-invalid-tool-args",
+		0,
+		gateway.ChatModelName("fs.read"),
+		`{"path":`,
+		"read sample",
+		func(stage string, _ map[string]any) {
+			stages = append(stages, stage)
+		},
+	)
+
+	if got.state != "error" {
+		t.Fatalf("expected invalid arguments to fail before gateway, got state=%q text=%q", got.state, got.text)
+	}
+	if !strings.Contains(got.failureReason, "invalid JSON") {
+		t.Fatalf("failureReason=%q", got.failureReason)
+	}
+	if !containsStage(stages, "tool_args_error") {
+		t.Fatalf("expected tool_args_error stage, got %v", stages)
+	}
+	assertGatewayInvocationCount(t, st, 0)
+}
+
+func TestDispatchRejectsModelPathTraversalBeforeGateway(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
+
+	var stages []string
+	got := srv.dispatchToolCall(
+		context.Background(),
+		"corr-path-traversal",
+		0,
+		gateway.ChatModelName("fs.read"),
+		`{"path":"../outside.txt"}`,
+		"read ../outside.txt",
+		func(stage string, _ map[string]any) {
+			stages = append(stages, stage)
+		},
+	)
+
+	if got.state != "denied" {
+		t.Fatalf("expected path traversal to be denied before gateway, got state=%q text=%q", got.state, got.text)
+	}
+	if !strings.Contains(got.failureReason, "path rejected") {
+		t.Fatalf("failureReason=%q", got.failureReason)
+	}
+	if !containsStage(stages, "path_precheck_failed") {
+		t.Fatalf("expected path_precheck_failed stage, got %v", stages)
+	}
+	assertGatewayInvocationCount(t, st, 0)
+}
+
 func containsStage(stages []string, want string) bool {
 	for _, stage := range stages {
 		if stage == want {
