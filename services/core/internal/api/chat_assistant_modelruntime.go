@@ -44,7 +44,7 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 	}
 
 	messages, promptBudget := s.buildModelRuntimePlainChatMessages(ctx, th)
-	preflightTrace, preflightReason := s.modelRuntimeChatPreflight(ctx, meta, modelID)
+	preflightTrace, preflightReason := s.modelRuntimeChatStreamPreflight(ctx, meta)
 	if strings.TrimSpace(preflightReason) != "" {
 		return nil, preflightReason
 	}

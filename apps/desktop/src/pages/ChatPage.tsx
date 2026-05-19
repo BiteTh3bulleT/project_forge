@@ -18,6 +18,7 @@ import {
   type ChatThreadSummary,
   type ModelRuntimeModel,
 } from "../lib/api";
+import { isTauriDesktop, launchOperatorApp } from "../lib/desktop";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
 import {
@@ -130,6 +131,71 @@ function sleep(ms: number) {
 function trimLine(value: string, fallback: string) {
   const trimmed = value.trim();
   return trimmed ? trimmed : fallback;
+}
+
+type LocalOperatorAppId = "files" | "terminal";
+
+function normalizeLocalOperatorIntentText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/\bexpolorer\b/g, "explorer")
+    .replace(/\bexpolrer\b/g, "explorer")
+    .replace(/[!?.,;:\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function localOperatorAppIntentForText(
+  value: string,
+): LocalOperatorAppId | null {
+  const text = normalizeLocalOperatorIntentText(value);
+  if (!text || !/\b(open|launch|start)\b/.test(text)) return null;
+  if (
+    text.includes("file explorer") ||
+    text.includes("file manager") ||
+    /\bfiles\b/.test(text) ||
+    /\bexplorer\b/.test(text)
+  ) {
+    return "files";
+  }
+  if (
+    text.includes("terminal") ||
+    text.includes("konsole") ||
+    text.includes("console") ||
+    /\bfoot\b/.test(text)
+  ) {
+    return "terminal";
+  }
+  return null;
+}
+
+function isLocalOperatorRetryTurn(value: string) {
+  const text = normalizeLocalOperatorIntentText(value);
+  return (
+    text === "try again" ||
+    text === "retry" ||
+    text === "do it again" ||
+    text === "try that again" ||
+    text === "that did nothing" ||
+    text === "that did not work" ||
+    text === "that didn't work"
+  );
+}
+
+function localOperatorAppIntentForChat(
+  value: string,
+  thread: ChatThreadDetail | null,
+): LocalOperatorAppId | null {
+  const direct = localOperatorAppIntentForText(value);
+  if (direct) return direct;
+  if (!isLocalOperatorRetryTurn(value) || !thread) return null;
+  for (let index = thread.messages.length - 1; index >= 0; index -= 1) {
+    const message = thread.messages[index];
+    if (message.role !== "user") continue;
+    const previous = localOperatorAppIntentForText(message.content);
+    if (previous) return previous;
+  }
+  return null;
 }
 
 const CHAT_STREAM_TOKEN_FLUSH_CHARS = 240;
@@ -569,6 +635,13 @@ export function ChatPage() {
     const text = draft.trim();
     const hasAttachments = pendingAttachments.length > 0;
     if (!text && !hasAttachments) return;
+    const localOperatorAppId = localOperatorAppIntentForChat(text, active);
+    const shouldLaunchLocalOperatorApp = Boolean(
+      localOperatorAppId && isTauriDesktop(),
+    );
+    const effectiveRequestAssistant = shouldLaunchLocalOperatorApp
+      ? false
+      : requestAssistant;
 
     setBusy(true);
     setErr(null);
@@ -583,19 +656,22 @@ export function ChatPage() {
     streamEsRef.current = null;
 
     const useStream =
-      requestAssistant &&
+      effectiveRequestAssistant &&
       !assistantDryRun &&
       streamAssistant &&
       !blockingAssistant;
     const useSyncBlock =
-      requestAssistant && !assistantDryRun && blockingAssistant;
+      effectiveRequestAssistant && !assistantDryRun && blockingAssistant;
     const useAsyncPoll =
-      requestAssistant && !assistantDryRun && !useStream && !useSyncBlock;
+      effectiveRequestAssistant &&
+      !assistantDryRun &&
+      !useStream &&
+      !useSyncBlock;
 
     const body: Parameters<typeof api.chat.threads.postMessage>[1] = {
       content: text || "Attached files for context.",
       attachmentArtifactIds: pendingAttachments.map((item) => item.artifactId),
-      requestAssistant,
+      requestAssistant: effectiveRequestAssistant,
       assistantDryRun,
     };
     const requestedModel = selectedChatModelId.trim();
@@ -621,6 +697,16 @@ export function ChatPage() {
     else if (useAsyncPoll) body.asyncAssistant = true;
 
     try {
+      if (localOperatorAppId && shouldLaunchLocalOperatorApp) {
+        void launchOperatorApp(localOperatorAppId)
+          .then((result) => {
+            setStatus(result.message || `${result.label} launch requested.`);
+          })
+          .catch((error: unknown) => {
+            setErr(extractApiErrorMessage(error));
+          });
+      }
+
       const res = await api.chat.threads.postMessage(active.id, body);
       const tid = active.id;
       setDraft("");
@@ -630,7 +716,9 @@ export function ChatPage() {
         setActive((prev) => applyPostMessages(prev, tid, res));
         void refreshThreads();
         setStatus(
-          requestAssistant ? "Assistant reply saved." : "Message saved.",
+          effectiveRequestAssistant
+            ? "Assistant reply saved."
+            : "Message saved.",
         );
         textareaRef.current?.focus();
         return;
@@ -664,7 +752,7 @@ export function ChatPage() {
       }
 
       setStatus(
-        requestAssistant
+        effectiveRequestAssistant
           ? "Message saved (assistant not returned)."
           : "Message saved.",
       );

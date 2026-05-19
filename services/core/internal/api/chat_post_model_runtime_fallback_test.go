@@ -2099,6 +2099,42 @@ func TestChatAssistantStreamUsesModelRuntimeStreamingWhenOllamaUnavailable(t *te
 	}
 }
 
+func TestChatAssistantStreamAvoidsDeepModelRuntimePreflightBeforeStreaming(t *testing.T) {
+	srv, _ := newBackupAuditHarness(t)
+	fakeRuntime := &fakeStreamingModelRuntime{fakeModelRuntime: newFakeModelRuntime()}
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "runtime stream preflight budget", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	um, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "hello without slow routing checks", map[string]any{"source": "operator"})
+	if err != nil {
+		t.Fatalf("append user message: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/assistant-stream?userMessageId="+strconv.FormatInt(um.ID, 10),
+		nil,
+	)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	if fakeRuntime.streamCalls != 1 {
+		t.Fatalf("expected one runtime stream call, got %d", fakeRuntime.streamCalls)
+	}
+	if fakeRuntime.queueCalls != 1 {
+		t.Fatalf("expected one scheduler queue preflight call, got %d", fakeRuntime.queueCalls)
+	}
+	if fakeRuntime.getCalls != 0 || fakeRuntime.healthCalls != 0 {
+		t.Fatalf("streaming route should avoid deep model/health preflight before first token, get=%d health=%d", fakeRuntime.getCalls, fakeRuntime.healthCalls)
+	}
+}
+
 func TestChatAssistantStreamEmitsModelRuntimeReasoningEvents(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	fakeRuntime := &fakeStreamingModelRuntime{

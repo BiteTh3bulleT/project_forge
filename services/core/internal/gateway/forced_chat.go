@@ -115,6 +115,9 @@ func wantsDesktopAppOpen(user string) bool {
 	}
 	appHints := []string{
 		"file explorer",
+		"file expolorer",
+		"file expolrer",
+		"file manager",
 		"explorer",
 		"google chrome",
 		"chrome",
@@ -486,6 +489,10 @@ func normalizeIntentText(user string) string {
 	if s == "" {
 		return ""
 	}
+	s = strings.NewReplacer(
+		"expolorer", "explorer",
+		"expolrer", "explorer",
+	).Replace(s)
 	replacer := strings.NewReplacer(
 		"!", " ",
 		"?", " ",

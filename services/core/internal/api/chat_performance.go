@@ -582,6 +582,29 @@ func (s *Server) modelRuntimeChatPreflight(ctx context.Context, meta ModelRuntim
 	return trace, ""
 }
 
+func (s *Server) modelRuntimeChatStreamPreflight(ctx context.Context, meta ModelRuntimeRequestMeta) (map[string]any, string) {
+	if s.modelRuntime == nil {
+		return nil, "model runtime is unavailable"
+	}
+	start := time.Now()
+	queue, err := s.modelRuntime.QueueStatus(ctx, meta)
+	trace := map[string]any{"gateway_preflight_ms": time.Since(start).Milliseconds()}
+	if err != nil {
+		_, code, message := mapModelRuntimeError(err)
+		return trace, message + " (" + code + ")"
+	}
+	trace["runtime_queue_depth"] = queue.Depth
+	if strings.Contains(strings.ToLower(queue.PolicyState), "cooldown") {
+		trace["runtime_policy_state"] = queue.PolicyState
+		return trace, "model runtime provider cooldown active"
+	}
+	if queue.Depth >= 64 {
+		trace["runtime_policy_state"] = queue.PolicyState
+		return trace, "model runtime queue is saturated"
+	}
+	return trace, ""
+}
+
 func (s *Server) modelRuntimeLoadedPreflight(ctx context.Context, meta ModelRuntimeRequestMeta, modelID string, queue ModelRuntimeQueueStatus, trace map[string]any) string {
 	if modelID == "" {
 		return ""

@@ -102,6 +102,7 @@ func TestForcedChatModelNameWebAndBrowser(t *testing.T) {
 		{name: "open browser", in: "open browser https://example.com", want: ChatModelName("desktop.open")},
 		{name: "open chrome app", in: "Open google chrome please.", want: ChatModelName("desktop.open")},
 		{name: "open file explorer", in: "Can you open file explorer please", want: ChatModelName("desktop.open")},
+		{name: "open file explorer typo", in: "Can you open file expolorer for me please?", want: ChatModelName("desktop.open")},
 		{name: "open terminal and run", in: "Open terminal and run sudo zypper refresh", want: ChatModelName("desktop.open")},
 		{name: "open terminal ssh workflow", in: "Open terminal, ssh into robert@10.150.1.9 password test-pass. Create a directory labled SSH-AI-TEST", want: ChatModelName("desktop.open")},
 		{name: "repo exploration", in: "You can explore your repo. Familiarize yourself with yourself.", want: ChatModelName("repo.inspect")},

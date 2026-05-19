@@ -47,6 +47,19 @@ func TestDesktopLaunchCandidates(t *testing.T) {
 	}
 }
 
+func TestDesktopLaunchCandidatesFileManagerOnUnix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix-specific launcher candidates")
+	}
+	candidates := desktopLaunchCandidates("file explorer")
+	if len(candidates) == 0 {
+		t.Fatalf("expected launch candidates for file explorer")
+	}
+	if candidates[0][0] != "pcmanfm" {
+		t.Fatalf("expected first file explorer candidate pcmanfm, got %#v", candidates)
+	}
+}
+
 func TestDesktopLaunchCandidatesMinecraftOnWindows(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("windows-specific launcher candidates")

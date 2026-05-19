@@ -579,6 +579,10 @@ func desktopNormalizeAppHint(raw string) string {
 	if s == "" {
 		return ""
 	}
+	s = strings.NewReplacer(
+		"expolorer", "explorer",
+		"expolrer", "explorer",
+	).Replace(s)
 	s = strings.Trim(s, `"'`)
 	s = strings.TrimSuffix(s, ".")
 	for _, prefix := range []string{"can you ", "could you ", "would you ", "please "} {
@@ -620,6 +624,18 @@ func desktopLaunchCandidates(hint string) [][]string {
 			{"xfce4-terminal"},
 			{"kitty"},
 			{"alacritty"},
+		}
+	case normalized == "files" ||
+		normalized == "explorer" ||
+		strings.Contains(normalized, "file explorer") ||
+		strings.Contains(normalized, "file manager"):
+		return [][]string{
+			{"pcmanfm"},
+			{"thunar"},
+			{"nautilus"},
+			{"dolphin"},
+			{"nemo"},
+			{"xdg-open", "."},
 		}
 	case strings.Contains(normalized, "software center"),
 		strings.Contains(normalized, "software manager"),

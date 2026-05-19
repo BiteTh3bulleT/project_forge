@@ -136,6 +136,11 @@ const apiMocks = vi.hoisted(() => {
   };
 });
 
+const desktopMocks = vi.hoisted(() => ({
+  isTauriDesktop: vi.fn(() => false),
+  launchOperatorApp: vi.fn(),
+}));
+
 vi.mock("../lib/api", () => ({
   api: {
     chat: {
@@ -163,9 +168,23 @@ vi.mock("../lib/api", () => ({
   },
 }));
 
+vi.mock("../lib/desktop", () => ({
+  isTauriDesktop: desktopMocks.isTauriDesktop,
+  launchOperatorApp: desktopMocks.launchOperatorApp,
+}));
+
 describe("ChatPage cross-session memory recall", () => {
   beforeEach(() => {
     apiMocks.reset();
+    desktopMocks.isTauriDesktop.mockReturnValue(false);
+    desktopMocks.launchOperatorApp.mockReset();
+    desktopMocks.launchOperatorApp.mockResolvedValue({
+      appId: "files",
+      label: "Files",
+      executable: "pcmanfm",
+      launched: true,
+      message: "Files launch requested",
+    });
     vi.clearAllMocks();
     window.localStorage.clear();
   });
@@ -369,5 +388,77 @@ describe("ChatPage cross-session memory recall", () => {
     expect(
       screen.getByText("No provider reasoning has streamed in this thread yet."),
     ).toBeTruthy();
+  });
+
+  it("launches the local Files operator app for a file explorer chat request", async () => {
+    desktopMocks.isTauriDesktop.mockReturnValue(true);
+    await apiMocks.createThread({ title: "Local desktop launch" });
+
+    render(
+      <MemoryRouter initialEntries={["/chat"]}>
+        <ChatPage />
+      </MemoryRouter>,
+    );
+
+    const composer = await screen.findByLabelText("Chat message");
+    fireEvent.change(composer, {
+      target: { value: "Can you open file expolorer for me please?" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Send chat message" }),
+    );
+
+    await waitFor(() => {
+      expect(desktopMocks.launchOperatorApp).toHaveBeenCalledWith("files");
+    });
+    expect(apiMocks.postMessage).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        content: "Can you open file expolorer for me please?",
+        requestAssistant: false,
+      }),
+    );
+  });
+
+  it("retries the previous local Files operator app request", async () => {
+    desktopMocks.isTauriDesktop.mockReturnValue(true);
+    await apiMocks.createThread({ title: "Local desktop retry" });
+
+    render(
+      <MemoryRouter initialEntries={["/chat"]}>
+        <ChatPage />
+      </MemoryRouter>,
+    );
+
+    const composer = await screen.findByLabelText("Chat message");
+    fireEvent.change(composer, {
+      target: { value: "Open file explorer please" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Send chat message" }),
+    );
+
+    await waitFor(() => {
+      expect(desktopMocks.launchOperatorApp).toHaveBeenCalledTimes(1);
+    });
+
+    fireEvent.change(screen.getByLabelText("Chat message"), {
+      target: { value: "Try again." },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Send chat message" }),
+    );
+
+    await waitFor(() => {
+      expect(desktopMocks.launchOperatorApp).toHaveBeenCalledTimes(2);
+    });
+    expect(desktopMocks.launchOperatorApp).toHaveBeenLastCalledWith("files");
+    expect(apiMocks.postMessage).toHaveBeenLastCalledWith(
+      1,
+      expect.objectContaining({
+        content: "Try again.",
+        requestAssistant: false,
+      }),
+    );
   });
 });

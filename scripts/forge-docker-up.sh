@@ -38,6 +38,11 @@ env_set() {
   [[ -n "${!name:-}" ]]
 }
 
+env_file_sets() {
+  local name="$1"
+  [[ -f "$ENV_FILE" ]] && grep -Eq "^[[:space:]]*(export[[:space:]]+)?${name}=" "$ENV_FILE"
+}
+
 default_env() {
   local name="$1"
   local value="$2"
@@ -143,6 +148,64 @@ has_service() {
   return 1
 }
 
+host_port_busy() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ss -H -ltn "sport = :${port}" 2>/dev/null | grep -q .
+    return
+  fi
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1
+    return
+  fi
+  return 1
+}
+
+first_free_host_port() {
+  local start="$1"
+  local port="$start"
+  while host_port_busy "$port"; do
+    port=$((port + 1))
+  done
+  printf '%s' "$port"
+}
+
+docker_service_published_port() {
+  local service="$1"
+  local target_port="$2"
+  local published
+  published="$(docker compose "${compose_args[@]}" "${args[@]}" port "$service" "$target_port" 2>/dev/null || true)"
+  if [[ -z "$published" ]]; then
+    return 1
+  fi
+  printf '%s' "${published##*:}"
+}
+
+apply_desktop_port_fallbacks() {
+  if ! has_service postgres; then
+    return
+  fi
+  if env_set FORGE_POSTGRES_PORT || env_file_sets FORGE_POSTGRES_PORT; then
+    return
+  fi
+  local current_postgres_port
+  current_postgres_port="$(docker_service_published_port postgres 5432 || true)"
+  if [[ -n "$current_postgres_port" ]]; then
+    export FORGE_POSTGRES_PORT="$current_postgres_port"
+    if [[ "$current_postgres_port" != "5432" ]]; then
+      printf 'Keeping running FORGE Postgres published on 127.0.0.1:%s.\n' "$current_postgres_port"
+    fi
+    return
+  fi
+  if ! host_port_busy 5432; then
+    return
+  fi
+  export FORGE_POSTGRES_PORT
+  FORGE_POSTGRES_PORT="$(first_free_host_port 15432)"
+  printf 'Host port 5432 is already in use; publishing FORGE Postgres on 127.0.0.1:%s instead.\n' "$FORGE_POSTGRES_PORT"
+  printf 'Internal Docker services still use postgres:5432.\n'
+}
+
 open_url_best_effort() {
   local url="$1"
   if [[ "${FORGE_DOCKER_OPEN:-1}" == "0" || "${FORGE_DOCKER_OPEN:-1}" == "false" ]]; then
@@ -175,6 +238,7 @@ echo "Services: ${services[*]}"
 echo "Intel iGPU telemetry: $([[ "$igpu_enabled" == "true" ]] && echo "enabled via docker-compose.igpu.yml" || echo "not enabled")"
 
 enable_docker_ollama_defaults
+apply_desktop_port_fallbacks
 docker compose "${compose_args[@]}" "${args[@]}" up -d --build "${services[@]}"
 
 echo
