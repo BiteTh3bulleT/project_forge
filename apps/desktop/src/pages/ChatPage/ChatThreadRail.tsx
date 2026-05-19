@@ -57,7 +57,11 @@ export function ChatThreadRail(props: ChatThreadRailProps) {
         ) : null}
       </div>
 
-      <div className="forge-chat-scroll min-h-0 flex-1 overflow-y-auto p-1.5">
+      <div
+        className="forge-chat-scroll min-h-0 flex-1 overflow-y-auto p-1.5"
+        role="listbox"
+        aria-label="Chat threads"
+      >
         {props.filteredThreads.length === 0 ? (
           <div className="rounded-lg border border-dashed border-forge-platinum/15 bg-black/35 px-3 py-4 text-xs text-forge-mist">
             <div className="font-semibold text-forge-ash">No chats shown</div>
@@ -73,6 +77,8 @@ export function ChatThreadRail(props: ChatThreadRailProps) {
                 <button
                   key={thread.id}
                   type="button"
+                  role="option"
+                  aria-selected={isActive}
                   onClick={() => props.onLoadThread(thread.id)}
                   className={[
                     "w-full rounded-lg border px-3 py-2 text-left transition shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]",

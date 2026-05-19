@@ -90,10 +90,13 @@ describe("ApprovalsPage decision controls", () => {
     );
 
     const approve = await screen.findByRole<HTMLButtonElement>("button", {
-      name: "Approve",
+      name: "Approve request 7",
     });
+    expect(
+      screen.getByRole("article", { name: "Request #7" }),
+    ).toBeTruthy();
     const deny = screen.getByRole<HTMLButtonElement>("button", {
-      name: "Deny",
+      name: "Deny request 7",
     });
 
     fireEvent.click(approve);
@@ -118,7 +121,9 @@ describe("ApprovalsPage decision controls", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Approve" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Approve request 7" }),
+    );
 
     expect(
       await screen.findByText("Request 7 was already resolved."),
@@ -135,7 +140,9 @@ describe("ApprovalsPage decision controls", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Deny" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Deny request 7" }),
+    );
 
     expect(await screen.findByText("gateway denied decision")).toBeTruthy();
   });
@@ -164,7 +171,7 @@ describe("ApprovalsPage decision controls", () => {
     );
 
     const nonPublic = await screen.findByRole<HTMLButtonElement>("button", {
-      name: "Non-public approval",
+      name: "Non-public approval request 8",
     });
     expect(nonPublic.disabled).toBe(true);
     expect(
@@ -172,10 +179,12 @@ describe("ApprovalsPage decision controls", () => {
         "This request requires a non-public approval authority.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Approve request 8" }),
+    ).toBeNull();
 
     const deny = screen.getByRole<HTMLButtonElement>("button", {
-      name: "Deny",
+      name: "Deny request 8",
     });
     expect(deny.disabled).toBe(false);
     expect(mocks.approve).not.toHaveBeenCalled();
@@ -203,14 +212,20 @@ describe("ApprovalsPage decision controls", () => {
     expect(
       screen.getByText("Public one-click decision allowed for this request."),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Approve" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Deny" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Approve request 7" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Deny request 7" }),
+    ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Recent / Resolved" }));
 
     expect(await screen.findByText("Approved governed file write")).toBeTruthy();
     expect(screen.getByText("Denied governed file write")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Approve request/ }),
+    ).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Denied" }));
 

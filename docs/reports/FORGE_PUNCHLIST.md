@@ -282,7 +282,7 @@ Continue the proven pattern (kvidentity, refvalidation, semanticvalidation). Pic
   - 2026-05-19 progress: added first-pass render coverage for `DossiersPage`, `ReviewsPage`, and `SourcesPage` around loaded-empty dossier, review/reconciliation, and source-ingestion states.
   - 2026-05-19 progress: added first-pass render coverage for `AutonomyPage`, `InspectorsPage`, and `JobDetailPage` around inactive autonomy, empty inspector, and loaded job-projection states.
 - [x] **Command palette polish.** 2026-05-19: expanded `CommandBar.tsx` with a categorized action surface for route, knowledge, job, and runtime commands plus component tests for staging and executing routed commands.
-- [ ] **Accessibility audit pass.** Focus management, keyboard nav, ARIA labels on the operator-critical surfaces (Chat, Approvals, Operator Apps).
+- [x] **Accessibility audit pass.** 2026-05-19: added targeted ARIA/live-region coverage on Chat, Approvals, and Operator Apps, including chat log semantics, request-specific approval decision labels, operator-app status/group labels, and regression assertions.
 
 ---
 

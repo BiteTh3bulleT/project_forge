@@ -178,6 +178,8 @@ export function OperatorAppsPage() {
               ? "rounded-md border border-forge-electric/25 bg-forge-electric/10 p-3 text-sm text-forge-ash"
               : "rounded-md border border-forge-amber/30 bg-forge-amber/10 p-3 text-sm text-forge-ash"
           }
+          role="status"
+          aria-live="polite"
         >
           {status}
         </div>
@@ -192,6 +194,8 @@ export function OperatorAppsPage() {
                 {group.items.map((app) => (
                   <div
                     key={app.id}
+                    role="group"
+                    aria-label={`${app.label} operator app`}
                     className="rounded border border-forge-platinum/10 bg-black/25 p-4"
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -221,6 +225,7 @@ export function OperatorAppsPage() {
                       <PrimaryButton
                         disabled={!tauriAvailable || busyAppId !== null}
                         onClick={() => void launch(app)}
+                        aria-label={`Launch ${app.label}`}
                       >
                         {busyAppId === app.id
                           ? "Launching"
