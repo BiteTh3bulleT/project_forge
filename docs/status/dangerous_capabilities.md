@@ -81,6 +81,14 @@ High-risk mappings are explicitly `approval_only` in `activeMappings`, including
 - High-risk capabilities resolve to real gateway tools but are not freely executable.
 - Platform, credential, binary, device, or privilege gaps are reported as explicit runtime errors after policy/approval checks.
 
+### 8) Desktop shell host power actions (policy-gated, disabled by default)
+- `shell.power_action` — desktop shell host `shutdown` and `reboot` requests exposed by the Tauri binary `request_host_power_action` command.
+- Disabled by default. The binary refuses to spawn host power commands unless the operator explicitly sets the environment variable `FORGE_SHELL_DIRECT_SYSTEM_CONTROL` to `1`, `true`, `TRUE`, `yes`, or `YES`.
+- Gate function: [`direct_system_control_enabled` in `apps/desktop/src-tauri/src/main.rs`](../../apps/desktop/src-tauri/src/main.rs) at line 526. Enforcement: `request_host_power_action_with_policy` at line 532 returns a `requested:false` `HostPowerActionResult` with the message "Host power controls are disabled by FORGE_SHELL_DIRECT_SYSTEM_CONTROL policy" when the gate is not set, and only invokes the host command runner when the gate is enabled.
+- Allowlist: only `shutdown` and `reboot` actions are accepted by `spawn_host_power_command`; any other action returns "host power action is not allowlisted".
+- Regression coverage: Rust unit tests `host_power_action_is_policy_disabled_by_default` (line 765) and `host_power_action_uses_runner_only_when_policy_enabled` (line 780) in the same file.
+- Enabling this gate grants host mutation authority to the desktop shell. It is therefore an operator-set, opt-in, disabled-by-default dangerous capability and supersedes prior docs language that described the shell as "no host mutation". See `docs/DESKTOP_SHELL.md` "Host Power Controls" and `docs/operations/forge_graphical_shell_session.md`.
+
 ## Policy behavior
 
 - `approval_only` returns `approval_required` decision path with structured tool error.

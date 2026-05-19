@@ -1,3 +1,5 @@
+[PROMPT-TEMPLATE-ONLY] This file is a prompt specification, not a review output. The actual review artifact it asks the assistant to generate is `docs/reports/FORGE_FULL_REVIEW.md`. Do not read this file as a current code review.
+
 # FORGE Full Code Review + Public Architecture Markdown Report
 
 You are acting as a senior principal engineer, systems architect, technical writer, and product reviewer.

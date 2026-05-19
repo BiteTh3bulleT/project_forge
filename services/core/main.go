@@ -20,18 +20,26 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+func run() int {
 	cfg := config.Load()
 	if err := validateCoreConfig(cfg); err != nil {
 		slog.Error("invalid configuration", slog.String("error", err.Error()))
-		os.Exit(1)
+		return 1
 	}
 
 	st, err := store.Open(cfg.DataDir)
 	if err != nil {
 		slog.Error("store open failed", slog.String("error", err.Error()))
-		os.Exit(1)
+		return 1
 	}
 	defer st.Close()
+
+	if strings.TrimSpace(cfg.APIToken) == "" {
+		slog.Warn("FORGE_API_TOKEN is empty — protected routes are unauthenticated; only safe on loopback bind", slog.String("bind", cfg.BindHost))
+	}
 
 	srv := api.NewServer(st, cfg)
 	defer srv.ShutdownWatch()
@@ -43,21 +51,35 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	serverErr := make(chan error, 1)
 	go func() {
 		slog.Info("forge-core listening", slog.String("addr", addr))
 		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("http server failed", slog.String("error", err.Error()))
-			os.Exit(1)
+			serverErr <- err
+			return
 		}
+		serverErr <- nil
 	}()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	<-ctx.Done()
+	defer stop()
+
+	exitCode := 0
+	select {
+	case <-ctx.Done():
+	case err := <-serverErr:
+		if err != nil {
+			slog.Error("http server failed", slog.String("error", err.Error()))
+			exitCode = 1
+		}
+	}
 	stop()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	_ = httpSrv.Shutdown(shutdownCtx)
+
+	return exitCode
 }
 
 var (

@@ -2,11 +2,54 @@ package autonomy
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/aios/truth"
 )
+
+type staleLoopLifecycleStub struct {
+	loops []domain.OpenLoop
+}
+
+func (s staleLoopLifecycleStub) OpenLoop(context.Context, truth.LoopMutationRequest) (domain.SyscallResult, error) {
+	return domain.SyscallResult{}, nil
+}
+func (s staleLoopLifecycleStub) TransitionLoop(context.Context, truth.LoopMutationRequest) (domain.SyscallResult, error) {
+	return domain.SyscallResult{}, nil
+}
+func (s staleLoopLifecycleStub) ResolveLoop(context.Context, truth.LoopMutationRequest) (domain.SyscallResult, error) {
+	return domain.SyscallResult{}, nil
+}
+func (s staleLoopLifecycleStub) BlockLoop(context.Context, truth.LoopMutationRequest) (domain.SyscallResult, error) {
+	return domain.SyscallResult{}, nil
+}
+func (s staleLoopLifecycleStub) ReopenLoop(context.Context, truth.LoopMutationRequest) (domain.SyscallResult, error) {
+	return domain.SyscallResult{}, nil
+}
+func (s staleLoopLifecycleStub) ArchiveLoop(context.Context, truth.LoopMutationRequest) (domain.SyscallResult, error) {
+	return domain.SyscallResult{}, nil
+}
+func (s staleLoopLifecycleStub) ListActiveLoops(context.Context, domain.ForgeScope, int) ([]domain.OpenLoop, error) {
+	return nil, nil
+}
+func (s staleLoopLifecycleStub) ListBlockedLoops(context.Context, domain.ForgeScope, int) ([]domain.OpenLoop, error) {
+	return nil, nil
+}
+func (s staleLoopLifecycleStub) ListLoopsByPriority(context.Context, domain.ForgeScope, string, int) ([]domain.OpenLoop, error) {
+	return nil, nil
+}
+func (s staleLoopLifecycleStub) ListLoopsByOwner(context.Context, domain.ForgeScope, string, int) ([]domain.OpenLoop, error) {
+	return nil, nil
+}
+func (s staleLoopLifecycleStub) ListStaleLoops(context.Context, domain.ForgeScope, int64, int) ([]domain.OpenLoop, error) {
+	return s.loops, nil
+}
+func (s staleLoopLifecycleStub) ExplainLoop(context.Context, string, domain.ForgeScope, int64) (domain.OpenLoopExplanation, error) {
+	return domain.OpenLoopExplanation{}, nil
+}
 
 func TestPolicyEvaluatorPersistenceGatePreventsMaintainAutoCommit(t *testing.T) {
 	h := newAutonomyHarness(t)
@@ -603,5 +646,106 @@ func TestHasPlaceholderArchiveTargetBlocksCandidatePrefixes(t *testing.T) {
 	}
 	if hasPlaceholderArchiveTarget(map[string]any{"noteId": "note-real"}) {
 		t.Fatalf("did not expect placeholder guard for real note id")
+	}
+}
+
+// TestLiveNoteIDGeneratorsAvoidPlaceholderPrefixes is the regression net for the
+// hasPlaceholderArchiveTarget string-prefix contract. The guard at
+// runner.go:hasPlaceholderArchiveTarget filters payload IDs by literal prefix
+// ("candidate-", "fake-", "placeholder-"), which is only safe if every live
+// generator of those payload IDs is guaranteed not to collide. This test
+// exercises the live generator shapes and asserts none of them produce a
+// forbidden prefix across a broad sweep of synthetic inputs.
+func TestLiveNoteIDGeneratorsAvoidPlaceholderPrefixes(t *testing.T) {
+	t.Parallel()
+
+	forbidden := []string{"candidate-", "fake-", "placeholder-"}
+	assertSafe := func(t *testing.T, label, id string) {
+		t.Helper()
+		lower := strings.ToLower(strings.TrimSpace(id))
+		if lower == "candidate-note" {
+			t.Fatalf("%s: live generator produced reserved placeholder id %q", label, id)
+		}
+		for _, p := range forbidden {
+			if strings.HasPrefix(lower, p) {
+				t.Fatalf("%s: live generator produced forbidden prefix %q in id %q", label, p, id)
+			}
+		}
+		// Equivalent assertion via the actual guard to keep the safety
+		// contract co-located with what runner.go enforces.
+		if hasPlaceholderArchiveTarget(map[string]any{"noteId": id}) {
+			t.Fatalf("%s: live id %q is rejected by hasPlaceholderArchiveTarget", label, id)
+		}
+	}
+
+	// 1. shortHash output is hex-only by construction; sweep a wide input
+	//    space and confirm none of the live "<literal>-" + shortHash(...)
+	//    note-id templates ever produce a forbidden prefix.
+	workspaces := []string{"ws-1", "ws-cleanup", "ws/unicode-ñ", "WS_UPPER", strings.Repeat("w", 64), ""}
+	loops := []string{"loop-1", "loop/abc", "", strings.Repeat("l", 256)}
+	now := int64(1700000000000)
+	for _, ws := range workspaces {
+		for _, loop := range loops {
+			for _, off := range []int64{0, 1, 12345, 9223372036854775} {
+				ts := fmt.Sprintf("%d", now+off)
+				// rule_agents.go:175 — OpenLoopStalenessAgent note payload "id"
+				assertSafe(t, "rule_agents.OpenLoopStalenessAgent.note.id",
+					"note-stale-loop-"+shortHash(loop))
+				// rule_agents.go:169 — action ID (not a payload note id, but shares the literal)
+				assertSafe(t, "rule_agents.OpenLoopStalenessAgent.action.id",
+					"action-stale-loop-note-"+shortHash(loop, ts))
+				// autonomy_maintenance_loop.go:1014 — dream-loop noteId
+				assertSafe(t, "autonomy_maintenance_loop.dream.noteId",
+					"note-dream-improvement-"+shortHash(ws, ts))
+				// autonomy_maintenance_loop.go:1036 — dream-loop action id
+				assertSafe(t, "autonomy_maintenance_loop.dream.action.id",
+					"action-dream-note-"+shortHash("intent-dream-improvement-"+shortHash(ts, ws), "note"))
+			}
+		}
+	}
+
+	// 2. shortHash itself must never produce a forbidden prefix; it returns
+	//    lowercase hex from sha1, so verify across a range of inputs.
+	for i := 0; i < 256; i++ {
+		h := shortHash(fmt.Sprintf("probe-%d", i), "salt")
+		for _, p := range forbidden {
+			if strings.HasPrefix(h, p) {
+				t.Fatalf("shortHash(%d) produced forbidden prefix %q in %q", i, p, h)
+			}
+		}
+		if len(h) != 16 {
+			t.Fatalf("shortHash expected 16 hex chars, got %d (%q)", len(h), h)
+		}
+	}
+
+	// 3. OpenLoopStalenessAgent end-to-end: drive the live agent and verify
+	//    the payload it produces passes the guard for any non-placeholder
+	//    upstream loop id.
+	agent := OpenLoopStalenessAgent{}
+	staleLoops := []domain.OpenLoop{{ID: "loop-real-1", Title: "stale review", UpdatedAt: 1, State: domain.LoopOpen}}
+	in := BuildRuleAgentInput(
+		domain.ForgeScope{WorkspaceID: "ws-prefix-guard", LaneID: "control.semantic"},
+		"corr-prefix-guard",
+		"trace-prefix-guard",
+		staleLoopLifecycleStub{loops: staleLoops},
+		0,
+		"manual",
+		now,
+	)
+	res, err := agent.Evaluate(context.Background(), in)
+	if err != nil {
+		t.Fatalf("OpenLoopStalenessAgent evaluate: %v", err)
+	}
+	if len(res.Actions) == 0 {
+		t.Fatalf("expected at least one action from OpenLoopStalenessAgent")
+	}
+	for _, act := range res.Actions {
+		assertSafe(t, "OpenLoopStalenessAgent.live.action.id", act.ID)
+		if id, ok := act.Payload["id"].(string); ok {
+			assertSafe(t, "OpenLoopStalenessAgent.live.payload.id", id)
+		}
+		if id, ok := act.Payload["noteId"].(string); ok {
+			assertSafe(t, "OpenLoopStalenessAgent.live.payload.noteId", id)
+		}
 	}
 }

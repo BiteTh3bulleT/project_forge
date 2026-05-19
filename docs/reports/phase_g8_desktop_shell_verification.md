@@ -79,6 +79,7 @@ labwc remains the Wayland compositor substrate. It owns native window placement,
 
 - Full manual multi-native-window smoke in the VM remains open.
 - No reboot, shutdown, `systemctl`, `nixos-rebuild`, package install, model load/unload, or host mutation checks were performed from the shell UI.
+- `FORGE_SHELL_DIRECT_SYSTEM_CONTROL` defaults to unset/false in production; the desktop shell's `request_host_power_action` returns `requested:false` without spawning any host command unless an operator explicitly opts in. Regression is covered by the Rust unit test `host_power_action_is_policy_disabled_by_default` in `apps/desktop/src-tauri/src/main.rs` (line 765), paired with `host_power_action_uses_runner_only_when_policy_enabled` (line 780). See also `docs/status/dangerous_capabilities.md` `shell.power_action` and `docs/DESKTOP_SHELL.md` "Host Power Controls".
 
 ## Known Limitations
 

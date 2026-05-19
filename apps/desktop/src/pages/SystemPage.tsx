@@ -14,6 +14,8 @@ function valueText(value: unknown, fallback = "not reported") {
   return fallback;
 }
 
+const warnedUnknownStatuses = new Set<string>();
+
 function statusClass(status?: string) {
   const normalized = (status ?? "").toLowerCase();
   if (["ok", "normal", "available", "healthy", "reachable", "fresh", "read_only"].includes(normalized)) {
@@ -30,6 +32,10 @@ function statusClass(status?: string) {
   }
   if (normalized === "blocked") {
     return "forge-ops-status forge-ops-status--bad";
+  }
+  if (normalized && import.meta.env?.DEV && !warnedUnknownStatuses.has(normalized)) {
+    warnedUnknownStatuses.add(normalized);
+    console.warn(`[SystemPage] unknown status code "${normalized}" mapped to muted; API contract may have drifted`);
   }
   return "forge-ops-status forge-ops-status--muted";
 }
@@ -222,12 +228,25 @@ export function SystemPage() {
     ];
     return Array.from(new Set(values.filter(Boolean))).slice(0, 8);
   }, [status]);
-  const cockpitRows = useMemo(
+  const hasKernelActivation = kernelActivation != null;
+  const hasProposalsSurface = status?.forgeh?.proposals != null;
+  const cockpitRows = useMemo<Array<{
+    id: string;
+    label: string;
+    live: boolean;
+    status: string;
+    liveOwner: string;
+    targetOwner: string;
+    source: string;
+  }>>(
     () => [
       {
         id: "authority_gates",
         label: "Authority gates",
-        status: `${kernelActivation?.authority_ready_gates ?? 0} ready / ${kernelActivation?.authority_blocked_gates ?? 0} blocked`,
+        live: hasKernelActivation,
+        status: hasKernelActivation
+          ? `${kernelActivation?.authority_ready_gates ?? 0} ready / ${kernelActivation?.authority_blocked_gates ?? 0} blocked`
+          : "",
         liveOwner: kernelActivation?.live_owner ?? "aios.controllane",
         targetOwner: "FORGE-K Kernel",
         source: "kernel_activation.authority_gates",
@@ -235,7 +254,8 @@ export function SystemPage() {
       {
         id: "cases",
         label: "Cases",
-        status: "simulator/planned",
+        live: false,
+        status: "",
         liveOwner: "not live-wired",
         targetOwner: "FORGE-K case packets",
         source: "planned Courthouse case surface",
@@ -243,7 +263,8 @@ export function SystemPage() {
       {
         id: "context_bundles",
         label: "Context bundles",
-        status: "shadow/inspector",
+        live: false,
+        status: "",
         liveOwner: "context snapshots/restore inspector",
         targetOwner: "FORGE-K Context Compiler",
         source: "/inspectors",
@@ -251,7 +272,8 @@ export function SystemPage() {
       {
         id: "proposals",
         label: "Proposals",
-        status: `${proposalRows.length} resource proposals`,
+        live: hasProposalsSurface,
+        status: hasProposalsSurface ? `${proposalRows.length} resource proposals` : "",
         liveOwner: "forgeh plus autonomy dry-run reports",
         targetOwner: "proposal lanes",
         source: "forgeh.proposals",
@@ -259,7 +281,8 @@ export function SystemPage() {
       {
         id: "journal_replay",
         label: "Journal/replay",
-        status: "trace/inspector",
+        live: false,
+        status: "",
         liveOwner: "audit/journal trace APIs",
         targetOwner: "FORGE-K Kernel replay",
         source: "/inspectors",
@@ -267,13 +290,16 @@ export function SystemPage() {
       {
         id: "lymphatic_reports",
         label: "Lymphatic reports",
-        status: "proposal-only",
+        live: false,
+        status: "",
         liveOwner: "autonomy maintenance dry-run reports",
         targetOwner: "FORGE-K Lymphatic Lane",
         source: "autonomy maintenance dry-run",
       },
     ],
     [
+      hasKernelActivation,
+      hasProposalsSurface,
       kernelActivation?.authority_blocked_gates,
       kernelActivation?.authority_ready_gates,
       kernelActivation?.live_owner,
@@ -607,9 +633,18 @@ export function SystemPage() {
                         {row.label}
                       </td>
                       <td className="py-2 pr-3">
-                        <span className={statusClass(row.status)}>
-                          {row.status}
-                        </span>
+                        {row.live ? (
+                          <span className={statusClass(row.status)}>
+                            {row.status}
+                          </span>
+                        ) : (
+                          <span
+                            className="text-forge-mist/50"
+                            aria-label={`${row.label}: data not available, surface not live-wired`}
+                          >
+                            &mdash;
+                          </span>
+                        )}
                       </td>
                       <td className="py-2 pr-3 font-mono text-forge-mist">
                         {row.liveOwner}

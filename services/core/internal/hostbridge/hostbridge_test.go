@@ -113,10 +113,10 @@ func TestHostProbeReadsRejectOversizeFiles(t *testing.T) {
 func TestExecRunnerRejectsOversizeCommandOutput(t *testing.T) {
 	runner := newExecRunner(2 * time.Second)
 	command := "sh"
-	args := []string{"-c", "i=0; while [ $i -lt 70000 ]; do printf x; i=$((i+1)); done"}
+	args := []string{"-c", "yes x | head -c 200000"}
 	if runtime.GOOS == "windows" {
 		command = "powershell.exe"
-		args = []string{"-NoProfile", "-Command", "$s='x'*70000; [Console]::Out.Write($s)"}
+		args = []string{"-NoProfile", "-Command", "$s='x'*200000; [Console]::Out.Write($s)"}
 	}
 	if _, err := runner.LookPath(command); err != nil {
 		t.Skipf("%s unavailable: %v", command, err)

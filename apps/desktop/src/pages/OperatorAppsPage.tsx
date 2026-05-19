@@ -2,6 +2,7 @@ import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { Toast } from "../components/Toast";
+import { FALLBACK_OPERATOR_APPS } from "../layout/AppShellSurfaces";
 import {
   isTauriDesktop,
   iconAssetUrl,
@@ -9,98 +10,6 @@ import {
   listOperatorApps,
   type OperatorApp,
 } from "../lib/desktop";
-
-const FALLBACK_OPERATOR_APPS: OperatorApp[] = [
-  {
-    id: "terminal",
-    label: "Terminal",
-    description: "Open a Foot terminal in the current FORGE operator session.",
-    executable: "foot",
-    category: "Workspace",
-    iconName: "foot",
-    iconPath: null,
-    desktopFile: null,
-    native: false,
-  },
-  {
-    id: "files",
-    label: "Files",
-    description:
-      "Open the PCManFM file manager in the current FORGE operator session.",
-    executable: "pcmanfm",
-    category: "Workspace",
-    iconName: "system-file-manager",
-    iconPath: null,
-    desktopFile: null,
-    native: false,
-  },
-  {
-    id: "editor",
-    label: "Editor",
-    description: "Open the native Mousepad text editor.",
-    executable: "mousepad",
-    category: "Workspace",
-    iconName: "accessories-text-editor",
-    iconPath: null,
-    desktopFile: "/run/current-system/sw/share/applications/org.xfce.mousepad.desktop",
-    native: true,
-  },
-  {
-    id: "browser",
-    label: "Browser",
-    description: "Open Firefox for local docs and web consoles.",
-    executable: "firefox",
-    category: "Internet",
-    iconName: "firefox",
-    iconPath: null,
-    desktopFile: null,
-    native: false,
-  },
-  {
-    id: "ollama-status",
-    label: "Ollama Status",
-    description: "Show local Ollama status without model mutation.",
-    executable: "foot",
-    category: "AI Runtime",
-    iconName: "utilities-terminal",
-    iconPath: null,
-    desktopFile: null,
-    native: false,
-  },
-  {
-    id: "system-monitor",
-    label: "System Monitor",
-    description: "Open the fixed btop/htop wrapper.",
-    executable: "foot",
-    category: "System",
-    iconName: "utilities-system-monitor",
-    iconPath: null,
-    desktopFile: null,
-    native: false,
-  },
-  {
-    id: "lazygit",
-    label: "Git UI",
-    description: "Open lazygit in the FORGE workspace.",
-    executable: "foot",
-    category: "Developer",
-    iconName: "git",
-    iconPath: null,
-    desktopFile: null,
-    native: false,
-  },
-  {
-    id: "forge-status",
-    label: "FORGE Status",
-    description: "Show local forge-core health.",
-    executable: "foot",
-    category: "FORGE",
-    iconName: "utilities-terminal",
-    iconPath: null,
-    desktopFile: null,
-    native: false,
-  },
-];
 
 export function OperatorAppsPage() {
   const tauriAvailable = useMemo(() => isTauriDesktop(), []);
