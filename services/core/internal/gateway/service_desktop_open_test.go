@@ -118,6 +118,43 @@ func TestDesktopLooksLikeURLAndPath(t *testing.T) {
 	}
 }
 
+func TestValidateDesktopOpenURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		wantErr string
+	}{
+		{name: "https", raw: "https://example.com/path"},
+		{name: "http", raw: "http://example.com"},
+		{name: "mailto", raw: "mailto:operator@example.com"},
+		{name: "userinfo", raw: "https://user:pass@example.com", wantErr: "userinfo"},
+		{name: "missing host", raw: "https:///missing-host", wantErr: "host"},
+		{name: "unsupported scheme", raw: "file:///etc/passwd", wantErr: "only supports"},
+		{name: "control character", raw: "https://example.com/\r\n--flag", wantErr: "control"},
+		{name: "empty mailto", raw: "mailto:", wantErr: "mailto target"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := validateDesktopOpenURL(tc.raw)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("validateDesktopOpenURL(%q) error=%v", tc.raw, err)
+				}
+				if strings.TrimSpace(got) == "" {
+					t.Fatalf("validateDesktopOpenURL(%q) returned empty URL", tc.raw)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("validateDesktopOpenURL(%q) accepted unsafe URL %q", tc.raw, got)
+			}
+			if !strings.Contains(strings.ToLower(err.Error()), strings.ToLower(tc.wantErr)) {
+				t.Fatalf("validateDesktopOpenURL(%q) error=%v want substring %q", tc.raw, err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestDesktopSplitAppAndCommand(t *testing.T) {
 	app, cmd := desktopSplitAppAndCommand("open konsole and ping 10.100.1.5")
 	if app != "konsole" {

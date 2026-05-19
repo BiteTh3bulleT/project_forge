@@ -160,7 +160,12 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if v, ok := body["ollamaBaseUrl"].(string); ok {
-		if err := upsertSetting(ctx, s.st.DB, "ollama_base_url", v); err != nil {
+		baseURL, err := validatePersistedOllamaBaseURL(v)
+		if err != nil {
+			writeAPIRequestError(w, http.StatusBadRequest, fmt.Errorf("invalid ollamaBaseUrl: %w", err))
+			return
+		}
+		if err := upsertSetting(ctx, s.st.DB, "ollama_base_url", baseURL); err != nil {
 			writeAPIRequestError(w, http.StatusInternalServerError, err)
 			return
 		}
@@ -610,6 +615,46 @@ func isAllowedOllamaModelsBaseURLAddr(addr netip.Addr) bool {
 		!addr.IsLinkLocalUnicast() &&
 		!addr.IsMulticast() &&
 		!addr.IsUnspecified()
+}
+
+func validatePersistedOllamaBaseURL(raw string) (string, error) {
+	baseURL := strings.TrimSpace(raw)
+	if baseURL == "" {
+		return "", nil
+	}
+	if len(baseURL) > maxOllamaModelsBaseURLOverrideLength {
+		return "", fmt.Errorf("is too long")
+	}
+
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return "", err
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", fmt.Errorf("scheme must be http or https")
+	}
+	if parsed.User != nil {
+		return "", fmt.Errorf("must not include userinfo")
+	}
+
+	host := strings.TrimSpace(parsed.Hostname())
+	if host == "" {
+		return "", fmt.Errorf("host is required")
+	}
+	if strings.Contains(host, "%") {
+		return "", fmt.Errorf("host zone identifiers are not allowed")
+	}
+	if isLocalhostName(host) || strings.EqualFold(strings.TrimSuffix(host, "."), "host.docker.internal") {
+		return baseURL, nil
+	}
+	if addr, err := netip.ParseAddr(host); err == nil {
+		if addr.IsLoopback() {
+			return baseURL, nil
+		}
+		return "", fmt.Errorf("host address must be loopback or host.docker.internal")
+	}
+	return "", fmt.Errorf("host must be localhost, loopback, or host.docker.internal")
 }
 
 func sameOllamaModelsBaseURL(a, b string) bool {

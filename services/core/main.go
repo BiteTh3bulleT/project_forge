@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -20,7 +21,7 @@ import (
 
 func main() {
 	cfg := config.Load()
-	if err := validateCoreListenConfig(cfg); err != nil {
+	if err := validateCoreConfig(cfg); err != nil {
 		slog.Error("invalid configuration", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
@@ -60,9 +61,20 @@ func main() {
 }
 
 var (
-	errWildcardBindRequiresOptIn = errors.New("wildcard bind host requires FORGE_ALLOW_WILDCARD_BIND=true")
-	errWildcardBindRequiresAuth  = errors.New("wildcard bind host requires API auth token")
+	errWildcardBindRequiresOptIn  = errors.New("wildcard bind host requires FORGE_ALLOW_WILDCARD_BIND=true")
+	errWildcardBindRequiresAuth   = errors.New("wildcard bind host requires API auth token")
+	errRootWorkspaceRequiresOptIn = errors.New("root workspace requires FORGE_ALLOW_ROOT_WORKSPACE=true")
 )
+
+func validateCoreConfig(cfg config.Config) error {
+	if err := validateCoreListenConfig(cfg); err != nil {
+		return err
+	}
+	if isRootWorkspaceDir(cfg.WorkspaceDir) && !cfg.AllowRootWorkspace {
+		return errRootWorkspaceRequiresOptIn
+	}
+	return nil
+}
 
 func validateCoreListenConfig(cfg config.Config) error {
 	if isWildcardBindHost(cfg.BindHost) {
@@ -91,4 +103,19 @@ func isWildcardBindHost(host string) bool {
 	default:
 		return false
 	}
+}
+
+func isRootWorkspaceDir(path string) bool {
+	clean := filepath.Clean(strings.TrimSpace(path))
+	if clean == "" || clean == "." {
+		return false
+	}
+	if clean == string(filepath.Separator) {
+		return true
+	}
+	volume := filepath.VolumeName(clean)
+	if volume == "" {
+		return false
+	}
+	return clean == volume+string(filepath.Separator)
 }

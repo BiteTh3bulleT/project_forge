@@ -4,30 +4,45 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CommandPage } from "./CommandPage";
 
-const mocks = vi.hoisted(() => ({
+const apiMocks = vi.hoisted(() => ({
   createJob: vi.fn(),
   executeCommand: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
   api: {
-    jobs: {
-      create: mocks.createJob,
-    },
     commands: {
-      execute: mocks.executeCommand,
+      execute: apiMocks.executeCommand,
+    },
+    jobs: {
+      create: apiMocks.createJob,
     },
   },
 }));
 
 describe("CommandPage", () => {
   beforeEach(() => {
-    mocks.createJob.mockReset();
-    mocks.executeCommand.mockReset();
+    vi.clearAllMocks();
+  });
+
+  it("renders command shortcuts and template job launchers", () => {
+    render(
+      <MemoryRouter>
+        <CommandPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Command Desk")).toBeTruthy();
+    expect(screen.getByText("Chat")).toBeTruthy();
+    expect(screen.getByText("Workbench")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Create packet" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Prepare Codex handoff" }),
+    ).toBeTruthy();
   });
 
   it("shows a page error when a template job cannot be queued", async () => {
-    mocks.createJob.mockRejectedValue(new Error("queue unavailable"));
+    apiMocks.createJob.mockRejectedValue(new Error("queue unavailable"));
 
     render(
       <MemoryRouter>

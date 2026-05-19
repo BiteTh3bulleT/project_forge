@@ -311,6 +311,39 @@ func TestToolCapabilityRegistryDangerousDefaultsNotFreelyActive(t *testing.T) {
 	}
 }
 
+func TestToolCapabilityRegistryApprovalOnlyDefaultsRequireApproval(t *testing.T) {
+	t.Parallel()
+	reg := NewToolCapabilityRegistry()
+	evaluator := NewToolPolicyEvaluator("", DeterministicToolRiskClassifier{}, nil)
+
+	checked := 0
+	for _, capability := range reg.List() {
+		capability := capability
+		if capability.Status != domain.ToolCapabilityApprovalOnly {
+			continue
+		}
+		t.Run(capability.ID, func(t *testing.T) {
+			t.Parallel()
+			decision := evaluator.Evaluate(context.Background(), ToolPolicyInput{
+				Request: Request{
+					ToolID:      capability.ID,
+					WorkspaceID: "workspace:test",
+					Initiator:   "tester",
+				},
+				Capability: capability,
+				HasAdapter: true,
+			})
+			if decision.Status != StatusNeedsApprov || !decision.RequiresApproval {
+				t.Fatalf("approval-only capability %s decision status=%s requiresApproval=%v reason=%q", capability.ID, decision.Status, decision.RequiresApproval, decision.Reason)
+			}
+		})
+		checked++
+	}
+	if checked == 0 {
+		t.Fatalf("expected approval-only capabilities in default registry")
+	}
+}
+
 func TestGatewayExecuteAndWaitApprovesAndReruns(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -750,3 +750,83 @@ html[data-effects="subtle"] .forge-context-card:hover {
     animation: none !important;
   }
 }
+
+html[data-render-profile="vm-safe"] {
+  --forge-shadow: none;
+  --forge-shadow-panel: 0 0 0 1px rgba(220, 224, 226, 0.1);
+  --forge-grid-opacity: 0;
+  --forge-noise-opacity: 0;
+}
+
+html[data-render-profile="vm-safe"] *,
+html[data-render-profile="vm-safe"] *::before,
+html[data-render-profile="vm-safe"] *::after {
+  animation: none !important;
+  transition-duration: 0.01ms !important;
+  transition-delay: 0ms !important;
+  scroll-behavior: auto !important;
+}
+
+html[data-render-profile="vm-safe"] body {
+  background-image: linear-gradient(155deg, #020405 0%, #071014 56%, #030506 100%);
+}
+
+html[data-render-profile="vm-safe"] body::before,
+html[data-render-profile="vm-safe"] body::after {
+  content: none;
+  display: none;
+  opacity: 0;
+  background: none;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-panel,
+html[data-render-profile="vm-safe"] .forge-window-frame,
+html[data-render-profile="vm-safe"] .forge-context-card,
+html[data-render-profile="vm-safe"] .forge-hero,
+html[data-render-profile="vm-safe"] .forge-taskstrip,
+html[data-render-profile="vm-safe"] .forge-chat-toolbar,
+html[data-render-profile="vm-safe"] .forge-chat-footer,
+html[data-render-profile="vm-safe"] .forge-chat-header,
+html[data-render-profile="vm-safe"] .forge-btn--ghost {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-panel,
+html[data-render-profile="vm-safe"] .forge-hero {
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(var(--forge-panel-rgb), 0.94),
+      rgba(var(--forge-panel-soft-rgb), 0.9)
+    );
+}
+
+html[data-render-profile="vm-safe"] .forge-panel::after,
+html[data-render-profile="vm-safe"] .forge-window-frame::after,
+html[data-render-profile="vm-safe"] .forge-context-card::after,
+html[data-render-profile="vm-safe"] .forge-hero::after {
+  content: none;
+  display: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-btn:hover,
+html[data-render-profile="vm-safe"] .forge-btn--ghost:hover,
+html[data-render-profile="vm-safe"] .forge-task:hover,
+html[data-render-profile="vm-safe"] .forge-dock__item:hover,
+html[data-render-profile="vm-safe"] .forge-chat-action-btn:hover {
+  transform: none;
+}
+
+html[data-render-profile="vm-safe"] .forge-btn--primary,
+html[data-render-profile="vm-safe"] .forge-btn--primary:hover,
+html[data-render-profile="vm-safe"] .forge-ops-board .forge-btn--primary,
+html[data-render-profile="vm-safe"] .forge-ops-board .forge-panel,
+html[data-render-profile="vm-safe"] .forge-input,
+html[data-render-profile="vm-safe"] .forge-input:focus,
+html[data-render-profile="vm-safe"] .forge-input:focus-visible {
+  box-shadow: none;
+}

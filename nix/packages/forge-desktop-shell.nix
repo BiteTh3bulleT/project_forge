@@ -15,6 +15,7 @@
   webkitgtk_4_1,
   librsvg,
   libayatana-appindicator,
+  renderProfile ? "default",
 }:
 
 let
@@ -45,6 +46,7 @@ let
     VITE_FORGE_BOOT_LOGIN = "true";
     VITE_FORGE_LOGIN_USER = "operator";
     VITE_FORGE_LOGIN_PASSWORD = "forge";
+    VITE_FORGE_RENDER_PROFILE = renderProfile;
 
     installPhase = ''
       runHook preInstall
@@ -128,6 +130,8 @@ rustPlatform.buildRustPackage rec {
       'export FORGE_SHELL_MODEL_MUTATION="''${FORGE_SHELL_MODEL_MUTATION:-false}"' \
       'export FORGE_SHELL_SEMANTIC_MEMORY_WRITE="''${FORGE_SHELL_SEMANTIC_MEMORY_WRITE:-false}"' \
       'export FORGE_SHELL_FORGE_K_LIVE_AUTHORITY="''${FORGE_SHELL_FORGE_K_LIVE_AUTHORITY:-false}"' \
+      'export FORGE_RENDER_PROFILE="''${FORGE_RENDER_PROFILE:-@renderProfile@}"' \
+      'export VITE_FORGE_RENDER_PROFILE="''${VITE_FORGE_RENDER_PROFILE:-$FORGE_RENDER_PROFILE}"' \
       "" \
       'if [ -n "''${FORGE_DESKTOP_SHELL_BINARY:-}" ]; then' \
       '  if [ -x "$FORGE_DESKTOP_SHELL_BINARY" ]; then' \
@@ -141,6 +145,7 @@ rustPlatform.buildRustPackage rec {
       > "$out/bin/forge-desktop-shell"
     substituteInPlace "$out/bin/forge-desktop-shell" \
       --replace-fail "@shell@" "${stdenv.shell}" \
+      --replace-fail "@renderProfile@" "${renderProfile}" \
       --replace-fail "@tauriBinary@" "$tauriBinary"
     chmod +x "$out/bin/forge-desktop-shell"
 

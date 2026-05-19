@@ -81,6 +81,7 @@ type DesktopWindowState = {
   focus: (id: string) => Promise<void>;
   // Geometry (browser fallback only)
   move: (id: string, x: number, y: number) => void;
+  moveLive: (id: string, x: number, y: number) => void;
   moveToHost: (
     id: string,
     hostLabel: string,
@@ -88,7 +89,16 @@ type DesktopWindowState = {
     y: number,
     monitorId?: string | null,
   ) => void;
+  moveToHostLive: (
+    id: string,
+    hostLabel: string,
+    x: number,
+    y: number,
+    monitorId?: string | null,
+  ) => void;
   resize: (id: string, width: number, height: number) => void;
+  resizeLive: (id: string, width: number, height: number) => void;
+  commitGeometry: (id: string) => void;
   reconcileHostAvailability: (hosts: DesktopWindowHostTarget[]) => void;
   // Internal: rehydrate from storage
   hydrate: () => void;
@@ -660,6 +670,17 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
       return next;
     }),
 
+  moveLive: (id, x, y) =>
+    set((s) => {
+      const now = Date.now();
+      const windows = s.windows.map((w) => {
+        if (w.id !== id) return w;
+        const nextWindow = withUpdatedAt({ ...w, x, y }, now);
+        return w.tauri ? nextWindow : normalizeBrowserWindow(nextWindow);
+      });
+      return { ...s, windows };
+    }),
+
   moveToHost: (id, hostLabel, x, y, monitorId) =>
     set((s) => {
       const cleanHostLabel = normalizeHostLabel(hostLabel);
@@ -685,6 +706,29 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
       return next;
     }),
 
+  moveToHostLive: (id, hostLabel, x, y, monitorId) =>
+    set((s) => {
+      const cleanHostLabel = normalizeHostLabel(hostLabel);
+      const cleanMonitorId = normalizeMonitorId(monitorId);
+      const now = Date.now();
+      const windows = s.windows.map((w) => {
+        if (w.id !== id) return w;
+        return normalizeBrowserWindow({
+          ...withUpdatedAt(
+            {
+              ...w,
+              hostLabel: cleanHostLabel,
+              monitorId: monitorId === undefined ? w.monitorId : cleanMonitorId,
+              x,
+              y,
+            },
+            now,
+          ),
+        });
+      });
+      return { ...s, windows, focusedId: id };
+    }),
+
   resize: (id, width, height) =>
     set((s) => {
       const now = Date.now();
@@ -693,6 +737,28 @@ export const useDesktopWindowStore = create<DesktopWindowState>((set, get) => ({
         const nextWindow = withUpdatedAt({ ...w, width, height }, now);
         return w.tauri ? nextWindow : normalizeBrowserWindow(nextWindow);
       });
+      const next = { ...s, windows };
+      persist(next);
+      return next;
+    }),
+
+  resizeLive: (id, width, height) =>
+    set((s) => {
+      const now = Date.now();
+      const windows = s.windows.map((w) => {
+        if (w.id !== id) return w;
+        const nextWindow = withUpdatedAt({ ...w, width, height }, now);
+        return w.tauri ? nextWindow : normalizeBrowserWindow(nextWindow);
+      });
+      return { ...s, windows };
+    }),
+
+  commitGeometry: (id) =>
+    set((s) => {
+      const now = Date.now();
+      const windows = s.windows.map((w) =>
+        w.id === id ? withUpdatedAt(w, now) : w,
+      );
       const next = { ...s, windows };
       persist(next);
       return next;

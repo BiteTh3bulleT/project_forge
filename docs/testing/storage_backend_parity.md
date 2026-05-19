@@ -19,7 +19,7 @@ Phase 13B-C adds Postgres foundation migrations and default-safe parity tests fo
 
 This is foundation parity, not data parity. The live SQLite schema does not write these new Postgres foundation tables, and live shadow diagnostics remain bounded in memory. Repository data parity begins only after a future repository adapter phase adds an explicit SQLite/Postgres implementation pair.
 
-Default tests do not require Docker or Postgres. The optional integration test runs only when `FORGE_POSTGRES_TEST_DSN` is set.
+Default local tests do not require Docker or Postgres. The integration test runs locally only when `FORGE_POSTGRES_TEST_DSN` is set, while CI provisions Postgres and requires that environment variable so the test cannot silently skip there.
 
 ## Phase 13D-E Status
 
@@ -28,7 +28,7 @@ Phase 13D-E adds diagnostic persistence and retrieval metadata relational adapte
 - config tests prove `FORGE_SHADOW_DIAGNOSTIC_PERSISTENCE_ENABLED` defaults disabled and requires Postgres configuration when enabled,
 - persistence tests prove disabled mode writes no repository rows while keeping in-memory diagnostics,
 - persistence tests prove safe row construction, retention expiry, schema version, unsafe metadata rejection, payload-size rejection, and repository failure isolation,
-- optional Postgres tests migrate the schema, insert/get/list diagnostic reports, and query retention expiry only when `FORGE_POSTGRES_TEST_DSN` is set,
+- local-optional/CI-required Postgres tests migrate the schema, insert/get/list diagnostic reports, and query retention expiry when `FORGE_POSTGRES_TEST_DSN` is set,
 - retrieval relational tests prove safe ref/count/class mapping, deterministic serialization, raw query/source/chunk/vector/embedding/memory-content rejection, and no retrieval execution.
 
 This remains diagnostic storage parity only. It does not switch reads, dual-write canonical records, migrate memory/retrieval tables, wire Qdrant, wire Redis, or add public diagnostics APIs.
@@ -41,7 +41,7 @@ Phase 13F-G adds Qdrant shadow vector adapter and shadow index tests without cha
 - payload safety tests prove safe ref/provenance payloads are accepted and source/chunk/prompt/completion/message/memory/raw-query/auth/secret metadata is rejected,
 - adapter tests prove collection creation and upsert payload shape without requiring Qdrant,
 - shadow index tests prove disabled mode skips writes, enabled mode upserts only precomputed vectors, vector dimensions are validated, Qdrant/search errors are isolated, and the service cannot execute retrieval or create embeddings,
-- optional Qdrant integration tests are gated by `FORGE_QDRANT_TEST_URL`.
+- local-optional/CI-required Qdrant integration tests are gated by `FORGE_QDRANT_TEST_URL`.
 
 This remains vector shadow infrastructure only. It does not switch retrieval reads, call Qdrant from live retrieval, generate embeddings, write canonical memory, admit evidence, persist content in Qdrant, wire Redis, or add public APIs.
 
@@ -54,7 +54,7 @@ Phase 13H adds Redis ephemeral coordination boundary tests without changing live
 - key policy tests prove safe namespaced keys are accepted while raw content, prompt, query, token, secret, auth, and unsafe path-like keys are rejected,
 - TTL tests prove cache, lock, and progress keys require expiration,
 - fake adapter tests prove cache set/get, queue push/pop, lock acquire/release, progress append/read, unsafe-key rejection, and health behavior,
-- optional Redis integration tests are gated by `FORGE_REDIS_TEST_ADDR`.
+- local-optional/CI-required Redis integration tests are gated by `FORGE_REDIS_TEST_ADDR`.
 
 This remains ephemeral coordination infrastructure only. It does not switch live job queues to Redis, make Redis required, store canonical memory, store evidence admission, store provenance authority, add routes, or change public APIs.
 
@@ -107,7 +107,7 @@ Phase 13B-C migration parity:
 - failed migrations report version/name context,
 - applied versions are recorded,
 - SQL registry entries match `services/core/migrations/postgres/*.sql`,
-- optional Postgres integration validates real table creation and idempotent rerun when `FORGE_POSTGRES_TEST_DSN` is provided.
+- local-optional/CI-required Postgres integration validates real table creation and idempotent rerun when `FORGE_POSTGRES_TEST_DSN` is provided.
 
 Phase 13D-E diagnostic repository parity:
 - diagnostic persistence config defaults disabled,
@@ -116,7 +116,7 @@ Phase 13D-E diagnostic repository parity:
 - safe diagnostic rows contain only summaries, refs, counts, classes, warnings, retention metadata, and no-effect verification,
 - unsafe or oversized payloads are rejected before persistence,
 - repository failure is isolated from the in-memory diagnostic sink,
-- optional Postgres integration is gated by `FORGE_POSTGRES_TEST_DSN`.
+- local-optional/CI-required Postgres integration is gated by `FORGE_POSTGRES_TEST_DSN`.
 
 Phase 13F-G Qdrant shadow parity:
 - qdrant shadow index config defaults disabled,
@@ -124,7 +124,7 @@ Phase 13F-G Qdrant shadow parity:
 - safe vector payloads preserve object/source/embedding/provenance refs,
 - unsafe content-bearing payloads are rejected before upsert,
 - disabled mode performs no Qdrant writes,
-- optional Qdrant integration is gated by `FORGE_QDRANT_TEST_URL`.
+- local-optional/CI-required Qdrant integration is gated by `FORGE_QDRANT_TEST_URL`.
 
 Phase 13H Redis ephemeral parity:
 - redis config defaults disabled,
@@ -134,7 +134,7 @@ Phase 13H Redis ephemeral parity:
 - forbidden redis roles cannot be canonical truth, durable memory, evidence admission, provenance authority, sole job record, canonical audit, canonical settings, or vector truth,
 - safe key namespace and TTL policy are enforced,
 - fake adapter behavior is deterministic,
-- optional Redis integration is gated by `FORGE_REDIS_TEST_ADDR`.
+- local-optional/CI-required Redis integration is gated by `FORGE_REDIS_TEST_ADDR`.
 
 Phase 16 cutover readiness:
 - default readiness report is blocked and preserves SQLite as canonical default,

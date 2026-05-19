@@ -25,6 +25,7 @@ type Config struct {
 	EnableMetricsEndpoint                       bool
 	ProjectContextAllowedRoots                  []string
 	WorkspaceDir                                string
+	AllowRootWorkspace                          bool
 	StoreBackend                                string
 	PostgresDSN                                 string
 	RedisAddr                                   string
@@ -131,7 +132,7 @@ func Load() Config {
 	bindHost := envStringDefault("FORGE_CORE_BIND_HOST", "127.0.0.1")
 	workspace := os.Getenv("FORGE_WORKSPACE_DIR")
 	if workspace == "" {
-		workspace = "/"
+		workspace = filepath.Join(dataDir, "workspace")
 	}
 	if abs, err := filepath.Abs(workspace); err == nil {
 		workspace = abs
@@ -165,6 +166,7 @@ func Load() Config {
 		EnableMetricsEndpoint:      envBool("FORGE_ENABLE_METRICS_ENDPOINT", false),
 		ProjectContextAllowedRoots: envList("FORGE_PROJECT_CONTEXT_ALLOWED_ROOTS"),
 		WorkspaceDir:               workspace,
+		AllowRootWorkspace:         envBool("FORGE_ALLOW_ROOT_WORKSPACE", false),
 		StoreBackend:               envStringDefault("FORGE_STORE_BACKEND", "sqlite"),
 		PostgresDSN:                strings.TrimSpace(os.Getenv("FORGE_POSTGRES_DSN")),
 		RedisAddr:                  strings.TrimSpace(os.Getenv("FORGE_REDIS_ADDR")),

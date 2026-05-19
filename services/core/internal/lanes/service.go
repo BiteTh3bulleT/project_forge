@@ -42,7 +42,15 @@ func New(db *sql.DB) *Service { return &Service{db: db} }
 // EnsureDefaults seeds the built-in, inspectable action lanes. These cannot
 // be deleted; they can be disabled.
 func (s *Service) EnsureDefaults(ctx context.Context, workspaceDir string) error {
-	now := time.Now().UnixMilli()
+	for _, l := range defaultBuiltins(workspaceDir, time.Now().UnixMilli()) {
+		if err := s.upsert(ctx, l); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func defaultBuiltins(workspaceDir string, now int64) []Lane {
 	builtins := []Lane{
 		{
 			ID:                "fs.read",
@@ -68,19 +76,6 @@ func (s *Service) EnsureDefaults(ctx context.Context, workspaceDir string) error
 			RequiresApproval:  false,
 			RiskClass:         "read_only",
 			ExpectedArtifacts: []string{"directoryListing"},
-			Builtin:           true,
-			Enabled:           true,
-		},
-		{
-			ID:                "fs.mkdir",
-			Name:              "Create workspace directories",
-			Description:       "Create directories (mkdir -p semantics) under the workspace via gateway fs.mkdir.",
-			ActionType:        "fs.mkdir",
-			AllowedPaths:      []string{workspaceDir},
-			WriteIntent:       true,
-			RequiresApproval:  false,
-			RiskClass:         "low_write",
-			ExpectedArtifacts: []string{"directoryCreated"},
 			Builtin:           true,
 			Enabled:           true,
 		},
@@ -556,14 +551,11 @@ func (s *Service) EnsureDefaults(ctx context.Context, workspaceDir string) error
 			Enabled:           true,
 		},
 	}
-	for _, l := range builtins {
-		l.CreatedAtMs = now
-		l.UpdatedAtMs = now
-		if err := s.upsert(ctx, l); err != nil {
-			return err
-		}
+	for i := range builtins {
+		builtins[i].CreatedAtMs = now
+		builtins[i].UpdatedAtMs = now
 	}
-	return nil
+	return builtins
 }
 
 // EnsureDefaultsIfEmpty seeds built-in lanes only for a fresh store with no

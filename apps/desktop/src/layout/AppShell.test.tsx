@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -12,7 +13,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useDesktopWindowStore } from "../stores/desktopWindowStore";
 import { useWorkspaceLayoutStore } from "../stores/workspaceLayoutStore";
-import type { LinuxWindowSnapshot, OperatorApp } from "../lib/desktop";
+import type {
+  LinuxWindowSnapshot,
+  OperatorApp,
+  OperatorAppLaunchResult,
+} from "../lib/desktop";
 
 import { AppShell } from "./AppShell";
 
@@ -763,6 +768,19 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(screen.getAllByTestId("mock-tool-content")).toHaveLength(1);
   });
 
+  it("does not keep routed children mounted behind an active shell window", () => {
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div>Deep linked chat route payload</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("mock-tool-content")).toBeTruthy();
+    expect(screen.queryByText("Deep linked chat route payload")).toBeNull();
+  });
+
   it("keeps Start open when a background surface only changes search params", () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
@@ -938,6 +956,123 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(screen.getByText("PID 4242")).toBeTruthy();
   });
 
+  it("does not create a native taskbar placeholder for refused launches", async () => {
+    resolvedOperatorApps();
+    desktopMocks.launchOperatorApp.mockResolvedValue({
+      appId: "terminal",
+      label: "Terminal",
+      executable: "foot",
+      launched: false,
+      pid: null,
+      message: "Terminal launch refused by policy",
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Terminal/ }));
+
+    await waitFor(() => {
+      expect(desktopMocks.launchOperatorApp).toHaveBeenCalledWith("terminal");
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Terminal native app" }),
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+    expect(
+      await screen.findByText("Terminal launch refused by policy"),
+    ).toBeTruthy();
+  });
+
+  it("prevents duplicate native launch requests while launch is pending", async () => {
+    resolvedOperatorApps();
+    let resolveLaunch: (result: OperatorAppLaunchResult) => void = () => {};
+    desktopMocks.launchOperatorApp.mockImplementation(
+      () =>
+        new Promise<OperatorAppLaunchResult>((resolve) => {
+          resolveLaunch = resolve;
+        }),
+    );
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Terminal/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Terminal/ }));
+
+    expect(desktopMocks.launchOperatorApp).toHaveBeenCalledTimes(1);
+
+    resolveLaunch({
+      appId: "terminal",
+      label: "Terminal",
+      executable: "foot",
+      launched: true,
+      pid: 4242,
+      message: "Terminal launch requested",
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "Terminal native app" }),
+    ).toBeTruthy();
+  });
+
+  it("expires stale native launch placeholders when no compositor window appears", async () => {
+    vi.useFakeTimers();
+    resolvedOperatorApps();
+    desktopMocks.launchOperatorApp.mockResolvedValue({
+      appId: "terminal",
+      label: "Terminal",
+      executable: "foot",
+      launched: true,
+      pid: 4242,
+      message: "Terminal launch requested",
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Terminal/ }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Terminal native app" }),
+    ).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(31_000);
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Terminal native app" }),
+    ).toBeNull();
+  });
+
   it("removes launched native placeholders after the Linux window appears", async () => {
     resolvedOperatorApps();
     desktopMocks.listLinuxWindows.mockResolvedValue([]);
@@ -996,6 +1131,56 @@ describe("AppShell confined Tauri tool surfaces", () => {
     ).toBeTruthy();
   });
 
+  it("does not resolve a new native launch against an already visible matching window", async () => {
+    resolvedOperatorApps();
+    const firstSeenMs = Date.now();
+    desktopMocks.listLinuxWindows.mockResolvedValue([
+      {
+        id: "terminal-existing",
+        title: "Terminal",
+        appId: "foot",
+        iconName: "foot",
+        iconPath: null,
+        focused: false,
+        minimized: false,
+        native: true,
+        firstSeenMs,
+        lastSeenMs: firstSeenMs,
+      },
+    ]);
+    desktopMocks.launchOperatorApp.mockResolvedValue({
+      appId: "terminal",
+      label: "Terminal",
+      executable: "foot",
+      launched: true,
+      pid: 5151,
+      message: "Terminal launch requested",
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Terminal linux app" }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+    fireEvent.click(
+      await within(
+        screen.getByRole("dialog", { name: "FORGE Start" }),
+      ).findByRole("button", { name: /Terminal/ }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Terminal native app" }),
+    ).toBeTruthy();
+  });
+
   it("shows compositor-reported Linux apps on the taskbar", async () => {
     desktopMocks.listLinuxWindows.mockResolvedValue([
       {
@@ -1029,6 +1214,123 @@ describe("AppShell confined Tauri tool surfaces", () => {
     await waitFor(() => {
       expect(desktopMocks.focusLinuxWindow).toHaveBeenCalledWith(
         "firefox-window",
+      );
+    });
+  });
+
+  it("keeps multiple compositor windows from the same native app separate", async () => {
+    desktopMocks.listLinuxWindows.mockResolvedValue([
+      {
+        id: "terminal-one",
+        title: "Terminal",
+        appId: "foot",
+        iconName: "foot",
+        iconPath: null,
+        focused: false,
+        minimized: false,
+        native: true,
+      },
+      {
+        id: "terminal-two",
+        title: "Terminal",
+        appId: "foot",
+        iconName: "foot",
+        iconPath: null,
+        focused: false,
+        minimized: false,
+        native: true,
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findAllByRole("button", { name: "Terminal linux app" }),
+    ).toHaveLength(2);
+  });
+
+  it("does not render compositor windows marked closed", async () => {
+    desktopMocks.listLinuxWindows.mockResolvedValue([
+      {
+        id: "terminal-closed",
+        title: "Terminal",
+        appId: "foot",
+        iconName: "foot",
+        iconPath: null,
+        focused: false,
+        minimized: false,
+        native: true,
+        lifecycle: "closed",
+      },
+      {
+        id: "firefox-window",
+        title: "Mozilla Firefox",
+        appId: "firefox",
+        iconName: "firefox",
+        iconPath: null,
+        focused: false,
+        minimized: false,
+        native: true,
+        lifecycle: "active",
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Mozilla Firefox linux app",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Terminal linux app" }),
+    ).toBeNull();
+  });
+
+  it("minimizes focused native Linux taskbar windows on left click", async () => {
+    desktopMocks.listLinuxWindows.mockResolvedValue([
+      {
+        id: "firefox-window",
+        title: "Mozilla Firefox",
+        appId: "firefox",
+        iconName: "firefox",
+        iconPath: null,
+        focused: true,
+        minimized: false,
+        native: true,
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const firefox = await screen.findByRole("button", {
+      name: "Mozilla Firefox linux app",
+    });
+
+    fireEvent.click(firefox);
+
+    await waitFor(() => {
+      expect(desktopMocks.controlLinuxWindow).toHaveBeenCalledWith(
+        "firefox-window",
+        "minimize",
       );
     });
   });
@@ -1109,5 +1411,45 @@ describe("AppShell confined Tauri tool surfaces", () => {
         "close",
       );
     });
+  });
+
+  it("reports bounded failures for unsupported native Linux taskbar actions", async () => {
+    desktopMocks.listLinuxWindows.mockResolvedValue([
+      {
+        id: "firefox-window",
+        title: "Mozilla Firefox",
+        appId: "firefox",
+        iconName: "firefox",
+        iconPath: null,
+        focused: false,
+        minimized: false,
+        native: true,
+      },
+    ]);
+    desktopMocks.controlLinuxWindow.mockResolvedValue(false);
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const firefox = await screen.findByRole("button", {
+      name: "Mozilla Firefox linux app",
+    });
+
+    fireEvent.contextMenu(firefox);
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Minimize window" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+
+    expect(
+      await screen.findByText(
+        "Mozilla Firefox did not accept the minimize request.",
+      ),
+    ).toBeTruthy();
   });
 });

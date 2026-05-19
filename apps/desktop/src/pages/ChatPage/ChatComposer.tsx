@@ -46,7 +46,11 @@ export function ChatComposer(props: {
   return (
     <footer className="forge-chat-footer border-t border-forge-platinum/10 bg-forge-black/95">
       <div className="forge-chat-content-width mx-auto w-full">
-        <div className="forge-chat-routing-strip mb-2 rounded-lg border border-forge-platinum/10 bg-black/30 p-2">
+        <div
+          className="forge-chat-routing-strip mb-2 rounded-lg border border-forge-platinum/10 bg-black/30 p-2"
+          role="status"
+          aria-live="polite"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="min-w-0 flex-1">
               <div className="text-[10px] uppercase tracking-[0.16em] text-forge-mist/60">
@@ -72,6 +76,7 @@ export function ChatComposer(props: {
               <button
                 type="button"
                 onClick={props.onRefreshChatModels}
+                aria-label="Refresh chat models"
                 className="min-w-0 rounded-lg border border-forge-platinum/10 bg-forge-platinum/5 px-3 py-1.5 text-[11px] text-forge-mist transition hover:border-forge-ember/30 hover:text-forge-ash"
               >
                 Refresh models
@@ -85,6 +90,7 @@ export function ChatComposer(props: {
               <button
                 type="button"
                 onClick={() => props.onShowAdvancedChange((v) => !v)}
+                aria-expanded={props.showAdvanced}
                 className="forge-chat-action-btn border-forge-platinum/10 bg-transparent py-1 px-2.5 text-[11px]"
               >
                 {props.showAdvanced ? "Hide advanced" : "Advanced"}
@@ -230,6 +236,7 @@ export function ChatComposer(props: {
           <div className="mb-2 flex flex-wrap gap-2">
             <button
               type="button"
+              aria-label="Prepare terminal command"
               onClick={() => {
                 props.onInspectorModeChange("terminal");
                 props.onDraftChange((prev) => prev || "run ");
@@ -241,6 +248,7 @@ export function ChatComposer(props: {
             </button>
             <button
               type="button"
+              aria-label="Prepare web search"
               onClick={() => {
                 props.onInspectorModeChange("browser");
                 props.onDraftChange((prev) => prev || "search the web for ");
@@ -252,6 +260,7 @@ export function ChatComposer(props: {
             </button>
             <button
               type="button"
+              aria-label="Prepare browser command"
               onClick={() => {
                 props.onInspectorModeChange("browser");
                 props.onDraftChange((prev) => prev || "open browser https://");
@@ -284,6 +293,7 @@ export function ChatComposer(props: {
             <input
               ref={props.fileInputRef}
               type="file"
+              aria-label="Attach chat files"
               className="hidden"
               multiple
               onChange={(e) => props.onUploadSelectedFiles(e.target.files)}
@@ -294,6 +304,7 @@ export function ChatComposer(props: {
                 type="button"
                 onClick={() => props.fileInputRef.current?.click()}
                 disabled={props.busy || props.uploading}
+                aria-label="Attach files"
                 className="forge-chat-action-btn bg-black/35"
               >
                 {props.uploading ? "Uploading…" : "Attach"}
@@ -301,6 +312,7 @@ export function ChatComposer(props: {
               <button
                 type="button"
                 onClick={props.onSend}
+                aria-label="Send chat message"
                 disabled={
                   props.busy ||
                   (!props.draft.trim() && props.pendingAttachments.length === 0)

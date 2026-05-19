@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { HumanDataView } from "../components/HumanDataView";
+import { Toast } from "../components/Toast";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -280,14 +281,14 @@ export function ApprovalsPage() {
           </div>
         </div>
         {err ? (
-          <div className="m-4 rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
+          <Toast tone="danger" className="m-4">
             {err}
-          </div>
+          </Toast>
         ) : null}
         {decisionNotice ? (
-          <div className="m-4 rounded border border-amber-300/30 bg-amber-300/10 p-3 text-sm text-forge-ash">
+          <Toast tone="warning" className="m-4">
             {decisionNotice}
-          </div>
+          </Toast>
         ) : null}
       </section>
 
@@ -316,12 +317,16 @@ export function ApprovalsPage() {
               return (
                 <article
                   key={r.id}
+                  aria-labelledby={`approval-request-${r.id}`}
                   className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_18rem]"
                 >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-forge-ash">
+                      <div
+                        id={`approval-request-${r.id}`}
+                        className="truncate text-sm font-semibold text-forge-ash"
+                      >
                         Request #{r.id}
                       </div>
                       <div className="mt-1 text-xs text-forge-mist/70">
@@ -390,7 +395,11 @@ export function ApprovalsPage() {
                     <div className="grid gap-2">
                       {nonPublicApproval ? (
                         <>
-                          <PrimaryButton className="w-full" disabled>
+                          <PrimaryButton
+                            className="w-full"
+                            disabled
+                            aria-label={`Non-public approval request ${r.id}`}
+                          >
                             Non-public approval
                           </PrimaryButton>
                           <div className="rounded border border-amber-300/25 bg-amber-300/10 p-2 text-xs leading-5 text-forge-mist">
@@ -406,6 +415,7 @@ export function ApprovalsPage() {
                           <PrimaryButton
                             className="w-full"
                             disabled={decisionBusyById[r.id]}
+                            aria-label={`Approve request ${r.id}`}
                             onClick={() => void decideApproval(r.id, "approve")}
                           >
                             Approve
@@ -415,6 +425,7 @@ export function ApprovalsPage() {
                       <GhostButton
                         className="w-full"
                         disabled={decisionBusyById[r.id]}
+                        aria-label={`Deny request ${r.id}`}
                         onClick={() => void decideApproval(r.id, "deny")}
                       >
                         Deny

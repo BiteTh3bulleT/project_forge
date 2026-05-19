@@ -3,20 +3,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AutomationPage } from "./AutomationPage";
 
-const mocks = vi.hoisted(() => ({
-  listRules: vi.fn(),
+const apiMocks = vi.hoisted(() => ({
   history: vi.fn(),
-  saveRule: vi.fn(),
+  listRules: vi.fn(),
   runRule: vi.fn(),
+  saveRule: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
   api: {
     automation: {
-      listRules: mocks.listRules,
-      history: mocks.history,
-      saveRule: mocks.saveRule,
-      runRule: mocks.runRule,
+      history: apiMocks.history,
+      listRules: apiMocks.listRules,
+      runRule: apiMocks.runRule,
+      saveRule: apiMocks.saveRule,
     },
   },
 }));
@@ -34,17 +34,27 @@ const rule = {
   dryRunDefault: true,
 };
 
-describe("AutomationPage mutation errors", () => {
+describe("AutomationPage", () => {
   beforeEach(() => {
-    for (const mock of Object.values(mocks)) {
-      mock.mockReset();
-    }
-    mocks.listRules.mockResolvedValue({ rules: [rule] });
-    mocks.history.mockResolvedValue({ history: [] });
+    vi.clearAllMocks();
+  });
+
+  it("renders empty automation rule and history states", async () => {
+    apiMocks.listRules.mockResolvedValueOnce({ rules: [] });
+    apiMocks.history.mockResolvedValueOnce({ history: [] });
+
+    render(<AutomationPage />);
+
+    expect(await screen.findByText("No automation rules yet.")).toBeTruthy();
+    expect(screen.getByText("No history rows yet.")).toBeTruthy();
+    expect(apiMocks.listRules).toHaveBeenCalledWith({ limit: 200 });
+    expect(apiMocks.history).toHaveBeenCalledWith(150);
   });
 
   it("renders selected rule run errors", async () => {
-    mocks.runRule.mockRejectedValueOnce(new Error("automation run denied"));
+    apiMocks.listRules.mockResolvedValue({ rules: [rule] });
+    apiMocks.history.mockResolvedValue({ history: [] });
+    apiMocks.runRule.mockRejectedValueOnce(new Error("automation run denied"));
 
     render(<AutomationPage />);
 

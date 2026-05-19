@@ -1,8 +1,10 @@
 import type { ProjectContextRecord } from "@forge/shared";
 import { GhostButton, PrimaryButton } from "@forge/ui";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 
+import { AsyncState } from "../components/AsyncState";
 import { HumanDataView } from "../components/HumanDataView";
+import { OpsPanel } from "../components/OpsPanel";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -56,7 +58,7 @@ export function ProjectContextPage() {
         </div>
       </header>
 
-      <Panel
+      <OpsPanel
         title="Project Context"
         subtitle="Normalize source context into versioned FORGE records and durable agent guidance files."
       >
@@ -129,24 +131,24 @@ export function ProjectContextPage() {
           </GhostButton>
         </div>
         {err ? (
-          <div className="mt-4 rounded border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
-            {err}
+          <div className="mt-4">
+            <AsyncState error={err} />
           </div>
         ) : null}
-      </Panel>
+      </OpsPanel>
 
       {!record ? (
-        <Panel
+        <OpsPanel
           title="No normalized context"
           subtitle="Run an import to materialize project guidance."
         >
           <div className="text-sm text-forge-mist">
             No project context record exists yet.
           </div>
-        </Panel>
+        </OpsPanel>
       ) : (
         <>
-          <Panel
+          <OpsPanel
             title="Latest Record"
             subtitle={`Record ${record.id} · version ${record.contextVersion} · generated ${formatTime(record.generatedAtMs)}`}
           >
@@ -179,55 +181,27 @@ export function ProjectContextPage() {
                 </div>
               </div>
             </div>
-          </Panel>
+          </OpsPanel>
 
-          <Panel
+          <OpsPanel
             title="Normalized Summary"
             subtitle="Readable digest extracted from context source."
           >
             <div className="max-h-[360px] overflow-auto rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
               <HumanDataView value={record.normalizedSummary} />
             </div>
-          </Panel>
+          </OpsPanel>
 
-          <Panel
+          <OpsPanel
             title="Generated Briefing"
             subtitle="FORGE-owned durable briefing used in packet generation and handoffs."
           >
             <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap rounded border border-white/10 bg-black/30 p-3 text-[11px] text-forge-mist">
               {record.briefingMarkdown}
             </pre>
-          </Panel>
+          </OpsPanel>
         </>
       )}
     </div>
-  );
-}
-
-function Panel(props: {
-  title: string;
-  subtitle?: string;
-  actions?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <section className="forge-ops-panel">
-      <div className="forge-ops-panel__head">
-        <div>
-          <div className="forge-ops-title">{props.title}</div>
-          {props.subtitle ? (
-            <div className="mt-1 text-xs text-forge-mist/65">
-              {props.subtitle}
-            </div>
-          ) : null}
-        </div>
-        {props.actions ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {props.actions}
-          </div>
-        ) : null}
-      </div>
-      <div className="forge-ops-panel__body">{props.children}</div>
-    </section>
   );
 }

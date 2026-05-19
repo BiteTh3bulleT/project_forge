@@ -28,6 +28,8 @@ let
         export FORGE_SHELL_MODEL_MUTATION=false
         export FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false
         export FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false
+        export FORGE_RENDER_PROFILE="''${FORGE_RENDER_PROFILE:-vm-safe}"
+        export VITE_FORGE_RENDER_PROFILE="''${VITE_FORGE_RENDER_PROFILE:-$FORGE_RENDER_PROFILE}"
         export FORGE_SHELL_DISPLAY_BACKEND=wayland
         export FORGE_SHELL_COMPOSITOR=labwc
         export XDG_SESSION_TYPE=wayland

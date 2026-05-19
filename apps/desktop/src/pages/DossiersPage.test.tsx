@@ -4,50 +4,50 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DossiersPage } from "./DossiersPage";
 
-const mocks = vi.hoisted(() => ({
-  dossiersList: vi.fn(),
+const apiMocks = vi.hoisted(() => ({
+  createDossier: vi.fn(),
   dossierDetail: vi.fn(),
-  dossierCreate: vi.fn(),
-  dossierGenerateBrief: vi.fn(),
-  sourcesList: vi.fn(),
-  listPresets: vi.fn(),
+  generateBrief: vi.fn(),
   getDossierProfile: vi.fn(),
+  listAutomationRules: vi.fn(),
+  listDossiers: vi.fn(),
+  listPresets: vi.fn(),
+  listReviews: vi.fn(),
+  listSources: vi.fn(),
+  listStrategies: vi.fn(),
   saveDossierProfile: vi.fn(),
-  strategiesList: vi.fn(),
-  listRules: vi.fn(),
-  reviewsList: vi.fn(),
   dossierView: vi.fn(),
   dossierVSASummary: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
   api: {
-    dossiers: {
-      list: mocks.dossiersList,
-      detail: mocks.dossierDetail,
-      create: mocks.dossierCreate,
-      generateBrief: mocks.dossierGenerateBrief,
-    },
-    sources: {
-      list: mocks.sourcesList,
-    },
-    policy: {
-      listPresets: mocks.listPresets,
-      getDossierProfile: mocks.getDossierProfile,
-      saveDossierProfile: mocks.saveDossierProfile,
-    },
-    strategies: {
-      list: mocks.strategiesList,
-    },
     automation: {
-      listRules: mocks.listRules,
+      listRules: apiMocks.listAutomationRules,
     },
-    reviews: {
-      list: mocks.reviewsList,
+    dossiers: {
+      create: apiMocks.createDossier,
+      detail: apiMocks.dossierDetail,
+      generateBrief: apiMocks.generateBrief,
+      list: apiMocks.listDossiers,
     },
     memory: {
-      dossierView: mocks.dossierView,
-      dossierVSASummary: mocks.dossierVSASummary,
+      dossierView: apiMocks.dossierView,
+      dossierVSASummary: apiMocks.dossierVSASummary,
+    },
+    policy: {
+      getDossierProfile: apiMocks.getDossierProfile,
+      listPresets: apiMocks.listPresets,
+      saveDossierProfile: apiMocks.saveDossierProfile,
+    },
+    reviews: {
+      list: apiMocks.listReviews,
+    },
+    sources: {
+      list: apiMocks.listSources,
+    },
+    strategies: {
+      list: apiMocks.listStrategies,
     },
   },
 }));
@@ -69,19 +69,44 @@ const dossier = {
 describe("DossiersPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.dossierCreate.mockResolvedValue({ dossier });
-    mocks.dossierGenerateBrief.mockResolvedValue({});
-    mocks.saveDossierProfile.mockResolvedValue({ profile: null });
-    mocks.dossierVSASummary.mockResolvedValue({ summary: null });
+    apiMocks.createDossier.mockResolvedValue({ dossier });
+    apiMocks.generateBrief.mockResolvedValue({});
+    apiMocks.saveDossierProfile.mockResolvedValue({ profile: null });
+    apiMocks.dossierVSASummary.mockResolvedValue({ summary: null });
+  });
+
+  it("renders empty dossier list and detail states", async () => {
+    apiMocks.listDossiers.mockResolvedValueOnce({ dossiers: [] });
+    apiMocks.listSources.mockResolvedValueOnce({ sources: [] });
+    apiMocks.listPresets.mockResolvedValueOnce({ presets: [] });
+    apiMocks.listStrategies.mockResolvedValueOnce({ strategies: [] });
+    apiMocks.listAutomationRules.mockResolvedValueOnce({ rules: [] });
+    apiMocks.listReviews.mockResolvedValueOnce({ reviews: [] });
+
+    render(
+      <MemoryRouter>
+        <DossiersPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("No dossiers yet.")).toBeTruthy();
+    expect(screen.getByText("Select a dossier to inspect details.")).toBeTruthy();
+    expect(screen.getByText("Select a dossier first.")).toBeTruthy();
+    expect(apiMocks.listDossiers).toHaveBeenCalledWith(180);
+    expect(apiMocks.listSources).toHaveBeenCalledOnce();
+    expect(apiMocks.listPresets).toHaveBeenCalledWith(80);
+    expect(apiMocks.listStrategies).toHaveBeenCalledWith({ limit: 220 });
+    expect(apiMocks.listAutomationRules).toHaveBeenCalledWith({ limit: 220 });
+    expect(apiMocks.listReviews).toHaveBeenCalledWith({ limit: 260 });
   });
 
   it("renders when list endpoints serialize empty arrays as null", async () => {
-    mocks.dossiersList.mockResolvedValue({ dossiers: null });
-    mocks.sourcesList.mockResolvedValue({ sources: null });
-    mocks.listPresets.mockResolvedValue({ presets: null });
-    mocks.strategiesList.mockResolvedValue({ strategies: null });
-    mocks.listRules.mockResolvedValue({ rules: null });
-    mocks.reviewsList.mockResolvedValue({ reviews: null });
+    apiMocks.listDossiers.mockResolvedValue({ dossiers: null });
+    apiMocks.listSources.mockResolvedValue({ sources: null });
+    apiMocks.listPresets.mockResolvedValue({ presets: null });
+    apiMocks.listStrategies.mockResolvedValue({ strategies: null });
+    apiMocks.listAutomationRules.mockResolvedValue({ rules: null });
+    apiMocks.listReviews.mockResolvedValue({ reviews: null });
 
     render(
       <MemoryRouter initialEntries={["/dossiers"]}>
@@ -94,13 +119,13 @@ describe("DossiersPage", () => {
   });
 
   it("renders dossier detail when profile and memory collections are null", async () => {
-    mocks.dossiersList.mockResolvedValue({ dossiers: [dossier] });
-    mocks.sourcesList.mockResolvedValue({ sources: null });
-    mocks.listPresets.mockResolvedValue({ presets: null });
-    mocks.strategiesList.mockResolvedValue({ strategies: null });
-    mocks.listRules.mockResolvedValue({ rules: null });
-    mocks.reviewsList.mockResolvedValue({ reviews: null });
-    mocks.dossierDetail.mockResolvedValue({
+    apiMocks.listDossiers.mockResolvedValue({ dossiers: [dossier] });
+    apiMocks.listSources.mockResolvedValue({ sources: null });
+    apiMocks.listPresets.mockResolvedValue({ presets: null });
+    apiMocks.listStrategies.mockResolvedValue({ strategies: null });
+    apiMocks.listAutomationRules.mockResolvedValue({ rules: null });
+    apiMocks.listReviews.mockResolvedValue({ reviews: null });
+    apiMocks.dossierDetail.mockResolvedValue({
       detail: {
         dossier,
         sources: null,
@@ -109,7 +134,7 @@ describe("DossiersPage", () => {
         vsaSummary: null,
       },
     });
-    mocks.getDossierProfile.mockResolvedValue({
+    apiMocks.getDossierProfile.mockResolvedValue({
       profile: {
         dossierId: dossier.id,
         updatedAtMs: 1_800_000_002_000,
@@ -123,7 +148,7 @@ describe("DossiersPage", () => {
         automationBindings: null,
       },
     });
-    mocks.dossierView.mockResolvedValue({
+    apiMocks.dossierView.mockResolvedValue({
       view: {
         dossierId: dossier.id,
         observationCount: 0,

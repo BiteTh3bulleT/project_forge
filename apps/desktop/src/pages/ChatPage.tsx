@@ -1342,6 +1342,10 @@ export function ChatPage() {
             <div
               ref={messagesScrollRef}
               className="forge-chat-messages forge-chat-scroll min-h-0 flex-1 overflow-y-auto px-5 py-6"
+              role="log"
+              aria-label="Chat messages"
+              aria-live="polite"
+              aria-relevant="additions text"
             >
               <div className="forge-chat-message-stack forge-chat-content-width mx-auto flex w-full flex-col gap-5">
                 {active.messages.length === 0 ? (

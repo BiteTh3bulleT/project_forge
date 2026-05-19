@@ -5,10 +5,14 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+
+	"forge/projectforge/services/core/internal/config"
+	"forge/projectforge/services/core/internal/store"
 )
 
 func TestWorkspaceJSONHandlersRejectOversizeRequestBodies(t *testing.T) {
@@ -90,6 +94,41 @@ func TestWorkspaceJSONHandlersRejectOversizeRequestBodies(t *testing.T) {
 				t.Fatalf("expected too-large response, got %q", rr.Body.String())
 			}
 		})
+	}
+}
+
+func TestChatMessagePostRouteRejectsOversizeRequestBody(t *testing.T) {
+	t.Parallel()
+
+	dataDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: t.TempDir()})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+
+	thread, err := srv.chat.CreateThread(context.Background(), "route body limit", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+
+	body := `{"content":"` + strings.Repeat("a", workspaceJSONRequestBodyLimit+1) + `"}`
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages",
+		strings.NewReader(body),
+	)
+	rr := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status=%d want=%d body=%s", rr.Code, http.StatusRequestEntityTooLarge, rr.Body.String())
+	}
+	if !strings.Contains(strings.ToLower(rr.Body.String()), "too large") {
+		t.Fatalf("expected too-large response, got %q", rr.Body.String())
 	}
 }
 

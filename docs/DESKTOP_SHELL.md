@@ -96,6 +96,28 @@ executes focus/minimize/maximize/fullscreen/close actions against active
 registered windows. The frontend taskbar is a consumer of that registry; it no
 longer treats raw polling output as the lifecycle owner.
 
+## Phase G8 Native App Lifecycle
+
+Phase G8 records the desktop shell as `DESKTOP_SHELL_POLISH / OPERATOR_UI_AUTHORITY / LABWC_SUBSTRATE_PRESERVED / NO_HOST_MUTATION / NO_FORGE_K_AUTHORITY_EXPANSION`.
+
+The shell now handles native launch lifecycle edges explicitly:
+
+- refused native launches (`launched:false`) report the backend message and do not create taskbar placeholders
+- duplicate launch requests for the same native app are blocked while a launch is pending
+- pending native placeholders expire if no matching compositor window appears within 30 seconds
+- compositor-reported native windows remain keyed by compositor window id, so multiple native windows can be represented separately
+- bounded native action failures are visible to the operator instead of silently returning
+
+Native taskbar left-click requests focus/restore for inactive or minimized native windows and minimize for focused non-minimized native windows. Middle-click requests bounded close. Right-click exposes bounded focus/minimize/maximize/fullscreen/close requests.
+
+The compositor bridge does not yet report per-window action capability metadata. Until it does, unsupported native actions fail visibly and safely instead of being hidden with precise capability-aware UI.
+
+Current G8 evidence lives in:
+
+- `docs/reports/phase_g8_desktop_shell_verification.md`
+- `docs/status/phase_g8_desktop_shell_verification.md`
+- `docs/runbooks/desktop_shell_operator_smoke_test.md`
+
 ## Monitor Model
 
 FORGE uses the real Tauri monitor list.

@@ -122,11 +122,39 @@ func (s *Service) EnsureDefaults(ctx context.Context) error {
 		},
 	}
 	for _, r := range defaults {
-		if _, err := s.SaveRule(ctx, r); err != nil {
+		if err := s.ensureDefaultRule(ctx, r); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *Service) ensureDefaultRule(ctx context.Context, req SaveRuleRequest) error {
+	name := strings.TrimSpace(req.Name)
+	trigger := strings.TrimSpace(req.Trigger)
+	if name == "" || trigger == "" {
+		return fmt.Errorf("name and trigger are required")
+	}
+	condition, err := marshalRulePayload("condition", req.Condition)
+	if err != nil {
+		return err
+	}
+	action, err := marshalRulePayload("action", req.Action)
+	if err != nil {
+		return err
+	}
+	scope, err := marshalRulePayload("scope", req.Scope)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UnixMilli()
+	_, err = s.db.ExecContext(ctx, `
+INSERT INTO automation_rules(created_at, updated_at, name, trigger, condition_json, action_json, scope_json, enabled, dry_run_default)
+VALUES(?,?,?,?,?,?,?,?,?)
+ON CONFLICT(name) DO NOTHING`,
+		now, now, name, trigger, string(condition), string(action), string(scope), boolToInt(req.Enabled), boolToInt(req.DryRunDefault),
+	)
+	return err
 }
 
 func (s *Service) SaveRule(ctx context.Context, req SaveRuleRequest) (*Rule, error) {
@@ -191,7 +219,7 @@ FROM automation_rules`
 	if enabledOnly {
 		query += ` WHERE enabled = 1`
 	}
-	query += ` ORDER BY updated_at DESC LIMIT ?`
+	query += ` ORDER BY updated_at DESC, id DESC LIMIT ?`
 	args = append(args, limit)
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -266,7 +294,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest, exec Executor) (*RunR
 		"executed": false,
 	}
 
-	matched := strings.EqualFold(trigger, rule.Trigger) && rule.Enabled
+	matched := strings.EqualFold(trigger, rule.Trigger) && rule.Enabled && conditionMatches(rule.Condition, req.Context)
 	preview["matched"] = matched
 	dryRun := rule.DryRunDefault
 	if req.DryRun != nil {
@@ -347,6 +375,43 @@ func nonNilMap(v map[string]any) map[string]any {
 		return map[string]any{}
 	}
 	return v
+}
+
+func conditionMatches(raw json.RawMessage, ctx map[string]any) bool {
+	condition := map[string]any{}
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &condition); err != nil {
+			return false
+		}
+	}
+	if len(condition) == 0 {
+		return true
+	}
+	if v, ok := condition["always"].(bool); ok && !v {
+		return false
+	}
+	if want, ok := stringValue(condition["source"]); ok {
+		got, ok := stringValue(nonNilMap(ctx)["source"])
+		if !ok || got != want {
+			return false
+		}
+	}
+	if needle, ok := stringValue(condition["pathContains"]); ok {
+		path, ok := stringValue(nonNilMap(ctx)["path"])
+		if !ok || !strings.Contains(path, needle) {
+			return false
+		}
+	}
+	return true
+}
+
+func stringValue(v any) (string, bool) {
+	s, ok := v.(string)
+	if !ok {
+		return "", false
+	}
+	s = strings.TrimSpace(s)
+	return s, s != ""
 }
 
 func marshalRulePayload(label string, payload map[string]any) ([]byte, error) {

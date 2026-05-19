@@ -175,6 +175,60 @@ describe("desktop window store", () => {
     ]);
   });
 
+  it("updates geometry live without persisting until commit", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-12T16:03:30.000Z"));
+    const { useDesktopWindowStore } = await import("./desktopWindowStore");
+    useDesktopWindowStore.setState({
+      windows: [
+        {
+          id: "drag-window",
+          toolId: "chat",
+          hostLabel: "main",
+          monitorId: null,
+          x: 120,
+          y: 92,
+          width: 700,
+          height: 420,
+          z: 1,
+          minimized: false,
+          maximized: false,
+          tauri: false,
+          createdAtMs: 1778601600000,
+          updatedAtMs: 1778601600000,
+        },
+      ],
+      focusedId: "drag-window",
+    });
+    window.localStorage.clear();
+
+    useDesktopWindowStore.getState().moveLive("drag-window", 140, 118);
+    useDesktopWindowStore.getState().resizeLive("drag-window", 700, 420);
+
+    expect(useDesktopWindowStore.getState().windows[0]).toMatchObject({
+      x: 140,
+      y: 118,
+      width: 700,
+      height: 420,
+    });
+    expect(window.localStorage.getItem("forge.os.windows.v1")).toBeNull();
+
+    useDesktopWindowStore.getState().commitGeometry("drag-window");
+
+    expect(
+      JSON.parse(window.localStorage.getItem("forge.os.windows.v1")!),
+    ).toEqual([
+      expect.objectContaining({
+        id: "drag-window",
+        x: 140,
+        y: 118,
+        width: 700,
+        height: 420,
+        updatedAtMs: 1778601810000,
+      }),
+    ]);
+  });
+
   it("keeps existing same-tool windows scoped per host", async () => {
     const { useDesktopWindowStore } = await import("./desktopWindowStore");
     useDesktopWindowStore.setState({

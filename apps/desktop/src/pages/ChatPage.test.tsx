@@ -187,6 +187,9 @@ describe("ChatPage cross-session memory recall", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "New chat" }));
     expect(await screen.findByText("Ready for the first message")).toBeTruthy();
+    expect(
+      screen.getByRole("log", { name: "Chat messages" }),
+    ).toBeTruthy();
 
     firstSession.unmount();
 
@@ -200,7 +203,7 @@ describe("ChatPage cross-session memory recall", () => {
     fireEvent.change(composer, {
       target: { value: "What should you remember after reopen?" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send chat message" }));
 
     await screen.findByText(/What should you remember after reopen\?/);
     expect(
@@ -256,7 +259,9 @@ describe("ChatPage cross-session memory recall", () => {
 
     const composer = await screen.findByLabelText("Chat message");
     fireEvent.change(composer, { target: { value: "stream this" } });
-    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Send chat message" }),
+    );
 
     fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
 

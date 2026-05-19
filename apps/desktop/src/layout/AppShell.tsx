@@ -1,5 +1,5 @@
 import type { DashboardSummary } from "@forge/shared";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { api } from "../lib/api";
@@ -68,6 +68,7 @@ type RunningOperatorApp = {
   app: OperatorApp;
   pid: number | null;
   launchedAtMs: number;
+  ignoredWindowIds: string[];
 };
 type ShellAuditRecord = {
   id?: number | string;
@@ -105,6 +106,7 @@ const EMPTY_TELEMETRY: ShellTelemetry = {
   contextSnapshots: [],
   error: null,
 };
+const NATIVE_LAUNCH_PENDING_TTL_MS = 30_000;
 
 function getWorkspaceLabel(workspaceDir: string | null | undefined) {
   if (!workspaceDir) return "Workspace unavailable";
@@ -192,6 +194,12 @@ function activeLoopSummary(status: Record<string, unknown> | null) {
     }
   }
   return "no active loops";
+}
+
+function activeLinuxWindowSnapshots(
+  windows: LinuxWindowSnapshot[],
+): LinuxWindowSnapshot[] {
+  return windows.filter((window_) => window_.lifecycle !== "closed");
 }
 
 function contextSnapshotLabel(
@@ -296,6 +304,7 @@ function linuxWindowResolvesOperatorLaunch(
   item: RunningOperatorApp,
   window_: LinuxWindowSnapshot,
 ) {
+  if (item.ignoredWindowIds.includes(window_.id)) return false;
   if (!linuxWindowMatchesOperatorApp(window_, item.app)) return false;
   const seenAtMs = window_.firstSeenMs ?? window_.lastSeenMs;
   return seenAtMs == null || seenAtMs >= item.launchedAtMs - 1500;
@@ -333,9 +342,10 @@ export function AppShell(props: AppShellProps) {
   const restore = useDesktopWindowStore((s) => s.restore);
   const focus = useDesktopWindowStore((s) => s.focus);
   const toggleMaximize = useDesktopWindowStore((s) => s.toggleMaximize);
-  const move = useDesktopWindowStore((s) => s.move);
-  const moveToHost = useDesktopWindowStore((s) => s.moveToHost);
-  const resize = useDesktopWindowStore((s) => s.resize);
+  const moveLive = useDesktopWindowStore((s) => s.moveLive);
+  const moveToHostLive = useDesktopWindowStore((s) => s.moveToHostLive);
+  const resizeLive = useDesktopWindowStore((s) => s.resizeLive);
+  const commitGeometry = useDesktopWindowStore((s) => s.commitGeometry);
   const reconcileHostAvailability = useDesktopWindowStore(
     (s) => s.reconcileHostAvailability,
   );
@@ -355,6 +365,7 @@ export function AppShell(props: AppShellProps) {
   const [runningOperatorApps, setRunningOperatorApps] = useState<
     RunningOperatorApp[]
   >([]);
+  const launchingOperatorAppIdsRef = useRef<Set<string>>(new Set());
   const [linuxWindows, setLinuxWindows] = useState<LinuxWindowSnapshot[]>([]);
   const [telemetry, setTelemetry] = useState<ShellTelemetry>(EMPTY_TELEMETRY);
   const [statusDetailsOpen, setStatusDetailsOpen] = useState(false);
@@ -544,7 +555,7 @@ export function AppShell(props: AppShellProps) {
     async function loadLinuxWindows() {
       const nextWindows = await listLinuxWindows();
       if (cancelled) return;
-      setLinuxWindows(nextWindows);
+      setLinuxWindows(activeLinuxWindowSnapshots(nextWindows));
     }
     void loadLinuxWindows();
     const id = window.setInterval(() => void loadLinuxWindows(), 1500);
@@ -658,13 +669,29 @@ export function AppShell(props: AppShellProps) {
 
   async function launchNativeApp(app: OperatorApp) {
     setStartOpen(false);
+    if (
+      launchingOperatorAppIdsRef.current.has(app.id) ||
+      runningOperatorApps.some((item) => item.app.id === app.id)
+    ) {
+      setOperatorAppStatus(`${app.label} launch is already pending.`);
+      return;
+    }
+    launchingOperatorAppIdsRef.current.add(app.id);
+    const ignoredWindowIds = linuxWindows
+      .filter((window_) => linuxWindowMatchesOperatorApp(window_, app))
+      .map((window_) => window_.id);
     try {
       const result = await launchOperatorApp(app.id);
+      if (!result.launched) {
+        setOperatorAppStatus(result.message);
+        return;
+      }
       setRunningOperatorApps((items) => {
         const next: RunningOperatorApp = {
           app,
           pid: result.pid ?? null,
           launchedAtMs: Date.now(),
+          ignoredWindowIds,
         };
         return [next, ...items.filter((item) => item.app.id !== app.id)];
       });
@@ -677,6 +704,8 @@ export function AppShell(props: AppShellProps) {
       setOperatorAppStatus(
         error instanceof Error ? error.message : String(error),
       );
+    } finally {
+      launchingOperatorAppIdsRef.current.delete(app.id);
     }
   }
 
@@ -688,9 +717,14 @@ export function AppShell(props: AppShellProps) {
       action === "focus"
         ? await focusLinuxWindow(window_.id)
         : await controlLinuxWindow(window_.id, action);
-    if (!ok) return;
+    if (!ok) {
+      setOperatorAppStatus(
+        `${window_.title} did not accept the ${action} request.`,
+      );
+      return;
+    }
     const nextWindows = await listLinuxWindows();
-    setLinuxWindows(nextWindows);
+    setLinuxWindows(activeLinuxWindowSnapshots(nextWindows));
   }
 
   function resolveTransferredWindow(
@@ -734,7 +768,7 @@ export function AppShell(props: AppShellProps) {
               }),
             )
           : { x: transferred.x, y: transferred.y };
-      moveToHost(
+      moveToHostLive(
         win.id,
         transferred.hostLabel,
         targetPlacement.x,
@@ -743,7 +777,7 @@ export function AppShell(props: AppShellProps) {
       );
       return;
     }
-    move(win.id, transferred.x, transferred.y);
+    moveLive(win.id, transferred.x, transferred.y);
   }
 
   function focusFromDock(window_: DesktopWindow) {
@@ -930,10 +964,51 @@ export function AppShell(props: AppShellProps) {
     );
   }, [linuxWindows]);
 
+  useEffect(() => {
+    const pending = runningOperatorApps.filter(
+      (item) =>
+        !linuxWindows.some((window_) =>
+          linuxWindowResolvesOperatorLaunch(item, window_),
+        ),
+    );
+    if (pending.length === 0) return;
+    const nextExpirationDelay = Math.max(
+      0,
+      Math.min(
+        ...pending.map(
+          (item) =>
+            NATIVE_LAUNCH_PENDING_TTL_MS - (Date.now() - item.launchedAtMs),
+        ),
+      ),
+    );
+    const timeout = window.setTimeout(() => {
+      const expiredLabels: string[] = [];
+      setRunningOperatorApps((items) =>
+        items.filter((item) => {
+          const resolved = linuxWindows.some((window_) =>
+            linuxWindowResolvesOperatorLaunch(item, window_),
+          );
+          if (resolved) return false;
+          const expired =
+            Date.now() - item.launchedAtMs >= NATIVE_LAUNCH_PENDING_TTL_MS;
+          if (expired) expiredLabels.push(item.app.label);
+          return !expired;
+        }),
+      );
+      if (expiredLabels.length > 0) {
+        setOperatorAppStatus(
+          `${expiredLabels[0]} launch did not report a compositor window.`,
+        );
+      }
+    }, nextExpirationDelay);
+    return () => window.clearTimeout(timeout);
+  }, [linuxWindows, runningOperatorApps]);
+
   const pendingOperatorApps = useMemo(
     () =>
       runningOperatorApps.filter(
         (item) =>
+          Date.now() - item.launchedAtMs < NATIVE_LAUNCH_PENDING_TTL_MS &&
           !linuxWindows.some((window_) =>
             linuxWindowResolvesOperatorLaunch(item, window_),
           ),
@@ -1026,7 +1101,9 @@ export function AppShell(props: AppShellProps) {
                   onClose={() => void closeWindow(win.id)}
                   onToggleMaximize={() => toggleMaximize(win.id)}
                   onMove={(x, y) => moveAcrossShellHosts(win, x, y)}
-                  onResize={(w, h) => resize(win.id, w, h)}
+                  onMoveCommit={() => commitGeometry(win.id)}
+                  onResize={(w, h) => resizeLive(win.id, w, h)}
+                  onResizeCommit={() => commitGeometry(win.id)}
                 />
               ))
             : null}
@@ -1079,7 +1156,9 @@ export function AppShell(props: AppShellProps) {
 
           {/* Hidden router-driven children keep route effects mounted for normal
               tool pages. Detail routes render above as focused shell windows. */}
-          {!detachedTauriShell && !routedDetailOpen ? (
+          {!detachedTauriShell &&
+          !routedDetailOpen &&
+          shellRenderedWindows.length === 0 ? (
             <div className="forge-os-router-sink" aria-hidden>
               {props.children}
             </div>
@@ -1342,7 +1421,14 @@ export function AppShell(props: AppShellProps) {
                 <button
                   key={window_.id}
                   type="button"
-                  onClick={() => void focusLinuxWindow(window_.id)}
+                  onClick={() =>
+                    void runNativeWindowAction(
+                      window_,
+                      window_.focused && !window_.minimized
+                        ? "minimize"
+                        : "focus",
+                    )
+                  }
                   onContextMenu={(event) => {
                     event.preventDefault();
                     setNativeContextMenu({

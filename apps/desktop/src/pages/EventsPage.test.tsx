@@ -3,23 +3,41 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EventsPage } from "./EventsPage";
 
-const mocks = vi.hoisted(() => ({
+const apiMocks = vi.hoisted(() => ({
   events: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
   api: {
-    events: mocks.events,
+    events: apiMocks.events,
   },
 }));
 
 describe("EventsPage", () => {
   beforeEach(() => {
-    mocks.events.mockReset();
+    vi.clearAllMocks();
+  });
+
+  it("renders events returned by the API", async () => {
+    apiMocks.events.mockResolvedValueOnce({
+      events: [
+        {
+          id: 1,
+          type: "forge.test.event",
+          createdAtMs: Date.UTC(2026, 4, 19, 12, 0, 0),
+          payload: { status: "ok" },
+        },
+      ],
+    });
+
+    render(<EventsPage />);
+
+    expect(await screen.findByText("forge.test.event")).toBeTruthy();
+    expect(apiMocks.events).toHaveBeenCalledWith(200);
   });
 
   it("renders an empty event stream when the API omits the events array", async () => {
-    mocks.events.mockResolvedValue({});
+    apiMocks.events.mockResolvedValue({});
 
     render(<EventsPage />);
 

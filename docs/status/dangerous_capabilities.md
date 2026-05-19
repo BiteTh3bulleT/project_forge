@@ -1,6 +1,6 @@
 # Dangerous Capability Inventory (Phase 5.99)
 
-Date: 2026-04-21
+Date: 2026-05-18
 Scope: preserve full taxonomy, enforce explicit executable posture
 
 ## Taxonomy preserved
@@ -17,8 +17,12 @@ dependencies return explicit runtime errors.
 - Runtime disable overrides are possible; registry status for many ids remains advisory and must be persisted through policy review workflow.
 
 ### 2) Stubbed/deferred defaults
-- None in the production default registry snapshot.
-- `stubbed` and `deferred` remain supported only as explicit override/status semantics.
+- No production default capability is `stubbed`.
+- Deferred defaults are explicit and include model-runtime work that is not directly executable through the gateway surface:
+  - `model.embed`
+  - `model.delete_file`
+  - `model.benchmark`
+- `deferred` returns deterministic unsupported behavior until a separate implementation/approval path is wired and tested.
 
 ### 3) Known approval-only
 High-risk mappings are explicitly `approval_only` in `activeMappings`, including (selection):
@@ -70,7 +74,8 @@ High-risk mappings are explicitly `approval_only` in `activeMappings`, including
 - `observability.read_logs` (medium)
 
 ### 6) Unknown status
-- Runtime-mutated capability statuses (if changed after registry initialization) are unknown in this report.
+- Runtime-mutated capability statuses are persisted as explicit overrides.
+- High-risk elevation is not treated as an unknown state: dangerous elevation requires approval metadata before persistence, and direct/stale status mutation paths cannot activate dangerous capabilities without that approval metadata.
 
 ### 7) Approval-only / configured dependency paths
 - High-risk capabilities resolve to real gateway tools but are not freely executable.
@@ -90,10 +95,11 @@ High-risk mappings are explicitly `approval_only` in `activeMappings`, including
 - High-risk elevation, including dangerous `approval_only -> active` and disabled/deferred/stubbed/deprecated -> active transitions, requires a matching approval request fingerprint before the override is persisted.
 - Safe lowering transitions such as `active -> approval_only`, `active -> disabled`, and `approval_only -> disabled` remain allowed without approval, but still persist actor, reason, previous/new status, transition risk, correlation id, trace id, and audit linkage.
 - Direct legacy/stale gateway status update calls cannot activate dangerous capabilities without approval metadata.
+- Default registry guards now verify that every `approval_only` capability evaluates to `needs_approval` before execution.
 
 ## Remaining hardening backlog
 
 1. Expand tests for capability-level workspace path boundaries and policy overrides.
 2. Keep retired non-capability mutation routes non-executable.
 3. Add more service-specific harness tests for configured dependency failures.
-4. Add operator UI affordances for the new approval-required capability status response.
+4. Add operator UI affordances for the approval-required capability status response.

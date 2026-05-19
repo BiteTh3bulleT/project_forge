@@ -1,6 +1,6 @@
 # FORGE Operator Desktop VM Runbook
 
-Status: Phase G6 native desktop runtime bring-up
+Status: Phase G8 native desktop runtime and operator shell UX bring-up
 
 Last verified: 2026-05-16 on VirtualBox VM `FORGE-OS` for the appliance-style
 FORGE shell loading/login path. Native graphical password login evidence is
@@ -8,6 +8,15 @@ pending for the canonical Nix VM target.
 
 In-repo evidence record:
 [docs/evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md](../evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md)
+
+Latest render evidence:
+[docs/evidence/vm_boot/2026-05-18-live-start/README.md](../evidence/vm_boot/2026-05-18-live-start/README.md)
+
+Phase G8 desktop shell verification:
+[docs/status/phase_g8_desktop_shell_verification.md](../status/phase_g8_desktop_shell_verification.md)
+
+Operator smoke checklist:
+[docs/runbooks/desktop_shell_operator_smoke_test.md](desktop_shell_operator_smoke_test.md)
 
 ## Purpose
 
@@ -56,6 +65,20 @@ toolbelt, `/forge` storage layout, local-only core binding, and safe shell
 flags. It is the preferred reproducible bring-up path. Manual ISO installation,
 VirtualBox shared-folder profiles, and direct TTY session launch are
 fallback/operator debugging paths.
+
+The VirtualBox/operator shell defaults to the low-cost render profile:
+
+```text
+FORGE_RENDER_PROFILE=vm-safe
+VITE_FORGE_RENDER_PROFILE=vm-safe
+```
+
+`vm-safe` is a frontend/rendering performance profile for the Tauri/WebKitGTK
+surface. It does not change FORGE authority, modelruntime behavior, gateway
+execution, approvals, memory writes, or FORGE-K live authority. It exists
+because pre-fix live-start evidence showed the VirtualBox/WebKit path could
+produce high CPU pressure and sluggish repaint behavior before effects were
+forced down.
 
 The canonical VM also starts `forge-core` with governed modelruntime enabled
 and `FORGE_MODEL_DEFAULT_BACKEND=ollama_compat`. This does not start Ollama or
@@ -201,6 +224,9 @@ Installed layout:
   (`WEBKIT_DISABLE_DMABUF_RENDERER=1`) because VirtualBox VMSVGA can expose a
   Wayland/dmabuf path that causes the Tauri shell to exit with a GTK protocol
   error.
+- The operator shell defaults to `FORGE_RENDER_PROFILE=vm-safe` to reduce the
+  WebKitGTK paint/compositing cost observed during the 2026-05-18 live-start
+  render investigation.
 - VM disk: `80G VBOX HARDDISK`.
 - `/dev/sda1`: 512 MiB FAT32 ESP, label `NIXBOOT`, mounted at `/boot`.
 - `/dev/sda2`: ext4, label `FORGEOS`, mounted at `/`.
@@ -259,6 +285,28 @@ If the compositor opens to a black screen with only a cursor, inspect the log
 for `Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display`.
 That indicates the WebKit dmabuf fallback is not active in the launched
 environment.
+
+## Render Profile Override
+
+Keep `vm-safe` enabled for normal VirtualBox operator work. To disable it for a
+diagnostic launch from a TTY:
+
+```bash
+FORGE_RENDER_PROFILE=default VITE_FORGE_RENDER_PROFILE=default forge-operator-session
+```
+
+The operator desktop profile builds the packaged shell with
+`renderProfile = "vm-safe"`. For a persistent non-VirtualBox or bare-metal
+profile, instantiate `nix/packages/forge-desktop-shell.nix` with:
+
+```nix
+renderProfile = "default";
+```
+
+Inside the shell, a stored operator preference can also override the packaged
+default by setting local storage key `forge.render.profile` to `default` and
+restarting the shell. Keep any override tied to hardware-specific evidence;
+the canonical VirtualBox/operator VM default remains `vm-safe`.
 
 ## Open Operator Tools
 

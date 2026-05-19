@@ -1,0 +1,483 @@
+PHASE CA1 — Full Codebase Integrity Audit
+
+You are working inside Project F.O.R.G.E.
+
+Do not output implementation code in chat.
+Write findings to files.
+Only make code changes if explicitly requested by the operator after the audit.
+In chat, summarize audit status, files created, validation commands run, and top findings only.
+
+Mission
+
+Perform a full codebase integrity audit of FORGE.
+
+The goal is to identify and document:
+
+duplicates
+partial implementations
+truncations
+corrupted files
+syntax/build errors
+placeholder code
+mock runtime behavior
+fake data
+stale files
+orphaned systems
+conflicting implementations
+dead code
+broken imports
+broken tests
+missing docs alignment
+unsafe TODOs
+unfinished features incorrectly marked complete
+
+This is an audit phase first.
+Do not refactor the codebase during this phase unless the operator explicitly requests a fix pass afterward.
+
+Phase Label
+
+PHASE CA1 — FULL_CODEBASE_INTEGRITY_AUDIT
+
+Status marker:
+
+AUDIT_ONLY / NO_RUNTIME_BEHAVIOR_CHANGE / NO_AUTHORITY_EXPANSION / NO_HOST_MUTATION / NO_FORGE_K_AUTHORITY_MIGRATION
+
+Mandatory Reading
+
+Read first:
+
+README.md
+AGENTS.md
+CODEX.md if present
+docs/onboarding.md
+docs/reviews/current_phase_status.md
+docs/status/current_authority_sources.md
+docs/status/implementation_matrix.md
+docs/status/placeholders_and_stubs.md
+docs/status/duplicate_systems.md
+docs/status/test_gap_analysis.md
+docs/status/current_baseline_gate.md
+docs/DESKTOP_SHELL.md
+docs/operations/forge_graphical_shell_session.md
+package.json
+apps/desktop/package.json
+services/core/go.mod
+apps/desktop/src-tauri/Cargo.toml
+flake.nix if present
+
+The repo’s AGENTS.md specifically says not to create duplicate runtime paths and to keep status sources aligned with current truth. Preserve that rule during the audit.
+
+Audit Output Files
+
+Create:
+
+docs/reviews/full_codebase_integrity_audit.md
+docs/reports/phase_ca1_full_codebase_integrity_audit.md
+docs/status/phase_ca1_full_codebase_integrity_audit.md
+
+If useful, also create:
+
+docs/reviews/full_codebase_integrity_findings.csv
+docs/reviews/full_codebase_integrity_fix_queue.md
+Audit Method
+
+Use a multi-pass audit.
+
+Pass 1 — Repo Inventory
+
+Map the repo structure.
+
+Identify:
+
+apps
+services
+packages
+scripts
+Nix files
+Tauri/Rust files
+Go core files
+frontend TypeScript/React files
+docs
+tests
+generated files
+archived/legacy files
+prompt packs
+worktree leftovers
+evidence folders
+
+Document what appears active, legacy, generated, test-only, simulator-only, or unknown.
+
+Pass 2 — Duplicate Detection
+
+Search for duplicate or conflicting implementations.
+
+Check for duplicate:
+
+API routes
+route handlers
+service startup paths
+gateway/tool execution paths
+memory write paths
+modelruntime paths
+approval paths
+auth/security middleware
+desktop shell stores
+taskbar/window/native-app registries
+terminal/file/browser launchers
+CSS blocks
+type definitions
+config loaders
+Nix modules/profiles
+scripts
+docs describing the same authority differently
+status reports with conflicting truth claims
+
+Classify duplicates as:
+
+intentional compatibility wrapper
+test fixture
+simulator-only
+legacy retained for provenance
+real duplicate requiring cleanup
+dangerous duplicate runtime path
+
+Do not delete anything during this audit.
+
+Pass 3 — Truncation and Corruption Scan
+
+Search for signs of truncated or corrupted files.
+
+Look for:
+
+files ending mid-sentence
+incomplete Markdown sections
+unclosed code fences
+unclosed JSON/YAML/TOML/Nix structures
+malformed imports
+broken JSX/TSX blocks
+broken Go/Rust syntax
+repeated pasted blocks
+merge conflict markers
+“truncated”
+“omitted”
+“rest of file”
+“continue here”
+“TODO: finish”
+placeholder ellipses in executable code
+dangling references to missing files
+
+Explicitly scan for:
+
+<<<<<<<
+=======
+TODO
+FIXME
+HACK
+STUB
+MOCK
+PLACEHOLDER
+DUMMY
+FAKE
+NOT_IMPLEMENTED
+panic("TODO")
+unimplemented!
+todo!
+throw new Error("not implemented")
+console.log used as runtime behavior
+lorem ipsum
+sample data
+hardcoded demo data
+
+Classify each finding by severity.
+
+Pass 4 — Placeholder, Mock, and Fake Runtime Audit
+
+Identify all placeholders, mocks, demo data, and fake behavior.
+
+Important distinction:
+
+Mocks are acceptable in:
+
+tests
+simulator-only packages
+fixture folders
+explicit demo docs
+
+Mocks are not acceptable in:
+
+live runtime paths
+production API routes
+desktop shell behavior
+gateway/tool execution
+approval decisions
+memory writes
+modelruntime production flows
+system status surfaces that claim real state
+desktop taskbar/native-app lifecycle state
+
+For every mock/placeholder finding, record:
+
+file path
+line/section
+whether it is test-only, simulator-only, docs-only, or runtime
+risk
+recommended action
+Pass 5 — Build and Static Validation
+
+Run the repo’s normal validation commands.
+
+Attempt:
+
+npm install if dependencies are missing and repo policy allows it
+npm test
+npm run lint
+npm run validate:js
+npm run validate:desktop
+npm run validate:local
+npm run build
+npm run build:core
+npm run build:desktop
+
+Also attempt focused checks where relevant:
+
+cd services/core && go test ./...
+cd services/core && go vet ./...
+npm -w @forge/desktop run test
+npm -w @forge/desktop run typecheck
+npm -w @forge/desktop run build
+cd apps/desktop/src-tauri && cargo test
+nix flake check if Nix is available
+nix build .#forge-core if Nix is available
+nix build .#forge-desktop-shell if Nix is available
+
+If a command cannot run due to environment limitations, record:
+
+command
+reason it could not run
+exact error
+whether this blocks confidence
+
+Do not mark blocked checks as passed.
+
+Pass 6 — Runtime Authority Boundary Audit
+
+Check for accidental authority expansion.
+
+Verify:
+
+FORGE-K simulator services are not used as live daemon authority unless explicitly documented and tested
+model output does not directly mutate canonical memory/state
+semantic writes go through Control Lane/syscall/journal paths
+gateway/tool execution does not bypass approval/audit systems
+desktop shell does not run direct host mutation commands
+shell UI does not expose systemctl, nixos-rebuild, reboot, shutdown, package install, model load/unload, or destructive cleanup controls
+memory/state/history separation remains intact
+simulator-only code is labeled and isolated
+
+Flag any live path that violates authority boundaries as Critical.
+
+Pass 7 — Frontend/Desktop Audit
+
+Audit apps/desktop.
+
+Check:
+
+duplicate stores
+duplicate window models
+duplicate taskbar/native app registries
+stale components
+dead routes
+broken route links
+fake system status cards
+fake model/runtime status
+placeholder panels
+broken launcher behavior
+terminal/file/browser launcher placeholders
+CSS duplication
+unused components
+console errors
+TypeScript errors
+broken tests
+hardcoded demo values
+hidden debug UI exposed by default
+clean boot behavior alignment with docs
+
+Pay special attention to:
+
+desktop shell
+taskbar
+Start/launcher
+native app lifecycle
+Tauri window manager
+System page
+modelruntime UI
+approvals UI
+memory UI
+Pass 8 — Core Service Audit
+
+Audit services/core.
+
+Check:
+
+duplicate route registrations
+duplicate service initialization
+duplicate gateway/tool paths
+duplicate modelruntime paths
+duplicate memory/retrieval paths
+stale legacy endpoints
+placeholder services
+mocks in live paths
+unimplemented handlers
+unsafe default config
+missing error handling
+panic/fatal paths in request handlers
+goroutine leaks
+shutdown gaps
+auth gaps
+approval bypasses
+audit gaps
+journal gaps
+storage migration inconsistencies
+Pass 9 — Docs Truth Alignment
+
+Audit docs for stale or conflicting claims.
+
+Check:
+
+README current truth
+current_phase_status.md
+implementation_matrix.md
+current_authority_sources.md
+DESKTOP_SHELL.md
+graphical shell runbooks
+security docs
+architecture docs
+ADRs
+old reviews/reports that may be mistaken as current authority
+
+Classify docs as:
+
+current authority
+historical evidence
+stale but retained
+conflicting
+needs supersession note
+should be moved/archive-labeled
+
+Do not delete historical evidence.
+Recommend supersession labels when needed.
+
+Pass 10 — Fix Queue
+
+Create a prioritized fix queue.
+
+Use severity:
+
+Critical — breaks build, corrupts runtime truth, unsafe authority bypass, live mock pretending to be real, data loss risk
+High — duplicate runtime path, stale endpoint, major broken UI path, failing core validation
+Medium — placeholder panel, dead code, stale docs, partial test coverage
+Low — cleanup, naming, comments, cosmetic duplication
+
+For each finding, include:
+
+ID
+severity
+category
+file path
+summary
+evidence
+impact
+recommended fix
+estimated difficulty
+whether safe for automated fix
+whether operator decision is needed
+Required Report Structure
+
+docs/reviews/full_codebase_integrity_audit.md must include:
+
+Executive Summary
+Audit Scope
+Commands Run
+Commands Failed or Skipped
+Build/Test Status
+Critical Findings
+High Findings
+Medium Findings
+Low Findings
+Duplicate Systems
+Placeholder / Mock / Fake Runtime Findings
+Truncation / Corruption Findings
+Dead Code / Orphan Findings
+Frontend/Desktop Findings
+Core Service Findings
+Nix/VM/Packaging Findings
+Docs Truth Alignment Findings
+Security/Authority Boundary Findings
+Recommended Fix Order
+Operator Decisions Needed
+Final Confidence Rating
+What Not To Do
+
+Do not make runtime behavior changes.
+
+Do not delete files.
+
+Do not “clean up” historical evidence.
+
+Do not collapse simulator-only and live runtime code.
+
+Do not mark mocks as bad when they are clearly test-only or simulator-only.
+
+Do not mark old docs as wrong without checking whether they are historical evidence.
+
+Do not trust comments over code.
+
+Do not trust docs over current implementation.
+
+Do not invent pass results.
+
+Do not mark skipped checks as passed.
+
+Do not silently fix issues during the audit.
+
+Do not add new features.
+
+Do not expand FORGE-K live authority.
+
+Do not add host mutation.
+
+Do not add direct system-control buttons.
+
+Do not output implementation code in chat.
+
+Completion Criteria
+
+CA1 is complete when:
+
+full audit report exists
+status file exists
+phase report exists
+validation commands were attempted or explicitly marked blocked
+duplicate systems are listed
+placeholders/mocks are classified
+truncation/corruption scan is documented
+build/test errors are recorded
+stale docs are identified
+fix queue is prioritized
+no runtime behavior was changed
+Final Response Format
+
+When finished, respond with:
+
+Summary
+Files created or updated
+Validation commands run
+Validation failures/skips
+Critical findings count
+High findings count
+Top 10 findings
+Recommended next phase
+
+Do not include implementation code in chat.
+
+END PROMPT

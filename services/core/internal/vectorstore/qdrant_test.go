@@ -116,10 +116,7 @@ func TestQdrantClientErrorResponseIsBoundedAndMarked(t *testing.T) {
 }
 
 func TestQdrantIntegrationEnvGated(t *testing.T) {
-	url := strings.TrimSpace(os.Getenv("FORGE_QDRANT_TEST_URL"))
-	if url == "" {
-		t.Skip("FORGE_QDRANT_TEST_URL not set")
-	}
+	url := requireIntegrationEnvOrSkip(t, "FORGE_QDRANT_TEST_URL")
 	client, err := NewQdrantClient(url, 3*time.Second)
 	if err != nil {
 		t.Fatalf("new qdrant client: %v", err)
@@ -156,4 +153,17 @@ func TestQdrantIntegrationEnvGated(t *testing.T) {
 	if err := client.DeleteVector(context.Background(), collection, pointID); err != nil {
 		t.Fatalf("delete vector: %v", err)
 	}
+}
+
+func requireIntegrationEnvOrSkip(t *testing.T, name string) string {
+	t.Helper()
+	value := strings.TrimSpace(os.Getenv(name))
+	if value != "" {
+		return value
+	}
+	if os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != "" {
+		t.Fatalf("%s must be set in CI for integration coverage", name)
+	}
+	t.Skipf("%s not set", name)
+	return ""
 }

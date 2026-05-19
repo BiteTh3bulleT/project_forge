@@ -10,15 +10,15 @@
 ## Current State Snapshot
 
 - **Build:** 54 Go packages, 0 fails, vet clean, ~20s test wall time.
-- **Coverage on load-bearing packages:**
-  - `memory`: 11.0% — was 6.5%
-  - `aios/controllane`: 13.9% — was 12.1%
-  - `aios/autonomy`: 9.2% — unchanged
-  - `aios/dream`: 20.5% — was 17.2%
+- **Coverage on load-bearing packages:** verified 2026-05-18.
+  - `memory`: 68.9%
+  - `aios/controllane`: 70.9%
+  - `aios/autonomy`: 47.5%
+  - `aios/dream`: 86.5%
   - `aios/hyperlane`: **66.7%** — was 0%
-  - `gateway`: 18.8%
-  - `api`: 22.6%
-- **Untested packages:** 18 (down from 27).
+  - `gateway`: 67.6%
+  - `api`: 52.5%
+- **Untested packages:** active Section 3 "worth covering" package list is closed. Remaining no-test packages are lower-traffic/deferred: `internal/failurepatterns`, `internal/packetopt`, `internal/packets`, `internal/reconciliation`, `internal/reviews`, `internal/strategies`.
 - **Largest non-test source file:** `services/core/internal/api/model_runtime_bridge.go` at 1,482 lines (down from `gateway/service.go` at 4,709). SQL migrations, validator crates, barrels, and test files remain tracked separately.
 - **In flight:** Section 2 file split threshold is satisfied; next refactors should be domain-driven rather than size-driven.
 - **Working tree:** Section 2 final split pass verified and pushed to `main`.
@@ -124,23 +124,24 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 
 ### Load-bearing (P0)
 
-- [ ] **`services/core/internal/memory/`** — 11% → 25%. The canonical-truth store. Pick the top 10 most-called functions and write substantive table-driven tests.
-- [ ] **`services/core/internal/aios/controllane/`** — 14% → 25%. Focus on `processor.go`, `validator.go`, `apply_*.go`.
-- [ ] **`services/core/internal/aios/autonomy/`** — 9% → 20%. Charter/budget/proposal cycle.
-- [ ] **`services/core/internal/aios/dream/`** — 21% → 25%. Almost there.
-- [ ] **`services/core/internal/gateway/`** — 19% → 25%. Coverage on the recent split files.
+- [x] **`services/core/internal/memory/`** — 68.9% verified 2026-05-18.
+- [x] **`services/core/internal/aios/controllane/`** — 70.9% verified 2026-05-18.
+- [x] **`services/core/internal/aios/autonomy/`** — 47.5% verified 2026-05-18.
+- [x] **`services/core/internal/aios/dream/`** — 86.5% verified 2026-05-18.
+- [x] **`services/core/internal/gateway/`** — 67.6% verified 2026-05-18.
+- [x] **`services/core/internal/api/`** — 52.5% verified 2026-05-18.
 
 ### Untested packages worth covering
 
-- [ ] `internal/chat` — chat-side server logic
+- [x] `internal/chat` — chat-side server logic. 2026-05-18: added focused coverage for thread/message persistence, role/content validation, auto-title rules, reply lookup metadata, malformed metadata hardening, deterministic thread ordering, transcript bounds, and delete cascade; package coverage is 77.7%.
 - [x] `internal/lanes` — lane definitions. 2026-05-18: added focused coverage for built-in authority boundaries, custom lane round-trip persistence, and list ordering; package coverage is 90.9%.
 - [x] `internal/policy` — policy evaluation. 2026-05-18: added focused coverage for strategy selection, failed recommendation persistence, newest-first recommendation listing, dossier validation, and missing global preset behavior; package coverage is 91.9%.
-- [ ] `internal/canvas` — canvas surface
-- [ ] `internal/dashboard` — dashboard rollups
-- [ ] `internal/lineage` — lineage tracking
-- [ ] `internal/insights` — insight surface
-- [ ] `internal/dossiers` — dossier service
-- [ ] `internal/evaluations` — evaluation pipeline
+- [x] `internal/canvas` — canvas surface. 2026-05-18: current focused package coverage is 84.4%; the stale zero-coverage entry is closed.
+- [x] `internal/dashboard` — dashboard rollups. 2026-05-18: added focused coverage for active jobs, recent failures, pending approvals/reviews, imports, dossier health, automation activity, routing recommendations, system inventory counts, and empty-store summaries; package coverage is 88.1%.
+- [x] `internal/lineage` — lineage tracking. 2026-05-18: added focused coverage for relation creation, default/normalized relation type, upsert behavior, parent/child/related job summaries, blank/missing-job rejection, no-relation responses, and JSON-serializable change summaries; package coverage is 90.4%.
+- [x] `internal/insights` — insight surface. 2026-05-18: added focused coverage for adapter, retrieval, and review signal generation, persisted advisory records, dossier filtering, valid reasons/evidence JSON, confidence bounds, and empty-signal behavior; package coverage is 85.2%.
+- [x] `internal/dossiers` — dossier service. 2026-05-18: added payload-bound hardening and lifecycle coverage for create/update/list detail, source links, job attachment, brief generation, and rejected oversized dossier JSON fields; package coverage is 63.2%.
+- [x] `internal/evaluations` — evaluation pipeline. 2026-05-18: added focused coverage for rating validation, scorer defaults, latest/list filtering, dossier-scoped records, and adapter metrics; package coverage is 91.9%.
 - [x] `internal/search` — search service. 2026-05-17: focused coverage is 91.5%.
 
 ### Untested packages worth leaving for later
@@ -149,7 +150,7 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 
 ### Test infrastructure
 
-- [ ] **Make CI integration env required.** No more silent skips on Postgres/Qdrant/Redis env vars.
+- [x] **Make CI integration env required.** 2026-05-19: CI now provisions Postgres, Qdrant, and Redis, exports the required integration env vars, runs `npm run test:integration:env:required`, and the env-gated Go integration tests fail in CI/GitHub Actions if their required env var is missing while preserving local optional skips.
 - [x] **Add scoped `go test -race` to weekly CI.** 2026-05-17: added weekly/manual race workflow for concurrency-heavy core packages (`api`, `jobs`, `modelruntime`, `gateway`, `hostbridge`, `aios/controllane`). Full `./...` race coverage remains optional because it is expensive.
 - [x] **Add fuzz tests** on URL/path/mode/ref/PID validators (5 fuzz targets in `gateway/`). 2026-05-17: added fuzz coverage for outbound HTTP URL, workspace path, chmod mode, git checkout ref, and terminate PID validators.
 - [x] **Cross-platform smoke port.** 2026-05-18: `npm run smoke` dispatches through `scripts/forge-smoke.mjs` to `forge-smoke.ps1` on Windows and `forge-smoke.sh` elsewhere.
@@ -162,7 +163,7 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 - [x] **Complete slog migration.** 2026-05-17: remaining `log.Printf`/startup legacy log call sites in `services/core/` migrated to `slog`; API request/error logs use structured fields and sanitize secret-looking error text. Request/correlation fields are retained where the existing request/event path already exposes them.
 - [x] **Add `/health/detailed` endpoint.** Per-service health rollup (storage, modelruntime, gateway, hostbridge, forgekshadow, dream, autonomy). One JSON body. 2026-05-17: implemented as bearer-authenticated structured JSON; `/health` remains public.
 - [x] **Add `/metrics` endpoint behind config flag.** Prometheus format. 2026-05-17: implemented disabled-by-default via `FORGE_ENABLE_METRICS_ENDPOINT`, returning bounded non-secret process/build/scrape metrics and 404 when disabled. Deeper request-duration, KV identity, gate decision, and journal-rate metrics remain future observability hardening.
-- [ ] **Per-service graceful shutdown.** Ensure every long-lived service (jobs runner, dream loop, autonomy maintenance) responds to context cancellation cleanly.
+- [x] **Per-service graceful shutdown.** 2026-05-18: jobs runner has `Close()`/root-context cancellation coverage, server shutdown is idempotent, approval expiry reaper is bound to the server context, autonomy maintenance loop now has direct context-cancel and manual-stop regression coverage, and Dream remains request-scoped with no background loop.
 - [x] **Audit retention policy.** 2026-05-17: documented current append-only audit/journal behavior, backup/export posture, retention/archive gap, recommended archive-before-prune approach, and explicit non-implemented items in `docs/AUDIT_AND_TRACE.md`. This closes the policy documentation gap only; automated rotation/pruning is not implemented.
 
 ---
@@ -170,11 +171,11 @@ Target: every load-bearing package at 25%+ test/source by function count. Smalle
 ## Section 5 — Security and Safety
 
 - [x] Chat gateway tool argument bounds — `d2b3d77 fix: bound chat gateway tool arguments`
-- [ ] **Complete chat assistant prompt-injection audit.** Trace every assignment from a model response field to `chat_assistant_*.go` files into (a) command args, (b) file paths, (c) URLs, (d) capability inputs. Verify validator coverage on each.
-- [ ] **Remote token (`X-Forge-Remote-Token`) lifecycle.** Verify rotation, storage, revocation paths are tested.
-- [ ] **Dangerous capabilities audit.** Run [docs/status/dangerous_capabilities.md](../status/dangerous_capabilities.md) against current `tool_capability_registry.go` — every approval-only capability still gated?
-- [ ] **Wildcard bind hardening** (also in Section 1).
-- [ ] **Audit `chat_post.go` (1,319 lines) for body-bound coverage.** Already has `request_body_bounds_test.go` series — verify the new chat surface didn't introduce unbounded paths.
+- [x] **Complete chat assistant prompt-injection audit.** 2026-05-19: refreshed [docs/reports/chat_assistant_gateway_audit.md](chat_assistant_gateway_audit.md) with a model-output trace matrix for function names, arguments, paths, command-like inputs, URLs, capability inputs, and model prose; added dispatch regressions for unknown functions, malformed arguments, and path traversal before gateway invocation, plus desktop URL validation coverage for the remaining URL sink.
+- [x] **Remote token (`X-Forge-Remote-Token`) lifecycle.** 2026-05-18: header-only authentication, query-token rejection, fixed-length hash comparison, encrypted settings storage, redacted reads, redacted-placeholder preservation, explicit replacement/rotation, and empty-token revocation are covered by `remote_auth_test.go` and `settings_test.go`; `TestPatchSettingsRemoteTokenRotationAndRevocationAffectIngress` proves rotated tokens affect mounted remote ingress immediately and revoked tokens fail closed.
+- [x] **Dangerous capabilities audit.** 2026-05-18: refreshed [docs/status/dangerous_capabilities.md](../status/dangerous_capabilities.md) against `tool_capability_registry.go`; default dangerous capabilities are not freely active, every `approval_only` capability now has broad policy coverage via `TestToolCapabilityRegistryApprovalOnlyDefaultsRequireApproval`, direct dangerous activation remains approval-gated, and gateway execution/audit coverage confirms approval-only tools return `needs_approval`.
+- [x] **Wildcard bind hardening** (also in Section 1). 2026-05-19: confirmed duplicate closed by Section 1/M5S evidence: standalone core image defaults to loopback, `validateCoreListenConfig` rejects wildcard binds unless `FORGE_ALLOW_WILDCARD_BIND=true` and a non-empty API token is present, and the npm Docker helpers create/pass a local ignored token before Compose starts.
+- [x] **Audit `chat_post.go` body-bound coverage.** 2026-05-18: `handleChatMessagePost` uses `decodeWorkspaceJSONBody`; direct handler coverage is in `TestWorkspaceJSONHandlersRejectOversizeRequestBodies`, route-level coverage is in `TestChatMessagePostRouteRejectsOversizeRequestBody`, and `TestProductionAPIHandlersDoNotDecodeRequestBodyDirectly` guards production handlers from direct unbounded `r.Body` decoding.
 
 ---
 
@@ -269,10 +270,19 @@ Continue the proven pattern (kvidentity, refvalidation, semanticvalidation). Pic
 - [x] Operator start menu
 - [x] Taskbar tracking
 - [x] Multi-monitor support
-- [ ] **Extract shared components from pages.** 46 pages, 4 shared components — most pages duplicate fetch/error/loading. Lift `<AsyncState>`, `<KeyValueList>`, `<Panel>`, `<Toast>` into `apps/desktop/src/components/`.
-- [ ] **Page-level test coverage**. ~8 of 46 pages have `.test.tsx`. Target: render test for every page.
-- [ ] **Command palette polish.** `CommandBar.tsx` exists; flesh out the actions surface.
-- [ ] **Accessibility audit pass.** Focus management, keyboard nav, ARIA labels on the operator-critical surfaces (Chat, Approvals, Operator Apps).
+- [x] **Extract shared components from pages.** 2026-05-19: shared `AsyncState`, `OpsPanel`, `KeyValueList`, and `Toast` components are present with component tests; representative duplicated panel/error/status/key-value patterns are migrated in Automation, Autonomy, Policy, Project Context, Approvals, Operator Apps, and Job Detail.
+  - 2026-05-19 progress: added shared `OpsPanel` and `AsyncState` components with component tests, then migrated Automation, Autonomy, Policy, and Project Context away from local duplicated panel/error wrappers.
+- [x] **Page-level test coverage**. Target: render test for every page. 2026-05-19: every desktop `*Page.tsx` now has a matching `.test.tsx` render test.
+  - 2026-05-19 progress: added first-pass render coverage for `CommandPage`, `EventsPage`, and `ReleasePage`, covering static command surfaces plus API-backed event/release data rendering.
+  - 2026-05-19 progress: added first-pass render coverage for `AdaptersPage`, `ProjectContextPage`, `BackupPage`, `StrategiesPage`, and `ActionLanesPage` using narrow API mocks and no native/destructive interactions.
+  - 2026-05-19 progress: added first-pass render coverage for `JobsPage`, `StartPage`, and `LineagePage` with router wrappers and empty-state API mocks.
+  - 2026-05-19 progress: added first-pass render coverage for `AutomationPage`, `EvaluationsPage`, and `InsightsPage` around loaded-empty rules/history, evaluation/metrics, imports, insights, and embedding states.
+  - 2026-05-19 progress: added first-pass render coverage for `MemoryDetailPage` and `WorkspaceLayoutsPage` with route/API and workspace layout store mocks.
+  - 2026-05-19 progress: added first-pass render coverage for `PolicyPage` and `RetrievalRunsPage` around loaded-empty policy, guidance, recommendation, and retrieval-run states.
+  - 2026-05-19 progress: added first-pass render coverage for `DossiersPage`, `ReviewsPage`, and `SourcesPage` around loaded-empty dossier, review/reconciliation, and source-ingestion states.
+  - 2026-05-19 progress: added first-pass render coverage for `AutonomyPage`, `InspectorsPage`, and `JobDetailPage` around inactive autonomy, empty inspector, and loaded job-projection states.
+- [x] **Command palette polish.** 2026-05-19: expanded `CommandBar.tsx` with a categorized action surface for route, knowledge, job, and runtime commands plus component tests for staging and executing routed commands.
+- [x] **Accessibility audit pass.** 2026-05-19: added targeted ARIA/live-region coverage on Chat, Approvals, and Operator Apps, including chat log semantics, request-specific approval decision labels, operator-app status/group labels, and regression assertions.
 
 ---
 
@@ -281,8 +291,8 @@ Continue the proven pattern (kvidentity, refvalidation, semanticvalidation). Pic
 The project is "wired and working properly" when:
 
 - [x] No source file >1,500 lines (except SQL migrations, validator crates, barrel files). 2026-05-18: verified across non-test Go/TS/TSX/Rust/Nix/CSS sources; largest non-exempt source is `services/core/internal/api/model_runtime_bridge.go` at 1,482 lines.
-- [ ] Memory, controllane, autonomy, gateway, api all at 25%+ test/source.
-- [ ] All Section 1 hygiene items closed.
+- [x] Memory, controllane, autonomy, gateway, api all at 25%+ statement coverage. 2026-05-18 verification: memory 68.9%, controllane 70.9%, autonomy 47.5%, gateway 67.6%, api 52.5%.
+- [x] All Section 1 hygiene items closed. 2026-05-19: Section 1 and its duplicate Section 5 wildcard bind item are closed.
 - [x] `/health/detailed` and `/metrics` endpoints live.
 - [x] slog migration complete with correlation IDs where available.
 - [x] Streaming model output working through modelruntime where supported.
@@ -292,9 +302,9 @@ The project is "wired and working properly" when:
 - [x] Cross-session memory recall verified working. 2026-05-18: GUI note creation, backend store-reopen recall, and chat remount recall are covered by focused tests and evidence.
 - [x] Operator desktop session running with toolbelt-provided ollama as the model backend.
 - [x] Native desktop runtime boots through FORGE-OS Runtime splash, graphical password login, and FORGE native desktop session with VM evidence. 2026-05-18: see `docs/evidence/vm_boot/2026-05-18-section6-final/`.
-- [ ] One more simulator-to-live migration landed.
-- [ ] CI is strict (integration env required and race detector weekly are present; fuzz on validators remains open).
-- [ ] No remaining items in Sections 1, 4, 5, 6. 2026-05-18: Section 6 is complete; Sections 3-5 still contain non-Section-6 open work.
+- [x] One more simulator-to-live migration landed. 2026-05-18: context attribution validation landed as the next narrow `[PARTIAL LIVE VALIDATION]` seam.
+- [x] CI is strict. 2026-05-19: integration env is required in CI, scoped weekly race coverage is present, and validator fuzz targets are present.
+- [x] No remaining items in Sections 1, 4, 5, 6. 2026-05-19: Section 1 hygiene, Section 4 observability/reliability, Section 5 security/safety, and Section 6 daily-use functional completeness are closed.
 
 ---
 

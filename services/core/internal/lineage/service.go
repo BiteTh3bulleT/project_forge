@@ -54,10 +54,13 @@ func (s *Service) Link(ctx context.Context, parentJobID, childJobID, relationTyp
 	if changeSummary == nil {
 		changeSummary = map[string]any{}
 	}
-	payload, _ := json.Marshal(changeSummary)
+	payload, err := json.Marshal(changeSummary)
+	if err != nil {
+		return nil, fmt.Errorf("change summary must be JSON serializable: %w", err)
+	}
 	now := time.Now().UnixMilli()
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err = s.db.ExecContext(ctx, `
 INSERT INTO job_lineage(parent_job_id, child_job_id, relation_type, created_at, change_summary_json)
 VALUES(?,?,?,?,?)
 ON CONFLICT(parent_job_id, child_job_id)

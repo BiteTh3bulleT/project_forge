@@ -3,57 +3,68 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PolicyPage } from "./PolicyPage";
 
-const mocks = vi.hoisted(() => ({
-  listPresets: vi.fn(),
+const apiMocks = vi.hoisted(() => ({
   getGlobalPreset: vi.fn(),
-  setGlobalPreset: vi.fn(),
+  listDossiers: vi.fn(),
+  listGuidance: vi.fn(),
+  listPresets: vi.fn(),
   listRecommendations: vi.fn(),
+  listStrategies: vi.fn(),
   recommend: vi.fn(),
   savePreset: vi.fn(),
-  strategiesList: vi.fn(),
-  dossiersList: vi.fn(),
-  packetGuidanceList: vi.fn(),
-  packetGuidanceAnalyze: vi.fn(),
+  setGlobalPreset: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
   api: {
-    policy: {
-      listPresets: mocks.listPresets,
-      getGlobalPreset: mocks.getGlobalPreset,
-      setGlobalPreset: mocks.setGlobalPreset,
-      listRecommendations: mocks.listRecommendations,
-      recommend: mocks.recommend,
-      savePreset: mocks.savePreset,
-    },
-    strategies: {
-      list: mocks.strategiesList,
-    },
     dossiers: {
-      list: mocks.dossiersList,
+      list: apiMocks.listDossiers,
     },
     packetGuidance: {
-      list: mocks.packetGuidanceList,
-      analyze: mocks.packetGuidanceAnalyze,
+      analyze: vi.fn(),
+      list: apiMocks.listGuidance,
+    },
+    policy: {
+      getGlobalPreset: apiMocks.getGlobalPreset,
+      listPresets: apiMocks.listPresets,
+      listRecommendations: apiMocks.listRecommendations,
+      recommend: apiMocks.recommend,
+      savePreset: apiMocks.savePreset,
+      setGlobalPreset: apiMocks.setGlobalPreset,
+    },
+    strategies: {
+      list: apiMocks.listStrategies,
     },
   },
 }));
 
-describe("PolicyPage mutation errors", () => {
+describe("PolicyPage", () => {
   beforeEach(() => {
-    for (const mock of Object.values(mocks)) {
-      mock.mockReset();
-    }
-    mocks.listPresets.mockResolvedValue({ presets: [] });
-    mocks.getGlobalPreset.mockResolvedValue({ presetId: "" });
-    mocks.listRecommendations.mockResolvedValue({ recommendations: [] });
-    mocks.strategiesList.mockResolvedValue({ strategies: [] });
-    mocks.dossiersList.mockResolvedValue({ dossiers: [] });
-    mocks.packetGuidanceList.mockResolvedValue({ guidance: [] });
+    vi.clearAllMocks();
+    apiMocks.listPresets.mockResolvedValue({ presets: [] });
+    apiMocks.getGlobalPreset.mockResolvedValue({ presetId: "" });
+    apiMocks.listRecommendations.mockResolvedValue({ recommendations: [] });
+    apiMocks.listStrategies.mockResolvedValue({ strategies: [] });
+    apiMocks.listDossiers.mockResolvedValue({ dossiers: [] });
+    apiMocks.listGuidance.mockResolvedValue({ guidance: [] });
+  });
+
+  it("renders empty policy board states", async () => {
+    render(<PolicyPage />);
+
+    expect(await screen.findByText("No approval presets")).toBeTruthy();
+    expect(screen.getByText("No recommendations recorded")).toBeTruthy();
+    expect(screen.getByText("No packet guidance records")).toBeTruthy();
+    expect(apiMocks.listPresets).toHaveBeenCalledWith(80);
+    expect(apiMocks.getGlobalPreset).toHaveBeenCalledOnce();
+    expect(apiMocks.listRecommendations).toHaveBeenCalledWith({ limit: 120 });
+    expect(apiMocks.listStrategies).toHaveBeenCalledWith({ limit: 240 });
+    expect(apiMocks.listDossiers).toHaveBeenCalledWith(180);
+    expect(apiMocks.listGuidance).toHaveBeenCalledWith({ limit: 120 });
   });
 
   it("renders global preset save errors", async () => {
-    mocks.setGlobalPreset.mockRejectedValueOnce(
+    apiMocks.setGlobalPreset.mockRejectedValueOnce(
       new Error("global preset write denied"),
     );
 
@@ -67,7 +78,7 @@ describe("PolicyPage mutation errors", () => {
   });
 
   it("renders recommendation errors", async () => {
-    mocks.recommend.mockRejectedValueOnce(new Error("recommendation failed"));
+    apiMocks.recommend.mockRejectedValueOnce(new Error("recommendation failed"));
 
     render(<PolicyPage />);
 

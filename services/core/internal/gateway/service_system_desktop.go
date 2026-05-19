@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -176,9 +177,13 @@ func (t *desktopOpenTool) Execute(ctx context.Context, req Request) (Result, err
 	}
 
 	if desktopLooksLikeURL(appHint) {
-		pid, out, err := desktopOpenTarget(ctx, appHint)
+		target, err := validateDesktopOpenURL(appHint)
+		if err != nil {
+			return Result{}, err
+		}
+		pid, out, err := desktopOpenTarget(ctx, target)
 		return Result{
-			Data:    map[string]any{"mode": "url", "target": appHint, "pid": pid, "output": out, "ok": err == nil},
+			Data:    map[string]any{"mode": "url", "target": target, "pid": pid, "output": out, "ok": err == nil},
 			Message: "open attempted",
 		}, nil
 	}
@@ -280,6 +285,40 @@ func desktopInlineCommandFromInput(input map[string]any) []string {
 func desktopLooksLikeURL(v string) bool {
 	v = strings.TrimSpace(strings.ToLower(v))
 	return strings.HasPrefix(v, "http://") || strings.HasPrefix(v, "https://") || strings.HasPrefix(v, "mailto:")
+}
+
+func validateDesktopOpenURL(raw string) (string, error) {
+	normalized := strings.TrimSpace(raw)
+	if normalized == "" {
+		return "", errors.New("desktop.open URL is required")
+	}
+	if len(normalized) > maxOutboundHTTPURLBytes {
+		return "", fmt.Errorf("desktop.open URL too large: %d > %d bytes", len(normalized), maxOutboundHTTPURLBytes)
+	}
+	if strings.ContainsAny(normalized, "\x00\r\n\t") {
+		return "", errors.New("desktop.open URL contains control characters")
+	}
+	parsed, err := url.Parse(normalized)
+	if err != nil {
+		return "", err
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	switch scheme {
+	case "http", "https":
+		if parsed.User != nil {
+			return "", errors.New("desktop.open URL userinfo is not allowed")
+		}
+		if strings.TrimSpace(parsed.Hostname()) == "" {
+			return "", errors.New("desktop.open URL host is required")
+		}
+	case "mailto":
+		if strings.TrimSpace(parsed.Opaque) == "" && strings.TrimSpace(parsed.Path) == "" {
+			return "", errors.New("desktop.open mailto target is required")
+		}
+	default:
+		return "", errors.New("desktop.open only supports http, https, and mailto URLs")
+	}
+	return parsed.String(), nil
 }
 
 func desktopLooksLikePath(v string) bool {

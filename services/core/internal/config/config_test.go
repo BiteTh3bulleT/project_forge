@@ -3,18 +3,37 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
-func TestLoadDefaultsWorkspaceToRoot(t *testing.T) {
+func TestLoadDefaultsWorkspaceUnderDataDir(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("FORGE_DATA_DIR", dataDir)
 	t.Setenv("FORGE_WORKSPACE_DIR", "")
 	cfg := Load()
-	want, err := filepath.Abs("/")
+	want, err := filepath.Abs(filepath.Join(dataDir, "workspace"))
 	if err != nil {
 		t.Fatalf("resolve default workspace: %v", err)
 	}
 	if cfg.WorkspaceDir != want {
 		t.Fatalf("expected default workspace %q, got %q", want, cfg.WorkspaceDir)
+	}
+}
+
+func TestLoadDefaultsRootWorkspaceOptInDisabled(t *testing.T) {
+	t.Setenv("FORGE_ALLOW_ROOT_WORKSPACE", "")
+	cfg := Load()
+	if cfg.AllowRootWorkspace {
+		t.Fatal("expected root workspace opt-in to default false")
+	}
+}
+
+func TestLoadRespectsRootWorkspaceOptIn(t *testing.T) {
+	t.Setenv("FORGE_ALLOW_ROOT_WORKSPACE", "true")
+	cfg := Load()
+	if !cfg.AllowRootWorkspace {
+		t.Fatal("expected root workspace opt-in true")
 	}
 }
 
@@ -62,16 +81,12 @@ func TestLoadGeneratesAPITokenFileUnderDataDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected generated auth directory: %v", err)
 	}
-	if got := authDirInfo.Mode().Perm(); got != 0o750 {
-		t.Fatalf("expected auth directory mode 0750, got %04o", got)
-	}
+	assertFileMode(t, authDirInfo, 0o750, "auth directory")
 	tokenInfo, err := os.Stat(filepath.Join(dataDir, "auth", "api_token"))
 	if err != nil {
 		t.Fatalf("expected generated token file stat: %v", err)
 	}
-	if got := tokenInfo.Mode().Perm(); got != 0o640 {
-		t.Fatalf("expected token file mode 0640, got %04o", got)
-	}
+	assertFileMode(t, tokenInfo, 0o640, "token file")
 }
 
 func TestLoadRepairsExistingAPITokenFilePermissions(t *testing.T) {
@@ -95,15 +110,21 @@ func TestLoadRepairsExistingAPITokenFilePermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected auth directory stat: %v", err)
 	}
-	if got := authDirInfo.Mode().Perm(); got != 0o750 {
-		t.Fatalf("expected repaired auth directory mode 0750, got %04o", got)
-	}
+	assertFileMode(t, authDirInfo, 0o750, "repaired auth directory")
 	tokenInfo, err := os.Stat(tokenPath)
 	if err != nil {
 		t.Fatalf("expected token file stat: %v", err)
 	}
-	if got := tokenInfo.Mode().Perm(); got != 0o640 {
-		t.Fatalf("expected repaired token file mode 0640, got %04o", got)
+	assertFileMode(t, tokenInfo, 0o640, "repaired token file")
+}
+
+func assertFileMode(t *testing.T, info os.FileInfo, want os.FileMode, label string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		return
+	}
+	if got := info.Mode().Perm(); got != want {
+		t.Fatalf("expected %s mode %04o, got %04o", label, want, got)
 	}
 }
 

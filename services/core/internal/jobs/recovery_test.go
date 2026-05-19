@@ -15,6 +15,7 @@ func TestRecoverInterruptedJobsRequeuesQueuedAndFailsRunning(t *testing.T) {
 	}
 	defer st.Close()
 	insertRecoveryJob(t, st, "queued-1", StatusQueued)
+	insertRecoveryJob(t, st, "preparing-1", StatusPreparing)
 	insertRecoveryJob(t, st, "running-1", StatusRunning)
 	insertRecoveryJob(t, st, "done-1", StatusSucceeded)
 
@@ -46,6 +47,18 @@ func TestRecoverInterruptedJobsRequeuesQueuedAndFailsRunning(t *testing.T) {
 	if running.LastFailureCode == nil || *running.LastFailureCode != FailInterrupted {
 		t.Fatalf("running failure code=%v, want interrupted", running.LastFailureCode)
 	}
+	preparing, err := svc.Get(context.Background(), "preparing-1")
+	if err != nil {
+		t.Fatalf("get preparing job: %v", err)
+	}
+	if preparing.Status != StatusFailed {
+		t.Fatalf("preparing job status=%s, want failed", preparing.Status)
+	}
+	if preparing.LastFailureCode == nil || *preparing.LastFailureCode != FailInterrupted {
+		t.Fatalf("preparing failure code=%v, want interrupted", preparing.LastFailureCode)
+	}
+	assertEventTypes(t, svc, "preparing-1", []string{"job.status.changed", "job.failed", "job.recovered"})
+	assertStatusHistory(t, svc, "preparing-1", []Status{StatusFailed})
 	done, err := svc.Get(context.Background(), "done-1")
 	if err != nil {
 		t.Fatalf("get done job: %v", err)

@@ -106,6 +106,9 @@ describe("OperatorAppsPage", () => {
     expect(
       screen.getByText(/operator apps require the tauri desktop runtime/i),
     ).toBeTruthy();
+    expect(
+      screen.getByRole("status").textContent,
+    ).toContain("Operator apps require");
     expect(container.querySelector("input")).toBeNull();
     expect(container.querySelector("textarea")).toBeNull();
     expect(screen.queryByLabelText(/command/i)).toBeNull();
@@ -124,5 +127,8 @@ describe("OperatorAppsPage", () => {
     expect(screen.getAllByText("foot").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Native")).toHaveLength(3);
     expect(screen.getByRole("img", { name: "Terminal icon" })).toBeTruthy();
+    expect(
+      screen.getByRole("group", { name: "Terminal operator app" }),
+    ).toBeTruthy();
   });
 });

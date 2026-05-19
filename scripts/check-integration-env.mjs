@@ -5,15 +5,15 @@ const allowMissing = process.argv.includes("--allow-missing");
 const required = [
   {
     name: "FORGE_POSTGRES_TEST_DSN",
-    description: "optional Postgres integration tests",
+    description: "local-optional / CI-required Postgres integration tests",
   },
   {
     name: "FORGE_QDRANT_TEST_URL",
-    description: "optional Qdrant shadow-vector integration tests",
+    description: "local-optional / CI-required Qdrant shadow-vector integration tests",
   },
   {
     name: "FORGE_REDIS_TEST_ADDR",
-    description: "optional Redis ephemeral-boundary integration tests",
+    description: "local-optional / CI-required Redis ephemeral-boundary integration tests",
   },
 ];
 
