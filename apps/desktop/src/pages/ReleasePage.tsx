@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { useUiStore } from "../stores/uiStore";
 
 type ChecklistItem = {
@@ -34,10 +35,10 @@ export function ReleasePage() {
         api.release.artifacts(40),
       ]);
       const cl = c.checklist as Record<string, unknown>;
-      setItems((cl.items as ChecklistItem[]) ?? []);
+      setItems(arrayOrEmpty<ChecklistItem>(cl.items));
       setReady(Boolean(cl.ready));
       setFirstRun(f.firstRun as Record<string, unknown>);
-      setArtifacts(a.artifacts);
+      setArtifacts(arrayOrEmpty<unknown>(a.artifacts));
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));

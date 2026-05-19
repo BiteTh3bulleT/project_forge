@@ -4,6 +4,89 @@ export type MessagePart =
   | { type: "text"; text: string }
   | { type: "code"; text: string; lang: string };
 
+function structuredErrorMessage(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const nested =
+    record.error && typeof record.error === "object"
+      ? (record.error as Record<string, unknown>)
+      : null;
+  const message = nested?.message ?? record.message ?? record.detail;
+  return typeof message === "string" && message.trim() ? message.trim() : null;
+}
+
+function matchingJsonObjectEnd(text: string, start: number): number | null {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i += 1) {
+    const char = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+
+  return null;
+}
+
+export function sanitizeMessageContent(content: string): string {
+  const markers = ['{"error"', '{"message"', '{"detail"'];
+  let cursor = 0;
+  let out = "";
+
+  while (cursor < content.length) {
+    const next = markers
+      .map((marker) => content.indexOf(marker, cursor))
+      .filter((idx) => idx >= 0)
+      .sort((a, b) => a - b)[0];
+    if (next == null) {
+      out += content.slice(cursor);
+      break;
+    }
+
+    const end = matchingJsonObjectEnd(content, next);
+    if (end == null) {
+      out += content.slice(cursor);
+      break;
+    }
+
+    const raw = content.slice(next, end);
+    try {
+      const message = structuredErrorMessage(JSON.parse(raw));
+      if (message) {
+        out += content.slice(cursor, next);
+        out += message;
+        cursor = end;
+        continue;
+      }
+    } catch {
+      // Keep non-JSON text intact.
+    }
+
+    out += content.slice(cursor, next + 1);
+    cursor = next + 1;
+  }
+
+  return out;
+}
+
 export function parseMessageParts(content: string): MessagePart[] {
   const out: MessagePart[] = [];
   const re = /```([\w-]+)?\n([\s\S]*?)```/g;
@@ -62,9 +145,13 @@ function renderInline(text: string): ReactNode[] {
 }
 
 export function RichMessage(props: { content: string }) {
-  const parts = useMemo(
-    () => parseMessageParts(props.content),
+  const content = useMemo(
+    () => sanitizeMessageContent(props.content),
     [props.content],
+  );
+  const parts = useMemo(
+    () => parseMessageParts(content),
+    [content],
   );
   return (
     <div className="min-w-0 max-w-full space-y-3 overflow-hidden">

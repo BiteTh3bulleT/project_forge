@@ -217,4 +217,54 @@ describe("ChatPage cross-session memory recall", () => {
       );
     });
   });
+
+  it("unlocks the composer after stopping a streaming assistant reply", async () => {
+    const thread = await apiMocks.createThread({ title: "Streaming chat" });
+    apiMocks.postMessage.mockResolvedValueOnce({
+      userMessage: {
+        id: 1,
+        threadId: thread.thread.id,
+        role: "user",
+        content: "stream this",
+        createdAtMs: 1_800_000_001_000,
+        metadata: {},
+      },
+      assistantMessage: null,
+      assistantPending: true,
+      userMessageId: 1,
+      stream: true,
+    } as unknown as Awaited<ReturnType<typeof apiMocks.postMessage>>);
+    apiMocks.assistantStream.mockImplementationOnce(
+      async (
+        _threadId: number,
+        _userMessageId: number,
+        _onEvent: unknown,
+        signal?: AbortSignal,
+      ) =>
+        new Promise<void>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        }),
+    );
+
+    render(
+      <MemoryRouter initialEntries={["/chat"]}>
+        <ChatPage />
+      </MemoryRouter>,
+    );
+
+    const composer = await screen.findByLabelText("Chat message");
+    fireEvent.change(composer, { target: { value: "stream this" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+
+    await waitFor(() => {
+      expect(
+        (screen.getByLabelText("Chat message") as HTMLTextAreaElement)
+          .disabled,
+      ).toBe(false);
+    });
+  });
 });

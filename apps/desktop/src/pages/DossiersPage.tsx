@@ -37,6 +37,28 @@ function csv(raw: string[]): string {
   return raw.join(", ");
 }
 
+function arrayOrEmpty<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function normalizeDossierDetail(detail: DossierDetail): DossierDetail {
+  return {
+    ...detail,
+    sources: arrayOrEmpty(detail.sources),
+    recentJobs: arrayOrEmpty(detail.recentJobs),
+    briefs: arrayOrEmpty(detail.briefs),
+  };
+}
+
+function normalizeMemoryView(view: DossierMemoryView): DossierMemoryView {
+  return {
+    ...view,
+    recentObservations: arrayOrEmpty(view.recentObservations),
+    recentSignals: arrayOrEmpty(view.recentSignals),
+    recentAlignmentNotes: arrayOrEmpty(view.recentAlignmentNotes),
+  };
+}
+
 function isOptionalEndpointMissing(error: unknown): boolean {
   const message =
     error instanceof Error
@@ -93,15 +115,16 @@ export function DossiersPage() {
         api.automation.listRules({ limit: 220 }),
         api.reviews.list({ limit: 260 }),
       ]);
-      setDossiers(d.dossiers);
-      setSources(src.sources);
-      setPresets(p.presets);
-      setStrategies(st.strategies);
-      setRules(ar.rules);
-      setReviews(rv.reviews);
+      const nextDossiers = arrayOrEmpty(d.dossiers);
+      setDossiers(nextDossiers);
+      setSources(arrayOrEmpty(src.sources));
+      setPresets(arrayOrEmpty(p.presets));
+      setStrategies(arrayOrEmpty(st.strategies));
+      setRules(arrayOrEmpty(ar.rules));
+      setReviews(arrayOrEmpty(rv.reviews));
       setErr(null);
-      if (selectedID == null && d.dossiers.length > 0) {
-        const firstId = d.dossiers[0].id;
+      if (selectedID == null && nextDossiers.length > 0) {
+        const firstId = nextDossiers[0].id;
         setSelectedID(firstId);
         setParams({ dossierId: String(firstId) });
       }
@@ -123,24 +146,28 @@ export function DossiersPage() {
           throw error;
         }),
       ]);
-      setDetail(d.detail);
+      const nextDetail = normalizeDossierDetail(d.detail);
+      const nextMemoryView = normalizeMemoryView(mem.view);
+      setDetail(nextDetail);
       setProfile(p.profile);
-      setMemoryView(mem.view);
+      setMemoryView(nextMemoryView);
       setVSASummary(
-        vsa.summary ?? mem.view.vsaSummary ?? d.detail.vsaSummary ?? null,
+        vsa.summary ?? nextMemoryView.vsaSummary ?? nextDetail.vsaSummary ?? null,
       );
       if (p.profile) {
-        setPreferredStrategiesRaw(csv(p.profile.preferredStrategies));
-        setPreferredAdaptersRaw(csv(p.profile.preferredAdapters));
+        setPreferredStrategiesRaw(csv(arrayOrEmpty(p.profile.preferredStrategies)));
+        setPreferredAdaptersRaw(csv(arrayOrEmpty(p.profile.preferredAdapters)));
         setApprovalPresetId(p.profile.approvalPresetId ?? "");
         setRetrievalMode(
           String((p.profile.retrievalDefaults?.mode as string) ?? "hybrid"),
         );
-        setHighValueRaw(csv(p.profile.highValueFiles));
-        setNoisyRaw(csv(p.profile.noisyFiles));
+        setHighValueRaw(csv(arrayOrEmpty(p.profile.highValueFiles)));
+        setNoisyRaw(csv(arrayOrEmpty(p.profile.noisyFiles)));
         setRoutingNotes(p.profile.routingNotes || "");
         setAutomationBindingsRaw(
-          p.profile.automationBindings.map((x) => String(x)).join(", "),
+          arrayOrEmpty(p.profile.automationBindings)
+            .map((x) => String(x))
+            .join(", "),
         );
       } else {
         setPreferredStrategiesRaw("");

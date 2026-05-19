@@ -13,6 +13,7 @@ import {
   type ModelRuntimeQueueStatus,
   type ModelRuntimeUsageSummary,
 } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
 import { CompactModelsBoard } from "./ModelsPage/CompactModelsBoard";
@@ -166,7 +167,10 @@ export function ModelsPage() {
       setModels(nextModels);
       setHealth(healthRes.health);
       setQueue(queueRes.queue);
-      setLoaded(loadedRes.loaded);
+      setLoaded({
+        ...(loadedRes.loaded ?? {}),
+        models: arrayOrEmpty(loadedRes.loaded?.models),
+      });
       setUsage(usageRes.usage);
       setBackends(
         Array.isArray(backendsRes.backends) ? backendsRes.backends : [],

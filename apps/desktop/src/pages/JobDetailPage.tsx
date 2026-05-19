@@ -6,10 +6,20 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
 
 type JobEvent = NonNullable<JobDetail["events"]>[number];
+type JobArtifact = NonNullable<JobDetail["artifacts"]>[number];
+
+function normalizeJobDetail(detail: JobDetail): JobDetail {
+  return {
+    ...detail,
+    events: arrayOrEmpty<JobEvent>(detail.events),
+    artifacts: arrayOrEmpty<JobArtifact>(detail.artifacts),
+  };
+}
 
 const terminalStatuses = new Set(["succeeded", "failed", "cancelled"]);
 
@@ -37,11 +47,19 @@ export function JobDetailPage() {
         api.jobs.detail(id, 0),
         api.reviews.list({ limit: 260 }),
       ]);
-      setDetail(d);
+      setDetail(normalizeJobDetail(d));
       setReviews(Array.isArray(r?.reviews) ? r.reviews : []);
       if (d.packet?.id) {
         const notes = await api.memory.packetAlignment(d.packet.id, 120);
-        setAlignmentNotes(notes.notes);
+        setAlignmentNotes(
+          arrayOrEmpty<{
+            id: number;
+            note: string;
+            retrievalResultId: number | null;
+            observationId: number | null;
+            createdAtMs: number;
+          }>(notes.notes),
+        );
       } else {
         setAlignmentNotes([]);
       }
@@ -122,8 +140,8 @@ export function JobDetailPage() {
 
   const j = detail.job;
   const approvalPending = detail.approvalRequest?.status === "pending";
-  const events = detail.events ?? [];
-  const artifacts = detail.artifacts ?? [];
+  const events = arrayOrEmpty<JobEvent>(detail.events);
+  const artifacts = arrayOrEmpty<JobArtifact>(detail.artifacts);
   const stages = buildStages(events, j.status);
   const canCancel = !terminalStatuses.has(String(j.status));
   const latestSignal = latestEvent?.type ?? "no events recorded";

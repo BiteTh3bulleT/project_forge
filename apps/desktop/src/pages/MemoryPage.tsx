@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { api } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { useUiStore } from "../stores/uiStore";
 import { MemoryControlsPanel } from "./MemoryPage/MemoryControlsPanel";
 import { MemoryNoteComposer } from "./MemoryPage/MemoryNoteComposer";
@@ -50,7 +51,7 @@ export function MemoryPage() {
   const [dossierId, setDossierId] = useState("");
   const [staleOnly, setStaleOnly] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [status, setStatus] = useState<string>("");
+  const [, setStatus] = useState<string>("");
   const [repairRuns, setRepairRuns] = useState<MemoryRepairRun[]>([]);
   const [selectedRepairId, setSelectedRepairId] = useState<number | null>(null);
   const [repairDetail, setRepairDetail] =
@@ -75,9 +76,10 @@ export function MemoryPage() {
         type: obsType.trim() || undefined,
         staleOnly,
       });
-      setObservations(res.observations);
-      if (res.observations.length > 0 && selectedObsId == null) {
-        setSelectedObsId(res.observations[0].id);
+      const nextObservations = arrayOrEmpty<MemoryObservation>(res.observations);
+      setObservations(nextObservations);
+      if (nextObservations.length > 0 && selectedObsId == null) {
+        setSelectedObsId(nextObservations[0].id);
       }
       setErr(null);
     } catch (e) {
@@ -92,9 +94,10 @@ export function MemoryPage() {
         limit: 60,
         dossierId: Number.isFinite(did) ? did : undefined,
       });
-      setRepairRuns(res.runs);
-      if (res.runs.length > 0 && selectedRepairId == null) {
-        setSelectedRepairId(res.runs[0].id);
+      const nextRuns = arrayOrEmpty<MemoryRepairRun>(res.runs);
+      setRepairRuns(nextRuns);
+      if (nextRuns.length > 0 && selectedRepairId == null) {
+        setSelectedRepairId(nextRuns[0].id);
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -108,9 +111,10 @@ export function MemoryPage() {
         limit: 60,
         dossierId: Number.isFinite(did) ? did : undefined,
       });
-      setVSARuns(res.runs);
-      if (res.runs.length > 0 && selectedVSARunId == null) {
-        setSelectedVSARunId(res.runs[0].id);
+      const nextRuns = arrayOrEmpty<VSAReindexRun>(res.runs);
+      setVSARuns(nextRuns);
+      if (nextRuns.length > 0 && selectedVSARunId == null) {
+        setSelectedVSARunId(nextRuns[0].id);
       }
     } catch (e) {
       if (isOptionalEndpointMissing(e)) {
@@ -139,8 +143,9 @@ export function MemoryPage() {
       try {
         const res = await api.search(q, 60);
         if (cancelled) return;
-        setHits(res.hits);
-        setStatusLine(`Search finished: ${res.hits.length} hit(s).`);
+        const nextHits = arrayOrEmpty<SearchHit>(res.hits);
+        setHits(nextHits);
+        setStatusLine(`Search finished: ${nextHits.length} hit(s).`);
       } catch (e) {
         if (cancelled) return;
         setHits(null);
@@ -351,14 +356,7 @@ export function MemoryPage() {
       />
 
       {memoryView === "all" || memoryView === "inspect" ? (
-        <MemoryNoteComposer
-          dossierId={dossierId}
-          loadObservations={loadObservations}
-          setSelectedObsId={setSelectedObsId}
-          setErr={setErr}
-          setStatus={setStatus}
-          setStatusLine={setStatusLine}
-        />
+        <MemoryNoteComposer />
       ) : null}
 
       {memoryView === "all" || memoryView === "inspect" ? (
@@ -371,10 +369,6 @@ export function MemoryPage() {
           <ObservationDetailPanel
             obsDetail={obsDetail}
             obsVSADetail={obsVSADetail}
-            setObsDetail={setObsDetail}
-            setObsVSADetail={setObsVSADetail}
-            status={status}
-            setStatus={setStatus}
           />
         </div>
       ) : null}

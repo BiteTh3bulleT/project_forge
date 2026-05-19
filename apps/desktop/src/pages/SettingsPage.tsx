@@ -1,5 +1,5 @@
 import { GhostButton, PrimaryButton } from "@forge/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { FoldSection } from "../components/FoldSection";
 import {
@@ -7,6 +7,7 @@ import {
   type DiscordGatewayStatusResponse,
   type TelegramStatusResponse,
 } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { getDesktopSystemDiagnostics, isTauriDesktop } from "../lib/desktop";
 import { useUiStore } from "../stores/uiStore";
 import {
@@ -112,6 +113,8 @@ export function SettingsPage() {
     null,
   );
   const [ollamaModelsLoading, setOllamaModelsLoading] = useState(false);
+  const [ollamaAutoRefreshReady, setOllamaAutoRefreshReady] = useState(false);
+  const lastOllamaAutoRefreshBase = useRef("");
   const [err, setErr] = useState<string | null>(null);
   const [pcDiagnostics, setPcDiagnostics] = useState<PcDiagnostics | null>(
     null,
@@ -125,7 +128,10 @@ export function SettingsPage() {
 
   async function loadOllamaModelsFromAdapters() {
     const adapters = await api.adapters.list();
-    const ollamaAdapter = adapters.adapters.find(
+    const adapterRows = arrayOrEmpty<typeof adapters.adapters[number]>(
+      adapters.adapters,
+    );
+    const ollamaAdapter = adapterRows.find(
       (adapter) => adapter.id === "ollama",
     );
     const models = Array.isArray(ollamaAdapter?.config?.models)
@@ -173,9 +179,12 @@ export function SettingsPage() {
   async function load() {
     try {
       const s = await api.settings.get();
+      setOllamaAutoRefreshReady(false);
+      const nextOllamaBaseUrl = s.ollamaBaseUrl || "http://127.0.0.1:11434";
+      lastOllamaAutoRefreshBase.current = nextOllamaBaseUrl;
       setExtensionsCsv(s.extensionsCsv);
       setTheme(s.theme === "light" ? "light" : "dark");
-      setOllamaBaseUrl(s.ollamaBaseUrl || "http://127.0.0.1:11434");
+      setOllamaBaseUrl(nextOllamaBaseUrl);
       setOllamaModel(s.ollamaModel || "");
       setEmbeddingProvider(s.embeddingProvider || "local_hash");
       setEmbeddingModel(s.embeddingModel || "");
@@ -224,7 +233,10 @@ export function SettingsPage() {
       setRuntimeSafeModeForceCpuOnly(
         Boolean(s.runtimeControls?.safeModeForceCpuOnly),
       );
-      await loadOllamaModels(s.ollamaBaseUrl || "http://127.0.0.1:11434");
+      const adapterModels = await loadOllamaModelsFromAdapters();
+      setOllamaModels(arrayOrEmpty<string>(adapterModels.models));
+      setOllamaModelsError(adapterModels.error ?? null);
+      setOllamaAutoRefreshReady(true);
       const m = await api.meta();
       setMeta(m);
       await refreshRemoteStatuses();
@@ -278,14 +290,18 @@ export function SettingsPage() {
   }, [theme]);
 
   useEffect(() => {
-    if (!ollamaBaseUrl) {
+    if (!ollamaAutoRefreshReady || !ollamaBaseUrl) {
+      return;
+    }
+    if (lastOllamaAutoRefreshBase.current === ollamaBaseUrl) {
       return;
     }
     const id = window.setTimeout(() => {
+      lastOllamaAutoRefreshBase.current = ollamaBaseUrl;
       void loadOllamaModels(ollamaBaseUrl);
     }, 300);
     return () => window.clearTimeout(id);
-  }, [ollamaBaseUrl]);
+  }, [ollamaAutoRefreshReady, ollamaBaseUrl]);
 
   const normalizedOllamaModel = ollamaModel.trim();
   const selectedInDropdown =

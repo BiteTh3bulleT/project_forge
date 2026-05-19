@@ -10,6 +10,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
 
@@ -51,12 +52,14 @@ export function PolicyPage() {
           api.dossiers.list(180),
           api.packetGuidance.list({ limit: 120 }),
         ]);
-      setPresets(presetRes.presets);
+      setPresets(arrayOrEmpty<ApprovalPreset>(presetRes.presets));
       setGlobalPreset(globalRes.presetId || "");
-      setRecommendations(recRes.recommendations);
-      setStrategies(stratRes.strategies);
-      setDossiers(dossierRes.dossiers);
-      setGuidance(guidanceRes.guidance);
+      setRecommendations(
+        arrayOrEmpty<PolicyRecommendation>(recRes.recommendations),
+      );
+      setStrategies(arrayOrEmpty<ExecutionStrategy>(stratRes.strategies));
+      setDossiers(arrayOrEmpty<Dossier>(dossierRes.dossiers));
+      setGuidance(arrayOrEmpty<PacketGuidance>(guidanceRes.guidance));
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -152,9 +155,16 @@ export function PolicyPage() {
             <PrimaryButton
               className="w-full md:w-auto"
               onClick={async () => {
-                await api.policy.setGlobalPreset(globalPreset);
-                setStatus(`Global preset set to ${globalPreset || "(none)"}.`);
-                await load();
+                try {
+                  await api.policy.setGlobalPreset(globalPreset);
+                  setStatus(
+                    `Global preset set to ${globalPreset || "(none)"}.`,
+                  );
+                  setErr(null);
+                  await load();
+                } catch (e) {
+                  setErr(e instanceof Error ? e.message : String(e));
+                }
               }}
             >
               Apply Global Preset
@@ -345,19 +355,24 @@ export function PolicyPage() {
             <PrimaryButton
               className="w-full sm:w-auto"
               onClick={async () => {
-                const d = dossierId.trim()
-                  ? Number(dossierId.trim())
-                  : undefined;
-                const res = await api.policy.recommend({
-                  taskType,
-                  dossierId: Number.isFinite(d) ? d : undefined,
-                  strategyId: strategyId.trim() || undefined,
-                  objective,
-                });
-                setStatus(
-                  `Policy recommendation created: ${res.recommendation.id}`,
-                );
-                await load();
+                try {
+                  const d = dossierId.trim()
+                    ? Number(dossierId.trim())
+                    : undefined;
+                  const res = await api.policy.recommend({
+                    taskType,
+                    dossierId: Number.isFinite(d) ? d : undefined,
+                    strategyId: strategyId.trim() || undefined,
+                    objective,
+                  });
+                  setStatus(
+                    `Policy recommendation created: ${res.recommendation.id}`,
+                  );
+                  setErr(null);
+                  await load();
+                } catch (e) {
+                  setErr(e instanceof Error ? e.message : String(e));
+                }
               }}
             >
               Generate Recommendation

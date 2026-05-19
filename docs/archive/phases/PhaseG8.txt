@@ -1,0 +1,334 @@
+# PHASE G8 — Desktop Shell Verification, Native App Polish, and Operator UX Pass
+
+You are working inside Project F.O.R.G.E.
+
+Do not output implementation code in chat.
+Write code to files.
+In chat, summarize changed files, tests run, results, and risks only.
+
+## Mission
+
+Verify, harden, and polish the FORGE desktop shell so it behaves like a real operator desktop, not a dashboard inside Linux.
+
+FORGE currently runs as a desktop shell on top of the labwc Wayland compositor substrate. labwc owns low-level compositor behavior. FORGE owns the operator-facing desktop surface, launcher, taskbar, shell windows, native app visibility model, bounded native-window controls, and session UX.
+
+This phase does not replace labwc.
+This phase does not create a compositor.
+This phase makes the existing shell trustworthy under real operator use.
+
+## Phase Label
+
+PHASE G8 — DESKTOP_SHELL_VERIFICATION_AND_OPERATOR_UX_POLISH
+
+Status marker:
+
+DESKTOP_SHELL_POLISH / OPERATOR_UI_AUTHORITY / LABWC_SUBSTRATE_PRESERVED / NO_HOST_MUTATION / NO_FORGE_K_AUTHORITY_EXPANSION
+
+## Mandatory Reading
+
+Read first:
+
+* README.md
+* AGENTS.md
+* docs/DESKTOP_SHELL.md
+* docs/operations/forge_graphical_shell_session.md
+* docs/runbooks/forge_operator_desktop_vm.md
+* docs/reviews/current_phase_status.md
+* apps/desktop/src-tauri/src/window_manager.rs
+* apps/desktop/src/lib/windowManager.ts
+* desktop shell stores/components
+* native app registry/compositor integration files
+* taskbar/dock/start launcher files
+* terminal/file-manager/browser launcher files
+* related tests
+
+Do not assume file names. Inspect the repo.
+
+## Current Truth To Preserve
+
+FORGE is the desktop shell authority.
+
+FORGE owns:
+
+* operator desktop surface
+* launcher/start behavior
+* taskbar/dock behavior
+* in-shell FORGE windows
+* native app registry consumption
+* bounded native app controls
+* clean desktop boot
+* system/status surfaces
+* workspace/session UX
+
+labwc still owns:
+
+* native app placement
+* compositor policy
+* drag/resize mechanics
+* low-level Wayland behavior
+* output routing
+
+Do not replace labwc in this phase.
+
+## Goals
+
+### 1. Verify Current Desktop Shell Behavior
+
+Audit the current implementation against intended OS-shell behavior.
+
+Confirm:
+
+* closed native apps disappear from the taskbar
+* failed launches do not leave phantom entries
+* multiple terminal windows remain separate
+* multiple file-manager windows remain separate
+* focused/minimized/restored state updates correctly
+* taskbar does not treat stale polling output as truth
+* frontend consumes backend/compositor lifecycle truth
+* clean boot lands on the desktop, not diagnostics
+* System/Status remains available but not noisy by default
+
+Create or update:
+
+* docs/reports/phase_g8_desktop_shell_verification.md
+* docs/status/phase_g8_desktop_shell_verification.md
+
+### 2. Native App UX Polish
+
+Improve operator-facing behavior for native Linux apps.
+
+Requirements:
+
+* terminal launcher should prefer configured terminal
+* file-manager launcher should prefer configured file manager
+* browser launcher should use configured/default browser when available
+* unsupported native actions must fail visibly and safely
+* native app taskbar labels should be human-readable
+* native app icons should use known mappings where possible
+* unknown app icons should use a clean fallback
+* native app windows should not collapse into one confusing entry unless explicit grouping exists
+* launch failures should produce bounded diagnostics, not ghost entries
+
+Do not introduce unsafe shell execution.
+
+Do not execute arbitrary command strings.
+
+### 3. Start Menu / Launcher Polish
+
+The Start/launcher surface should feel like an OS launcher.
+
+Requirements:
+
+* common operator apps are easy to launch:
+
+  * terminal
+  * files
+  * browser
+  * system/status
+  * settings
+  * activity/jobs
+  * memory
+  * chat/workspace
+* failed launches show bounded diagnostics
+* launcher does not spam duplicate pending entries
+* launcher does not expose unsafe host mutation controls
+* launcher labels are clear and operator-friendly
+* launcher favorites/pinned apps remain stable after restart if already supported
+
+### 4. Taskbar Interaction Verification
+
+Verify or implement expected behavior:
+
+* left click:
+
+  * focus/restore inactive window
+  * minimize active focused window when appropriate
+* middle click:
+
+  * close when supported
+* right click:
+
+  * open a bounded action menu with available actions:
+
+    * focus/restore
+    * minimize
+    * maximize/fullscreen if supported
+    * close if supported
+
+Unsupported actions should be hidden or disabled.
+
+No fake controls.
+No demon buttons.
+No “it probably works” buttons. Civilization has suffered enough.
+
+### 5. Clean Desktop Boot
+
+Ensure normal boot flow remains:
+
+* FORGE loading screen
+* FORGE login when enabled
+* empty desktop after login
+* wallpaper/dock/taskbar/start visible
+* no restored clutter unless explicitly configured
+* diagnostics hidden behind System/Status/Activity
+
+If forge-core is unreachable, show honest degraded state without pretending everything is healthy.
+
+### 6. Operator Smoke Test Runbook
+
+Create or update:
+
+* docs/runbooks/desktop_shell_operator_smoke_test.md
+
+Include manual checks:
+
+* boot to desktop
+* open terminal
+* open two terminals
+* close one terminal
+* close both terminals
+* open file manager
+* open browser
+* left-click taskbar entries
+* middle-click taskbar entries
+* right-click taskbar entries
+* minimize/restore native apps
+* close native apps
+* restart shell
+* verify no stale taskbar entries
+* verify degraded System/Status state if core is stopped
+* verify normal desktop/session rollback remains available
+
+### 7. Tests
+
+Add or update focused tests for:
+
+* terminal preference resolution
+* invalid terminal config rejection
+* file-manager preference resolution if supported
+* browser preference resolution if supported
+* native launch pending expiration
+* duplicate pending launch prevention
+* taskbar entry removal after close
+* multiple native windows represented separately
+* clean desktop reset after login
+* right-click menu action availability
+* no unsafe shell string execution
+* no direct host mutation commands introduced
+
+Use existing repo conventions.
+
+Prefer focused tests over huge fragile integration tests unless the repo already has stable integration coverage.
+
+## Documentation Requirements
+
+Update:
+
+* docs/DESKTOP_SHELL.md
+* docs/operations/forge_graphical_shell_session.md
+* docs/reviews/current_phase_status.md
+
+Create:
+
+* docs/reports/phase_g8_desktop_shell_verification.md
+* docs/status/phase_g8_desktop_shell_verification.md
+* docs/runbooks/desktop_shell_operator_smoke_test.md
+
+The report must include:
+
+* current observed behavior
+* what was fixed
+* what was only verified
+* tests run
+* manual checks run or not run
+* known limitations
+* rollback notes
+* recommended next phase
+
+## Authority Boundaries
+
+This phase must not:
+
+* replace labwc
+* create a new compositor
+* enable autologin
+* remove fallback desktop/TTY paths
+* run systemctl
+* run nixos-rebuild
+* install packages
+* mutate NixOS config
+* reboot or shutdown the host
+* load/unload kernel modules
+* load/unload models directly
+* write semantic memory directly
+* bypass gateway/approvals/Control Lane
+* make FORGE-K simulator services live authority
+* treat model output as truth
+* add public mutation routes
+* add direct host-control buttons
+
+## Validation Commands
+
+Attempt:
+
+* npm test
+* npm run lint
+* npm run validate:desktop
+* npm run validate:local
+* npm run build:desktop
+
+Also run the most focused desktop/Tauri tests available for:
+
+* taskbar
+* launcher
+* native app registry
+* terminal launching
+* desktop window store
+* Tauri window manager
+* compositor/native-window action wrappers
+
+If broad validation fails due to environment constraints, run focused validation and document exactly why.
+
+Do not mark environment-blocked checks as passed.
+
+## Definition of Done
+
+G8 is complete when:
+
+* current desktop shell behavior is verified against intended OS-shell semantics
+* native app taskbar behavior is stable
+* native app launch failures do not leave ghost entries
+* multiple native app windows are understandable
+* terminal/file/browser launching is configurable or clearly documented
+* clean desktop boot remains clean
+* operator smoke test runbook exists
+* docs/status/report files are updated
+* tests prove the key lifecycle behavior
+* no authority boundaries are expanded
+
+## Recommended Next Phase
+
+After G8, recommend one of these based on findings:
+
+* G9 — Workspace/session persistence and “Resume Mission”
+* G9 — Native app grouping and semantic workspaces
+* G9 — Compositor-adjacent control readiness
+* G9 — Desktop shell performance and latency pass
+
+Pick only one recommendation and justify it.
+
+## Final Response Format
+
+When finished, respond with:
+
+1. Summary
+2. Files changed
+3. Behavior verified
+4. Tests run
+5. Failed/skipped validation
+6. Known limitations
+7. Recommended next phase
+
+Do not include implementation code in chat.
+
+END PROMPT

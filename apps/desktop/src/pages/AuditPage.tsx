@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { formatTime } from "../lib/format";
 
 type AuditRecord = {
@@ -149,7 +150,7 @@ export function AuditPage() {
         correlationId: correlation || undefined,
         jobId: jobId || undefined,
       });
-      setRecords(r.records as AuditRecord[]);
+      setRecords(arrayOrEmpty<AuditRecord>(r.records));
       setErr(null);
       syncParams({
         category,
@@ -170,7 +171,7 @@ export function AuditPage() {
     }
     try {
       const r = await api.audit.trace(id);
-      setTrace(r.records as AuditRecord[]);
+      setTrace(arrayOrEmpty<AuditRecord>(r.records));
       setTraceErr(null);
       syncParams({ traceId: id, correlationId: correlation });
     } catch (e) {

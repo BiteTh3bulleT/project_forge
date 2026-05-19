@@ -1,4 +1,5 @@
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { api } from "../lib/api";
@@ -7,6 +8,7 @@ import { useUiStore } from "../stores/uiStore";
 export function CommandPage() {
   const navigate = useNavigate();
   const setStatus = useUiStore((s) => s.setStatusLine);
+  const [err, setErr] = useState<string | null>(null);
 
   async function queue(
     templateId: string,
@@ -22,8 +24,15 @@ export function CommandPage() {
       query,
       initiatingSource: "command_page",
     });
+    setErr(null);
     setStatus(`Job queued: ${res.job.id}`);
     navigate(`/jobs/${res.job.id}`);
+  }
+
+  function showError(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    setErr(message);
+    setStatus(`Command failed: ${message}`);
   }
 
   return (
@@ -34,21 +43,31 @@ export function CommandPage() {
         actions={
           <GhostButton
             onClick={async () => {
-              const res = await api.commands.execute("reindex", {
-                via: "command.page",
-              });
-              setStatus(
-                res.jobId
-                  ? `Re-index job queued: ${res.jobId}`
-                  : "Re-index queued.",
-              );
-              navigate(res.jobId ? `/jobs/${res.jobId}` : "/jobs");
+              try {
+                const res = await api.commands.execute("reindex", {
+                  via: "command.page",
+                });
+                setErr(null);
+                setStatus(
+                  res.jobId
+                    ? `Re-index job queued: ${res.jobId}`
+                    : "Re-index queued.",
+                );
+                navigate(res.jobId ? `/jobs/${res.jobId}` : "/jobs");
+              } catch (error) {
+                showError(error);
+              }
             }}
           >
             Queue Re-index Job
           </GhostButton>
         }
       >
+        {err ? (
+          <div className="mb-3 rounded-md border border-forge-ember/30 bg-forge-ember/10 p-3 text-sm text-forge-ash">
+            {err}
+          </div>
+        ) : null}
         <div className="grid gap-3 md:grid-cols-2">
           <Quick
             title="Chat"
@@ -125,7 +144,7 @@ export function CommandPage() {
                 "Search packet",
                 "Assemble a packet from current indexed memory",
                 "project context",
-              )
+              ).catch(showError)
             }
           >
             Create packet
@@ -137,7 +156,7 @@ export function CommandPage() {
                 "Ollama summary",
                 "Summarize relevant context from retrieval",
                 "summarize current forge phase",
-              )
+              ).catch(showError)
             }
           >
             Ollama summary
@@ -149,7 +168,7 @@ export function CommandPage() {
                 "Implementation plan",
                 "Draft implementation plan from local index",
                 "implementation plan for next phase",
-              )
+              ).catch(showError)
             }
           >
             Plan from index
@@ -161,7 +180,7 @@ export function CommandPage() {
                 "Codex handoff",
                 "Prepare bounded Codex handoff contract",
                 "implement job cancellation checks",
-              )
+              ).catch(showError)
             }
           >
             Prepare Codex handoff
@@ -173,7 +192,7 @@ export function CommandPage() {
                 "Claude handoff",
                 "Prepare bounded Claude Code handoff contract",
                 "draft docs for approvals",
-              )
+              ).catch(showError)
             }
           >
             Prepare Claude handoff
@@ -185,7 +204,7 @@ export function CommandPage() {
                 "Normalize context",
                 "Import source context and regenerate AGENTS/CLAUDE guidance",
                 "normalize forge context",
-              )
+              ).catch(showError)
             }
           >
             Normalize context

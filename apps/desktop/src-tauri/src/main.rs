@@ -296,14 +296,29 @@ fn forge_data_dir() -> Option<PathBuf> {
     }
 }
 
-fn forge_api_token_file() -> Option<PathBuf> {
+fn forge_api_token_file_from_env() -> Option<PathBuf> {
     if let Ok(value) = std::env::var("FORGE_API_TOKEN_FILE") {
         let trimmed = value.trim();
         if !trimmed.is_empty() {
             return Some(PathBuf::from(trimmed));
         }
     }
-    forge_data_dir().map(|dir| dir.join("auth").join("api_token"))
+    None
+}
+
+fn forge_api_token_files() -> Vec<PathBuf> {
+    if let Some(path) = forge_api_token_file_from_env() {
+        return vec![path];
+    }
+
+    let mut paths = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        paths.push(cwd.join(".forge").join("docker-api-token"));
+    }
+    if let Some(path) = forge_data_dir().map(|dir| dir.join("auth").join("api_token")) {
+        paths.push(path);
+    }
+    paths
 }
 
 #[tauri::command]
@@ -314,21 +329,25 @@ fn read_forge_api_token() -> Result<Option<String>, String> {
             return Ok(Some(token.to_string()));
         }
     }
-    let Some(path) = forge_api_token_file() else {
-        return Ok(None);
-    };
-    match std::fs::read_to_string(&path) {
-        Ok(body) => {
-            let token = body.trim();
-            if token.is_empty() {
-                Ok(None)
-            } else {
-                Ok(Some(token.to_string()))
+    for path in forge_api_token_files() {
+        match std::fs::read_to_string(&path) {
+            Ok(body) => {
+                let token = body.trim();
+                if !token.is_empty() {
+                    return Ok(Some(token.to_string()));
+                }
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(err) => {
+                return Err(format!(
+                    "failed to read FORGE API token from {}: {}",
+                    path.display(),
+                    err
+                ))
             }
         }
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(err) => Err(format!("failed to read FORGE API token: {}", err)),
     }
+    Ok(None)
 }
 
 fn fit_operator_desktop_window(window: &tauri::WebviewWindow) {

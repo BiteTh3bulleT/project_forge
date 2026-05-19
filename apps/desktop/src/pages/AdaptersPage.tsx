@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { useUiStore } from "../stores/uiStore";
 
 export function AdaptersPage() {
@@ -14,7 +15,7 @@ export function AdaptersPage() {
   async function refresh() {
     try {
       const res = await api.adapters.list();
-      setItems(res.adapters);
+      setItems(arrayOrEmpty<AdapterInfo>(res.adapters));
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));

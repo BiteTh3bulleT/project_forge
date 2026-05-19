@@ -751,6 +751,13 @@ export function ChatPage() {
 
       let settled = false;
 
+      const settleStopped = () => {
+        if (settled) return;
+        settled = true;
+        cleanupStream();
+        resolve();
+      };
+
       const failOrRecover = (error: Error) => {
         if (settled) return;
         settled = true;
@@ -888,12 +895,19 @@ export function ChatPage() {
           streamController.signal,
         )
         .then(() => {
+          if (streamController.signal.aborted) {
+            settleStopped();
+            return;
+          }
           if (!settled && !streamController.signal.aborted) {
             failOrRecover(new Error("Assistant stream ended before completion."));
           }
         })
         .catch((error) => {
-          if (streamController.signal.aborted) return;
+          if (streamController.signal.aborted) {
+            settleStopped();
+            return;
+          }
           failOrRecover(
             error instanceof Error
               ? error

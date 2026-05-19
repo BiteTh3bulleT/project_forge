@@ -3,6 +3,7 @@ import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
 
@@ -50,11 +51,12 @@ export function StrategiesPage() {
         api.strategies.list({ limit: 240 }),
         api.policy.listPresets(80),
       ]);
-      setStrategies(s.strategies);
-      setPresets(p.presets);
+      const nextStrategies = arrayOrEmpty<ExecutionStrategy>(s.strategies);
+      setStrategies(nextStrategies);
+      setPresets(arrayOrEmpty<ApprovalPreset>(p.presets));
       setErr(null);
-      if (!selected && s.strategies.length > 0) {
-        selectStrategy(s.strategies[0]);
+      if (!selected && nextStrategies.length > 0) {
+        selectStrategy(nextStrategies[0]);
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));

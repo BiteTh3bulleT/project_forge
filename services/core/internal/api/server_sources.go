@@ -157,6 +157,8 @@ func (s *Server) handleAddSource(w http.ResponseWriter, r *http.Request) {
 	_ = s.log.Emit(ctx, "source.added", map[string]any{"sourceId": id, "path": abs})
 	if err := s.ingest.IndexSource(ctx, id, abs); err != nil {
 		_ = s.log.Emit(ctx, "error.raised", map[string]any{"where": "ingest after add", "message": err.Error(), "sourceId": id})
+	} else {
+		s.runLibrarianAfterSourceIndex(ctx, id, abs)
 	}
 	if s.watch != nil {
 		_ = s.watch.SyncSources(ctx, listSourcePaths(s.st.DB))
@@ -208,7 +210,37 @@ func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
 		writeAPIRequestError(w, http.StatusInternalServerError, err)
 		return
 	}
+	s.runLibrarianAfterSourceIndex(ctx, id, path)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "scope": "one", "sourceId": id})
+}
+
+// runLibrarianAfterSourceIndex fires the librarian ingest pipeline (dry-run)
+// for a source folder that has just been indexed. Errors and panics are logged
+// and swallowed: the source index itself has already succeeded, and the
+// librarian path is non-mutating diagnostic infrastructure that must never
+// fail the user-facing source operation.
+func (s *Server) runLibrarianAfterSourceIndex(ctx context.Context, sourceID int64, sourcePath string) {
+	if s == nil || s.autonomy == nil || !s.autonomy.LibrarianPipelineConfigured() {
+		return
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			_ = s.log.Emit(ctx, "error.raised", map[string]any{
+				"where":      "librarian after source index",
+				"message":    fmt.Sprintf("panic: %v", r),
+				"sourceId":   sourceID,
+				"sourcePath": sourcePath,
+			})
+		}
+	}()
+	if _, err := s.autonomy.RunSourceIndexIngest(ctx, sourceID, sourcePath); err != nil {
+		_ = s.log.Emit(ctx, "error.raised", map[string]any{
+			"where":      "librarian after source index",
+			"message":    err.Error(),
+			"sourceId":   sourceID,
+			"sourcePath": sourcePath,
+		})
+	}
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {

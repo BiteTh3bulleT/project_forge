@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api, type ForgeSystemStatus } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 
 const REFRESH_MS = 30_000;
 
@@ -181,13 +182,13 @@ export function SystemPage() {
     return () => window.clearInterval(interval);
   }, [load]);
 
-  const proposalRows = status?.forgeh?.proposals ?? [];
-  const executionRows = status?.forgeh?.executions?.items ?? [];
+  const proposalRows = arrayOrEmpty(status?.forgeh?.proposals);
+  const executionRows = arrayOrEmpty(status?.forgeh?.executions?.items);
   const kernelActivation = status?.kernel_activation;
-  const subsystemRows = kernelActivation?.authority_matrix ?? [];
+  const subsystemRows = arrayOrEmpty(kernelActivation?.authority_matrix);
   const cutoverReadiness = status?.storage?.cutover_readiness;
-  const authorityRows = status?.authority?.rows ?? [];
-  const authorityBlockers = status?.authority?.blockers ?? [];
+  const authorityRows = arrayOrEmpty(status?.authority?.rows);
+  const authorityBlockers = arrayOrEmpty(status?.authority?.blockers);
   const approvalQueueReason = status?.approval_queue?.reason;
   const backendPendingApprovals = status?.approval_queue?.pending_count;
   const displayedPendingApprovals =
@@ -214,10 +215,10 @@ export function SystemPage() {
     validation?.commands?.[0]?.result ?? validationEvidence?.status;
   const warnings = useMemo(() => {
     const values = [
-      ...(status?.warnings ?? []),
-      ...(status?.forgeh?.policy?.warnings ?? []),
-      ...(status?.modelruntime?.warnings ?? []),
-      ...(status?.modelruntime?.errors ?? []),
+      ...arrayOrEmpty(status?.warnings),
+      ...arrayOrEmpty(status?.forgeh?.policy?.warnings),
+      ...arrayOrEmpty(status?.modelruntime?.warnings),
+      ...arrayOrEmpty(status?.modelruntime?.errors),
     ];
     return Array.from(new Set(values.filter(Boolean))).slice(0, 8);
   }, [status]);
@@ -696,7 +697,7 @@ export function SystemPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(kernelActivation?.authority_gates ?? []).map((gate) => (
+                    {arrayOrEmpty(kernelActivation?.authority_gates).map((gate) => (
                       <tr
                         key={gate.name}
                         className="border-t border-white/10"
@@ -733,7 +734,7 @@ export function SystemPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(kernelActivation?.validation_actions ?? []).map((action) => (
+                  {arrayOrEmpty(kernelActivation?.validation_actions).map((action) => (
                     <tr
                       key={action.action ?? action.capability}
                       className="border-t border-white/10"

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
 
@@ -38,7 +39,7 @@ function linesToList(s: string): string[] {
 }
 
 function listToLines(arr: string[] | undefined): string {
-  return (arr ?? []).join("\n");
+  return arrayOrEmpty<string>(arr).join("\n");
 }
 
 function emptyForm(): Record<string, string | boolean | number> {
@@ -120,7 +121,7 @@ export function ExecutionPermissionsPage() {
   const refresh = useCallback(async () => {
     try {
       const r = await api.executionPermissions.profiles();
-      setProfiles(r.profiles as PermissionProfile[]);
+      setProfiles(arrayOrEmpty<PermissionProfile>(r.profiles));
       setActive(r.active as PermissionProfile | null);
       setSummary(r.summary);
       setErr(null);

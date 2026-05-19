@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"forge/projectforge/services/core/internal/aios/autonomy"
+	"forge/projectforge/services/core/internal/aios/compute/librarian"
 	"forge/projectforge/services/core/internal/aios/controllane"
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/aios/rulecells"
@@ -73,6 +74,7 @@ func NewAutonomyMaintenanceLoop(opts AutonomyMaintenanceLoopOptions) *AutonomyMa
 		runImprovement:      opts.RunImprovement,
 		customMaintenance:   opts.RunMaintenance != nil,
 		customImprovement:   opts.RunImprovement != nil,
+		librarianPipeline:   opts.LibrarianPipeline,
 		stopCh:              make(chan struct{}),
 	}
 	if loop.runMaintenance == nil {
@@ -1290,6 +1292,22 @@ func newDefaultAutonomyMaintenanceLoop(db *sql.DB, cfg config.Config, ev *events
 		},
 		NowMillis: nowFn,
 	})
+	librarianPipeline := librarian.NewIngestPipeline(librarian.IngestPipelineOptions{
+		Kernel: kernel,
+		Repositories: librarian.CellReadRepositories{
+			Journal:        controllane.NewSQLiteJournalRepository(db),
+			Notes:          noteRepo,
+			Links:          controllane.NewSQLiteSemanticLinkRepository(db),
+			State:          stateRepo,
+			Loops:          loopRepo,
+			Artifacts:      controllane.NewSQLiteArtifactRefRepository(db),
+			Models:         modelRepo,
+			Contradictions: contradictionRepo,
+			Supersessions:  supersessionRepo,
+			ContextPackets: controllane.NewSQLiteContextPacketRepository(db),
+		},
+		NowMillis: nowFn,
+	})
 	bundle, err := autonomy.NewSQLiteBundleStrict(db)
 	if err != nil {
 		apiLogWarn("autonomy maintenance loop disabled", apiLogErr(err))
@@ -1367,6 +1385,7 @@ func newDefaultAutonomyMaintenanceLoop(db *sql.DB, cfg config.Config, ev *events
 		TickEvery:           parseDurationSetting(loadSetting(db, "autonomy_dream_tick", "45s"), 45*time.Second, 5*time.Second, 30*time.Minute),
 		MaintenanceCooldown: parseDurationSetting(loadSetting(db, "autonomy_maintenance_cooldown", "20m"), 20*time.Minute, 1*time.Minute, 24*time.Hour),
 		ImprovementCooldown: parseDurationSetting(loadSetting(db, "autonomy_improvement_cooldown", "45m"), 45*time.Minute, 1*time.Minute, 24*time.Hour),
+		LibrarianPipeline:   librarianPipeline,
 	})
 }
 

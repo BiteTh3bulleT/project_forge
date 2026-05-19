@@ -144,9 +144,16 @@ export function CommandBar(props: { compact?: boolean }) {
         verb === "policy" ||
         verb === "settings" ||
         verb === "sources" ||
-        verb === "adapters"
+        verb === "adapters" ||
+        verb === "events" ||
+        verb === "logs"
       ) {
-        const path = verb === "dashboard" ? "/dashboard" : `/${verb}`;
+        const path =
+          verb === "dashboard"
+            ? "/dashboard"
+            : verb === "logs"
+              ? "/events"
+              : `/${verb}`;
         navigate(path);
         setStatus(`Opened ${verb}.`);
         setDraft("");

@@ -624,6 +624,16 @@
   overflow: auto;
 }
 
+.forge-os-route-window {
+  position: absolute;
+  inset: 1.5rem;
+  z-index: 22;
+}
+
+.forge-os-route-window .forge-os-window__content {
+  min-height: 100%;
+}
+
 /* Taskbar */
 
 .forge-os-taskbar {

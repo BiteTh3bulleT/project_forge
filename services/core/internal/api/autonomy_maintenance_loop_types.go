@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"forge/projectforge/services/core/internal/aios/autonomy"
+	"forge/projectforge/services/core/internal/aios/compute/librarian"
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/aios/truth"
 	"forge/projectforge/services/core/internal/events"
@@ -35,6 +36,7 @@ type AutonomyMaintenanceLoopOptions struct {
 	HasInflightWork     func() bool
 	RunMaintenance      func(ctx context.Context, idleReason string) error
 	RunImprovement      func(ctx context.Context, idleReason string) error
+	LibrarianPipeline   *librarian.IngestPipeline
 }
 
 type AutonomyDreamStatus struct {
@@ -128,6 +130,8 @@ type AutonomyMaintenanceLoop struct {
 	runImprovement    func(ctx context.Context, idleReason string) error
 	customMaintenance bool
 	customImprovement bool
+
+	librarianPipeline *librarian.IngestPipeline
 
 	stopOnce sync.Once
 	stopCh   chan struct{}

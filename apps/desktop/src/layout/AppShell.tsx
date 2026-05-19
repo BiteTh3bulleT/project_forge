@@ -393,6 +393,11 @@ export function AppShell(props: AppShellProps) {
     runtimeWindows.find((window_) => window_.runtimeLabel === hostLabel)
       ?.monitorId ??
     null;
+  const routedDetailOpen =
+    pathname.startsWith("/jobs/") || pathname.startsWith("/memory/chunk/");
+  const routedDetailBackRoute = pathname.startsWith("/jobs/")
+    ? "/jobs"
+    : "/memory";
 
   useEffect(() => {
     if (desktopHosts.length === 0) return;
@@ -413,6 +418,7 @@ export function AppShell(props: AppShellProps) {
   useEffect(() => {
     if (detachedTauriShell) return;
     if (isHome) return;
+    if (routedDetailOpen) return;
     const tool = currentTool;
     if (tool.id === "other" || tool.id === "job-detail") return;
     const existing = windows.find(
@@ -425,7 +431,7 @@ export function AppShell(props: AppShellProps) {
     }
     // intentionally omit windows / focusedId: this effect only reacts to route changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, isHome, detachedTauriShell, hostLabel]);
+  }, [pathname, isHome, routedDetailOpen, detachedTauriShell, hostLabel]);
 
   // Detached Tauri compatibility only: reconcile the desktop window store
   // against real Tauri windows. Normal Tauri uses confined in-shell windows.
@@ -1025,9 +1031,55 @@ export function AppShell(props: AppShellProps) {
               ))
             : null}
 
-          {/* Hidden router-driven children for deep-link routes. Detached
-              Tauri compatibility renders routes in separate webviews. */}
-          {!detachedTauriShell ? (
+          {routedDetailOpen && !detachedTauriShell ? (
+            <section
+              className="forge-os-window forge-os-window--focused forge-os-route-window"
+              aria-label={currentTool.label}
+            >
+              <div className="forge-os-window__chrome">
+                <div className="forge-os-window__title">
+                  <span className="forge-os-window__sigil">
+                    {currentTool.shortLabel}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="forge-os-window__name">
+                      {currentTool.label}
+                    </div>
+                    <div className="forge-os-window__sub">
+                      {currentTool.description}
+                    </div>
+                  </div>
+                </div>
+                <div className="forge-os-window__buttons">
+                  <button
+                    type="button"
+                    className="forge-os-window__btn"
+                    onClick={() => navigate(routedDetailBackRoute)}
+                    aria-label={`Back to ${routedDetailBackRoute === "/jobs" ? "Jobs" : "Memory"}`}
+                    title="Back"
+                  >
+                    ‹
+                  </button>
+                  <button
+                    type="button"
+                    className="forge-os-window__btn forge-os-window__btn--close"
+                    onClick={() => navigate(routedDetailBackRoute)}
+                    aria-label="Close"
+                    title="Close"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              <div className="forge-os-window__body">
+                <div className="forge-os-window__content">{props.children}</div>
+              </div>
+            </section>
+          ) : null}
+
+          {/* Hidden router-driven children keep route effects mounted for normal
+              tool pages. Detail routes render above as focused shell windows. */}
+          {!detachedTauriShell && !routedDetailOpen ? (
             <div className="forge-os-router-sink" aria-hidden>
               {props.children}
             </div>

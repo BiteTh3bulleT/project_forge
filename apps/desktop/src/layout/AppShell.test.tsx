@@ -291,6 +291,21 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(desktopMocks.listForgeWindows).not.toHaveBeenCalled();
   });
 
+  it("renders routed detail pages in a focused shell window", () => {
+    render(
+      <MemoryRouter initialEntries={["/jobs/job-1"]}>
+        <AppShell isMainWindow={true}>
+          <div data-testid="routed-detail">Job detail route</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByLabelText("Job Detail")).toBeTruthy();
+    expect(screen.getByTestId("routed-detail").textContent).toBe(
+      "Job detail route",
+    );
+  });
+
   it("exposes the global shell status line as a polite live region", () => {
     render(
       <MemoryRouter>

@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
 
@@ -31,11 +32,12 @@ export function AutomationPage() {
         api.automation.listRules({ limit: 200 }),
         api.automation.history(150),
       ]);
-      setRules(rs.rules);
-      setHistory(hs.history);
+      const nextRules = arrayOrEmpty<AutomationRule>(rs.rules);
+      setRules(nextRules);
+      setHistory(arrayOrEmpty<AutomationHistory>(hs.history));
       setErr(null);
-      if (selectedRuleId == null && rs.rules.length > 0) {
-        selectRule(rs.rules[0]);
+      if (selectedRuleId == null && nextRules.length > 0) {
+        selectRule(nextRules[0]);
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -195,15 +197,20 @@ export function AutomationPage() {
             disabled={selectedRuleId == null}
             onClick={async () => {
               if (selectedRuleId == null) return;
-              const res = await api.automation.runRule({
-                ruleId: selectedRuleId,
-                dryRun: runDry,
-              });
-              setRunResult(res.result as unknown as Record<string, unknown>);
-              setStatus(
-                `Automation rule ${selectedRuleId} run: ${res.result.executed ? "executed" : "preview/skipped"}.`,
-              );
-              await load();
+              try {
+                const res = await api.automation.runRule({
+                  ruleId: selectedRuleId,
+                  dryRun: runDry,
+                });
+                setRunResult(res.result as unknown as Record<string, unknown>);
+                setStatus(
+                  `Automation rule ${selectedRuleId} run: ${res.result.executed ? "executed" : "preview/skipped"}.`,
+                );
+                setErr(null);
+                await load();
+              } catch (e) {
+                setErr(e instanceof Error ? e.message : String(e));
+              }
             }}
           >
             Run Selected Rule

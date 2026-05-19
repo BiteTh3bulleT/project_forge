@@ -13,7 +13,7 @@ export function EventsPage() {
   async function refresh() {
     try {
       const res = await api.events(200);
-      setEvents(res.events);
+      setEvents(Array.isArray(res.events) ? res.events : []);
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));

@@ -3,6 +3,7 @@ import { GhostButton, PrimaryButton } from "@forge/ui";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { api } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
 
@@ -39,11 +40,12 @@ export function EvaluationsPage() {
         api.evaluations.metrics(Number.isFinite(d) ? d : undefined),
         api.jobs.list("", 60),
       ]);
-      setEvaluations(ev.evaluations);
-      setMetrics(met.metrics);
-      setJobs(recent.jobs);
-      if (!jobId && recent.jobs.length > 0) {
-        setJobId(recent.jobs[0].id);
+      const nextJobs = arrayOrEmpty<JobRecord>(recent.jobs);
+      setEvaluations(arrayOrEmpty<EvaluationRecord>(ev.evaluations));
+      setMetrics(arrayOrEmpty<AdapterMetric>(met.metrics));
+      setJobs(nextJobs);
+      if (!jobId && nextJobs.length > 0) {
+        setJobId(nextJobs[0].id);
       }
       setErr(null);
     } catch (e) {

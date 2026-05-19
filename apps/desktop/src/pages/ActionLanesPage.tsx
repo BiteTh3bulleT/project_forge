@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
 
@@ -67,7 +68,7 @@ export function ActionLanesPage() {
   const refresh = useCallback(async () => {
     try {
       const r = await api.actionLanes.list();
-      setLanes(r.lanes as LaneRow[]);
+      setLanes(arrayOrEmpty<LaneRow>(r.lanes));
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));

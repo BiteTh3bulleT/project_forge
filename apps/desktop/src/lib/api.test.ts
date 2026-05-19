@@ -109,4 +109,26 @@ describe("api client request bounds", () => {
     await assertion;
     expect(signal?.aborted).toBe(true);
   });
+
+  it("formats structured API errors instead of leaking raw JSON", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "unauthorized",
+            message: "missing or invalid bearer token",
+          },
+        }),
+        {
+          status: 401,
+          statusText: "Unauthorized",
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    await expect(api.health()).rejects.toThrow(
+      "401 unauthorized: missing or invalid bearer token",
+    );
+  });
 });

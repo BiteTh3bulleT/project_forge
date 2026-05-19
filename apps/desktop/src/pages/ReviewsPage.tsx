@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
 
@@ -18,8 +19,20 @@ function parseLines(raw: string): string[] {
     .filter(Boolean);
 }
 
-function lines(v: string[]): string {
-  return v.join("\n");
+function lines(v: unknown): string {
+  return arrayOrEmpty<string>(v).join("\n");
+}
+
+function normalizeReconciliation(
+  reconciliation: ImportReconciliation,
+): ImportReconciliation {
+  return {
+    ...reconciliation,
+    changedFiles: arrayOrEmpty<string>(reconciliation.changedFiles),
+    failureReasons: arrayOrEmpty<string>(reconciliation.failureReasons),
+    unresolvedIssues: arrayOrEmpty<string>(reconciliation.unresolvedIssues),
+    suggestedNextSteps: arrayOrEmpty<string>(reconciliation.suggestedNextSteps),
+  };
 }
 
 export function ReviewsPage() {
@@ -56,9 +69,13 @@ export function ReviewsPage() {
         api.imports.list(180),
         api.reconciliation.list({ limit: 180 }),
       ]);
-      setReviews(r.reviews);
-      setImportsList(i.imports);
-      setReconciliations(rec.reconciliations);
+      setReviews(arrayOrEmpty<ReviewRecord>(r.reviews));
+      setImportsList(arrayOrEmpty<ImportedExecution>(i.imports));
+      setReconciliations(
+        arrayOrEmpty<ImportReconciliation>(rec.reconciliations).map(
+          normalizeReconciliation,
+        ),
+      );
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -78,14 +95,15 @@ export function ReviewsPage() {
   async function loadReconciliation(importId: number) {
     try {
       const res = await api.reconciliation.getByImport(importId);
-      setSelectedReconciliation(res.reconciliation);
-      setChangedFiles(lines(res.reconciliation.changedFiles));
-      setFailureReasons(lines(res.reconciliation.failureReasons));
-      setUnresolvedIssues(lines(res.reconciliation.unresolvedIssues));
-      setNextSteps(lines(res.reconciliation.suggestedNextSteps));
-      setAgentNotes(res.reconciliation.agentNotes);
-      setPatchSummary(res.reconciliation.patchSummary);
-      setReviewStatus(res.reconciliation.reviewStatus || "pending");
+      const reconciliation = normalizeReconciliation(res.reconciliation);
+      setSelectedReconciliation(reconciliation);
+      setChangedFiles(lines(reconciliation.changedFiles));
+      setFailureReasons(lines(reconciliation.failureReasons));
+      setUnresolvedIssues(lines(reconciliation.unresolvedIssues));
+      setNextSteps(lines(reconciliation.suggestedNextSteps));
+      setAgentNotes(reconciliation.agentNotes);
+      setPatchSummary(reconciliation.patchSummary);
+      setReviewStatus(reconciliation.reviewStatus || "pending");
     } catch {
       setSelectedReconciliation(null);
       setChangedFiles("");

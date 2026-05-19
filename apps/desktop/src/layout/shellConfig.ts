@@ -35,6 +35,7 @@ export type ShellToolId =
   | "backup"
   | "release"
   | "job-detail"
+  | "memory-detail"
   | "other";
 
 export type ShellToolDefinition = {
@@ -354,6 +355,17 @@ export const assignableShellTools: readonly ShellToolDefinition[] =
   );
 
 export function getShellTool(pathname: string): ShellToolDefinition {
+  if (pathname.startsWith("/memory/chunk/")) {
+    return {
+      id: "memory-detail",
+      label: "Memory Chunk",
+      shortLabel: "MC",
+      route: pathname,
+      description:
+        "Focused memory chunk detail with source, embedding, and inspection evidence.",
+      primary: false,
+    };
+  }
   if (pathname.startsWith("/jobs/")) {
     return {
       id: "job-detail",

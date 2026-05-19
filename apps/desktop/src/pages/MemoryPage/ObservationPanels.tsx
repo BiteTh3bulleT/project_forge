@@ -4,7 +4,6 @@ import type {
   ObservationVSADetail,
 } from "@forge/shared";
 
-import { api } from "../../lib/api";
 import { formatTime } from "../../lib/format";
 import { EmptyState, Panel } from "./shared";
 
@@ -64,15 +63,11 @@ export function ObservationsPanel(props: {
 export function ObservationDetailPanel(props: {
   obsDetail: MemoryObservationDetail | null;
   obsVSADetail: ObservationVSADetail | null;
-  setObsDetail: (detail: MemoryObservationDetail) => void;
-  setObsVSADetail: (detail: ObservationVSADetail | null) => void;
-  status: string;
-  setStatus: (status: string) => void;
 }) {
   return (
     <Panel
       title="Observation Detail"
-      subtitle="Inspect lineage, links, and usefulness events. Mark stale/useful/noisy to repair memory drift."
+      subtitle="Inspect lineage, links, usefulness events, and VSA bindings as read-only historical evidence."
     >
       {!props.obsDetail ? (
         <EmptyState
@@ -83,10 +78,6 @@ export function ObservationDetailPanel(props: {
         <ObservationDetailContent
           obsDetail={props.obsDetail}
           obsVSADetail={props.obsVSADetail}
-          setObsDetail={props.setObsDetail}
-          setObsVSADetail={props.setObsVSADetail}
-          status={props.status}
-          setStatus={props.setStatus}
         />
       )}
     </Panel>
@@ -96,10 +87,6 @@ export function ObservationDetailPanel(props: {
 function ObservationDetailContent(props: {
   obsDetail: MemoryObservationDetail;
   obsVSADetail: ObservationVSADetail | null;
-  setObsDetail: (detail: MemoryObservationDetail) => void;
-  setObsVSADetail: (detail: ObservationVSADetail | null) => void;
-  status: string;
-  setStatus: (status: string) => void;
 }) {
   return (
     <div className="space-y-3">
@@ -123,78 +110,10 @@ function ObservationDetailContent(props: {
         {props.obsDetail.observation.rawContent || "(no raw content)"}
       </div>
       <ObservationVSADetailBlock obsVSADetail={props.obsVSADetail} />
-      <div className="flex flex-wrap gap-2">
-        {[
-          ["useful", "Useful"],
-          ["noisy", "Noisy"],
-          ["not_useful", "Not useful"],
-          ["insufficient", "Insufficient"],
-        ].map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            className="forge-btn forge-btn--ghost"
-            onClick={async () => {
-              await api.memory.markObservationUsefulness(
-                props.obsDetail.observation.id,
-                {
-                  signal: value,
-                  note: `Marked from memory page at ${new Date().toISOString()}`,
-                },
-              );
-              const [detail, vsa] = await Promise.all([
-                api.memory.getObservation(props.obsDetail.observation.id),
-                api.memory
-                  .getObservationVSA(props.obsDetail.observation.id)
-                  .catch(() => ({
-                    detail: null as ObservationVSADetail | null,
-                  })),
-              ]);
-              props.setObsDetail(detail.observation);
-              if (vsa.detail) {
-                props.setObsVSADetail(vsa.detail);
-              }
-              props.setStatus(
-                `Observation ${props.obsDetail.observation.id} marked ${value}.`,
-              );
-            }}
-          >
-            {label}
-          </button>
-        ))}
-        <button
-          type="button"
-          className="forge-btn forge-btn--ghost"
-          onClick={async () => {
-            await api.memory.patchObservation(props.obsDetail.observation.id, {
-              stale: !props.obsDetail.observation.stale,
-              lastVerifiedAtMs: Date.now(),
-            });
-            const [detail, vsa] = await Promise.all([
-              api.memory.getObservation(props.obsDetail.observation.id),
-              api.memory
-                .getObservationVSA(props.obsDetail.observation.id)
-                .catch(() => ({
-                  detail: null as ObservationVSADetail | null,
-                })),
-            ]);
-            props.setObsDetail(detail.observation);
-            if (vsa.detail) {
-              props.setObsVSADetail(vsa.detail);
-            }
-            props.setStatus(
-              `Observation ${props.obsDetail.observation.id} stale=${String(detail.observation.observation.stale)}.`,
-            );
-          }}
-        >
-          Toggle stale
-        </button>
+      <div className="rounded border border-forge-platinum/10 bg-black/20 p-3 text-xs leading-5 text-forge-mist">
+        Legacy observation mutation controls are retired. Usefulness and stale
+        state are shown from existing evidence only.
       </div>
-      {props.status ? (
-        <div className="rounded border border-forge-platinum/10 bg-black/20 p-2 text-xs text-forge-mist">
-          {props.status}
-        </div>
-      ) : null}
     </div>
   );
 }

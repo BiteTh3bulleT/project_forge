@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -102,14 +102,19 @@ describe("MemoryPage note composer", () => {
     vi.clearAllMocks();
   });
 
-  it("records an operator note through the memory observation API", async () => {
+  it("keeps retired legacy memory note writes read-only", async () => {
     render(
       <MemoryRouter initialEntries={["/memory"]}>
         <MemoryPage />
       </MemoryRouter>,
     );
 
-    fireEvent.change(await screen.findByPlaceholderText(/decision/i), {
+    expect(
+      await screen.findByText(/Legacy memory note writes are retired/i),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Record note" })).toBeNull();
+
+    fireEvent.change(screen.getByPlaceholderText(/decision/i), {
       target: { value: "Remember the basalt notebook" },
     });
     fireEvent.change(screen.getByPlaceholderText(/durable note/i), {
@@ -118,22 +123,33 @@ describe("MemoryPage note composer", () => {
     fireEvent.change(screen.getByPlaceholderText(/comma/i), {
       target: { value: "memory, section6" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Record note" }));
 
-    await waitFor(() => {
-      expect(apiMocks.createObservation).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: "note",
-          summary: "Remember the basalt notebook",
-          rawContent:
-            "The basalt notebook belongs in reopened chat memory.",
-          tags: ["memory", "section6"],
-          verificationState: "operator_recorded",
-          originKind: "operator_note",
-        }),
-      );
+    expect(apiMocks.createObservation).not.toHaveBeenCalled();
+  });
+
+  it("keeps retired observation mutation controls read-only", async () => {
+    apiMocks.createObservation({
+      type: "note",
+      summary: "Remember the basalt notebook",
+      rawContent: "The basalt notebook belongs in reopened chat memory.",
+      tags: ["memory", "section6"],
+      verificationState: "operator_recorded",
+      originKind: "operator_note",
     });
-    expect(await screen.findByText(/Memory note recorded as observation #1/)).toBeTruthy();
+
+    render(
+      <MemoryRouter initialEntries={["/memory"]}>
+        <MemoryPage />
+      </MemoryRouter>,
+    );
+
     expect(await screen.findByText(/Remember the basalt notebook/)).toBeTruthy();
+    expect(
+      await screen.findByText(/Legacy observation mutation controls are retired/i),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Useful" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Toggle stale" })).toBeNull();
+    expect(apiMocks.markObservationUsefulness).not.toHaveBeenCalled();
+    expect(apiMocks.patchObservation).not.toHaveBeenCalled();
   });
 });

@@ -8,10 +8,19 @@ import { useEffect, useState, type ReactNode } from "react";
 
 import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
 
 const modes: RetrievalMode[] = ["keyword", "semantic", "hybrid"];
+
+function normalizeRun(run: RetrievalRun): RetrievalRun {
+  return {
+    ...run,
+    results: arrayOrEmpty(run.results),
+    vsaSignals: arrayOrEmpty(run.vsaSignals),
+  };
+}
 
 function isOptionalEndpointMissing(error: unknown): boolean {
   const message =
@@ -55,10 +64,13 @@ export function RetrievalRunsPage() {
         limit: 80,
         dossierId: Number.isFinite(d) ? d : undefined,
       });
-      setRuns(res.runs);
-      if (res.runs.length > 0 && !selectedRun) {
-        setSelectedRun(res.runs[0]);
-      }
+      const nextRuns = arrayOrEmpty<RetrievalRun>(res.runs).map(normalizeRun);
+      setRuns(nextRuns);
+      setSelectedRun((current) => {
+        if (nextRuns.length === 0) return null;
+        if (!current) return nextRuns[0];
+        return nextRuns.find((run) => run.id === current.id) ?? nextRuns[0];
+      });
       setErr(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -92,12 +104,14 @@ export function RetrievalRunsPage() {
         ]);
         if (cancelled) return;
         const map: Record<number, Record<string, unknown>> = {};
-        selection.selection.forEach((row) => {
+        arrayOrEmpty<typeof selection.selection[number]>(
+          selection.selection,
+        ).forEach((row) => {
           map[row.retrievalResultId] = row.reason ?? {};
         });
         setSelectionByResult(map);
         const vsaMap: Record<number, RetrievalResultVSASignal> = {};
-        (vsaSignals.signals ?? []).forEach((signal) => {
+        arrayOrEmpty<RetrievalResultVSASignal>(vsaSignals.signals).forEach((signal) => {
           vsaMap[signal.retrievalResultId] = signal;
         });
         setVsaByResult(vsaMap);
@@ -309,7 +323,7 @@ export function RetrievalRunsPage() {
                   ].join(" ")}
                   onClick={async () => {
                     const full = await api.retrieval.getRun(run.id);
-                    setSelectedRun(full.run);
+                    setSelectedRun(normalizeRun(full.run));
                   }}
                 >
                   <div className="flex items-center justify-between gap-2">

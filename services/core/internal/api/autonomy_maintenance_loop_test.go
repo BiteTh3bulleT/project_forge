@@ -7,11 +7,103 @@ import (
 	"testing"
 	"time"
 
+	"forge/projectforge/services/core/internal/aios/compute/librarian"
+	"forge/projectforge/services/core/internal/aios/controllane"
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/audit"
 	"forge/projectforge/services/core/internal/config"
 	"forge/projectforge/services/core/internal/events"
 	"forge/projectforge/services/core/internal/store"
 )
+
+func TestRunSourceIndexIngestNoopWhenPipelineMissing(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer st.Close()
+	loop := NewAutonomyMaintenanceLoop(AutonomyMaintenanceLoopOptions{
+		DB:        st.DB,
+		Events:    events.New(st.DB),
+		Scope:     domain.ForgeScope{WorkspaceID: "ws-noop", LaneID: "control.semantic"},
+		NowMillis: func() int64 { return 1_800_000_000_000 },
+	})
+	if loop.LibrarianPipelineConfigured() {
+		t.Fatalf("expected LibrarianPipelineConfigured=false when no pipeline injected")
+	}
+	res, err := loop.RunSourceIndexIngest(context.Background(), 42, "/tmp/src")
+	if err != nil {
+		t.Fatalf("unexpected err from noop ingest: %v", err)
+	}
+	if res.Success {
+		t.Fatalf("expected zero-value result when pipeline missing, got %+v", res)
+	}
+}
+
+func TestRunSourceIndexIngestDryRunRoutesThroughLibrarianPipeline(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer st.Close()
+
+	now := int64(1_800_000_000_000)
+	nowFn := func() int64 { return now }
+	scope := domain.ForgeScope{WorkspaceID: "ws-librarian-ingest", LaneID: "control.semantic"}
+
+	kernel := controllane.NewProcessor(controllane.ProcessorOptions{
+		Registry:     controllane.NewStaticActionRegistry(),
+		Validator:    controllane.NewDeterministicValidator(),
+		Capabilities: controllane.NewStaticCapabilityService(),
+		ApprovalGate: controllane.NewStaticApprovalGate(),
+		TxRunner:     controllane.NewSQLiteTransactionRunner(st.DB),
+		AuditSink:    controllane.NewCoreAuditSink(audit.New(st.DB)),
+		NowMillis:    nowFn,
+	})
+	pipeline := librarian.NewIngestPipeline(librarian.IngestPipelineOptions{
+		Kernel: kernel,
+		Repositories: librarian.CellReadRepositories{
+			Journal:        controllane.NewSQLiteJournalRepository(st.DB),
+			Notes:          controllane.NewSQLiteMemoryNoteRepository(st.DB),
+			Links:          controllane.NewSQLiteSemanticLinkRepository(st.DB),
+			State:          controllane.NewSQLiteStateRepository(st.DB),
+			Loops:          controllane.NewSQLiteOpenLoopRepository(st.DB),
+			Artifacts:      controllane.NewSQLiteArtifactRefRepository(st.DB),
+			Models:         controllane.NewSQLiteDerivedModelRepository(st.DB),
+			Contradictions: controllane.NewSQLiteContradictionRepository(st.DB),
+			Supersessions:  controllane.NewSQLiteSupersessionRepository(st.DB),
+			ContextPackets: controllane.NewSQLiteContextPacketRepository(st.DB),
+		},
+		NowMillis: nowFn,
+	})
+	loop := NewAutonomyMaintenanceLoop(AutonomyMaintenanceLoopOptions{
+		DB:                st.DB,
+		Events:            events.New(st.DB),
+		Scope:             scope,
+		NowMillis:         nowFn,
+		LibrarianPipeline: pipeline,
+	})
+
+	if !loop.LibrarianPipelineConfigured() {
+		t.Fatalf("expected pipeline configured after injection")
+	}
+	res, err := loop.RunSourceIndexIngest(context.Background(), 7, "/tmp/source-7")
+	if err != nil {
+		t.Fatalf("RunSourceIndexIngest: %v", err)
+	}
+	if !res.DryRun {
+		t.Fatalf("expected dry-run result (commit_mode=validate_only forces DryRun), got DryRun=false")
+	}
+	if len(res.CommittedObjectIDs) != 0 {
+		t.Fatalf("expected zero commits in dry-run preflight, got %+v", res.CommittedObjectIDs)
+	}
+	if res.Scope.WorkspaceID != scope.WorkspaceID {
+		t.Fatalf("expected scope.workspaceId=%q to propagate, got %+v", scope.WorkspaceID, res.Scope)
+	}
+	if res.CorrelationID == "" {
+		t.Fatalf("expected correlation id to propagate")
+	}
+}
 
 func TestAutonomyDreamLoopRunsMaintenanceAndImprovementOnlyWhenIdle(t *testing.T) {
 	st, err := store.Open(t.TempDir())

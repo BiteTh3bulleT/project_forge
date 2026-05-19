@@ -236,6 +236,7 @@ function RoutedViews({
           <Route path="/adapters" element={<AdaptersPage />} />
           <Route path="/models" element={<ModelsPage />} />
           <Route path="/events" element={<EventsPage />} />
+          <Route path="/logs" element={<Navigate to="/events" replace />} />
           <Route path="/autonomy" element={<AutonomyPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/layouts" element={<WorkspaceLayoutsPage />} />

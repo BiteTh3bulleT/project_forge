@@ -94,10 +94,50 @@ export async function j<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const t = await res.text().catch(() => "");
-    throw new Error(t || `${res.status} ${res.statusText}`);
+    throw new Error(formatApiError(res.status, res.statusText, t));
   }
   if (res.status === 204) {
     return undefined as T;
   }
   return (await res.json()) as T;
+}
+
+function stringField(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function formatApiError(
+  status: number,
+  statusText: string,
+  body: string,
+): string {
+  const fallback = `${status} ${statusText}`.trim();
+  const trimmed = body.trim();
+  if (!trimmed) return fallback;
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (parsed && typeof parsed === "object") {
+      const record = parsed as Record<string, unknown>;
+      const nestedError =
+        record.error && typeof record.error === "object"
+          ? (record.error as Record<string, unknown>)
+          : null;
+      const code =
+        stringField(nestedError?.code) ??
+        stringField(record.code) ??
+        stringField(record.error);
+      const message =
+        stringField(nestedError?.message) ??
+        stringField(record.message) ??
+        stringField(record.detail);
+      if (message && code) return `${status} ${code}: ${message}`;
+      if (message) return `${status}: ${message}`;
+      if (code) return `${status} ${code}`;
+    }
+  } catch {
+    // Non-JSON error bodies are handled below.
+  }
+
+  return trimmed.length > 240 ? `${trimmed.slice(0, 237)}...` : trimmed;
 }

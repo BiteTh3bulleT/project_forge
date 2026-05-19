@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
+import { arrayOrEmpty } from "../lib/arrays";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
 
@@ -41,11 +42,11 @@ export function BackupPage() {
   async function refresh() {
     try {
       const r = await api.backup.bundles(80);
-      setBundles(r.bundles as Bundle[]);
+      setBundles(arrayOrEmpty<Bundle>(r.bundles));
       setDirs({
         backupDir: r.backupDir,
         exportDir: r.exportDir,
-        kinds: r.knownKinds,
+        kinds: arrayOrEmpty<string>(r.knownKinds),
       });
       setErr(null);
     } catch (e) {
