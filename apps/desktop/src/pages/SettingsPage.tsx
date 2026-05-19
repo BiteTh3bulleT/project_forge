@@ -235,14 +235,23 @@ export function SettingsPage() {
       setRuntimeSafeModeForceCpuOnly(
         Boolean(s.runtimeControls?.safeModeForceCpuOnly),
       );
-      const adapterModels = await loadOllamaModelsFromAdapters();
-      setOllamaModels(arrayOrEmpty<string>(adapterModels.models));
-      setOllamaModelsError(adapterModels.error ?? null);
-      setOllamaAutoRefreshReady(true);
-      const m = await api.meta();
-      setMeta(m);
-      await refreshRemoteStatuses();
       setErr(null);
+      try {
+        const adapterModels = await loadOllamaModelsFromAdapters();
+        setOllamaModels(arrayOrEmpty<string>(adapterModels.models));
+        setOllamaModelsError(adapterModels.error ?? null);
+      } catch (e) {
+        setOllamaModels([]);
+        setOllamaModelsError(e instanceof Error ? e.message : String(e));
+      }
+      setOllamaAutoRefreshReady(true);
+      try {
+        const m = await api.meta();
+        setMeta(m);
+      } catch {
+        setMeta(null);
+      }
+      await refreshRemoteStatuses();
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
@@ -399,45 +408,51 @@ export function SettingsPage() {
   };
 
   async function refreshDiagnostics() {
-    const memory = (
-      performance as Performance & {
-        memory?: { usedJSHeapSize?: number; jsHeapSizeLimit?: number };
-      }
-    ).memory;
-    const browserNavigator = navigator as Navigator & { deviceMemory?: number };
-    const desktop = isTauriDesktop()
-      ? await getDesktopSystemDiagnostics()
-      : null;
-    setPcDiagnostics({
-      userAgent: navigator.userAgent,
-      platform: navigator.platform,
-      language: navigator.language,
-      languages: navigator.languages?.join(", ") || navigator.language,
-      cores:
-        typeof navigator.hardwareConcurrency === "number"
-          ? String(navigator.hardwareConcurrency)
-          : "unknown",
-      memoryGiB:
-        typeof browserNavigator.deviceMemory === "number"
-          ? `${browserNavigator.deviceMemory} GB`
-          : "unknown",
-      screenWidth: screen.width,
-      screenHeight: screen.height,
-      availWidth: screen.availWidth,
-      availHeight: screen.availHeight,
-      colorDepth: screen.colorDepth,
-      pixelRatio: window.devicePixelRatio,
-      runtime: window.performance?.timeOrigin
-        ? `timeOrigin ${new Date(window.performance.timeOrigin).toLocaleString()}`
-        : "unavailable",
-      memoryUsedMB: memory?.usedJSHeapSize
-        ? `${Math.round(memory.usedJSHeapSize / 1024 / 1024)} MB`
-        : "unavailable",
-      memoryLimitMB: memory?.jsHeapSizeLimit
-        ? `${Math.round(memory.jsHeapSizeLimit / 1024 / 1024)} MB`
-        : "unavailable",
-      desktop,
-    });
+    try {
+      const memory = (
+        performance as Performance & {
+          memory?: { usedJSHeapSize?: number; jsHeapSizeLimit?: number };
+        }
+      ).memory;
+      const browserNavigator = navigator as Navigator & {
+        deviceMemory?: number;
+      };
+      const desktop = isTauriDesktop()
+        ? await getDesktopSystemDiagnostics()
+        : null;
+      setPcDiagnostics({
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        language: navigator.language,
+        languages: navigator.languages?.join(", ") || navigator.language,
+        cores:
+          typeof navigator.hardwareConcurrency === "number"
+            ? String(navigator.hardwareConcurrency)
+            : "unknown",
+        memoryGiB:
+          typeof browserNavigator.deviceMemory === "number"
+            ? `${browserNavigator.deviceMemory} GB`
+            : "unknown",
+        screenWidth: screen.width,
+        screenHeight: screen.height,
+        availWidth: screen.availWidth,
+        availHeight: screen.availHeight,
+        colorDepth: screen.colorDepth,
+        pixelRatio: window.devicePixelRatio,
+        runtime: window.performance?.timeOrigin
+          ? `timeOrigin ${new Date(window.performance.timeOrigin).toLocaleString()}`
+          : "unavailable",
+        memoryUsedMB: memory?.usedJSHeapSize
+          ? `${Math.round(memory.usedJSHeapSize / 1024 / 1024)} MB`
+          : "unavailable",
+        memoryLimitMB: memory?.jsHeapSizeLimit
+          ? `${Math.round(memory.jsHeapSizeLimit / 1024 / 1024)} MB`
+          : "unavailable",
+        desktop,
+      });
+    } catch {
+      setPcDiagnostics(null);
+    }
   }
 
   return (

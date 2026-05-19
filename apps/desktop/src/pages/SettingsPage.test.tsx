@@ -194,4 +194,29 @@ describe("SettingsPage remote secrets", () => {
     expect(await screen.findByText("Model Lifecycle")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Open Models" })).toBeTruthy();
   });
+
+  it("keeps primary settings usable when secondary status loads fail", async () => {
+    mocks.adaptersList.mockRejectedValueOnce(
+      new Error("adapter discovery down"),
+    );
+    mocks.meta.mockRejectedValueOnce(new Error("meta down"));
+    mocks.telegramStatus.mockRejectedValueOnce(new Error("telegram down"));
+    mocks.discordStatus.mockRejectedValueOnce(new Error("discord down"));
+
+    renderSettingsPage();
+
+    expect(await screen.findByText("Settings operations board")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Save extensions" }),
+    ).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "Ollama model list unavailable: adapter discovery down",
+      ),
+    ).toBeTruthy();
+    expect(await screen.findByText("telegram down")).toBeTruthy();
+    expect(await screen.findByText("discord down")).toBeTruthy();
+    expect(screen.queryByText("meta down")).toBeNull();
+    expect(mocks.settingsPatch).not.toHaveBeenCalled();
+  });
 });
