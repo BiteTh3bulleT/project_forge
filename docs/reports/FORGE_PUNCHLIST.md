@@ -276,6 +276,7 @@ Continue the proven pattern (kvidentity, refvalidation, semanticvalidation). Pic
   - 2026-05-19 progress: added first-pass render coverage for `CommandPage`, `EventsPage`, and `ReleasePage`, covering static command surfaces plus API-backed event/release data rendering.
   - 2026-05-19 progress: added first-pass render coverage for `AdaptersPage`, `ProjectContextPage`, `BackupPage`, `StrategiesPage`, and `ActionLanesPage` using narrow API mocks and no native/destructive interactions.
   - 2026-05-19 progress: added first-pass render coverage for `JobsPage`, `StartPage`, and `LineagePage` with router wrappers and empty-state API mocks.
+  - 2026-05-19 progress: added first-pass render coverage for `AutomationPage`, `EvaluationsPage`, and `InsightsPage` around loaded-empty rules/history, evaluation/metrics, imports, insights, and embedding states.
 - [ ] **Command palette polish.** `CommandBar.tsx` exists; flesh out the actions surface.
 - [ ] **Accessibility audit pass.** Focus management, keyboard nav, ARIA labels on the operator-critical surfaces (Chat, Approvals, Operator Apps).
 
