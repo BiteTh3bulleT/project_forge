@@ -56,7 +56,8 @@ type ModelRuntimeRequestMeta struct {
 }
 
 type ModelRuntimeListRequest struct {
-	Meta ModelRuntimeRequestMeta `json:"meta"`
+	Meta          ModelRuntimeRequestMeta `json:"meta"`
+	SkipDiscovery bool                    `json:"-"`
 }
 
 func modelRuntimeRouteModelID(r *http.Request) string {

@@ -375,7 +375,7 @@ func (s *Server) resolveNativeOllamaChatModel(ctx context.Context, ol adapters.O
 	if requested == "" || s.modelRuntime == nil {
 		return "", ""
 	}
-	models, err := s.modelRuntime.ListModels(ctx, ModelRuntimeListRequest{})
+	models, err := s.modelRuntime.ListModels(ctx, ModelRuntimeListRequest{SkipDiscovery: true})
 	if err != nil {
 		return "", ""
 	}

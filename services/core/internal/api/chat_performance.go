@@ -333,7 +333,7 @@ func (s *Server) renderFastModelRuntimeStatusReply(ctx context.Context) string {
 	if loaded, err := s.modelRuntime.LoadedStatus(ctx, meta); err == nil {
 		parts = append(parts, fmt.Sprintf("loaded %d", loaded.Count))
 	}
-	if models, err := s.modelRuntime.ListModels(ctx, ModelRuntimeListRequest{Meta: meta}); err == nil {
+	if models, err := s.modelRuntime.ListModels(ctx, ModelRuntimeListRequest{Meta: meta, SkipDiscovery: true}); err == nil {
 		available := 0
 		for _, model := range models {
 			status := strings.ToLower(strings.TrimSpace(model.Status))

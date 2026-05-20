@@ -387,7 +387,7 @@ func (s *Server) resolveChatModelRuntimeModel(ctx context.Context, meta ModelRun
 		return "", "model runtime is unavailable"
 	}
 
-	models, err := s.modelRuntime.ListModels(ctx, ModelRuntimeListRequest{Meta: meta})
+	models, err := s.modelRuntime.ListModels(ctx, ModelRuntimeListRequest{Meta: meta, SkipDiscovery: true})
 	if err != nil {
 		_, code, message := mapModelRuntimeError(err)
 		if strings.TrimSpace(code) != "" {

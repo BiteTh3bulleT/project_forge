@@ -631,14 +631,16 @@ func modelRuntimeDiscoveredManifest(rawID, rawName string, backend modelruntime.
 }
 
 func (b *modelRuntimeBridge) ListModels(ctx context.Context, req ModelRuntimeListRequest) ([]ModelRuntimeModel, error) {
-	b.refreshDiscoveredModels(ctx, modelruntime.ManagementRequestMeta{
-		WorkspaceID:   strings.TrimSpace(req.Meta.WorkspaceID),
-		Actor:         "api",
-		Source:        "model_runtime_list",
-		CorrelationID: strings.TrimSpace(req.Meta.CorrelationID),
-		TraceID:       strings.TrimSpace(req.Meta.TraceID),
-		Metadata:      map[string]any{"trigger": "list"},
-	})
+	if !req.SkipDiscovery {
+		b.refreshDiscoveredModels(ctx, modelruntime.ManagementRequestMeta{
+			WorkspaceID:   strings.TrimSpace(req.Meta.WorkspaceID),
+			Actor:         "api",
+			Source:        "model_runtime_list",
+			CorrelationID: strings.TrimSpace(req.Meta.CorrelationID),
+			TraceID:       strings.TrimSpace(req.Meta.TraceID),
+			Metadata:      map[string]any{"trigger": "list"},
+		})
+	}
 	infos, err := b.runtime.List(ctx)
 	if err != nil {
 		return nil, mapModelRuntimeBridgeError(err)

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -2096,6 +2097,87 @@ func TestChatAssistantStreamUsesModelRuntimeStreamingWhenOllamaUnavailable(t *te
 	}
 	if fakeRuntime.chatCalls != 0 {
 		t.Fatalf("expected streaming path to avoid sync chat call, got %d", fakeRuntime.chatCalls)
+	}
+}
+
+func TestChatAssistantStreamDoesNotRefreshRemoteDiscoveryBeforeCloudToken(t *testing.T) {
+	var modelListCalls int32
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			atomic.AddInt32(&modelListCalls, 1)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]any{
+					{"id": "remote-qwen", "name": "Remote Qwen"},
+				},
+			})
+		case "/v1/chat/completions":
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"cloud \"}}]}\n\n"))
+			_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"stream\"},\"finish_reason\":\"stop\"}]}\n\n"))
+			_, _ = w.Write([]byte("data: [DONE]\n\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer remote.Close()
+
+	t.Setenv("FORGE_ENABLE_MODEL_RUNTIME", "true")
+	t.Setenv("FORGE_ENABLE_OPENAI_COMPAT_API", "false")
+	t.Setenv("FORGE_MODEL_OPENAI_COMPAT_ENDPOINT", remote.URL)
+	t.Setenv("FORGE_MODEL_OPENAI_COMPAT_API_KEY", "")
+	t.Setenv("FORGE_MODEL_VLLM_ENDPOINT", "")
+	t.Setenv("FORGE_MODEL_VLLM_API_KEY", "")
+	t.Setenv("FORGE_MODEL_DEFAULT_BACKEND", "openai_compat")
+	t.Setenv("FORGE_MODEL_POLICY_REQUIRE_WORKSPACE_SCOPE", "false")
+	t.Setenv("FORGE_MODEL_HOME", t.TempDir())
+
+	runtimeSvc := initModelRuntimeService(config.Load(), nil)
+	if runtimeSvc == nil {
+		t.Fatalf("expected model runtime service")
+	}
+	if _, err := runtimeSvc.LoadModel(context.Background(), "remote-qwen", ModelRuntimeControlRequest{
+		Actor:  "operator",
+		Source: "test",
+		Meta:   ModelRuntimeRequestMeta{WorkspaceID: "ws-test"},
+	}); err != nil {
+		t.Fatalf("load remote model: %v", err)
+	}
+	readyModelListCalls := atomic.LoadInt32(&modelListCalls)
+	if readyModelListCalls == 0 {
+		t.Fatalf("expected startup remote discovery call")
+	}
+
+	srv, _ := newBackupAuditHarness(t)
+	srv.modelRuntime = runtimeSvc
+	thread, err := srv.chat.CreateThread(context.Background(), "remote stream discovery budget", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	um, err := srv.chat.AppendMessage(context.Background(), thread.ID, "user", "answer quickly", map[string]any{
+		"requestedModelId": "remote-qwen",
+	})
+	if err != nil {
+		t.Fatalf("append user message: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodGet,
+		"/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/assistant-stream?userMessageId="+strconv.FormatInt(um.ID, 10),
+		nil,
+	)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "cloud stream") {
+		t.Fatalf("expected streamed cloud response, got body=%s", body)
+	}
+	if got := atomic.LoadInt32(&modelListCalls); got != readyModelListCalls {
+		t.Fatalf("chat stream refreshed remote discovery before streaming: calls=%d ready=%d", got, readyModelListCalls)
 	}
 }
 
