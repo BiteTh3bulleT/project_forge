@@ -5,9 +5,13 @@ mod linux_windows;
 mod notifications;
 mod window_manager;
 
-use desktop_metadata::{find_desktop_file_for_ids, find_icon_path, parse_desktop_value};
+use desktop_metadata::{
+    application_dirs, find_desktop_file_by_id, find_desktop_file_for_ids, find_icon_path,
+    parse_desktop_value,
+};
 
 use serde::Serialize;
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use sysinfo::{Disks, Pid, System};
@@ -83,6 +87,13 @@ struct OperatorAppLaunchResult {
     launched: bool,
     pid: Option<u32>,
     message: String,
+}
+
+struct OperatorAppLaunchPlan {
+    app_id: String,
+    label: String,
+    executable: String,
+    args: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -270,6 +281,247 @@ fn enrich_operator_app(app: &OperatorAppDefinition) -> OperatorApp {
     enriched
 }
 
+fn desktop_entry_bool(contents: &str, key: &str) -> bool {
+    parse_desktop_value(contents, key)
+        .map(|value| matches!(value.as_str(), "true" | "True" | "TRUE" | "1"))
+        .unwrap_or(false)
+}
+
+fn desktop_entry_is_visible_application(contents: &str) -> bool {
+    if desktop_entry_bool(contents, "Hidden")
+        || desktop_entry_bool(contents, "NoDisplay")
+        || desktop_entry_bool(contents, "Terminal")
+    {
+        return false;
+    }
+    parse_desktop_value(contents, "Type")
+        .map(|kind| kind == "Application")
+        .unwrap_or(true)
+}
+
+fn desktop_category(contents: &str) -> String {
+    let categories = parse_desktop_value(contents, "Categories").unwrap_or_default();
+    if categories.contains("Development") {
+        "Developer".to_string()
+    } else if categories.contains("Network") {
+        "Internet".to_string()
+    } else if categories.contains("Settings")
+        || categories.contains("System")
+        || categories.contains("Utility")
+    {
+        "System".to_string()
+    } else if categories.contains("AudioVideo") {
+        "Media".to_string()
+    } else if categories.contains("Graphics") {
+        "Graphics".to_string()
+    } else if categories.contains("Office") {
+        "Office".to_string()
+    } else if categories.contains("Game") {
+        "Games".to_string()
+    } else {
+        "Native Apps".to_string()
+    }
+}
+
+fn shell_meta_found(value: &str) -> bool {
+    value.chars().any(|ch| {
+        matches!(
+            ch,
+            ';' | '&' | '|' | '$' | '`' | '<' | '>' | '\\' | '\n' | '\r'
+        )
+    })
+}
+
+fn split_desktop_exec(exec: &str) -> Option<Vec<String>> {
+    if shell_meta_found(exec) {
+        return None;
+    }
+
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut quote: Option<char> = None;
+
+    for ch in exec.chars() {
+        if let Some(active_quote) = quote {
+            if ch == active_quote {
+                quote = None;
+            } else {
+                current.push(ch);
+            }
+            continue;
+        }
+
+        if ch == '"' || ch == '\'' {
+            quote = Some(ch);
+        } else if ch.is_whitespace() {
+            if !current.is_empty() {
+                tokens.push(std::mem::take(&mut current));
+            }
+        } else {
+            current.push(ch);
+        }
+    }
+
+    if quote.is_some() {
+        return None;
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+
+    if tokens.is_empty() {
+        None
+    } else {
+        Some(tokens)
+    }
+}
+
+fn blocked_desktop_executable(executable: &str) -> bool {
+    let name = Path::new(executable)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(executable);
+    matches!(
+        name,
+        "sh" | "bash" | "dash" | "zsh" | "fish" | "pkexec" | "sudo" | "systemctl" | "nixos-rebuild"
+    )
+}
+
+fn safe_desktop_exec_tokens(exec: &str) -> Option<Vec<String>> {
+    let tokens = split_desktop_exec(exec.trim())?;
+    let executable = tokens.first()?;
+    if executable.contains('%') || blocked_desktop_executable(executable) {
+        return None;
+    }
+
+    let filtered = tokens
+        .into_iter()
+        .filter(|token| !token.starts_with('%') && !token.contains('%'))
+        .collect::<Vec<_>>();
+    if filtered.is_empty() {
+        None
+    } else {
+        Some(filtered)
+    }
+}
+
+fn xdg_operator_app_from_desktop_entry(
+    path: &Path,
+    desktop_id: &str,
+    contents: &str,
+) -> Option<OperatorApp> {
+    if !desktop_entry_is_visible_application(contents) {
+        return None;
+    }
+    let name = parse_desktop_value(contents, "Name")?;
+    let exec = parse_desktop_value(contents, "Exec")?;
+    let tokens = safe_desktop_exec_tokens(&exec)?;
+    let executable = tokens.first()?.clone();
+    let description = parse_desktop_value(contents, "Comment")
+        .or_else(|| parse_desktop_value(contents, "GenericName"))
+        .unwrap_or_else(|| format!("Launch {name}."));
+    let icon_name = parse_desktop_value(contents, "Icon");
+    let icon_path = icon_name.as_deref().and_then(find_icon_path);
+
+    Some(OperatorApp {
+        id: format!("xdg:{desktop_id}"),
+        label: name,
+        description,
+        executable,
+        category: desktop_category(contents),
+        icon_name,
+        icon_path,
+        desktop_file: Some(path.to_string_lossy().into_owned()),
+        native: true,
+    })
+}
+
+fn xdg_launch_plan_from_desktop_entry(
+    app_id: &str,
+    _path: &Path,
+    contents: &str,
+) -> Option<OperatorAppLaunchPlan> {
+    if !desktop_entry_is_visible_application(contents) {
+        return None;
+    }
+    let label = parse_desktop_value(contents, "Name")?;
+    let exec = parse_desktop_value(contents, "Exec")?;
+    let mut tokens = safe_desktop_exec_tokens(&exec)?;
+    let executable = tokens.remove(0);
+
+    Some(OperatorAppLaunchPlan {
+        app_id: app_id.to_string(),
+        label,
+        executable,
+        args: tokens,
+    })
+}
+
+fn curated_desktop_ids() -> BTreeSet<&'static str> {
+    OPERATOR_APPS
+        .iter()
+        .flat_map(|app| app.desktop_ids.iter().copied())
+        .collect()
+}
+
+fn scan_operator_apps_from_dirs(dirs: &[PathBuf]) -> Vec<OperatorApp> {
+    let mut apps = Vec::new();
+    let mut seen = BTreeSet::new();
+
+    for dir in dirs {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        let mut paths = entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("desktop"))
+            .collect::<Vec<_>>();
+        paths.sort();
+
+        for path in paths {
+            let Some(desktop_id) = path.file_name().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            if !seen.insert(desktop_id.to_string()) {
+                continue;
+            }
+            let Ok(contents) = std::fs::read_to_string(&path) else {
+                continue;
+            };
+            if let Some(app) = xdg_operator_app_from_desktop_entry(&path, desktop_id, &contents) {
+                apps.push(app);
+            }
+        }
+    }
+
+    apps
+}
+
+fn merge_operator_apps_with_scanned(scanned: Vec<OperatorApp>) -> Vec<OperatorApp> {
+    let curated_desktop_ids = curated_desktop_ids();
+    let mut apps = OPERATOR_APPS
+        .iter()
+        .map(enrich_operator_app)
+        .collect::<Vec<_>>();
+    let mut ids = apps
+        .iter()
+        .map(|app| app.id.clone())
+        .collect::<BTreeSet<_>>();
+
+    for app in scanned {
+        let Some(desktop_id) = app.id.strip_prefix("xdg:") else {
+            continue;
+        };
+        if curated_desktop_ids.contains(desktop_id) || !ids.insert(app.id.clone()) {
+            continue;
+        }
+        apps.push(app);
+    }
+
+    apps
+}
+
 fn operator_desktop_locked() -> bool {
     std::env::var("FORGE_OPERATOR_DESKTOP_LOCKED")
         .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
@@ -450,7 +702,7 @@ fn read_system_diagnostics() -> Result<HostDiagnostics, String> {
 
 #[tauri::command]
 fn list_operator_apps() -> Vec<OperatorApp> {
-    OPERATOR_APPS.iter().map(enrich_operator_app).collect()
+    merge_operator_apps_with_scanned(scan_operator_apps_from_dirs(&application_dirs()))
 }
 
 fn resolve_operator_app(app_id: &str) -> Result<&'static OperatorAppDefinition, String> {
@@ -462,20 +714,34 @@ fn resolve_operator_app(app_id: &str) -> Result<&'static OperatorAppDefinition, 
 
 #[tauri::command]
 fn launch_operator_app(app_id: String) -> Result<OperatorAppLaunchResult, String> {
-    let app = resolve_operator_app(&app_id)?;
+    let app_id = app_id.trim();
+    let launch = if let Some(desktop_id) = app_id.strip_prefix("xdg:") {
+        let (path, contents) = find_desktop_file_by_id(desktop_id)
+            .ok_or_else(|| "operator app is not allowlisted".to_string())?;
+        xdg_launch_plan_from_desktop_entry(app_id, &path, &contents)
+            .ok_or_else(|| "operator app is not allowlisted".to_string())?
+    } else {
+        let app = resolve_operator_app(app_id)?;
+        OperatorAppLaunchPlan {
+            app_id: app.id.to_string(),
+            label: app.label.to_string(),
+            executable: app.executable.to_string(),
+            args: app.launch_args.iter().map(|arg| arg.to_string()).collect(),
+        }
+    };
 
-    let child = std::process::Command::new(app.executable)
-        .args(app.launch_args)
+    let child = std::process::Command::new(&launch.executable)
+        .args(&launch.args)
         .spawn()
-        .map_err(|err| format!("failed to launch {}: {}", app.label, err))?;
+        .map_err(|err| format!("failed to launch {}: {}", launch.label, err))?;
 
     Ok(OperatorAppLaunchResult {
-        app_id: app.id.to_string(),
-        label: app.label.to_string(),
-        executable: app.executable.to_string(),
+        app_id: launch.app_id,
+        label: launch.label.clone(),
+        executable: launch.executable,
         launched: true,
         pid: Some(child.id()),
-        message: format!("{} launch requested", app.label),
+        message: format!("{} launch requested", launch.label),
     })
 }
 
@@ -789,6 +1055,103 @@ mod tests {
                 .expect("trimmed app id should resolve")
                 .id,
             "api-health"
+        );
+    }
+
+    #[test]
+    fn xdg_desktop_entries_become_native_operator_apps() {
+        let path = PathBuf::from("/usr/share/applications/org.example.Tool.desktop");
+        let app = xdg_operator_app_from_desktop_entry(
+            &path,
+            "org.example.Tool.desktop",
+            "[Desktop Entry]\nType=Application\nName=Example Tool\nComment=Inspect example data\nExec=example-tool --new-window %U\nIcon=example-tool\nCategories=Development;Utility;\n",
+        )
+        .expect("safe application desktop entry should be listed");
+
+        assert_eq!(app.id, "xdg:org.example.Tool.desktop");
+        assert_eq!(app.label, "Example Tool");
+        assert_eq!(app.description, "Inspect example data");
+        assert_eq!(app.executable, "example-tool");
+        assert_eq!(app.category, "Developer");
+        assert_eq!(app.icon_name.as_deref(), Some("example-tool"));
+        assert_eq!(app.desktop_file.as_deref(), Some(path.to_str().unwrap()));
+        assert!(app.native);
+
+        let launch = xdg_launch_plan_from_desktop_entry(
+            "xdg:org.example.Tool.desktop",
+            &path,
+            "[Desktop Entry]\nType=Application\nName=Example Tool\nExec=example-tool --new-window %U\n",
+        )
+        .expect("safe application desktop entry should be launchable");
+        assert_eq!(launch.app_id, "xdg:org.example.Tool.desktop");
+        assert_eq!(launch.label, "Example Tool");
+        assert_eq!(launch.executable, "example-tool");
+        assert_eq!(launch.args, vec!["--new-window"]);
+    }
+
+    #[test]
+    fn xdg_desktop_exec_rejects_shell_and_host_mutation_paths() {
+        for exec in [
+            "sh -c 'touch /tmp/nope'",
+            "bash -lc firefox",
+            "pkexec pcmanfm",
+            "sudo reboot",
+            "systemctl reboot",
+            "nixos-rebuild switch",
+            "firefox; touch /tmp/nope",
+            "firefox && touch /tmp/nope",
+            "firefox | tee /tmp/nope",
+            "firefox $HOME",
+            "firefox `whoami`",
+        ] {
+            assert!(
+                safe_desktop_exec_tokens(exec).is_none(),
+                "unsafe Exec line should be rejected: {exec}"
+            );
+        }
+    }
+
+    #[test]
+    fn scanned_operator_apps_append_after_curated_apps_and_skip_curated_desktops() {
+        let native = OperatorApp {
+            id: "xdg:org.example.Tool.desktop".to_string(),
+            label: "Example Tool".to_string(),
+            description: "Inspect example data".to_string(),
+            executable: "example-tool".to_string(),
+            category: "Developer".to_string(),
+            icon_name: None,
+            icon_path: None,
+            desktop_file: Some("/usr/share/applications/org.example.Tool.desktop".to_string()),
+            native: true,
+        };
+        let duplicate_terminal = OperatorApp {
+            id: "xdg:foot.desktop".to_string(),
+            label: "Foot".to_string(),
+            description: "Terminal".to_string(),
+            executable: "foot".to_string(),
+            category: "System".to_string(),
+            icon_name: None,
+            icon_path: None,
+            desktop_file: Some("/usr/share/applications/foot.desktop".to_string()),
+            native: true,
+        };
+
+        let apps = merge_operator_apps_with_scanned(vec![duplicate_terminal, native]);
+
+        assert_eq!(
+            apps.first().expect("curated apps should exist").id,
+            "terminal"
+        );
+        assert!(apps
+            .iter()
+            .any(|app| app.id == "xdg:org.example.Tool.desktop"));
+        assert!(!apps.iter().any(|app| app.id == "xdg:foot.desktop"));
+        assert!(
+            apps.iter()
+                .position(|app| app.id == "xdg:org.example.Tool.desktop")
+                .expect("scanned app should be present")
+                > OPERATOR_APPS.len() - 1,
+            "scanned apps should append after curated FORGE apps"
         );
     }
 

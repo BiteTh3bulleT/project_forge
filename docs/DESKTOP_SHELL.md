@@ -43,6 +43,22 @@ Backed by real state:
 
 Primary tool launcher for day-to-day surfaces.
 
+### App Launcher
+
+The operator app launcher is backend-owned. It always lists the curated FORGE
+toolbelt first, then appends visible native `.desktop` applications discovered
+from the system XDG application directories. Curated entries keep stable IDs and
+ordering, so Terminal, Files, Editor, browser, diagnostics, and FORGE wrappers
+remain predictable.
+
+Scanned native entries use `xdg:<desktop-file>` IDs and launch through parsed
+`Exec=` tokens, not shell strings. The backend drops desktop field-code
+placeholders such as `%U`, rejects hidden/no-display/terminal entries, and
+refuses shell or host-mutation launch paths including shell interpreters,
+`sudo`, `pkexec`, `systemctl`, and `nixos-rebuild`. Scanned app discovery does
+not grant new FORGE authority; it only exposes normal native application
+launches through bounded Tauri command handling.
+
 ### Task Strip
 
 Per-window task strip for the surfaces open inside that window only.
