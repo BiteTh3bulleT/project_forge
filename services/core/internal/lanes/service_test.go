@@ -114,11 +114,11 @@ func TestEnsureDefaultsSeedsExpectedLaneInvariants(t *testing.T) {
 			allowedPaths:     []string{workspaceDir},
 		},
 		{
-			id:           "legacy.adapter.invoke",
-			actionType:   "legacy.adapter.invoke",
-			riskClass:    "low",
-			artifacts:    []string{"legacyAdapterInvocation"},
-			allowedPaths: []string{filepath.Clean(string(filepath.Separator))},
+			id:               "legacy.adapter.invoke",
+			actionType:       "legacy.adapter.invoke",
+			riskClass:        "scoped_execute",
+			artifacts:        []string{"legacyAdapterInvocation"},
+			allowedPaths:     []string{filepath.Clean(string(filepath.Separator))},
 		},
 	}
 
