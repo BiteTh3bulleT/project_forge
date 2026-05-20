@@ -6,7 +6,9 @@
 }:
 
 let
-  forgeDesktopShell = pkgs.callPackage ../../packages/forge-desktop-shell.nix { };
+  forgeDesktopShell = pkgs.callPackage ../../packages/forge-desktop-shell.nix {
+    renderProfile = "vm-safe";
+  };
   forgeShellSession = pkgs.callPackage ../../packages/forge-shell-session.nix {
     forgeDesktopShell = forgeDesktopShell;
   };
