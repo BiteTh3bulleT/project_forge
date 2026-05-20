@@ -6,6 +6,8 @@ final: prev: {
   forge-desktop-shell = final.callPackage ../packages/forge-desktop-shell.nix { };
   forge-operator-desktop-shell = final.callPackage ../packages/forge-desktop-shell.nix {
     renderProfile = "vm-safe";
+    bootLogin = false;
+    emptyDesktopOnBoot = true;
   };
   forge-shell-session = final.callPackage ../packages/forge-shell-session.nix {
     forgeDesktopShell = final.forge-desktop-shell;

@@ -16,6 +16,10 @@
   librsvg,
   libayatana-appindicator,
   renderProfile ? "default",
+  bootLogin ? false,
+  emptyDesktopOnBoot ? false,
+  loginUser ? "operator",
+  loginPassword ? "forge",
 }:
 
 let
@@ -43,9 +47,10 @@ let
     src = repoSrc;
     npmDepsHash = "sha256-jYunGuiJSavcSFRni+s48v5SjlERLsnLzOpxbX4D6jw=";
     npmBuildScript = "build:desktop";
-    VITE_FORGE_BOOT_LOGIN = "true";
-    VITE_FORGE_LOGIN_USER = "operator";
-    VITE_FORGE_LOGIN_PASSWORD = "forge";
+    VITE_FORGE_BOOT_LOGIN = if bootLogin then "true" else "false";
+    VITE_FORGE_EMPTY_DESKTOP_ON_BOOT = if emptyDesktopOnBoot then "true" else "false";
+    VITE_FORGE_LOGIN_USER = loginUser;
+    VITE_FORGE_LOGIN_PASSWORD = loginPassword;
     VITE_FORGE_RENDER_PROFILE = renderProfile;
 
     installPhase = ''

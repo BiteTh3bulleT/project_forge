@@ -140,7 +140,7 @@ Manual recovery checkpoint:
   `/nix/store/rw3zbfk28d5rfa1my2kgfgbja4bymjyg-nixos-system-forge-os-25.11.10470.0c88e1f2bdb9`
 - VM network: NAT with host SSH forwarding on `127.0.0.1:2222`.
 - Launch path:
-  `Plymouth FORGE-OS splash -> greetd -> forge-operator-session -> labwc -> forge-shell-session -> forge-desktop-shell -> FORGE shell loading screen -> FORGE login screen -> empty FORGE desktop -> forge-core`
+  `Plymouth FORGE-OS splash -> greetd/ReGreet OS login -> forge-operator-session -> labwc -> forge-shell-session -> forge-desktop-shell -> empty FORGE desktop -> forge-core`
 - Display: VirtualBox VMSVGA, 128 MiB VRAM, 3D acceleration enabled.
 - Session compatibility: `WEBKIT_DISABLE_DMABUF_RENDERER=1` is set for the
   operator desktop to avoid VirtualBox Wayland/dmabuf protocol failures.

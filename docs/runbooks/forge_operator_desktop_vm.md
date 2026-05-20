@@ -96,9 +96,11 @@ The VM keeps SSH disabled by default and does not enable autologin. Password
 login is required. TTY access and Nix generation rollback must remain available.
 Change the local password before exposing the VM beyond the host-only/local
 development boundary.
-The packaged desktop shows a FORGE loading screen before the FORGE login screen
-at boot. The current VM greeter is a local operator UX gate, not a PAM-backed
-security boundary yet.
+The native runtime uses the graphical OS greeter as the FORGE login boundary.
+The packaged desktop shell disables its older client-side unlock screen in this
+path, so a successful ReGreet/PAM login opens the empty FORGE operator desktop.
+The native/operator package also sets `emptyDesktopOnBoot = true` so restored
+tool windows do not reappear on first desktop load.
 
 ## Boundaries
 
@@ -123,8 +125,6 @@ firmware / bootloader
 -> labwc compositor
 -> forge-shell-session
 -> packaged forge-desktop-shell
--> FORGE shell loading screen
--> FORGE login screen
 -> empty FORGE operator desktop
 ```
 
@@ -132,7 +132,7 @@ firmware / bootloader
 2. Confirm the FORGE-OS Runtime boot splash appears during boot.
 3. Log in through the graphical greeter as `operator`.
 4. Confirm the login starts the FORGE native desktop session.
-5. At the FORGE login screen, sign in with the local VM operator credentials above when the shell presents it.
+5. Confirm the FORGE shell opens to an empty desktop after the OS login.
 6. Open terminal/files/toolbelt apps from FORGE.
 7. Lock or log out through the desktop path when done.
 

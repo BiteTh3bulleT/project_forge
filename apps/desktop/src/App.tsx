@@ -34,6 +34,8 @@ import { useUiStore } from "./stores/uiStore";
 const FORGE_OPERATOR_LOGIN_SESSION_KEY = "forge.operator.login.unlocked";
 const FORGE_BOOT_LOGIN_REQUIRED =
   import.meta.env.VITE_FORGE_BOOT_LOGIN === "true";
+const FORGE_EMPTY_DESKTOP_ON_BOOT =
+  import.meta.env.VITE_FORGE_EMPTY_DESKTOP_ON_BOOT === "true";
 const FORGE_OPERATOR_DESKTOP_ROUTE = "/";
 const FORGE_BOOT_SCREEN_MIN_MS = 1600;
 
@@ -261,6 +263,7 @@ export default function App() {
   const layoutReady = useWorkspaceLayoutStore((s) => s.ready);
   const locationRef = useRef(`${location.pathname}${location.search}`);
   const desktopShownAfterUnlockRef = useRef(false);
+  const desktopBootResetRef = useRef(false);
   const layoutHydratedRef = useRef(false);
   const currentWindowLabel = useWorkspaceLayoutStore(
     (s) => s.currentWindowLabel,
@@ -362,6 +365,13 @@ export default function App() {
     const id = window.setInterval(() => void ping(), 8000);
     return () => window.clearInterval(id);
   }, [ping, isPrimaryShellWindow]);
+
+  useEffect(() => {
+    if (!FORGE_EMPTY_DESKTOP_ON_BOOT) return;
+    if (!isPrimaryShellWindow || desktopBootResetRef.current) return;
+    desktopBootResetRef.current = true;
+    useDesktopWindowStore.getState().resetDesktopSession();
+  }, [isPrimaryShellWindow]);
 
   useEffect(() => {
     if (!canHydrateLayouts || layoutHydratedRef.current) return;

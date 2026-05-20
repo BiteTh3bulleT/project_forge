@@ -28,6 +28,8 @@
         forgeDesktopShell = pkgs.callPackage ./nix/packages/forge-desktop-shell.nix { };
         forgeOperatorDesktopShell = pkgs.callPackage ./nix/packages/forge-desktop-shell.nix {
           renderProfile = "vm-safe";
+          bootLogin = false;
+          emptyDesktopOnBoot = true;
         };
         forgeShellSession = pkgs.callPackage ./nix/packages/forge-shell-session.nix {
           forgeDesktopShell = forgeDesktopShell;

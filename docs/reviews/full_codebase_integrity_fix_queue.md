@@ -10,7 +10,7 @@ Status: prioritized queue only. No fixes were applied during CA1.
 | CA1-002 | High | filesystem authority | `services/core/internal/config/config.go`; `services/core/internal/api/server.go`; `services/core/internal/permissions/service.go` | Default workspace `/` can become broad write authority. | yes | yes |
 | CA1-003 | High | network exposure | `docker-compose.yml` | Compose defaults to wildcard bind and wildcard opt-in. | yes | yes |
 | CA1-004 | High | gateway/modelruntime boundary | `services/core/internal/api/legacy_adapter_gateway_tool.go`; `services/core/internal/adapters/ollama.go` | Legacy adapter invoke underreports network/model authority and bypasses modelruntime metadata. | partial | yes |
-| CA1-005 | High | login/auth semantics | `nix/packages/forge-desktop-shell.nix`; `apps/desktop/src/pages/ForgeLoginPage.tsx`; `apps/desktop/src/App.tsx` | Packaged shell login uses hardcoded client-side credentials. | partial | yes |
+| CA1-005 | High | login/auth semantics | `nix/packages/forge-desktop-shell.nix`; `apps/desktop/src/pages/ForgeLoginPage.tsx`; `apps/desktop/src/App.tsx` | Native/operator shell builds now use OS login (`bootLogin = false`) and explicit empty-desktop boot reset; optional client-side unlock remains only for builds that opt in. | partial | yes |
 | CA1-006 | High | SSRF/config validation | `services/core/internal/api/server_settings.go`; `services/core/internal/adapters/ollama.go` | Persisted Ollama base URL is less constrained than query override validation. | yes | no |
 | CA1-007 | High | docs truth alignment | `docs/operations/operator_desktop.md`; `docs/runbooks/forge_operator_desktop_vm.md`; `nix/nixos/configurations/forge-operator-vm.nix` | VM/Ollama docs conflict with Nix service enablement. | yes | no |
 | CA1-008 | Medium | API UX/errors | `services/core/internal/api/*` | Plain `http.Error` responses remain across route families. | yes | no |
@@ -42,4 +42,3 @@ Then run:
 - `npm run validate:desktop`
 - `npm run build`
 - `cd apps/desktop/src-tauri && cargo test`
-

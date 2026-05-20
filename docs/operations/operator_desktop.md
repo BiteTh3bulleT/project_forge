@@ -24,11 +24,16 @@ Power on
 -> labwc
 -> forge-shell-session
 -> forge-desktop-shell
+-> empty FORGE desktop
 -> local forge-core
 ```
 
 Password login is required. Autologin is not allowed. TTY access and Nix
 generation rollback remain preserved recovery paths.
+
+The native/operator Nix shell build sets `bootLogin = false` and
+`emptyDesktopOnBoot = true`. ReGreet/PAM is the login boundary; the older
+client-side FORGE unlock screen is not part of the normal native desktop path.
 
 `FORGE_SHELL_BINARY` remains a development fallback for non-operator shell
 sessions. The `operator-desktop` path rejects that override and requires the
@@ -49,8 +54,8 @@ nix build .#nixosConfigurations.forge-operator-vm.config.system.build.vm
 That VM target is expected to import the FORGE-OS module and the native desktop
 runtime profile. It is the preferred reproducible bring-up path because it
 includes the boot splash, graphical password login, daemon, desktop shell,
-session wrapper, operator toolbelt, and safe defaults in one NixOS system
-closure.
+empty desktop boot policy, session wrapper, operator toolbelt, and safe
+defaults in one NixOS system closure.
 
 The session remains safe by default:
 

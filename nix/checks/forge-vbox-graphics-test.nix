@@ -26,6 +26,8 @@ stdenv.mkDerivation {
     grep -F 'OPT-IN ONLY' "$profile"
     grep -F 'VIRTUALBOX/MINIMAL NIXOS GRAPHICS BRING-UP' "$profile"
     grep -F 'renderProfile = "vm-safe";' "$profile"
+    grep -F 'bootLogin = false;' "$profile"
+    grep -F 'emptyDesktopOnBoot = true;' "$profile"
     grep -F 'forge-wayland-session' "$profile"
     grep -F 'forge-shell-session' "$profile"
     grep -F 'forge-desktop-shell' "$profile"

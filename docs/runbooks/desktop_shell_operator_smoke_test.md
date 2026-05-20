@@ -26,7 +26,7 @@ This smoke test must not run `systemctl`, `nixos-rebuild`, package installs, reb
 ## Checklist
 
 1. Boot or start the operator VM/session.
-2. Confirm the FORGE loading screen appears before the FORGE login screen.
+2. Confirm the FORGE-branded OS graphical login appears before the desktop.
 3. Log in and confirm the desktop is empty except for normal shell chrome/taskbar.
 4. Open Terminal from Start.
 5. Open a second Terminal and confirm both native windows have separate taskbar entries.
