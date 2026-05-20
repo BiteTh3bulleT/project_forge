@@ -120,7 +120,9 @@ Last convergence sweep update: 2026-05-14 (current authority/status alignment).
 - Optional Go static checks: `cd services/core && go vet ./...` (root `npm run lint` runs VSA preflight first)
 - Root aggregate test command: `npm test` (delegates to Go core test suite).
 - Root lint command: `npm run lint` (delegates to Go vet/static checks).
-- Local aggregate validation: `npm run validate:local` (integration env preflight, desktop validation, FORGE-K validation, Go core build).
+- OS integration readiness tests: `npm run test:os-integration` (regression tests for the native desktop/operator VM static gate).
+- OS integration readiness: `npm run validate:os-integration` (cross-platform native desktop/operator VM static gate; run before VM rebuilds or boot evidence capture).
+- Local aggregate validation: `npm run validate:local` (integration env preflight, OS integration readiness tests, OS integration readiness, desktop validation, FORGE-K validation, Go core build).
 - JS/TS tests: `npm run test:js` (delegates to desktop Vitest suite).
 - JS/TS lint/static check: `npm run lint:js` (delegates to desktop TypeScript typecheck; no ESLint lane is configured yet).
 - JS/TS validation bundle: `npm run validate:js` (runs JS/TS static check plus desktop tests).

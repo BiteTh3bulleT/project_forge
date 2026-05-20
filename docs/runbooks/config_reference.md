@@ -123,6 +123,18 @@ to `apps/desktop/.env.development` (or `.env.production`) to override.
 | `FORGE_CORE_BIND_HOST` | `services/core` | `127.0.0.1` | Direct core bind host; orchestration health checks use loopback. |
 | `FORGE_ALLOW_WILDCARD_BIND` | `services/core` | `false` | Required only when intentionally binding `FORGE_CORE_BIND_HOST` to `0.0.0.0` or `::`; wildcard still requires API auth. |
 
+### OS integration readiness
+
+Run `npm run test:os-integration` and then `npm run validate:os-integration`
+before native desktop VM rebuilds or boot evidence capture. The test command
+exercises the gate's failure behavior. The validation command performs
+cross-platform static checks for the FORGE native desktop runtime, canonical
+operator VM, operator shell package wiring, loopback-only service defaults,
+local Ollama/modelruntime wiring, `/forge` durable storage roots, safe-mode
+defaults, disabled autologin, TTY fallback markers, and disabled shell
+host-mutation authority flags. It complements Nix flake checks and is usable on
+hosts where `nix` is unavailable.
+
 ## Durable settings (stored in SQLite)
 
 Selected keys the core reads via `loadSetting(db, key, default)`. Most

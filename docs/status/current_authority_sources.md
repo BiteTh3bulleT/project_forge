@@ -1,6 +1,6 @@
 # Current Authority Sources
 
-Status date: 2026-05-18.
+Status date: 2026-05-20.
 
 This file maps the current authority docs for FORGE. It is a navigation document, not a new authority path.
 
@@ -22,7 +22,7 @@ This file maps the current authority docs for FORGE. It is a navigation document
 | Memory and retrieval | `services/core/internal/memory`, `services/core/internal/retrieval`, `docs/MEMORY_ARCHITECTURE.md`, `docs/RETRIEVAL_PIPELINE.md` | Tool/model output is evidence, not automatic truth. |
 | Approvals and audit | `services/core/internal/approvals`, `services/core/internal/audit`, `docs/POLICY_AND_APPROVALS.md`, `docs/AUDIT_AND_TRACE.md` | Approval decisions and audit records remain separated and durable. |
 | Jobs and artifacts | `services/core/internal/jobs`, `docs/JOBS_AND_APPROVALS.md`, `docs/TASK_PACKETS.md` | Job streams and task packets are projection/evidence surfaces, not direct truth mutation. |
-| Operator bring-up | `docs/runbooks/current_forge_bringup.md`, `docs/runbooks/config_reference.md`, `docs/runbooks/forge_operator_desktop_vm.md` | Runbooks are the operator path for starting and diagnosing current FORGE and the Nix-first operator VM. |
+| Operator bring-up | `docs/runbooks/current_forge_bringup.md`, `docs/runbooks/config_reference.md`, `docs/runbooks/forge_operator_desktop_vm.md` | Runbooks are the operator path for starting and diagnosing current FORGE and the Nix-first operator VM. `npm run test:os-integration` and `npm run validate:os-integration` are the cross-platform static readiness gates before VM rebuilds or boot evidence capture, including local model loop, `/forge` storage-root, safe-mode, and login posture checks. |
 | Operator desktop shell | `docs/DESKTOP_SHELL.md`, `docs/status/phase_g8_desktop_shell_verification.md`, `docs/reports/phase_g8_desktop_shell_verification.md`, `docs/runbooks/desktop_shell_operator_smoke_test.md` | FORGE owns the operator-facing shell surface, launcher, taskbar, in-shell windows, native app registry consumption, and bounded native-window requests; labwc remains the compositor substrate, host power is policy-gated and disabled by default through `FORGE_SHELL_DIRECT_SYSTEM_CONTROL`, and G8 adds no FORGE-K live authority. |
 | Windows WSL Nix setup | `docs/status/windows_wsl_nix_install_status.md`, `docs/architecture/nix_substrate.md` | Records the local Windows/WSL Nix development install and verification evidence; host setup only, not daemon authority. |
 

@@ -1,6 +1,6 @@
-{ runCommandNoCC }:
+{ runCommand }:
 
-runCommandNoCC "forge-core-bind-host-check"
+runCommand "forge-core-bind-host-check"
   {
     src = ../..;
   }
@@ -22,14 +22,14 @@ runCommandNoCC "forge-core-bind-host-check"
     grep -F 'RestrictSUIDSGID = true;' "$module"
     grep -F 'envStringDefault("FORGE_CORE_BIND_HOST", "127.0.0.1")' "$config"
     grep -F 'AllowWildcardBind:          envBool("FORGE_ALLOW_WILDCARD_BIND", false),' "$config"
-    grep -F 'errWildcardBindRequiresOptIn = errors.New("wildcard bind host requires FORGE_ALLOW_WILDCARD_BIND=true")' "$main"
+    grep -E 'errWildcardBindRequiresOptIn[[:space:]]*= errors.New\("wildcard bind host requires FORGE_ALLOW_WILDCARD_BIND=true"\)' "$main"
     grep -F 'net.JoinHostPort(host, strconv.Itoa(cfg.Port))' "$main"
     if grep -E 'addr := ":".*strconv\.Itoa\(cfg\.Port\)' "$main"; then
       echo "forge-core must not bind all interfaces by default" >&2
       exit 1
     fi
-    grep -F 'FORGE_CORE_BIND_HOST: "''${FORGE_CORE_BIND_HOST:-0.0.0.0}"' "$compose"
-    grep -F 'FORGE_ALLOW_WILDCARD_BIND: "''${FORGE_ALLOW_WILDCARD_BIND:-true}"' "$compose"
+    grep -F 'FORGE_CORE_BIND_HOST: "''${FORGE_CORE_BIND_HOST:-127.0.0.1}"' "$compose"
+    grep -F 'FORGE_ALLOW_WILDCARD_BIND: "''${FORGE_ALLOW_WILDCARD_BIND:-false}"' "$compose"
     grep -F 'FORGE_CORE_BIND_HOST=127.0.0.1' "$dockerfile"
     if grep -F 'FORGE_ALLOW_WILDCARD_BIND=true' "$dockerfile"; then
       echo "Dockerfile must not default to wildcard bind opt-in" >&2

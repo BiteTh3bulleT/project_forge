@@ -116,7 +116,8 @@ tool windows do not reappear on first desktop load.
 - Do not treat FORGE-K as live authority.
 - Do not launch arbitrary commands from FORGE UI surfaces in this phase.
 - Do not add `curl | sh` installers; Ollama and operator tools come from Nix.
-- Do not add model load/unload, service restart, or rebuild controls to the UI.
+- Keep model load/unload behind governed modelruntime approval-gated model load/unload controls.
+- Do not add service restart or rebuild controls to the UI.
 
 ## Normal Native Desktop Login
 

@@ -100,6 +100,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: OS integration readiness tests
+        run: npm run test:os-integration
+
+      - name: OS integration readiness
+        run: npm run validate:os-integration
+
       - name: JS/TS validation
         run: npm run validate:js
 

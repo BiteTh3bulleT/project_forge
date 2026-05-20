@@ -125,6 +125,19 @@ composes the operator desktop profile. Manual TTY launch of
 `forge-operator-session` is recovery/fallback only, not the normal operator
 path.
 
+Before rebuilding or boot-testing the operator VM from a checkout, run the
+cross-platform static readiness gate:
+
+```sh
+npm run test:os-integration
+npm run validate:os-integration
+```
+
+The test command exercises the gate's failure behavior. The validation command
+complements the Nix flake checks and verifies that the native desktop profile,
+canonical operator VM config, package wiring, runbook markers, and safe-mode
+authority flags still match the intended OS integration posture.
+
 The `FORGE-OS` VirtualBox VM host checkout is mounted in the guest at
 `/projectforge`; FORGE data is stored in the guest at `/forge`.
 
