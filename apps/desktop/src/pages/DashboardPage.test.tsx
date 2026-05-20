@@ -86,4 +86,16 @@ describe("DashboardPage shadow mode toggle", () => {
     expect(screen.getByText("Runtime Monitor")).toBeTruthy();
     expect(screen.getByText("Cognitive Surfaces")).toBeTruthy();
   });
+
+  it("does not report unavailable runtime queue telemetry as zero", async () => {
+    render(
+      <MemoryRouter>
+        <DashboardPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("queue unavailable")).toBeTruthy();
+    expect(screen.queryByText("0 queued")).toBeNull();
+    expect(screen.getAllByText("unavailable").length).toBeGreaterThan(0);
+  });
 });

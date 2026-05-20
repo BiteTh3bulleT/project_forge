@@ -98,10 +98,7 @@ export function DashboardPage() {
                 : null,
             },
             {
-              queue: {
-                depth: 0,
-                scheduler: "not enabled",
-              } satisfies ModelRuntimeQueueStatus,
+              queue: null as ModelRuntimeQueueStatus | null,
             },
             { usage: emptyUsage() },
           ];
@@ -191,6 +188,12 @@ export function DashboardPage() {
     invocationCounts.success ??
     invocationCounts.ok ??
     0;
+  const queueDepth = queue?.depth;
+  const queueDepthLabel =
+    typeof queueDepth === "number" ? String(queueDepth) : "unavailable";
+  const queueDetailLabel =
+    typeof queueDepth === "number" ? `${queueDepth} queued` : "queue unavailable";
+  const queueSchedulerLabel = queue?.scheduler || "unavailable";
   const attentionCount =
     (summary?.approvalsPending ?? 0) +
     (summary?.reviewsPending ?? 0) +
@@ -251,7 +254,7 @@ export function DashboardPage() {
   ];
   const openLoopRows = [
     ["Active jobs", String(activeJobs.length)],
-    ["Runtime queue", String(queue?.depth ?? 0)],
+    ["Runtime queue", queueDepthLabel],
     ["Gateway failures", String(failedInvocations)],
     ["Stale memory", String(staleObservations)],
   ] satisfies Array<[string, string]>;
@@ -308,7 +311,7 @@ export function DashboardPage() {
     },
     {
       label: "Warning",
-      value: Math.max((queue?.depth ?? 0) + (summary?.reviewsPending ?? 0), 0),
+      value: Math.max((queueDepth ?? 0) + (summary?.reviewsPending ?? 0), 0),
       tone: "warn",
     },
     {
@@ -432,7 +435,7 @@ export function DashboardPage() {
         <div className="mt-4 grid min-w-0 gap-2 border-t border-forge-platinum/10 pt-3 text-[11px] text-forge-mist/65 sm:grid-cols-3">
           <DashboardSignal
             label="Queue depth"
-            value={String(queue?.depth ?? 0)}
+            value={queueDepthLabel}
           />
           <DashboardSignal
             label="Gateway calls"
@@ -565,7 +568,7 @@ export function DashboardPage() {
         <MetricCard
           label="Active Goals"
           value={String(activeJobs.length)}
-          detail={`${queue?.depth ?? 0} queued`}
+          detail={queueDetailLabel}
           tone={activeJobs.length > 0 ? "warn" : "ok"}
         />
         <MetricCard
@@ -779,8 +782,8 @@ export function DashboardPage() {
               rows={[
                 ["Health", health?.status || (health?.ok ? "ok" : "unknown")],
                 ["Backend", health?.backend || "unknown"],
-                ["Scheduler", queue?.scheduler || "unknown"],
-                ["Queue depth", String(queue?.depth ?? 0)],
+                ["Scheduler", queueSchedulerLabel],
+                ["Queue depth", queueDepthLabel],
                 ["Registered", String(usage?.registered ?? 0)],
                 ["Loaded", String(usage?.loaded ?? 0)],
               ]}

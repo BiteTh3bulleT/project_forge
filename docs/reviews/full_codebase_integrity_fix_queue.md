@@ -2,7 +2,7 @@
 
 Source audit: `docs/reviews/full_codebase_integrity_audit.md`
 
-Status: prioritized queue. CA1-001 through CA1-007 plus CA1-012 are closed by disabled-by-default host-power policy, root-workspace startup validation, fail-closed raw Compose bind defaults, corrected legacy adapter gateway/lane metadata, OS-login native shell posture, persisted Ollama URL validation, VM/Ollama docs alignment, and lane default duplicate-ID coverage; remaining rows stay queued until explicitly closed.
+Status: prioritized queue. CA1-001 through CA1-007, CA1-009, and CA1-012 are closed by disabled-by-default host-power policy, root-workspace startup validation, fail-closed raw Compose bind defaults, corrected legacy adapter gateway/lane metadata, OS-login native shell posture, persisted Ollama URL validation, VM/Ollama docs alignment, desktop queue telemetry truth, and lane default duplicate-ID coverage; remaining rows stay queued until explicitly closed.
 
 | ID | Severity | Category | File path | Summary | Safe for automated fix | Operator decision needed |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -14,7 +14,7 @@ Status: prioritized queue. CA1-001 through CA1-007 plus CA1-012 are closed by di
 | CA1-006 | High | SSRF/config validation | `services/core/internal/api/server_settings.go`; `services/core/internal/api/settings_test.go` | Closed: persisted `ollamaBaseUrl` is validated before storage; unsafe link-local/remote targets are rejected while loopback/local Docker host targets remain allowed. | fixed | no |
 | CA1-007 | High | docs truth alignment | `docs/operations/operator_desktop.md`; `docs/runbooks/forge_operator_desktop_vm.md`; `nix/nixos/configurations/forge-operator-vm.nix` | Closed: docs now match canonical VM config, which enables local NixOS `services.ollama` while leaving model pull/load controls out of the desktop shell. | fixed | no |
 | CA1-008 | Medium | API UX/errors | `services/core/internal/api/*` | Plain `http.Error` responses remain across route families. | yes | no |
-| CA1-009 | Medium | desktop telemetry truth | `apps/desktop/src/pages/DashboardPage.tsx` | Runtime queue unavailable can display as zero. | yes | no |
+| CA1-009 | Medium | desktop telemetry truth | `apps/desktop/src/pages/DashboardPage.tsx`; `apps/desktop/src/pages/DashboardPage.test.tsx` | Closed: unavailable model-runtime queue telemetry stays `null` and renders as `unavailable` / `queue unavailable` instead of a synthetic zero. | fixed | no |
 | CA1-010 | Medium | duplicate desktop catalog | `apps/desktop/src-tauri/src/main.rs`; `apps/desktop/src/layout/AppShellSurfaces.tsx`; `apps/desktop/src/pages/OperatorAppsPage.tsx` | Operator app catalogs are duplicated and can drift. | partial | no |
 | CA1-011 | Medium | desktop route integration | `apps/desktop/src/App.tsx`; `apps/desktop/src/layout/AppShell.tsx` | Deep-link routes can be orphaned in shell window mode. | partial | no |
 | CA1-012 | Medium | duplicate policy metadata | `services/core/internal/lanes/service.go`; `services/core/internal/lanes/defaults_test.go` | Closed: default lane IDs are covered by `TestDefaultBuiltinsHaveUniqueIDs`, preventing duplicate built-in metadata such as repeated `fs.mkdir`. | fixed | no |
