@@ -429,12 +429,13 @@ function ToolLoadingFallback() {
 
 function UnsupportedToolNotice(props: { toolId: string | undefined }) {
   return (
-    <div className="forge-os-window__placeholder">
+    <div className="forge-os-window__placeholder" role="alert">
       <div className="forge-os-window__placeholder-title">
-        Surface unavailable
+        Unregistered shell surface
       </div>
       <div className="forge-os-window__placeholder-body">
-        No window component is registered for {props.toolId ?? "this surface"}.
+        Registry drift detected: no window component is registered for{" "}
+        {props.toolId ?? "this surface"}.
       </div>
     </div>
   );

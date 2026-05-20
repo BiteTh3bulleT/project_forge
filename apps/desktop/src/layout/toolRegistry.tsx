@@ -16,9 +16,9 @@ function lazyTool<K extends string>(
 
 // Map of tool id → page component. Each window in the desktop window manager
 // renders the component for its tool, replacing the previous single-route
-// foreground pane. Tool ids without a directly mounted component (job-detail,
-// memory chunk detail, "other") fall back to the existing route surface via
-// the deep-link fallback in the shell.
+// foreground pane. Every launchable entry in allShellTools must have a mounted
+// component. Route-derived detail ids (job-detail, memory-detail, other) are
+// intentionally non-launchable and stay outside allShellTools.
 export const TOOL_COMPONENTS: Partial<Record<ShellToolId, ToolComponent>> = {
   start: lazyTool(() => import("../pages/StartPage"), "StartPage"),
   dashboard: lazyTool(() => import("../pages/DashboardPage"), "DashboardPage"),

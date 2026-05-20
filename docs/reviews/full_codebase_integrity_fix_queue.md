@@ -2,7 +2,7 @@
 
 Source audit: `docs/reviews/full_codebase_integrity_audit.md`
 
-Status: prioritized queue. CA1-001 through CA1-007, CA1-009, and CA1-012 through CA1-016 are closed by disabled-by-default host-power policy, root-workspace startup validation, fail-closed raw Compose bind defaults, corrected legacy adapter gateway/lane metadata, OS-login native shell posture, persisted Ollama URL validation, VM/Ollama docs alignment, desktop queue telemetry truth, lane default duplicate-ID coverage, desktop/Nix doc supersession, canonical VM evidence alignment, and disabled-by-default debug-console handling; remaining rows stay queued until explicitly closed.
+Status: prioritized queue. CA1-001 through CA1-007, CA1-009, and CA1-012 through CA1-017 are closed by disabled-by-default host-power policy, root-workspace startup validation, fail-closed raw Compose bind defaults, corrected legacy adapter gateway/lane metadata, OS-login native shell posture, persisted Ollama URL validation, VM/Ollama docs alignment, desktop queue telemetry truth, lane default duplicate-ID coverage, desktop/Nix doc supersession, canonical VM evidence alignment, disabled-by-default debug-console handling, and shell registry drift tests; remaining rows stay queued until explicitly closed.
 
 | ID | Severity | Category | File path | Summary | Safe for automated fix | Operator decision needed |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -22,7 +22,7 @@ Status: prioritized queue. CA1-001 through CA1-007, CA1-009, and CA1-012 through
 | CA1-014 | Medium | docs truth alignment | `docs/operations/forge_graphical_shell_session.md` | Closed: runbook now states the current `forge-operator`/labwc path, keeps Cage as fullscreen rollback/test coverage, and separates G3.5 package truth from later G8 operator desktop truth. | fixed | no |
 | CA1-015 | Medium | docs verification | `docs/runbooks/forge_operator_desktop_vm.md`; `docs/evidence/vm_boot/2026-05-18-section6-final/README.md` | Closed: operator VM runbook now points at the 2026-05-18 Section 6 canonical boot/login/session evidence, and the evidence README records the remaining separate G8 native-app smoke scope. | fixed | no |
 | CA1-016 | Low | stale/debug surface | `apps/desktop/src-tauri/src/window_manager.rs`; `apps/desktop/src/lib/windowManager.ts`; `docs/architecture/desktop_window_manager.md` | Closed: `debug_console` is reserved but disabled by default, the frontend bridge no longer routes `debug-console` opens, layout restore rejects persisted debug-console entries, and docs record the boundary. | fixed | no |
-| CA1-017 | Low | registry drift detection | `apps/desktop/src/layout/toolRegistry.tsx`; `apps/desktop/src/layout/AppShellSurfaces.tsx` | Placeholder surface fallback can hide registry drift. | yes | no |
+| CA1-017 | Low | registry drift detection | `apps/desktop/src/layout/toolRegistry.tsx`; `apps/desktop/src/layout/toolRegistry.test.ts`; `apps/desktop/src/layout/AppShellSurfaces.tsx` | Closed: launchable shell tools now have a static component coverage test, route-derived detail surfaces are explicitly non-launchable, and the unsupported fallback is labeled as registry drift. | fixed | no |
 
 ## Suggested CA2 Slice
 
