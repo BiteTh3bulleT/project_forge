@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { WorkspaceLayoutsPage } from "./WorkspaceLayoutsPage";
@@ -16,6 +16,7 @@ const storeMocks = vi.hoisted(() => {
     renameLayout: vi.fn(),
     selectLayout: vi.fn(),
     setMainMonitor: vi.fn(),
+    setDisplayArrangementMode: vi.fn(),
     setMonitorRoleLabel: vi.fn(),
     updateLayoutWindow: vi.fn(),
   };
@@ -29,6 +30,13 @@ const storeMocks = vi.hoisted(() => {
       customLabels: { "display-main": "Desk" },
     },
     monitorRoleMap: { "display-main": "main" },
+    displayIntent: {
+      arrangementMode: "preserve",
+      primaryMonitorId: "display-main",
+      preferredOrder: ["display-main"],
+      applyDeferred: true,
+      updatedAtMs: null,
+    },
     monitors: [
       {
         id: "display-main",
@@ -103,5 +111,18 @@ describe("WorkspaceLayoutsPage", () => {
     expect(screen.getByText("FORGE Runtime")).toBeTruthy();
     expect(screen.getByText("focused")).toBeTruthy();
     expect(storeMocks.useWorkspaceLayoutStore).toHaveBeenCalled();
+  });
+
+  it("wires the display layout intent selector to the workspace layout store", () => {
+    render(<WorkspaceLayoutsPage />);
+
+    fireEvent.change(screen.getByLabelText("Display arrangement intent"), {
+      target: { value: "extend" },
+    });
+
+    expect(storeMocks.actions.setDisplayArrangementMode).toHaveBeenCalledWith(
+      "extend",
+    );
+    expect(screen.getByText("Apply deferred")).toBeTruthy();
   });
 });

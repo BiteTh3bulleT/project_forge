@@ -17,6 +17,16 @@ export type MonitorDesignation = {
 
 export type MonitorRoleMap = Record<string, string>;
 
+export type DisplayArrangementMode = "preserve" | "extend" | "mirror";
+
+export type DisplayLayoutIntent = {
+  arrangementMode: DisplayArrangementMode;
+  primaryMonitorId: string | null;
+  preferredOrder: string[];
+  applyDeferred: true;
+  updatedAtMs: number | null;
+};
+
 export type LayoutWindowRecord = {
   id: string;
   runtimeLabel: string;
@@ -62,6 +72,7 @@ export type LayoutDoc = {
   runtimeWindows: RuntimeWindowRecord[];
   lastKnownMonitors: MonitorSnapshot[];
   lastMonitorSignature: string;
+  displayIntent: DisplayLayoutIntent;
   fallbackNotice: string | null;
   lastRestoreAtMs: number | null;
 };
@@ -77,11 +88,13 @@ export type WorkspaceLayoutState = {
   layouts: LayoutPreset[];
   monitors: MonitorSnapshot[];
   runtimeWindows: RuntimeWindowRecord[];
+  displayIntent: DisplayLayoutIntent;
   fallbackNotice: string | null;
   hydrate: (pathname: string) => Promise<void>;
   refreshEnvironment: () => Promise<void>;
   syncCurrentRoute: (pathname: string) => Promise<void>;
   setMainMonitor: (monitorId: string) => void;
+  setDisplayArrangementMode: (mode: DisplayArrangementMode) => void;
   setMonitorRoleLabel: (monitorId: string, label: string) => void;
   createLayout: (name: string) => void;
   selectLayout: (layoutId: string) => void;

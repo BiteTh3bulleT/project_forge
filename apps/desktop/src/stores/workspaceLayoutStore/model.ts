@@ -3,6 +3,8 @@ import type { MonitorSnapshot } from "../../lib/desktop";
 import { hostLabelForMonitorOrdinal } from "../../lib/desktopHostLabels";
 
 import type {
+  DisplayArrangementMode,
+  DisplayLayoutIntent,
   LayoutDoc,
   LayoutPreset,
   LayoutWindowRecord,
@@ -10,6 +12,12 @@ import type {
   MonitorRoleMap,
   WindowRole,
 } from "./types";
+
+const DISPLAY_ARRANGEMENT_MODES: DisplayArrangementMode[] = [
+  "preserve",
+  "extend",
+  "mirror",
+];
 
 export function nowMs() {
   return Date.now();
@@ -30,6 +38,87 @@ export function uid(prefix: string) {
 
 export function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+export function parseDisplayArrangementMode(
+  raw: unknown,
+): DisplayArrangementMode {
+  return DISPLAY_ARRANGEMENT_MODES.includes(raw as DisplayArrangementMode)
+    ? (raw as DisplayArrangementMode)
+    : "preserve";
+}
+
+function sortedMonitorIds(monitors: MonitorSnapshot[]) {
+  return [...monitors]
+    .sort((a, b) => a.ordinal - b.ordinal)
+    .map((monitor) => monitor.id);
+}
+
+export function defaultDisplayLayoutIntent(
+  monitors: MonitorSnapshot[] = [],
+  designations: MonitorDesignation = { mainMonitorId: null, customLabels: {} },
+): DisplayLayoutIntent {
+  const orderedIds = sortedMonitorIds(monitors);
+  return {
+    arrangementMode: "preserve",
+    primaryMonitorId:
+      designations.mainMonitorId &&
+      orderedIds.includes(designations.mainMonitorId)
+        ? designations.mainMonitorId
+        : (orderedIds[0] ?? null),
+    preferredOrder: orderedIds,
+    applyDeferred: true,
+    updatedAtMs: null,
+  };
+}
+
+export function normalizeDisplayLayoutIntent(
+  raw: unknown,
+  monitors: MonitorSnapshot[],
+  designations: MonitorDesignation,
+): DisplayLayoutIntent {
+  const fallback = defaultDisplayLayoutIntent(monitors, designations);
+  if (!raw || typeof raw !== "object") return fallback;
+  const input = raw as Partial<DisplayLayoutIntent>;
+  const validMonitorIds = new Set(sortedMonitorIds(monitors));
+  const preferredOrder = Array.isArray(input.preferredOrder)
+    ? input.preferredOrder.filter((monitorId, index, all) => {
+        return (
+          typeof monitorId === "string" &&
+          validMonitorIds.has(monitorId) &&
+          all.indexOf(monitorId) === index
+        );
+      })
+    : [];
+  const primaryMonitorId =
+    typeof input.primaryMonitorId === "string" &&
+    validMonitorIds.has(input.primaryMonitorId)
+      ? input.primaryMonitorId
+      : fallback.primaryMonitorId;
+  return {
+    arrangementMode: parseDisplayArrangementMode(input.arrangementMode),
+    primaryMonitorId,
+    preferredOrder:
+      preferredOrder.length > 0 ? preferredOrder : fallback.preferredOrder,
+    applyDeferred: true,
+    updatedAtMs:
+      typeof input.updatedAtMs === "number" &&
+      Number.isFinite(input.updatedAtMs)
+        ? input.updatedAtMs
+        : null,
+  };
+}
+
+export function captureDisplayLayoutIntent(
+  mode: DisplayArrangementMode,
+  monitors: MonitorSnapshot[],
+  designations: MonitorDesignation,
+): DisplayLayoutIntent {
+  return {
+    ...defaultDisplayLayoutIntent(monitors, designations),
+    arrangementMode: mode,
+    updatedAtMs: nowMs(),
+  };
 }
 
 export function defaultRoutesForRole(role: WindowRole): string[] {
@@ -200,7 +289,10 @@ export function ensureDocMonitors(doc: LayoutDoc, monitors: MonitorSnapshot[]) {
   return state;
 }
 
-export function deriveMonitorState(monitors: MonitorSnapshot[], doc: LayoutDoc) {
+export function deriveMonitorState(
+  monitors: MonitorSnapshot[],
+  doc: LayoutDoc,
+) {
   const state = ensureDocMonitors(doc, monitors);
   return {
     monitorDesignations: state.monitorDesignations,
@@ -379,6 +471,7 @@ export function emptyDoc(): LayoutDoc {
     runtimeWindows: [],
     lastKnownMonitors: [],
     lastMonitorSignature: "",
+    displayIntent: defaultDisplayLayoutIntent(),
     fallbackNotice: null,
     lastRestoreAtMs: null,
   };
@@ -522,6 +615,11 @@ export function normalizeLayoutDoc(
     doc.monitorDesignations,
   );
   ensureDocMonitors(doc, monitors);
+  doc.displayIntent = normalizeDisplayLayoutIntent(
+    doc.displayIntent,
+    monitors,
+    doc.monitorDesignations,
+  );
   doc.runtimeWindows = Array.isArray(doc.runtimeWindows)
     ? doc.runtimeWindows
     : [];

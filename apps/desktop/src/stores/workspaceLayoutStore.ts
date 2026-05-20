@@ -11,6 +11,8 @@ import { getCurrentWindowLabel } from "../lib/windowManager";
 import { AUTO_RESTORE_TAURI_LAYOUTS } from "./workspaceLayoutStore/constants";
 import {
   clone,
+  captureDisplayLayoutIntent,
+  defaultDisplayLayoutIntent,
   defaultWindowForLayout,
   deriveMonitorState,
   ensureActiveLayout,
@@ -32,6 +34,8 @@ import type {
 } from "./workspaceLayoutStore/types";
 
 const HYDRATE_TIMEOUT_MS = 1200;
+const DISPLAY_INTENT_DEFERRED_NOTICE =
+  "Display layout intent saved; output application is deferred to compositor output management.";
 
 type HydrateResult<T> = {
   value: T;
@@ -87,6 +91,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>(
     layouts: [],
     monitors: [],
     runtimeWindows: [],
+    displayIntent: defaultDisplayLayoutIntent(),
     fallbackNotice: null,
     hydrate: async (pathname) => {
       const supported = isTauriDesktop();
@@ -169,6 +174,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>(
         monitors: clone(monitors),
         monitorDesignations: clone(monitorState.monitorDesignations),
         monitorRoleMap: monitorState.monitorRoleMap,
+        displayIntent: clone(doc.displayIntent),
         fallbackNotice: fallbackNotice ?? doc.fallbackNotice,
       });
     },
@@ -217,6 +223,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>(
         monitorRoleMap: monitorState.monitorRoleMap,
         monitors: clone(doc.lastKnownMonitors),
         runtimeWindows: clone(doc.runtimeWindows),
+        displayIntent: clone(doc.displayIntent),
         fallbackNotice: doc.fallbackNotice,
         activeLayoutId: doc.activeLayoutId,
         selectedLayoutId: doc.selectedLayoutId,
@@ -232,6 +239,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>(
         monitorDesignations: monitorState.monitorDesignations,
         monitorRoleMap: monitorState.monitorRoleMap,
         runtimeWindows: clone(doc.runtimeWindows),
+        displayIntent: clone(doc.displayIntent),
         fallbackNotice: doc.fallbackNotice,
       });
     },
@@ -392,6 +400,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>(
       set({
         monitorDesignations: next.monitorDesignations,
         monitorRoleMap: next.monitorRoleMap,
+        displayIntent: clone(doc.displayIntent),
       });
       const activeLayoutId = doc.activeLayoutId;
       if (activeLayoutId) {
@@ -421,6 +430,22 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>(
         monitorRoleMap: next.monitorRoleMap,
       });
     },
+    setDisplayArrangementMode: (mode) => {
+      const currentMonitors = get().monitors;
+      const doc = loadDoc(currentMonitors);
+      const monitorState = deriveMonitorState(currentMonitors, doc);
+      doc.displayIntent = captureDisplayLayoutIntent(
+        mode,
+        currentMonitors,
+        monitorState.monitorDesignations,
+      );
+      doc.fallbackNotice = DISPLAY_INTENT_DEFERRED_NOTICE;
+      persistDoc(doc);
+      set({
+        displayIntent: clone(doc.displayIntent),
+        fallbackNotice: DISPLAY_INTENT_DEFERRED_NOTICE,
+      });
+    },
     activateLayout: async (layoutId) => {
       const doc = await applyLayout(layoutId, false, get().monitors);
       const monitorState = deriveMonitorState(get().monitors, doc);
@@ -432,6 +457,7 @@ export const useWorkspaceLayoutStore = create<WorkspaceLayoutState>(
         monitorRoleMap: monitorState.monitorRoleMap,
         runtimeWindows: clone(doc.runtimeWindows),
         monitors: clone(doc.lastKnownMonitors),
+        displayIntent: clone(doc.displayIntent),
         fallbackNotice: doc.fallbackNotice,
       });
     },

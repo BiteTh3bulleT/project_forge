@@ -170,6 +170,12 @@ This is the B2 host-settings surface, not the B5 display-control surface.
 Display topology can be inspected, but applying monitor layout or resolution
 changes waits for compositor-owned output-management support.
 
+The Workspace Layouts surface now records a B5 interim display layout intent:
+preserve, extend, or mirror, plus the current primary monitor and detected
+display order. This is saved operator preference only. The shell does not apply
+output topology, resolution, or mirroring changes until the compositor
+output-management gate exists.
+
 ## Command Bar Maintenance
 
 The desktop CommandBar quick actions are a static frontend affordance in `apps/desktop/src/components/CommandBar.tsx`. They are not a backend authority registry, do not grant capabilities, and must only point at existing routes or already-governed API commands.

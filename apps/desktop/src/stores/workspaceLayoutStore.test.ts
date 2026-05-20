@@ -29,9 +29,9 @@ const desktopMocks = vi.hoisted(() => ({
   getWindowByLabel: vi.fn(async () => null),
   isTauriDesktop: vi.fn(() => true),
   listAvailableMonitors: vi.fn(async (): Promise<TestMonitor[]> => []),
-  listRuntimeWindows: vi.fn(async (): Promise<TestRuntimeWindow[]> => [
-    { label: "main" },
-  ]),
+  listRuntimeWindows: vi.fn(
+    async (): Promise<TestRuntimeWindow[]> => [{ label: "main" }],
+  ),
   monitorSignature: vi.fn(() => ""),
   spanCurrentWindowAcrossMonitors: vi.fn(async () => true),
   tauriWindow: {
@@ -129,9 +129,12 @@ function activeLayoutDoc() {
             targetMonitorId: null,
             targetMonitorOrdinal: 0,
             targetMonitorRole: null,
-            bounds: null as
-              | { x: number; y: number; width: number; height: number }
-              | null,
+            bounds: null as {
+              x: number;
+              y: number;
+              width: number;
+              height: number;
+            } | null,
             fallbackReason: null,
           },
         ],
@@ -292,5 +295,59 @@ describe("workspace layout hydration", () => {
         }),
       ]),
     );
+  });
+
+  it("persists display arrangement intent without applying output changes", async () => {
+    const monitors = [
+      {
+        id: "left",
+        ordinal: 0,
+        name: "Left",
+        position: { x: 0, y: 0 },
+        size: { width: 1920, height: 1080 },
+        workArea: { x: 0, y: 0, width: 1920, height: 1040 },
+        scaleFactor: 1,
+      },
+      {
+        id: "right",
+        ordinal: 1,
+        name: "Right",
+        position: { x: 1920, y: 0 },
+        size: { width: 2560, height: 1440 },
+        workArea: { x: 1920, y: 0, width: 2560, height: 1400 },
+        scaleFactor: 1,
+      },
+    ];
+    desktopMocks.listAvailableMonitors.mockResolvedValueOnce(monitors);
+    localStorage.setItem(
+      "forge.workspace.layouts.v2",
+      JSON.stringify(currentMainLayoutDoc()),
+    );
+    const { useWorkspaceLayoutStore } = await import("./workspaceLayoutStore");
+
+    await useWorkspaceLayoutStore.getState().hydrate("/");
+    desktopMocks.spanCurrentWindowAcrossMonitors.mockClear();
+
+    useWorkspaceLayoutStore.getState().setDisplayArrangementMode("extend");
+
+    const persisted = JSON.parse(
+      localStorage.getItem("forge.workspace.layouts.v2") ?? "{}",
+    );
+    expect(useWorkspaceLayoutStore.getState().displayIntent).toMatchObject({
+      arrangementMode: "extend",
+      primaryMonitorId: "left",
+      preferredOrder: ["left", "right"],
+      applyDeferred: true,
+    });
+    expect(persisted.displayIntent).toMatchObject({
+      arrangementMode: "extend",
+      primaryMonitorId: "left",
+      preferredOrder: ["left", "right"],
+      applyDeferred: true,
+    });
+    expect(useWorkspaceLayoutStore.getState().fallbackNotice).toBe(
+      "Display layout intent saved; output application is deferred to compositor output management.",
+    );
+    expect(desktopMocks.spanCurrentWindowAcrossMonitors).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,7 @@ import { useMemo, type ReactNode } from "react";
 
 import { assignableShellTools } from "../layout/shellConfig";
 import { useWorkspaceLayoutStore } from "../stores/workspaceLayoutStore";
+import type { DisplayArrangementMode } from "../stores/workspaceLayoutStore/types";
 
 const roleOptions = [
   "chat",
@@ -29,6 +30,7 @@ export function WorkspaceLayoutsPage() {
   );
   const monitorRoleMap = useWorkspaceLayoutStore((s) => s.monitorRoleMap);
   const runtimeWindows = useWorkspaceLayoutStore((s) => s.runtimeWindows);
+  const displayIntent = useWorkspaceLayoutStore((s) => s.displayIntent);
   const fallbackNotice = useWorkspaceLayoutStore((s) => s.fallbackNotice);
   const supported = useWorkspaceLayoutStore((s) => s.supported);
   const createLayout = useWorkspaceLayoutStore((s) => s.createLayout);
@@ -51,6 +53,9 @@ export function WorkspaceLayoutsPage() {
     (s) => s.clearFallbackNotice,
   );
   const setMainMonitor = useWorkspaceLayoutStore((s) => s.setMainMonitor);
+  const setDisplayArrangementMode = useWorkspaceLayoutStore(
+    (s) => s.setDisplayArrangementMode,
+  );
   const setMonitorRoleLabel = useWorkspaceLayoutStore(
     (s) => s.setMonitorRoleLabel,
   );
@@ -168,67 +173,119 @@ export function WorkspaceLayoutsPage() {
       </Panel>
 
       {supported ? (
-        <Panel
-          title="Monitor Roles"
-          subtitle="Assign one monitor as Main and add optional labels to the role list."
-        >
-          <div className="space-y-3">
-            {monitorRoleCatalog.length === 0 ? (
-              <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3 text-sm text-forge-mist">
-                No displays detected yet.
-              </div>
-            ) : null}
-            {monitorRoleCatalog.map((monitor) => {
-              const isMain = monitor.id === monitorDesignations.mainMonitorId;
-              return (
-                <div
-                  key={monitor.id}
-                  className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <div className="text-sm font-semibold text-forge-ash">
-                        {monitor.label}
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
+          <Panel
+            title="Monitor Roles"
+            subtitle="Assign one monitor as Main and add optional labels to the role list."
+          >
+            <div className="space-y-3">
+              {monitorRoleCatalog.length === 0 ? (
+                <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3 text-sm text-forge-mist">
+                  No displays detected yet.
+                </div>
+              ) : null}
+              {monitorRoleCatalog.map((monitor) => {
+                const isMain = monitor.id === monitorDesignations.mainMonitorId;
+                return (
+                  <div
+                    key={monitor.id}
+                    className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-semibold text-forge-ash">
+                          {monitor.label}
+                        </div>
+                        <div className="text-xs text-forge-mist">
+                          Role: {roleDisplay(monitor.role)}
+                        </div>
+                        <div className="mt-1 text-[11px] text-forge-mist">
+                          Current monitor role target: {monitor.role}
+                        </div>
                       </div>
-                      <div className="text-xs text-forge-mist">
-                        Role: {roleDisplay(monitor.role)}
-                      </div>
-                      <div className="mt-1 text-[11px] text-forge-mist">
-                        Current monitor role target: {monitor.role}
-                      </div>
+                      <label className="text-xs text-forge-mist">
+                        <input
+                          type="radio"
+                          checked={isMain}
+                          onChange={() => setMainMonitor(monitor.id)}
+                        />
+                        <span className="ml-1">Main</span>
+                      </label>
                     </div>
-                    <label className="text-xs text-forge-mist">
+                    <label className="mt-3 block text-xs text-forge-mist">
+                      Custom role label
                       <input
-                        type="radio"
-                        checked={isMain}
-                        onChange={() => setMainMonitor(monitor.id)}
+                        className="forge-input mt-1"
+                        value={monitor.customLabel}
+                        onChange={(e) =>
+                          setMonitorRoleLabel(monitor.id, e.target.value)
+                        }
+                        placeholder="e.g. Focus +1"
                       />
-                      <span className="ml-1">Main</span>
                     </label>
                   </div>
-                  <label className="mt-3 block text-xs text-forge-mist">
-                    Custom role label
-                    <input
-                      className="forge-input mt-1"
-                      value={monitor.customLabel}
-                      onChange={(e) =>
-                        setMonitorRoleLabel(monitor.id, e.target.value)
-                      }
-                      placeholder="e.g. Focus +1"
-                    />
-                  </label>
-                </div>
-              );
-            })}
-            <div className="rounded-xl border border-forge-ember/25 bg-forge-ember/5 p-3 text-xs leading-relaxed text-forge-mist">
-              Role order is currently inferred from detected monitor index:{" "}
-              <b>Main</b> first, then <b>Secondary N</b> by ordinal.
-              <br />
-              You can override layout bindings per-window using the role
-              selector.
+                );
+              })}
+              <div className="rounded-xl border border-forge-ember/25 bg-forge-ember/5 p-3 text-xs leading-relaxed text-forge-mist">
+                Role order is currently inferred from detected monitor index:{" "}
+                <b>Main</b> first, then <b>Secondary N</b> by ordinal.
+                <br />
+                You can override layout bindings per-window using the role
+                selector.
+              </div>
             </div>
-          </div>
-        </Panel>
+          </Panel>
+
+          <Panel
+            title="Display Layout Intent"
+            subtitle="Saved display preference for the FORGE shell."
+          >
+            <div className="space-y-4">
+              <label className="block text-xs text-forge-mist">
+                Display arrangement intent
+                <select
+                  className="forge-input mt-1"
+                  value={displayIntent.arrangementMode}
+                  onChange={(e) =>
+                    setDisplayArrangementMode(
+                      e.target.value as DisplayArrangementMode,
+                    )
+                  }
+                >
+                  <option value="preserve">Preserve current layout</option>
+                  <option value="extend">Extend desktop</option>
+                  <option value="mirror">Mirror displays</option>
+                </select>
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <MetricCard
+                  label="Primary display"
+                  value={
+                    monitors.find(
+                      (monitor) =>
+                        monitor.id === displayIntent.primaryMonitorId,
+                    )?.name ?? "Unassigned"
+                  }
+                  detail={displayIntent.primaryMonitorId ?? "No saved display"}
+                />
+                <MetricCard
+                  label="Output apply"
+                  value="Apply deferred"
+                  detail="Compositor output management gate pending."
+                />
+              </div>
+              <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3 text-xs leading-relaxed text-forge-mist">
+                Saved order:{" "}
+                {displayIntent.preferredOrder.length > 0
+                  ? displayIntent.preferredOrder.join(" -> ")
+                  : "No display order saved"}
+              </div>
+              <button type="button" className="forge-btn" disabled>
+                Apply output changes
+              </button>
+            </div>
+          </Panel>
+        </div>
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
