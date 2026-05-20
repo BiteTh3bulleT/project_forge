@@ -1,6 +1,5 @@
 use serde::Serialize;
 
-const DEFAULT_NOTIFICATION_ID: u32 = 1;
 const MAX_FIELD_CHARS: usize = 2048;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,22 +41,6 @@ pub fn capabilities() -> [&'static str; 3] {
     ["body", "body-markup", "persistence"]
 }
 
-pub fn normalize_notification_request(
-    app_name: &str,
-    replaces_id: u32,
-    app_icon: &str,
-    summary: &str,
-    body: &str,
-    expire_timeout: i32,
-) -> NotificationRequest {
-    let id = if replaces_id > 0 {
-        replaces_id
-    } else {
-        DEFAULT_NOTIFICATION_ID
-    };
-    normalize_notification_request_with_id(app_name, id, app_icon, summary, body, expire_timeout)
-}
-
 fn normalize_notification_request_with_id(
     app_name: &str,
     id: u32,
@@ -95,7 +78,10 @@ pub fn start_freedesktop_service(app: tauri::AppHandle) {
     {
         tauri::async_runtime::spawn(async move {
             if let Err(err) = run_freedesktop_service(app).await {
-                eprintln!("FORGE notification service unavailable: {err}");
+                eprintln!(
+                    "{}",
+                    notification_service_unavailable_message(&err.to_string())
+                );
             }
         });
     }
@@ -104,6 +90,15 @@ pub fn start_freedesktop_service(app: tauri::AppHandle) {
     {
         let _ = app;
     }
+}
+
+fn notification_service_unavailable_message(error: &str) -> String {
+    if error.contains("name already taken") {
+        return format!(
+            "FORGE native notification bridge disabled: another notification service owns org.freedesktop.Notifications ({error})"
+        );
+    }
+    format!("FORGE native notification bridge unavailable: {error}")
 }
 
 #[cfg(target_os = "linux")]
@@ -231,9 +226,9 @@ mod tests {
 
     #[test]
     fn notification_request_trims_and_limits_payloads() {
-        let request = normalize_notification_request(
+        let request = normalize_notification_request_with_id(
             "  Native App  ",
-            0,
+            1,
             "  forge-icon  ",
             "  Build finished  ",
             "  The desktop shell build completed successfully.  ",
@@ -253,12 +248,20 @@ mod tests {
 
     #[test]
     fn notification_replacement_id_is_preserved_when_supplied() {
-        let request = normalize_notification_request("", 42, "", "", "", -1);
+        let request = normalize_notification_request_with_id("", 42, "", "", "", -1);
 
         assert_eq!(request.id, 42);
         assert_eq!(request.app_name, "Unknown");
         assert_eq!(request.summary, "Notification");
         assert_eq!(request.body, "");
         assert_eq!(request.expire_timeout_ms, None);
+    }
+
+    #[test]
+    fn notification_service_name_collision_message_is_operator_clear() {
+        let message = notification_service_unavailable_message("name already taken on the bus");
+
+        assert!(message.contains("native notification bridge disabled"));
+        assert!(message.contains("another notification service owns"));
     }
 }
