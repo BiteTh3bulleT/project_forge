@@ -6,13 +6,17 @@ const VALID_RENDER_PROFILES = new Set<ForgeRenderProfile>([
   "vm-safe",
 ]);
 
-export function normalizeRenderProfile(
-  value: unknown,
-): ForgeRenderProfile {
+function explicitRenderProfile(value: unknown): ForgeRenderProfile | null {
   return typeof value === "string" &&
     VALID_RENDER_PROFILES.has(value as ForgeRenderProfile)
     ? (value as ForgeRenderProfile)
-    : "default";
+    : null;
+}
+
+export function normalizeRenderProfile(
+  value: unknown,
+): ForgeRenderProfile {
+  return explicitRenderProfile(value) ?? "default";
 }
 
 export function initialEffectsPreference(
@@ -25,16 +29,16 @@ export function initialEffectsPreference(
 
 export function configuredRenderProfile(): ForgeRenderProfile {
   if (typeof window !== "undefined") {
-    const stored = window.localStorage.getItem("forge.render.profile");
-    const normalizedStored = normalizeRenderProfile(stored);
-    if (stored === normalizedStored) return normalizedStored;
-
     const runtimeProfile = (window as unknown as {
       __FORGE_RENDER_PROFILE__?: unknown;
     }).__FORGE_RENDER_PROFILE__;
-    const normalizedRuntime = normalizeRenderProfile(runtimeProfile);
-    if (runtimeProfile === normalizedRuntime) return normalizedRuntime;
+    const explicitRuntime = explicitRenderProfile(runtimeProfile);
+    if (explicitRuntime) return explicitRuntime;
+
+    const stored = window.localStorage.getItem("forge.render.profile");
+    const explicitStored = explicitRenderProfile(stored);
+    if (explicitStored) return explicitStored;
   }
 
-  return normalizeRenderProfile(import.meta.env.VITE_FORGE_RENDER_PROFILE);
+  return explicitRenderProfile(import.meta.env.VITE_FORGE_RENDER_PROFILE) ?? "default";
 }

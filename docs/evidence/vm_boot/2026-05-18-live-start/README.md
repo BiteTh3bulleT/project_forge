@@ -45,8 +45,10 @@ For a one-off manual launch from a TTY:
 FORGE_RENDER_PROFILE=default VITE_FORGE_RENDER_PROFILE=default forge-operator-session
 ```
 
-For a persistent operator preference inside the web shell, set
-`forge.render.profile` to `default` in local storage, then restart the shell.
+Local storage can only override the render profile when the runtime has not
+already supplied one. The packaged VirtualBox/operator shell supplies
+`vm-safe`, so stale local storage must not silently switch it back to the
+heavier default path.
 
 For a Nix profile intended for non-VirtualBox or bare-metal use, instantiate
 `nix/packages/forge-desktop-shell.nix` with:

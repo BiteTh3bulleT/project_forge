@@ -303,10 +303,11 @@ profile, instantiate `nix/packages/forge-desktop-shell.nix` with:
 renderProfile = "default";
 ```
 
-Inside the shell, a stored operator preference can also override the packaged
-default by setting local storage key `forge.render.profile` to `default` and
-restarting the shell. Keep any override tied to hardware-specific evidence;
-the canonical VirtualBox/operator VM default remains `vm-safe`.
+Inside the shell, local storage can only override when the runtime has not
+already supplied an explicit render profile. The packaged VirtualBox/operator
+build supplies `vm-safe`, so stale browser storage must not silently re-enable
+the heavier default path. Keep any non-VM override tied to hardware-specific
+evidence; the canonical VirtualBox/operator VM default remains `vm-safe`.
 
 ## Open Operator Tools
 
