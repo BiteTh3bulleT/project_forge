@@ -25,19 +25,29 @@
           config.allowUnfree = false;
           overlays = overlays;
         };
+        forgeDesktopShell = pkgs.callPackage ./nix/packages/forge-desktop-shell.nix { };
+        forgeOperatorDesktopShell = pkgs.callPackage ./nix/packages/forge-desktop-shell.nix {
+          renderProfile = "vm-safe";
+        };
+        forgeShellSession = pkgs.callPackage ./nix/packages/forge-shell-session.nix {
+          forgeDesktopShell = forgeDesktopShell;
+        };
+        forgeOperatorShellSession = pkgs.callPackage ./nix/packages/forge-shell-session.nix {
+          forgeDesktopShell = forgeOperatorDesktopShell;
+        };
       in
       {
         packages = {
           forge-core = pkgs.callPackage ./nix/packages/forge-core.nix { };
-          forge-desktop-shell = pkgs.callPackage ./nix/packages/forge-desktop-shell.nix { };
-          forge-shell-session = pkgs.callPackage ./nix/packages/forge-shell-session.nix {
-            forgeDesktopShell = self.packages.${system}.forge-desktop-shell;
-          };
+          forge-desktop-shell = forgeDesktopShell;
+          forge-operator-desktop-shell = forgeOperatorDesktopShell;
+          forge-shell-session = forgeShellSession;
+          forge-operator-shell-session = forgeOperatorShellSession;
           forge-wayland-session = pkgs.callPackage ./nix/packages/forge-wayland-session.nix {
-            forge-shell-session = self.packages.${system}.forge-shell-session;
+            forge-shell-session = forgeShellSession;
           };
           forge-operator-session = pkgs.callPackage ./nix/packages/forge-operator-session.nix {
-            forge-shell-session = self.packages.${system}.forge-shell-session;
+            forge-shell-session = forgeOperatorShellSession;
           };
           forge-operator-toolbelt = pkgs.callPackage ./nix/packages/forge-operator-toolbelt.nix {
             inherit pkgs;
@@ -54,9 +64,17 @@
             type = "app";
             program = "${self.packages.${system}.forge-shell-session}/bin/forge-shell-session";
           };
+          forge-operator-shell-session = {
+            type = "app";
+            program = "${self.packages.${system}.forge-operator-shell-session}/bin/forge-shell-session";
+          };
           forge-desktop-shell = {
             type = "app";
             program = "${self.packages.${system}.forge-desktop-shell}/bin/forge-desktop-shell";
+          };
+          forge-operator-desktop-shell = {
+            type = "app";
+            program = "${self.packages.${system}.forge-operator-desktop-shell}/bin/forge-desktop-shell";
           };
           forge-wayland-session = {
             type = "app";
