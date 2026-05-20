@@ -116,6 +116,11 @@ export type ForgeHostPowerActionResult = {
   message: string;
 };
 
+export type ForgeHostPowerPolicy = {
+  directSystemControlEnabled: boolean;
+  message: string;
+};
+
 export function isTauriDesktop() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
@@ -800,6 +805,29 @@ export async function launchOperatorApp(
     throw new Error("invalid operator app launch response");
   }
   return parsed;
+}
+
+export async function readHostPowerPolicy(): Promise<ForgeHostPowerPolicy> {
+  if (!isTauriDesktop()) {
+    return {
+      directSystemControlEnabled: false,
+      message: "Host shutdown and reboot controls require the Tauri shell.",
+    };
+  }
+  const result = await invoke("read_host_power_policy");
+  if (!result || typeof result !== "object") {
+    throw new Error("invalid host power policy response");
+  }
+  const value = result as Record<string, unknown>;
+  const enabled =
+    value.directSystemControlEnabled ?? value.direct_system_control_enabled;
+  if (typeof enabled !== "boolean" || typeof value.message !== "string") {
+    throw new Error("invalid host power policy response");
+  }
+  return {
+    directSystemControlEnabled: enabled,
+    message: value.message,
+  };
 }
 
 export async function requestHostPowerAction(

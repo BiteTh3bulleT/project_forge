@@ -13,8 +13,10 @@ import {
   listForgeWindows,
   listLinuxWindows,
   listOperatorApps,
+  readHostPowerPolicy,
   requestHostPowerAction,
   type ForgeHostPowerAction,
+  type ForgeHostPowerPolicy,
   type LinuxWindowSnapshot,
   type LinuxWindowAction,
   type OperatorApp,
@@ -362,6 +364,8 @@ export function AppShell(props: AppShellProps) {
   const [operatorAppStatus, setOperatorAppStatus] = useState<string | null>(
     null,
   );
+  const [hostPowerPolicy, setHostPowerPolicy] =
+    useState<ForgeHostPowerPolicy | null>(null);
   const [runningOperatorApps, setRunningOperatorApps] = useState<
     RunningOperatorApp[]
   >([]);
@@ -582,6 +586,31 @@ export function AppShell(props: AppShellProps) {
     if (!isMainWindow) return;
     const id = window.setInterval(() => setNow(new Date()), 30_000);
     return () => window.clearInterval(id);
+  }, [isMainWindow]);
+
+  useEffect(() => {
+    if (!isMainWindow) return;
+    let cancelled = false;
+    async function loadHostPowerPolicy() {
+      try {
+        const policy = await readHostPowerPolicy();
+        if (!cancelled) setHostPowerPolicy(policy);
+      } catch (error) {
+        if (!cancelled) {
+          setHostPowerPolicy({
+            directSystemControlEnabled: false,
+            message:
+              error instanceof Error
+                ? error.message
+                : "Unable to read host power policy.",
+          });
+        }
+      }
+    }
+    void loadHostPowerPolicy();
+    return () => {
+      cancelled = true;
+    };
   }, [isMainWindow]);
 
   useEffect(() => {
@@ -809,6 +838,14 @@ export function AppShell(props: AppShellProps) {
       if (!props.onForgeLogout) {
         navigate("/login");
       }
+      return;
+    }
+
+    if (hostPowerPolicy?.directSystemControlEnabled !== true) {
+      setOperatorAppStatus(
+        hostPowerPolicy?.message ??
+          "Host shutdown and reboot policy is still loading.",
+      );
       return;
     }
 
@@ -1597,6 +1634,7 @@ export function AppShell(props: AppShellProps) {
           uiMode={uiMode}
           pinnedIds={pinned}
           onPowerAction={(action) => void handleStartPowerAction(action)}
+          hostPowerPolicy={hostPowerPolicy}
           operatorApps={operatorApps}
           operatorAppStatus={operatorAppStatus}
           onLaunchOperatorApp={(app) => void launchNativeApp(app)}

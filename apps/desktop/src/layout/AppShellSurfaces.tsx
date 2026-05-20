@@ -10,6 +10,7 @@ import {
 import {
   iconAssetUrl,
   type ForgeHostPowerAction,
+  type ForgeHostPowerPolicy,
   type LinuxWindowAction,
   type LinuxWindowSnapshot,
   type OperatorApp,
@@ -453,6 +454,7 @@ export function StartMenu(props: {
   uiMode: "cognitive" | "metrics";
   pinnedIds: ShellToolId[];
   onPowerAction: (action: "logout" | ForgeHostPowerAction) => void;
+  hostPowerPolicy: ForgeHostPowerPolicy | null;
   operatorApps: OperatorApp[];
   operatorAppStatus: string | null;
   onLaunchOperatorApp: (app: OperatorApp) => void;
@@ -489,6 +491,11 @@ export function StartMenu(props: {
     () => groupAppsByCategory(filteredApps),
     [filteredApps],
   );
+  const hostPowerEnabled =
+    props.hostPowerPolicy?.directSystemControlEnabled === true;
+  const hostPowerMessage =
+    props.hostPowerPolicy?.message ??
+    "Host shutdown and reboot policy is loading.";
 
   return (
     <>
@@ -704,16 +711,28 @@ export function StartMenu(props: {
           </button>
           <button
             type="button"
-            className="forge-os-startmenu__power-btn"
+            className={cx(
+              "forge-os-startmenu__power-btn",
+              !hostPowerEnabled && "forge-os-startmenu__power-btn--disabled",
+            )}
             onClick={() => props.onPowerAction("reboot")}
+            disabled={!hostPowerEnabled}
+            title={hostPowerEnabled ? "Reboot the FORGE host" : hostPowerMessage}
           >
             <span className="forge-os-startmenu__power-icon">RB</span>
             <span>Reboot</span>
           </button>
           <button
             type="button"
-            className="forge-os-startmenu__power-btn forge-os-startmenu__power-btn--danger"
+            className={cx(
+              "forge-os-startmenu__power-btn forge-os-startmenu__power-btn--danger",
+              !hostPowerEnabled && "forge-os-startmenu__power-btn--disabled",
+            )}
             onClick={() => props.onPowerAction("shutdown")}
+            disabled={!hostPowerEnabled}
+            title={
+              hostPowerEnabled ? "Shut down the FORGE host" : hostPowerMessage
+            }
           >
             <span className="forge-os-startmenu__power-icon">SD</span>
             <span>Shutdown</span>

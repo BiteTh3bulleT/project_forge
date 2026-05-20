@@ -91,6 +91,12 @@ struct HostPowerActionResult {
     message: String,
 }
 
+#[derive(Serialize)]
+struct HostPowerPolicy {
+    direct_system_control_enabled: bool,
+    message: String,
+}
+
 const OPERATOR_APPS: &[OperatorAppDefinition] = &[
     OperatorAppDefinition {
         id: "terminal",
@@ -529,6 +535,23 @@ fn direct_system_control_enabled() -> bool {
         .unwrap_or(false)
 }
 
+fn read_host_power_policy_state(direct_system_control_enabled: bool) -> HostPowerPolicy {
+    HostPowerPolicy {
+        direct_system_control_enabled,
+        message: if direct_system_control_enabled {
+            "Host shutdown and reboot controls are enabled for this shell session".to_string()
+        } else {
+            "Host shutdown and reboot controls are disabled by FORGE_SHELL_DIRECT_SYSTEM_CONTROL policy"
+                .to_string()
+        },
+    }
+}
+
+#[tauri::command]
+fn read_host_power_policy() -> HostPowerPolicy {
+    read_host_power_policy_state(direct_system_control_enabled())
+}
+
 fn request_host_power_action_with_policy<F>(
     action: String,
     direct_control_enabled: bool,
@@ -604,6 +627,7 @@ fn main() {
             read_system_diagnostics,
             list_operator_apps,
             launch_operator_app,
+            read_host_power_policy,
             request_host_power_action,
             linux_windows::list_linux_windows,
             linux_windows::focus_linux_window,
@@ -785,6 +809,10 @@ mod tests {
 
     #[test]
     fn host_power_action_is_policy_disabled_by_default() {
+        let policy = read_host_power_policy_state(false);
+        assert!(!policy.direct_system_control_enabled);
+        assert!(policy.message.contains("disabled"));
+
         let mut called = false;
         let result = request_host_power_action_with_policy("reboot".to_string(), false, |_| {
             called = true;
@@ -800,6 +828,10 @@ mod tests {
 
     #[test]
     fn host_power_action_uses_runner_only_when_policy_enabled() {
+        let policy = read_host_power_policy_state(true);
+        assert!(policy.direct_system_control_enabled);
+        assert!(policy.message.contains("enabled"));
+
         let mut requested = String::new();
         let result =
             request_host_power_action_with_policy(" shutdown ".to_string(), true, |action| {

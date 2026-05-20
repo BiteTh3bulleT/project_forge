@@ -82,6 +82,8 @@ The desktop Start menu is an allowlist. It exposes categorized launchers:
 
 CLI tools are launched through fixed `forge-operator-*` wrappers in a terminal. Native GUI apps such as Mousepad, PCManFM, Xarchiver, and Firefox launch directly from the allowlist. The UI passes only an allowlisted app ID to Tauri; it does not accept arbitrary command text or user-provided launch arguments.
 
+The Start menu also exposes Logout, Reboot, and Shutdown controls. Logout returns to the FORGE/OS session login boundary. Reboot and Shutdown are real host-power controls, but they are disabled by default and reflect the Tauri `read_host_power_policy` result in the UI. They only become clickable when `FORGE_SHELL_DIRECT_SYSTEM_CONTROL` is explicitly enabled for the shell session.
+
 ## Runtime Services
 
 Ollama is installed through Nix as part of the operator toolbelt, not by a runtime installer. The profile provides the `ollama` CLI on `PATH`, and the canonical operator VM config enables governed modelruntime with the local Ollama-compatible backend at `http://127.0.0.1:11434`.
@@ -107,4 +109,4 @@ such as GPU telemetry, are optional and may be absent.
 
 ## Safety Boundary
 
-The operator desktop is visibility and workstation ergonomics. It is not host mutation authority. Rebuilds, service lifecycle changes, model lifecycle changes, cleanup, and canonical semantic writes must remain governed by their existing FORGE/NixOS authority paths.
+The operator desktop is visibility and workstation ergonomics. Rebuilds, service lifecycle changes, model lifecycle changes, cleanup, and canonical semantic writes must remain governed by their existing FORGE/NixOS authority paths. Host shutdown/reboot is the only current direct host-power path and remains an explicit disabled-by-default dangerous capability through `FORGE_SHELL_DIRECT_SYSTEM_CONTROL`.

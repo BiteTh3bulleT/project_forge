@@ -101,9 +101,10 @@ longer treats raw polling output as the lifecycle owner.
 The desktop shell's Tauri binary exposes a `request_host_power_action` command that can request host `shutdown` or `reboot`. This is policy-gated, not absent:
 
 - Default disabled. The binary reads the environment variable `FORGE_SHELL_DIRECT_SYSTEM_CONTROL`; unless it is set to `1`, `true`, `TRUE`, `yes`, or `YES`, the command returns a `requested:false` result and does not spawn any host process.
+- The Start menu reads the same policy through `read_host_power_policy`. Logout remains available, but Shutdown and Reboot are disabled with the policy message until direct system control is explicitly enabled.
 - Enabling the gate grants host mutation authority to the desktop shell. The operator must opt in explicitly through the environment variable.
 - Allowlist: only `shutdown` and `reboot` actions are accepted.
-- Binary-level enforcement is unit-tested. See `apps/desktop/src-tauri/src/main.rs`: gate `direct_system_control_enabled` at line 526, enforcement `request_host_power_action_with_policy` at line 532, and Rust unit tests `host_power_action_is_policy_disabled_by_default` (line 765) and `host_power_action_uses_runner_only_when_policy_enabled` (line 780).
+- Binary-level enforcement is unit-tested. Frontend coverage verifies that disabled policy state prevents Start menu host mutation requests.
 - This supersedes earlier docs language describing the shell as "no host mutation". The accurate posture is "policy-gated host power actions, disabled by default". See also `docs/status/dangerous_capabilities.md` `shell.power_action` entry and `docs/operations/forge_graphical_shell_session.md`.
 
 ## Phase G8 Native App Lifecycle

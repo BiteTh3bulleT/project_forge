@@ -35,7 +35,7 @@ Expected G6 checks:
 
 - Core Status shows `forge-core` reachable when the local core is running.
 - Core Status shows the core URL, health state, and last refresh time from the read-only status route.
-- Shell Session Status shows host mutation, model mutation, semantic memory write, and FORGE-K live authority as disabled by default. Supersedes the earlier read "no host mutation": desktop shell host power actions (`shutdown`/`reboot`) exist behind the `FORGE_SHELL_DIRECT_SYSTEM_CONTROL` policy gate (default disabled); enabling them requires the operator to set that environment variable. Binary-level enforcement is unit-tested in `apps/desktop/src-tauri/src/main.rs` (`direct_system_control_enabled` line 526, `request_host_power_action_with_policy` line 532, regression tests at lines 765 and 780).
+- Shell Session Status shows host mutation, model mutation, semantic memory write, and FORGE-K live authority as disabled by default. Supersedes the earlier read "no host mutation": desktop shell host power actions (`shutdown`/`reboot`) exist behind the `FORGE_SHELL_DIRECT_SYSTEM_CONTROL` policy gate (default disabled); enabling them requires the operator to set that environment variable. The Start menu reads `read_host_power_policy`, keeps Logout available, and disables Shutdown/Reboot until the gate is enabled. Binary-level enforcement and frontend disabled-state behavior are unit-tested.
 - Host Diagnostics Summary shows bounded identity, RAM/disk/GPU/thermal/source-error, and degraded fields, or an honest unavailable state.
 - FORGE-H Resource Posture shows advisory pressure, disk pressure, recommendations, and warning count when HostBridge summary data is available.
 - FORGE-H Proposals are listed read-only with advisory-only status.
@@ -474,7 +474,7 @@ G4 validation must include Nix package/app evaluation, desktop shell package che
 - session launch in `fullscreen-shell`
 - safe failure when the shell binary/package is unavailable
 - `FORGE_CORE_URL` environment wiring
-- no direct host mutation from shell controls by default; host power actions (`shutdown`/`reboot`) are policy-gated by `FORGE_SHELL_DIRECT_SYSTEM_CONTROL` (default disabled) and require explicit operator opt-in (see `apps/desktop/src-tauri/src/main.rs` lines 526 and 532; tests at lines 765 and 780)
+- no direct host mutation from shell controls by default; host power actions (`shutdown`/`reboot`) are policy-gated by `FORGE_SHELL_DIRECT_SYSTEM_CONTROL` (default disabled), reflected in the Start menu through `read_host_power_policy`, and require explicit operator opt-in
 - no `systemctl`, `nixos-rebuild`, package-manager mutation, kernel-module commands, reboot, or shutdown in session wrappers (the Tauri binary's `shutdown`/`reboot` paths are gated by `FORGE_SHELL_DIRECT_SYSTEM_CONTROL`; session wrappers themselves do not invoke these)
 - no direct modelruntime mutation
 - no direct semantic memory writes

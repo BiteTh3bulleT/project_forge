@@ -53,6 +53,7 @@ const desktopMocks = vi.hoisted(() => ({
     () => new Promise(() => {}),
   ),
   launchOperatorApp: vi.fn(),
+  readHostPowerPolicy: vi.fn(),
   requestHostPowerAction: vi.fn(),
   iconAssetUrl: vi.fn((path: string) => `asset://${path}`),
 }));
@@ -130,6 +131,7 @@ vi.mock("../lib/desktop", () => ({
   controlLinuxWindow: desktopMocks.controlLinuxWindow,
   listOperatorApps: desktopMocks.listOperatorApps,
   launchOperatorApp: desktopMocks.launchOperatorApp,
+  readHostPowerPolicy: desktopMocks.readHostPowerPolicy,
   requestHostPowerAction: desktopMocks.requestHostPowerAction,
   iconAssetUrl: desktopMocks.iconAssetUrl,
   minimizeTauriWindow: desktopMocks.minimizeTauriWindow,
@@ -185,6 +187,10 @@ describe("AppShell confined Tauri tool surfaces", () => {
       () => new Promise(() => {}),
     );
     desktopMocks.launchOperatorApp.mockClear();
+    desktopMocks.readHostPowerPolicy.mockReset();
+    desktopMocks.readHostPowerPolicy.mockImplementation(
+      () => new Promise(() => {}),
+    );
     desktopMocks.requestHostPowerAction.mockReset();
     desktopMocks.requestHostPowerAction.mockResolvedValue({
       action: "reboot",
@@ -878,6 +884,10 @@ describe("AppShell confined Tauri tool surfaces", () => {
 
   it("confirms and requests host reboot from Start", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    desktopMocks.readHostPowerPolicy.mockResolvedValue({
+      directSystemControlEnabled: true,
+      message: "Host shutdown and reboot controls are enabled",
+    });
     desktopMocks.requestHostPowerAction.mockResolvedValue({
       action: "reboot",
       requested: true,
@@ -893,7 +903,15 @@ describe("AppShell confined Tauri tool surfaces", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
-    fireEvent.click(screen.getByRole("button", { name: /Reboot/ }));
+    const rebootButton = screen.getByRole("button", {
+      name: /Reboot/,
+    }) as HTMLButtonElement;
+
+    await waitFor(() => {
+      expect(rebootButton.disabled).toBe(false);
+    });
+
+    fireEvent.click(rebootButton);
 
     await waitFor(() => {
       expect(desktopMocks.requestHostPowerAction).toHaveBeenCalledWith(
@@ -901,6 +919,43 @@ describe("AppShell confined Tauri tool surfaces", () => {
       );
     });
     expect(confirm).toHaveBeenCalledWith("Reboot the FORGE host now?");
+
+    confirm.mockRestore();
+  });
+
+  it("shows policy-disabled host power controls without requesting host mutation", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    desktopMocks.readHostPowerPolicy.mockResolvedValue({
+      directSystemControlEnabled: false,
+      message: "Host power controls disabled by policy",
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
+    const rebootButton = screen.getByRole("button", {
+      name: /Reboot/,
+    }) as HTMLButtonElement;
+    const shutdownButton = screen.getByRole("button", {
+      name: /Shutdown/,
+    }) as HTMLButtonElement;
+
+    await waitFor(() => {
+      expect(rebootButton.disabled).toBe(true);
+      expect(shutdownButton.disabled).toBe(true);
+    });
+
+    expect(rebootButton.title).toBe("Host power controls disabled by policy");
+    fireEvent.click(rebootButton);
+
+    expect(confirm).not.toHaveBeenCalled();
+    expect(desktopMocks.requestHostPowerAction).not.toHaveBeenCalled();
 
     confirm.mockRestore();
   });

@@ -2,11 +2,11 @@
 
 Source audit: `docs/reviews/full_codebase_integrity_audit.md`
 
-Status: prioritized queue only. No fixes were applied during CA1.
+Status: prioritized queue. CA1-001 is closed by disabled-by-default Tauri host-power policy plus Start menu policy reflection; remaining rows stay queued until explicitly closed.
 
 | ID | Severity | Category | File path | Summary | Safe for automated fix | Operator decision needed |
 | --- | --- | --- | --- | --- | --- | --- |
-| CA1-001 | Critical | authority/host mutation | `apps/desktop/src-tauri/src/main.rs`; `apps/desktop/src/layout/AppShellSurfaces.tsx`; `apps/desktop/src/layout/AppShell.tsx` | Direct shutdown/reboot controls bypass documented no-host-mutation boundary. | partial | yes |
+| CA1-001 | Critical | authority/host mutation | `apps/desktop/src-tauri/src/main.rs`; `apps/desktop/src/layout/AppShellSurfaces.tsx`; `apps/desktop/src/layout/AppShell.tsx` | Closed: shutdown/reboot are allowlisted, disabled by default through `FORGE_SHELL_DIRECT_SYSTEM_CONTROL`, exposed to the UI through `read_host_power_policy`, and disabled in Start until explicitly enabled. | fixed | yes |
 | CA1-002 | High | filesystem authority | `services/core/internal/config/config.go`; `services/core/internal/api/server.go`; `services/core/internal/permissions/service.go` | Default workspace `/` can become broad write authority. | yes | yes |
 | CA1-003 | High | network exposure | `docker-compose.yml` | Compose defaults to wildcard bind and wildcard opt-in. | yes | yes |
 | CA1-004 | High | gateway/modelruntime boundary | `services/core/internal/api/legacy_adapter_gateway_tool.go`; `services/core/internal/adapters/ollama.go` | Legacy adapter invoke underreports network/model authority and bypasses modelruntime metadata. | partial | yes |

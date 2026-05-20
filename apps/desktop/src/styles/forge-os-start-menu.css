@@ -432,6 +432,16 @@
   box-shadow: 0 0 20px rgba(var(--forge-danger-rgb), 0.08);
 }
 
+.forge-os-startmenu__power-btn:disabled,
+.forge-os-startmenu__power-btn--disabled,
+.forge-os-startmenu__power-btn--disabled:hover {
+  cursor: not-allowed;
+  border-color: rgba(var(--forge-border-strong-rgb), 0.08);
+  background: rgba(255, 255, 255, 0.018);
+  color: rgba(var(--forge-muted-rgb), 0.62);
+  box-shadow: none;
+}
+
 .forge-os-startmenu__power-icon {
   display: grid;
   place-items: center;
