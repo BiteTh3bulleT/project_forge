@@ -73,6 +73,7 @@ const apiMocks = vi.hoisted(() => ({
   contextSnapshots: vi.fn<() => Promise<unknown>>(
     () => new Promise(() => {}),
   ),
+  events: vi.fn<() => Promise<unknown>>(() => new Promise(() => {})),
 }));
 
 function resolvedOperatorApps() {
@@ -157,6 +158,7 @@ vi.mock("../lib/api", () => ({
     contextInspector: {
       listSnapshots: apiMocks.contextSnapshots,
     },
+    events: apiMocks.events,
   },
 }));
 
@@ -222,6 +224,8 @@ describe("AppShell confined Tauri tool surfaces", () => {
     apiMocks.contextSnapshots.mockImplementation(
       () => new Promise<never>(() => {}),
     );
+    apiMocks.events.mockReset();
+    apiMocks.events.mockResolvedValue({ events: [] });
     useDesktopWindowStore.setState({
       pinned: ["chat", "jobs", "memory", "models", "approvals", "settings"],
       windows: [
@@ -568,6 +572,62 @@ describe("AppShell confined Tauri tool surfaces", () => {
     });
     expect(within(log).getByText("model.runtime.chat")).toBeTruthy();
     expect(apiMocks.auditList).toHaveBeenCalledWith({ limit: 20 });
+  });
+
+  it("opens a notification center from core event notifications", async () => {
+    apiMocks.auditList.mockResolvedValue({ records: [] });
+    apiMocks.autonomyStatus.mockResolvedValue({
+      available: true,
+      dream: { active: false },
+    });
+    apiMocks.modelRuntimeQueue.mockResolvedValue({ queue: { depth: 0 } });
+    apiMocks.modelRuntimeBackends.mockResolvedValue({ backends: [] });
+    apiMocks.contextSnapshots.mockResolvedValue({ snapshots: [] });
+    apiMocks.events.mockResolvedValue({
+      events: [
+        {
+          id: 10,
+          createdAtMs: 1700000000000,
+          type: "job.completed",
+          payload: { jobId: "job-1", title: "Build image" },
+        },
+        {
+          id: 11,
+          createdAtMs: 1700000001000,
+          type: "approval.requested",
+          payload: { requestId: 42, summary: "Load model" },
+        },
+        {
+          id: 12,
+          createdAtMs: 1700000002000,
+          type: "chat.message.user",
+          payload: { messageId: 1 },
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    const button = await screen.findByRole("button", {
+      name: "Open notification center",
+    });
+    expect(button.textContent).toContain("2");
+
+    fireEvent.click(button);
+
+    const center = screen.getByRole("dialog", { name: "Notification center" });
+    expect(within(center).getByText("job.completed")).toBeTruthy();
+    expect(within(center).getByText("Build image")).toBeTruthy();
+    expect(within(center).getByText("approval.requested")).toBeTruthy();
+    expect(within(center).getByText("Load model")).toBeTruthy();
+    expect(within(center).queryByText("chat.message.user")).toBeNull();
+    expect(apiMocks.events).toHaveBeenCalledWith(20);
   });
 
   it("persists a CSS-variable shell theme and accent from the status controls", async () => {

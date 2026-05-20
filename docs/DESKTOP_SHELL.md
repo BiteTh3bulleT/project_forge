@@ -34,6 +34,7 @@ Backed by real state:
 - workspace identity and core status
 - active model and adapter readiness
 - queue counts
+- operator notification count and center for job, approval, and shell notification events
 - active layout switcher
 - direct access to layout management
 - clock and shell mode
@@ -95,6 +96,16 @@ lifecycle metadata for each toplevel, marks missing windows closed, and only
 executes focus/minimize/maximize/fullscreen/close actions against active
 registered windows. The frontend taskbar is a consumer of that registry; it no
 longer treats raw polling output as the lifecycle owner.
+
+## Notifications
+
+The shell exposes an operator notification center from the top bar. The current
+frontend bridge polls core events with `api.events(20)` and promotes
+operator-relevant job, approval, and notification events into the center. Raw
+event history remains available through the Activity log.
+
+This is not yet the freedesktop D-Bus notification service. That backend service
+is the next completion slice for full Linux app notification compatibility.
 
 ## Host Power Controls
 

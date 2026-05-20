@@ -1,4 +1,4 @@
-import type { DashboardSummary } from "@forge/shared";
+import type { DashboardSummary, ForgeEvent } from "@forge/shared";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -92,6 +92,7 @@ type ShellContextSnapshot = {
 };
 type ShellTelemetry = {
   auditRecords: ShellAuditRecord[];
+  eventRecords: ForgeEvent[];
   autonomyStatus: Record<string, unknown> | null;
   modelQueue: Record<string, unknown> | null;
   modelBackends: Array<Record<string, unknown>>;
@@ -102,6 +103,7 @@ type ShellTelemetry = {
 const HOME_ROUTE = "/";
 const EMPTY_TELEMETRY: ShellTelemetry = {
   auditRecords: [],
+  eventRecords: [],
   autonomyStatus: null,
   modelQueue: null,
   modelBackends: [],
@@ -134,6 +136,45 @@ function auditSummary(record: ShellAuditRecord | null | undefined) {
 function auditDetail(record: ShellAuditRecord | null | undefined) {
   if (!record) return "No audit events loaded.";
   return record.summary?.trim() || auditSummary(record);
+}
+
+function payloadTextField(payload: unknown, keys: string[]) {
+  if (typeof payload !== "object" || payload == null) return "";
+  const record = payload as Record<string, unknown>;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+  return "";
+}
+
+function isNotificationEvent(event: ForgeEvent) {
+  const type = event.type.toLowerCase();
+  if (type.includes("approval")) return true;
+  if (type.includes("notification") || type.includes("notify")) return true;
+  if (!type.includes("job")) return false;
+  return /complete|done|fail|error|cancel|approval/i.test(type);
+}
+
+function notificationDetail(event: ForgeEvent) {
+  const summary = payloadTextField(event.payload, [
+    "summary",
+    "title",
+    "message",
+    "reason",
+    "status",
+  ]);
+  if (summary) return summary;
+  const identifier = payloadTextField(event.payload, [
+    "jobId",
+    "jobID",
+    "requestId",
+    "id",
+  ]);
+  return identifier ? `Reference ${identifier}` : "Core event notification";
 }
 
 function modelRuntimeSummary(telemetry: ShellTelemetry) {
@@ -374,6 +415,7 @@ export function AppShell(props: AppShellProps) {
   const [telemetry, setTelemetry] = useState<ShellTelemetry>(EMPTY_TELEMETRY);
   const [statusDetailsOpen, setStatusDetailsOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [contextMenu, setContextMenu] = useState<DockContextMenu | null>(null);
   const [nativeContextMenu, setNativeContextMenu] =
@@ -494,9 +536,10 @@ export function AppShell(props: AppShellProps) {
     if (!isMainWindow) return;
     let cancelled = false;
     async function loadTelemetry() {
-      const [auditRes, autonomyRes, queueRes, backendsRes, contextRes] =
+      const [auditRes, eventRes, autonomyRes, queueRes, backendsRes, contextRes] =
         await Promise.allSettled([
           api.audit.list({ limit: 20 }),
+          api.events(20),
           api.autonomy.status(),
           api.modelRuntime.queue(),
           api.modelRuntime.backends(),
@@ -506,6 +549,7 @@ export function AppShell(props: AppShellProps) {
 
       const rejected = [
         auditRes,
+        eventRes,
         autonomyRes,
         queueRes,
         backendsRes,
@@ -515,6 +559,10 @@ export function AppShell(props: AppShellProps) {
         auditRecords:
           auditRes.status === "fulfilled"
             ? (auditRes.value.records as ShellAuditRecord[])
+            : [],
+        eventRecords:
+          eventRes.status === "fulfilled" && Array.isArray(eventRes.value.events)
+            ? (eventRes.value.events as ForgeEvent[])
             : [],
         autonomyStatus:
           autonomyRes.status === "fulfilled"
@@ -650,6 +698,10 @@ export function AppShell(props: AppShellProps) {
           setActivityOpen(false);
           return;
         }
+        if (notificationOpen) {
+          setNotificationOpen(false);
+          return;
+        }
         if (contextMenu) {
           setContextMenu(null);
           return;
@@ -672,7 +724,15 @@ export function AppShell(props: AppShellProps) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activityOpen, statusDetailsOpen, startOpen, focusedId, minimize, contextMenu]);
+  }, [
+    activityOpen,
+    contextMenu,
+    focusedId,
+    minimize,
+    notificationOpen,
+    startOpen,
+    statusDetailsOpen,
+  ]);
 
   useEffect(() => {
     setStartOpen(false);
@@ -885,6 +945,19 @@ export function AppShell(props: AppShellProps) {
   const autonomyText = autonomySummary(telemetry.autonomyStatus);
   const activeLoopText = activeLoopSummary(telemetry.autonomyStatus);
   const pendingApprovalsText = `${approvalsPending} pending`;
+  const notifications = useMemo(
+    () =>
+      telemetry.eventRecords
+        .filter(isNotificationEvent)
+        .slice(0, 20)
+        .map((event) => ({
+          id: event.id,
+          createdAtMs: event.createdAtMs,
+          type: event.type,
+          detail: notificationDetail(event),
+        })),
+    [telemetry.eventRecords],
+  );
   const queueText =
     level === "none" ? "clear" : `attention ${attentionCount}`;
   const statusSummary = `Core: ${
@@ -1125,6 +1198,15 @@ export function AppShell(props: AppShellProps) {
                 Activity
               </button>
             )}
+            <button
+              type="button"
+              className="forge-os-statusbar__button forge-os-statusbar__button--notify"
+              onClick={() => setNotificationOpen((value) => !value)}
+              aria-label="Open notification center"
+              aria-expanded={notificationOpen ? "true" : "false"}
+            >
+              Alerts {notifications.length}
+            </button>
           </div>
         </header>
       ) : null}
@@ -1387,6 +1469,55 @@ export function AppShell(props: AppShellProps) {
             ) : (
               <p className="forge-os-activity-log__empty">
                 No audit events loaded.
+              </p>
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {isMainWindow && notificationOpen ? (
+        <section
+          className="forge-os-notification-center"
+          role="dialog"
+          aria-label="Notification center"
+        >
+          <div className="forge-os-activity-log__header">
+            <div>
+              <div className="forge-os-context-inspector__eyebrow">
+                Core events
+              </div>
+              <h2>Notification center</h2>
+            </div>
+            <button
+              type="button"
+              className="forge-os-statusbar__button"
+              onClick={() => setNotificationOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+          <div className="forge-os-activity-log__list">
+            {notifications.length > 0 ? (
+              notifications.map((item) => (
+                <article
+                  key={item.id}
+                  className="forge-os-activity-log__item"
+                >
+                  <div className="forge-os-activity-log__meta">
+                    <span>{item.type}</span>
+                    <span>
+                      {new Date(item.createdAtMs).toLocaleTimeString([], {
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
+                  <p>{item.detail}</p>
+                </article>
+              ))
+            ) : (
+              <p className="forge-os-activity-log__empty">
+                No operator notifications loaded.
               </p>
             )}
           </div>

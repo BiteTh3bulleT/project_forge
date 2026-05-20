@@ -234,6 +234,7 @@ These are the items between "wired" and "works the way I want."
 - [x] **Status bar across the shell.** One-line summary of modelruntime + autonomy + last journal entry + workspace. Data already exists. 2026-05-18: shell status bar now summarizes workspace, modelruntime, autonomy, latest audit, queue/core/runtime.
 - [x] **Right-side context inspector.** Shows current context being compiled, recent journal entries, active loops/approvals. 2026-05-18: added right-side inspector fed by context snapshots, audit, autonomy, and approvals state.
 - [x] **Activity log surface.** Last 20 audit events, popover or accordion. 2026-05-18: added activity log popover backed by `api.audit.list({ limit: 20 })`.
+- [x] **Notification center surface.** 2026-05-20: added a shell notification center button and popover backed by `api.events(20)`, filtering operator-relevant job, approval, and notification events while leaving raw event history in the Activity log. This is the frontend/core-event bridge for Track B1; the freedesktop D-Bus notification service remains the next B1 backend slice.
 - [x] **Theme variables.** Minimal CSS-vars-driven light/dark + accent. 2026-05-18: theme/accent preferences persist via `uiStore` and drive `data-theme` / `data-forge-accent` CSS variables.
 - [x] **Lazy-load tier-2 pages.** 2026-05-17: route and shell tool pages now load through `React.lazy`/`Suspense`; Vite production build emits per-page chunks and the main JS chunk is ~312 KB.
 
