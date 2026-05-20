@@ -2,7 +2,6 @@ import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import { Toast } from "../components/Toast";
-import { FALLBACK_OPERATOR_APPS } from "../layout/AppShellSurfaces";
 import {
   isTauriDesktop,
   iconAssetUrl,
@@ -10,6 +9,7 @@ import {
   listOperatorApps,
   type OperatorApp,
 } from "../lib/desktop";
+import { FALLBACK_OPERATOR_APPS } from "../lib/operatorApps";
 
 export function OperatorAppsPage() {
   const tauriAvailable = useMemo(() => isTauriDesktop(), []);

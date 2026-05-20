@@ -28,6 +28,7 @@ import {
   useDesktopWindowStore,
   type DesktopWindow,
 } from "../stores/desktopWindowStore";
+import { FALLBACK_OPERATOR_APPS } from "../lib/operatorApps";
 
 import {
   allShellTools,
@@ -38,7 +39,6 @@ import {
 import {
   DesktopWallpaper,
   DockContextMenuView,
-  FALLBACK_OPERATOR_APPS,
   FloatingWindow,
   ForgeHero,
   LinuxWindowIcon,
