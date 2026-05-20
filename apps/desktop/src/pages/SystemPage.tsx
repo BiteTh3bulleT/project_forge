@@ -228,84 +228,7 @@ export function SystemPage() {
     ];
     return Array.from(new Set(values.filter(Boolean))).slice(0, 8);
   }, [status]);
-  const hasKernelActivation = kernelActivation != null;
-  const hasProposalsSurface = status?.forgeh?.proposals != null;
-  const cockpitRows = useMemo<Array<{
-    id: string;
-    label: string;
-    live: boolean;
-    status: string;
-    liveOwner: string;
-    targetOwner: string;
-    source: string;
-  }>>(
-    () => [
-      {
-        id: "authority_gates",
-        label: "Authority gates",
-        live: hasKernelActivation,
-        status: hasKernelActivation
-          ? `${kernelActivation?.authority_ready_gates ?? 0} ready / ${kernelActivation?.authority_blocked_gates ?? 0} blocked`
-          : "",
-        liveOwner: kernelActivation?.live_owner ?? "aios.controllane",
-        targetOwner: "FORGE-K Kernel",
-        source: "kernel_activation.authority_gates",
-      },
-      {
-        id: "cases",
-        label: "Cases",
-        live: false,
-        status: "",
-        liveOwner: "not live-wired",
-        targetOwner: "FORGE-K case packets",
-        source: "planned Courthouse case surface",
-      },
-      {
-        id: "context_bundles",
-        label: "Context bundles",
-        live: false,
-        status: "",
-        liveOwner: "context snapshots/restore inspector",
-        targetOwner: "FORGE-K Context Compiler",
-        source: "/inspectors",
-      },
-      {
-        id: "proposals",
-        label: "Proposals",
-        live: hasProposalsSurface,
-        status: hasProposalsSurface ? `${proposalRows.length} resource proposals` : "",
-        liveOwner: "forgeh plus autonomy dry-run reports",
-        targetOwner: "proposal lanes",
-        source: "forgeh.proposals",
-      },
-      {
-        id: "journal_replay",
-        label: "Journal/replay",
-        live: false,
-        status: "",
-        liveOwner: "audit/journal trace APIs",
-        targetOwner: "FORGE-K Kernel replay",
-        source: "/inspectors",
-      },
-      {
-        id: "lymphatic_reports",
-        label: "Lymphatic reports",
-        live: false,
-        status: "",
-        liveOwner: "autonomy maintenance dry-run reports",
-        targetOwner: "FORGE-K Lymphatic Lane",
-        source: "autonomy maintenance dry-run",
-      },
-    ],
-    [
-      hasKernelActivation,
-      hasProposalsSurface,
-      kernelActivation?.authority_blocked_gates,
-      kernelActivation?.authority_ready_gates,
-      kernelActivation?.live_owner,
-      proposalRows.length,
-    ],
-  );
+  const cockpitRows = arrayOrEmpty(status?.operator_cockpit?.rows);
 
   if (error && !status) {
     return (
@@ -627,36 +550,50 @@ export function SystemPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {cockpitRows.map((row) => (
-                    <tr key={row.id} className="border-t border-white/10">
+                  {cockpitRows.length > 0 ? cockpitRows.map((row) => (
+                    <tr key={row.id ?? row.label} className="border-t border-white/10">
                       <td className="py-2 pr-3 font-mono text-forge-ash">
-                        {row.label}
+                        {valueText(row.label)}
                       </td>
                       <td className="py-2 pr-3">
-                        {row.live ? (
-                          <span className={statusClass(row.status)}>
-                            {row.status}
-                          </span>
-                        ) : (
-                          <span
-                            className="text-forge-mist/50"
-                            aria-label={`${row.label}: data not available, surface not live-wired`}
-                          >
-                            &mdash;
-                          </span>
-                        )}
+                        <span
+                          className={statusClass(row.live ? row.status : row.status ?? "unavailable")}
+                          aria-label={row.live ? undefined : `${valueText(row.label)}: ${valueText(row.status, "unavailable")}`}
+                        >
+                          {valueText(row.status, "unavailable")}
+                        </span>
                       </td>
                       <td className="py-2 pr-3 font-mono text-forge-mist">
-                        {row.liveOwner}
+                        {valueText(row.live_owner)}
                       </td>
                       <td className="py-2 pr-3 font-mono text-forge-mist">
-                        {row.targetOwner}
+                        {valueText(row.target_owner)}
                       </td>
                       <td className="py-2 pr-3 font-mono text-forge-mist">
-                        {row.source}
+                        {valueText(row.source)}
                       </td>
                     </tr>
-                  ))}
+                  )) : (
+                    <tr className="border-t border-white/10">
+                      <td className="py-2 pr-3 font-mono text-forge-ash">
+                        Operator cockpit
+                      </td>
+                      <td className="py-2 pr-3">
+                        <span className={statusClass("unavailable")}>
+                          unavailable
+                        </span>
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-forge-mist">
+                        forge.system.status
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-forge-mist">
+                        future FORGE-K operator cockpit
+                      </td>
+                      <td className="py-2 pr-3 font-mono text-forge-mist">
+                        operator_cockpit.rows
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

@@ -107,9 +107,21 @@ The desktop shell's Tauri binary exposes a `request_host_power_action` command t
 - Binary-level enforcement is unit-tested. Frontend coverage verifies that disabled policy state prevents Start menu host mutation requests.
 - This supersedes earlier docs language describing the shell as "no host mutation". The accurate posture is "policy-gated host power actions, disabled by default". See also `docs/status/dangerous_capabilities.md` `shell.power_action` entry and `docs/operations/forge_graphical_shell_session.md`.
 
+## Command Bar Maintenance
+
+The desktop CommandBar quick actions are a static frontend affordance in `apps/desktop/src/components/CommandBar.tsx`. They are not a backend authority registry, do not grant capabilities, and must only point at existing routes or already-governed API commands.
+
+When adding or changing a quick action:
+
+- update the `commandActions` list in `CommandBar.tsx`
+- keep labels short and category names stable for scanability
+- verify the command still resolves through existing UI/API authority paths
+- update `apps/desktop/src/components/CommandBar.test.tsx` when visible actions or command behavior changes
+- do not add host mutation, model lifecycle mutation, approval decisions, or gateway execution shortcuts through CommandBar without a separate authority design and tests
+
 ## Phase G8 Native App Lifecycle
 
-Phase G8 records the desktop shell as `DESKTOP_SHELL_POLISH / OPERATOR_UI_AUTHORITY / LABWC_SUBSTRATE_PRESERVED / NO_HOST_MUTATION / NO_FORGE_K_AUTHORITY_EXPANSION`.
+Phase G8 records the desktop shell as `DESKTOP_SHELL_POLISH / OPERATOR_UI_AUTHORITY / LABWC_SUBSTRATE_PRESERVED / POLICY_GATED_HOST_POWER_DISABLED_BY_DEFAULT / NO_FORGE_K_AUTHORITY_EXPANSION`.
 
 The shell now handles native launch lifecycle edges explicitly:
 

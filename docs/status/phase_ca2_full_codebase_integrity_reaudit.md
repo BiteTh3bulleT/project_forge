@@ -49,7 +49,7 @@ No skipped command is recorded as passed.
 - Semantic writes: Control Lane–gated.
 - Memory: append-only / journaled.
 - Live validation seams (`VALIDATE_REF_SHAPE`, `VALIDATE_KV_IDENTITY`, `COMPARE_REF_SHAPE`, `VALIDATE_SEMANTIC_OPERATION`, `VALIDATE_CONTEXT_ATTRIBUTION`) remain `[PARTIAL LIVE VALIDATION]` only.
-- Desktop shell `shutdown`/`reboot`: binary-gated by `FORGE_SHELL_DIRECT_SYSTEM_CONTROL` (default false), unit-tested. Docs require supersession (M-1).
+- Desktop shell `shutdown`/`reboot`: binary-gated by `FORGE_SHELL_DIRECT_SYSTEM_CONTROL` (default false), unit-tested, and now documented as policy-gated host power rather than absent host mutation.
 
 ## Open operator decisions
 
@@ -57,4 +57,4 @@ OP-1 (power-action documentation), OP-2 (empty token policy), OP-3 (stale repo-r
 
 ## Next
 
-Operator may approve a single CA3 fix-pass PR addressing the H-1..H-4 + M-1 items in the fix queue. No fix work has been performed in CA2 itself.
+CA3 follow-up has closed the original H-1..H-4, M-1, OP-1, OP-4, M-2, M-3, M-5, M-6, L-2, L-4, and L-5 header-label items. Remaining CA2 hygiene stays tracked in `docs/reviews/full_codebase_integrity_ca2_fix_queue.md`.

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ type forgeSystemStatusResponse struct {
 	ModelRuntime  forgeSystemModelRuntime                     `json:"modelruntime"`
 	Storage       forgeSystemStorageStatus                    `json:"storage"`
 	Legacy        forgeSystemLegacyRetirement                 `json:"legacy_retirement"`
+	Cockpit       forgeSystemOperatorCockpit                  `json:"operator_cockpit"`
 	ApprovalQueue forgeSystemApprovalQueue                    `json:"approval_queue"`
 	Warnings      []string                                    `json:"warnings,omitempty"`
 	Errors        []string                                    `json:"errors,omitempty"`
@@ -143,6 +145,25 @@ type forgeSystemLegacyRetirementEntry struct {
 	Notes                  string `json:"notes"`
 }
 
+type forgeSystemOperatorCockpit struct {
+	Available                 bool                            `json:"available"`
+	LiveOwner                 string                          `json:"live_owner"`
+	TargetForgeKOwner         string                          `json:"target_forge_k_owner"`
+	MutationControlsAvailable bool                            `json:"mutation_controls_available"`
+	Rows                      []forgeSystemOperatorCockpitRow `json:"rows"`
+}
+
+type forgeSystemOperatorCockpitRow struct {
+	ID              string `json:"id"`
+	Label           string `json:"label"`
+	Live            bool   `json:"live"`
+	Status          string `json:"status"`
+	LiveOwner       string `json:"live_owner"`
+	TargetOwner     string `json:"target_owner"`
+	Source          string `json:"source"`
+	MutationAllowed bool   `json:"mutation_allowed"`
+}
+
 type shellSystemStatusCommandRunner struct{}
 
 func (shellSystemStatusCommandRunner) LookPath(name string) (string, error) {
@@ -182,6 +203,7 @@ func (s *Server) handleForgeSystemStatus(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
+	kernel := s.forgeKActivationReadiness(now)
 	payload := forgeSystemStatusResponse{
 		GeneratedAt: now,
 		Core: forgeSystemCoreStatus{
@@ -228,14 +250,86 @@ func (s *Server) handleForgeSystemStatus(w http.ResponseWriter, r *http.Request)
 			},
 			CanonicalWriteCommitted: false,
 		},
-		Kernel:        s.forgeKActivationReadiness(now),
+		Kernel:        kernel,
 		ModelRuntime:  s.shellSystemModelRuntime(r),
 		Storage:       s.shellSystemStorage(snapshot),
 		Legacy:        shellSystemLegacyRetirement(),
+		Cockpit:       shellSystemOperatorCockpit(kernel, len(proposals)),
 		ApprovalQueue: forgeSystemApprovalQueue{Wired: true, Reason: "use governed approvals surface for decisions; G6 status is read-only"},
 		Warnings:      warnings,
 	}
 	writeJSON(w, http.StatusOK, payload)
+}
+
+func shellSystemOperatorCockpit(kernel controllane.ForgeKActivationReadinessReport, proposalCount int) forgeSystemOperatorCockpit {
+	return forgeSystemOperatorCockpit{
+		Available:                 true,
+		LiveOwner:                 "forge.system.status",
+		TargetForgeKOwner:         "future FORGE-K operator cockpit",
+		MutationControlsAvailable: false,
+		Rows: []forgeSystemOperatorCockpitRow{
+			{
+				ID:              "authority_gates",
+				Label:           "Authority gates",
+				Live:            true,
+				Status:          strconv.Itoa(kernel.AuthorityReadyGates) + " ready / " + strconv.Itoa(kernel.AuthorityBlockedGates) + " blocked",
+				LiveOwner:       firstNonEmpty(kernel.LiveOwner, "aios.controllane"),
+				TargetOwner:     "FORGE-K Kernel",
+				Source:          "kernel_activation.authority_gates",
+				MutationAllowed: false,
+			},
+			{
+				ID:              "cases",
+				Label:           "Cases",
+				Live:            false,
+				Status:          "unavailable",
+				LiveOwner:       "not live-wired",
+				TargetOwner:     "FORGE-K case packets",
+				Source:          "planned Courthouse case surface",
+				MutationAllowed: false,
+			},
+			{
+				ID:              "context_bundles",
+				Label:           "Context bundles",
+				Live:            false,
+				Status:          "unavailable",
+				LiveOwner:       "context snapshots/restore inspector",
+				TargetOwner:     "FORGE-K Context Compiler",
+				Source:          "/inspectors",
+				MutationAllowed: false,
+			},
+			{
+				ID:              "proposals",
+				Label:           "Proposals",
+				Live:            true,
+				Status:          strconv.Itoa(proposalCount) + " resource proposals",
+				LiveOwner:       "forgeh plus autonomy dry-run reports",
+				TargetOwner:     "proposal lanes",
+				Source:          "forgeh.proposals",
+				MutationAllowed: false,
+			},
+			{
+				ID:              "journal_replay",
+				Label:           "Journal/replay",
+				Live:            false,
+				Status:          "unavailable",
+				LiveOwner:       "audit/journal trace APIs",
+				TargetOwner:     "FORGE-K Kernel replay",
+				Source:          "/inspectors",
+				MutationAllowed: false,
+			},
+			{
+				ID:              "lymphatic_reports",
+				Label:           "Lymphatic reports",
+				Live:            false,
+				Status:          "unavailable",
+				LiveOwner:       "autonomy maintenance dry-run reports",
+				TargetOwner:     "FORGE-K Lymphatic Lane",
+				Source:          "autonomy maintenance dry-run",
+				MutationAllowed: false,
+			},
+		},
+	}
 }
 
 func shellSystemLegacyRetirement() forgeSystemLegacyRetirement {

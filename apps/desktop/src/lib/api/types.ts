@@ -907,6 +907,22 @@ export type ForgeSystemStatus = {
       no_effect?: Record<string, boolean>;
     };
   };
+  operator_cockpit?: {
+    available?: boolean;
+    live_owner?: string;
+    target_forge_k_owner?: string;
+    mutation_controls_available?: boolean;
+    rows?: Array<{
+      id?: string;
+      label?: string;
+      live?: boolean;
+      status?: string;
+      live_owner?: string;
+      target_owner?: string;
+      source?: string;
+      mutation_allowed?: boolean;
+    }>;
+  };
   authority?: {
     matrix_available?: boolean;
     matrix_rows?: number;

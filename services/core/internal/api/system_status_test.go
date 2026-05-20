@@ -81,6 +81,37 @@ func TestForgeSystemStatusReadOnlySurface(t *testing.T) {
 		t.Fatalf("kernel_activation authority gate counts unexpected: %#v", kernel)
 	}
 
+	operatorCockpit := asMap(t, payload["operator_cockpit"])
+	if operatorCockpit["available"] != true || operatorCockpit["mutation_controls_available"] != false {
+		t.Fatalf("operator_cockpit flags wrong: %#v", operatorCockpit)
+	}
+	rows, ok := operatorCockpit["rows"].([]any)
+	if !ok || len(rows) == 0 {
+		t.Fatalf("operator_cockpit.rows=%#v, want non-empty API-owned rows", operatorCockpit["rows"])
+	}
+	rowIDs := map[string]bool{}
+	for _, raw := range rows {
+		row := asMap(t, raw)
+		id, ok := row["id"].(string)
+		if !ok || id == "" {
+			t.Fatalf("operator cockpit row missing id: %#v", row)
+		}
+		for _, key := range []string{"label", "status", "live_owner", "target_owner", "source"} {
+			if row[key] == "" {
+				t.Fatalf("operator cockpit row %s missing %s: %#v", id, key, row)
+			}
+		}
+		if row["mutation_allowed"] != false {
+			t.Fatalf("operator cockpit row %s allows mutation: %#v", id, row)
+		}
+		rowIDs[id] = true
+	}
+	for _, id := range []string{"authority_gates", "cases", "context_bundles", "proposals", "journal_replay", "lymphatic_reports"} {
+		if !rowIDs[id] {
+			t.Fatalf("operator cockpit missing row %s: %#v", id, rows)
+		}
+	}
+
 	storage := asMap(t, payload["storage"])
 	if storage["truth_authority"] != "sqlite" {
 		t.Fatalf("storage.truth_authority=%v, want sqlite", storage["truth_authority"])
