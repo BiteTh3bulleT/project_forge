@@ -29,12 +29,20 @@ function Test-EnvSet {
   return -not [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($Name, "Process"))
 }
 
+function Test-EnvFileSet {
+  param([string]$Name)
+  if (-not (Test-Path -LiteralPath $EnvFile)) {
+    return $false
+  }
+  return Select-String -LiteralPath $EnvFile -Pattern "^\s*(export\s+)?$([regex]::Escape($Name))=" -Quiet
+}
+
 function Set-DefaultEnv {
   param(
     [string]$Name,
     [string]$Value
   )
-  if (-not (Test-EnvSet $Name)) {
+  if (-not (Test-EnvSet $Name) -and -not (Test-EnvFileSet $Name)) {
     [Environment]::SetEnvironmentVariable($Name, $Value, "Process")
   }
 }
@@ -101,6 +109,9 @@ function Enable-DockerOllamaDefaults {
     Write-Host "FORGE Docker model default selected from host Ollama: $Selected"
   }
 }
+
+Set-DefaultEnv "FORGE_CORE_BIND_HOST" "0.0.0.0"
+Set-DefaultEnv "FORGE_ALLOW_WILDCARD_BIND" "true"
 
 function Test-DockerEngineReady {
   try {

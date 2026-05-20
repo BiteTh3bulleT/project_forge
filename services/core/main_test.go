@@ -105,22 +105,44 @@ func TestValidateCoreConfigAllowsRootWorkspaceWithExplicitOptIn(t *testing.T) {
 	}
 }
 
-func TestDockerComposeCoreDefaultsUseContainerWildcardWithAuth(t *testing.T) {
+func TestDockerComposeCoreDefaultsAreLoopbackAndWildcardOptInDisabled(t *testing.T) {
 	body, err := os.ReadFile(filepath.Join("..", "..", "docker-compose.yml"))
 	if err != nil {
 		t.Fatalf("read docker-compose.yml: %v", err)
 	}
 	compose := string(body)
-	if !strings.Contains(compose, `FORGE_CORE_BIND_HOST: "${FORGE_CORE_BIND_HOST:-0.0.0.0}"`) {
-		t.Fatal("docker-compose.yml must default FORGE_CORE_BIND_HOST to 0.0.0.0 for container port publishing")
+	if !strings.Contains(compose, `FORGE_CORE_BIND_HOST: "${FORGE_CORE_BIND_HOST:-127.0.0.1}"`) {
+		t.Fatal("docker-compose.yml must default FORGE_CORE_BIND_HOST to 127.0.0.1")
 	}
-	if !strings.Contains(compose, `FORGE_ALLOW_WILDCARD_BIND: "${FORGE_ALLOW_WILDCARD_BIND:-true}"`) {
-		t.Fatal("docker-compose.yml must explicitly opt into wildcard bind for the container profile")
+	if !strings.Contains(compose, `FORGE_ALLOW_WILDCARD_BIND: "${FORGE_ALLOW_WILDCARD_BIND:-false}"`) {
+		t.Fatal("docker-compose.yml must keep wildcard bind opt-in disabled by default")
 	}
 	if !strings.Contains(compose, `FORGE_API_TOKEN: "${FORGE_API_TOKEN:-}"`) {
-		t.Fatal("docker-compose.yml must keep wildcard-bound API surfaces auth-gated by FORGE_API_TOKEN")
+		t.Fatal("docker-compose.yml must keep API surfaces auth-gated by FORGE_API_TOKEN")
 	}
 	if !strings.Contains(compose, `${FORGE_DOCKER_BIND_HOST:-127.0.0.1}`) {
 		t.Fatal("docker-compose.yml must keep host-published ports loopback-bound by default")
+	}
+}
+
+func TestDockerHelperOptsIntoContainerWildcardWithGeneratedToken(t *testing.T) {
+	for _, path := range []string{
+		filepath.Join("..", "..", "scripts", "forge-docker-up.sh"),
+		filepath.Join("..", "..", "scripts", "forge-docker-up.ps1"),
+	} {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(body)
+		if !strings.Contains(text, "FORGE_CORE_BIND_HOST") || !strings.Contains(text, "0.0.0.0") {
+			t.Fatalf("%s must explicitly set container-internal core bind host for published Docker ports", path)
+		}
+		if !strings.Contains(text, "FORGE_ALLOW_WILDCARD_BIND") || !strings.Contains(text, "true") {
+			t.Fatalf("%s must explicitly opt into wildcard bind for the generated-token Docker helper path", path)
+		}
+		if !strings.Contains(text, "FORGE_API_TOKEN") || !strings.Contains(text, "docker-api-token") {
+			t.Fatalf("%s must generate or pass a Docker API token before enabling wildcard bind", path)
+		}
 	}
 }

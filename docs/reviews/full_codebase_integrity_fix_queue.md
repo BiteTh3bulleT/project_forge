@@ -2,13 +2,13 @@
 
 Source audit: `docs/reviews/full_codebase_integrity_audit.md`
 
-Status: prioritized queue. CA1-001 is closed by disabled-by-default Tauri host-power policy plus Start menu policy reflection; remaining rows stay queued until explicitly closed.
+Status: prioritized queue. CA1-001, CA1-002, and CA1-003 are closed by disabled-by-default host-power policy, root-workspace startup validation, and fail-closed raw Compose bind defaults; remaining rows stay queued until explicitly closed.
 
 | ID | Severity | Category | File path | Summary | Safe for automated fix | Operator decision needed |
 | --- | --- | --- | --- | --- | --- | --- |
 | CA1-001 | Critical | authority/host mutation | `apps/desktop/src-tauri/src/main.rs`; `apps/desktop/src/layout/AppShellSurfaces.tsx`; `apps/desktop/src/layout/AppShell.tsx` | Closed: shutdown/reboot are allowlisted, disabled by default through `FORGE_SHELL_DIRECT_SYSTEM_CONTROL`, exposed to the UI through `read_host_power_policy`, and disabled in Start until explicitly enabled. | fixed | yes |
-| CA1-002 | High | filesystem authority | `services/core/internal/config/config.go`; `services/core/internal/api/server.go`; `services/core/internal/permissions/service.go` | Default workspace `/` can become broad write authority. | yes | yes |
-| CA1-003 | High | network exposure | `docker-compose.yml` | Compose defaults to wildcard bind and wildcard opt-in. | yes | yes |
+| CA1-002 | High | filesystem authority | `services/core/internal/config/config.go`; `services/core/main.go`; `services/core/main_test.go`; `docs/runbooks/config_reference.md` | Closed: default workspace resolves to `${FORGE_DATA_DIR}/workspace`, core startup rejects filesystem root unless `FORGE_ALLOW_ROOT_WORKSPACE=true`, and config docs record the unsafe opt-in. | fixed | yes |
+| CA1-003 | High | network exposure | `docker-compose.yml`; `scripts/forge-docker-up.sh`; `scripts/forge-docker-up.ps1`; `services/core/main_test.go`; `docs/runbooks/docker_containerization.md` | Closed: raw Compose defaults to loopback + wildcard opt-in disabled; Docker helper scripts explicitly opt into container-internal wildcard only after generating/passing a local API token. | fixed | yes |
 | CA1-004 | High | gateway/modelruntime boundary | `services/core/internal/api/legacy_adapter_gateway_tool.go`; `services/core/internal/adapters/ollama.go` | Legacy adapter invoke underreports network/model authority and bypasses modelruntime metadata. | partial | yes |
 | CA1-005 | High | login/auth semantics | `nix/packages/forge-desktop-shell.nix`; `apps/desktop/src/pages/ForgeLoginPage.tsx`; `apps/desktop/src/App.tsx` | Native/operator shell builds now use OS login (`bootLogin = false`) and explicit empty-desktop boot reset; optional client-side unlock remains only for builds that opt in. | partial | yes |
 | CA1-006 | High | SSRF/config validation | `services/core/internal/api/server_settings.go`; `services/core/internal/adapters/ollama.go` | Persisted Ollama base URL is less constrained than query override validation. | yes | no |

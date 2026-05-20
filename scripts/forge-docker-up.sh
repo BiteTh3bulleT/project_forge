@@ -46,7 +46,7 @@ env_file_sets() {
 default_env() {
   local name="$1"
   local value="$2"
-  if ! env_set "$name"; then
+  if ! env_set "$name" && ! env_file_sets "$name"; then
     export "$name=$value"
   fi
 }
@@ -116,6 +116,9 @@ process.stdout.write(chosen);
     printf 'FORGE Docker model default selected from host Ollama: %s\n' "$selected_model"
   fi
 }
+
+default_env FORGE_CORE_BIND_HOST "0.0.0.0"
+default_env FORGE_ALLOW_WILDCARD_BIND "true"
 
 args=()
 if [[ -f "$ENV_FILE" ]]; then
