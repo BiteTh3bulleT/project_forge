@@ -86,11 +86,11 @@ The Start menu also exposes Logout, Reboot, and Shutdown controls. Logout return
 
 ## Runtime Services
 
-Ollama is installed through Nix as part of the operator toolbelt, not by a runtime installer. The profile provides the `ollama` CLI on `PATH`, and the canonical operator VM config enables governed modelruntime with the local Ollama-compatible backend at `http://127.0.0.1:11434`.
+Ollama is provided by Nix, not by a runtime installer. The operator profile provides the `ollama` CLI on `PATH`, and the canonical operator VM config enables a local `services.ollama` instance plus governed modelruntime with the local Ollama-compatible backend at `http://127.0.0.1:11434`.
 
-The desktop shell does not start Ollama, pull models, or expose model load/unload controls. The operator starts Ollama from the toolbelt/terminal, pulls a model, then uses the Chat surface's model refresh path. `forge-core` discovers local Ollama models through governed modelruntime list/scan calls and marks them as non-managed local runtime models.
+The desktop shell does not start/stop Ollama, pull models, or expose model load/unload controls. The NixOS service owns the local Ollama process in the canonical VM. The operator pulls a model from the terminal, then uses the Chat surface's model refresh path. `forge-core` discovers local Ollama models through governed modelruntime list/scan calls and marks them as non-managed local runtime models.
 
-To enable an Ollama service later, add an explicit NixOS configuration change and review it as host configuration. Do not use `curl | sh` installers on FORGE-OS.
+To change the Ollama service posture later, make an explicit NixOS configuration change and review it as host configuration. Do not use `curl | sh` installers on FORGE-OS.
 
 ## Troubleshooting
 
@@ -100,8 +100,8 @@ If an app fails to launch:
 - confirm the native runtime profile composes `nix/nixos/profiles/forge-operator-desktop.nix`
 - confirm `forge-operator-toolbelt` is installed in `environment.systemPackages`
 - launch a terminal and check that the wrapper exists with `command -v forge-operator-core-status`
-- for Ollama, check `command -v ollama` and then use the fixed `Ollama Status` launcher
-- for chat, confirm `OLLAMA_BASE_URL=http://127.0.0.1:11434`, pull a local model from the terminal, refresh Chat models, and select the discovered `ollama_compat` model
+- for Ollama, check `command -v ollama`, `ollama list`, and then use the fixed `Ollama Status` launcher
+- for chat, confirm `OLLAMA_BASE_URL=http://127.0.0.1:11434`, pull a local model from the terminal if needed, refresh Chat models, and select the discovered `ollama_compat` model
 - if graphical login fails, switch to TTY and run `forge-operator-session` as the recovery path
 
 Core operator tools are required by the Nix package. Platform-specific tools,

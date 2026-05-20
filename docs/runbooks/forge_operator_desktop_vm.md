@@ -80,10 +80,11 @@ because pre-fix live-start evidence showed the VirtualBox/WebKit path could
 produce high CPU pressure and sluggish repaint behavior before effects were
 forced down.
 
-The canonical VM also starts `forge-core` with governed modelruntime enabled
-and `FORGE_MODEL_DEFAULT_BACKEND=ollama_compat`. This does not start Ollama or
-pull models by itself; it makes the local Ollama endpoint discoverable once the
-operator starts Ollama from the toolbelt.
+The canonical VM starts `forge-core` with governed modelruntime enabled,
+`FORGE_MODEL_DEFAULT_BACKEND=ollama_compat`, and a local NixOS
+`services.ollama` instance bound to `127.0.0.1:11434`. This does not pull
+models by itself; it makes the local Ollama endpoint available for governed
+modelruntime discovery after the operator pulls or imports a model.
 
 Default local VM login:
 
@@ -158,10 +159,11 @@ from this runbook are operator verification only.
 Inside the operator session:
 
 1. Open Terminal from the Start menu.
-2. Confirm toolbelt Ollama is present with `command -v ollama`.
-3. Pull and run the intended local model from the terminal.
+2. Confirm the Nix-provided Ollama CLI is present with `command -v ollama`.
+3. Confirm the local Ollama service is reachable with `ollama list` or `curl -fsS http://127.0.0.1:11434/api/tags`.
 4. Confirm Ollama responds at `http://127.0.0.1:11434`.
-5. Open FORGE Chat, use Refresh models, select the discovered local Ollama model, and send a short prompt.
+5. Pull the intended local model from the terminal if it is not already present.
+6. Open FORGE Chat, use Refresh models, select the discovered local Ollama model, and send a short prompt.
 
 Expected result: Chat records a normal assistant reply and trace metadata shows
 `backend=ollama_compat`. If Chat says no runtime models are available, verify
