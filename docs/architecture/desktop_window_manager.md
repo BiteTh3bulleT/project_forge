@@ -39,11 +39,17 @@ Supported backend kinds:
 - `settings`
 - `inspector`
 - `artifact_viewer`
-- `debug_console`
 - `shell_host`
 
 Singleton labels include `main`, `settings`, `memory-panel`, `task-panel`,
-`system-panel`, `inspector`, and `debug-console`.
+`system-panel`, and `inspector`.
+
+`debug_console` is a reserved diagnostic kind in the backend enum for layout
+compatibility, but it is disabled by default and is not a product surface. The
+frontend bridge does not route `debug-console` labels to the backend window
+manager, and persisted `debug-console` layout entries are rejected during
+restore unless a future reviewed diagnostic phase explicitly enables that
+surface.
 
 Dynamic labels are backend-derived from sanitized IDs, such as
 `workspace-{id}`, `terminal-{session_id}`, `artifact-{id}`, and

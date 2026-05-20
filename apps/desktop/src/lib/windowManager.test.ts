@@ -123,6 +123,22 @@ describe("FORGE frontend window manager bridge", () => {
     expect(desktopMocks.createShellWindow).not.toHaveBeenCalled();
   });
 
+  it("does not open the reserved debug-console surface by default", async () => {
+    const { createShellWindow } = await import("./windowManager");
+
+    await expect(
+      createShellWindow({
+        label: "debug-console",
+        route: "/system?surface=debug-console",
+        title: "FORGE Debug Console",
+        bounds: { x: 120, y: 80, width: 900, height: 640 },
+      }),
+    ).resolves.toBeNull();
+
+    expect(tauriMocks.invoke).not.toHaveBeenCalled();
+    expect(desktopMocks.createShellWindow).not.toHaveBeenCalled();
+  });
+
   it("falls back to legacy focus when backend focus rejects a stale label", async () => {
     tauriMocks.invoke.mockRejectedValueOnce(new Error("not registered"));
     const { focusForgeWindow } = await import("./windowManager");

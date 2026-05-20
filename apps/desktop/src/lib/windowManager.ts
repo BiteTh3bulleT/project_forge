@@ -235,14 +235,6 @@ function supportedBackendRequest(
   if (options.label === "settings") {
     return { kind: "settings", route: options.route, title: options.title, bounds: options.bounds };
   }
-  if (options.label === "debug-console") {
-    return {
-      kind: "debug_console",
-      route: options.route,
-      title: options.title,
-      bounds: options.bounds,
-    };
-  }
   if (options.label === "memory-panel") {
     return { kind: "memory_panel", route: options.route, title: options.title, bounds: options.bounds };
   }

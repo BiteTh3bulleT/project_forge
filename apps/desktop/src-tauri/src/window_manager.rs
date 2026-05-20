@@ -207,6 +207,23 @@ fn singleton_kind(kind: WindowKind) -> bool {
     )
 }
 
+#[cfg(not(test))]
+fn debug_console_enabled() -> bool {
+    std::env::var("FORGE_SHELL_DEBUG_CONSOLE")
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+fn debug_console_enabled() -> bool {
+    false
+}
+
 fn clean_dynamic_id(value: &str) -> Result<String, String> {
     let clean = value.trim();
     if clean.is_empty() || clean == "." || clean == ".." || clean.contains("..") {
@@ -354,11 +371,16 @@ fn descriptor_from_request(request: WindowOpenRequest) -> Result<WindowDescripto
             "/inspectors".to_string(),
             "FORGE Inspector".to_string(),
         ),
-        WindowKind::DebugConsole => (
-            "debug-console".to_string(),
-            "/system?surface=debug-console".to_string(),
-            "FORGE Debug Console".to_string(),
-        ),
+        WindowKind::DebugConsole => {
+            if !debug_console_enabled() {
+                return Err("debug console window is disabled by default".to_string());
+            }
+            (
+                "debug-console".to_string(),
+                "/system?surface=debug-console".to_string(),
+                "FORGE Debug Console".to_string(),
+            )
+        }
         WindowKind::ShellHost => {
             let host_id = request
                 .host_id
@@ -730,6 +752,9 @@ fn request_from_restored_entry(entry: &WindowRegistryEntry) -> Result<WindowOpen
             }
         }
         WindowKind::DebugConsole => {
+            if !debug_console_enabled() {
+                return Err("debug console restore is disabled by default".to_string());
+            }
             if entry.label != "debug-console" {
                 return Err("debug console restore label mismatch".to_string());
             }
@@ -1169,10 +1194,15 @@ mod tests {
         assert_eq!(settings.label, "settings");
         assert_eq!(settings.route, "/settings");
         assert!(settings.singleton);
+    }
 
-        let debug = descriptor_from_request(open_request(WindowKind::DebugConsole)).unwrap();
-        assert_eq!(debug.label, "debug-console");
-        assert!(debug.singleton);
+    #[test]
+    fn debug_console_is_disabled_by_default() {
+        let debug = descriptor_from_request(open_request(WindowKind::DebugConsole));
+        assert!(debug.is_err());
+        assert!(debug
+            .unwrap_err()
+            .contains("debug console window is disabled by default"));
     }
 
     #[test]
@@ -1258,12 +1288,12 @@ mod tests {
     #[test]
     fn focus_is_global_and_singular() {
         let settings = descriptor_from_request(open_request(WindowKind::Settings)).unwrap();
-        let debug = descriptor_from_request(open_request(WindowKind::DebugConsole)).unwrap();
+        let inspector = descriptor_from_request(open_request(WindowKind::Inspector)).unwrap();
         let mut registry = WindowRegistry::default();
         registry.upsert(&settings, 100);
-        registry.upsert(&debug, 100);
+        registry.upsert(&inspector, 100);
         registry.mark_focused("settings", true, 200);
-        registry.mark_focused("debug-console", true, 300);
+        registry.mark_focused("inspector", true, 300);
 
         let snapshot = registry.snapshot(350);
         let focused: Vec<_> = snapshot
@@ -1272,7 +1302,7 @@ mod tests {
             .filter(|entry| entry.focused)
             .map(|entry| entry.label.as_str())
             .collect();
-        assert_eq!(focused, vec!["debug-console"]);
+        assert_eq!(focused, vec!["inspector"]);
     }
 
     #[test]
@@ -1412,5 +1442,40 @@ mod tests {
 
         assert!(plan.entries.is_empty());
         assert_eq!(plan.failures.len(), 2);
+    }
+
+    #[test]
+    fn restore_plan_rejects_debug_console_by_default() {
+        let debug = WindowRegistryEntry {
+            label: "debug-console".to_string(),
+            kind: WindowKind::DebugConsole,
+            route: "/system?surface=debug-console".to_string(),
+            title: "FORGE Debug Console".to_string(),
+            visible: true,
+            focused: false,
+            minimized: false,
+            singleton: true,
+            bounds: Some(default_bounds(WindowKind::DebugConsole)),
+            workspace_id: None,
+            artifact_id: None,
+            session_id: None,
+            host_id: None,
+            created_at_ms: 100,
+            updated_at_ms: 100,
+        };
+
+        let plan = restore_plan_from_snapshot(
+            WindowRegistrySnapshot {
+                windows: vec![debug],
+                timestamp_ms: 200,
+                restore_failures: Vec::new(),
+            },
+            300,
+        );
+
+        assert!(plan.entries.is_empty());
+        assert_eq!(plan.failures.len(), 1);
+        assert_eq!(plan.failures[0].label.as_deref(), Some("debug-console"));
+        assert!(plan.failures[0].reason.contains("disabled by default"));
     }
 }
