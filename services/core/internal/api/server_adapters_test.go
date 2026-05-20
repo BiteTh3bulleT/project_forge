@@ -93,6 +93,7 @@ func TestGatewayLegacyAdapterInvokeAllowed(t *testing.T) {
 	t.Parallel()
 
 	srv, st := newLegacyAdapterInvokeHarness(t)
+	assertLegacyAdapterGatewayToolMetadata(t, srv)
 	adapter := &testLegacyAdapter{
 		id: "legacy-fake",
 		result: adapters.InvokeResult{
@@ -106,6 +107,7 @@ func TestGatewayLegacyAdapterInvokeAllowed(t *testing.T) {
 		ID:           "legacy-gw-allowed",
 		Name:         "Legacy gateway allowed",
 		AllowedTools: []string{"legacy.adapter.invoke"},
+		AllowNetwork: true,
 		Editable:     true,
 		Active:       true,
 	})
@@ -155,6 +157,56 @@ func TestGatewayLegacyAdapterInvokeAllowed(t *testing.T) {
 
 	mustGatewayInvocationMatch(t, st, correlation, "legacy.adapter.invoke", "legacy.adapter.invoke", "ok")
 	mustAuditActionCount(t, st, "tool.executed", correlation)
+}
+
+func TestGatewayLegacyAdapterInvokeRequiresNetworkApproval(t *testing.T) {
+	t.Parallel()
+
+	srv, st := newLegacyAdapterInvokeHarness(t)
+	adapter := &testLegacyAdapter{id: "legacy-fake"}
+	srv.adapters.Register(adapter)
+	setLegacyInvokePermissionProfile(t, srv, permissions.Profile{
+		ID:                   "legacy-gw-network-gated",
+		Name:                 "Legacy gateway network gated",
+		AllowedTools:         []string{"legacy.adapter.invoke"},
+		ApprovalRequiredRisk: []string{"medium", "high"},
+		Editable:             true,
+		Active:               true,
+	})
+
+	const correlation = "corr-legacy-gateway-network-gated"
+	result := invokeLegacyAdapterViaGateway(t, srv, map[string]any{
+		"toolId":        "legacy.adapter.invoke",
+		"laneId":        "legacy.adapter.invoke",
+		"action":        "invoke",
+		"source":        "api",
+		"initiator":     "api",
+		"correlationId": correlation,
+		"paths":         []string{},
+		"input": map[string]any{
+			"adapterId":     "legacy-fake",
+			"capability":    "test.invoke",
+			"scope":         map[string]any{"allowedPaths": []string{}, "forbiddenPaths": []string{}, "selectedPaths": []string{}},
+			"writeIntent":   false,
+			"timeoutMs":     5000,
+			"dryRun":        false,
+			"correlationId": correlation,
+			"input":         map[string]any{},
+		},
+	})
+
+	if result.Status != gateway.StatusNeedsApprov {
+		t.Fatalf("gateway status = %q want %q", result.Status, gateway.StatusNeedsApprov)
+	}
+	if !strings.Contains(result.Message, "network access not enabled") {
+		t.Fatalf("expected network approval reason, got %q", result.Message)
+	}
+	if adapter.calls != 0 {
+		t.Fatalf("expected adapter not invoked before approval, got calls=%d", adapter.calls)
+	}
+
+	mustGatewayInvocationMatch(t, st, correlation, "legacy.adapter.invoke", "legacy.adapter.invoke", "needs_approval")
+	mustAuditActionCount(t, st, "tool.needs_approval", correlation)
 }
 
 func TestGatewayLegacyAdapterInvokeDeniedByPolicy(t *testing.T) {
@@ -216,6 +268,7 @@ func TestGatewayLegacyAdapterInvokeUnknownAdapterErrors(t *testing.T) {
 		ID:           "legacy-gw-not-found",
 		Name:         "Legacy gateway not found",
 		AllowedTools: []string{"legacy.adapter.invoke"},
+		AllowNetwork: true,
 		Editable:     true,
 		Active:       true,
 	})
@@ -272,6 +325,29 @@ func invokeLegacyAdapterViaGateway(t *testing.T, srv *Server, body map[string]an
 		t.Fatalf("decode gateway invoke response: %v body=%s", err, rr.Body.String())
 	}
 	return payload.Result
+}
+
+func assertLegacyAdapterGatewayToolMetadata(t *testing.T, srv *Server) {
+	t.Helper()
+	for _, tool := range srv.gateway.Tools() {
+		if tool.ID != "legacy.adapter.invoke" {
+			continue
+		}
+		if tool.RiskClass != "scoped_execute" {
+			t.Fatalf("legacy adapter risk class = %q want scoped_execute", tool.RiskClass)
+		}
+		if tool.ExecutionLevel != "L2" {
+			t.Fatalf("legacy adapter execution level = %q want L2", tool.ExecutionLevel)
+		}
+		if !tool.UsesNetwork {
+			t.Fatalf("legacy adapter tool must advertise network use")
+		}
+		if tool.Executes {
+			t.Fatalf("legacy adapter tool should not advertise host process execution")
+		}
+		return
+	}
+	t.Fatalf("legacy.adapter.invoke tool not registered")
 }
 
 func setLegacyInvokePermissionProfile(t *testing.T, srv *Server, profile permissions.Profile) {

@@ -26,7 +26,8 @@ Scope: post-cutover verification that tool execution authority remains gateway-o
   - `/api/adapters/{id}/invoke` route wiring is absent.
 - `services/core/internal/api/server_adapters_test.go`
   - `TestLegacyAdapterInvokeRouteRemoved` asserts `404` for removed route.
-  - Gateway path tests assert `ok/denied/error` outcomes + audit coverage for `legacy.adapter.invoke`.
+  - Gateway path tests assert `ok/denied/error/needs_approval` outcomes + audit coverage for `legacy.adapter.invoke`.
+  - Gateway metadata coverage asserts `legacy.adapter.invoke` is `scoped_execute`, `L2`, and `usesNetwork=true`.
 - `services/core/internal/api/chat_assistant_gateway.go`
   - `dispatchToolCall(...)` builds gateway request and executes through `s.gateway.Execute(...)`.
 - `services/core/internal/api/chat_fs_fallback.go`
@@ -34,7 +35,8 @@ Scope: post-cutover verification that tool execution authority remains gateway-o
 - `services/core/internal/api/chat_post.go`
   - `/tool` path maps to `gateway_action` execution template.
 - `services/core/internal/api/legacy_adapter_gateway_tool.go`
-  - legacy adapter invocation remains available only as gateway tool `legacy.adapter.invoke`.
+  - legacy adapter invocation remains available only as deprecated gateway tool `legacy.adapter.invoke`.
+  - The tool advertises networked scoped execution so it is gated by network/profile approval instead of underreported as low-risk local behavior.
 
 ## Notes / Boundaries
 

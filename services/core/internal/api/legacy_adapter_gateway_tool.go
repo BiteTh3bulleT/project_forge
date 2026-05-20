@@ -21,13 +21,13 @@ func newLegacyAdapterGatewayTool(registry *adapters.Registry) *legacyAdapterGate
 func (t *legacyAdapterGatewayTool) ID() string             { return "legacy.adapter.invoke" }
 func (t *legacyAdapterGatewayTool) Domain() string         { return "gateway" }
 func (t *legacyAdapterGatewayTool) Action() string         { return "invoke" }
-func (t *legacyAdapterGatewayTool) RiskClass() string      { return "low" }
-func (t *legacyAdapterGatewayTool) ExecutionLevel() string { return "L0" }
+func (t *legacyAdapterGatewayTool) RiskClass() string      { return "scoped_execute" }
+func (t *legacyAdapterGatewayTool) ExecutionLevel() string { return "L2" }
 func (t *legacyAdapterGatewayTool) Executes() bool         { return false }
-func (t *legacyAdapterGatewayTool) UsesNetwork() bool      { return false }
+func (t *legacyAdapterGatewayTool) UsesNetwork() bool      { return true }
 func (t *legacyAdapterGatewayTool) WriteIntent() bool      { return false }
 func (t *legacyAdapterGatewayTool) Description() string {
-	return "Legacy adapter invoke compatibility shim routed through gateway policy and audit controls."
+	return "Deprecated adapter invoke compatibility shim routed through gateway policy, network gating, and audit controls."
 }
 
 func (t *legacyAdapterGatewayTool) Execute(ctx context.Context, req gateway.Request) (gateway.Result, error) {

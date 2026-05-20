@@ -28,6 +28,7 @@ No direct shell/filesystem/network operations are allowed outside registered gat
 Legacy compatibility note:
 - `/api/adapters/{id}/invoke` is removed and no longer routed.
 - Adapter execution must go through `/api/gateway/invoke` (for example `toolId=legacy.adapter.invoke`, `laneId=legacy.adapter.invoke` for compatibility probing).
+- `legacy.adapter.invoke` is deprecated compatibility only. It is classified as networked scoped execution (`scoped_execute`, `L2`, `usesNetwork=true`) so permission profiles and approval gates do not treat model/network adapter behavior as a low-risk local read.
 
 Phase 5.9 uses:
 
