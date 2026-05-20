@@ -11,6 +11,7 @@ import {
   iconAssetUrl,
   type ForgeHostPowerAction,
   type ForgeHostPowerPolicy,
+  type ForgeShellSessionAction,
   type LinuxWindowAction,
   type LinuxWindowSnapshot,
   type OperatorApp,
@@ -362,7 +363,9 @@ export function StartMenu(props: {
   workspaceLabel: string;
   uiMode: "cognitive" | "metrics";
   pinnedIds: ShellToolId[];
-  onPowerAction: (action: "logout" | ForgeHostPowerAction) => void;
+  onPowerAction: (
+    action: "logout" | ForgeShellSessionAction | ForgeHostPowerAction,
+  ) => void;
   hostPowerPolicy: ForgeHostPowerPolicy | null;
   operatorApps: OperatorApp[];
   operatorAppStatus: string | null;
@@ -617,6 +620,15 @@ export function StartMenu(props: {
           >
             <span className="forge-os-startmenu__power-icon">LO</span>
             <span>Logout</span>
+          </button>
+          <button
+            type="button"
+            className="forge-os-startmenu__power-btn"
+            onClick={() => props.onPowerAction("restart_shell")}
+            title="Restart the FORGE shell process"
+          >
+            <span className="forge-os-startmenu__power-icon">RS</span>
+            <span>Restart Shell</span>
           </button>
           <button
             type="button"

@@ -109,9 +109,16 @@ export type LinuxWindowAction =
   | "fullscreen"
   | "close";
 export type ForgeHostPowerAction = "shutdown" | "reboot";
+export type ForgeShellSessionAction = "restart_shell";
 
 export type ForgeHostPowerActionResult = {
   action: ForgeHostPowerAction;
+  requested: boolean;
+  message: string;
+};
+
+export type ForgeShellSessionActionResult = {
+  action: ForgeShellSessionAction;
   requested: boolean;
   message: string;
 };
@@ -913,6 +920,31 @@ export async function requestHostPowerAction(
     typeof value.message !== "string"
   ) {
     throw new Error("invalid host power action response");
+  }
+  return {
+    action: value.action,
+    requested: value.requested,
+    message: value.message,
+  };
+}
+
+export async function requestShellSessionAction(
+  action: ForgeShellSessionAction,
+): Promise<ForgeShellSessionActionResult> {
+  if (!isTauriDesktop()) {
+    throw new Error("FORGE shell session controls require the Tauri shell.");
+  }
+  const result = await invoke("request_shell_session_action", { action });
+  if (!result || typeof result !== "object") {
+    throw new Error("invalid shell session action response");
+  }
+  const value = result as Record<string, unknown>;
+  if (
+    value.action !== "restart_shell" ||
+    typeof value.requested !== "boolean" ||
+    typeof value.message !== "string"
+  ) {
+    throw new Error("invalid shell session action response");
   }
   return {
     action: value.action,

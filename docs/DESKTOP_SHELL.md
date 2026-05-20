@@ -134,11 +134,26 @@ core event notifications still work.
 The desktop shell's Tauri binary exposes a `request_host_power_action` command that can request host `shutdown` or `reboot`. This is policy-gated, not absent:
 
 - Default disabled. The binary reads the environment variable `FORGE_SHELL_DIRECT_SYSTEM_CONTROL`; unless it is set to `1`, `true`, `TRUE`, `yes`, or `YES`, the command returns a `requested:false` result and does not spawn any host process.
-- The Start menu reads the same policy through `read_host_power_policy`. Logout remains available, but Shutdown and Reboot are disabled with the policy message until direct system control is explicitly enabled.
+- The Start menu reads the same policy through `read_host_power_policy`. Logout and Restart Shell remain available, but Shutdown and Reboot are disabled with the policy message until direct system control is explicitly enabled.
 - Enabling the gate grants host mutation authority to the desktop shell. The operator must opt in explicitly through the environment variable.
 - Allowlist: only `shutdown` and `reboot` actions are accepted.
 - Binary-level enforcement is unit-tested. Frontend coverage verifies that disabled policy state prevents Start menu host mutation requests.
 - This supersedes earlier docs language describing the shell as "no host mutation". The accurate posture is "policy-gated host power actions, disabled by default". See also `docs/status/dangerous_capabilities.md` `shell.power_action` entry and `docs/operations/forge_graphical_shell_session.md`.
+
+## Shell Session Controls
+
+Logout remains an in-shell FORGE operator-login transition: it clears the
+cached API token promise, resets in-shell desktop session state, removes the
+operator login marker, and returns to the login surface.
+
+Restart Shell is a bounded Tauri session command, `request_shell_session_action`
+with action `restart_shell`. The command is allowed only when
+`FORGE_SHELL_SESSION_ENABLED` is set by `forge-shell-session`; outside that
+wrapper it returns `requested:false`. When allowed, it spawns the current Tauri
+shell executable with the same arguments and then exits the current shell
+process after returning the response. It does not call `systemctl`, restart
+`forge-core`, rebuild NixOS, reboot the host, mutate modelruntime state, or
+write semantic memory.
 
 ## Host Settings
 

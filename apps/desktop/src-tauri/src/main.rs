@@ -104,6 +104,13 @@ struct HostPowerActionResult {
 }
 
 #[derive(Serialize)]
+struct ShellSessionActionResult {
+    action: String,
+    requested: bool,
+    message: String,
+}
+
+#[derive(Serialize)]
 struct HostPowerPolicy {
     direct_system_control_enabled: bool,
     message: String,
@@ -856,6 +863,64 @@ fn request_host_power_action(action: String) -> Result<HostPowerActionResult, St
     })
 }
 
+fn shell_session_enabled() -> bool {
+    std::env::var("FORGE_SHELL_SESSION_ENABLED")
+        .map(|value| matches!(value.trim(), "1" | "true" | "TRUE" | "yes" | "YES"))
+        .unwrap_or(false)
+}
+
+fn spawn_shell_restart_command() -> Result<(), String> {
+    let executable = std::env::current_exe()
+        .map_err(|err| format!("failed to resolve current shell executable: {err}"))?;
+    let args = std::env::args_os().skip(1).collect::<Vec<_>>();
+    Command::new(&executable)
+        .args(args)
+        .spawn()
+        .map_err(|err| format!("failed to restart FORGE shell: {err}"))?;
+
+    std::thread::spawn(|| {
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        std::process::exit(0);
+    });
+    Ok(())
+}
+
+fn request_shell_session_action_with_policy<F>(
+    action: String,
+    shell_session_enabled: bool,
+    mut runner: F,
+) -> Result<ShellSessionActionResult, String>
+where
+    F: FnMut(&str) -> Result<(), String>,
+{
+    let normalized = action.trim().to_ascii_lowercase();
+    if normalized != "restart_shell" {
+        return Err("shell session action is not allowlisted".to_string());
+    }
+
+    if !shell_session_enabled {
+        return Ok(ShellSessionActionResult {
+            action: normalized,
+            requested: false,
+            message: "FORGE shell restart is available only inside forge-shell-session".to_string(),
+        });
+    }
+
+    runner(&normalized)?;
+    Ok(ShellSessionActionResult {
+        action: normalized,
+        requested: true,
+        message: "FORGE shell restart requested".to_string(),
+    })
+}
+
+#[tauri::command]
+fn request_shell_session_action(action: String) -> Result<ShellSessionActionResult, String> {
+    request_shell_session_action_with_policy(action, shell_session_enabled(), |_| {
+        spawn_shell_restart_command()
+    })
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
@@ -897,6 +962,7 @@ fn main() {
             launch_operator_app,
             read_host_power_policy,
             request_host_power_action,
+            request_shell_session_action,
             linux_windows::list_linux_windows,
             linux_windows::focus_linux_window,
             linux_windows::control_linux_window,
@@ -1208,5 +1274,54 @@ mod tests {
         assert_eq!(requested, "shutdown");
         assert_eq!(result.action, "shutdown");
         assert!(result.requested);
+    }
+
+    #[test]
+    fn shell_session_restart_is_declined_outside_forge_shell_session() {
+        let mut called = false;
+        let result =
+            request_shell_session_action_with_policy("restart_shell".to_string(), false, |_| {
+                called = true;
+                Ok(())
+            })
+            .expect("disabled shell session policy should decline cleanly");
+
+        assert_eq!(result.action, "restart_shell");
+        assert!(!result.requested);
+        assert!(!called);
+        assert!(result.message.contains("forge-shell-session"));
+    }
+
+    #[test]
+    fn shell_session_restart_uses_runner_only_inside_forge_shell_session() {
+        let mut requested = String::new();
+        let result = request_shell_session_action_with_policy(
+            " restart_shell ".to_string(),
+            true,
+            |action| {
+                requested = action.to_string();
+                Ok(())
+            },
+        )
+        .expect("enabled shell session policy should call the runner");
+
+        assert_eq!(requested, "restart_shell");
+        assert_eq!(result.action, "restart_shell");
+        assert!(result.requested);
+        assert!(result.message.contains("restart"));
+    }
+
+    #[test]
+    fn shell_session_action_rejects_unknown_actions() {
+        let result = request_shell_session_action_with_policy(
+            "systemctl restart forge-core".to_string(),
+            true,
+            |_| Ok(()),
+        );
+
+        assert_eq!(
+            result.err().expect("unknown action should fail"),
+            "shell session action is not allowlisted"
+        );
     }
 }
