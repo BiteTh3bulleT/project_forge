@@ -85,17 +85,17 @@ High-risk mappings are explicitly `approval_only` in `activeMappings`, including
 - `shell.power_action` — desktop shell host `shutdown` and `reboot` requests exposed by the Tauri binary `request_host_power_action` command.
 - Disabled by default. The binary refuses to spawn host power commands unless the operator explicitly sets the environment variable `FORGE_SHELL_DIRECT_SYSTEM_CONTROL` to `1`, `true`, `TRUE`, `yes`, or `YES`.
 - Gate function: [`direct_system_control_enabled` in `apps/desktop/src-tauri/src/main.rs`](../../apps/desktop/src-tauri/src/main.rs). Enforcement: `request_host_power_action_with_policy` returns a `requested:false` `HostPowerActionResult` with the message "Host power controls are disabled by FORGE_SHELL_DIRECT_SYSTEM_CONTROL policy" when the gate is not set, and only invokes the host command runner when the gate is enabled.
-- UI policy read: `read_host_power_policy` exposes the gate state to the desktop. The Start menu keeps Logout and Restart Shell available, disables Shutdown/Reboot while the gate is off, and does not call `request_host_power_action` for disabled policy state.
+- UI policy read: `read_host_power_policy` exposes the gate state to the desktop. The Start menu keeps Lock and Logout available, disables Restart/Shutdown while the gate is off, and does not call `request_host_power_action` for disabled policy state. The visible Restart control maps to the host `reboot` action.
 - Allowlist: only `shutdown` and `reboot` actions are accepted by `spawn_host_power_command`; any other action returns "host power action is not allowlisted".
 - Regression coverage: Rust unit tests cover disabled/enabled host-power policy, and desktop AppShell tests cover disabled Start menu host-power controls.
 - Enabling this gate grants host mutation authority to the desktop shell. It is therefore an operator-set, opt-in, disabled-by-default dangerous capability and supersedes prior docs language that described the shell as "no host mutation". See `docs/DESKTOP_SHELL.md` "Host Power Controls" and `docs/operations/forge_graphical_shell_session.md`.
 
 ### 9) Desktop shell session actions (bounded shell process only)
-- `shell.session_action` — desktop shell `restart_shell` request exposed by the Tauri binary `request_shell_session_action` command.
+- `shell.session_action` — desktop shell `restart_shell` request exposed by the Tauri binary `request_shell_session_action` command. This is a bounded shell-process action, not the visible Start menu Restart control.
 - Gate function: `shell_session_enabled` requires `FORGE_SHELL_SESSION_ENABLED`, which is set by `forge-shell-session`. Outside that wrapper, the command returns `requested:false` and does not spawn a process.
 - Allowlist: only `restart_shell` is accepted. Unknown actions return "shell session action is not allowlisted".
 - Scope: when allowed, the command spawns the current Tauri shell executable with the same arguments and exits the current shell process after returning the response. It does not call service-control commands, reboot or shut down the host, rebuild NixOS, mutate modelruntime state, execute gateway tools, or write semantic memory.
-- Regression coverage: Rust unit tests cover disabled/enabled shell-session policy and unknown action rejection; desktop AppShell tests cover the Start menu confirmation path.
+- Regression coverage: Rust unit tests cover disabled/enabled shell-session policy and unknown action rejection. Start menu power tests verify the visible Restart action routes to host reboot semantics instead of shell-process restart.
 
 ## Policy behavior
 

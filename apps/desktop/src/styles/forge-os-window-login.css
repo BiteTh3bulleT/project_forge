@@ -640,6 +640,17 @@
     linear-gradient(155deg, #020405 0%, #071014 48%, #030506 100%);
 }
 
+.forge-shell-lock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: auto;
+}
+
+.forge-shell-lock-overlay .forge-login-screen {
+  z-index: 1;
+}
+
 .forge-login-screen::before {
   content: "";
   position: absolute;

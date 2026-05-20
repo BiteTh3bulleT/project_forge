@@ -20,4 +20,14 @@ describe("ForgeLoginPage accessibility feedback", () => {
     expect(alert.textContent).toContain("Invalid local operator login.");
     expect(alert.getAttribute("aria-live")).toBe("assertive");
   });
+
+  it("renders a distinct lock screen re-auth mode", () => {
+    render(<ForgeLoginPage mode="lock" onUnlock={vi.fn()} />);
+
+    expect(
+      screen.getByRole("region", { name: "FORGE lock screen" }),
+    ).toBeTruthy();
+    expect(screen.getByText("Session Locked")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Unlock" })).toBeTruthy();
+  });
 });

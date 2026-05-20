@@ -134,7 +134,7 @@ core event notifications still work.
 The desktop shell's Tauri binary exposes a `request_host_power_action` command that can request host `shutdown` or `reboot`. This is policy-gated, not absent:
 
 - Default disabled. The binary reads the environment variable `FORGE_SHELL_DIRECT_SYSTEM_CONTROL`; unless it is set to `1`, `true`, `TRUE`, `yes`, or `YES`, the command returns a `requested:false` result and does not spawn any host process.
-- The Start menu reads the same policy through `read_host_power_policy`. Logout and Restart Shell remain available, but Shutdown and Reboot are disabled with the policy message until direct system control is explicitly enabled.
+- The Start menu reads the same policy through `read_host_power_policy`. Lock and Logout remain available, but Restart and Shutdown are disabled with the policy message until direct system control is explicitly enabled. Restart maps to the host `reboot` action.
 - Enabling the gate grants host mutation authority to the desktop shell. The operator must opt in explicitly through the environment variable.
 - Allowlist: only `shutdown` and `reboot` actions are accepted.
 - Binary-level enforcement is unit-tested. Frontend coverage verifies that disabled policy state prevents Start menu host mutation requests.
@@ -142,18 +142,20 @@ The desktop shell's Tauri binary exposes a `request_host_power_action` command t
 
 ## Shell Session Controls
 
+Lock is an interim shell-owned overlay. It covers the primary FORGE shell
+window and re-authenticates with the local FORGE operator login form. It is a
+usability lock for the current shell surface, not a compositor/session security
+boundary against other native windows. Real session locking waits for
+`ext-session-lock-v1` in Track C.
+
 Logout remains an in-shell FORGE operator-login transition: it clears the
 cached API token promise, resets in-shell desktop session state, removes the
 operator login marker, and returns to the login surface.
 
-Restart Shell is a bounded Tauri session command, `request_shell_session_action`
-with action `restart_shell`. The command is allowed only when
-`FORGE_SHELL_SESSION_ENABLED` is set by `forge-shell-session`; outside that
-wrapper it returns `requested:false`. When allowed, it spawns the current Tauri
-shell executable with the same arguments and then exits the current shell
-process after returning the response. It does not call `systemctl`, restart
-`forge-core`, rebuild NixOS, reboot the host, mutate modelruntime state, or
-write semantic memory.
+The lower-level `request_shell_session_action` command remains bounded to
+`restart_shell` and gated by `FORGE_SHELL_SESSION_ENABLED`, but it is not part
+of the Start power row. The normal Start power semantics are OS-style:
+Lock, Logout, Restart, and Shutdown.
 
 ## Host Settings
 

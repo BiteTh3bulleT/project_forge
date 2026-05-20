@@ -82,7 +82,7 @@ The desktop Start menu is an allowlist. It exposes categorized launchers:
 
 CLI tools are launched through fixed `forge-operator-*` wrappers in a terminal. Native GUI apps such as Mousepad, PCManFM, Xarchiver, and Firefox launch directly from the allowlist. The UI passes only an allowlisted app ID to Tauri; it does not accept arbitrary command text or user-provided launch arguments.
 
-The Start menu also exposes Logout, Reboot, and Shutdown controls. Logout returns to the FORGE/OS session login boundary. Reboot and Shutdown are real host-power controls, but they are disabled by default and reflect the Tauri `read_host_power_policy` result in the UI. They only become clickable when `FORGE_SHELL_DIRECT_SYSTEM_CONTROL` is explicitly enabled for the shell session.
+The Start menu also exposes Lock, Logout, Restart, and Shutdown controls. Lock is the interim shell-owned FORGE re-auth overlay. Logout returns to the FORGE/OS session login boundary. Restart and Shutdown are real host-power controls, but they are disabled by default and reflect the Tauri `read_host_power_policy` result in the UI. They only become clickable when `FORGE_SHELL_DIRECT_SYSTEM_CONTROL` is explicitly enabled for the shell session.
 
 ## Runtime Services
 

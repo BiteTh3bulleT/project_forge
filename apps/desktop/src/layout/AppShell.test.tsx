@@ -55,7 +55,6 @@ const desktopMocks = vi.hoisted(() => ({
   launchOperatorApp: vi.fn(),
   readHostPowerPolicy: vi.fn(),
   requestHostPowerAction: vi.fn(),
-  requestShellSessionAction: vi.fn(),
   subscribeToDesktopNotifications: vi.fn(),
   iconAssetUrl: vi.fn((path: string) => `asset://${path}`),
 }));
@@ -136,7 +135,6 @@ vi.mock("../lib/desktop", () => ({
   launchOperatorApp: desktopMocks.launchOperatorApp,
   readHostPowerPolicy: desktopMocks.readHostPowerPolicy,
   requestHostPowerAction: desktopMocks.requestHostPowerAction,
-  requestShellSessionAction: desktopMocks.requestShellSessionAction,
   subscribeToDesktopNotifications: desktopMocks.subscribeToDesktopNotifications,
   iconAssetUrl: desktopMocks.iconAssetUrl,
   minimizeTauriWindow: desktopMocks.minimizeTauriWindow,
@@ -202,12 +200,6 @@ describe("AppShell confined Tauri tool surfaces", () => {
       action: "reboot",
       requested: true,
       message: "Host reboot requested",
-    });
-    desktopMocks.requestShellSessionAction.mockReset();
-    desktopMocks.requestShellSessionAction.mockResolvedValue({
-      action: "restart_shell",
-      requested: true,
-      message: "FORGE shell restart requested",
     });
     desktopMocks.subscribeToDesktopNotifications.mockReset();
     desktopMocks.subscribeToDesktopNotifications.mockResolvedValue(vi.fn());
@@ -1019,12 +1011,17 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(screen.queryByText("Native")).toBeNull();
   });
 
-  it("shows Start menu power controls and logs out through the shell callback", () => {
+  it("shows Start menu session controls and logs out or locks through shell callbacks", () => {
     const onForgeLogout = vi.fn();
+    const onForgeLock = vi.fn();
 
     render(
       <MemoryRouter>
-        <AppShell isMainWindow={true} onForgeLogout={onForgeLogout}>
+        <AppShell
+          isMainWindow={true}
+          onForgeLogout={onForgeLogout}
+          onForgeLock={onForgeLock}
+        >
           <div />
         </AppShell>
       </MemoryRouter>,
@@ -1032,42 +1029,23 @@ describe("AppShell confined Tauri tool surfaces", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
 
+    expect(screen.getByRole("button", { name: /Lock/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Logout/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Restart Shell/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Reboot/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Restart/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Shutdown/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Restart Shell/ })).toBeNull();
 
+    fireEvent.click(screen.getByRole("button", { name: /Lock/ }));
+    expect(onForgeLock).toHaveBeenCalledTimes(1);
+    expect(onForgeLogout).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
     fireEvent.click(screen.getByRole("button", { name: /Logout/ }));
 
     expect(onForgeLogout).toHaveBeenCalledTimes(1);
   });
 
-  it("confirms and requests a bounded shell restart from Start", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
-
-    render(
-      <MemoryRouter>
-        <AppShell isMainWindow={true}>
-          <div />
-        </AppShell>
-      </MemoryRouter>,
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
-    fireEvent.click(screen.getByRole("button", { name: /Restart Shell/ }));
-
-    await waitFor(() => {
-      expect(desktopMocks.requestShellSessionAction).toHaveBeenCalledWith(
-        "restart_shell",
-      );
-    });
-    expect(desktopMocks.requestHostPowerAction).not.toHaveBeenCalled();
-    expect(confirm).toHaveBeenCalledWith("Restart the FORGE shell now?");
-
-    confirm.mockRestore();
-  });
-
-  it("confirms and requests host reboot from Start", async () => {
+  it("confirms and requests host restart from Start", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     desktopMocks.readHostPowerPolicy.mockResolvedValue({
       directSystemControlEnabled: true,
@@ -1089,7 +1067,7 @@ describe("AppShell confined Tauri tool surfaces", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
     const rebootButton = screen.getByRole("button", {
-      name: /Reboot/,
+      name: /Restart/,
     }) as HTMLButtonElement;
 
     await waitFor(() => {
@@ -1103,7 +1081,7 @@ describe("AppShell confined Tauri tool surfaces", () => {
         "reboot",
       );
     });
-    expect(confirm).toHaveBeenCalledWith("Reboot the FORGE host now?");
+    expect(confirm).toHaveBeenCalledWith("Restart the FORGE host now?");
 
     confirm.mockRestore();
   });
@@ -1125,7 +1103,7 @@ describe("AppShell confined Tauri tool surfaces", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open Start menu" }));
     const rebootButton = screen.getByRole("button", {
-      name: /Reboot/,
+      name: /Restart/,
     }) as HTMLButtonElement;
     const shutdownButton = screen.getByRole("button", {
       name: /Shutdown/,

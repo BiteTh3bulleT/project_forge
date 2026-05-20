@@ -47,7 +47,7 @@ Expected G6 checks:
 
 - Core Status shows `forge-core` reachable when the local core is running.
 - Core Status shows the core URL, health state, and last refresh time from the read-only status route.
-- Shell Session Status shows host mutation, model mutation, semantic memory write, and FORGE-K live authority as disabled by default. Supersedes the earlier read "no host mutation": desktop shell host power actions (`shutdown`/`reboot`) exist behind the `FORGE_SHELL_DIRECT_SYSTEM_CONTROL` policy gate (default disabled); enabling them requires the operator to set that environment variable. The Start menu reads `read_host_power_policy`, keeps Logout available, and disables Shutdown/Reboot until the gate is enabled. Binary-level enforcement and frontend disabled-state behavior are unit-tested.
+- Shell Session Status shows host mutation, model mutation, semantic memory write, and FORGE-K live authority as disabled by default. Supersedes the earlier read "no host mutation": desktop shell host power actions (`shutdown`/`reboot`) exist behind the `FORGE_SHELL_DIRECT_SYSTEM_CONTROL` policy gate (default disabled); enabling them requires the operator to set that environment variable. The Start menu reads `read_host_power_policy`, keeps Lock and Logout available, and disables Restart/Shutdown until the gate is enabled. Binary-level enforcement and frontend disabled-state behavior are unit-tested.
 - Host Diagnostics Summary shows bounded identity, RAM/disk/GPU/thermal/source-error, and degraded fields, or an honest unavailable state.
 - FORGE-H Resource Posture shows advisory pressure, disk pressure, recommendations, and warning count when HostBridge summary data is available.
 - FORGE-H Proposals are listed read-only with advisory-only status.

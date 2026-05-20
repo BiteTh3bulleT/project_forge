@@ -2,16 +2,21 @@ import { FormEvent, useMemo, useState } from "react";
 
 type ForgeLoginPageProps = {
   onUnlock: () => void;
+  mode?: "login" | "lock";
 };
 
 const LOGIN_USER = (import.meta.env.VITE_FORGE_LOGIN_USER || "operator").trim();
 const LOGIN_PASSWORD =
   import.meta.env.VITE_FORGE_LOGIN_PASSWORD || "forge";
 
-export function ForgeLoginPage({ onUnlock }: ForgeLoginPageProps) {
+export function ForgeLoginPage({
+  mode = "login",
+  onUnlock,
+}: ForgeLoginPageProps) {
   const [user, setUser] = useState(LOGIN_USER);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const locked = mode === "lock";
   const currentTime = useMemo(
     () =>
       new Intl.DateTimeFormat(undefined, {
@@ -37,7 +42,10 @@ export function ForgeLoginPage({ onUnlock }: ForgeLoginPageProps) {
   };
 
   return (
-    <section className="forge-login-screen" aria-label="FORGE login">
+    <section
+      className="forge-login-screen"
+      aria-label={locked ? "FORGE lock screen" : "FORGE login"}
+    >
       <div className="forge-login-screen__brand">
         <img
           className="forge-login-screen__mark"
@@ -46,8 +54,12 @@ export function ForgeLoginPage({ onUnlock }: ForgeLoginPageProps) {
           draggable={false}
         />
         <div>
-          <div className="forge-login-screen__product">FORGE-OS</div>
-          <div className="forge-login-screen__subtitle">Operator Runtime</div>
+          <div className="forge-login-screen__product">
+            {locked ? "Session Locked" : "FORGE-OS"}
+          </div>
+          <div className="forge-login-screen__subtitle">
+            {locked ? "Operator Re-auth Required" : "Operator Runtime"}
+          </div>
         </div>
       </div>
 
@@ -81,7 +93,7 @@ export function ForgeLoginPage({ onUnlock }: ForgeLoginPageProps) {
           </div>
         ) : null}
         <button className="forge-login-panel__submit" type="submit">
-          Sign in
+          {locked ? "Unlock" : "Sign in"}
         </button>
       </form>
     </section>

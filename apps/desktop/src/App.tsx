@@ -280,6 +280,7 @@ export default function App() {
       window.sessionStorage.getItem(FORGE_OPERATOR_LOGIN_SESSION_KEY) === "true"
     );
   });
+  const [forgeShellLocked, setForgeShellLocked] = useState(false);
   const [forgeBootScreenReady, setForgeBootScreenReady] = useState(
     () => !FORGE_BOOT_LOGIN_REQUIRED,
   );
@@ -295,8 +296,17 @@ export default function App() {
     window.sessionStorage.setItem(FORGE_OPERATOR_LOGIN_SESSION_KEY, "true");
     useDesktopWindowStore.getState().resetDesktopSession();
     desktopShownAfterUnlockRef.current = true;
+    setForgeShellLocked(false);
     setForgeLoginUnlocked(true);
     navigate(FORGE_OPERATOR_DESKTOP_ROUTE, { replace: true });
+  };
+
+  const handleForgeLock = () => {
+    setForgeShellLocked(true);
+  };
+
+  const handleForgeLockUnlock = () => {
+    setForgeShellLocked(false);
   };
 
   const handleForgeLogout = () => {
@@ -304,6 +314,7 @@ export default function App() {
     window.sessionStorage.removeItem(FORGE_OPERATOR_LOGIN_SESSION_KEY);
     useDesktopWindowStore.getState().resetDesktopSession();
     desktopShownAfterUnlockRef.current = false;
+    setForgeShellLocked(false);
     setForgeLoginUnlocked(false);
     setForgeBootScreenReady(true);
     navigate("/login", { replace: true });
@@ -486,12 +497,20 @@ export default function App() {
     );
   }
   return (
-    <AppShell
-      isMainWindow={isPrimaryShellWindow}
-      hostLabel={currentWindowLabel || "main"}
-      onForgeLogout={handleForgeLogout}
-    >
-      <RoutedViews onForgeLoginUnlock={handleForgeLoginUnlock} />
-    </AppShell>
+    <>
+      <AppShell
+        isMainWindow={isPrimaryShellWindow}
+        hostLabel={currentWindowLabel || "main"}
+        onForgeLock={handleForgeLock}
+        onForgeLogout={handleForgeLogout}
+      >
+        <RoutedViews onForgeLoginUnlock={handleForgeLoginUnlock} />
+      </AppShell>
+      {forgeShellLocked && isPrimaryShellWindow ? (
+        <div className="forge-shell-lock-overlay">
+          <ForgeLoginPage mode="lock" onUnlock={handleForgeLockUnlock} />
+        </div>
+      ) : null}
+    </>
   );
 }

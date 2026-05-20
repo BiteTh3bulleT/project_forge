@@ -15,12 +15,10 @@ import {
   listOperatorApps,
   readHostPowerPolicy,
   requestHostPowerAction,
-  requestShellSessionAction,
   subscribeToDesktopNotifications,
   type DesktopNotification,
   type ForgeHostPowerAction,
   type ForgeHostPowerPolicy,
-  type ForgeShellSessionAction,
   type LinuxWindowSnapshot,
   type LinuxWindowAction,
   type OperatorApp,
@@ -66,6 +64,7 @@ type AppShellProps = {
   children: ReactNode;
   isMainWindow: boolean;
   hostLabel?: string;
+  onForgeLock?: () => void;
   onForgeLogout?: () => void;
 };
 
@@ -930,31 +929,20 @@ export function AppShell(props: AppShellProps) {
   }
 
   async function handleStartPowerAction(
-    action: "logout" | ForgeShellSessionAction | ForgeHostPowerAction,
+    action: "lock" | "logout" | ForgeHostPowerAction,
   ) {
     setStartOpen(false);
     setStartQuery("");
+
+    if (action === "lock") {
+      props.onForgeLock?.();
+      return;
+    }
 
     if (action === "logout") {
       props.onForgeLogout?.();
       if (!props.onForgeLogout) {
         navigate("/login");
-      }
-      return;
-    }
-
-    if (action === "restart_shell") {
-      const confirmed = window.confirm("Restart the FORGE shell now?");
-      if (!confirmed) return;
-      try {
-        const result = await requestShellSessionAction(action);
-        setOperatorAppStatus(result.message);
-      } catch (error) {
-        setOperatorAppStatus(
-          error instanceof Error
-            ? error.message
-            : "Unable to request FORGE shell restart.",
-        );
       }
       return;
     }
@@ -969,7 +957,7 @@ export function AppShell(props: AppShellProps) {
 
     const confirmed = window.confirm(
       action === "reboot"
-        ? "Reboot the FORGE host now?"
+        ? "Restart the FORGE host now?"
         : "Shut down the FORGE host now?",
     );
     if (!confirmed) return;
