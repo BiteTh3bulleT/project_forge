@@ -13,6 +13,7 @@ result-*
 .env.*.local
 *.log
 data/
+audit/
 apps/desktop/src-tauri/gen/
 .forge/
 .vm-*/
@@ -24,5 +25,9 @@ operator_toolbelt.txt
 .claude/settings.local.json
 .claude/worktrees/
 .worktrees/
+services/core/ForgeTestFile/
+services/core/directory/
+services/core/test_project/
+services/core/scratch/
 apps/desktop/.env*
 !apps/desktop/.env.example

@@ -37,6 +37,7 @@ Trivial wins. Close the small stuff so it stops appearing in every review. ~1-2 
 - [x] **Archive old phase reviews.** Move `docs/reviews/phase_12*.md`, `docs/reviews/phase_13*.md` into `docs/reviews/archive/phase_12/` and `archive/phase_13/`.
 - [x] **Delete or fill empty `Operator-Toolbelt.txt`.** It's now superseded by the Nix package + `docs/operations/operator_toolbelt.md`.
 - [x] **Resolve duplicate review docs.** Pick one canonical historical review in `docs/reviews/` (`full_project_forge_review.md` vs `full_project_review.md` vs `full_project_review_checklist.md`). Archive the others.
+- [x] **Remove tracked tool-run artifacts from core.** 2026-05-20: removed committed FORGE tool-execution scratch outputs under `services/core/ForgeTestFile`, `services/core/directory`, `services/core/test_project`, and `services/core/scratch`; added repo hygiene scripts and CI/local validation coverage to prevent recurrence.
 
 ---
 
