@@ -1,4 +1,4 @@
-import { emit } from "@tauri-apps/api/event";
+import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   availableMonitors,
@@ -121,12 +121,78 @@ export type ForgeHostPowerPolicy = {
   message: string;
 };
 
+export type DesktopNotification = {
+  id: number;
+  appName: string;
+  appIcon: string;
+  summary: string;
+  body: string;
+  expireTimeoutMs: number | null;
+  createdAtMs: number;
+};
+
 export function isTauriDesktop() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
 export function iconAssetUrl(path: string) {
   return convertFileSrc(path);
+}
+
+function notificationStringField(
+  payload: Record<string, unknown>,
+  camelKey: string,
+  snakeKey: string,
+  fallback: string,
+) {
+  const value = payload[camelKey] ?? payload[snakeKey];
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
+function notificationNumberField(
+  payload: Record<string, unknown>,
+  camelKey: string,
+  snakeKey: string,
+) {
+  const value = payload[camelKey] ?? payload[snakeKey];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+export function parseDesktopNotification(
+  payload: unknown,
+): DesktopNotification | null {
+  if (typeof payload !== "object" || payload == null) return null;
+  const record = payload as Record<string, unknown>;
+  const id = notificationNumberField(record, "id", "id");
+  if (id == null || id <= 0) return null;
+  return {
+    id,
+    appName: notificationStringField(record, "appName", "app_name", "Unknown"),
+    appIcon: notificationStringField(record, "appIcon", "app_icon", ""),
+    summary: notificationStringField(
+      record,
+      "summary",
+      "summary",
+      "Notification",
+    ),
+    body: notificationStringField(record, "body", "body", ""),
+    expireTimeoutMs: notificationNumberField(
+      record,
+      "expireTimeoutMs",
+      "expire_timeout_ms",
+    ),
+    createdAtMs: Date.now(),
+  };
+}
+
+export async function subscribeToDesktopNotifications(
+  onNotification: (notification: DesktopNotification) => void,
+): Promise<UnlistenFn | null> {
+  if (!isTauriDesktop()) return null;
+  return listen("forge://notification", (event) => {
+    const notification = parseDesktopNotification(event.payload);
+    if (notification) onNotification(notification);
+  });
 }
 
 export function isShellHostWindowLabel(label: string | null | undefined) {

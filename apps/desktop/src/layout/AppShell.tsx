@@ -15,6 +15,8 @@ import {
   listOperatorApps,
   readHostPowerPolicy,
   requestHostPowerAction,
+  subscribeToDesktopNotifications,
+  type DesktopNotification,
   type ForgeHostPowerAction,
   type ForgeHostPowerPolicy,
   type LinuxWindowSnapshot,
@@ -80,6 +82,13 @@ type ShellAuditRecord = {
   outcome?: string;
   summary?: string;
   correlationId?: string;
+};
+type ShellNotificationItem = {
+  id: string;
+  createdAtMs: number;
+  type: string;
+  detail: string;
+  body?: string;
 };
 type ShellContextSnapshot = {
   id?: string;
@@ -412,6 +421,9 @@ export function AppShell(props: AppShellProps) {
   >([]);
   const launchingOperatorAppIdsRef = useRef<Set<string>>(new Set());
   const [linuxWindows, setLinuxWindows] = useState<LinuxWindowSnapshot[]>([]);
+  const [desktopNotifications, setDesktopNotifications] = useState<
+    DesktopNotification[]
+  >([]);
   const [telemetry, setTelemetry] = useState<ShellTelemetry>(EMPTY_TELEMETRY);
   const [statusDetailsOpen, setStatusDetailsOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(false);
@@ -614,6 +626,34 @@ export function AppShell(props: AppShellProps) {
     return () => {
       cancelled = true;
       window.clearInterval(id);
+    };
+  }, [isMainWindow]);
+
+  useEffect(() => {
+    if (!isMainWindow) return;
+    let cancelled = false;
+    let unlisten: (() => void) | null = null;
+    void subscribeToDesktopNotifications((notification) => {
+      setDesktopNotifications((current) => {
+        const withoutReplacement = current.filter(
+          (entry) => entry.id !== notification.id,
+        );
+        return [notification, ...withoutReplacement].slice(0, 20);
+      });
+    })
+      .then((nextUnlisten) => {
+        if (cancelled) {
+          nextUnlisten?.();
+        } else {
+          unlisten = nextUnlisten;
+        }
+      })
+      .catch(() => {
+        // Notification service is opportunistic; core event polling remains active.
+      });
+    return () => {
+      cancelled = true;
+      unlisten?.();
     };
   }, [isMainWindow]);
 
@@ -945,18 +985,29 @@ export function AppShell(props: AppShellProps) {
   const autonomyText = autonomySummary(telemetry.autonomyStatus);
   const activeLoopText = activeLoopSummary(telemetry.autonomyStatus);
   const pendingApprovalsText = `${approvalsPending} pending`;
-  const notifications = useMemo(
-    () =>
-      telemetry.eventRecords
+  const notifications = useMemo<ShellNotificationItem[]>(
+    () => {
+      const coreNotifications = telemetry.eventRecords
         .filter(isNotificationEvent)
         .slice(0, 20)
         .map((event) => ({
-          id: event.id,
+          id: `core:${event.id}`,
           createdAtMs: event.createdAtMs,
           type: event.type,
           detail: notificationDetail(event),
-        })),
-    [telemetry.eventRecords],
+        }));
+      const nativeNotifications = desktopNotifications.map((notification) => ({
+        id: `desktop:${notification.id}`,
+        createdAtMs: notification.createdAtMs,
+        type: notification.appName,
+        detail: notification.summary,
+        body: notification.body,
+      }));
+      return [...nativeNotifications, ...coreNotifications]
+        .sort((a, b) => b.createdAtMs - a.createdAtMs)
+        .slice(0, 20);
+    },
+    [desktopNotifications, telemetry.eventRecords],
   );
   const queueText =
     level === "none" ? "clear" : `attention ${attentionCount}`;
@@ -1513,6 +1564,7 @@ export function AppShell(props: AppShellProps) {
                     </span>
                   </div>
                   <p>{item.detail}</p>
+                  {item.body ? <p>{item.body}</p> : null}
                 </article>
               ))
             ) : (

@@ -55,6 +55,7 @@ const desktopMocks = vi.hoisted(() => ({
   launchOperatorApp: vi.fn(),
   readHostPowerPolicy: vi.fn(),
   requestHostPowerAction: vi.fn(),
+  subscribeToDesktopNotifications: vi.fn(),
   iconAssetUrl: vi.fn((path: string) => `asset://${path}`),
 }));
 
@@ -134,6 +135,7 @@ vi.mock("../lib/desktop", () => ({
   launchOperatorApp: desktopMocks.launchOperatorApp,
   readHostPowerPolicy: desktopMocks.readHostPowerPolicy,
   requestHostPowerAction: desktopMocks.requestHostPowerAction,
+  subscribeToDesktopNotifications: desktopMocks.subscribeToDesktopNotifications,
   iconAssetUrl: desktopMocks.iconAssetUrl,
   minimizeTauriWindow: desktopMocks.minimizeTauriWindow,
   monitorSignature: (monitors: Array<{ id: string }>) =>
@@ -199,6 +201,8 @@ describe("AppShell confined Tauri tool surfaces", () => {
       requested: true,
       message: "Host reboot requested",
     });
+    desktopMocks.subscribeToDesktopNotifications.mockReset();
+    desktopMocks.subscribeToDesktopNotifications.mockResolvedValue(vi.fn());
     desktopMocks.iconAssetUrl.mockClear();
     desktopMocks.minimizeTauriWindow.mockClear();
     desktopMocks.controlLinuxWindow.mockClear();
@@ -628,6 +632,66 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(within(center).getByText("Load model")).toBeTruthy();
     expect(within(center).queryByText("chat.message.user")).toBeNull();
     expect(apiMocks.events).toHaveBeenCalledWith(20);
+  });
+
+  it("adds native desktop notifications to the notification center", async () => {
+    apiMocks.auditList.mockResolvedValue({ records: [] });
+    apiMocks.autonomyStatus.mockResolvedValue({
+      available: true,
+      dream: { active: false },
+    });
+    apiMocks.modelRuntimeQueue.mockResolvedValue({ queue: { depth: 0 } });
+    apiMocks.modelRuntimeBackends.mockResolvedValue({ backends: [] });
+    apiMocks.contextSnapshots.mockResolvedValue({ snapshots: [] });
+    apiMocks.events.mockResolvedValue({ events: [] });
+
+    let onNotification:
+      | ((notification: {
+          id: number;
+          appName: string;
+          summary: string;
+          body: string;
+        }) => void)
+      | null = null;
+    desktopMocks.subscribeToDesktopNotifications.mockImplementationOnce(
+      async (listener) => {
+        onNotification = listener as typeof onNotification;
+        return vi.fn();
+      },
+    );
+
+    render(
+      <MemoryRouter>
+        <AppShell isMainWindow={true}>
+          <div />
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(desktopMocks.subscribeToDesktopNotifications).toHaveBeenCalled();
+    });
+
+    act(() => {
+      onNotification?.({
+        id: 7,
+        appName: "Firefox",
+        summary: "Download complete",
+        body: "forge.iso",
+      });
+    });
+
+    const button = await screen.findByRole("button", {
+      name: "Open notification center",
+    });
+    expect(button.textContent).toContain("1");
+
+    fireEvent.click(button);
+
+    const center = screen.getByRole("dialog", { name: "Notification center" });
+    expect(within(center).getByText("Firefox")).toBeTruthy();
+    expect(within(center).getByText("Download complete")).toBeTruthy();
+    expect(within(center).getByText("forge.iso")).toBeTruthy();
   });
 
   it("persists a CSS-variable shell theme and accent from the status controls", async () => {

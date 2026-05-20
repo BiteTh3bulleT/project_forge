@@ -2,6 +2,7 @@
 
 mod desktop_metadata;
 mod linux_windows;
+mod notifications;
 mod window_manager;
 
 use desktop_metadata::{find_desktop_file_for_ids, find_icon_path, parse_desktop_value};
@@ -620,6 +621,7 @@ fn main() {
                     let _ = window.set_focus();
                 }
             }
+            notifications::start_freedesktop_service(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

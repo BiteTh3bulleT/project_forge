@@ -100,12 +100,18 @@ longer treats raw polling output as the lifecycle owner.
 ## Notifications
 
 The shell exposes an operator notification center from the top bar. The current
-frontend bridge polls core events with `api.events(20)` and promotes
-operator-relevant job, approval, and notification events into the center. Raw
-event history remains available through the Activity log.
+frontend bridge polls core events with `api.events(20)` and promotes operator-
+relevant job, approval, and notification events into the center. Raw event
+history remains available through the Activity log.
 
-This is not yet the freedesktop D-Bus notification service. That backend service
-is the next completion slice for full Linux app notification compatibility.
+On Linux, the Tauri backend also starts an opportunistic
+`org.freedesktop.Notifications` service at `/org/freedesktop/Notifications`
+using `zbus`. It implements `Notify`, `CloseNotification`, `GetCapabilities`,
+`GetServerInformation`, and the standard notification signals. Native app
+notifications are emitted into the shell as `forge://notification` events and
+shown in the same notification center. If another notification daemon already
+owns the D-Bus name, FORGE logs the unavailable service and continues running;
+core event notifications still work.
 
 ## Host Power Controls
 
