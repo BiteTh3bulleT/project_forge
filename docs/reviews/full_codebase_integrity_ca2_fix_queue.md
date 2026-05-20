@@ -38,7 +38,7 @@ Acceptance: `go test ./...`, `go vet ./...`, `go build ./...` all clean; startup
 - L-3 — Optional/open: zod/typia-style guards for `SystemPage` / `ModelsPage` payloads remain future hardening.
 - L-4 — Closed: `ModelsPage` validates cached chat model selection against the live model list and reports when the cached model is absent.
 - L-5 / L-9 — Partial: `Full-Code-Review.md` is header-labeled as a prompt template; relocation/ignore policy remains optional operator hygiene.
-- L-6 — Unify "legacy adapter" wording across `AGENTS.md` and `docs/status/current_authority_sources.md`.
+- L-6 — Closed: `AGENTS.md` and `docs/status/current_authority_sources.md` both describe legacy adapter direct invoke ingress as removed/non-authoritative, with gateway-only execution authority.
 - L-7 / L-8 — Operator decision on retention (`result`, `result-1`, `.vm-build-core.log`, `.vm-nix-store/`, `.vm-nix-tmp/`).
 - L-10 — Closed: `docs/status/implementation_matrix.md` now records remote gateways as partial, including Discord's intentionally narrow command coverage and `NOT_IMPLEMENTED` posture for unimplemented commands.
 
