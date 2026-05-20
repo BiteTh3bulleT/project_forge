@@ -39,6 +39,7 @@ func TestServerRouteInventoryRepresentativeCoverage(t *testing.T) {
 		{http.MethodGet, "/forge/model-runtime/loaded"},
 		{http.MethodGet, "/forge/kernel/status"},
 		{http.MethodGet, "/forge/system/status"},
+		{http.MethodGet, "/forge/system/host"},
 
 		{http.MethodGet, "/api/meta"},
 		{http.MethodGet, "/api/settings"},

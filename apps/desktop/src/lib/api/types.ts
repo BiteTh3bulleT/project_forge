@@ -1024,3 +1024,94 @@ export type ForgeSystemStatus = {
   warnings?: string[];
   errors?: string[];
 };
+
+export type ForgeSystemHost = {
+  generated_at?: string;
+  live_owner?: string;
+  read_only?: boolean;
+  mutation_disabled?: boolean;
+  host?: {
+    hostname?: string;
+    architecture?: string;
+    os_release?: string;
+  };
+  kernel?: {
+    version?: string;
+    modules?: Array<{ name?: string; refcount?: number; state?: string }>;
+  };
+  boot?: {
+    parameters?: string[];
+  };
+  cpu?: {
+    count?: number;
+    load_average?: number[];
+    utilization_estimate?: number;
+  };
+  memory?: {
+    total_bytes?: number;
+    available_bytes?: number;
+    swap_total_bytes?: number;
+    swap_free_bytes?: number;
+    pressure_level?: string;
+  };
+  storage?: {
+    root?: string;
+    total_bytes?: number;
+    used_bytes?: number;
+    free_bytes?: number;
+    pressure_level?: string;
+  };
+  gpu?: {
+    available?: boolean;
+    vendor?: string;
+    devices?: Array<{
+      name?: string;
+      driver_version?: string;
+      memory_total_mib?: number;
+      memory_free_mib?: number;
+      memory_used_mib?: number;
+    }>;
+    warnings?: string[];
+  };
+  thermal?: {
+    available?: boolean;
+    sensors?: Array<{ label?: string; temperature_c?: number }>;
+    warnings?: string[];
+  };
+  display?: ForgeSystemHostReadOnlySection;
+  audio?: ForgeSystemHostReadOnlySection;
+  network?: ForgeSystemHostReadOnlySection;
+  power?: ForgeSystemHostReadOnlySection;
+  session?: {
+    shell_mode?: string;
+    display_backend?: string;
+    compositor_session?: string;
+    safe_mode?: boolean;
+    host_mutation_disabled?: boolean;
+    model_mutation_disabled?: boolean;
+    semantic_memory_write_disabled?: boolean;
+    forge_k_live_authority_disabled?: boolean;
+    context_compiler_required_for_llm?: boolean;
+  };
+  config?: {
+    data_dir?: string;
+    workspace_dir?: string;
+    store_backend?: string;
+    enable_model_runtime?: boolean;
+    gpu_enabled?: boolean;
+    safe_mode_force_cpu_only?: boolean;
+    modelruntime_allow_cloud_models?: boolean;
+    model_policy_require_explicit_load?: boolean;
+    model_policy_allow_auto_load?: boolean;
+    model_policy_require_workspace_scope?: boolean;
+  };
+  source_errors?: Array<{ source?: string; error?: string }>;
+  warnings?: string[];
+};
+
+export type ForgeSystemHostReadOnlySection = {
+  status?: string;
+  reason?: string;
+  read_only?: boolean;
+  mutation_disabled?: boolean;
+};

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   discordStatus: vi.fn(),
   remoteTelegram: vi.fn(),
   remoteDiscord: vi.fn(),
+  systemHost: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
@@ -36,6 +37,9 @@ vi.mock("../lib/api", () => ({
     remote: {
       telegram: mocks.remoteTelegram,
       discord: mocks.remoteDiscord,
+    },
+    system: {
+      host: mocks.systemHost,
     },
   },
 }));
@@ -128,6 +132,67 @@ describe("SettingsPage remote secrets", () => {
       status: "disabled",
       reason: "not connected in test",
     });
+    mocks.systemHost.mockResolvedValue({
+      read_only: true,
+      mutation_disabled: true,
+      host: {
+        hostname: "forge-vm",
+        architecture: "x86_64",
+        os_release: "FORGE OS",
+      },
+      cpu: { count: 8 },
+      memory: {
+        total_bytes: 34_359_738_368,
+        available_bytes: 17_179_869_184,
+        pressure_level: "normal",
+      },
+      storage: {
+        root: "/forge",
+        total_bytes: 1_000_000_000,
+        free_bytes: 700_000_000,
+        used_bytes: 300_000_000,
+        pressure_level: "normal",
+      },
+      gpu: {
+        available: true,
+        vendor: "nvidia",
+        devices: [{ name: "RTX 3050", memory_total_mib: 8192 }],
+      },
+      display: {
+        status: "read_only",
+        reason: "display control deferred",
+        read_only: true,
+        mutation_disabled: true,
+      },
+      audio: {
+        status: "not_wired",
+        reason: "audio control not live",
+        read_only: true,
+        mutation_disabled: true,
+      },
+      network: {
+        status: "not_wired",
+        reason: "network mutation not exposed",
+        read_only: true,
+        mutation_disabled: true,
+      },
+      power: {
+        status: "policy_gated",
+        reason: "power actions are policy gated",
+        read_only: true,
+        mutation_disabled: true,
+      },
+      session: {
+        shell_mode: "manual",
+        display_backend: "wayland",
+        compositor_session: "labwc",
+        host_mutation_disabled: true,
+      },
+      config: {
+        safe_mode_force_cpu_only: false,
+        gpu_enabled: true,
+      },
+    });
   });
 
   it("does not send redacted remote secret placeholders back to core", async () => {
@@ -193,6 +258,22 @@ describe("SettingsPage remote secrets", () => {
 
     expect(await screen.findByText("Model Lifecycle")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Open Models" })).toBeTruthy();
+  });
+
+  it("renders read-only host and hardware settings from core", async () => {
+    renderSettingsPage();
+
+    expect(await screen.findByText("Host and Hardware")).toBeTruthy();
+    expect(screen.getByText("forge-vm · x86_64")).toBeTruthy();
+    expect(screen.getByText("8 logical cores")).toBeTruthy();
+    expect(screen.getByText("16.0 GB available / 32.0 GB total")).toBeTruthy();
+    expect(screen.getByText("RTX 3050")).toBeTruthy();
+    expect(screen.getByText("Display: read_only")).toBeTruthy();
+    expect(screen.getByText("Audio: not_wired")).toBeTruthy();
+    expect(screen.getByText("Network: not_wired")).toBeTruthy();
+    expect(screen.getByText("Power: policy_gated")).toBeTruthy();
+    expect(screen.getByText("Host mutation disabled")).toBeTruthy();
+    expect(mocks.systemHost).toHaveBeenCalledTimes(1);
   });
 
   it("keeps primary settings usable when secondary status loads fail", async () => {

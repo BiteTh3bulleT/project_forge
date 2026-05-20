@@ -6,6 +6,7 @@ import { FoldSection } from "../components/FoldSection";
 import {
   api,
   type DiscordGatewayStatusResponse,
+  type ForgeSystemHost,
   type TelegramStatusResponse,
 } from "../lib/api";
 import { arrayOrEmpty } from "../lib/arrays";
@@ -35,6 +36,166 @@ const redactedSettingSecret = "[redacted]";
 
 function isRedactedSettingSecret(value: string) {
   return value.trim() === redactedSettingSecret;
+}
+
+function formatHostBytes(value: unknown) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return "not reported";
+  }
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let current = value;
+  let index = 0;
+  while (current >= 1024 && index < units.length - 1) {
+    current /= 1024;
+    index += 1;
+  }
+  return `${current.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+}
+
+function hostStatusLabel(label: string, status?: string) {
+  return `${label}: ${status?.trim() || "not reported"}`;
+}
+
+function HostMetric(props: {
+  label: string;
+  value: string;
+  detail: string;
+  tone?: "ok" | "warn" | "muted";
+}) {
+  const toneClass =
+    props.tone === "ok"
+      ? "forge-ops-status forge-ops-status--ok"
+      : props.tone === "warn"
+        ? "forge-ops-status forge-ops-status--warn"
+        : "forge-ops-status forge-ops-status--muted";
+  return (
+    <div className="forge-ops-card p-4">
+      <div className="forge-ops-label">{props.label}</div>
+      <div className="mt-2 break-words text-sm font-semibold leading-5 text-forge-ash">
+        {props.value}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-forge-mist/65">
+        <span>{props.detail}</span>
+        <span className={toneClass}>{props.tone ?? "muted"}</span>
+      </div>
+    </div>
+  );
+}
+
+function HostHardwareSection(props: {
+  hostSettings: ForgeSystemHost | null;
+  hostSettingsErr: string | null;
+}) {
+  const host = props.hostSettings;
+  const gpuDevice = host?.gpu?.devices?.find((device) => device.name?.trim());
+  const hostLabel = [
+    host?.host?.hostname?.trim() || host?.host?.os_release?.trim() || "unknown",
+    host?.host?.architecture?.trim(),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const cpuLabel =
+    typeof host?.cpu?.count === "number"
+      ? `${host.cpu.count} logical cores`
+      : "not reported";
+  const memoryLabel = `${formatHostBytes(
+    host?.memory?.available_bytes,
+  )} available / ${formatHostBytes(host?.memory?.total_bytes)} total`;
+
+  return (
+    <FoldSection
+      title="Host and Hardware"
+      subtitle="Read-only host state from forge-core and HostBridge."
+      defaultOpen
+    >
+      <Panel
+        title="Host Snapshot"
+        subtitle="Visibility only. This section does not apply display, audio, network, power, model, or memory mutations."
+      >
+        {host ? (
+          <div className="space-y-4 text-sm text-forge-mist">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <HostMetric
+                label="Host"
+                value={hostLabel}
+                detail="identity"
+                tone="muted"
+              />
+              <HostMetric
+                label="CPU"
+                value={cpuLabel}
+                detail="scheduler view"
+                tone="muted"
+              />
+              <HostMetric
+                label="Memory"
+                value={memoryLabel}
+                detail={host.memory?.pressure_level ?? "pressure unknown"}
+                tone={
+                  host.memory?.pressure_level === "normal" ? "ok" : "warn"
+                }
+              />
+              <HostMetric
+                label="GPU"
+                value={
+                  gpuDevice?.name ||
+                  (host.gpu?.available ? "available" : "unavailable")
+                }
+                detail={host.gpu?.vendor || "runtime accelerator"}
+                tone={host.gpu?.available ? "ok" : "muted"}
+              />
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3">
+                <div className="forge-ops-label">Subsystem controls</div>
+                <div className="mt-3 space-y-2">
+                  {[
+                    hostStatusLabel("Display", host.display?.status),
+                    hostStatusLabel("Audio", host.audio?.status),
+                    hostStatusLabel("Network", host.network?.status),
+                    hostStatusLabel("Power", host.power?.status),
+                  ].map((label) => (
+                    <div
+                      key={label}
+                      className="flex items-center justify-between gap-3 text-xs"
+                    >
+                      <span>{label}</span>
+                      <span className="forge-ops-status forge-ops-status--muted">
+                        read-only
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-xl border border-forge-platinum/10 bg-black/20 p-3">
+                <div className="forge-ops-label">Session boundary</div>
+                <div className="mt-3 grid gap-2 text-xs">
+                  <span>{`Shell mode: ${host.session?.shell_mode ?? "not reported"}`}</span>
+                  <span>{`Display backend: ${host.session?.display_backend ?? "not reported"}`}</span>
+                  <span>{`Compositor: ${host.session?.compositor_session ?? "not reported"}`}</span>
+                  {host.session?.host_mutation_disabled ? (
+                    <span>Host mutation disabled</span>
+                  ) : (
+                    <span>Host mutation status not reported</span>
+                  )}
+                  <span>{`Storage: ${host.storage?.root ?? "not reported"} · ${host.storage?.pressure_level ?? "unknown"}`}</span>
+                  <span>{`Safe mode CPU-only: ${host.config?.safe_mode_force_cpu_only ? "yes" : "no"}`}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <MiniEmpty
+            title="Host settings unavailable"
+            detail={
+              props.hostSettingsErr ??
+              "Start or reconnect core to show read-only host settings."
+            }
+          />
+        )}
+      </Panel>
+    </FoldSection>
+  );
 }
 
 export function SettingsPage() {
@@ -121,6 +282,10 @@ export function SettingsPage() {
   const [pcDiagnostics, setPcDiagnostics] = useState<PcDiagnostics | null>(
     null,
   );
+  const [hostSettings, setHostSettings] = useState<ForgeSystemHost | null>(
+    null,
+  );
+  const [hostSettingsErr, setHostSettingsErr] = useState<string | null>(null);
   const [settingsView, setSettingsView] = useState<SettingsView>("all");
   const setStatus = useUiStore((s) => s.setStatusLine);
   const contrastPreference = useUiStore((s) => s.contrastPreference);
@@ -250,6 +415,14 @@ export function SettingsPage() {
         setMeta(m);
       } catch {
         setMeta(null);
+      }
+      try {
+        const host = await api.system.host();
+        setHostSettings(host);
+        setHostSettingsErr(null);
+      } catch (e) {
+        setHostSettings(null);
+        setHostSettingsErr(e instanceof Error ? e.message : String(e));
       }
       await refreshRemoteStatuses();
     } catch (e) {
@@ -539,6 +712,7 @@ export function SettingsPage() {
                 <option value="remote">Remote channels</option>
                 <option value="retrieval">Retrieval + embeddings</option>
                 <option value="chat">Chat prompt</option>
+                <option value="host">Host + hardware</option>
                 <option value="display">Theme/display + workspace</option>
                 <option value="diagnostics">Diagnostics</option>
               </select>
@@ -1469,6 +1643,13 @@ export function SettingsPage() {
           chatPromptDefault={chatPromptDefault}
           setChatPersonalityPrompt={setChatPersonalityPrompt}
           setStatus={setStatus}
+        />
+      ) : null}
+
+      {settingsView === "all" || settingsView === "host" ? (
+        <HostHardwareSection
+          hostSettings={hostSettings}
+          hostSettingsErr={hostSettingsErr}
         />
       ) : null}
 

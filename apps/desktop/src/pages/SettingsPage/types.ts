@@ -6,6 +6,7 @@ export type SettingsView =
   | "remote"
   | "retrieval"
   | "chat"
+  | "host"
   | "display"
   | "diagnostics";
 

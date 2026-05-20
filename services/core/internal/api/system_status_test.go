@@ -188,6 +188,81 @@ func TestForgeSystemStatusDoesNotExposeMutationMethod(t *testing.T) {
 	}
 }
 
+func TestForgeSystemHostReadOnlySettingsSurface(t *testing.T) {
+	dataDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv := NewServer(st, config.Config{
+		DataDir:              dataDir,
+		WorkspaceDir:         filepath.Join(dataDir, "workspace"),
+		SafeModeForceCPUOnly: true,
+	})
+	req := httptest.NewRequest(http.MethodGet, "/forge/system/host", nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if payload["read_only"] != true {
+		t.Fatalf("read_only=%v, want true", payload["read_only"])
+	}
+	if payload["mutation_disabled"] != true {
+		t.Fatalf("mutation_disabled=%v, want true", payload["mutation_disabled"])
+	}
+	if payload["live_owner"] != "forge.system.host" {
+		t.Fatalf("live_owner=%v, want forge.system.host", payload["live_owner"])
+	}
+
+	host := asMap(t, payload["host"])
+	if host["architecture"] == "" {
+		t.Fatalf("host architecture not reported: %#v", host)
+	}
+	cpu := asMap(t, payload["cpu"])
+	if cpu["count"] == float64(0) {
+		t.Fatalf("cpu count not reported: %#v", cpu)
+	}
+	memory := asMap(t, payload["memory"])
+	if memory["pressure_level"] == "" {
+		t.Fatalf("memory pressure not reported: %#v", memory)
+	}
+	storage := asMap(t, payload["storage"])
+	if storage["root"] == "" || storage["pressure_level"] == "" {
+		t.Fatalf("storage not reported: %#v", storage)
+	}
+
+	for _, key := range []string{"display", "audio", "network", "power"} {
+		section := asMap(t, payload[key])
+		if section["read_only"] != true || section["mutation_disabled"] != true {
+			t.Fatalf("%s does not preserve read-only mutation boundary: %#v", key, section)
+		}
+		if section["status"] == "" {
+			t.Fatalf("%s status not reported: %#v", key, section)
+		}
+	}
+
+	session := asMap(t, payload["session"])
+	if session["safe_mode"] != true {
+		t.Fatalf("session.safe_mode=%v, want true", session["safe_mode"])
+	}
+	if session["host_mutation_disabled"] != true {
+		t.Fatalf("session host mutation not disabled: %#v", session)
+	}
+	configView := asMap(t, payload["config"])
+	if configView["safe_mode_force_cpu_only"] != true {
+		t.Fatalf("config safe mode not reported: %#v", configView)
+	}
+}
+
 func TestForgeSystemStatusWarnsWhenCapabilityOverrideStoreFallsBack(t *testing.T) {
 	dataDir := t.TempDir()
 	st, err := store.Open(dataDir)
@@ -220,12 +295,15 @@ func TestForgeSystemStatusWarnsWhenCapabilityOverrideStoreFallsBack(t *testing.T
 	}
 }
 
-func TestForgeSystemStatusSourceContainsNoHostMutationCommands(t *testing.T) {
-	body, err := os.ReadFile("system_status.go")
-	if err != nil {
-		t.Fatalf("read system_status.go: %v", err)
+func TestForgeSystemSurfacesSourceContainsNoHostMutationCommands(t *testing.T) {
+	var source strings.Builder
+	for _, path := range []string{"system_status.go", "system_host.go"} {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		source.Write(body)
 	}
-	source := string(body)
 	for _, forbidden := range []string{
 		"exec.Command",
 		"systemctl start",
@@ -241,8 +319,8 @@ func TestForgeSystemStatusSourceContainsNoHostMutationCommands(t *testing.T) {
 		"GenerateStream(",
 		"os.RemoveAll",
 	} {
-		if strings.Contains(source, forbidden) {
-			t.Fatalf("system status route must not contain forbidden mutation text %q", forbidden)
+		if strings.Contains(source.String(), forbidden) {
+			t.Fatalf("system surfaces must not contain forbidden mutation text %q", forbidden)
 		}
 	}
 }

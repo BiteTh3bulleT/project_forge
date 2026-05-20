@@ -117,6 +117,7 @@ func (s *Server) mountForgeRoutes(r chi.Router) {
 		r.Get("/model-runtime/loaded", s.handleForgeModelRuntimeLoaded)
 		r.Get("/kernel/status", s.handleForgeKernelStatus)
 		r.Get("/system/status", s.handleForgeSystemStatus)
+		r.Get("/system/host", s.handleForgeSystemHost)
 	})
 }
 

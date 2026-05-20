@@ -52,6 +52,7 @@ export type {
   ModelRuntimeLoadedStatus,
   ModelRuntimeBackendStatus,
   ModelRuntimeUsageSummary,
+  ForgeSystemHost,
   ForgeSystemStatus,
 } from "./api/types";
 

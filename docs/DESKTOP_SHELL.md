@@ -124,6 +124,19 @@ The desktop shell's Tauri binary exposes a `request_host_power_action` command t
 - Binary-level enforcement is unit-tested. Frontend coverage verifies that disabled policy state prevents Start menu host mutation requests.
 - This supersedes earlier docs language describing the shell as "no host mutation". The accurate posture is "policy-gated host power actions, disabled by default". See also `docs/status/dangerous_capabilities.md` `shell.power_action` entry and `docs/operations/forge_graphical_shell_session.md`.
 
+## Host Settings
+
+The Settings surface includes a read-only Host and Hardware section backed by
+`GET /forge/system/host`. The endpoint uses HostBridge diagnostics for host,
+CPU, memory, storage, GPU, thermal, and session/config visibility while keeping
+display apply, audio control, network mutation, and power mutation outside the
+route. Those subsystem blocks report status and preserve
+`mutation_disabled:true`.
+
+This is the B2 host-settings surface, not the B5 display-control surface.
+Display topology can be inspected, but applying monitor layout or resolution
+changes waits for compositor-owned output-management support.
+
 ## Command Bar Maintenance
 
 The desktop CommandBar quick actions are a static frontend affordance in `apps/desktop/src/components/CommandBar.tsx`. They are not a backend authority registry, do not grant capabilities, and must only point at existing routes or already-governed API commands.
