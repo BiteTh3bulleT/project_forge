@@ -303,6 +303,11 @@ describe("AppShell confined Tauri tool surfaces", () => {
   });
 
   it("renders routed detail pages in a focused shell window", () => {
+    useDesktopWindowStore.setState({
+      windows: [],
+      focusedId: null,
+    });
+
     render(
       <MemoryRouter initialEntries={["/jobs/job-1"]}>
         <AppShell isMainWindow={true}>
@@ -315,6 +320,28 @@ describe("AppShell confined Tauri tool surfaces", () => {
     expect(screen.getByTestId("routed-detail").textContent).toBe(
       "Job detail route",
     );
+    expect(useDesktopWindowStore.getState().windows).toHaveLength(0);
+  });
+
+  it("renders memory chunk detail pages in a focused shell window", () => {
+    useDesktopWindowStore.setState({
+      windows: [],
+      focusedId: null,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/memory/chunk/chunk-1"]}>
+        <AppShell isMainWindow={true}>
+          <div data-testid="routed-detail">Memory chunk route</div>
+        </AppShell>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByLabelText("Memory Chunk")).toBeTruthy();
+    expect(screen.getByTestId("routed-detail").textContent).toBe(
+      "Memory chunk route",
+    );
+    expect(useDesktopWindowStore.getState().windows).toHaveLength(0);
   });
 
   it("exposes the global shell status line as a polite live region", () => {
