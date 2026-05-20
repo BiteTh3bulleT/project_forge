@@ -1,8 +1,18 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ModelsPage } from "./ModelsPage";
+
+function LocationProbe() {
+  const location = useLocation();
+  return (
+    <div data-testid="location-probe">
+      {location.pathname}
+      {location.search}
+    </div>
+  );
+}
 
 const mocks = vi.hoisted(() => ({
   health: vi.fn(),
@@ -131,27 +141,33 @@ describe("ModelsPage", () => {
       </MemoryRouter>,
     );
 
-    expect((await screen.findAllByText("unavailable")).length)
-      .toBeGreaterThan(0);
+    expect((await screen.findAllByText("unavailable")).length).toBeGreaterThan(
+      0,
+    );
 
     expect(
-      (screen.getByRole("button", {
-        name: /scan model home/i,
-      }) as HTMLButtonElement).disabled,
+      (
+        screen.getByRole("button", {
+          name: /scan model home/i,
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
     expect(
-      (screen.getByRole("button", {
-        name: /import model/i,
-      }) as HTMLButtonElement).disabled,
+      (
+        screen.getByRole("button", {
+          name: /import model/i,
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
     expect(
-      (screen.getByRole("button", {
-        name: /reconcile registry/i,
-      }) as HTMLButtonElement).disabled,
+      (
+        screen.getByRole("button", {
+          name: /reconcile registry/i,
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
     expect(
-      (screen.getByLabelText(/gpu acceleration/i) as HTMLInputElement)
-        .disabled,
+      (screen.getByLabelText(/gpu acceleration/i) as HTMLInputElement).disabled,
     ).toBe(true);
     expect(
       (screen.getByLabelText(/ollama cloud models/i) as HTMLInputElement)
@@ -221,6 +237,33 @@ describe("ModelsPage", () => {
     );
 
     expect(await screen.findByRole("button", { name: "Load" })).toBeTruthy();
+  });
+
+  it("opens the registry view from a shell window without mutating the shell route", async () => {
+    mocks.health.mockResolvedValue({
+      ok: true,
+      service: "forge-core",
+      modelRuntime: {
+        available: true,
+        status: "ok",
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <ModelsPage />
+        <LocationProbe />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Open Registry" }),
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Model runtime board" }),
+    ).toBeTruthy();
+    expect(screen.getByTestId("location-probe").textContent).toBe("/");
   });
 
   it("reuses pending load approval ids on the next load attempt", async () => {
@@ -324,10 +367,12 @@ describe("ModelsPage", () => {
       await screen.findByRole("button", { name: "Approve and load" }),
     );
 
-    await waitFor(() => expect(mocks.approvalApprove).toHaveBeenCalledWith(
-      7,
-      "Approved model load from Models page",
-    ));
+    await waitFor(() =>
+      expect(mocks.approvalApprove).toHaveBeenCalledWith(
+        7,
+        "Approved model load from Models page",
+      ),
+    );
     await waitFor(() => expect(mocks.modelLoad).toHaveBeenCalledTimes(2));
     expect(mocks.modelLoad.mock.calls[1][1]).toMatchObject({
       approvalId: "7",
