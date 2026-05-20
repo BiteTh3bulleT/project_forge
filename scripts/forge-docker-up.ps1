@@ -112,6 +112,7 @@ function Enable-DockerOllamaDefaults {
 
 Set-DefaultEnv "FORGE_CORE_BIND_HOST" "0.0.0.0"
 Set-DefaultEnv "FORGE_ALLOW_WILDCARD_BIND" "true"
+Set-DefaultEnv "FORGE_POSTGRES_PASSWORD" "forge_dev_password"
 
 function Test-DockerEngineReady {
   try {

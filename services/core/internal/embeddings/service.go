@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"forge/projectforge/services/core/internal/sqlutil"
 )
 
 const (
@@ -354,7 +356,7 @@ JOIN files f ON f.id = er.file_id
 WHERE er.provider = ? AND er.model = ? AND er.status = 'ready'`
 	args := []any{p.ID(), p.Model()}
 	if len(sourceIDs) > 0 {
-		query += ` AND er.source_id IN (` + placeholders(len(sourceIDs)) + `)`
+		query += ` AND er.source_id IN (` + sqlutil.Placeholders(len(sourceIDs)) + `)`
 		for _, id := range sourceIDs {
 			args = append(args, id)
 		}
@@ -755,18 +757,4 @@ func snippet(in string, max int) string {
 		return trim
 	}
 	return trim[:max] + "…"
-}
-
-func placeholders(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	b := strings.Builder{}
-	for i := 0; i < n; i++ {
-		if i > 0 {
-			b.WriteString(",")
-		}
-		b.WriteString("?")
-	}
-	return b.String()
 }

@@ -119,6 +119,7 @@ process.stdout.write(chosen);
 
 default_env FORGE_CORE_BIND_HOST "0.0.0.0"
 default_env FORGE_ALLOW_WILDCARD_BIND "true"
+default_env FORGE_POSTGRES_PASSWORD "forge_dev_password"
 
 args=()
 if [[ -f "$ENV_FILE" ]]; then

@@ -107,6 +107,11 @@ The default Compose stack starts:
 - `qdrant`
 - `core`
 
+The wrapper scripts set a local development `FORGE_POSTGRES_PASSWORD` when neither
+the process environment nor `.env.docker` provides one. Raw `docker compose`
+commands intentionally require `FORGE_POSTGRES_PASSWORD` to be set instead of
+falling back to a baked-in compose password.
+
 `desktop-web` is intentionally opt-in through `npm run docker:web`.
 
 Useful probes:

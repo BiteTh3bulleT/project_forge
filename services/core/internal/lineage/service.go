@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"forge/projectforge/services/core/internal/sqlutil"
 )
 
 type Relation struct {
@@ -155,7 +157,7 @@ func (s *Service) jobSummaries(ctx context.Context, ids []string) ([]JobSummary,
 	query := `
 SELECT id, title, status, target_adapter, created_at, result_summary, last_failure_code
 FROM jobs
-WHERE id IN (` + placeholders(len(ids)) + `)
+WHERE id IN (` + sqlutil.Placeholders(len(ids)) + `)
 ORDER BY created_at DESC`
 	args := make([]any, 0, len(ids))
 	for _, id := range ids {
@@ -185,18 +187,4 @@ ORDER BY created_at DESC`
 		out = append(out, r)
 	}
 	return out, rows.Err()
-}
-
-func placeholders(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	var b strings.Builder
-	for i := 0; i < n; i++ {
-		if i > 0 {
-			b.WriteString(",")
-		}
-		b.WriteString("?")
-	}
-	return b.String()
 }

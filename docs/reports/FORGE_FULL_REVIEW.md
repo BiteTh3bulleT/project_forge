@@ -119,7 +119,8 @@ ProjectForge/
 ├── CODEX.md                        # Forward-vision implementation prompt — 594 lines, marked [FUTURE]
 ├── README.md                       # Public-facing project description — 295 lines
 ├── FORGE_CONTEXT.md                # Source-of-truth context generator output
-├── Full-Code-Review.md             # This review's brief
+├── docs/prompt-packs/PROMPT_FORGE_FULL_CODE_REVIEW.md
+│                                      # This review's prompt template
 ├── Operator-Toolbelt.txt           # deleted after review; was an empty tracked placeholder
 ├── package.json                    # npm workspace root, scripts
 ├── flake.nix                       # Nix flake — packages/apps/checks/devShells

@@ -14,6 +14,7 @@ import (
 	"forge/projectforge/services/core/internal/artifacts"
 	"forge/projectforge/services/core/internal/audit"
 	"forge/projectforge/services/core/internal/gateway"
+	"forge/projectforge/services/core/internal/sqlutil"
 )
 
 type correlationTraceReport struct {
@@ -789,10 +790,7 @@ func traceStringFromValue(value any) string {
 }
 
 func traceQueryPlaceholders(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
+	return sqlutil.Placeholders(n)
 }
 
 func (s *Server) traceDB() (*sql.DB, error) {

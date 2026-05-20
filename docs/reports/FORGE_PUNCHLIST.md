@@ -18,7 +18,7 @@
   - `aios/hyperlane`: **66.7%** — was 0%
   - `gateway`: 67.6%
   - `api`: 52.5%
-- **Untested packages:** active Section 3 "worth covering" package list is closed. Remaining no-test packages are lower-traffic/deferred: `internal/failurepatterns`, `internal/packetopt`, `internal/packets`, `internal/reconciliation`, `internal/reviews`, `internal/strategies`.
+- **Untested packages:** active Section 3 "worth covering" package list is closed. Remaining no-test packages are lower-traffic/deferred: `internal/failurepatterns`, `internal/packetopt`, `internal/packets`, `internal/strategies`.
 - **Largest non-test source file:** `services/core/internal/api/model_runtime_bridge.go` at 1,482 lines (down from `gateway/service.go` at 4,709). SQL migrations, validator crates, barrels, and test files remain tracked separately.
 - **In flight:** Section 2 file split threshold is satisfied; next refactors should be domain-driven rather than size-driven.
 - **Working tree:** Section 2 final split pass verified and pushed to `main`.
@@ -38,6 +38,10 @@ Trivial wins. Close the small stuff so it stops appearing in every review. ~1-2 
 - [x] **Delete or fill empty `Operator-Toolbelt.txt`.** It's now superseded by the Nix package + `docs/operations/operator_toolbelt.md`.
 - [x] **Resolve duplicate review docs.** Pick one canonical historical review in `docs/reviews/` (`full_project_forge_review.md` vs `full_project_review.md` vs `full_project_review_checklist.md`). Archive the others.
 - [x] **Remove tracked tool-run artifacts from core.** 2026-05-20: removed committed FORGE tool-execution scratch outputs under `services/core/ForgeTestFile`, `services/core/directory`, `services/core/test_project`, and `services/core/scratch`; added repo hygiene scripts and CI/local validation coverage to prevent recurrence.
+- [x] **Archive root full-review prompt template.** 2026-05-20: moved the root `Full-Code-Review.md` prompt template to `docs/prompt-packs/PROMPT_FORGE_FULL_CODE_REVIEW.md`, preserving its prompt-only label and adding repo hygiene coverage so it does not return as a review-looking root file.
+- [x] **Extract shared SQL placeholder helper.** 2026-05-20: replaced duplicated `placeholders()` helpers across lineage, dossiers, embeddings, search, memory VSA, and API trace reporting with `internal/sqlutil.Placeholders` plus direct helper coverage.
+- [x] **Cover reconciliation/reviews services.** 2026-05-20: added persistence tests for reconciliation upsert/filter/default behavior and review create/update/list/default behavior.
+- [x] **Remove raw Compose Postgres password default.** 2026-05-20: `docker-compose.yml` now requires `FORGE_POSTGRES_PASSWORD` for raw compose use; the npm wrapper scripts still set the local dev password when no env or `.env.docker` value exists.
 
 ---
 

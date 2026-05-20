@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"forge/projectforge/services/core/internal/sqlutil"
 )
 
 const maxDossierPayloadBytes = 128 << 10
@@ -461,7 +463,7 @@ func (s *Service) sourcePaths(ctx context.Context, sourceIDs []int64) ([]string,
 	if len(sourceIDs) == 0 {
 		return nil, nil
 	}
-	q := `SELECT path FROM sources WHERE id IN (` + placeholders(len(sourceIDs)) + `) ORDER BY id ASC`
+	q := `SELECT path FROM sources WHERE id IN (` + sqlutil.Placeholders(len(sourceIDs)) + `) ORDER BY id ASC`
 	args := make([]any, 0, len(sourceIDs))
 	for _, id := range sourceIDs {
 		args = append(args, id)
@@ -508,18 +510,4 @@ func marshalDossierPayload(label string, payload []string) ([]byte, error) {
 		return nil, fmt.Errorf("%w: %s %d > %d bytes", errDossierPayloadTooLarge, strings.TrimSpace(label), len(body), maxDossierPayloadBytes)
 	}
 	return body, nil
-}
-
-func placeholders(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	var b strings.Builder
-	for i := 0; i < n; i++ {
-		if i > 0 {
-			b.WriteString(",")
-		}
-		b.WriteString("?")
-	}
-	return b.String()
 }

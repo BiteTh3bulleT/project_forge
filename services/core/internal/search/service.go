@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode"
+
+	"forge/projectforge/services/core/internal/sqlutil"
 )
 
 type Hit struct {
@@ -97,7 +99,7 @@ JOIN files f ON f.id = c.file_id
 WHERE chunks_fts MATCH ?`
 	args := []any{match}
 	if len(sourceIDs) > 0 {
-		sqlText += ` AND f.source_id IN (` + placeholders(len(sourceIDs)) + `)`
+		sqlText += ` AND f.source_id IN (` + sqlutil.Placeholders(len(sourceIDs)) + `)`
 		for _, id := range sourceIDs {
 			args = append(args, id)
 		}
@@ -125,20 +127,6 @@ LIMIT ?`
 		out = append(out, h)
 	}
 	return out, rows.Err()
-}
-
-func placeholders(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	var b strings.Builder
-	for i := 0; i < n; i++ {
-		if i > 0 {
-			b.WriteString(",")
-		}
-		b.WriteString("?")
-	}
-	return b.String()
 }
 
 func (s *Service) ChunkByID(ctx context.Context, id int64) (*Hit, error) {

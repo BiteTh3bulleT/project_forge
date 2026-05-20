@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"forge/projectforge/services/core/internal/sqlutil"
 )
 
 func (s *Service) ComputeVSAQuerySignals(ctx context.Context, req VSAQuerySignalsRequest) (map[int64]RetrievalResultVSASignal, error) {
@@ -128,7 +130,7 @@ func (s *Service) vsaObservationPointersByPath(ctx context.Context, paths []stri
 SELECT mo.id, mo.source_path, mo.usefulness_score, mo.usefulness_count, mo.noise_count, vp.pointer_json
 FROM memory_observations mo
 JOIN memory_vsa_pointers vp ON vp.observation_id = mo.id
-WHERE mo.source_path IN (`+placeholders(len(paths))+`)
+WHERE mo.source_path IN (`+sqlutil.Placeholders(len(paths))+`)
 ORDER BY mo.observed_at DESC, mo.id DESC`, toAny(paths)...)
 	if err != nil {
 		return nil, nil, nil, err
@@ -169,7 +171,7 @@ func (s *Service) vsaBindingsByObservation(ctx context.Context, obsIDs []int64) 
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, observation_id, role, filler, weight, support_count, noise_count, binding_json, created_at, updated_at
 FROM memory_vsa_role_bindings
-WHERE observation_id IN (`+placeholders(len(obsIDs))+`)
+WHERE observation_id IN (`+sqlutil.Placeholders(len(obsIDs))+`)
 ORDER BY observation_id ASC, role ASC, filler ASC`, args...)
 	if err != nil {
 		return nil, err
@@ -200,7 +202,7 @@ func (s *Service) vsaAssociationsByObservation(ctx context.Context, obsIDs []int
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, from_observation_id, to_observation_id, association_type, strength, support_count, noise_count, evidence_json, created_at, updated_at
 FROM memory_vsa_associations
-WHERE from_observation_id IN (`+placeholders(len(obsIDs))+`) OR to_observation_id IN (`+placeholders(len(obsIDs))+`)
+WHERE from_observation_id IN (`+sqlutil.Placeholders(len(obsIDs))+`) OR to_observation_id IN (`+sqlutil.Placeholders(len(obsIDs))+`)
 ORDER BY strength DESC`, args...)
 	if err != nil {
 		return nil, err
@@ -406,17 +408,6 @@ func toAny(items []string) []any {
 		out[i] = item
 	}
 	return out
-}
-
-func placeholders(n int) string {
-	if n <= 0 {
-		return ""
-	}
-	parts := make([]string, n)
-	for i := 0; i < n; i++ {
-		parts[i] = "?"
-	}
-	return strings.Join(parts, ",")
 }
 
 func rankTopSignals(signals []RetrievalResultVSASignal, limit int) []RetrievalResultVSASignal {

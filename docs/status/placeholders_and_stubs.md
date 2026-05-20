@@ -16,7 +16,7 @@ Classification labels used:
 
 | Location | Finding | Classification | Reachable? | Current posture |
 |---|---|---|---|---|
-| Repo root prompt packs | M5A/M5S prompt packs and window-manager prompt were left at repo root | operational hygiene | yes, as source clutter only | Archived under `docs/prompt-packs/` and `docs/superpowers/specs/`; root no longer carries active loose prompt-pack files. |
+| Repo root prompt packs | M5A/M5S prompt packs, full-review prompt template, and window-manager prompt were left at repo root | operational hygiene | yes, as source clutter only | Archived under `docs/prompt-packs/` and `docs/superpowers/specs/`; root no longer carries active loose prompt-pack files. |
 | `services/core/internal/aios/autonomy/rule_agents.go` + `runner.go` | `CleanupProposalAgent` previously emitted `candidate-note` placeholder payload | dangerous placeholder | proposal path no (now disabled), commit path guarded | `CleanupProposalAgent` now emits no destructive actions by default; runner still blocks placeholder targets for defense-in-depth. |
 | `services/core/internal/api/server.go` memory mutation handlers | Observation mutation endpoints previously bypassed syscall semantics if opened | resolved | no | Mutation endpoints are retired (`410 Gone`) and retired attempts are audited; there is no env opt-in path. |
 | `services/core/internal/aios/*` lane layout | `compute/librarian` runtime coexists with `computelane` scaffold/doc surfaces | safe scaffold | yes | Explicitly documented as partial and non-duplicative target for cutover. |

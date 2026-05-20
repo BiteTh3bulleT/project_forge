@@ -3,6 +3,11 @@
 Date: 2026-04-21
 Scope: branch-local validation evidence after convergence hardening pass.
 
+Update 2026-05-20:
+- `internal/reconciliation` now has service persistence coverage for import-scoped upsert, status normalization, trimmed JSON fields, and filtered listing.
+- `internal/reviews` now has service persistence coverage for create/update/list flows, default pending/operator fields, target validation, and annotation normalization.
+- Remaining no-test core packages after the audit-remediation pass are `internal/failurepatterns`, `internal/packetopt`, `internal/packets`, and `internal/strategies`; these are deferred lower-traffic service packages, not type-only packages.
+
 ## Coverage snapshot
 
 | Area | Status | Evidence | Main gap |

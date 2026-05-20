@@ -19,7 +19,7 @@ Acceptance: SystemPage renders only data sourced from `api.system.status()`; no 
 
 ### Batch 3 — "Power-action docs supersession" (M-1, OP-1)
 - Closed: `docs/reviews/current_phase_status.md`, `docs/operations/forge_graphical_shell_session.md`, `docs/DESKTOP_SHELL.md`, `docs/status/dangerous_capabilities.md`, and `docs/reports/phase_g8_desktop_shell_verification.md` now describe host power actions as policy-gated and disabled by default through `FORGE_SHELL_DIRECT_SYSTEM_CONTROL`.
-- Closed: `Full-Code-Review.md` is labeled `[PROMPT-TEMPLATE-ONLY]` at the repo root.
+- Closed: the full-review prompt template is labeled `[PROMPT-TEMPLATE-ONLY]` and archived as `docs/prompt-packs/PROMPT_FORGE_FULL_CODE_REVIEW.md`.
 
 Acceptance: no doc claims "host mutation disabled" without referencing the policy gate.
 
@@ -37,7 +37,7 @@ Acceptance: `go test ./...`, `go vet ./...`, `go build ./...` all clean; startup
 - L-2 — Closed: `/jobs/:id` and `/memory/chunk/:id` are declared in `apps/desktop/src/App.tsx`.
 - L-3 — Optional/open: zod/typia-style guards for `SystemPage` / `ModelsPage` payloads remain future hardening.
 - L-4 — Closed: `ModelsPage` validates cached chat model selection against the live model list and reports when the cached model is absent.
-- L-5 / L-9 — Partial: `Full-Code-Review.md` is header-labeled as a prompt template; relocation/ignore policy remains optional operator hygiene.
+- L-5 / L-9 — Closed: the prompt template moved from repo root to `docs/prompt-packs/PROMPT_FORGE_FULL_CODE_REVIEW.md`, preserving the `[PROMPT-TEMPLATE-ONLY]` header.
 - L-6 — Closed: `AGENTS.md` and `docs/status/current_authority_sources.md` both describe legacy adapter direct invoke ingress as removed/non-authoritative, with gateway-only execution authority.
 - L-7 / L-8 — Operator decision on retention (`result`, `result-1`, `.vm-build-core.log`, `.vm-nix-store/`, `.vm-nix-tmp/`).
 - L-10 — Closed: `docs/status/implementation_matrix.md` now records remote gateways as partial, including Discord's intentionally narrow command coverage and `NOT_IMPLEMENTED` posture for unimplemented commands.

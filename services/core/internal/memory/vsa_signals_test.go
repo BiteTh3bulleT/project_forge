@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+
+	"forge/projectforge/services/core/internal/sqlutil"
 )
 
 func TestSaveAndLoadRetrievalResultVSASignal(t *testing.T) {
@@ -204,8 +206,8 @@ func TestVSASignalScoringHelpers(t *testing.T) {
 	if got := normalizeUsefulness(-3, 0, 4); got >= 0 || got < -1 {
 		t.Fatalf("negative usefulness = %v, want within [-1,0)", got)
 	}
-	if got := placeholders(3); got != "?,?,?" {
-		t.Fatalf("placeholders(3) = %q", got)
+	if got := sqlutil.Placeholders(3); got != "?,?,?" {
+		t.Fatalf("Placeholders(3) = %q", got)
 	}
 	if got := toAny([]string{"a", "b"}); len(got) != 2 || got[0] != "a" || got[1] != "b" {
 		t.Fatalf("toAny returned %#v", got)
