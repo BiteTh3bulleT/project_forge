@@ -1,5 +1,8 @@
 # Section 6 Native Desktop VM Evidence - 2026-05-18
 
+Status: current canonical VM boot/login/session evidence for
+`docs/runbooks/forge_operator_desktop_vm.md`.
+
 ## Scope
 
 This run verifies the canonical operator VM reaches the native FORGE desktop
@@ -42,3 +45,16 @@ Passed. The VM reached the native FORGE desktop session after graphical password
 login, with taskbar apps visible and the Models surface reporting the expected
 degraded local modelruntime state when the VM-local Ollama endpoint is not
 running.
+
+This supersedes the partial `docs/evidence/vm_boot/2026-05-18-section6/`
+attempt, which reached the graphical login surface but did not complete the
+post-login desktop evidence requirement.
+
+## Remaining Manual Smoke
+
+This evidence proves boot, graphical login, session selection, desktop entry,
+and visible modelruntime state. It does not replace the G8 native-app smoke
+matrix for opening multiple terminals, multiple file-manager windows, browser
+open/close behavior, and shell restart. Track that operator pass through
+`docs/runbooks/desktop_shell_operator_smoke_test.md` and
+`docs/status/phase_g8_desktop_shell_verification.md`.

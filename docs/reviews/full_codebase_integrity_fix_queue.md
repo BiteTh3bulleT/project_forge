@@ -2,7 +2,7 @@
 
 Source audit: `docs/reviews/full_codebase_integrity_audit.md`
 
-Status: prioritized queue. CA1-001 through CA1-007, CA1-009, and CA1-012 through CA1-014 are closed by disabled-by-default host-power policy, root-workspace startup validation, fail-closed raw Compose bind defaults, corrected legacy adapter gateway/lane metadata, OS-login native shell posture, persisted Ollama URL validation, VM/Ollama docs alignment, desktop queue telemetry truth, lane default duplicate-ID coverage, and desktop/Nix doc supersession; remaining rows stay queued until explicitly closed.
+Status: prioritized queue. CA1-001 through CA1-007, CA1-009, and CA1-012 through CA1-015 are closed by disabled-by-default host-power policy, root-workspace startup validation, fail-closed raw Compose bind defaults, corrected legacy adapter gateway/lane metadata, OS-login native shell posture, persisted Ollama URL validation, VM/Ollama docs alignment, desktop queue telemetry truth, lane default duplicate-ID coverage, desktop/Nix doc supersession, and canonical VM evidence alignment; remaining rows stay queued until explicitly closed.
 
 | ID | Severity | Category | File path | Summary | Safe for automated fix | Operator decision needed |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -20,7 +20,7 @@ Status: prioritized queue. CA1-001 through CA1-007, CA1-009, and CA1-012 through
 | CA1-012 | Medium | duplicate policy metadata | `services/core/internal/lanes/service.go`; `services/core/internal/lanes/defaults_test.go` | Closed: default lane IDs are covered by `TestDefaultBuiltinsHaveUniqueIDs`, preventing duplicate built-in metadata such as repeated `fs.mkdir`. | fixed | no |
 | CA1-013 | Medium | docs supersession | `docs/status/desktop_shell_status.md`; `docs/status/desktop_nix_packaging_gap.md` | Closed: historical desktop/API and G3.5 package status docs now point to current G8/operator VM sources and identify labwc operator desktop vs Cage rollback/test scope. | fixed | no |
 | CA1-014 | Medium | docs truth alignment | `docs/operations/forge_graphical_shell_session.md` | Closed: runbook now states the current `forge-operator`/labwc path, keeps Cage as fullscreen rollback/test coverage, and separates G3.5 package truth from later G8 operator desktop truth. | fixed | no |
-| CA1-015 | Medium | docs verification | `docs/runbooks/forge_operator_desktop_vm.md`; `docs/evidence/vm_boot/2026-05-18-section6-final/README.md` | VM verification status appears stale. | yes | no |
+| CA1-015 | Medium | docs verification | `docs/runbooks/forge_operator_desktop_vm.md`; `docs/evidence/vm_boot/2026-05-18-section6-final/README.md` | Closed: operator VM runbook now points at the 2026-05-18 Section 6 canonical boot/login/session evidence, and the evidence README records the remaining separate G8 native-app smoke scope. | fixed | no |
 | CA1-016 | Low | stale/debug surface | `apps/desktop/src-tauri/src/window_manager.rs` | Debug console window kind exists without obvious owned UI surface. | yes | no |
 | CA1-017 | Low | registry drift detection | `apps/desktop/src/layout/toolRegistry.tsx`; `apps/desktop/src/layout/AppShellSurfaces.tsx` | Placeholder surface fallback can hide registry drift. | yes | no |
 

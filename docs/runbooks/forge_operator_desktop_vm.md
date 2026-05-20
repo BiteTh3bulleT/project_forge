@@ -2,15 +2,18 @@
 
 Status: Phase G8 native desktop runtime and operator shell UX bring-up
 
-Last verified: 2026-05-16 on VirtualBox VM `FORGE-OS` for the appliance-style
-FORGE shell loading/login path. Native graphical password login evidence is
-pending for the canonical Nix VM target.
+Last verified: 2026-05-18 through the canonical Nix VM target's Section 6
+evidence pass. The pass captured boot/login/session screenshots for the
+graphical password login path into the native FORGE operator desktop.
 
 In-repo evidence record:
-[docs/evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md](../evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md)
+[docs/evidence/vm_boot/2026-05-18-section6-final/README.md](../evidence/vm_boot/2026-05-18-section6-final/README.md)
 
 Latest render evidence:
 [docs/evidence/vm_boot/2026-05-18-live-start/README.md](../evidence/vm_boot/2026-05-18-live-start/README.md)
+
+Historical manual VirtualBox evidence:
+[docs/evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md](../evidence/vm_boot/2026-05-11-forge-os-operator-desktop.md)
 
 Phase G8 desktop shell verification:
 [docs/status/phase_g8_desktop_shell_verification.md](../status/phase_g8_desktop_shell_verification.md)
