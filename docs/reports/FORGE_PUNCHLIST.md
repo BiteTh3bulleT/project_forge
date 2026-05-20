@@ -42,6 +42,7 @@ Trivial wins. Close the small stuff so it stops appearing in every review. ~1-2 
 - [x] **Extract shared SQL placeholder helper.** 2026-05-20: replaced duplicated `placeholders()` helpers across lineage, dossiers, embeddings, search, memory VSA, and API trace reporting with `internal/sqlutil.Placeholders` plus direct helper coverage.
 - [x] **Cover reconciliation/reviews services.** 2026-05-20: added persistence tests for reconciliation upsert/filter/default behavior and review create/update/list/default behavior.
 - [x] **Remove raw Compose Postgres password default.** 2026-05-20: `docker-compose.yml` now requires `FORGE_POSTGRES_PASSWORD` for raw compose use; the npm wrapper scripts still set the local dev password when no env or `.env.docker` value exists.
+- [x] **Close A5 security verification.** 2026-05-20: fresh smoke passed; `go test -race ./internal/api` passed on captured rerun; `govulncheck` found reachable `GO-2025-3770` in chi v5.2.1 and was cleared by upgrading `github.com/go-chi/chi/v5` to v5.2.2.
 
 ---
 
