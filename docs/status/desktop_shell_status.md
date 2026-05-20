@@ -3,6 +3,23 @@
 Date: 2026-04-21
 Scope: desktop/API runtime truth without UI redesign.
 
+## Supersession Notice
+
+This file is historical status context. Current operator desktop truth is recorded in:
+
+- `docs/status/phase_g8_desktop_shell_verification.md`
+- `docs/reports/phase_g8_desktop_shell_verification.md`
+- `docs/operations/forge_graphical_shell_session.md`
+- `docs/runbooks/forge_operator_desktop_vm.md`
+
+As of the G8/CA2 alignment, the native shell path is:
+
+```text
+FORGE boot splash -> graphical OS login -> forge-operator session -> labwc -> forge-shell-session -> forge-desktop-shell
+```
+
+Use this file only for older desktop/API surface discovery. Do not use the "Still missing" section below as current validation truth; `npm run validate:desktop` is now the current desktop validation bundle and includes typecheck, Vitest, and build.
+
 ## Current desktop/API surfaces
 
 Visible surfaces remain broad and wired to backend APIs:

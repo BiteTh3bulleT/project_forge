@@ -2,11 +2,23 @@
 
 This runbook describes the Phase G1/G2/G3/G3.5/G4/G5/G6/G8 graphical shell session contract.
 
+## Current Operator Desktop Truth
+
+The current native/operator VM path is:
+
+```text
+FORGE boot splash -> graphical OS login -> forge-operator session -> labwc -> forge-shell-session -> forge-desktop-shell
+```
+
+`labwc` is the current operator desktop compositor substrate. `forge-operator-session` launches labwc with FORGE as the visible desktop shell while preserving the NixOS/Linux recovery path. The older Cage `forge-wayland-session` fullscreen path remains available as a rollback/test lane, especially for the earlier G4/G5 fullscreen-shell work, but it is not the default operator desktop substrate.
+
+Current operator desktop status and evidence live in `docs/status/phase_g8_desktop_shell_verification.md`, `docs/reports/phase_g8_desktop_shell_verification.md`, and `docs/runbooks/forge_operator_desktop_vm.md`. Older G3.5 package-language below describes the package boundary, not the current full operator desktop session.
+
 G1 defines how an opt-in NixOS session should launch FORGE as the primary visible shell while preserving the existing FORGE authority boundaries. G2 adds a launchable `forge-shell-session` wrapper package and flake app. G3 adds the target package contract for a Nix-built desktop shell package named `forge-desktop-shell`, while preserving the G2 safe wrapper and local-binary fallback behavior.
 
 G3.5 is the real Tauri Nix build phase. `packages.forge-desktop-shell` has been changed from a launcher placeholder to a real Tauri build derivation, advertises `passthru.containsTauriBinary = true`, and builds the `forge_desktop` binary plus the stable `forge-desktop-shell` wrapper.
 
-G4 is the opt-in Wayland shell session integration lane. It should make FORGE Shell selectable or manually launchable through NixOS session plumbing and a lightweight compositor substrate, preferably Cage when cleanly available through Nixpkgs. The launch path remains compositor -> `forge-shell-session` -> packaged `forge-desktop-shell` -> local `forge-core`; G4 must not bypass `forge-shell-session`.
+G4 is the opt-in Wayland shell session integration lane. Its original fullscreen-shell path uses Cage through `forge-wayland-session`; the later operator desktop path uses labwc through `forge-operator-session`. In both paths, the launch remains compositor -> `forge-shell-session` -> packaged `forge-desktop-shell` -> local `forge-core`; session launchers must not bypass `forge-shell-session`.
 
 G5 adds a test-only, opt-in VirtualBox/minimal NixOS graphics profile at `nix/nixos/profiles/forge-vbox-graphics-test.nix`. It is for manual TTY launch in a minimal VM and is documented in `docs/operations/virtualbox_forge_shell_test.md`. It does not install a full graphical desktop environment, enable automatic login, replace the user's desktop, remove TTY fallback, or grant wrappers host-control authority.
 
@@ -70,7 +82,19 @@ Current G3.5 package status is packaged and validated on Linux. The package-leve
 
 The session scaffolding remains inert unless explicitly enabled.
 
-| Option | Expected G4 Default |
+| Option | Current operator VM default |
+|---|---|
+| `forge.shellSession.enable` | `true` through the explicit operator desktop profile |
+| `forge.shellSession.mode` | `"operator-desktop"` |
+| `forge.shellSession.displayBackend` | `"wayland"` |
+| `forge.shellSession.compositor` | `"labwc"` |
+| `forge.shellSession.autoStart` | `false` |
+| `forge.shellSession.coreURL` | `"http://127.0.0.1:18492"` |
+| `forge.shellSession.safeMode` | `true` |
+| `forge.shellSession.fullscreen` | `false` |
+| `forge.shellSession.wayland.enable` | enabled by the explicit operator desktop profile |
+
+| Option | Fullscreen rollback/test default |
 |---|---|
 | `forge.shellSession.enable` | `false` |
 | `forge.shellSession.mode` | `"fullscreen-shell"` |
@@ -82,7 +106,7 @@ The session scaffolding remains inert unless explicitly enabled.
 | `forge.shellSession.fullscreen` | `true` |
 | `forge.shellSession.wayland.enable` | disabled unless the shell session is explicitly enabled |
 
-Autologin must remain disabled by default. Existing desktop environments and TTY login must remain available by default. G4 only documents the `fullscreen-shell` Wayland path; other modes require later design, implementation, tests, and rollback notes.
+Autologin must remain disabled. Existing desktop environments and TTY login must remain available. `operator-desktop`/labwc is the current native desktop path; `fullscreen-shell`/Cage remains the older rollback/test path.
 
 The host/system authority flags must remain false in generated environment or session files:
 
@@ -127,7 +151,7 @@ The expected package output is:
 - `/bin/forge-desktop-shell`, the stable command used by operators and wrappers
 - `/bin/forge_desktop`, the Tauri binary name from `apps/desktop/src-tauri`
 
-The current G3.5 limitation is explicit: the package is validated as a Linux Nix build only. Compositor/session integration, autostart, desktop replacement, and multi-monitor display-manager integration remain future phases.
+The G3.5 limitation is explicit: that phase validates the Linux Nix package only. Current compositor/session integration is provided by later profiles and wrappers: `forge-operator-session` with labwc for operator desktop, and `forge-wayland-session` with Cage for fullscreen rollback/test coverage. Autologin, forced desktop replacement, and host mutation remain out of scope.
 
 Build the wrapper and safety checks:
 
@@ -247,7 +271,18 @@ FORGE_SHELL_BINARY=/path/to/forge_desktop nix run .#forge-shell-session
 
 ## Wayland Session Launch
 
-G4 session integration should keep the manual wrapper usable and add an opt-in Wayland session surface. The conceptual launch is:
+The current operator desktop launch is:
+
+```text
+FORGE Shell session selection
+  -> forge-operator-session
+  -> labwc --startup forge-shell-session
+  -> forge-shell-session
+  -> forge-desktop-shell
+  -> local forge-core at FORGE_CORE_URL
+```
+
+The older fullscreen rollback/test launch is:
 
 ```text
 FORGE Shell session selection
@@ -257,9 +292,11 @@ FORGE Shell session selection
   -> local forge-core at FORGE_CORE_URL
 ```
 
-G5 uses the same launch path from a minimal VirtualBox TTY. When the profile is imported, `forge-wayland-session` is installed for manual launch, but the profile still keeps automatic login disabled and preserves TTY rollback.
+G5 uses the fullscreen Cage launch path from a minimal VirtualBox TTY. The current operator VM profile installs both the labwc operator session and the Cage rollback/test session, keeps automatic login disabled, and preserves TTY rollback.
 
 If a `forge-wayland-session` wrapper is present, it should provide `/bin/forge-wayland-session`, set or preserve the safe shell environment, verify that the compositor and `forge-shell-session` are available, and fail loudly when either dependency is missing. The compositor and shell wrapper executable paths are package-pinned at build time; ambient environment variables may set non-executable session metadata such as `FORGE_CORE_URL`, but must not redirect the wrapper to arbitrary compositor or shell binaries. It must launch `forge-shell-session` inside the compositor and must not launch `forge-desktop-shell` directly.
+
+If a `forge-operator-session` wrapper is present, it should provide `/bin/forge-operator-session`, set or preserve the safe shell environment, verify that labwc and `forge-shell-session` are available, and fail loudly when either dependency is missing. It may generate bounded labwc runtime config, but must not accept ambient compositor executable overrides or bypass `forge-shell-session`.
 
 When enabled through NixOS, expected operator flow is:
 
@@ -275,22 +312,20 @@ Example local NixOS configuration shape:
 {
   forge.shellSession = {
     enable = true;
-    mode = "fullscreen-shell";
+    mode = "operator-desktop";
     displayBackend = "wayland";
-    compositor = "cage";
+    compositor = "labwc";
     autoStart = false;
     coreURL = "http://127.0.0.1:18492";
     safeMode = true;
-    fullscreen = true;
+    fullscreen = false;
     wayland.enable = true;
-    wayland.sessionName = "FORGE Shell";
+    wayland.sessionName = "forge-operator";
   };
 }
 ```
 
-This example is an explicit operator choice. It must not be used to enable autologin, change the display manager's default session automatically, or remove existing sessions.
-
-G4 must not enable autologin, set FORGE Shell as the default session automatically, remove other session entries, or replace the display manager configuration without explicit local opt-in.
+This example is an explicit operator choice. It must not be used to enable autologin, remove existing sessions, or remove TTY recovery. The canonical operator VM may set `forge-operator` as the display-manager default session while still requiring graphical password login; that is different from autologin and remains recoverable through normal session selection/TTY.
 
 ## Binary Selection Order
 
@@ -376,7 +411,7 @@ The shell must not:
 - treat model output as canonical truth
 - use FORGE-K simulator services as live authority
 
-G3.5 introduces no host mutation, modelruntime mutation, semantic memory mutation, route/API mutation, gateway mutation, compositor integration, autologin, desktop replacement, or FORGE-K authority mutation. G4 may introduce opt-in compositor/session selection, but it still introduces no host mutation, modelruntime mutation, semantic memory mutation, route/API mutation, gateway mutation, autologin, forced desktop replacement, or FORGE-K authority mutation.
+G3.5 introduces no modelruntime mutation, semantic memory mutation, route/API mutation, gateway mutation, compositor integration, autologin, desktop replacement, or FORGE-K authority mutation. Later operator desktop phases add compositor/session selection through labwc and keep the Cage fullscreen path as rollback/test coverage. Host power actions in the Tauri binary remain policy-gated by `FORGE_SHELL_DIRECT_SYSTEM_CONTROL` and disabled by default; wrappers and session profiles must not invoke shutdown, reboot, service-control, or package-manager mutation.
 
 ## System Context Handling
 

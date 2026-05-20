@@ -2,6 +2,24 @@
 
 _Status: Phase G3.5 real Tauri Nix packaging is implemented and validated on Linux._
 
+## Supersession Notice
+
+This file remains authoritative for the G3.5 package boundary only: `packages.forge-desktop-shell` is a real Tauri Nix build, not a launcher placeholder. It is not the current operator-session status source.
+
+For current graphical desktop operation, use:
+
+- `docs/operations/forge_graphical_shell_session.md`
+- `docs/runbooks/forge_operator_desktop_vm.md`
+- `docs/status/phase_g8_desktop_shell_verification.md`
+
+Current operator VM/native desktop truth is:
+
+```text
+FORGE boot splash -> graphical OS login -> forge-operator session -> labwc -> forge-shell-session -> forge-desktop-shell
+```
+
+The older Cage `forge-wayland-session` path remains a fullscreen rollback/test lane. It is not the default operator desktop substrate.
+
 `packages.forge-desktop-shell` is no longer a launcher placeholder. The package
 builds the desktop frontend, builds the `apps/desktop/src-tauri` Tauri crate,
 wraps the resulting Linux binary with the required GTK/WebKit runtime
@@ -60,7 +78,7 @@ Phase G3.5 is still only the package boundary. It does not:
 - change routes or public APIs
 - make FORGE-K live authority
 
-Compositor/session integration is Phase G4 work. G4 should be an opt-in Wayland session lane on the NixOS substrate, preferably using Cage as the lightweight compositor when available, and should launch `forge-shell-session` inside that compositor so safe environment defaults and packaged-shell selection stay centralized. G4 must not change the G3.5 truth that the desktop package is a real Tauri Nix build, and it must not autostart, enable autologin, remove fallback sessions, mutate host configuration, run service control, call modelruntime, write semantic memory, or make FORGE-K live authority.
+Compositor/session integration is later than this G3.5 package status. The current operator desktop path uses the opt-in `forge-operator` session with labwc as substrate and keeps the Cage `forge-wayland-session` fullscreen path as rollback/test coverage. Later session phases must not change the G3.5 truth that the desktop package is a real Tauri Nix build, and must not enable autologin, remove fallback sessions, mutate host configuration, run service control, call modelruntime, write semantic memory, or make FORGE-K live authority.
 
 ## Fallback
 
