@@ -45,10 +45,10 @@ func decodeOptionalServerJSONBody(r *http.Request, target any) error {
 
 func writeServerDecodeError(w http.ResponseWriter, err error) {
 	if errors.Is(err, errServerRequestBodyTooLarge) {
-		http.Error(w, "server json request body too large", http.StatusRequestEntityTooLarge)
+		writeAPIError(w, http.StatusRequestEntityTooLarge, "request_failed", "server json request body too large", nil)
 		return
 	}
-	http.Error(w, "invalid json", http.StatusBadRequest)
+	writeAPIError(w, http.StatusBadRequest, "request_failed", "invalid json", nil)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

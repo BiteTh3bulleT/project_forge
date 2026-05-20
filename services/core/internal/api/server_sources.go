@@ -138,7 +138,7 @@ func (s *Server) handleAddSource(w http.ResponseWriter, r *http.Request) {
 	}
 	abs, status, reason := s.admittedSourcePath(ctx, body.Path)
 	if status != http.StatusOK {
-		http.Error(w, reason, status)
+		writeAPIError(w, status, "request_failed", reason, nil)
 		return
 	}
 	res, err := s.st.DB.ExecContext(ctx,
@@ -147,7 +147,7 @@ func (s *Server) handleAddSource(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
-			http.Error(w, "source already exists", http.StatusConflict)
+			writeAPIError(w, http.StatusConflict, "request_failed", "source already exists", nil)
 			return
 		}
 		writeAPIRequestError(w, http.StatusInternalServerError, err)
@@ -170,7 +170,7 @@ func (s *Server) handleDeleteSource(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	if _, err := s.st.DB.ExecContext(ctx, `DELETE FROM sources WHERE id = ?`, id); err != nil {
@@ -198,12 +198,12 @@ func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
 	}
 	id, err := strconv.ParseInt(q, 10, 64)
 	if err != nil {
-		http.Error(w, "bad sourceId", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad sourceId", nil)
 		return
 	}
 	var path string
 	if err := s.st.DB.QueryRowContext(ctx, `SELECT path FROM sources WHERE id = ?`, id).Scan(&path); err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
+		writeAPIError(w, http.StatusNotFound, "request_failed", "not found", nil)
 		return
 	}
 	if err := s.ingest.IndexSource(ctx, id, path); err != nil {
@@ -261,12 +261,12 @@ func (s *Server) handleChunk(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	h, err := s.search.ChunkByID(ctx, id)
 	if err != nil {
-		http.Error(w, "not found", http.StatusNotFound)
+		writeAPIError(w, http.StatusNotFound, "request_failed", "not found", nil)
 		return
 	}
 	writeJSON(w, http.StatusOK, h)

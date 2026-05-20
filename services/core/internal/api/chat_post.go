@@ -496,7 +496,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	threadID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad thread id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad thread id", nil)
 		return
 	}
 	var body struct {
@@ -516,7 +516,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 	body.Content = strings.TrimSpace(body.Content)
 	body.ModelID = strings.TrimSpace(body.ModelID)
 	if body.Content == "" {
-		http.Error(w, "content required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "content required", nil)
 		return
 	}
 	userMeta := map[string]any{"source": "operator"}
@@ -678,7 +678,7 @@ func (s *Server) handleChatMessagePost(w http.ResponseWriter, r *http.Request) {
 	if async {
 		key := chatInflightKey(threadID, um.ID)
 		if _, loaded := s.chatAssistInflight.LoadOrStore(key, true); loaded {
-			http.Error(w, "assistant generation already in progress for this message", http.StatusConflict)
+			writeAPIError(w, http.StatusConflict, "request_failed", "assistant generation already in progress for this message", nil)
 			return
 		}
 		go s.runChatAssistantAsync(key, threadID, um.ID, th, um.Content, ollamaAdapter, body.ModelID)
@@ -1141,12 +1141,12 @@ func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	threadID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad thread id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad thread id", nil)
 		return
 	}
 	userMessageID, err := strconv.ParseInt(strings.TrimSpace(r.URL.Query().Get("userMessageId")), 10, 64)
 	if err != nil || userMessageID <= 0 {
-		http.Error(w, "userMessageId required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "userMessageId required", nil)
 		return
 	}
 
@@ -1157,7 +1157,7 @@ func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Reques
 
 	key := chatInflightKey(threadID, userMessageID)
 	if _, loaded := s.chatAssistInflight.LoadOrStore(key, true); loaded {
-		http.Error(w, "assistant generation already in progress", http.StatusConflict)
+		writeAPIError(w, http.StatusConflict, "request_failed", "assistant generation already in progress", nil)
 		return
 	}
 	defer s.chatAssistInflight.Delete(key)
@@ -1175,12 +1175,12 @@ func (s *Server) handleChatAssistantStream(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	if !found {
-		http.Error(w, "user message not in thread", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "user message not in thread", nil)
 		return
 	}
 
 	if _, ok := w.(http.Flusher); !ok {
-		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		writeAPIError(w, http.StatusInternalServerError, "request_failed", "streaming unsupported", nil)
 		return
 	}
 

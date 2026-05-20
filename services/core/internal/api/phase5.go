@@ -96,10 +96,10 @@ func readPhase5RequestBody(w http.ResponseWriter, r *http.Request) ([]byte, erro
 
 func writePhase5DecodeError(w http.ResponseWriter, err error) {
 	if errors.Is(err, errPhase5RequestBodyTooLarge) {
-		http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+		writeAPIError(w, http.StatusRequestEntityTooLarge, "request_failed", "request body too large", nil)
 		return
 	}
-	http.Error(w, "invalid json", http.StatusBadRequest)
+	writeAPIError(w, http.StatusBadRequest, "request_failed", "invalid json", nil)
 }
 
 func requiresCapabilityStatusReason(status domain.ToolCapabilityStatus) bool {
@@ -177,7 +177,7 @@ func (s *Server) handleGatewayCapabilityStatusUpdate(w http.ResponseWriter, r *h
 	ctx := r.Context()
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	if id == "" {
-		http.Error(w, "capability id is required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "capability id is required", nil)
 		return
 	}
 	var body gatewayCapabilityStatusUpdateBody
@@ -187,27 +187,27 @@ func (s *Server) handleGatewayCapabilityStatusUpdate(w http.ResponseWriter, r *h
 	}
 	status := strings.TrimSpace(strings.ToLower(body.Status))
 	if status == "" {
-		http.Error(w, "status is required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "status is required", nil)
 		return
 	}
 	parsedStatus := domain.ToolCapabilityStatus(status)
 	if !domain.IsKnownToolCapabilityStatus(parsedStatus) {
-		http.Error(w, "unknown capability status", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "unknown capability status", nil)
 		return
 	}
 	reason := strings.TrimSpace(body.Reason)
 	if s.gateway == nil {
-		http.Error(w, "gateway unavailable", http.StatusServiceUnavailable)
+		writeAPIError(w, http.StatusServiceUnavailable, "request_failed", "gateway unavailable", nil)
 		return
 	}
 
 	previous, ok := s.gateway.Capability(id)
 	if !ok {
-		http.Error(w, "capability not found", http.StatusNotFound)
+		writeAPIError(w, http.StatusNotFound, "request_failed", "capability not found", nil)
 		return
 	}
 	if previous.Status != parsedStatus && requiresCapabilityStatusReason(parsedStatus) && reason == "" {
-		http.Error(w, "reason is required for capability status changes", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "reason is required for capability status changes", nil)
 		return
 	}
 	transition := gateway.ClassifyCapabilityStatusTransition(previous, parsedStatus)
@@ -219,7 +219,7 @@ func (s *Server) handleGatewayCapabilityStatusUpdate(w http.ResponseWriter, r *h
 		actor = strings.TrimSpace(r.Header.Get("X-Actor"))
 	}
 	if actor == "" && previous.Status != parsedStatus {
-		http.Error(w, "actor is required for capability status changes", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "actor is required for capability status changes", nil)
 		return
 	}
 	actorKind := strings.TrimSpace(body.ActorKind)
@@ -230,7 +230,7 @@ func (s *Server) handleGatewayCapabilityStatusUpdate(w http.ResponseWriter, r *h
 		actorKind = strings.TrimSpace(r.Header.Get("X-Forge-Actor-Kind"))
 	}
 	if actorKind == "" && previous.Status != parsedStatus {
-		http.Error(w, "actorKind or source is required for capability status changes", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "actorKind or source is required for capability status changes", nil)
 		return
 	}
 	correlationID := strings.TrimSpace(body.CorrelationID)
@@ -315,7 +315,7 @@ func (s *Server) handleGatewayCapabilityStatusUpdate(w http.ResponseWriter, r *h
 		return
 	}
 	if !ok {
-		http.Error(w, "capability not found", http.StatusNotFound)
+		writeAPIError(w, http.StatusNotFound, "request_failed", "capability not found", nil)
 		return
 	}
 
@@ -794,7 +794,7 @@ func (s *Server) handleAuditTrace(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	correlation := strings.TrimSpace(chi.URLParam(r, "correlationId"))
 	if correlation == "" {
-		http.Error(w, "correlation id is required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "correlation id is required", nil)
 		return
 	}
 	report, err := s.buildCorrelationTraceReport(ctx, correlation)
@@ -863,7 +863,7 @@ func (s *Server) handleDeleteBundle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	if err := s.backup.Delete(ctx, id); err != nil {
@@ -894,7 +894,7 @@ func (s *Server) handleRestoreBundle(w http.ResponseWriter, r *http.Request) {
 	}
 	if gov.HTTPStatus > 0 {
 		s.auditBackupRestoreGovernance(ctx, body, gov, "denied")
-		http.Error(w, gov.ErrorMessage, gov.HTTPStatus)
+		writeAPIError(w, gov.HTTPStatus, "request_failed", gov.ErrorMessage, nil)
 		return
 	}
 	if gov.RequiresApproval && !gov.Approved {

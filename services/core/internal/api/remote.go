@@ -106,7 +106,7 @@ func (s *Server) handleRemoteTelegram(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !s.remoteTokenOk(r, conf.token) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		writeAPIError(w, http.StatusUnauthorized, "request_failed", "unauthorized", nil)
 		return
 	}
 
@@ -118,7 +118,7 @@ func (s *Server) handleRemoteTelegram(w http.ResponseWriter, r *http.Request) {
 
 	msg := remoteFirstTelegramMessage(&payload)
 	if msg == nil {
-		http.Error(w, "no telegram message", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "no telegram message", nil)
 		return
 	}
 	if err := s.processTelegramRemoteMessage(r.Context(), conf, msg); err != nil {
@@ -141,17 +141,17 @@ func (s *Server) handleRemoteDiscord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !s.remoteTokenOk(r, conf.token) {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		writeAPIError(w, http.StatusUnauthorized, "request_failed", "unauthorized", nil)
 		return
 	}
 
 	if err := verifyRemoteDiscordSignature(w, r, conf.discordPublicKey); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			http.Error(w, "remote request body too large", http.StatusRequestEntityTooLarge)
+			writeAPIError(w, http.StatusRequestEntityTooLarge, "request_failed", "remote request body too large", nil)
 			return
 		}
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		writeAPIError(w, http.StatusUnauthorized, "request_failed", "unauthorized", nil)
 		return
 	}
 
@@ -171,7 +171,7 @@ func (s *Server) handleRemoteDiscord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if text == "" {
-		http.Error(w, "content required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "content required", nil)
 		return
 	}
 
@@ -181,7 +181,7 @@ func (s *Server) handleRemoteDiscord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if channelID == "" && strings.TrimSpace(conf.discordWebhookURL) == "" {
-		http.Error(w, "discord channel id not configured", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "discord channel id not configured", nil)
 		return
 	}
 
@@ -593,10 +593,10 @@ func decodeRemoteJSONBody(w http.ResponseWriter, r *http.Request, target any) er
 func writeRemoteDecodeError(w http.ResponseWriter, err error) {
 	var maxBytesErr *http.MaxBytesError
 	if errors.As(err, &maxBytesErr) {
-		http.Error(w, "remote request body too large", http.StatusRequestEntityTooLarge)
+		writeAPIError(w, http.StatusRequestEntityTooLarge, "request_failed", "remote request body too large", nil)
 		return
 	}
-	http.Error(w, "invalid json", http.StatusBadRequest)
+	writeAPIError(w, http.StatusBadRequest, "request_failed", "invalid json", nil)
 }
 
 func remoteStringID(id any) string {

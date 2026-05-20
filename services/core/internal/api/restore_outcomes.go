@@ -49,16 +49,16 @@ func decodeRestoreOutcomeFeedbackJSONBody(w http.ResponseWriter, r *http.Request
 
 func writeRestoreOutcomeFeedbackDecodeError(w http.ResponseWriter, err error) {
 	if errors.Is(err, errRestoreOutcomeFeedbackRequestBodyTooLarge) {
-		http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+		writeAPIError(w, http.StatusRequestEntityTooLarge, "request_failed", "request body too large", nil)
 		return
 	}
-	http.Error(w, "invalid json", http.StatusBadRequest)
+	writeAPIError(w, http.StatusBadRequest, "request_failed", "invalid json", nil)
 }
 
 func (s *Server) handleRestoreOutcomeList(w http.ResponseWriter, r *http.Request) {
 	workspaceID := strings.TrimSpace(r.URL.Query().Get("workspaceId"))
 	if workspaceID == "" {
-		http.Error(w, "workspaceId required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "workspaceId required", nil)
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -83,7 +83,7 @@ func (s *Server) handleRestoreOutcomeList(w http.ResponseWriter, r *http.Request
 func (s *Server) handleRestoreOutcomeGet(w http.ResponseWriter, r *http.Request) {
 	workspaceID := strings.TrimSpace(r.URL.Query().Get("workspaceId"))
 	if workspaceID == "" {
-		http.Error(w, "workspaceId required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "workspaceId required", nil)
 		return
 	}
 	laneID := strings.TrimSpace(r.URL.Query().Get("laneId"))
@@ -94,7 +94,7 @@ func (s *Server) handleRestoreOutcomeGet(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if !ok || !restoreOutcomeInAPIScope(event, workspaceID, laneID) {
-		http.Error(w, "restore outcome not found", http.StatusNotFound)
+		writeAPIError(w, http.StatusNotFound, "request_failed", "restore outcome not found", nil)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"outcome": event})
@@ -108,12 +108,12 @@ func (s *Server) handleRestoreOutcomeFeedback(w http.ResponseWriter, r *http.Req
 	}
 	workspaceID := strings.TrimSpace(firstNonEmptyTrimmed(body.WorkspaceID, r.URL.Query().Get("workspaceId")))
 	if workspaceID == "" {
-		http.Error(w, "workspaceId required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "workspaceId required", nil)
 		return
 	}
 	outcome := controllane.RestoreOutcome(strings.TrimSpace(body.Outcome))
 	if !controllane.ValidateRestoreOutcome(outcome) || outcome == controllane.RestoreOutcomeUnknown {
-		http.Error(w, "valid non-unknown outcome required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "valid non-unknown outcome required", nil)
 		return
 	}
 	laneID := strings.TrimSpace(firstNonEmptyTrimmed(body.LaneID, r.URL.Query().Get("laneId")))
@@ -135,7 +135,7 @@ func (s *Server) handleRestoreOutcomeFeedback(w http.ResponseWriter, r *http.Req
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "outside requested scope") || strings.Contains(err.Error(), "not found") {
-			http.Error(w, "restore outcome not found", http.StatusNotFound)
+			writeAPIError(w, http.StatusNotFound, "request_failed", "restore outcome not found", nil)
 			return
 		}
 		writeAPIRequestError(w, http.StatusInternalServerError, err)

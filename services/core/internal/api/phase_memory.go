@@ -91,7 +91,7 @@ func (s *Server) handleCreateMemoryObservation(w http.ResponseWriter, r *http.Re
 func (s *Server) handleGetMemoryObservation(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	obs, err := s.memory.GetObservation(r.Context(), id)
@@ -105,7 +105,7 @@ func (s *Server) handleGetMemoryObservation(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleGetObservationVSA(w http.ResponseWriter, r *http.Request) {
 	observationID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	detail, err := s.memory.GetObservationVSA(r.Context(), observationID)
@@ -119,7 +119,7 @@ func (s *Server) handleGetObservationVSA(w http.ResponseWriter, r *http.Request)
 func (s *Server) handlePatchMemoryObservation(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	var body struct {
@@ -152,7 +152,7 @@ func (s *Server) handlePatchMemoryObservation(w http.ResponseWriter, r *http.Req
 func (s *Server) handleMarkMemoryObservationUsefulness(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	var body struct {
@@ -187,7 +187,7 @@ func (s *Server) handleMarkMemoryObservationUsefulness(w http.ResponseWriter, r 
 func (s *Server) handleGetRetrievalSelection(w http.ResponseWriter, r *http.Request) {
 	runID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	selection, err := s.memory.SelectionByRun(r.Context(), runID)
@@ -201,7 +201,7 @@ func (s *Server) handleGetRetrievalSelection(w http.ResponseWriter, r *http.Requ
 func (s *Server) handleGetPacketAlignmentNotes(w http.ResponseWriter, r *http.Request) {
 	packetID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -216,7 +216,7 @@ func (s *Server) handleGetPacketAlignmentNotes(w http.ResponseWriter, r *http.Re
 func (s *Server) handleGetDossierMemory(w http.ResponseWriter, r *http.Request) {
 	dossierID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -231,7 +231,7 @@ func (s *Server) handleGetDossierMemory(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleGetDossierVSASummary(w http.ResponseWriter, r *http.Request) {
 	dossierID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	summary, err := s.memory.DossierVSASummary(r.Context(), dossierID)
@@ -256,7 +256,7 @@ func (s *Server) handleListMemoryRepairRuns(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleGetMemoryRepairRun(w http.ResponseWriter, r *http.Request) {
 	runID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	detail, err := s.memory.GetRepairRun(r.Context(), runID)
@@ -365,10 +365,10 @@ func readMemoryRequestBody(r *http.Request) ([]byte, error) {
 
 func writeMemoryDecodeError(w http.ResponseWriter, err error) {
 	if errors.Is(err, errMemoryRequestBodyTooLarge) {
-		http.Error(w, "memory request body too large", http.StatusRequestEntityTooLarge)
+		writeAPIError(w, http.StatusRequestEntityTooLarge, "request_failed", "memory request body too large", nil)
 		return
 	}
-	http.Error(w, "invalid json", http.StatusBadRequest)
+	writeAPIError(w, http.StatusBadRequest, "request_failed", "invalid json", nil)
 }
 
 func (s *Server) handleListVSAReindexRuns(w http.ResponseWriter, r *http.Request) {
@@ -385,13 +385,13 @@ func (s *Server) handleListVSAReindexRuns(w http.ResponseWriter, r *http.Request
 func (s *Server) handleGetVSAReindexRun(w http.ResponseWriter, r *http.Request) {
 	runID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	detail, err := s.memory.GetVSAReindexRun(r.Context(), runID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "not found", http.StatusNotFound)
+			writeAPIError(w, http.StatusNotFound, "request_failed", "not found", nil)
 			return
 		}
 		writeAPIRequestError(w, http.StatusInternalServerError, err)

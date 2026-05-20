@@ -423,7 +423,7 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	if rawDreamMode, ok := body["dreamMode"]; ok {
 		dreamMode, ok := rawDreamMode.(map[string]any)
 		if !ok {
-			http.Error(w, "dreamMode must be an object", http.StatusBadRequest)
+			writeAPIError(w, http.StatusBadRequest, "request_failed", "dreamMode must be an object", nil)
 			return
 		}
 		for _, item := range []struct {

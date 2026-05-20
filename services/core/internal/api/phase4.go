@@ -117,7 +117,7 @@ func (s *Server) handleSetGlobalPreset(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetDossierProfile(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	item, err := s.policy.DossierProfile(r.Context(), &id)
@@ -131,7 +131,7 @@ func (s *Server) handleGetDossierProfile(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleSaveDossierProfile(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	var body policy.SaveDossierProfileRequest
@@ -324,7 +324,7 @@ func (s *Server) handleListPacketGuidance(w http.ResponseWriter, r *http.Request
 func (s *Server) handleGetImportReconciliation(w http.ResponseWriter, r *http.Request) {
 	importID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	rec, err := s.reconcile.ByImport(r.Context(), importID)
@@ -338,7 +338,7 @@ func (s *Server) handleGetImportReconciliation(w http.ResponseWriter, r *http.Re
 func (s *Server) handleSaveImportReconciliation(w http.ResponseWriter, r *http.Request) {
 	importID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	var body reconciliation.SaveRequest
@@ -394,7 +394,7 @@ func (s *Server) handleListReviews(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUpdateReview(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	var body reviews.UpdateRequest
@@ -517,8 +517,8 @@ func readPhase4RequestBody(r *http.Request) ([]byte, error) {
 
 func writePhase4DecodeError(w http.ResponseWriter, err error) {
 	if errors.Is(err, errPhase4RequestBodyTooLarge) {
-		http.Error(w, "phase4 json request body too large", http.StatusRequestEntityTooLarge)
+		writeAPIError(w, http.StatusRequestEntityTooLarge, "request_failed", "phase4 json request body too large", nil)
 		return
 	}
-	http.Error(w, "invalid json", http.StatusBadRequest)
+	writeAPIError(w, http.StatusBadRequest, "request_failed", "invalid json", nil)
 }

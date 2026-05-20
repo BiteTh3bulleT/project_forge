@@ -269,7 +269,7 @@ func (s *Server) handleContextSnapshotGet(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	if id == "" {
-		http.Error(w, "snapshot id is required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "snapshot id is required", nil)
 		return
 	}
 	record, ok, err := s.getContextSnapshotInspectorRow(ctx, id, strings.TrimSpace(r.URL.Query().Get("workspaceId")), strings.TrimSpace(r.URL.Query().Get("laneId")), false)
@@ -278,7 +278,7 @@ func (s *Server) handleContextSnapshotGet(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if !ok {
-		http.Error(w, "snapshot not found", http.StatusNotFound)
+		writeAPIError(w, http.StatusNotFound, "request_failed", "snapshot not found", nil)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"snapshot": detailContextSnapshotRow(record)})
@@ -319,7 +319,7 @@ WHERE id = ?
 
 func (s *Server) handleContextRestoreRecent(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(r.URL.Query().Get("workspaceId")) == "" {
-		http.Error(w, "workspaceId required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "workspaceId required", nil)
 		return
 	}
 	if strings.TrimSpace(r.URL.Query().Get("snapshotKind")) == "" {
@@ -402,7 +402,7 @@ func (s *Server) handleContextRestoreResumeHints(w http.ResponseWriter, r *http.
 func (s *Server) loadScopedRestoreSnapshot(w http.ResponseWriter, r *http.Request) (contextSnapshotInspectorRow, bool) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	if id == "" {
-		http.Error(w, "snapshot id is required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "snapshot id is required", nil)
 		return contextSnapshotInspectorRow{}, false
 	}
 	record, found, err := s.getContextSnapshotInspectorRow(r.Context(), id, strings.TrimSpace(r.URL.Query().Get("workspaceId")), strings.TrimSpace(r.URL.Query().Get("laneId")), true)
@@ -415,7 +415,7 @@ func (s *Server) loadScopedRestoreSnapshot(w http.ResponseWriter, r *http.Reques
 		return contextSnapshotInspectorRow{}, false
 	}
 	if !found {
-		http.Error(w, "restore snapshot not found", http.StatusNotFound)
+		writeAPIError(w, http.StatusNotFound, "request_failed", "restore snapshot not found", nil)
 		return contextSnapshotInspectorRow{}, false
 	}
 	return record, true
@@ -426,7 +426,7 @@ func (s *Server) handleProcessHealthTrace(w http.ResponseWriter, r *http.Request
 	correlationID := strings.TrimSpace(r.URL.Query().Get("correlationId"))
 	traceID := strings.TrimSpace(r.URL.Query().Get("traceId"))
 	if correlationID == "" && traceID == "" {
-		http.Error(w, "correlationId or traceId is required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "correlationId or traceId is required", nil)
 		return
 	}
 
@@ -442,11 +442,11 @@ func (s *Server) handleProcessHealthTrace(w http.ResponseWriter, r *http.Request
 		correlationIDs = ids
 	}
 	if len(correlationIDs) == 0 {
-		http.Error(w, "no correlated correlation ids", http.StatusNotFound)
+		writeAPIError(w, http.StatusNotFound, "request_failed", "no correlated correlation ids", nil)
 		return
 	}
 	if s.gateway == nil {
-		http.Error(w, "gateway unavailable", http.StatusServiceUnavailable)
+		writeAPIError(w, http.StatusServiceUnavailable, "request_failed", "gateway unavailable", nil)
 		return
 	}
 
@@ -544,7 +544,7 @@ func (s *Server) handleAuditTraceLookup(w http.ResponseWriter, r *http.Request) 
 	correlationID := strings.TrimSpace(r.URL.Query().Get("correlationId"))
 	traceID := strings.TrimSpace(r.URL.Query().Get("traceId"))
 	if correlationID == "" && traceID == "" {
-		http.Error(w, "correlationId or traceId is required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "correlationId or traceId is required", nil)
 		return
 	}
 	if correlationID != "" {
@@ -572,7 +572,7 @@ func (s *Server) handleAuditTraceLookup(w http.ResponseWriter, r *http.Request) 
 	for _, candidate := range correlationIDs {
 		result, buildErr := s.buildAuditTraceLookupResult(ctx, candidate)
 		if buildErr != nil {
-			http.Error(w, buildErr.Error(), http.StatusInternalServerError)
+			writeAPIInternalError(w, buildErr)
 			return
 		}
 		reports = append(reports, result)

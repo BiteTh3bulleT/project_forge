@@ -43,7 +43,7 @@ type dreamRunRequest struct {
 
 func (s *Server) handleDreamRun(w http.ResponseWriter, r *http.Request) {
 	if s.dream == nil {
-		http.Error(w, "dream service unavailable", http.StatusServiceUnavailable)
+		writeAPIError(w, http.StatusServiceUnavailable, "request_failed", "dream service unavailable", nil)
 		return
 	}
 	var body dreamRunRequest
@@ -52,7 +52,7 @@ func (s *Server) handleDreamRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if strings.TrimSpace(body.WorkspaceID) == "" {
-		http.Error(w, "workspaceId required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "workspaceId required", nil)
 		return
 	}
 	report, err := s.dream.Run(r.Context(), dream.RunRequest{
@@ -113,17 +113,17 @@ func (s *Server) handleDreamRun(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDreamReportGet(w http.ResponseWriter, r *http.Request) {
 	if s.dream == nil {
-		http.Error(w, "dream service unavailable", http.StatusServiceUnavailable)
+		writeAPIError(w, http.StatusServiceUnavailable, "request_failed", "dream service unavailable", nil)
 		return
 	}
 	workspaceID := strings.TrimSpace(r.URL.Query().Get("workspaceId"))
 	if workspaceID == "" {
-		http.Error(w, "workspaceId required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "workspaceId required", nil)
 		return
 	}
 	rec, err := s.dream.GetReport(r.Context(), chi.URLParam(r, "id"), workspaceID, strings.TrimSpace(r.URL.Query().Get("laneId")))
 	if err != nil {
-		http.Error(w, "dream report not found", http.StatusNotFound)
+		writeAPIError(w, http.StatusNotFound, "request_failed", "dream report not found", nil)
 		return
 	}
 	writeJSON(w, http.StatusOK, rec)
@@ -181,12 +181,12 @@ func (s *Server) handleDreamReportWarnings(w http.ResponseWriter, r *http.Reques
 
 func (s *Server) handleDreamReportsList(w http.ResponseWriter, r *http.Request) {
 	if s.dream == nil {
-		http.Error(w, "dream service unavailable", http.StatusServiceUnavailable)
+		writeAPIError(w, http.StatusServiceUnavailable, "request_failed", "dream service unavailable", nil)
 		return
 	}
 	workspaceID := strings.TrimSpace(r.URL.Query().Get("workspaceId"))
 	if workspaceID == "" {
-		http.Error(w, "workspaceId required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "workspaceId required", nil)
 		return
 	}
 	limit, _ := strconv.Atoi(strings.TrimSpace(r.URL.Query().Get("limit")))
@@ -205,17 +205,17 @@ func (s *Server) handleDreamReportsList(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) loadScopedDreamReport(w http.ResponseWriter, r *http.Request) (dream.ReportRecord, bool) {
 	if s.dream == nil {
-		http.Error(w, "dream service unavailable", http.StatusServiceUnavailable)
+		writeAPIError(w, http.StatusServiceUnavailable, "request_failed", "dream service unavailable", nil)
 		return dream.ReportRecord{}, false
 	}
 	workspaceID := strings.TrimSpace(r.URL.Query().Get("workspaceId"))
 	if workspaceID == "" {
-		http.Error(w, "workspaceId required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "workspaceId required", nil)
 		return dream.ReportRecord{}, false
 	}
 	rec, err := s.dream.GetReport(r.Context(), chi.URLParam(r, "id"), workspaceID, strings.TrimSpace(r.URL.Query().Get("laneId")))
 	if err != nil {
-		http.Error(w, "dream report not found", http.StatusNotFound)
+		writeAPIError(w, http.StatusNotFound, "request_failed", "dream report not found", nil)
 		return dream.ReportRecord{}, false
 	}
 	return rec, true
@@ -237,8 +237,8 @@ func decodeDreamRunJSONBody(r *http.Request, target any) error {
 
 func writeDreamRunDecodeError(w http.ResponseWriter, err error) {
 	if errors.Is(err, errDreamRunRequestBodyTooLarge) {
-		http.Error(w, "dream run request body too large", http.StatusRequestEntityTooLarge)
+		writeAPIError(w, http.StatusRequestEntityTooLarge, "request_failed", "dream run request body too large", nil)
 		return
 	}
-	http.Error(w, "invalid json", http.StatusBadRequest)
+	writeAPIError(w, http.StatusBadRequest, "request_failed", "invalid json", nil)
 }

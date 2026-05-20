@@ -66,13 +66,13 @@ func (s *Server) handleChatThreadGet(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	d, err := s.chat.GetThread(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "not found", http.StatusNotFound)
+			writeAPIError(w, http.StatusNotFound, "request_failed", "not found", nil)
 			return
 		}
 		writeAPIRequestError(w, http.StatusInternalServerError, err)
@@ -151,7 +151,7 @@ func (s *Server) handleChatThreadPatch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	var body struct {
@@ -174,7 +174,7 @@ func (s *Server) handleChatThreadDelete(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	if err := s.chat.DeleteThread(ctx, id); err != nil {
@@ -189,7 +189,7 @@ func (s *Server) handleChatJobCreate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	threadID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad thread id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad thread id", nil)
 		return
 	}
 	var body jobs.CreateRequest
@@ -219,12 +219,12 @@ func (s *Server) handleChatAttachmentUpload(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 	threadID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad thread id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad thread id", nil)
 		return
 	}
 	if _, err := s.chat.GetThread(ctx, threadID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "thread not found", http.StatusNotFound)
+			writeAPIError(w, http.StatusNotFound, "request_failed", "thread not found", nil)
 			return
 		}
 		writeAPIRequestError(w, http.StatusInternalServerError, err)
@@ -234,10 +234,10 @@ func (s *Server) handleChatAttachmentUpload(w http.ResponseWriter, r *http.Reque
 	if err := r.ParseMultipartForm(chatAttachmentUploadRequestLimit); err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) || strings.Contains(strings.ToLower(err.Error()), "request body too large") {
-			http.Error(w, "chat attachment request body too large", http.StatusRequestEntityTooLarge)
+			writeAPIError(w, http.StatusRequestEntityTooLarge, "request_failed", "chat attachment request body too large", nil)
 			return
 		}
-		http.Error(w, "invalid multipart body", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "invalid multipart body", nil)
 		return
 	}
 	if r.MultipartForm != nil {
@@ -245,7 +245,7 @@ func (s *Server) handleChatAttachmentUpload(w http.ResponseWriter, r *http.Reque
 	}
 	f, fh, err := r.FormFile("file")
 	if err != nil {
-		http.Error(w, "file required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "file required", nil)
 		return
 	}
 	defer f.Close()
@@ -360,13 +360,13 @@ func (s *Server) handleCanvasBoardGet(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	b, err := s.canvas.GetBoard(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "not found", http.StatusNotFound)
+			writeAPIError(w, http.StatusNotFound, "request_failed", "not found", nil)
 			return
 		}
 		writeAPIRequestError(w, http.StatusInternalServerError, err)
@@ -379,7 +379,7 @@ func (s *Server) handleCanvasBoardDelete(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	if err := s.canvas.DeleteBoard(ctx, id); err != nil {
@@ -393,7 +393,7 @@ func (s *Server) handleCanvasNoteCreate(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	boardID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad board id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad board id", nil)
 		return
 	}
 	var body struct {
@@ -426,12 +426,12 @@ func (s *Server) handleCanvasNotePatch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	boardID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad board id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad board id", nil)
 		return
 	}
 	noteID, err := strconv.ParseInt(chi.URLParam(r, "noteId"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad note id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad note id", nil)
 		return
 	}
 	var body canvas.PatchNote
@@ -451,12 +451,12 @@ func (s *Server) handleCanvasNoteDelete(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	boardID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad board id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad board id", nil)
 		return
 	}
 	noteID, err := strconv.ParseInt(chi.URLParam(r, "noteId"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad note id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad note id", nil)
 		return
 	}
 	if err := s.canvas.DeleteNote(ctx, boardID, noteID); err != nil {
@@ -475,7 +475,7 @@ func (s *Server) handleArtifactsList(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	threadID, err := artifactThreadScopeFromRequest(r)
 	if err != nil {
-		http.Error(w, "bad threadId", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad threadId", nil)
 		return
 	}
 	job := strings.TrimSpace(r.URL.Query().Get("jobId"))
@@ -500,13 +500,13 @@ func (s *Server) handleArtifactGet(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	a, err := s.artifacts.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "not found", http.StatusNotFound)
+			writeAPIError(w, http.StatusNotFound, "request_failed", "not found", nil)
 			return
 		}
 		writeAPIRequestError(w, http.StatusInternalServerError, err)
@@ -514,7 +514,7 @@ func (s *Server) handleArtifactGet(w http.ResponseWriter, r *http.Request) {
 	}
 	threadID, err := artifactThreadScopeFromRequest(r)
 	if err != nil {
-		http.Error(w, "bad threadId", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad threadId", nil)
 		return
 	}
 	if err := s.authorizeArtifactPublicRead(ctx, a, threadID); err != nil {
@@ -532,13 +532,13 @@ func (s *Server) handleArtifactContent(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		http.Error(w, "bad id", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
 		return
 	}
 	art, err := s.artifacts.GetByID(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "not found", http.StatusNotFound)
+			writeAPIError(w, http.StatusNotFound, "request_failed", "not found", nil)
 			return
 		}
 		writeAPIRequestError(w, http.StatusInternalServerError, err)
@@ -546,7 +546,7 @@ func (s *Server) handleArtifactContent(w http.ResponseWriter, r *http.Request) {
 	}
 	threadID, err := artifactThreadScopeFromRequest(r)
 	if err != nil {
-		http.Error(w, "bad threadId", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad threadId", nil)
 		return
 	}
 	if err := s.authorizeArtifactPublicRead(ctx, art, threadID); err != nil {
@@ -718,8 +718,8 @@ func readWorkspaceRequestBody(r *http.Request) ([]byte, error) {
 
 func writeWorkspaceDecodeError(w http.ResponseWriter, err error) {
 	if errors.Is(err, errWorkspaceRequestBodyTooLarge) {
-		http.Error(w, "workspace json request body too large", http.StatusRequestEntityTooLarge)
+		writeAPIError(w, http.StatusRequestEntityTooLarge, "request_failed", "workspace json request body too large", nil)
 		return
 	}
-	http.Error(w, "invalid json", http.StatusBadRequest)
+	writeAPIError(w, http.StatusBadRequest, "request_failed", "invalid json", nil)
 }

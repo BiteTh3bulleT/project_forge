@@ -75,12 +75,12 @@ func (s *Server) handleAutonomyIntents(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAutonomyIntentExplain(w http.ResponseWriter, r *http.Request) {
 	if s == nil || s.autonomy == nil {
-		http.Error(w, "autonomy loop is not configured", http.StatusNotFound)
+		writeAPIError(w, http.StatusNotFound, "request_failed", "autonomy loop is not configured", nil)
 		return
 	}
 	intentID := strings.TrimSpace(chi.URLParam(r, "id"))
 	if intentID == "" {
-		http.Error(w, "intent id is required", http.StatusBadRequest)
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "intent id is required", nil)
 		return
 	}
 	explanation, err := s.autonomy.ExplainIntent(r.Context(), intentID)
@@ -134,7 +134,7 @@ func (s *Server) handleAutonomyCharters(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleAutonomyEvents(w http.ResponseWriter, r *http.Request) {
 	if s == nil || s.st == nil || s.st.DB == nil {
-		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		writeAPIError(w, http.StatusInternalServerError, "request_failed", "database unavailable", nil)
 		return
 	}
 	limit := parseAutonomyLimit(r, 120)
@@ -148,7 +148,7 @@ func (s *Server) handleAutonomyEvents(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAutonomyMaintenanceSweep(w http.ResponseWriter, r *http.Request) {
 	if s == nil || s.autonomy == nil {
-		http.Error(w, "autonomy loop is not configured", http.StatusNotFound)
+		writeAPIError(w, http.StatusNotFound, "request_failed", "autonomy loop is not configured", nil)
 		return
 	}
 	var body AutonomyMaintenanceSweepRequest
