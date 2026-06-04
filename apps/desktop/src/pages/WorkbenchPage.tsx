@@ -3,6 +3,11 @@ import { GhostButton, PrimaryButton } from "@forge/ui";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
+import {
+  AuditJobLink,
+  AuditTraceLink,
+  traceAuditTargetFrom,
+} from "../components/AuditLinks";
 import { api, type ForgeArtifact } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -434,6 +439,7 @@ export function WorkbenchPage() {
                     >
                       Job detail
                     </Link>
+                    <AuditJobLink jobId={jobDetail.job.id} />
                     <Link
                       className="text-forge-emberSoft underline"
                       to={`/chat`}
@@ -454,16 +460,24 @@ export function WorkbenchPage() {
               <div>
                 <div className="mb-2 forge-ops-label">Recent job events</div>
                 <div className="max-h-80 space-y-1 overflow-auto rounded border border-forge-platinum/10 bg-black/25 p-2 text-[11px] text-forge-mist">
-                  {recentJobEvents.map((ev) => (
-                    <div
-                      key={ev.id}
-                      className="border-b border-forge-platinum/5 py-1 last:border-0"
-                    >
-                      <span className="text-forge-ash">{ev.type}</span> ·{" "}
-                      {formatTime(ev.createdAtMs)}
-                      <div className="text-forge-mist/90">{ev.message}</div>
-                    </div>
-                  ))}
+                  {recentJobEvents.map((ev) => {
+                    const auditTarget = traceAuditTargetFrom(ev.payload);
+                    return (
+                      <div
+                        key={ev.id}
+                        className="border-b border-forge-platinum/5 py-1 last:border-0"
+                      >
+                        <span className="text-forge-ash">{ev.type}</span> ·{" "}
+                        {formatTime(ev.createdAtMs)}
+                        <div className="text-forge-mist/90">{ev.message}</div>
+                        {auditTarget ? (
+                          <div className="mt-1 font-semibold">
+                            <AuditTraceLink target={auditTarget} />
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ) : null}

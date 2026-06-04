@@ -3,6 +3,7 @@ import { GhostButton, PrimaryButton } from "@forge/ui";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { AuditJobLink } from "../components/AuditLinks";
 import { HumanDataView } from "../components/HumanDataView";
 import { Toast } from "../components/Toast";
 import { api } from "../lib/api";
@@ -337,6 +338,7 @@ export function ApprovalsPage() {
                         >
                           {r.jobId}
                         </Link>{" "}
+                        · <AuditJobLink jobId={r.jobId} />{" "}
                         · {formatTime(r.createdAtMs)}
                       </div>
                     </div>

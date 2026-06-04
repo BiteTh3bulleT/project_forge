@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { HumanDataView } from "../components/HumanDataView";
-import { api } from "../lib/api";
+import { api, type AuditTraceLookupResponse } from "../lib/api";
 import { arrayOrEmpty } from "../lib/arrays";
 import { formatTime } from "../lib/format";
 
@@ -115,6 +115,100 @@ function auditOutcomeClass(outcome: string) {
   return "forge-ops-status forge-ops-status--muted";
 }
 
+function recordFromUnknown(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+function countReportArray(report: Record<string, unknown>, key: string) {
+  const value = report[key];
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function countTraceLinks(report: Record<string, unknown>) {
+  const links = recordFromUnknown(report.links);
+  return Object.values(links).reduce<number>(
+    (sum, value) => sum + (Array.isArray(value) ? value.length : 0),
+    0,
+  );
+}
+
+function pickTraceReport(response: AuditTraceLookupResponse) {
+  const directReport = recordFromUnknown(response.report);
+  if (Object.keys(directReport).length > 0) return directReport;
+  const firstReport = response.reports?.[0]?.report;
+  return recordFromUnknown(firstReport);
+}
+
+function recordsFromTraceLookup(response: AuditTraceLookupResponse) {
+  if (Array.isArray(response.records)) {
+    return arrayOrEmpty<AuditRecord>(response.records);
+  }
+  return arrayOrEmpty<AuditRecord>(
+    response.reports?.flatMap((report) => report.records ?? []),
+  );
+}
+
+function AuthorityChainPanel({ report }: { report: Record<string, unknown> }) {
+  const hasReport = Object.keys(report).length > 0;
+  if (!hasReport) return null;
+
+  const linkCount = countTraceLinks(report);
+  const links = recordFromUnknown(report.links);
+
+  return (
+    <section className="mt-4 rounded border border-white/10 bg-white/[0.03] p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="forge-ops-title">Authority Chain</div>
+          <div className="mt-1 text-xs text-forge-mist/65">
+            Read-only correlation graph across gateway, audit, artifact,
+            provenance, and journal evidence.
+          </div>
+        </div>
+        <span className="forge-ops-status forge-ops-status--muted">
+          {linkCount} linked edges
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        <CountPill
+          label="Gateway Invocations"
+          value={countReportArray(report, "gatewayInvocations")}
+        />
+        <CountPill
+          label="Audit Records"
+          value={countReportArray(report, "auditRecords")}
+        />
+        <CountPill
+          label="Artifacts"
+          value={countReportArray(report, "artifactRecords")}
+        />
+        <CountPill
+          label="Provenance Records"
+          value={countReportArray(report, "provenanceRecords")}
+        />
+        <CountPill
+          label="Journal Events"
+          value={countReportArray(report, "journalEvents")}
+        />
+        <CountPill
+          label="Artifact Refs"
+          value={countReportArray(report, "artifactRefs")}
+        />
+      </div>
+      <div className="mt-3">
+        <JsonBlock
+          value={links}
+          empty="No link edges recorded for this trace."
+          maxHeightClass="max-h-[180px]"
+        />
+      </div>
+    </section>
+  );
+}
+
 export function AuditPage() {
   const [params, setParams] = useSearchParams();
   const jobId = useMemo(() => params.get("jobId") ?? "", [params]);
@@ -128,6 +222,7 @@ export function AuditPage() {
   );
   const [records, setRecords] = useState<AuditRecord[]>([]);
   const [trace, setTrace] = useState<AuditRecord[]>([]);
+  const [traceReport, setTraceReport] = useState<Record<string, unknown>>({});
   const [err, setErr] = useState<string | null>(null);
   const [traceErr, setTraceErr] = useState<string | null>(null);
 
@@ -162,20 +257,31 @@ export function AuditPage() {
     }
   }
 
-  async function loadTrace(nextTraceId = traceId) {
+  async function loadTrace(
+    nextTraceId = traceId,
+    mode: "correlation" | "trace" = "correlation",
+  ) {
     const id = nextTraceId.trim() || correlation.trim();
     if (!id) {
       setTraceErr("Provide a correlation id to load a trace.");
       setTrace([]);
+      setTraceReport({});
       return;
     }
     try {
-      const r = await api.audit.trace(id);
-      setTrace(arrayOrEmpty<AuditRecord>(r.records));
+      const r = await api.audit.lookup(
+        mode === "trace" ? { traceId: id } : { correlationId: id },
+      );
+      setTrace(recordsFromTraceLookup(r));
+      setTraceReport(pickTraceReport(r));
       setTraceErr(null);
-      syncParams({ traceId: id, correlationId: correlation });
+      syncParams({
+        traceId: id,
+        correlationId: mode === "correlation" ? id : correlation,
+      });
     } catch (e) {
       setTrace([]);
+      setTraceReport({});
       setTraceErr(e instanceof Error ? e.message : String(e));
     }
   }
@@ -185,8 +291,14 @@ export function AuditPage() {
   }, [jobId]);
 
   useEffect(() => {
-    if (traceId.trim()) {
-      void loadTrace(traceId);
+    const initialCorrelation = params.get("correlationId")?.trim() ?? "";
+    const initialTrace = params.get("traceId")?.trim() ?? "";
+    if (initialTrace && !initialCorrelation) {
+      void loadTrace(initialTrace, "trace");
+      return;
+    }
+    if (initialCorrelation) {
+      void loadTrace(initialCorrelation, "correlation");
     }
   }, []);
 
@@ -382,6 +494,7 @@ export function AuditPage() {
               ) : null}
             </div>
           ) : null}
+          <AuthorityChainPanel report={traceReport} />
           <div className="mt-4 space-y-2">
             {trace.length === 0 ? (
               <div className="text-sm text-forge-mist">No trace loaded.</div>
@@ -480,8 +593,9 @@ export function AuditPage() {
                     <button
                       type="button"
                       onClick={() => {
+                        setCorrelation(rec.correlationId);
                         setTraceId(rec.correlationId);
-                        void loadTrace(rec.correlationId);
+                        void loadTrace(rec.correlationId, "correlation");
                       }}
                       className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-forge-mist transition hover:text-forge-ash"
                     >

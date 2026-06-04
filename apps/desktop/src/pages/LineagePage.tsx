@@ -3,6 +3,7 @@ import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
+import { AuditJobLink } from "../components/AuditLinks";
 import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
@@ -128,6 +129,12 @@ export function LineagePage() {
           <GhostButton onClick={() => void loadLineage(jobId)}>
             Load Lineage
           </GhostButton>
+          {jobId.trim() ? (
+            <AuditJobLink
+              jobId={jobId.trim()}
+              className="forge-btn forge-btn--ghost inline-flex"
+            />
+          ) : null}
         </div>
       </Panel>
 
@@ -237,17 +244,26 @@ export function LineagePage() {
               ) : (
                 <div className="mt-2 space-y-2">
                   {lineage.relatedJobs.map((j) => (
-                    <button
+                    <div
                       key={j.id}
-                      type="button"
-                      className="w-full rounded border border-forge-platinum/10 bg-black/30 p-2 text-left text-xs text-forge-mist"
-                      onClick={() => navigate(`/jobs/${j.id}`)}
+                      className="rounded border border-forge-platinum/10 bg-black/30 p-2 text-xs text-forge-mist"
                     >
-                      <div className="font-semibold text-forge-ash">{j.id}</div>
-                      <div className="mt-1">
-                        {j.status} | {j.targetAdapter}
+                      <button
+                        type="button"
+                        className="w-full text-left"
+                        onClick={() => navigate(`/jobs/${j.id}`)}
+                      >
+                        <div className="font-semibold text-forge-ash">
+                          {j.id}
+                        </div>
+                        <div className="mt-1">
+                          {j.status} | {j.targetAdapter}
+                        </div>
+                      </button>
+                      <div className="mt-2">
+                        <AuditJobLink jobId={j.id} />
                       </div>
-                    </button>
+                    </div>
                   ))}
                 </div>
               )}

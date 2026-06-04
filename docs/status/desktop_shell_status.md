@@ -43,7 +43,9 @@ Visible surfaces remain broad and wired to backend APIs:
 
 - Backend audit/correlation records are real and queryable.
 - Legacy boundary audits now carry richer correlation/trace/workspace payload context.
-- Dedicated end-to-end trace/explain desktop surface is still partial.
+- The Audit page now loads the consolidated trace lookup report and renders a read-only authority-chain summary across gateway, audit, artifact, provenance, and journal evidence.
+- Chat message metadata, selected gateway invocation details, jobs, approvals, artifacts/workbench context, journal/events payloads, and lineage/provenance-facing rows now link directly to that Audit view when trace, correlation, or job context is available.
+- Object-id-specific artifact/provenance/journal trace lookups remain future backend work; current artifact and provenance-facing pivots are job-scoped unless a payload carries a trace/correlation id.
 
 ## Frontend validation surface
 

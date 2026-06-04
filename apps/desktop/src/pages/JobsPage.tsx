@@ -3,6 +3,7 @@ import { GhostButton, PrimaryButton } from "@forge/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { AuditJobLink } from "../components/AuditLinks";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
 import { useUiStore } from "../stores/uiStore";
@@ -306,13 +307,19 @@ export function JobsPage() {
                         </div>
                       </td>
                       <td className="text-right">
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-forge-emberSoft hover:text-forge-ash"
-                          onClick={() => navigate(`/jobs/${j.id}`)}
-                        >
-                          Open
-                        </button>
+                        <div className="flex justify-end gap-3">
+                          <AuditJobLink
+                            jobId={j.id}
+                            className="text-xs font-semibold text-forge-emberSoft hover:text-forge-ash"
+                          />
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-forge-emberSoft hover:text-forge-ash"
+                            onClick={() => navigate(`/jobs/${j.id}`)}
+                          >
+                            Open
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

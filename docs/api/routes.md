@@ -39,6 +39,7 @@ Check without writing with `node scripts/generate-api-routes.mjs --check`.
 | GET | `/forge/model-runtime/loaded` | Bearer token when `APIToken` is configured; open when `APIToken` is empty | Always mounted |
 | GET | `/forge/kernel/status` | Bearer token when `APIToken` is configured; open when `APIToken` is empty | Always mounted |
 | GET | `/forge/system/status` | Bearer token when `APIToken` is configured; open when `APIToken` is empty | Always mounted |
+| GET | `/forge/system/host` | Bearer token when `APIToken` is configured; open when `APIToken` is empty | Always mounted |
 | GET | `/v1/models` | Bearer token when `APIToken` is configured; open when `APIToken` is empty | `EnableOpenAICompatAPI` |
 | POST | `/v1/chat/completions` | Bearer token when `APIToken` is configured; open when `APIToken` is empty | `EnableOpenAICompatAPI` |
 | GET | `/api/chat/threads/{id}/assistant-stream` | Bearer token when `APIToken` is configured; open when `APIToken` is empty | Always mounted |

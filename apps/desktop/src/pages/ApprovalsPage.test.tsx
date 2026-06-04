@@ -234,4 +234,19 @@ describe("ApprovalsPage decision controls", () => {
     expect(screen.getByText("denied after review")).toBeTruthy();
     expect(mocks.list).toHaveBeenLastCalledWith("resolved", 120);
   });
+
+  it("exposes an Audit pivot for approval job context", async () => {
+    render(
+      <MemoryRouter>
+        <ApprovalsPage />
+      </MemoryRouter>,
+    );
+
+    const audit = await screen.findByRole("link", {
+      name: "Audit job-approval-7",
+    });
+    expect(audit.getAttribute("href")).toBe(
+      "/audit?jobId=job-approval-7",
+    );
+  });
 });

@@ -71,6 +71,29 @@ const lane = {
   requiresApproval: false,
 };
 
+const invocation = {
+  id: 9,
+  correlationId: "corr-gateway-9",
+  createdAtMs: 1_800_000_000_000,
+  completedAtMs: 1_800_000_001_000,
+  toolId: "filesystem.read_file",
+  laneId: "fs.read",
+  jobId: null,
+  packetId: null,
+  initiator: "operator",
+  action: "read_file",
+  domain: "filesystem",
+  riskClass: "read_only",
+  executionLevel: "L0",
+  policyOutcome: "allowed",
+  writeIntent: false,
+  status: "success",
+  deniedReason: "",
+  permissionProfileId: "default",
+  approvalRequestId: null,
+  result: {},
+};
+
 describe("ToolGatewayPage capability status drafts", () => {
   beforeEach(() => {
     for (const mock of Object.values(mocks)) {
@@ -139,5 +162,25 @@ describe("ToolGatewayPage capability status drafts", () => {
     expect(staleExecute.disabled).toBe(true);
     fireEvent.click(staleExecute);
     expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it("exposes an Audit trace pivot from selected gateway invocation details", async () => {
+    mocks.tools.mockResolvedValue({ tools: [tool] });
+    mocks.lanes.mockResolvedValue({ lanes: [lane] });
+    mocks.invocations.mockResolvedValue({ invocations: [invocation] });
+
+    render(
+      <MemoryRouter>
+        <ToolGatewayPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(await screen.findByText(/#9 · filesystem\.read_file/));
+
+    expect(
+      (
+        await screen.findByRole("link", { name: "Open Audit trace" })
+      ).getAttribute("href"),
+    ).toBe("/audit?correlationId=corr-gateway-9");
   });
 });

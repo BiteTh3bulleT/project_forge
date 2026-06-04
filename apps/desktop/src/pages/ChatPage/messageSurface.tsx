@@ -120,20 +120,36 @@ export const MessageRow = memo(function MessageRow(props: {
                   </Link>
                 ) : null}
                 {correlationId ? (
-                  <Link
-                    to={`/inspectors?correlationId=${encodeURIComponent(correlationId)}`}
-                    className="rounded-full border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
-                  >
-                    Correlation {correlationId}
-                  </Link>
+                  <>
+                    <Link
+                      to={`/audit?correlationId=${encodeURIComponent(correlationId)}`}
+                      className="rounded-full border border-forge-electric/20 bg-forge-electric/10 px-2.5 py-1 text-[11px] text-forge-electric transition hover:text-forge-ash"
+                    >
+                      Audit {correlationId}
+                    </Link>
+                    <Link
+                      to={`/inspectors?correlationId=${encodeURIComponent(correlationId)}`}
+                      className="rounded-full border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
+                    >
+                      Correlation {correlationId}
+                    </Link>
+                  </>
                 ) : null}
                 {traceId ? (
-                  <Link
-                    to={`/inspectors?traceId=${encodeURIComponent(traceId)}`}
-                    className="rounded-full border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
-                  >
-                    Trace {traceId}
-                  </Link>
+                  <>
+                    <Link
+                      to={`/audit?traceId=${encodeURIComponent(traceId)}`}
+                      className="rounded-full border border-forge-electric/20 bg-forge-electric/10 px-2.5 py-1 text-[11px] text-forge-electric transition hover:text-forge-ash"
+                    >
+                      Audit {traceId}
+                    </Link>
+                    <Link
+                      to={`/inspectors?traceId=${encodeURIComponent(traceId)}`}
+                      className="rounded-full border border-forge-platinum/15 bg-forge-platinum/5 px-2.5 py-1 text-[11px] text-forge-mist transition hover:text-forge-ash"
+                    >
+                      Trace {traceId}
+                    </Link>
+                  </>
                 ) : null}
               </div>
             </div>

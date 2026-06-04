@@ -32,4 +32,46 @@ describe("JobsPage", () => {
     expect(screen.getByText("Jobs command board")).toBeTruthy();
     expect(apiMocks.list).toHaveBeenCalledWith("", 180);
   });
+
+  it("exposes an Audit pivot for each recent job", async () => {
+    apiMocks.list.mockResolvedValue({
+      jobs: [
+        {
+          id: "job-audit-1",
+          title: "Traceable job",
+          requestedAction: "inspect",
+          targetAdapter: "gateway",
+          status: "succeeded",
+          createdAtMs: Date.UTC(2026, 4, 24, 12, 0, 0),
+          updatedAtMs: Date.UTC(2026, 4, 24, 12, 1, 0),
+          queuedAtMs: null,
+          startedAtMs: null,
+          completedAtMs: null,
+          initiatingSource: "test",
+          executionBoundary: "bounded",
+          riskClass: "read_only",
+          approvalStatus: "not_required",
+          writeIntent: false,
+          cancelRequested: false,
+          taskPacketId: null,
+          resultSummary: null,
+          failureInfo: null,
+          lastFailureCode: null,
+          lastError: null,
+          metadata: {},
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter>
+        <JobsPage />
+      </MemoryRouter>,
+    );
+
+    const audit = await screen.findByRole("link", {
+      name: "Audit job-audit-1",
+    });
+    expect(audit.getAttribute("href")).toBe("/audit?jobId=job-audit-1");
+  });
 });

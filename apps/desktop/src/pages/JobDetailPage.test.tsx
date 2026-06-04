@@ -83,4 +83,74 @@ describe("JobDetailPage", () => {
     expect(apiMocks.listReviews).toHaveBeenCalledWith({ limit: 260 });
     expect(apiMocks.packetAlignment).not.toHaveBeenCalled();
   });
+
+  it("exposes Audit pivots for job artifacts and event trace payloads", async () => {
+    apiMocks.detail.mockResolvedValueOnce({
+      job: {
+        id: "job-trace-9",
+        title: "Traceable job projection",
+        status: "succeeded",
+        requestedAction: "inspect",
+        targetAdapter: "gateway",
+        executionBoundary: "bounded",
+        initiatingSource: "test",
+        taskPacketId: null,
+        cancelRequested: false,
+        createdAtMs: 1_800_000_000_000,
+        updatedAtMs: 1_800_000_001_000,
+        approvalStatus: "not_required",
+        riskClass: "low",
+        writeIntent: false,
+        resultSummary: "",
+        lastError: "",
+        lastFailureCode: null,
+      },
+      approvalRequest: null,
+      artifacts: [
+        {
+          id: 42,
+          createdAtMs: 1_800_000_000_500,
+          jobId: "job-trace-9",
+          packetId: null,
+          type: "job_result",
+          title: "Trace artifact",
+          filePath: "/tmp/trace-artifact.json",
+          mimeType: "application/json",
+          metadata: {},
+        },
+      ],
+      events: [
+        {
+          id: 3,
+          jobId: "job-trace-9",
+          createdAtMs: 1_800_000_000_750,
+          type: "gateway.completed",
+          message: "Gateway completed",
+          payload: { correlationId: "corr-job-event-9" },
+        },
+      ],
+      packet: null,
+    });
+    apiMocks.listReviews.mockResolvedValueOnce({ reviews: [] });
+
+    render(
+      <MemoryRouter initialEntries={["/jobs/job-trace-9"]}>
+        <Routes>
+          <Route path="/jobs/:id" element={<JobDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Traceable job projection")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Audit artifact 42" })
+        .getAttribute("href"),
+    ).toBe("/audit?jobId=job-trace-9");
+    expect(
+      screen
+        .getByRole("link", { name: "Audit corr-job-event-9" })
+        .getAttribute("href"),
+    ).toBe("/audit?correlationId=corr-job-event-9");
+  });
 });

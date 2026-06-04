@@ -1,6 +1,6 @@
 import { GhostButton, Panel, PrimaryButton } from "@forge/ui";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import type { ToolCapabilityStatus } from "@forge/shared";
 
 import { FoldSection } from "../components/FoldSection";
@@ -775,6 +775,7 @@ export function ToolGatewayPage() {
 
 function GatewayResultSummary(props: { result: Record<string, unknown> }) {
   const approvalRequestId = gatewayApprovalRequestId(props.result);
+  const correlationId = toText(props.result.correlationId);
   const rows: Array<[string, string]> = [
     ["Status", toText(props.result.status)],
     ["Policy outcome", toText(props.result.policyOutcome)],
@@ -785,7 +786,7 @@ function GatewayResultSummary(props: { result: Record<string, unknown> }) {
     ["Execution level", toText(props.result.executionLevel)],
     ["Approval request", toText(approvalRequestId)],
     ["Job", toText(props.result.jobId)],
-    ["Correlation", toText(props.result.correlationId)],
+    ["Correlation", correlationId],
     ["Audit", toText(props.result.auditId)],
   ];
   const warnings = normalizeStringList(props.result.warnings);
@@ -808,6 +809,16 @@ function GatewayResultSummary(props: { result: Record<string, unknown> }) {
             </div>
           ))}
       </div>
+      {correlationId !== "—" ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link
+            to={`/audit?correlationId=${encodeURIComponent(correlationId)}`}
+            className="rounded-full border border-forge-electric/20 bg-forge-electric/10 px-2.5 py-1 text-[11px] text-forge-electric transition hover:text-forge-ash"
+          >
+            Open Audit trace
+          </Link>
+        </div>
+      ) : null}
       {outputSummary ? (
         <div className="mt-2 rounded border border-forge-platinum/10 bg-black/30 px-2 py-1 text-[11px] text-forge-ash">
           Output: {outputSummary}

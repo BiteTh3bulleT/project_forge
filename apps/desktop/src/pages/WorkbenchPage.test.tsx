@@ -62,4 +62,76 @@ describe("WorkbenchPage", () => {
       expect(screen.queryByText("Recent job events")).toBeNull();
     });
   });
+
+  it("exposes Audit pivots from selected artifact job context and event traces", async () => {
+    apiMocks.listArtifacts.mockResolvedValueOnce({
+      artifacts: [
+        {
+          id: 12,
+          createdAtMs: Date.UTC(2026, 4, 24, 12, 0, 0),
+          jobId: "job-workbench-12",
+          type: "job_result",
+          title: "Trace output",
+          filePath: "/tmp/trace-output.json",
+          mimeType: "application/json",
+          metadata: {},
+        },
+      ],
+    });
+    apiMocks.getJobDetail.mockResolvedValueOnce({
+      job: {
+        id: "job-workbench-12",
+        title: "Workbench trace job",
+        status: "succeeded",
+        targetAdapter: "gateway",
+        taskPacketId: null,
+      },
+      events: [
+        {
+          id: 4,
+          createdAtMs: Date.UTC(2026, 4, 24, 12, 1, 0),
+          type: "gateway.completed",
+          message: "Gateway completed",
+          payload: { traceId: "trace-workbench-12" },
+        },
+      ],
+    });
+    apiMocks.getArtifact.mockResolvedValueOnce({
+      id: 12,
+      createdAtMs: Date.UTC(2026, 4, 24, 12, 0, 0),
+      jobId: "job-workbench-12",
+      type: "job_result",
+      title: "Trace output",
+      filePath: "/tmp/trace-output.json",
+      mimeType: "application/json",
+      metadata: {},
+    });
+    apiMocks.getArtifactContent.mockResolvedValueOnce({
+      content: "{}",
+      textual: true,
+      previewLimited: false,
+    });
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          "/workbench?jobId=job-workbench-12&artifactId=12",
+        ]}
+      >
+        <WorkbenchPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Workbench trace job")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Audit job-workbench-12" })
+        .getAttribute("href"),
+    ).toBe("/audit?jobId=job-workbench-12");
+    expect(
+      screen
+        .getByRole("link", { name: "Audit trace-workbench-12" })
+        .getAttribute("href"),
+    ).toBe("/audit?traceId=trace-workbench-12");
+  });
 });

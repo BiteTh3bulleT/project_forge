@@ -25,6 +25,7 @@
     "validate:os-integration": "node ./scripts/validate-os-integration.mjs",
     "test:repo-hygiene": "node --test ./scripts/check-repo-hygiene.test.mjs",
     "validate:repo-hygiene": "node ./scripts/check-repo-hygiene.mjs",
+    "validate:axiom-cognition-docs": "node ./scripts/check-axiom-cognition-docs.mjs",
     "docs:routes": "node ./scripts/generate-api-routes.mjs",
     "docs:routes:check": "node ./scripts/generate-api-routes.mjs --check",
     "test:integration:env": "node ./scripts/check-integration-env.mjs --allow-missing",

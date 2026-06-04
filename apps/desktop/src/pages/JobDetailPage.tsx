@@ -4,6 +4,11 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import {
+  AuditJobLink,
+  AuditTraceLink,
+  traceAuditTargetFrom,
+} from "../components/AuditLinks";
 import { HumanDataView } from "../components/HumanDataView";
 import { KeyValueList } from "../components/KeyValueList";
 import { api } from "../lib/api";
@@ -561,12 +566,20 @@ export function JobDetailPage() {
                       <td>{a.type}</td>
                       <td>{formatTime(a.createdAtMs)}</td>
                       <td className="text-right">
-                        <Link
-                          className="text-forge-emberSoft hover:text-forge-ash"
-                          to={`/workbench?artifactId=${encodeURIComponent(String(a.id))}&jobId=${encodeURIComponent(j.id)}`}
-                        >
-                          Open
-                        </Link>
+                        <div className="flex justify-end gap-3">
+                          <AuditJobLink
+                            jobId={j.id}
+                            className="text-forge-emberSoft hover:text-forge-ash"
+                          >
+                            Audit artifact {a.id}
+                          </AuditJobLink>
+                          <Link
+                            className="text-forge-emberSoft hover:text-forge-ash"
+                            to={`/workbench?artifactId=${encodeURIComponent(String(a.id))}&jobId=${encodeURIComponent(j.id)}`}
+                          >
+                            Open
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -733,6 +746,7 @@ function CompactPanel(props: {
 function EventRow(props: { event: JobEvent }) {
   const ev = props.event;
   const tone = eventTone(ev);
+  const auditTarget = traceAuditTargetFrom(ev.payload);
   return (
     <div className="grid gap-3 rounded-md border border-forge-platinum/10 bg-black/20 p-3 md:grid-cols-[9rem_minmax(0,1fr)]">
       <div className="text-xs">
@@ -751,6 +765,11 @@ function EventRow(props: { event: JobEvent }) {
       </div>
       <div className="min-w-0">
         <div className="text-sm text-forge-mist/85">{ev.message}</div>
+        {auditTarget ? (
+          <div className="mt-2 text-[11px] font-semibold">
+            <AuditTraceLink target={auditTarget} />
+          </div>
+        ) : null}
         <details className="mt-2 group">
           <summary className="cursor-pointer text-[11px] font-semibold text-forge-emberSoft group-open:text-forge-ash">
             Payload

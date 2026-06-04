@@ -2,6 +2,7 @@ import type { ForgeEvent } from "@forge/shared";
 import { GhostButton, Panel } from "@forge/ui";
 import { useEffect, useState } from "react";
 
+import { AuditTraceLink, traceAuditTargetFrom } from "../components/AuditLinks";
 import { HumanDataView } from "../components/HumanDataView";
 import { api } from "../lib/api";
 import { formatTime } from "../lib/format";
@@ -48,24 +49,32 @@ export function EventsPage() {
             No events yet (or core offline).
           </div>
         ) : (
-          events.map((ev) => (
-            <div
-              key={ev.id}
-              className="rounded-lg border border-forge-platinum/10 bg-forge-iron/40 p-4"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-sm font-semibold text-forge-ash">
-                  {ev.type}
+          events.map((ev) => {
+            const auditTarget = traceAuditTargetFrom(ev.payload);
+            return (
+              <div
+                key={ev.id}
+                className="rounded-lg border border-forge-platinum/10 bg-forge-iron/40 p-4"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-semibold text-forge-ash">
+                    {ev.type}
+                  </div>
+                  <div className="text-[11px] text-forge-mist">
+                    {formatTime(ev.createdAtMs)}
+                  </div>
                 </div>
-                <div className="text-[11px] text-forge-mist">
-                  {formatTime(ev.createdAtMs)}
+                {auditTarget ? (
+                  <div className="mt-2 text-[11px] font-semibold">
+                    <AuditTraceLink target={auditTarget} />
+                  </div>
+                ) : null}
+                <div className="mt-3 max-h-48 overflow-auto break-words rounded border border-white/10 bg-black/20 p-2 text-[11px] leading-relaxed text-forge-mist">
+                  <HumanDataView value={ev.payload} compact />
                 </div>
               </div>
-              <div className="mt-3 max-h-48 overflow-auto break-words rounded border border-white/10 bg-black/20 p-2 text-[11px] leading-relaxed text-forge-mist">
-                <HumanDataView value={ev.payload} compact />
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

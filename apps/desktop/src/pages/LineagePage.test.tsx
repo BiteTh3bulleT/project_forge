@@ -38,4 +38,48 @@ describe("LineagePage", () => {
     expect(screen.getByText("No lineage loaded.")).toBeTruthy();
     expect(apiMocks.listJobs).toHaveBeenCalledWith("", 80);
   });
+
+  it("exposes Audit pivots for the selected lineage job and related jobs", async () => {
+    apiMocks.listJobs.mockResolvedValue({
+      jobs: [
+        {
+          id: "job-lineage-1",
+          title: "Lineage origin",
+          status: "succeeded",
+          targetAdapter: "gateway",
+          createdAtMs: Date.UTC(2026, 4, 24, 12, 0, 0),
+        },
+      ],
+    });
+    apiMocks.byJob.mockResolvedValue({
+      parents: [],
+      children: [],
+      relatedJobs: [
+        {
+          id: "job-lineage-child",
+          title: "Lineage child",
+          status: "succeeded",
+          targetAdapter: "gateway",
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/lineage?jobId=job-lineage-1"]}>
+        <LineagePage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      (await screen.findByRole("link", { name: "Audit job-lineage-1" }))
+        .getAttribute("href"),
+    ).toBe("/audit?jobId=job-lineage-1");
+    expect(
+      (
+        await screen.findByRole("link", {
+          name: "Audit job-lineage-child",
+        })
+      ).getAttribute("href"),
+    ).toBe("/audit?jobId=job-lineage-child");
+  });
 });
