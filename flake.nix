@@ -117,6 +117,7 @@
           forge-operator-desktop = pkgs.callPackage ./nix/checks/forge-operator-desktop.nix { };
           forge-native-desktop-runtime = pkgs.callPackage ./nix/checks/forge-native-desktop-runtime.nix { };
           forge-operator-vm = pkgs.callPackage ./nix/checks/forge-operator-vm.nix { };
+          forge-optiplex-7000 = pkgs.callPackage ./nix/checks/forge-optiplex-7000.nix { };
           forge-vbox-graphics-test = pkgs.callPackage ./nix/checks/forge-vbox-graphics-test.nix { };
           forge-shadow-env = pkgs.callPackage ./nix/checks/forge-shadow-env.nix { };
           forge-workspace-default = pkgs.callPackage ./nix/checks/forge-workspace-default.nix { };
@@ -144,6 +145,16 @@
       };
 
       nixosConfigurations = {
+        forge-optiplex-7000 = nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          modules = [
+            {
+              nixpkgs.overlays = overlays;
+              nixpkgs.config.allowUnfree = false;
+            }
+            ./nix/nixos/configurations/forge-optiplex-7000.nix
+          ];
+        };
         forge-operator-vm = nixpkgs.lib.nixosSystem {
           system = "x86_64-linux";
           modules = [
