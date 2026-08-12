@@ -130,10 +130,9 @@ in
       home = "/forge/models/ollama";
       host = "127.0.0.1";
       port = 11434;
-      loadModels = [
-        "gemma3:1b-it-q4_K_M"
-        "smuxo/smuxoAI:0.8b"
-      ];
+      # Models are staged from the build workstation. NixOS loadModels always
+      # checks the remote registry, so it is intentionally disabled here.
+      loadModels = [ ];
       environmentVariables = {
         OLLAMA_KEEP_ALIVE = "5m";
         OLLAMA_MAX_LOADED_MODELS = "1";
@@ -206,6 +205,7 @@ in
     FORGE_MODEL_RUNTIME_ENABLED=true
     FORGE_MODEL_DEFAULT_BACKEND=ollama_compat
     FORGE_MODEL_DEFAULT_ID=gemma3:1b-it-q4_K_M
+    FORGE_MODEL_SECONDARY_ID=smuxo/smuxoAI:0.8b
     FORGE_MODEL_MAX_LOADED_MODELS=1
     FORGE_SAFE_MODE_FORCE_CPU_ONLY=true
     FORGE_SHELL_SAFE_MODE=true
@@ -224,6 +224,10 @@ in
     {
       assertion = config.services.forge-core.enableModelRuntime == true;
       message = "FORGE OptiPlex test target must route the selected local model through governed modelruntime.";
+    }
+    {
+      assertion = !(config.systemd.services ? ollama-model-loader);
+      message = "FORGE OptiPlex offline target must not enable the registry-backed Ollama model loader.";
     }
     {
       assertion = config.services.displayManager.autoLogin.enable == false;

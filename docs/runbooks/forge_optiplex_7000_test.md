@@ -60,7 +60,9 @@ safe fullscreen FORGE shell. TTY fallback remains available.
 For an offline target, stage an Ollama cache containing only the declared model
 manifests and their referenced blobs at `/forge/models/ollama/models`. Preserve
 ownership as `ollama:forge` and mode `0750` for directories; do not copy an
-unbounded workstation model cache.
+unbounded workstation model cache. Automatic `services.ollama.loadModels`
+downloads are disabled because that helper always checks the remote registry;
+model updates must use the same bounded workstation-to-target staging flow.
 
 ## Verification
 
