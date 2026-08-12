@@ -13,7 +13,7 @@ buildGoModule rec {
   src = lib.cleanSource ../..;
   modRoot = "services/core";
 
-  vendorHash = "sha256-U49EPR8tINqpYBzVpgDOuwU3cWpOxDwVTWXy4u/+bAc=";
+  vendorHash = "sha256-JjVms5MeQbCt69/H0b9L0SVO8KZPPNdv2Kp3EnivXug=";
 
   # Core imports modernc.org/sqlite (pure Go). sqlite CLI is handy at
   # runtime for inspection/tooling but not strictly required.
