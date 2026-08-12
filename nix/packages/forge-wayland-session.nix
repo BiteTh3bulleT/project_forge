@@ -19,6 +19,8 @@ writeShellApplication {
     export FORGE_SHELL_MODE=fullscreen-shell
     export FORGE_CORE_URL="''${FORGE_CORE_URL:-http://127.0.0.1:18492}"
     export VITE_FORGE_API_URL="''${VITE_FORGE_API_URL:-$FORGE_CORE_URL}"
+    export FORGE_DATA_DIR="''${FORGE_DATA_DIR:-/forge/data}"
+    export FORGE_API_TOKEN_FILE="''${FORGE_API_TOKEN_FILE:-$FORGE_DATA_DIR/auth/api_token}"
     export FORGE_SHELL_SAFE_MODE=true
     export FORGE_SHELL_FULLSCREEN=true
     export FORGE_SHELL_HOST_MUTATION=false

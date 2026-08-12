@@ -74,9 +74,17 @@ systemctl is-active ollama
 curl -fsS http://127.0.0.1:18492/health
 ollama list
 cat /etc/forge/optiplex-test.env
+cat /etc/forge/shell-session.env
 free -h
 swapon --show
 ```
+
+After `operator` signs in, the Cage session must show a borderless FORGE
+surface covering the output. The live `forge_desktop` process must receive
+`FORGE_SHELL_MODE=fullscreen-shell`, `FORGE_SHELL_FULLSCREEN=true`, and the
+configured `FORGE_API_TOKEN_FILE`; the shell status must report runtime online
+when the authenticated dashboard calls succeed. CPU-only safe-mode warnings are
+policy advisories and do not by themselves mean modelruntime is degraded.
 
 The expected boundary is live AI-OS/core authority with the existing governed
 paths. FORGE-K remains simulator-only except for the already documented narrow

@@ -46,6 +46,8 @@ stdenv.mkDerivation {
     grep -F 'FORGE_SHELL_MODE=fullscreen-shell' "$wrapper"
     grep -F 'FORGE_CORE_URL="''${FORGE_CORE_URL:-http://127.0.0.1:18492}"' "$wrapper"
     grep -F 'VITE_FORGE_API_URL="''${VITE_FORGE_API_URL:-$FORGE_CORE_URL}"' "$wrapper"
+    grep -F 'FORGE_DATA_DIR="''${FORGE_DATA_DIR:-/forge/data}"' "$wrapper"
+    grep -F 'FORGE_API_TOKEN_FILE="''${FORGE_API_TOKEN_FILE:-$FORGE_DATA_DIR/auth/api_token}"' "$wrapper"
     grep -F 'FORGE_SHELL_SAFE_MODE=true' "$wrapper"
     grep -F 'FORGE_SHELL_FULLSCREEN=true' "$wrapper"
     grep -F 'FORGE_SHELL_HOST_MUTATION=false' "$wrapper"

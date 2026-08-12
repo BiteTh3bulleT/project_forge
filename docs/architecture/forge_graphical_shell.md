@@ -258,9 +258,21 @@ The wrapper prepares:
 - `FORGE_SHELL_MODE=fullscreen-shell`
 - `FORGE_CORE_URL=http://127.0.0.1:18492` unless overridden
 - `VITE_FORGE_API_URL=$FORGE_CORE_URL` unless overridden
+- `FORGE_DATA_DIR=/forge/data` unless the NixOS service configuration supplies
+  another governed data root
+- `FORGE_API_TOKEN_FILE=$FORGE_DATA_DIR/auth/api_token`, which exposes the
+  token location to the local shell without embedding or logging the token
 - `FORGE_SHELL_SAFE_MODE=true`
 - `FORGE_SHELL_FULLSCREEN=true`
 - explicit false flags for host mutation, direct system control, model mutation, semantic memory writes, and FORGE-K live authority
+
+In `fullscreen-shell` mode the packaged Tauri main surface must consume the
+fullscreen policy, remove native decorations, enter compositor fullscreen, and
+reject ordinary close requests. Exporting `FORGE_SHELL_FULLSCREEN=true` as
+metadata without enforcing the window state does not satisfy the G4 contract.
+The token-file path is required so authenticated local status calls reflect the
+live core state instead of presenting authorization failures as runtime
+degradation.
 
 The former launcher placeholder accepted `FORGE_DESKTOP_SHELL_BINARY=/path/to/forge_desktop` for direct operator testing. The current real-build derivation still supports that override for wrapper tests; normal local fallback should use `FORGE_SHELL_BINARY` at the session wrapper layer.
 

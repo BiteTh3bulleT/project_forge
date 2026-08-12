@@ -529,10 +529,30 @@ fn merge_operator_apps_with_scanned(scanned: Vec<OperatorApp>) -> Vec<OperatorAp
     apps
 }
 
-fn operator_desktop_locked() -> bool {
-    std::env::var("FORGE_OPERATOR_DESKTOP_LOCKED")
-        .map(|value| matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
+fn env_flag_enabled(value: Option<&str>) -> bool {
+    value
+        .map(str::trim)
+        .map(|value| matches!(value, "1" | "true" | "TRUE" | "yes" | "YES"))
         .unwrap_or(false)
+}
+
+fn fullscreen_shell_policy(mode: Option<&str>, fullscreen: Option<&str>) -> bool {
+    mode.map(str::trim) == Some("fullscreen-shell") && env_flag_enabled(fullscreen)
+}
+
+fn fullscreen_shell_enabled() -> bool {
+    let mode = std::env::var("FORGE_SHELL_MODE").ok();
+    let fullscreen = std::env::var("FORGE_SHELL_FULLSCREEN").ok();
+    fullscreen_shell_policy(mode.as_deref(), fullscreen.as_deref())
+}
+
+fn operator_desktop_locked() -> bool {
+    let locked = std::env::var("FORGE_OPERATOR_DESKTOP_LOCKED").ok();
+    env_flag_enabled(locked.as_deref())
+}
+
+fn main_shell_window_locked() -> bool {
+    fullscreen_shell_enabled() || operator_desktop_locked()
 }
 
 fn forge_data_dir() -> Option<PathBuf> {
@@ -931,7 +951,7 @@ fn main() {
         .manage(linux_windows::LinuxWindowRegistryState::default())
         .manage(window_manager::WindowManagerState::default())
         .on_window_event(|window, event| {
-            if operator_desktop_locked() && window.label() == "main" {
+            if main_shell_window_locked() && window.label() == "main" {
                 if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                     api.prevent_close();
                 }
@@ -944,12 +964,18 @@ fn main() {
             let state = app.state::<window_manager::WindowManagerState>();
             window_manager::register_main_window(app.handle(), state.inner())
                 .map_err(|err| Box::<dyn std::error::Error>::from(err))?;
-            if operator_desktop_locked() {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.set_decorations(false);
-                    let _ = window.set_resizable(true);
+            if let Some(window) = app.get_webview_window("main") {
+                if fullscreen_shell_enabled() {
+                    eprintln!("[forge-shell] enforcing fullscreen main surface");
+                    window.set_decorations(false)?;
+                    window.set_resizable(false)?;
+                    window.set_fullscreen(true)?;
+                    window.set_focus()?;
+                } else if operator_desktop_locked() {
+                    window.set_decorations(false)?;
+                    window.set_resizable(true)?;
                     fit_operator_desktop_window(&window);
-                    let _ = window.set_focus();
+                    window.set_focus()?;
                 }
             }
             notifications::start_freedesktop_service(app.handle().clone());
@@ -985,6 +1011,24 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fullscreen_shell_policy_requires_mode_and_explicit_flag() {
+        for enabled in ["1", "true", "TRUE", "yes", "YES", " true "] {
+            assert!(fullscreen_shell_policy(
+                Some("fullscreen-shell"),
+                Some(enabled)
+            ));
+        }
+        for disabled in [None, Some(""), Some("0"), Some("false"), Some("no")] {
+            assert!(!fullscreen_shell_policy(Some("fullscreen-shell"), disabled));
+        }
+        assert!(!fullscreen_shell_policy(
+            Some("operator-desktop"),
+            Some("true")
+        ));
+        assert!(!fullscreen_shell_policy(None, Some("true")));
+    }
 
     #[test]
     fn forge_workspace_token_lookup_walks_up_from_desktop_package() {

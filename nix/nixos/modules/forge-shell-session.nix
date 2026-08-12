@@ -36,7 +36,7 @@ let
         sessionBinary =
           if cfg.mode == "operator-desktop" then "forge-operator-session" else "forge-wayland-session";
       in
-      "env FORGE_CORE_URL=${cfg.coreURL} VITE_FORGE_API_URL=${cfg.coreURL} FORGE_SHELL_MODE=${cfg.mode} FORGE_SHELL_DISPLAY_BACKEND=${cfg.displayBackend} FORGE_SHELL_COMPOSITOR=${cfg.compositor} FORGE_SHELL_SAFE_MODE=${boolString cfg.safeMode} FORGE_SHELL_FULLSCREEN=${boolString cfg.fullscreen} FORGE_SHELL_RUNTIME_DIR=${cfg.runtimePath} ${cfg.wayland.sessionPackage}/bin/${sessionBinary}";
+      "env FORGE_CORE_URL=${cfg.coreURL} VITE_FORGE_API_URL=${cfg.coreURL} FORGE_DATA_DIR=${config.services.forge-core.dataDir} FORGE_API_TOKEN_FILE=${config.services.forge-core.dataDir}/auth/api_token FORGE_SHELL_MODE=${cfg.mode} FORGE_SHELL_DISPLAY_BACKEND=${cfg.displayBackend} FORGE_SHELL_COMPOSITOR=${cfg.compositor} FORGE_SHELL_SAFE_MODE=${boolString cfg.safeMode} FORGE_SHELL_FULLSCREEN=${boolString cfg.fullscreen} FORGE_SHELL_RUNTIME_DIR=${cfg.runtimePath} ${cfg.wayland.sessionPackage}/bin/${sessionBinary}";
 in
 {
   imports = [
@@ -215,6 +215,8 @@ in
       FORGE_SHELL_WAYLAND_PACKAGE=${compositorPackageName}
       FORGE_SHELL_WAYLAND_SESSION_PACKAGE=${sessionPackageName}
       FORGE_CORE_URL=${cfg.coreURL}
+      FORGE_DATA_DIR=${config.services.forge-core.dataDir}
+      FORGE_API_TOKEN_FILE=${config.services.forge-core.dataDir}/auth/api_token
       FORGE_SHELL_SAFE_MODE=${boolString cfg.safeMode}
       FORGE_SHELL_FULLSCREEN=${boolString cfg.fullscreen}
       FORGE_SHELL_AUTOSTART=false
