@@ -1,0 +1,9 @@
+{
+  "id": "forge-engine-mcp",
+  "name": "FORGE Engine MCP",
+  "version": "0.5.0",
+  "minAppVersion": "1.5.0",
+  "description": "Writes bounded, local, non-canonical Obsidian editor context for FORGE integrations.",
+  "author": "Strange Alloy Studios, LLC",
+  "isDesktopOnly": true
+}

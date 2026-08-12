@@ -31,3 +31,13 @@ services/core/test_project/
 services/core/scratch/
 apps/desktop/.env*
 !apps/desktop/.env.example
+
+# Obsidian session state and live editor-context evidence are machine-local.
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/plugins/forge-engine-mcp/context.json
+.obsidian/plugins/forge-engine-mcp/context.json.tmp
+FORGE/.obsidian/workspace.json
+FORGE/.obsidian/workspace-mobile.json
+FORGE/.obsidian/plugins/forge-engine-mcp/context.json
+FORGE/.obsidian/plugins/forge-engine-mcp/context.json.tmp

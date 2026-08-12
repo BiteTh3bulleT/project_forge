@@ -83,10 +83,7 @@ describe("AuditPage correlation trace routing", () => {
 
   it("loads the authority trace report from the correlation id URL parameter", async () => {
     render(
-      <MemoryRouter
-        initialEntries={["/audit?correlationId=corr-from-url"]}
-        future={{ v7_relativeSplatPath: true, v7_startTransition: true }}
-      >
+      <MemoryRouter initialEntries={["/audit?correlationId=corr-from-url"]}>
         <AuditPage />
       </MemoryRouter>,
     );

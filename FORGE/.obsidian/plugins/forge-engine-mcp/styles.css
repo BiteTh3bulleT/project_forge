@@ -1,0 +1,7 @@
+.forge-engine-mcp-status {
+  color: var(--text-accent);
+}
+
+.forge-engine-mcp-status.is-error {
+  color: var(--text-error);
+}

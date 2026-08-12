@@ -26,7 +26,7 @@ Detailed phase history belongs in `docs/reviews/current_phase_status.md`, not in
 
 ## Requirements
 
-- Go `1.22+`
+- Go `1.24+` (the local/Nix toolchain may be newer)
 - Node.js + npm
 - Rust toolchain for Tauri desktop builds
 - Optional: Nix for flake/dev-shell workflows

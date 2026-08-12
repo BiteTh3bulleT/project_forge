@@ -1,3 +1,14 @@
 {
-  "showUnsupportedFiles": true
+  "promptDelete": true,
+  "showUnsupportedFiles": true,
+  "userIgnoreFilters": [
+    ".git/",
+    ".worktrees/",
+    ".claude/worktrees/",
+    ".forge/",
+    "node_modules/",
+    "apps/desktop/dist/",
+    "apps/desktop/src-tauri/target/",
+    "crates/forgek-validate/target/"
+  ]
 }

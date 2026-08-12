@@ -7,7 +7,7 @@ current FORGE system. Updated 2026-05-15 against branch `main`._
 
 ### Tools
 
-- **Go ≥ 1.22** (repo uses `go.mod` go 1.22; Nix shells pin to 1.26).
+- **Go ≥ 1.24** (the module declares Go 1.24; the current Nix shell may provide a newer compatible toolchain).
 - **Node ≥ 18** (Nix shells pin to 20).
 - **Rust + Cargo** — only if you plan to run the desktop.
 - **SQLite** CLI — optional; useful for inspecting `forge.sqlite`.
