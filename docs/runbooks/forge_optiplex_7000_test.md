@@ -14,8 +14,10 @@ The target intentionally uses:
 - password-gated `greetd`/`tuigreet` login into the fullscreen Cage session;
 - loopback-only `forge-core` in CPU-safe mode;
 - governed modelruntime with a single loopback-only Ollama worker;
-- `gemma3:1b-it-q4_K_M` as the only declared boot-time model (approximately
-  815 MB), with one loaded model and one parallel request at a time;
+- `gemma3:1b-it-q4_K_M` (approximately 815 MB) as the default governed worker;
+- `smuxo/smuxoAI:0.8b` as an optional downloaded secondary worker
+  (approximately 1 GB); only one model may be loaded and one request may run at
+  a time;
 - key-only SSH for the explicitly provisioned operator key;
 - no VirtualBox guest integration, autologin, or automatic host mutation.
 

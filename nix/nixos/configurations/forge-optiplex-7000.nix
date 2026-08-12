@@ -128,7 +128,10 @@ in
       home = "/forge/models/ollama";
       host = "127.0.0.1";
       port = 11434;
-      loadModels = [ "gemma3:1b-it-q4_K_M" ];
+      loadModels = [
+        "gemma3:1b-it-q4_K_M"
+        "smuxo/smuxoAI:0.8b"
+      ];
       environmentVariables = {
         OLLAMA_KEEP_ALIVE = "5m";
         OLLAMA_MAX_LOADED_MODELS = "1";
