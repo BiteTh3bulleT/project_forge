@@ -125,6 +125,8 @@ in
     };
     ollama = {
       enable = true;
+      user = "ollama";
+      group = "forge";
       home = "/forge/models/ollama";
       host = "127.0.0.1";
       port = 11434;
@@ -151,6 +153,10 @@ in
     polkit.enable = true;
     sudo.wheelNeedsPassword = true;
   };
+  systemd.tmpfiles.rules = [
+    "d /forge/models/ollama 0750 ollama forge -"
+    "d /forge/models/ollama/models 0750 ollama forge -"
+  ];
   programs.dconf.enable = true;
 
   xdg.portal = {

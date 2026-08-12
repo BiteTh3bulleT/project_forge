@@ -14,6 +14,8 @@ The target intentionally uses:
 - password-gated `greetd`/`tuigreet` login into the fullscreen Cage session;
 - loopback-only `forge-core` in CPU-safe mode;
 - governed modelruntime with a single loopback-only Ollama worker;
+- a static, unprivileged Ollama service account in the `forge` group so the
+  worker can access only its governed `/forge/models/ollama` subtree;
 - `gemma3:1b-it-q4_K_M` (approximately 815 MB) as the default governed worker;
 - `smuxo/smuxoAI:0.8b` as an optional downloaded secondary worker
   (approximately 1 GB); only one model may be loaded and one request may run at
@@ -54,6 +56,11 @@ sudo nixos-install --flake .#forge-optiplex-7000 --no-root-passwd
 Set the mutable local operator password explicitly from the installer after the
 build completes. On first boot, sign in as `operator`; `tuigreet` launches the
 safe fullscreen FORGE shell. TTY fallback remains available.
+
+For an offline target, stage an Ollama cache containing only the declared model
+manifests and their referenced blobs at `/forge/models/ollama/models`. Preserve
+ownership as `ollama:forge` and mode `0750` for directories; do not copy an
+unbounded workstation model cache.
 
 ## Verification
 
