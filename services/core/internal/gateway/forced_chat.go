@@ -75,8 +75,10 @@ var smallTalkTurns = map[string]struct{}{
 	"nah":                    {},
 }
 
-// ForcedChatModelName returns a forge_* function name when the user text clearly maps to one gateway tool.
-func ForcedChatModelName(user string) string {
+// SelectChatToolName returns the only gateway tool FORGE permits for this turn
+// when deterministic intent routing resolves exactly one tool. An empty result
+// means FORGE has not selected a tool; a model must never choose one instead.
+func SelectChatToolName(user string) string {
 	if wantsRemoteTerminalWorkflow(user) {
 		return ChatModelName("desktop.open")
 	}
@@ -447,13 +449,14 @@ func IsLikelyStatusProbeTurn(user string) bool {
 	return false
 }
 
-// ShouldAttachChatTools gates whether the tool catalog should be attached for this user turn.
-// It is intentionally conservative: casual acknowledgements do not get tool access.
-func ShouldAttachChatTools(user string) bool {
+// ShouldUseChatToolPipeline reports whether FORGE should run deterministic
+// operational routing and shortcut checks. It does not authorize attaching a
+// model-facing tool schema; only SelectChatToolName can do that.
+func ShouldUseChatToolPipeline(user string) bool {
 	if IsLikelySmallTalkTurn(user) {
 		return false
 	}
-	if ForcedChatModelName(user) != "" {
+	if SelectChatToolName(user) != "" {
 		return true
 	}
 	if _, _, _, ok := ParseCombinedMkdirAndWrite(user); ok {

@@ -9,6 +9,7 @@ import (
 
 	"forge/projectforge/services/core/internal/aios/controllane"
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/forgekernel"
 )
 
 type TruthEngine interface {
@@ -77,14 +78,14 @@ type Repositories struct {
 }
 
 type EngineOptions struct {
-	Kernel           controllane.ForgeKernelProcessor
+	Kernel           forgekernel.Processor
 	Repositories     Repositories
 	NowMillis        func() int64
 	StaleAfterMillis int64
 }
 
 type Engine struct {
-	kernel           controllane.ForgeKernelProcessor
+	kernel           forgekernel.Processor
 	repos            Repositories
 	nowMillis        func() int64
 	staleAfterMillis int64

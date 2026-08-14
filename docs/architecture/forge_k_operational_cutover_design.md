@@ -1,14 +1,16 @@
 # FORGE-K Operational Cutover Design
 
-Status: Phase 14A implemented as `DOCS_ONLY / LIVE_AUTHORITY_MIGRATION_DESIGN_ONLY`; Phase 14B implemented the first narrow `PARTIAL LIVE VALIDATION / CONTROL_LANE / NO_AUTHORITY_REPLACEMENT` seam; Phase 14F marks existing Control Lane validation seams with explicit `[PARTIAL LIVE ENFORCEMENT]` metadata.
+Status: Historical Phase 14 design plus active K20A cutover. K20A makes `internal/forgekernel` the default live semantic syscall ingress owner while retaining Control Lane as a temporary durable commit adapter. Full FORGE-K authority is not yet complete.
 
-Date: 2026-05-09.
+Date: 2026-05-09. Updated: 2026-08-14.
 
 ## Executive Summary
 
 FORGE-K is largely complete as a simulator architecture, but it is not yet live daemon authority. Making it operational means migrating narrow authority decisions into existing live owners with explicit gates, tests, rollback, and operator visibility.
 
-This design does not wire FORGE-K into the live daemon. It defines the staged cutover model required before any live authority migration.
+The original Phase 14 portion of this document defined the staged cutover model. K20A now begins that migration through the production-owned `internal/forgekernel` boundary. The simulator remains isolated and is not live authority.
+
+See `docs/architecture/forge_k_live_cutover.md` and ADR 0017 for the active completion gates and migration order.
 
 ## Current Authority Split
 
@@ -153,7 +155,7 @@ No-go:
 
 ## What Not To Do
 
-- Do not wire the full FORGE-K Kernel into the live daemon.
+- Do not import the in-memory simulator Kernel into the live daemon or claim the staged production ingress facade is already the full completed Kernel.
 - Do not create a second live authority path.
 - Do not replace live Control Lane, gateway, permissions, lanes, audit, modelruntime, retrieval, embeddings, memory, or API routing in one phase.
 - Do not make the live Context Compiler prompt authority without a separate design and tests.
@@ -176,3 +178,14 @@ The next operational phase must continue the same rule: choose one narrow contra
 Phase 14F marks Control Lane validation as the first explicit FORGE-K partial live enforcement mode. The live owner remains `services/core/internal/aios/controllane`; shared pure validators provide deterministic doctrine, and summaries expose activation/no-effect metadata for operators and tests.
 
 This remains partial enforcement, not full FORGE-K live authority. It does not import simulator services, replace the Control Lane, enable live KV reuse, admit evidence through the simulator Courthouse, compile live prompts through the simulator Context Compiler, call modelruntime, execute tools, run retrieval/search/embeddings, or write semantic memory directly.
+
+## K20A Production Ingress Cutover
+
+K20A adds `services/core/internal/forgekernel` as a production-owned authority
+boundary. The default boot mode is `forge_k`; `legacy_v1` is an explicit tested
+rollback. Only one processor is selected and only one durable commit occurs.
+
+K20A does not import `services/core/internal/forgek`, replace SQLite, duplicate
+journal writes, or claim full Kernel completion. The existing Control Lane
+processor remains the temporary durable commit adapter while K20B extracts
+FORGE-K-owned durable ports and orchestration.

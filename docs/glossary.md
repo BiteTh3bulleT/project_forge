@@ -213,8 +213,10 @@ The greetd/PAM authentication boundary for a FORGE operator desktop. Native
 Lock and Logout exit the compositor session and return to this boundary; a
 client-side password comparison is not an OS session lock.
 
-## Tool-capable model worker
+## Structured tool-proposal worker
 
 An external model driver whose active runtime manifest and live protocol probe
-support structured tool-call proposals. The gateway still resolves,
-authorizes, validates, audits, and executes any accepted proposal.
+support formatting a structured proposal for the one tool FORGE has already
+selected. This capability never lets the worker decide whether to use a tool or
+which tool to use. The gateway still resolves, authorizes, validates, audits,
+and executes any accepted proposal.

@@ -41,7 +41,7 @@ func BuildSemanticSyscallFacade(req domain.SyscallRequest, def ActionDefinition)
 		Refs:               syscallRefs(req),
 		CapabilityScope:    capabilityScope(req),
 		RollbackMetadata:   rollbackMetadata(req, def),
-		AuthorityEffects:   authorityEffects(def),
+		AuthorityEffects:   authorityEffects(req, def),
 	}
 }
 
@@ -98,13 +98,16 @@ func capabilityScope(req domain.SyscallRequest) map[string]any {
 	}
 }
 
-func authorityEffects(def ActionDefinition) map[string]bool {
+func authorityEffects(req domain.SyscallRequest, def ActionDefinition) map[string]bool {
+	forgeKIngress, _ := req.Metadata["forgeKIngressAuthority"].(bool)
 	return map[string]bool{
-		"controlLaneOwned":     true,
-		"mutatesCanonicalData": def.Mutating,
-		"callsModelRuntime":    false,
-		"executesGatewayTool":  false,
-		"importsForgeK":        false,
+		"forgeKIngressOwned":       forgeKIngress,
+		"controlLaneOwned":         !forgeKIngress,
+		"controlLaneCommitAdapter": forgeKIngress,
+		"mutatesCanonicalData":     def.Mutating,
+		"callsModelRuntime":        false,
+		"executesGatewayTool":      false,
+		"importsForgeKSimulator":   false,
 	}
 }
 

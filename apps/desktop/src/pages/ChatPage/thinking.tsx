@@ -19,7 +19,7 @@ export function formatThinkingStage(stage: string): string {
     deterministic_combined_shortcut: "Deterministic file workflow selected",
     deterministic_python_banner_shortcut:
       "Deterministic script workflow selected",
-    forced_tool_choice: "Forced tool route selected",
+    forge_tool_choice_enforced: "FORGE tool route enforced",
     runtime_primary: "Model runtime selected",
     runtime_fallback: "Runtime fallback selected",
     adapter_mismatch: "Adapter mismatch detected",

@@ -9,10 +9,6 @@ import (
 	"forge/projectforge/services/core/internal/forgekshadow"
 )
 
-type ForgeKernelProcessor interface {
-	Process(ctx context.Context, req domain.SyscallRequest) (domain.SyscallResult, error)
-}
-
 type ControlLaneValidationObserver interface {
 	ObserveControlLaneValidationBestEffort(ctx context.Context, input forgekshadow.ControlLaneValidationInput)
 }
@@ -329,9 +325,11 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 				Source:    "forge_kernel",
 				Scope:     req.Scope,
 				Payload: map[string]any{
-					"action":             req.Action,
-					"committedObjectIds": append([]string{}, commitIDs...),
-					"dryRun":             false,
+					"action":               req.Action,
+					"committedObjectIds":   append([]string{}, commitIDs...),
+					"dryRun":               false,
+					"kernelAuthorityOwner": nonEmpty(readString(req.Metadata, "kernelAuthorityOwner"), "aios.controllane"),
+					"durableCommitAdapter": nonEmpty(readString(req.Metadata, "durableCommitAdapter"), "aios.controllane.sqlite"),
 				},
 				CorrelationID: req.CorrelationID,
 				Provenance:    req.Provenance,
@@ -431,6 +429,13 @@ func (p *Processor) reject(ctx context.Context, req domain.SyscallRequest, resul
 		result.DeterministicErrCode = issues[0].Code
 	}
 	result.StateSummary["dryRun"] = req.DryRun
+	result.AuditID = p.writeAudit(ctx, req, result)
+	return result
+}
+
+// RecordKernelRejection persists a production FORGE-K ingress rejection through
+// the same immutable audit sink as Control Lane validation and commit results.
+func (p *Processor) RecordKernelRejection(ctx context.Context, req domain.SyscallRequest, result domain.SyscallResult) domain.SyscallResult {
 	result.AuditID = p.writeAudit(ctx, req, result)
 	return result
 }

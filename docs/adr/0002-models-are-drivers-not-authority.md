@@ -20,19 +20,22 @@ Neural neurons propose. Rule neurons validate. Courthouse admits. Kernel commits
 - Runtime drivers must record model id, model revision, tokenizer information, prompt layout version, and provenance where relevant.
 - Canonical mutation remains impossible without semantic syscalls.
 - Capability and approval decisions remain deterministic Kernel or gateway concerns.
-- A worker selected for tool proposals must advertise and demonstrate structured
-  tool-call output for the active runtime protocol. Completion-only workers may
-  still answer text but must not be represented as tool-capable.
+- A worker asked to format an already selected tool proposal must advertise and
+  demonstrate structured tool-call output for the active runtime protocol.
+  Completion-only workers may still answer text, but model capability never
+  participates in deciding whether a tool is needed or which tool is selected.
 - Runtime thinking/reasoning controls and output budgets may be bounded so a
   small worker can emit the proposal envelope; this does not grant execution or
   commit authority to that worker.
-- When deterministic routing identifies one forced tool, the model-facing tool
-  catalog is narrowed to that matching schema for the proposal turn. The full
-  gateway manifest remains the authority record, and only the gateway may
-  validate or execute the resulting proposal.
+- FORGE decides whether a turn needs a tool and selects the exact tool before any
+  model call. If FORGE cannot select exactly one tool, no tool schema is exposed
+  to the model. When FORGE does select one, the model-facing catalog contains
+  only that schema so the worker can format bounded arguments. The full gateway
+  manifest remains the authority record, and only the gateway may validate or
+  execute the resulting proposal.
 
 ## Alternatives considered
 
 - Model-owned memory: rejected because it is not replayable or auditable as canonical state.
-- Model-decided tool execution: rejected because capability, approval, and risk controls must be deterministic and inspectable.
+- Model-decided tool selection or execution: rejected because intent routing, capability, approval, and risk controls must be deterministic and inspectable.
 - Direct model writes to stores: rejected because this bypasses provenance, validation, and journal requirements.

@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"forge/projectforge/services/core/internal/aios/controllane"
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/forgekernel"
 )
 
 type SelfInitiatedRunnerOptions struct {
-	Kernel    controllane.ForgeKernelProcessor
+	Kernel    forgekernel.Processor
 	Policy    *AutonomyPolicyEvaluator
 	Intents   *IntentQueueService
 	Decisions DecisionRepository
@@ -20,7 +20,7 @@ type SelfInitiatedRunnerOptions struct {
 }
 
 type SelfInitiatedSyscallRunner struct {
-	kernel    controllane.ForgeKernelProcessor
+	kernel    forgekernel.Processor
 	policy    *AutonomyPolicyEvaluator
 	intents   *IntentQueueService
 	decisions DecisionRepository

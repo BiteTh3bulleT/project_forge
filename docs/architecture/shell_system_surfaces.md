@@ -1,6 +1,6 @@
 # Shell System Surfaces
 
-Phase G6 adds read-only FORGE-OS visibility to the graphical shell. The shell surface is operator visibility only; it is not a host control plane and is not a second authority path.
+Phase G6 adds read-only FORGE-OS visibility to the graphical shell. K20A extends that visibility with the boot-selected production kernel ingress owner and migration posture. The shell surface is operator visibility only; it is not a host control plane and is not a second authority path.
 
 FORGE-K Online Phase 17 extends this surface with a read-only Operator Cockpit Index and display-only FORGE-K subsystem/storage readiness rows. Phase 18 adds read-only legacy-retirement proof metadata for retired direct mutation surfaces. It still does not add commands, approval execution, cleanup execution, storage switching, legacy mutation, or FORGE-K live authority.
 
@@ -39,7 +39,7 @@ It does not expose request bodies, prompts, model outputs, raw host logs, raw me
 | FORGE-H proposals | Generated advisory proposals | Empty list when none | Shows advisory-only flag; no approve/reject/execute controls |
 | FORGE-H executions | Execution ledger availability | Not wired unless governed store exists | Shows bounded/mutation/side-effect fields when available; no execution from shell |
 | Modelruntime | Existing runtime health path when configured | Unavailable/degraded | No load/unload controls |
-| FORGE-K activation readiness | Live Control Lane readiness report via `kernel_activation` | Show unavailable/error if core status is unavailable | Shows validation lane readiness, authority gate blockers, and disabled authority flags; no Kernel authority migration |
+| FORGE-K activation readiness | Boot-selected kernel authority plus durable-adapter readiness via `kernel_activation` | Show fail-closed/unavailable if no boot authority was selected | Shows live ingress owner, rollback/migration posture, validation lane readiness, and remaining full-authority blockers; no mutation controls |
 | Storage | SQLite/data-root status, disk summary, and storagebackend cutover readiness | Unavailable pressure if stat fails; blocked readiness if cutover evidence is missing | Shows used/free and readiness blockers when safely available; SQLite remains live truth authority |
 | Legacy retirement | Static API retirement report backed by route/memory tests | Omit only if core status is unavailable | Shows retired route state, replacement path, and rollback proof; no route registration or mutation |
 | Approval queue | Existing approvals surface wiring | Placeholder when unavailable | Decisions stay in governed approvals UI |

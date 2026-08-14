@@ -15,12 +15,12 @@ func (s *Server) runChatFSDeterministicFallback(
 	ctx context.Context,
 	corr string,
 	lastUserContent string,
-	forcedModel string,
+	selectedTool string,
 	pushStage func(string, map[string]any),
 	gwActivity map[string]any,
 	final *strings.Builder,
 ) bool {
-	if forcedModel == gateway.ChatModelName("desktop.open") {
+	if selectedTool == gateway.ChatModelName("desktop.open") {
 		rawURL, ok := gateway.ParseURLFromText(lastUserContent)
 		if ok {
 			pushStage("deterministic_browser_open_dispatch", map[string]any{"url": rawURL})
@@ -86,7 +86,7 @@ func (s *Server) runChatFSDeterministicFallback(
 		gwActivity["syntheticToolExecution"] = true
 		return true
 	}
-	if forcedModel == gateway.ChatModelName("repo.inspect") {
+	if selectedTool == gateway.ChatModelName("repo.inspect") {
 		pushStage("deterministic_repo_inspect_dispatch", map[string]any{"path": "."})
 		res, err := s.gwChatExec(ctx, corr, "repo.inspect", []string{"."}, nil)
 		if err != nil {
@@ -210,7 +210,7 @@ func (s *Server) runChatFSDeterministicFallback(
 		gwActivity["syntheticToolExecution"] = true
 		return true
 	}
-	if forcedModel == gateway.ChatModelName("fs.list") {
+	if selectedTool == gateway.ChatModelName("fs.list") {
 		listPath, ok := gateway.ParseListPath(lastUserContent)
 		if ok {
 			pushStage("deterministic_list_dispatch", map[string]any{"path": listPath})
@@ -252,7 +252,7 @@ func (s *Server) runChatFSDeterministicFallback(
 			return true
 		}
 	}
-	if forcedModel == gateway.ChatModelName("fs.read") {
+	if selectedTool == gateway.ChatModelName("fs.read") {
 		readPath, ok := gateway.ParseReadPath(lastUserContent)
 		if ok {
 			pushStage("deterministic_read_dispatch", map[string]any{"path": readPath})
@@ -294,7 +294,7 @@ func (s *Server) runChatFSDeterministicFallback(
 			return true
 		}
 	}
-	if forcedModel == gateway.ChatModelName("proc.run") {
+	if selectedTool == gateway.ChatModelName("proc.run") {
 		cmd, ok := gateway.ParseShellCommand(lastUserContent)
 		if ok {
 			pushStage("deterministic_proc_dispatch", map[string]any{"command": cmd})
@@ -336,7 +336,7 @@ func (s *Server) runChatFSDeterministicFallback(
 			return true
 		}
 	}
-	if forcedModel == gateway.ChatModelName("web.search") {
+	if selectedTool == gateway.ChatModelName("web.search") {
 		query, ok := gateway.ParseWebSearchQuery(lastUserContent)
 		if ok {
 			pushStage("deterministic_web_search_dispatch", map[string]any{"query": query})
@@ -378,7 +378,7 @@ func (s *Server) runChatFSDeterministicFallback(
 			return true
 		}
 	}
-	if forcedModel == gateway.ChatModelName("net.fetch") {
+	if selectedTool == gateway.ChatModelName("net.fetch") {
 		rawURL, ok := gateway.ParseURLFromText(lastUserContent)
 		if ok {
 			pushStage("deterministic_url_fetch_dispatch", map[string]any{"url": rawURL})
@@ -420,7 +420,7 @@ func (s *Server) runChatFSDeterministicFallback(
 			return true
 		}
 	}
-	if forcedModel == gateway.ChatModelName("desktop.open") {
+	if selectedTool == gateway.ChatModelName("desktop.open") {
 		rawURL, ok := gateway.ParseURLFromText(lastUserContent)
 		if ok {
 			pushStage("deterministic_browser_open_dispatch", map[string]any{"url": rawURL})
@@ -486,7 +486,7 @@ func (s *Server) runChatFSDeterministicFallback(
 		gwActivity["syntheticToolExecution"] = true
 		return true
 	}
-	if forcedModel == gateway.ChatModelName("git.status") {
+	if selectedTool == gateway.ChatModelName("git.status") {
 		pushStage("deterministic_git_status_dispatch", map[string]any{"path": "."})
 		res, err := s.gwChatExec(ctx, corr, "git.status", []string{"."}, nil)
 		if err != nil {
@@ -525,7 +525,7 @@ func (s *Server) runChatFSDeterministicFallback(
 		gwActivity["syntheticToolExecution"] = true
 		return true
 	}
-	if forcedModel == gateway.ChatModelName("fs.mkdir") {
+	if selectedTool == gateway.ChatModelName("fs.mkdir") {
 		dir, ok := gateway.ParseDirectoryCalled(lastUserContent)
 		if !ok {
 			dir, ok = gateway.ParseMkdirShellPath(lastUserContent)

@@ -15,7 +15,8 @@ This is the starting path for a new collaborator, future operator session, or ag
 ## Authority Rules
 
 - FORGE-K simulator packages under `services/core/internal/forgek` are not live daemon authority.
-- Live mutation authority remains in existing AI-OS, Control Lane, Gateway, modelruntime, approvals, audit, memory, retrieval, and API paths unless a tested live path says otherwise.
+- Production FORGE-K lives under `services/core/internal/forgekernel`; K20A makes it the default semantic syscall ingress owner while Control Lane remains the temporary durable commit adapter.
+- Gateway, modelruntime, approvals, audit, memory, retrieval, API, and the temporary Control Lane adapter retain their documented live roles until each staged cutover gate closes.
 - Model output is proposal/evidence text, not canonical truth.
 - Durable semantic writes need deterministic validation, journal/audit/provenance, and governed commit boundaries.
 - Legacy direct mutation paths stay retired unless a separate phase provides replacement, rollback proof, tests, and docs.
@@ -74,6 +75,7 @@ npm run validate:desktop
 - `apps/desktop` - Tauri and React operator shell.
 - `services/core` - Go daemon and live authority paths.
 - `services/core/internal/forgek` - FORGE-K simulator and target architecture work.
+- `services/core/internal/forgekernel` - production FORGE-K authority boundary and staged cutover code.
 - `services/core/internal/forgekshadow` - disabled-by-default/read-only diagnostic shadow seams.
 - `docs/architecture` - system design.
 - `docs/status` - current posture and gate status.

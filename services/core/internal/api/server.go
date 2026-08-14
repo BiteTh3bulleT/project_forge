@@ -14,6 +14,8 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"forge/projectforge/services/core/internal/adapters"
+	"forge/projectforge/services/core/internal/aios/controllane"
+	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/aios/dream"
 	"forge/projectforge/services/core/internal/aios/rulecells"
 	"forge/projectforge/services/core/internal/approvals"
@@ -30,6 +32,7 @@ import (
 	"forge/projectforge/services/core/internal/evaluations"
 	"forge/projectforge/services/core/internal/events"
 	"forge/projectforge/services/core/internal/failurepatterns"
+	"forge/projectforge/services/core/internal/forgekernel"
 	"forge/projectforge/services/core/internal/forgekshadow"
 	"forge/projectforge/services/core/internal/gateway"
 	"forge/projectforge/services/core/internal/gpu"
@@ -109,6 +112,8 @@ type Server struct {
 	discordErr      string
 	forgeKShadow    *forgekshadow.Observer
 	shadowDB        *sql.DB
+	kernelAuthority forgekernel.Selection
+	kernelErr       string
 
 	// chatAssistInflight tracks assistant generation (async job or SSE) per thread/user-message key.
 	chatAssistInflight sync.Map
@@ -206,9 +211,28 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		}
 		shadowObserver = forgekshadow.NewObserverWithSink(shadowConfig, shadowSink, nil)
 	}
+	commitAdapter := controllane.NewProcessor(controllane.ProcessorOptions{
+		Registry:                      controllane.NewStaticActionRegistry(),
+		Validator:                     controllane.NewDeterministicValidator(),
+		Capabilities:                  controllane.NewStaticCapabilityService(),
+		ApprovalGate:                  controllane.NewStaticApprovalGate(),
+		TxRunner:                      controllane.NewSQLiteTransactionRunner(st.DB),
+		AuditSink:                     controllane.NewCoreAuditSink(auditSvc),
+		RuleEngine:                    ruleEngine,
+		NowMillis:                     domain.NowMillis,
+		ControlLaneValidationObserver: shadowObserver,
+	})
+	kernelAuthority, kernelAuthorityErr := forgekernel.SelectAuthority(cfg.ForgeKernelAuthorityMode, commitAdapter)
+	kernelErr := ""
+	if kernelAuthorityErr != nil {
+		kernelErr = kernelAuthorityErr.Error()
+		apiLogWarn("semantic kernel authority unavailable; semantic mutation paths disabled", apiLogErr(kernelAuthorityErr))
+	}
 	var autonomyLoop *AutonomyMaintenanceLoop
-	if loop := newDefaultAutonomyMaintenanceLoop(st.DB, cfg, ev, memorySvc, shadowObserver); loop != nil {
-		autonomyLoop = loop
+	if kernelAuthorityErr == nil {
+		if loop := newDefaultAutonomyMaintenanceLoop(st.DB, cfg, ev, memorySvc, kernelAuthority.Processor); loop != nil {
+			autonomyLoop = loop
+		}
 	}
 	capabilityOverrideStoreDurable := true
 	capabilityOverrideStoreError := ""
@@ -264,52 +288,54 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		go autonomyLoop.Run(ctx)
 	}
 	srv := &Server{
-		st:             st,
-		cfg:            cfg,
-		log:            ev,
-		ingest:         ing,
-		search:         searchSvc,
-		adapters:       reg,
-		approvals:      appSvc,
-		packets:        pktSvc,
-		artifacts:      artSvc,
-		chat:           chatSvc,
-		canvas:         canvasSvc,
-		projectCtx:     pcSvc,
-		embeddings:     embedSvc,
-		retrieval:      retrievalSvc,
-		memory:         memorySvc,
-		dossiers:       dossierSvc,
-		evals:          evalSvc,
-		lineage:        lineageSvc,
-		imports:        importSvc,
-		insights:       insightSvc,
-		strategies:     strategySvc,
-		policy:         policySvc,
-		automation:     automationSvc,
-		packetOpt:      packetOptSvc,
-		reviews:        reviewSvc,
-		reconcile:      reconcileSvc,
-		failures:       failureSvc,
-		dashboard:      dashboardSvc,
-		jobs:           jobSvc,
-		gateway:        gw,
-		capStoreOK:     capabilityOverrideStoreDurable,
-		capStoreErr:    capabilityOverrideStoreError,
-		lanes:          laneSvc,
-		permissions:    permSvc,
-		auditSvc:       auditSvc,
-		backup:         backupSvc,
-		release:        releaseSvc,
-		modelRuntime:   modelRuntimeSvc,
-		dream:          dreamSvc,
-		gpuTelemetry:   gpuTelemetrySvc,
-		intelTelemetry: intelTelemetrySvc,
-		watch:          wm,
-		watchStop:      cancel,
-		autonomy:       autonomyLoop,
-		forgeKShadow:   shadowObserver,
-		shadowDB:       shadowDB,
+		st:              st,
+		cfg:             cfg,
+		log:             ev,
+		ingest:          ing,
+		search:          searchSvc,
+		adapters:        reg,
+		approvals:       appSvc,
+		packets:         pktSvc,
+		artifacts:       artSvc,
+		chat:            chatSvc,
+		canvas:          canvasSvc,
+		projectCtx:      pcSvc,
+		embeddings:      embedSvc,
+		retrieval:       retrievalSvc,
+		memory:          memorySvc,
+		dossiers:        dossierSvc,
+		evals:           evalSvc,
+		lineage:         lineageSvc,
+		imports:         importSvc,
+		insights:        insightSvc,
+		strategies:      strategySvc,
+		policy:          policySvc,
+		automation:      automationSvc,
+		packetOpt:       packetOptSvc,
+		reviews:         reviewSvc,
+		reconcile:       reconcileSvc,
+		failures:        failureSvc,
+		dashboard:       dashboardSvc,
+		jobs:            jobSvc,
+		gateway:         gw,
+		capStoreOK:      capabilityOverrideStoreDurable,
+		capStoreErr:     capabilityOverrideStoreError,
+		lanes:           laneSvc,
+		permissions:     permSvc,
+		auditSvc:        auditSvc,
+		backup:          backupSvc,
+		release:         releaseSvc,
+		modelRuntime:    modelRuntimeSvc,
+		dream:           dreamSvc,
+		gpuTelemetry:    gpuTelemetrySvc,
+		intelTelemetry:  intelTelemetrySvc,
+		watch:           wm,
+		watchStop:       cancel,
+		autonomy:        autonomyLoop,
+		forgeKShadow:    shadowObserver,
+		shadowDB:        shadowDB,
+		kernelAuthority: kernelAuthority,
+		kernelErr:       kernelErr,
 	}
 	srv.telegramGateway = srv.tryStartTelegramGateway(ctx, cfg)
 	srv.discordGateway = srv.tryStartDiscordGateway(ctx, cfg)

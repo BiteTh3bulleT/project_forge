@@ -7,8 +7,8 @@ import (
 	"forge/projectforge/services/core/internal/chat"
 )
 
-func forgeAuthorityToolOmissionMessage(forcedModel string) string {
-	toolID := strings.TrimSpace(forcedModel)
+func forgeAuthorityToolOmissionMessage(selectedTool string) string {
+	toolID := strings.TrimSpace(selectedTool)
 	if toolID == "" {
 		toolID = "requested tool"
 	}

@@ -1,6 +1,6 @@
 # ADR Index
 
-Status date: 2026-05-18.
+Status date: 2026-08-14.
 
 This index records current ADR status so historical architecture decisions are
 not mistaken for stale or conflicting authority.
@@ -21,6 +21,9 @@ not mistaken for stale or conflicting authority.
 | [0012 - FORGE Wayland Shell Session](0012-forge-wayland-shell-session.md) | Accepted | Opt-in Wayland/Cage session path. |
 | [0013 - FORGE G6 Operator Desktop](0013-forge-g6-operator-desktop.md) | Accepted | Opt-in labwc operator desktop path; Cage remains rollback. |
 | [0014 - FORGE Workstation Substrate and Nix Mutation Proposals](0014-forge-workstation-substrate-and-nix-mutation-proposals.md) | Accepted | Workstation substrate and advisory Nix mutation proposal boundary. |
+| [0015 - Ref Model Unification](0015-ref-model-unification.md) | Accepted | Shared deterministic ref contracts across simulator and production validation seams. |
+| [0016 - FORGE AXIOM Cognition Engine](0016-forge-axiom-cognition-engine.md) | Accepted | AXIOM proposal and deterministic cognition boundary. |
+| [0017 - FORGE-K Production Authority Cutover](0017-forge-k-production-authority-cutover.md) | Accepted; K20A active | Staged single-authority production cutover from Control Lane v1 to FORGE-K. |
 
 ## Superseded Decisions
 

@@ -1,6 +1,6 @@
 # Simulator To Live Migration
 
-Status: Current migration-pattern document. FORGE-K simulator services remain `SIMULATOR_ONLY`; Phase 12 is read-only shadow diagnostics; Phase 14 is validation-only Control Lane integration through live-owned seams. This document is intentionally concise and supersedes older phase-ledger wording in this file.
+Status: Current migration-pattern document amended for K20A. FORGE-K simulator services remain `SIMULATOR_ONLY`; Phase 12 is read-only shadow diagnostics; Phase 14 is validation-only adapter integration; production semantic syscall ingress now lives in `internal/forgekernel` under ADR 0017.
 
 ## Purpose
 
@@ -13,7 +13,8 @@ FORGE-K simulator packages define target authority behavior. Live daemon integra
 | Simulator services | `services/core/internal/forgek` | Target architecture only; no live daemon authority |
 | Phase 12 shadow diagnostics | `services/core/internal/forgekshadow` | Disabled-by-default read-only metadata/advisory reports |
 | Phase 14 Control Lane seams | `services/core/internal/aios/controllane` plus shared pure validators | Validation/enforcement only; no simulator service authority |
-| Live daemon authority | API, AI-OS Control Lane, gateway, permissions, lanes, audit, modelruntime, retrieval/search/embeddings, memory | Existing live owners remain authoritative |
+| K20A Kernel ingress | `services/core/internal/forgekernel` | Default production semantic syscall ingress; single boot authority; `legacy_v1` rollback only |
+| Remaining live daemon authority | API, Control Lane durable adapter, gateway, permissions, lanes, audit, modelruntime, retrieval/search/embeddings, memory | Existing roles remain authoritative until their explicit migration gates close |
 
 ## Migration Pattern
 

@@ -66,6 +66,12 @@ Chat supports explicit tool dispatch with command payload:
 
 This creates a `gateway_action` job so approvals, audit, and artifacts remain governed.
 
+For natural-language chat, FORGE performs deterministic intent routing before
+the model is called. FORGE either selects exactly one governed gateway tool or
+exposes no tool schema. A model can only format bounded proposal arguments for
+the already selected schema; it cannot select a different tool or cause direct
+execution. Ambiguous operational language stays on the no-tool response path.
+
 ## Deferred
 
 - Non-job gateway approval requests currently require a backing job id for full approval request linkage.

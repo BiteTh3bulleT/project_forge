@@ -24,10 +24,10 @@ function statusClass(status?: string) {
   if (normalized === "partial_live_validation_ready" || normalized === "ready") {
     return "forge-ops-status forge-ops-status--ok";
   }
-  if (["degraded", "elevated", "constrained", "warning", "proposed", "stale", "deferred", "legacy_gate"].includes(normalized)) {
+  if (["degraded", "elevated", "constrained", "warning", "proposed", "stale", "deferred", "legacy_gate", "forge_k_ingress_live"].includes(normalized)) {
     return "forge-ops-status forge-ops-status--warn";
   }
-  if (["critical", "failed", "unreachable", "error"].includes(normalized)) {
+  if (["critical", "failed", "unreachable", "error", "kernel_authority_unavailable"].includes(normalized)) {
     return "forge-ops-status forge-ops-status--bad";
   }
   if (normalized === "blocked") {
@@ -632,12 +632,16 @@ export function SystemPage() {
                 enabled={kernelActivation ? !kernelActivation.simulator_authority : false}
               />
               <BoundaryFlag
-                label="Live Kernel authority disabled"
+                label="FORGE-K syscall ingress live"
+                enabled={kernelActivation?.live_kernel_ingress_authority ?? false}
+              />
+              <BoundaryFlag
+                label="Full FORGE-K authority still gated"
                 enabled={kernelActivation ? !kernelActivation.live_kernel_authority : false}
               />
               <BoundaryFlag
-                label="Live authority migration disabled"
-                enabled={kernelActivation ? !kernelActivation.live_authority_migration : false}
+                label="Live authority migration active"
+                enabled={kernelActivation?.live_authority_migration ?? false}
               />
               <BoundaryFlag
                 label="Mutation controls absent"

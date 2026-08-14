@@ -16,7 +16,8 @@ This file maps the current authority docs for FORGE. It is a navigation document
 
 | Area | Current source | Authority note |
 |---|---|---|
-| Canonical mutation | `services/core/internal/aios/controllane`, `docs/architecture/forge_ai_os.md` | Durable semantic writes must pass deterministic validation, commit boundaries, audit, and provenance. |
+| Canonical semantic syscall ingress | `services/core/internal/forgekernel`, `docs/architecture/forge_k_live_cutover.md` | K20A default live FORGE-K ingress authority. Boot selects exactly one owner and rejects external authority claims. |
+| Canonical durable commit adapter | `services/core/internal/aios/controllane`, `docs/architecture/forge_ai_os.md` | Temporary K20A SQLite transaction/journal/audit adapter behind FORGE-K ingress; K20B will extract FORGE-K-owned durable ports. |
 | Tool execution | `services/core/internal/gateway`, `docs/TOOL_GATEWAY.md`, `docs/CAPABILITY_BROKERS.md` | Gateway-only execution authority; legacy adapter invoke ingress is not authority. |
 | Model runtime | `services/core/internal/modelruntime`, `services/core/internal/api/model_runtime*.go`, `docs/architecture/model_runtime.md` | Models are governed drivers. Streaming, vLLM-compatible external endpoint support, and managed delete-file approval exist inside modelruntime boundaries. |
 | Memory and retrieval | `services/core/internal/memory`, `services/core/internal/retrieval`, `docs/MEMORY_ARCHITECTURE.md`, `docs/RETRIEVAL_PIPELINE.md` | Tool/model output is evidence, not automatic truth. |
@@ -28,7 +29,7 @@ This file maps the current authority docs for FORGE. It is a navigation document
 
 ## FORGE-K Boundary
 
-FORGE-K remains target architecture and simulator-first implementation. Simulator packages under `services/core/internal/forgek` are not live daemon authority.
+The simulator packages under `services/core/internal/forgek` remain simulator-only. The distinct production package `services/core/internal/forgekernel` owns live semantic syscall ingress by default in K20A. Full FORGE-K authority is still incomplete while Control Lane remains the durable commit adapter and other subsystem gates remain staged.
 
 Current partial live integrations are narrow validation/enforcement seams through shared pure packages and existing live Control Lane paths. They do not:
 
@@ -47,7 +48,7 @@ Current Runtime Boundary-related live work is proposal-envelope metadata only th
 
 Current Consensus Mesh-related live work is a narrow modelruntime-backed final-response guard through `services/core/internal/api` and pure `services/core/internal/consensusgate`. It can withhold unsupported high-risk action claims from model proposal output before assistant message persistence, and records response-composition metadata only. It does not make `services/core/internal/forgek/consensus` live authority, admit evidence, commit truth, mutate memory, execute gateway tools, approve actions, call modelruntime, compile context, or fully gate gateway/Ollama/streaming token surfaces.
 
-Current low-risk Kernel-style commit work includes `CREATE_NOTE`, `UPDATE_STATE`, `OPEN_LOOP`, and `CLOSE_LOOP` through existing `services/core/internal/aios/controllane` syscall transactions. Notes, state records, state history, and open-loop records persist with journal, audit, provenance, scope, and semantic read-store visibility. This does not make `services/core/internal/forgek` live Kernel authority and does not migrate links, tags, memory observations, gateway execution, modelruntime proposals, or evidence admission.
+Current low-risk Kernel-style commit work includes `CREATE_NOTE`, `UPDATE_STATE`, `OPEN_LOOP`, and `CLOSE_LOOP` through production FORGE-K ingress and existing `services/core/internal/aios/controllane` durable transactions. Notes, state records, state history, and open-loop records persist with journal, audit, provenance, scope, and semantic read-store visibility. This does not make `services/core/internal/forgek` simulator services live authority and does not migrate links, tags, memory observations, gateway execution, modelruntime proposals, or evidence admission.
 
 Current memory observation migration work keeps legacy `POST/PATCH /api/memory/observations*` mutation endpoints retired through `services/core/internal/api`. Existing `memory_observations` rows remain historical/retrieval evidence, and retired write attempts receive structured guidance/audit metadata pointing to Courthouse admission-candidate validation plus Control Lane semantic syscalls. This does not admit evidence, write memory, run a batch migrator, or make `services/core/internal/forgek` live authority.
 
@@ -57,7 +58,7 @@ Current KV-related live work includes a validation-only exact-identity canary th
 
 Current storage cutover-related work is read-only readiness metadata through `services/core/internal/storagebackend` and `GET /forge/system/status`. SQLite remains the live truth authority and default backend. Postgres is future durable relational infrastructure gated by parity, rollback, read-compare, dual-write comparison, and operator approval evidence. Redis remains ephemeral coordination only, and Qdrant remains vector shadow/acceleration only. This does not enable dual-write, read switching, storage authority migration, Redis canonical truth, Qdrant truth/admissibility, or FORGE-K persistence authority.
 
-Current operator cockpit work is read-only desktop visibility through `apps/desktop/src/pages/SystemPage.tsx` and existing `GET /forge/system/status` plus inspector pointers. It summarizes gates, planned cases, context bundle inspector posture, proposals, journal/replay inspector posture, lymphatic proposal-only posture, subsystem authority matrix rows, and storage cutover readiness. It does not add action controls, new routes, approval execution, cleanup execution, tool execution, storage switching, or FORGE-K live authority.
+Current operator cockpit work is read-only desktop visibility through `apps/desktop/src/pages/SystemPage.tsx` and existing `GET /forge/system/status` plus inspector pointers. It summarizes the boot-selected K20A ingress owner, gates, planned cases, context bundle inspector posture, proposals, journal/replay inspector posture, lymphatic proposal-only posture, subsystem authority matrix rows, and storage cutover readiness. It does not add action controls, new routes, approval execution, cleanup execution, tool execution, storage switching, or additional authority.
 
 Current legacy-retirement work is read-only proof metadata through `GET /forge/system/status`. It records that direct adapter invocation remains unrouted, legacy memory observation mutation remains `410 Gone` and audited, and each retired surface has a default-live replacement and rollback proof. It does not reopen retired routes, execute adapters, write memory, change gateway or Control Lane authority, or make FORGE-K simulator services live authority.
 
@@ -67,7 +68,7 @@ See `docs/reviews/current_phase_status.md` and `docs/adr/0005-forge-k-simulator-
 
 Status date: 2026-05-18 audit.
 
-Seven validation seams are wired in the live Control Lane. All are `[PARTIAL LIVE VALIDATION]`: registered in `services/core/internal/aios/controllane/registry.go`, dispatched from `services/core/internal/aios/controllane/processor.go`, and observable via the disabled-by-default `services/core/internal/forgekshadow` observer. `VALIDATE_SOURCE_OBJECT` has a live production caller in `services/core/internal/aios/autonomy/runner.go:preflightSourceObjectAuthority`, which submits a dry-run preflight before any `ARCHIVE_NOTE`, `MARK_SUPERSEDED`, `REGISTER_CONTRADICT` (governed sides only), or `DERIVE_MODEL` commit in `commitAllowedActions`. The candidate-action ingest pipeline now calls the other six seams through `services/core/internal/aios/compute/librarian/pipeline.go:processActionValidationSeams` before candidate actions reach the kernel commit path. These calls are dry-run validation preflights and do not make FORGE-K live authority.
+Seven validation seams are wired in the live durable adapter. All are `[PARTIAL LIVE VALIDATION]`: registered in `services/core/internal/aios/controllane/registry.go`, dispatched from `services/core/internal/aios/controllane/processor.go` after production FORGE-K ingress, and observable via the disabled-by-default `services/core/internal/forgekshadow` observer. `VALIDATE_SOURCE_OBJECT` has a live production caller in `services/core/internal/aios/autonomy/runner.go:preflightSourceObjectAuthority`, which submits a dry-run preflight before any `ARCHIVE_NOTE`, `MARK_SUPERSEDED`, `REGISTER_CONTRADICT` (governed sides only), or `DERIVE_MODEL` commit in `commitAllowedActions`. The candidate-action ingest pipeline calls the other six seams through `services/core/internal/aios/compute/librarian/pipeline.go:processActionValidationSeams` before candidate actions reach the commit path. These calls remain validation preflights and do not grant full FORGE-K subsystem authority.
 
 | Seam | Live handler | Pure pkg | Pure-pkg purity test | Simulator import | Notes |
 | --- | --- | --- | --- | --- | --- |

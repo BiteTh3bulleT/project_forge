@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"strings"
 
-	"forge/projectforge/services/core/internal/aios/controllane"
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/forgekernel"
 )
 
 type PolicyEvaluatorOptions struct {
 	Charters                 CharterRepository
 	Risk                     RiskClassifier
 	Budgets                  *FreedomBudgetService
-	Kernel                   controllane.ForgeKernelProcessor
+	Kernel                   forgekernel.Processor
 	NowMillis                func() int64
 	CharterService           CharterService
 	HasActiveStateDependency func(scope domain.ForgeScope, objectID string) bool
@@ -30,7 +30,7 @@ type AutonomyPolicyEvaluator struct {
 	charters       CharterRepository
 	risk           RiskClassifier
 	budgets        *FreedomBudgetService
-	kernel         controllane.ForgeKernelProcessor
+	kernel         forgekernel.Processor
 	nowMillis      func() int64
 	charterService CharterService
 	hasStateDep    func(scope domain.ForgeScope, objectID string) bool

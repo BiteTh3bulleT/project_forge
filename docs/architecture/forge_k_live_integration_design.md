@@ -1,6 +1,6 @@
 # FORGE-K Live Integration Design
 
-Status: Phase 12A implemented as `DOCS_ONLY / LIVE_INTEGRATION_DESIGN_ONLY`; Phase 12B/12E/12H/12K-L implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT` metadata diagnostics; Phase 12C/12F/12I implemented as observability hardening; Phase 12D/12G/12J implemented as design-only expansion records; Phase 12M-Q implemented as `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT / ADVISORY_DIAGNOSTIC_ONLY`.
+Status: Historical Phase 12 integration design. ADR 0017 and `forge_k_live_cutover.md` are authoritative for the active K20A production migration; Phase 12 shadow constraints remain active.
 
 Phase 12B implements the first disabled-by-default read-only live touchpoint. Phase 12C hardens that implementation. Phase 12D selected route envelope metadata as the next controlled expansion, and Phase 12E later implemented it. Later Phase 12 metadata passes add chat, retrieval, and advisory diagnostics while preserving the same no-authority boundary. These phases do not authorize live authority migration.
 
@@ -9,11 +9,11 @@ Current boundary banner:
 - Phase 12 is read-only shadow diagnostics and advisory reporting. It may copy bounded metadata from already-executing live paths into `forgekshadow`; it must not decide, commit, execute, retrieve, generate, admit, compile, or mutate.
 - Phase 14 is a separate validation-only Control Lane seam pattern. It uses live-owned actions and shared pure validators; it is not the Phase 12 shadow harness and it is not simulator authority.
 - Simulator services under `services/core/internal/forgek` remain simulator services. Live diagnostics may reuse pure contract shapes, but they must not import `forgek.Kernel`, simulator Courthouse, simulator Context Compiler, simulator Runtime Boundary, or simulator syscalls as live authority.
-- Blocked authority gates remain blocked: live Courthouse admission, live Context Compiler prompt authority, governed semantic mutation routing, runtime driver authority, and full FORGE-K Kernel authority.
+- K20A now owns semantic syscall ingress through `internal/forgekernel`; live Courthouse admission, live Context Compiler prompt authority, FORGE-K durable commit ports, runtime driver authority, and full FORGE-K Kernel authority remain blocked.
 
 ## Executive Summary
 
-FORGE-K Phase 1-11G is implemented and tested in simulator, research, tooling, governance, integration-prep, and shadow-design layers. The live daemon still uses the existing AI-OS, gateway, permissions, lane, audit, modelruntime, retrieval, embeddings, memory, search, and API authority paths.
+FORGE-K Phase 1-11G is implemented and tested in simulator, research, tooling, governance, integration-prep, and shadow-design layers. As of K20A, the distinct production `internal/forgekernel` package owns semantic syscall ingress while the live daemon retains the existing gateway, permissions, lanes, audit, modelruntime, retrieval, embeddings, memory, search, API, and temporary Control Lane commit-adapter paths.
 
 Phase 12A designed the first live integration path. Phase 12B implements the smallest read-only shadow harness: `/health` request metadata can be copied into a bounded in-memory diagnostic sink when `FORGE_K_SHADOW_MODE_ENABLED=true`. Phase 12C hardens that observer. Phase 12D is design-only and selected route envelope metadata; Phase 12E later implemented that read-only route-envelope observer. Phase 12M-Q adds an internal advisory report that consumes only existing safe diagnostics when `FORGE_K_SHADOW_ADVISORY_ENABLED=true` and global shadow mode is also enabled. The design preserves live authority by allowing only passive observation of already-executing live paths, diagnostic report generation, advisory-only summaries, and disabled-by-default activation. It does not wire FORGE-K into live authority.
 
@@ -21,10 +21,10 @@ Phase 12A designed the first live integration path. Phase 12B implements the sma
 
 FORGE-K simulator packages live under `services/core/internal/forgek` and adjacent research/tooling paths. They define target architecture contracts for Kernel authority, Courthouse admission, Memory Palace retrieval shape, Semantic Algebra, Snapshots, Context Compiler, KV metadata, Runtime Boundary, Lymphatic Lane, Consensus Mesh, integration readiness, and shadow harness reports.
 
-Live daemon authority remains outside FORGE-K:
+Live daemon authority after K20A is split explicitly:
 
 - API routes are owned by `services/core/internal/api`.
-- Live semantic mutation is owned by `services/core/internal/aios/controllane`.
+- Semantic syscall ingress is owned by `services/core/internal/forgekernel`; durable application remains temporarily implemented by `services/core/internal/aios/controllane`.
 - Tool execution is owned by `services/core/internal/gateway`.
 - Policy gates are owned by `services/core/internal/permissions` and `services/core/internal/lanes`.
 - Audit is owned by `services/core/internal/audit`.

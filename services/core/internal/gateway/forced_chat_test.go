@@ -53,7 +53,7 @@ func TestIsLikelyStatusProbeTurn(t *testing.T) {
 	}
 }
 
-func TestShouldAttachChatTools(t *testing.T) {
+func TestShouldUseChatToolPipeline(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name string
@@ -80,15 +80,15 @@ func TestShouldAttachChatTools(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := ShouldAttachChatTools(tc.in)
+			got := ShouldUseChatToolPipeline(tc.in)
 			if got != tc.want {
-				t.Fatalf("ShouldAttachChatTools(%q)=%v want %v", tc.in, got, tc.want)
+				t.Fatalf("ShouldUseChatToolPipeline(%q)=%v want %v", tc.in, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestForcedChatModelNameWebAndBrowser(t *testing.T) {
+func TestSelectChatToolNameWebAndBrowser(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name string
@@ -111,8 +111,8 @@ func TestForcedChatModelNameWebAndBrowser(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := ForcedChatModelName(tc.in); got != tc.want {
-				t.Fatalf("ForcedChatModelName(%q)=%q want %q", tc.in, got, tc.want)
+			if got := SelectChatToolName(tc.in); got != tc.want {
+				t.Fatalf("SelectChatToolName(%q)=%q want %q", tc.in, got, tc.want)
 			}
 		})
 	}
@@ -134,11 +134,11 @@ func TestParseWebSearchQueryAndURL(t *testing.T) {
 	}
 }
 
-func TestForcedChatModelNameCompositeWorkflowNotForced(t *testing.T) {
+func TestSelectChatToolNameCompositeWorkflowNotSelected(t *testing.T) {
 	t.Parallel()
 	in := `Open konsole, cd to Projects/. run mkdir and create new directory called "MyFirstTele". Inside that directory create a python app that is a clock that tells jokes on the hour.`
-	if got := ForcedChatModelName(in); got != "" {
-		t.Fatalf("ForcedChatModelName should not force single tool for composite workflow, got %q", got)
+	if got := SelectChatToolName(in); got != "" {
+		t.Fatalf("SelectChatToolName should not select a single tool for composite workflow, got %q", got)
 	}
 }
 
@@ -148,15 +148,26 @@ func TestCompositeFilesystemWorkflowDetectsTypedFileCreate(t *testing.T) {
 	if !IsCompositeFilesystemWorkflow(in) {
 		t.Fatalf("expected composite filesystem workflow")
 	}
-	if got := ForcedChatModelName(in); got != "" {
-		t.Fatalf("ForcedChatModelName should not force single mkdir for composite SVG workflow, got %q", got)
+	if got := SelectChatToolName(in); got != "" {
+		t.Fatalf("SelectChatToolName should not select a single mkdir for composite SVG workflow, got %q", got)
 	}
 }
 
-func TestForcedChatModelNameSimpleMkdirStillForced(t *testing.T) {
+func TestSelectChatToolNameSimpleMkdir(t *testing.T) {
 	t.Parallel()
 	in := `create a directory called "MyFirstTele"`
-	if got := ForcedChatModelName(in); got != ChatModelName("fs.mkdir") {
-		t.Fatalf("ForcedChatModelName should force fs.mkdir for simple mkdir, got %q", got)
+	if got := SelectChatToolName(in); got != ChatModelName("fs.mkdir") {
+		t.Fatalf("SelectChatToolName should select fs.mkdir for simple mkdir, got %q", got)
+	}
+}
+
+func TestOperationalLanguageDoesNotDelegateToolSelectionToModel(t *testing.T) {
+	t.Parallel()
+	in := "delete something important"
+	if !ShouldUseChatToolPipeline(in) {
+		t.Fatalf("expected operational language to enter the governed tool-routing path")
+	}
+	if got := SelectChatToolName(in); got != "" {
+		t.Fatalf("ambiguous intent must not select a tool, got %q", got)
 	}
 }

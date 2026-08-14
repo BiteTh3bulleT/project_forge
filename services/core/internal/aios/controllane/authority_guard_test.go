@@ -82,17 +82,13 @@ func TestCanonicalCognitiveWritesStayBounded(t *testing.T) {
 	}
 }
 
-// TestKernelProcessorHasSingleConstructionSite guards the second authority
-// invariant: `controllane.NewProcessor` is the only legitimate constructor of
-// the FORGE kernel, and production code should pin a single construction site
-// so a future feature cannot quietly stand up a parallel kernel. The current
-// pinned site is `services/core/internal/api/autonomy_maintenance_loop.go`.
-// When the kernel is hoisted to `api/server.go` and threaded into autonomy,
-// update `expected` to that path. Adding a *third* call site without an
-// explicit allow-list update is the failure this test catches.
+// TestKernelProcessorHasSingleConstructionSite guards the durable adapter
+// invariant: the legacy Control Lane processor is assembled exactly once at
+// daemon bootstrap, then selected behind the production FORGE-K authority.
+// It must not become a parallel write root in feature code.
 func TestKernelProcessorHasSingleConstructionSite(t *testing.T) {
 	expected := []string{
-		filepath.Join("services", "core", "internal", "api", "autonomy_maintenance_loop.go"),
+		filepath.Join("services", "core", "internal", "api", "server.go"),
 	}
 	assertProductionCallSites(t, `\bcontrollane\.NewProcessor\b`, expected, "controllane.NewProcessor")
 }

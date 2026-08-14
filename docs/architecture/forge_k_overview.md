@@ -1,6 +1,6 @@
 # FORGE-K Architecture Overview
 
-Status: Current overview with historical simulator context. FORGE-K simulator services are implemented through Consensus Mesh and remain `SIMULATOR_ONLY`; Phase 12 adds read-only disabled-by-default shadow diagnostics outside the simulator; Phase 14 adds validation-only Control Lane seams through shared pure contracts. Live daemon authority remains outside FORGE-K except for those narrow live-owned validation seams.
+Status: Current overview with historical simulator context and K20A production cutover. FORGE-K simulator services are implemented through Consensus Mesh and remain `SIMULATOR_ONLY`; the distinct production `internal/forgekernel` package now owns semantic syscall ingress by default while Control Lane remains a temporary durable commit adapter. Full FORGE-K authority is not complete.
 
 ## Read This If You Want
 
@@ -11,7 +11,8 @@ Current boundary banner:
 - `[SIMULATOR-ONLY]` Kernel, Courthouse, Memory Palace, Semantic Algebra, Snapshots, Context Compiler, KV System, Runtime Boundary, Lymphatic Lane, and Consensus Mesh are simulator authorities only.
 - `[LIVE / READ_ONLY]` Phase 12 shadow diagnostics can observe bounded metadata and produce advisory reports; they cannot affect output or state.
 - `[PARTIAL LIVE VALIDATION]` Phase 14 Control Lane seams validate identity, ref shape, source-object authority, comparison shape, and semantic-operation envelopes without executing those operations.
-- `[BLOCKED]` Live Courthouse admission, live Context Compiler prompt authority, governed semantic mutation routing, runtime driver authority, and full Kernel authority require explicit future migration gates.
+- `[LIVE / K20A]` `internal/forgekernel` owns semantic syscall ingress by default; daemon boot selects it or the rollback-only `legacy_v1` path, never both.
+- `[BLOCKED]` Live Courthouse admission, live Context Compiler prompt authority, FORGE-K-owned durable commit ports, runtime driver authority, and full Kernel authority require later migration gates.
 
 As target architecture, FORGE-K is a deterministic cognitive microkernel for governed semantic work. In the simulator and future migrated authority model, it owns canonical truth through semantic syscalls, deterministic validation, journaled commits, and replayable evidence. Model runtimes are drivers attached to the operating system; they may propose interpretations, actions, or text, but they do not own truth authority.
 

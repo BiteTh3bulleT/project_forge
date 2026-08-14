@@ -1,6 +1,6 @@
 # Duplicate / Overlapping Systems (Phase 5.99)
 
-Date: 2026-04-21
+Date: 2026-04-21. K20A authority update: 2026-08-14.
 Scope: identify overlaps; do not expand duplicates
 
 ## Current overlap map
@@ -8,7 +8,7 @@ Scope: identify overlaps; do not expand duplicates
 | System area | Path A | Path B | Status | Risk | Decision |
 |---|---|---|---|---|---|
 | Tool execution | Gateway (`/api/gateway/invoke` -> `gateway.Execute`) | none | converged | low | Keep gateway as sole ingress; direct adapter invoke route removed. |
-| Semantic memory/state mutation | syscall kernel (`aios/controllane`) | read-only observation inspection APIs (`/api/memory/*` GET) | converged for mutation | low | Mutation endpoints are retired (`410 Gone`); reads remain compatibility inspection only. |
+| Semantic memory/state mutation | production `forgekernel.Kernel` ingress with one Control Lane durable adapter | read-only observation inspection APIs (`/api/memory/*` GET); rollback-only `legacy_v1` boot mode | K20A single-authority cutover | low while rollback exists | Mutation endpoints remain retired (`410 Gone`); daemon bootstrap constructs one adapter and selects one ingress owner; no dual commit. |
 | Compute lane structure | `aios/computelane` interfaces (forward-declared seam, zero production importers) | `aios/compute/librarian` runtime cells | not duplicated; intent vs runtime split | none | `computelane` is a contract seam for the future IRIS service; package docstring forbids runtime logic and production imports. `compute/librarian` is the only live runtime. |
 | Backup semantics | `full_backup` export of many AI-OS tables | restore import supports only policy-shaped tables | partial duplicate semantics (export-only vs import subset) | false sense of recoverability | Keep as explicit export/restore asymmetry; do not claim full restore parity. |
 | Autonomy state | Single canonical store: `aios/autonomy.SQLiteBundle` over the `settings` table with the `autonomy_repo.*` key prefix (production wires this via `NewSQLiteBundleStrict`, fail-closed when DB is nil) | `autonomy_settings` is the backup-export view name for the same rows (`SELECT key, value FROM settings WHERE key LIKE 'autonomy_repo.%'`), not a parallel store | not duplicated | none | `InMemoryBundle` is retained only for unit tests / `db == nil` diagnostic mode. |
@@ -19,6 +19,7 @@ Scope: identify overlaps; do not expand duplicates
 - Audit substrate: single `audit.Service` with gateway/kernel sinks.
 - Tool capability registry: single registry implementation in gateway.
 - Gateway core: single gateway service instance wired in `api/server.go`.
+- Semantic commit adapter: single `controllane.NewProcessor` assembly site in `api/server.go`, selected behind production FORGE-K or used as the explicit boot rollback path.
 
 ## Cutover priorities
 

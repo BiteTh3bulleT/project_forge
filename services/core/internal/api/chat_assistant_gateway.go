@@ -31,15 +31,15 @@ const (
 
 const assistantContentFallback = "I couldn't produce a clean assistant response. Try again, or check the selected model/runtime."
 
-func narrowOllamaToolsToForcedModel(tools []map[string]any, forcedModel string) ([]map[string]any, bool) {
-	forcedModel = strings.TrimSpace(forcedModel)
-	if forcedModel == "" {
-		return tools, false
+func narrowOllamaToolsToForgeSelection(tools []map[string]any, selectedTool string) ([]map[string]any, bool) {
+	selectedTool = strings.TrimSpace(selectedTool)
+	if selectedTool == "" {
+		return nil, false
 	}
 	for _, tool := range tools {
 		fn, _ := tool["function"].(map[string]any)
 		name, _ := fn["name"].(string)
-		if strings.TrimSpace(name) == forcedModel {
+		if strings.TrimSpace(name) == selectedTool {
 			return []map[string]any{tool}, true
 		}
 	}
@@ -123,7 +123,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 		return s.completeAssistantWithoutTools(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, corr, stages, pushStage, emit, requestedModelID)
 	}
 
-	if !gateway.ShouldAttachChatTools(lastUserContent) {
+	if !gateway.ShouldUseChatToolPipeline(lastUserContent) {
 		pushStage("tools_skipped", map[string]any{"reason": "non_operational_turn"})
 		return s.completeAssistantWithoutTools(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, corr, stages, pushStage, emit, requestedModelID)
 	}
@@ -145,14 +145,25 @@ func (s *Server) completeAssistantWithGatewayTools(
 		return am
 	}
 
-	forcedModel := gateway.ForcedChatModelName(lastUserContent)
+	selectedTool := gateway.SelectChatToolName(lastUserContent)
 	loadToolCatalog()
-	if narrowed, ok := narrowOllamaToolsToForcedModel(ollamaTools, forcedModel); ok {
+	if narrowed, ok := narrowOllamaToolsToForgeSelection(ollamaTools, selectedTool); ok {
 		ollamaTools = narrowed
-		toolNames = []string{forcedModel}
-		pushStage("tools_narrowed", map[string]any{"reason": "deterministic_forced_tool", "tool": forcedModel})
+		toolNames = []string{selectedTool}
+		pushStage("forge_tool_selected", map[string]any{"reason": "deterministic_intent_route", "tool": selectedTool})
+	} else if selectedTool != "" {
+		pushStage("tools_unavailable", map[string]any{"reason": "forge_selected_tool_missing_from_gateway_catalog", "tool": selectedTool})
+		text := "FORGE selected a tool for this request, but that tool is not present in the governed gateway catalog. No model tool proposal was requested."
+		am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", text, map[string]any{
+			"failure": true, "replyToUserMessageId": userMessageID, "correlationId": corr,
+			"toolsUnavailable": true, "toolManifest": manifests, "toolPipeline": map[string]any{"stages": stages},
+		})
+		return am
+	} else {
+		ollamaTools = nil
+		toolNames = nil
 	}
-	pushStage("tools_attached", map[string]any{"tools": toolNames, "count": len(toolNames)})
+	pushStage("tool_proposal_schema_attached", map[string]any{"tools": toolNames, "count": len(toolNames), "selectedBy": "forge"})
 
 	if dryRun {
 		pushStage("dry_run", map[string]any{"note": "no_model_no_gateway"})
@@ -220,7 +231,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 		_ = s.log.Emit(ctx, "chat.message.assistant", map[string]any{"threadId": threadID, "messageId": am.ID, "ok": true, "tools": true, "deterministicShortcut": true})
 		return am
 	}
-	if forcedModel != gateway.ChatModelName("desktop.open") {
+	if selectedTool != gateway.ChatModelName("desktop.open") {
 		if _, _, ok := gateway.ParsePythonBannerScriptIntent(lastUserContent); ok {
 			pushStage("deterministic_python_banner_shortcut", map[string]any{"reason": "explicit script creation intent"})
 			gwActivity := map[string]any{
@@ -249,7 +260,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 	} else if _, _, ok := gateway.ParsePythonBannerScriptIntent(lastUserContent); ok {
 		pushStage("deterministic_python_banner_shortcut_skipped", map[string]any{"reason": "remote terminal workflow uses desktop.open"})
 	}
-	if forcedModel == gateway.ChatModelName("desktop.open") {
+	if selectedTool == gateway.ChatModelName("desktop.open") {
 		pushStage("deterministic_desktop_shortcut", map[string]any{"reason": "explicit desktop or terminal intent"})
 		gwActivity := map[string]any{
 			"userRequestSummary": trimSummary(lastUserContent, 500),
@@ -259,7 +270,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 		}
 		trackedActivity = gwActivity
 		var final strings.Builder
-		s.runChatFSDeterministicFallback(ctx, corr, lastUserContent, forcedModel, pushStage, gwActivity, &final)
+		s.runChatFSDeterministicFallback(ctx, corr, lastUserContent, selectedTool, pushStage, gwActivity, &final)
 		if final.Len() == 0 {
 			final.WriteString("(no deterministic output)")
 		}
@@ -274,7 +285,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 		_ = s.log.Emit(ctx, "chat.message.assistant", map[string]any{"threadId": threadID, "messageId": am.ID, "ok": true, "tools": true, "deterministicShortcut": true})
 		return am
 	}
-	if forcedModel == gateway.ChatModelName("repo.inspect") {
+	if selectedTool == gateway.ChatModelName("repo.inspect") {
 		pushStage("deterministic_repo_inspect_shortcut", map[string]any{"reason": "explicit repo orientation intent"})
 		gwActivity := map[string]any{
 			"userRequestSummary": trimSummary(lastUserContent, 500),
@@ -284,7 +295,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 		}
 		trackedActivity = gwActivity
 		var final strings.Builder
-		s.runChatFSDeterministicFallback(ctx, corr, lastUserContent, forcedModel, pushStage, gwActivity, &final)
+		s.runChatFSDeterministicFallback(ctx, corr, lastUserContent, selectedTool, pushStage, gwActivity, &final)
 		if final.Len() == 0 {
 			final.WriteString("(no deterministic output)")
 		}
@@ -349,6 +360,10 @@ func (s *Server) completeAssistantWithGatewayTools(
 		_ = s.log.Emit(ctx, "chat.message.assistant", map[string]any{"threadId": threadID, "messageId": am.ID, "ok": true, "tools": true, "deterministicShortcut": true})
 		return am
 	}
+	if selectedTool == "" {
+		pushStage("tools_skipped", map[string]any{"reason": "no_deterministic_forge_tool_selection"})
+		return s.completeAssistantWithoutTools(ctx, threadID, userMessageID, th, lastUserContent, ollamaAdapter, corr, stages, pushStage, emit, requestedModelID)
+	}
 
 	ol, ok := ollamaAdapter.(adapters.Ollama)
 	if !ok {
@@ -402,12 +417,12 @@ func (s *Server) completeAssistantWithGatewayTools(
 	}
 
 	var toolChoice any
-	if forcedModel != "" {
+	if selectedTool != "" {
 		toolChoice = map[string]any{
 			"type":     "function",
-			"function": map[string]any{"name": forcedModel},
+			"function": map[string]any{"name": selectedTool},
 		}
-		pushStage("forced_tool_choice", map[string]any{"mode": "function", "reason": "heuristic_match", "tool": forcedModel})
+		pushStage("forge_tool_choice_enforced", map[string]any{"mode": "function", "reason": "deterministic_intent_route", "tool": selectedTool})
 	}
 	gwActivity := map[string]any{
 		"userRequestSummary": trimSummary(lastUserContent, 500),
@@ -416,8 +431,8 @@ func (s *Server) completeAssistantWithGatewayTools(
 		"toolCallEmitted":    false,
 	}
 	trackedActivity = gwActivity
-	if forcedModel != "" {
-		gwActivity["forcedToolRequested"] = forcedModel
+	if selectedTool != "" {
+		gwActivity["forgeSelectedTool"] = selectedTool
 	}
 
 	var final strings.Builder
@@ -483,17 +498,17 @@ func (s *Server) completeAssistantWithGatewayTools(
 		}
 		pushStage("tool_call_check", map[string]any{"turn": turn, "emitted": toolEmitted, "count": len(toolCalls)})
 
-		if forcedModel != "" && toolEmitted {
-			if mismatch, selected := s.forcedToolCallMismatch(forcedModel, toolCalls); mismatch {
+		if selectedTool != "" && toolEmitted {
+			if mismatch, selected := s.forgeToolCallMismatch(selectedTool, toolCalls); mismatch {
 				pushStage("forced_tool_mismatch_discarded", map[string]any{
 					"turn":     turn,
-					"forced":   forcedModel,
+					"forced":   selectedTool,
 					"selected": selected,
 				})
 				gwActivity["modelToolCallsDiscarded"] = true
 				gwActivity["discardedToolCalls"] = selected
 				fallbackOnly := strings.Builder{}
-				fallbackRan = s.runChatFSDeterministicFallback(ctx, corr, lastUserContent, forcedModel, pushStage, gwActivity, &fallbackOnly)
+				fallbackRan = s.runChatFSDeterministicFallback(ctx, corr, lastUserContent, selectedTool, pushStage, gwActivity, &fallbackOnly)
 				if fallbackRan {
 					if strings.TrimSpace(content) != "" {
 						pushStage("model_prose_discarded", map[string]any{
@@ -506,7 +521,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 					stopLoop = true
 					break
 				}
-				final.WriteString(forgeAuthorityToolOmissionMessage(forcedModel))
+				final.WriteString(forgeAuthorityToolOmissionMessage(selectedTool))
 				terminalState = "model_tool_mismatch"
 				gwActivity["failureReason"] = "Ollama returned a different tool than the FORGE-forced gateway route; model tool call discarded because FORGE owns capability and availability decisions."
 				stopLoop = true
@@ -528,7 +543,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 		if !toolEmitted {
 			if turn == 0 {
 				fallbackOnly := strings.Builder{}
-				fallbackRan = s.runChatFSDeterministicFallback(ctx, corr, lastUserContent, forcedModel, pushStage, gwActivity, &fallbackOnly)
+				fallbackRan = s.runChatFSDeterministicFallback(ctx, corr, lastUserContent, selectedTool, pushStage, gwActivity, &fallbackOnly)
 				if fallbackRan {
 					if strings.TrimSpace(content) != "" {
 						pushStage("model_prose_discarded", map[string]any{
@@ -541,14 +556,14 @@ func (s *Server) completeAssistantWithGatewayTools(
 					stopLoop = true
 					break
 				}
-				if forcedModel != "" {
+				if selectedTool != "" {
 					if strings.TrimSpace(content) != "" {
 						pushStage("model_prose_discarded", map[string]any{
 							"reason": "forced tool route omitted tool_calls; model prose cannot decide FORGE capability or availability",
 						})
 						gwActivity["modelProseDiscarded"] = true
 					}
-					final.WriteString(forgeAuthorityToolOmissionMessage(forcedModel))
+					final.WriteString(forgeAuthorityToolOmissionMessage(selectedTool))
 					terminalState = "model_omitted_tool_calls"
 					gwActivity["failureReason"] = "Ollama returned no tool_calls while a tool was forced; model prose discarded because FORGE owns capability and availability decisions."
 					stopLoop = true

@@ -68,12 +68,13 @@ func TestForgeSystemStatusReadOnlySurface(t *testing.T) {
 	}
 
 	kernel := asMap(t, payload["kernel_activation"])
-	if kernel["status"] != "partial_live_validation_ready" {
-		t.Fatalf("kernel_activation.status=%v, want partial_live_validation_ready", kernel["status"])
+	if kernel["status"] != "forge_k_ingress_live" {
+		t.Fatalf("kernel_activation.status=%v, want forge_k_ingress_live", kernel["status"])
 	}
 	if kernel["live_kernel_authority"] != false ||
 		kernel["simulator_authority"] != false ||
-		kernel["live_authority_migration"] != false ||
+		kernel["live_kernel_ingress_authority"] != true ||
+		kernel["live_authority_migration"] != true ||
 		kernel["mutation_controls_available"] != false {
 		t.Fatalf("kernel_activation claimed forbidden authority or mutation controls: %#v", kernel)
 	}

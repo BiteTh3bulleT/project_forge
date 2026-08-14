@@ -12,10 +12,11 @@ import (
 	"forge/projectforge/services/core/internal/aios/controllane"
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/aios/truth"
+	"forge/projectforge/services/core/internal/forgekernel"
 )
 
 type IngestPipelineOptions struct {
-	Kernel           controllane.ForgeKernelProcessor
+	Kernel           forgekernel.Processor
 	Repositories     CellReadRepositories
 	Cells            []RuntimeCell
 	Semantic         SemanticInferenceService
@@ -34,7 +35,7 @@ type AutonomyPassFunc func(
 ) ([]domain.AutonomyRunSummary, error)
 
 type IngestPipeline struct {
-	kernel           controllane.ForgeKernelProcessor
+	kernel           forgekernel.Processor
 	repositories     CellReadRepositories
 	cells            []RuntimeCell
 	semantic         SemanticInferenceService

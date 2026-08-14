@@ -1,6 +1,6 @@
 # FORGE-K Integration Readiness
 
-Status: Historical Phase 11F readiness record, amended for current boundaries. Phase 11F remains `SIMULATOR_ONLY / INTEGRATION_PREP_ONLY`; later Phase 12 diagnostics are `LIVE_INTEGRATION / READ_ONLY / DISABLED_BY_DEFAULT`; Phase 14 seams are `PARTIAL LIVE VALIDATION` through the existing live Control Lane.
+Status: Historical Phase 11F readiness record, amended for K20A. ADR 0017 and `forge_k_live_cutover.md` are authoritative for the active production migration.
 
 Phase 11F does not authorize live authority migration.
 
@@ -9,11 +9,11 @@ Current boundary banner:
 - Simulator services in `services/core/internal/forgek` remain target architecture, not live daemon authority.
 - Phase 12 shadow diagnostics in `services/core/internal/forgekshadow` are read-only metadata observers and advisory report builders. They do not commit truth, admit evidence, compile prompt context, call modelruntime, execute retrieval/search/embeddings, write memory, change routes, or affect user-visible output.
 - Phase 14 Control Lane validation seams use shared pure validators from live-owned actions such as `VALIDATE_KV_IDENTITY`, `VALIDATE_REF_SHAPE`, `COMPARE_REF_SHAPE`, `VALIDATE_SOURCE_OBJECT_AUTHORITY`, and `VALIDATE_SEMANTIC_OPERATION`. They are validation/enforcement gates only, not live FORGE-K Kernel authority.
-- Live Courthouse admission, live Context Compiler authority, governed semantic mutation routing, runtime driver authority, and broader Kernel authority are blocked until separate migration gates are approved and proven.
+- K20A production semantic syscall ingress is live. Live Courthouse admission, live Context Compiler authority, FORGE-K-owned durable commit ports, runtime driver authority, and broader Kernel authority remain blocked until separate migration gates are approved and proven.
 
 ## Executive Summary
 
-FORGE-K Phase 1-11E is implemented and tested in the simulator under `services/core/internal/forgek`. The live daemon still uses the existing AI-OS, gateway, permissions, lanes, audit, modelruntime, API, retrieval, embeddings, memory, and controllane paths. ADR 0005 remains the authority boundary: FORGE-K is target architecture, not live daemon authority.
+FORGE-K Phase 1-11E is implemented and tested in the simulator under `services/core/internal/forgek`. The distinct production `internal/forgekernel` boundary now owns semantic syscall ingress by default; the live daemon still uses existing gateway, permissions, lanes, audit, modelruntime, API, retrieval, embeddings, memory, and temporary Control Lane durable-adapter paths. ADR 0005 remains authoritative for simulator isolation and ADR 0017 governs production cutover.
 
 Integration readiness means the simulator has documented contracts, live path mappings, adapter boundaries, shadow-mode rules, and tests that make a later live integration plan possible. It is not live integration.
 
@@ -22,7 +22,7 @@ Integration readiness means the simulator has documented contracts, live path ma
 | Area | Current authority |
 |---|---|
 | FORGE-K simulator | Kernel, Neuron Fabric, Courthouse, Memory Palace, Semantic Algebra, Snapshots, Context Compiler, KV System, Runtime Boundary, Lymphatic Lane, Consensus Mesh, Rust fixture validation. |
-| Live daemon | AI-OS/control lane, gateway, permissions, lanes, audit, modelruntime, API routing, memory, retrieval, search, embeddings, dream/autonomy, backup/release, settings/config. |
+| Live daemon | Production FORGE-K syscall ingress; temporary AI-OS/Control Lane durable adapter; gateway, permissions, lanes, audit, modelruntime, API routing, memory, retrieval, search, embeddings, dream/autonomy, backup/release, settings/config. |
 
 The simulator may define target contracts. It must not route live requests, execute live tools, call live model runtimes, perform live retrieval, call embedding providers, write live memory, or alter user-visible output.
 

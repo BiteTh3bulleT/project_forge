@@ -228,6 +228,7 @@ func TestLoadModelRuntimeDefaultsSafe(t *testing.T) {
 	t.Setenv("FORGE_MODEL_CHAT_MODEL_COOLDOWN_MS", "")
 	t.Setenv("FORGE_MODEL_CHAT_CHECKPOINT_LIMIT", "")
 	t.Setenv("FORGE_ENABLE_OPENAI_COMPAT_API", "")
+	t.Setenv("FORGE_KERNEL_AUTHORITY_MODE", "")
 	t.Setenv("FORGE_EMBEDDING_TEI_ENDPOINT", "")
 	t.Setenv("FORGE_EMBEDDING_TEI_API_KEY", "")
 	t.Setenv("FORGE_EMBEDDING_TEI_TIMEOUT_MS", "")
@@ -284,6 +285,9 @@ func TestLoadModelRuntimeDefaultsSafe(t *testing.T) {
 	}
 	if cfg.DreamModeAllowGPUSubjobs {
 		t.Fatalf("expected dream mode GPU subjobs disabled by default")
+	}
+	if cfg.ForgeKernelAuthorityMode != "forge_k" {
+		t.Fatalf("expected FORGE-K live ingress authority by default, got %q", cfg.ForgeKernelAuthorityMode)
 	}
 	if cfg.ForgeKShadowModeEnabled {
 		t.Fatalf("expected FORGE-K shadow mode disabled by default")
@@ -452,6 +456,7 @@ func TestLoadModelRuntimeOverrides(t *testing.T) {
 	t.Setenv("FORGE_MODEL_CHAT_MODEL_COOLDOWN_MS", "6000")
 	t.Setenv("FORGE_MODEL_CHAT_CHECKPOINT_LIMIT", "256")
 	t.Setenv("FORGE_ENABLE_OPENAI_COMPAT_API", "true")
+	t.Setenv("FORGE_KERNEL_AUTHORITY_MODE", "legacy_v1")
 	t.Setenv("FORGE_EMBEDDING_TEI_ENDPOINT", "http://127.0.0.1:8081")
 	t.Setenv("FORGE_EMBEDDING_TEI_API_KEY", "secret")
 	t.Setenv("FORGE_EMBEDDING_TEI_TIMEOUT_MS", "45000")
@@ -605,6 +610,9 @@ func TestLoadModelRuntimeOverrides(t *testing.T) {
 	}
 	if !cfg.EnableOpenAICompatAPI {
 		t.Fatalf("expected OpenAI-compat API enabled")
+	}
+	if cfg.ForgeKernelAuthorityMode != "legacy_v1" {
+		t.Fatalf("expected legacy kernel rollback mode from env, got %q", cfg.ForgeKernelAuthorityMode)
 	}
 	if cfg.EmbeddingTEIEndpoint != "http://127.0.0.1:8081" || cfg.EmbeddingTEIAPIKey != "secret" || cfg.EmbeddingTEITimeoutMs != 45000 {
 		t.Fatalf("expected TEI overrides, got endpoint=%q key=%q timeout=%d", cfg.EmbeddingTEIEndpoint, cfg.EmbeddingTEIAPIKey, cfg.EmbeddingTEITimeoutMs)

@@ -1,6 +1,6 @@
 # FORGE Implementation Matrix (Current Live Authority Snapshot)
 
-Observed against this branch on 2026-05-18.
+Observed against this branch on 2026-08-14.
 
 Top note: this matrix tracks legacy/live AI-OS implementation status and current daemon authority paths. It is not the FORGE-K simulator phase matrix. For current phase status and FORGE-K simulator/live authority boundaries, see `docs/reviews/current_phase_status.md`, `docs/status/current_authority_sources.md`, and ADR 0005 (`docs/adr/0005-forge-k-simulator-vs-live-authority.md`).
 
@@ -11,7 +11,7 @@ Status values: `real`, `partial`, `legacy-boundary`, `blocked`, `scaffold`, `def
 | Tool execution | `/api/gateway/invoke` -> `gateway.Execute` | real | `internal/gateway/service.go`, gateway tests | keep gateway-only ingress discipline |
 | Legacy adapter side door | route removed | resolved | `server.go`, `server_adapters_test.go` | `/api/adapters/{id}/invoke` no longer wired; removed-route behavior tested as `404` |
 | Model runtime governance (M3/M4) | `/forge/models*` + `modelruntime.Service` (with gated `/v1/*` compatibility) | partial (implemented) | `services/core/internal/modelruntime/*`, `services/core/internal/api/model_runtime.go`, `services/core/internal/api/model_runtime_bridge.go`, `services/core/internal/config/config.go`, gateway `model.*` policy aliases | Remaining work is hardening/supervision: stronger backend/process control, deeper scheduling/backpressure, cancellation/usage accounting hardening, and operator visibility |
-| Semantic mutation kernel | `controllane.Processor` | real | controllane/truth tests, `processor.go` | broader API-level path coverage |
+| Semantic mutation kernel ingress | `forgekernel.Kernel` (default) -> `controllane.Processor` durable adapter | partial cutover | `internal/forgekernel`, controllane/truth tests, kernel status tests | K20B must move transaction/journal orchestration behind FORGE-K-owned ports, then retire the v1 rollback path |
 | Retired memory observation mutation | syscall-native memory/state mutation only | resolved | retired gate in `server.go`, `server_memory_legacy_test.go` | keep mutation endpoints returning `410 Gone`; add only syscall-native write facades |
 | Approvals/events/jobs/artifacts restore parity | `backup.Service` restore mappings | mostly complete | `backup/service.go`, `backup/service_test.go` | VSA-derived export-only sections remain |
 | Cognitive filesystem restore parity | restore mappings for core cognitive tables | mostly complete | `backup/service.go` mappings + tests | VSA tables still export-only |

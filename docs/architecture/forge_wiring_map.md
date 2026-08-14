@@ -1,6 +1,6 @@
 # FORGE Wiring Map
 
-Date: 2026-04-24.
+Date: 2026-04-24. K20A authority update: 2026-08-14.
 Scope: one-page map of authoritative FORGE runtime wiring after cutover.
 Companion to `docs/status/authoritative_paths.md` and
 `docs/architecture/v1_v2_unification_plan.md`.
@@ -35,7 +35,9 @@ Adapter execution must use `/api/gateway/invoke`; gateway is authoritative.
 
 ```
 caller (API handler, rule agent, autonomy runner, librarian cell)
-   -> controllane.Processor.Submit(intent)
+   -> forgekernel.Kernel.Process(syscall)
+      -> authority-claim gate
+      -> Control Lane durable commit adapter
       -> registry (syscall type known?)
       -> validator.Validate(intent)
       -> policy/capability check
@@ -111,7 +113,8 @@ Guarantees enforced in `autonomy/runner.go` + `policy_evaluator.go`:
 | Concern | Single authority |
 |---|---|
 | Tool execution | `gateway.Service` |
-| Semantic mutation | `controllane.Processor` |
+| Semantic syscall ingress | `forgekernel.Kernel` |
+| Durable semantic commit adapter | `controllane.Processor` (temporary K20A adapter) |
 | Approval records | `approvals.Service` |
 | Audit records | `audit.Service` |
 | Artifact evidence | `artifacts.Service` |

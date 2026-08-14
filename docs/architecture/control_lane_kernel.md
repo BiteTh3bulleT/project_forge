@@ -1,6 +1,8 @@
-# Control Lane Kernel (Phase 2)
+# Control Lane Durable Commit Adapter (Phase 2, K20A compatibility)
 
-Phase 2 makes FORGE Control Lane a deterministic semantic syscall processor.
+Phase 2 made Control Lane a deterministic semantic syscall processor. K20A
+places that processor behind the production FORGE-K ingress boundary as the
+single temporary durable SQLite commit adapter.
 
 Implementation location:
 
@@ -8,11 +10,11 @@ Implementation location:
 
 ## Read This If You Want
 
-Read this if you want the live Control Lane implementation boundary: how semantic syscalls are validated, authorized, committed, audited, and where partial FORGE-K validation/enforcement seams currently live without making the simulator live authority.
+Read this if you want the temporary durable adapter boundary: how semantic syscalls are validated, authorized, committed, and audited after production FORGE-K admits them, and where older partial validation/enforcement seams remain.
 
 ## Responsibilities
 
-Control Lane owns:
+During K20A, the adapter provides:
 
 - semantic syscall registry and action metadata
 - deterministic request normalization
@@ -34,7 +36,7 @@ Phase 14C adds `[PARTIAL LIVE VALIDATION]` `COMPARE_REF_SHAPE` and `VALIDATE_SEM
 
 Phase 14D adds disabled-by-default internal shadow reporting support for Control Lane validation summaries through `services/core/internal/forgekshadow`. It records bounded scalar diagnostics only when global shadow mode and `FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED` are both enabled. The reports do not alter Control Lane decisions, change routes, expose a public API, affect user-visible output, admit evidence, compile context, write memory, execute retrieval/search/embeddings, call modelruntime, execute tools, or make FORGE-K simulator services live authority.
 
-Phase 14E wires those disabled-by-default diagnostic summaries into the live Control Lane processor through an optional best-effort observer. The observer receives bounded validation result metadata after a syscall result exists and cannot change the returned result. The live Control Lane remains the authority; FORGE-K simulator services remain outside the live authority path.
+Phase 14E wired those disabled-by-default diagnostic summaries into the live Control Lane processor through an optional best-effort observer. The observer receives bounded validation result metadata after a syscall result exists and cannot change the returned result. As of K20A, production FORGE-K owns ingress while this processor remains the durable adapter; FORGE-K simulator services remain outside the live path.
 
 Phase 14F adds explicit FORGE-K partial live enforcement metadata to Control Lane validation actions. `VALIDATE_REF_SHAPE`, `COMPARE_REF_SHAPE`, `VALIDATE_SEMANTIC_OPERATION`, and `VALIDATE_KV_IDENTITY` expose activation mode and no-effect summaries while keeping the live owner as Control Lane. Phase 14M extends the same validation-only contract to `VALIDATE_SOURCE_OBJECT_AUTHORITY`, which resolves supported governed source objects by id/scope and fails closed. Online Phase 19 adds `VALIDATE_CONTEXT_ATTRIBUTION` for planned source refs and selection reasons only. This is not full FORGE-K live authority and does not import simulator services, enable live KV reuse, execute tools, call modelruntime, execute retrieval/search/embeddings, admit evidence, compile context, replace `COMPILE_CONTEXT`, or write memory outside existing governed paths.
 
@@ -48,7 +50,7 @@ Phase 14J closes the `COMPARE_REF_SHAPE` lane as `LANE_CLOSED / DIAGNOSTIC_ONLY 
 
 ## FORGE-K Partial Enforcement
 
-Control Lane validation actions now expose FORGE-K partial live enforcement metadata. This means deterministic doctrine is enforced by the current live Control Lane owner, not by importing the simulator Kernel. Validation summaries include the activation mode and no-effect posture so callers and operator surfaces can distinguish partial enforcement from full live authority.
+Control Lane validation actions expose FORGE-K partial live enforcement metadata. In K20A those actions execute inside the durable adapter behind the production FORGE-K ingress owner, never by importing the simulator Kernel. Validation summaries include the activation and no-effect posture so callers and operator surfaces can distinguish ingress authority from full live authority.
 
 ## Kernel / user-space boundary
 

@@ -191,9 +191,9 @@ func assembleBoundedSystemPromptUnprotected(base string, sections []string, max 
 	return strings.TrimSpace(base + separator + suffix)
 }
 
-func (s *Server) forcedToolCallMismatch(forcedModel string, toolCalls []map[string]any) (bool, []string) {
-	forcedModel = strings.TrimSpace(forcedModel)
-	if forcedModel == "" || len(toolCalls) == 0 || s.gateway == nil {
+func (s *Server) forgeToolCallMismatch(selectedTool string, toolCalls []map[string]any) (bool, []string) {
+	selectedTool = strings.TrimSpace(selectedTool)
+	if selectedTool == "" || len(toolCalls) == 0 || s.gateway == nil {
 		return false, nil
 	}
 	selected := make([]string, 0, len(toolCalls))
@@ -211,7 +211,7 @@ func (s *Server) forcedToolCallMismatch(forcedModel string, toolCalls []map[stri
 		}
 		resolvedModel := gateway.ChatModelName(toolID)
 		selected = append(selected, resolvedModel)
-		if resolvedModel != forcedModel {
+		if resolvedModel != selectedTool {
 			return true, selected
 		}
 	}

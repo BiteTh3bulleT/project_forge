@@ -1417,6 +1417,48 @@ func TestChatPostForcedToolMismatchUsesDeterministicFallback(t *testing.T) {
 	}
 }
 
+func TestChatPostAmbiguousOperationalIntentNeverLetsModelSelectTool(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	srv.modelRuntime = fakeRuntime
+
+	thread, err := srv.chat.CreateThread(context.Background(), "forge selects tools", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	raw := []byte(`{"content":"delete something important","requestAssistant":true,"syncAssistant":true}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	var payload chatPostResponse
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v body=%s", err, rr.Body.String())
+	}
+	if payload.AssistantMessage == nil {
+		t.Fatalf("expected assistant message")
+	}
+	activity := metadataMap(payload.AssistantMessage.Metadata, "toolGatewayActivity")
+	if activity["toolCallEmitted"] != false {
+		t.Fatalf("model must not emit a tool proposal without FORGE selection: %#v", activity)
+	}
+	rawStages, _ := metadataMap(payload.AssistantMessage.Metadata, "toolPipeline")["stages"].([]any)
+	found := false
+	for _, rawStage := range rawStages {
+		stage, _ := rawStage.(map[string]any)
+		if asString(stage["stage"]) == "tools_skipped" && asString(stage["reason"]) == "no_deterministic_forge_tool_selection" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("missing FORGE no-selection stage: %#v", rawStages)
+	}
+	assertGatewayInvocationCount(t, st, 0)
+}
+
 func TestChatPostRemoteSSHBannerUsesDesktopOpenNotLocalWrite(t *testing.T) {
 	srv, st := newBackupAuditHarness(t)
 	thread, err := srv.chat.CreateThread(context.Background(), "remote ssh banner", nil)

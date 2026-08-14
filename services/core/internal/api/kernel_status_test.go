@@ -1,16 +1,40 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/config"
+	"forge/projectforge/services/core/internal/forgekernel"
+	"forge/projectforge/services/core/internal/store"
 )
 
+type kernelStatusProcessor struct{}
+
+func (kernelStatusProcessor) Process(context.Context, domain.SyscallRequest) (domain.SyscallResult, error) {
+	return domain.SyscallResult{}, nil
+}
+
+func liveForgeKStatusSelection() forgekernel.Selection {
+	return forgekernel.Selection{
+		Processor:       kernelStatusProcessor{},
+		Mode:            forgekernel.ModeForgeK,
+		AuthorityOwner:  forgekernel.AuthorityOwnerForgeK,
+		CommitAdapter:   forgekernel.DurableCommitAdapter,
+		RollbackMode:    forgekernel.ModeLegacyV1,
+		SingleAuthority: true,
+	}
+}
+
 func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
-	srv := &Server{}
+	srv := &Server{kernelAuthority: liveForgeKStatusSelection()}
 	req := httptest.NewRequest(http.MethodGet, "/forge/kernel/status", nil)
 	rr := httptest.NewRecorder()
 
@@ -23,12 +47,13 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload["status"] != "partial_live_validation_ready" {
+	if payload["status"] != "forge_k_ingress_live" {
 		t.Fatalf("unexpected kernel status payload: %#v", payload)
 	}
 	if payload["live_kernel_authority"] != false ||
 		payload["simulator_authority"] != false ||
-		payload["live_authority_migration"] != false ||
+		payload["live_kernel_ingress_authority"] != true ||
+		payload["live_authority_migration"] != true ||
 		payload["shadow_authoritative"] != false ||
 		payload["mutation_controls_available"] != false {
 		t.Fatalf("kernel status claimed forbidden authority or mutation controls: %#v", payload)
@@ -49,12 +74,35 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 		if action["registered"] != true || action["mutating"] != false || action["approval_possible"] != false {
 			t.Fatalf("validation action is not read-only closed: %#v", action)
 		}
+		if action["live_owner"] != forgekernel.AuthorityOwnerForgeK {
+			t.Fatalf("validation action bypassed boot-selected ingress owner: %#v", action)
+		}
 	}
 	if !seenActions["VALIDATE_ADMISSION_CANDIDATE"] {
 		t.Fatalf("missing admission candidate validation action: %#v", actions)
 	}
 	if !seenActions["VALIDATE_CONTEXT_ATTRIBUTION"] {
 		t.Fatalf("missing context attribution validation action: %#v", actions)
+	}
+	activationGates, ok := payload["gates"].([]any)
+	if !ok {
+		t.Fatalf("missing activation gates: %#v", payload["gates"])
+	}
+	seenFullAuthorityGate := false
+	for _, raw := range activationGates {
+		gate, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected activation gate shape: %#v", raw)
+		}
+		if gate["name"] == "full_kernel_authority_gated" {
+			seenFullAuthorityGate = true
+		}
+		if gate["name"] == "live_kernel_authority_disabled" {
+			t.Fatalf("live K20A status retained legacy disabled gate: %#v", gate)
+		}
+	}
+	if !seenFullAuthorityGate {
+		t.Fatalf("missing full authority migration gate: %#v", activationGates)
 	}
 
 	if payload["authority_ready_gates"] != float64(4) || payload["authority_blocked_gates"] != float64(3) {
@@ -95,6 +143,9 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 		if subsystem == "Courthouse" && entry["current_status"] != "ADMISSION_CANDIDATE_ONLY" {
 			t.Fatalf("courthouse must remain candidate-only, got %#v", entry)
 		}
+		if subsystem == "Kernel" && (entry["current_status"] != "FORGE_K_INGRESS_LIVE" || entry["live_owner"] != "forge_k.kernel") {
+			t.Fatalf("kernel ingress authority not reported: %#v", entry)
+		}
 		if entry["live_owner"] == "" || entry["target_owner"] == "" || entry["rollback_path"] == "" {
 			t.Fatalf("authority matrix entry missing owner/rollback fields: %#v", entry)
 		}
@@ -120,8 +171,69 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	}
 }
 
+func TestForgeKernelStatusReportsLegacyRollbackMode(t *testing.T) {
+	srv := &Server{
+		cfg: config.Config{ForgeKernelAuthorityMode: "legacy_v1"},
+		kernelAuthority: forgekernel.Selection{
+			Processor:       kernelStatusProcessor{},
+			Mode:            forgekernel.ModeLegacyV1,
+			AuthorityOwner:  forgekernel.AuthorityOwnerLegacyV1,
+			CommitAdapter:   forgekernel.DurableCommitAdapter,
+			RollbackMode:    forgekernel.ModeLegacyV1,
+			SingleAuthority: true,
+		},
+	}
+	req := httptest.NewRequest(http.MethodGet, "/forge/kernel/status", nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["status"] != "partial_live_validation_ready" || payload["live_kernel_ingress_authority"] != false || payload["live_authority_migration"] != false {
+		t.Fatalf("legacy rollback posture incorrect: %#v", payload)
+	}
+}
+
+func TestForgeKernelStatusReportsBootSelectionFailureClosed(t *testing.T) {
+	dataDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	srv := NewServer(st, config.Config{
+		DataDir:                  dataDir,
+		WorkspaceDir:             filepath.Join(dataDir, "workspace"),
+		ForgeKernelAuthorityMode: "both",
+	})
+	t.Cleanup(srv.ShutdownWatch)
+	if srv.kernelAuthority.SingleAuthority || srv.kernelAuthority.Processor != nil || srv.kernelErr == "" || srv.autonomy != nil {
+		t.Fatalf("invalid boot authority did not fail closed: selection=%#v err=%q autonomy=%#v", srv.kernelAuthority, srv.kernelErr, srv.autonomy)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/forge/kernel/status", nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["status"] != "kernel_authority_unavailable" || payload["mode"] != "fail_closed" || payload["live_owner"] != "none" {
+		t.Fatalf("boot selection failure posture incorrect: %#v", payload)
+	}
+	if payload["live_kernel_ingress_authority"] != false || payload["live_authority_migration"] != false {
+		t.Fatalf("boot selection failure claimed live authority: %#v", payload)
+	}
+}
+
 func TestForgeKernelStatusDoesNotExposeMutationMethod(t *testing.T) {
-	srv := &Server{}
+	srv := &Server{kernelAuthority: liveForgeKStatusSelection()}
 	req := httptest.NewRequest(http.MethodPost, "/forge/kernel/status", nil)
 	rr := httptest.NewRecorder()
 

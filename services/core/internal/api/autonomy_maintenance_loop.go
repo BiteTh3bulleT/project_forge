@@ -17,11 +17,10 @@ import (
 	"forge/projectforge/services/core/internal/aios/compute/librarian"
 	"forge/projectforge/services/core/internal/aios/controllane"
 	"forge/projectforge/services/core/internal/aios/domain"
-	"forge/projectforge/services/core/internal/aios/rulecells"
 	"forge/projectforge/services/core/internal/aios/truth"
-	"forge/projectforge/services/core/internal/audit"
 	"forge/projectforge/services/core/internal/config"
 	"forge/projectforge/services/core/internal/events"
+	"forge/projectforge/services/core/internal/forgekernel"
 	"forge/projectforge/services/core/internal/memory"
 )
 
@@ -1243,8 +1242,8 @@ func (l *AutonomyMaintenanceLoop) emit(kind string, payload map[string]any) erro
 	return l.events.Emit(context.Background(), kind, payload)
 }
 
-func newDefaultAutonomyMaintenanceLoop(db *sql.DB, cfg config.Config, ev *events.Logger, memorySvc *memory.Service, controlLaneValidationObserver controllane.ControlLaneValidationObserver) *AutonomyMaintenanceLoop {
-	if db == nil {
+func newDefaultAutonomyMaintenanceLoop(db *sql.DB, cfg config.Config, ev *events.Logger, memorySvc *memory.Service, kernel forgekernel.Processor) *AutonomyMaintenanceLoop {
+	if db == nil || kernel == nil {
 		return nil
 	}
 	if !parseBoolSetting(loadSetting(db, "autonomy_dream_enabled", "true"), true) {
@@ -1268,18 +1267,6 @@ func newDefaultAutonomyMaintenanceLoop(db *sql.DB, cfg config.Config, ev *events
 	modelRepo := controllane.NewSQLiteDerivedModelRepository(db)
 	contradictionRepo := controllane.NewSQLiteContradictionRepository(db)
 	supersessionRepo := controllane.NewSQLiteSupersessionRepository(db)
-	txRunner := controllane.NewSQLiteTransactionRunner(db)
-	kernel := controllane.NewProcessor(controllane.ProcessorOptions{
-		Registry:                      controllane.NewStaticActionRegistry(),
-		Validator:                     controllane.NewDeterministicValidator(),
-		Capabilities:                  controllane.NewStaticCapabilityService(),
-		ApprovalGate:                  controllane.NewStaticApprovalGate(),
-		TxRunner:                      txRunner,
-		AuditSink:                     controllane.NewCoreAuditSink(audit.New(db)),
-		RuleEngine:                    rulecells.MustStaticEngine(),
-		NowMillis:                     nowFn,
-		ControlLaneValidationObserver: controlLaneValidationObserver,
-	})
 	truthEngine := truth.NewEngine(truth.EngineOptions{
 		Kernel: kernel,
 		Repositories: truth.Repositories{

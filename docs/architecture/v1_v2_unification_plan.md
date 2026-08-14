@@ -1,6 +1,6 @@
 # Runtime Authority Cutover Plan (Phase 5.997)
 
-Observed baseline date: 2026-04-22.
+Observed baseline date: 2026-04-22. K20A authority update: 2026-08-14.
 
 Goal: one authoritative path per operation. Legacy mutation boundaries are retired rather than opt-in.
 
@@ -9,8 +9,8 @@ Goal: one authoritative path per operation. Legacy mutation boundaries are retir
 | Area | Authoritative path | Legacy boundary | Current state |
 |---|---|---|---|
 | Tool execution | `/api/gateway/invoke` -> `gateway.Execute` | none | complete (legacy `/api/adapters/{id}/invoke` route removed; execution authority is gateway-only) |
-| Semantic mutation | `controllane.Processor` syscall path | none for syscall entities | mostly complete |
-| Memory observation mutation | `controllane.Processor` syscall path | `/api/memory/observations*` mutation endpoints | complete for cutover: legacy mutation endpoints return `410 Gone` and emit retired audit records |
+| Semantic mutation | `forgekernel.Kernel` -> Control Lane durable adapter | `legacy_v1` boot rollback | K20A ingress cutover active; no dual commit |
+| Memory observation mutation | FORGE-K semantic syscall ingress | `/api/memory/observations*` mutation endpoints | complete for route cutover: legacy mutation endpoints return `410 Gone` and emit retired audit records |
 | Approvals | `approvals.Service` | direct decision endpoints | stable |
 | Audit | `audit.Service` | none observed | stable |
 | Backup/export/import | `backup.Service` | manual DB/file operations | partial (transactional restore for supported sections with explicit `atomicScope`; VSA sections are explicitly `exportOnly` by policy and require recompute after restore) |

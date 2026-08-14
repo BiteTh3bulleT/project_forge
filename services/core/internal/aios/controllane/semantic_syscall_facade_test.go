@@ -92,7 +92,7 @@ func TestProcessorAuditIncludesSemanticSyscallFacade(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing authority effects: %#v", facade)
 	}
-	if authority["callsModelRuntime"] != false || authority["executesGatewayTool"] != false || authority["importsForgeK"] != false {
+	if authority["callsModelRuntime"] != false || authority["executesGatewayTool"] != false || authority["importsForgeKSimulator"] != false {
 		t.Fatalf("facade must preserve authority boundaries: %#v", authority)
 	}
 }

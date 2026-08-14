@@ -1,7 +1,7 @@
 # FORGE AI-OS Architecture Baseline
 
-Status date: 2026-04-23  
-Scope: branch-local architecture baseline after code inspection of the current Phase 3-5 surfaces.
+Status date: 2026-08-14
+Scope: live AI-OS baseline including the K20A production FORGE-K ingress cutover.
 
 ## Read This If You Want
 
@@ -20,7 +20,8 @@ Rule of operation:
 
 | Concern | Current authority | Evidence |
 |---|---|---|
-| Canonical semantic mutation | semantic syscall control lane | `services/core/internal/aios/controllane/processor.go`, `validator.go`, `processor_apply.go`, `sqlite_store.go` |
+| Canonical semantic syscall ingress | production FORGE-K Kernel | `services/core/internal/forgekernel/kernel.go`, daemon assembly in `services/core/internal/api/server.go` |
+| Canonical durable commit | temporary Control Lane SQLite adapter | `services/core/internal/aios/controllane/processor.go`, `validator.go`, `processor_apply.go`, `sqlite_store.go` |
 | Tool execution | gateway only | `services/core/internal/gateway/service.go`, `/api/gateway/invoke` in `services/core/internal/api/server.go` |
 | Model execution and model management | model runtime service | `services/core/internal/modelruntime/service.go`, `management.go`, `store_management.go`, `services/core/internal/api/model_runtime*.go` |
 | Approval and capability gates | approvals + permissions + gateway/tool policy | `services/core/internal/approvals`, `services/core/internal/permissions`, `services/core/internal/gateway/tool_policy.go` |
@@ -35,7 +36,7 @@ FORGE memory is classified across three temporal horizons, six processing functi
 - functions: capture, recall, route, score, consolidate, forget
 - types: working, episodic, salience, prospective, reflective, utility, semantic, procedural, structural
 
-Memory type never implies truth authority. Canonical memory still requires semantic syscall validation and control-lane commit. Restore snapshots, Dream reports, retrieval/vector/VSA records, and restore outcome events remain non-canonical evidence unless a governed syscall promotes a specific claim.
+Memory type never implies truth authority. Canonical memory still requires production FORGE-K syscall ingress followed by deterministic validation and the current durable commit adapter. Restore snapshots, Dream reports, retrieval/vector/VSA records, and restore outcome events remain non-canonical evidence unless a governed syscall promotes a specific claim.
 
 Reference:
 

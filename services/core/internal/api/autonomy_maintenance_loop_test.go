@@ -443,7 +443,11 @@ func buildOperationalAutonomyLoop(t *testing.T, st *store.Store, now int64) *Aut
 		DataDir:      t.TempDir(),
 		WorkspaceDir: filepath.Join(t.TempDir(), "workspace"),
 	}
-	loop := newDefaultAutonomyMaintenanceLoop(st.DB, cfg, events.New(st.DB), nil, nil)
+	kernel := controllane.NewProcessor(controllane.ProcessorOptions{
+		TxRunner:  controllane.NewSQLiteTransactionRunner(st.DB),
+		AuditSink: controllane.NewCoreAuditSink(audit.New(st.DB)),
+	})
+	loop := newDefaultAutonomyMaintenanceLoop(st.DB, cfg, events.New(st.DB), nil, kernel)
 	if loop == nil {
 		t.Fatalf("expected default autonomy loop")
 	}
