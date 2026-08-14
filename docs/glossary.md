@@ -136,6 +136,23 @@ original request, plan, seal, receipt, and stable idempotency fingerprint. A
 verified replay performs no new canonical commit. Conflicting fingerprints and
 legacy unbound records fail closed.
 
+## AuthorizationProof
+
+Typed production FORGE-K evidence binding a trusted service principal or
+authenticated request origin to the effective action-registry definition,
+scope-exact capability grant, and approval policy or durable decision. The
+Kernel verifies this proof before preparation, binds its fingerprint into the
+sealed request, persists the full proof with audit/idempotency evidence, and
+requires the same authority binding for replay. Caller-filled actor or source
+fields are attribution, not authentication.
+
+## Restore inspection
+
+A read-only deterministic analysis of a staged backup bundle. It binds the raw
+bundle digest, normalized section set, manifest policy, counts, checksums,
+authority dispositions, blockers, and plan digest without applying rows. It is
+not a restore transaction and cannot import foreign journal or replay authority.
+
 ## Contradiction
 
 An explicit record that two exhibits or claims conflict. Contradictions do not delete or silently merge evidence.

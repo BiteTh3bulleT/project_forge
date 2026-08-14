@@ -95,19 +95,19 @@ VALUES('key-1','CREATE_NOTE','{}',100,'corr-1')`); err != nil {
 	if err := migrate(db); err != nil {
 		t.Fatal(err)
 	}
-	var requestFingerprint, idempotencyFingerprint, requestJSON, planJSON, sealJSON, receiptJSON string
+	var requestFingerprint, idempotencyFingerprint, requestJSON, planJSON, sealJSON, receiptJSON, authproofJSON string
 	if err := db.QueryRow(`
-SELECT request_fingerprint,idempotency_fingerprint,request_json,plan_json,seal_json,receipt_json
+SELECT request_fingerprint,idempotency_fingerprint,request_json,plan_json,seal_json,receipt_json,authproof_json
 FROM semantic_idempotency_keys WHERE idempotency_key='key-1'`).Scan(
-		&requestFingerprint, &idempotencyFingerprint, &requestJSON, &planJSON, &sealJSON, &receiptJSON,
+		&requestFingerprint, &idempotencyFingerprint, &requestJSON, &planJSON, &sealJSON, &receiptJSON, &authproofJSON,
 	); err != nil {
 		t.Fatal(err)
 	}
 	if requestFingerprint != legacyUnboundRequestFingerprint || idempotencyFingerprint != legacyUnboundRequestFingerprint {
 		t.Fatalf("legacy row was not marked non-replayable: request=%q idempotency=%q", requestFingerprint, idempotencyFingerprint)
 	}
-	if requestJSON != "{}" || planJSON != "{}" || sealJSON != "{}" || receiptJSON != "{}" {
-		t.Fatalf("legacy replay proof defaults must fail closed: request=%q plan=%q seal=%q receipt=%q", requestJSON, planJSON, sealJSON, receiptJSON)
+	if requestJSON != "{}" || planJSON != "{}" || sealJSON != "{}" || receiptJSON != "{}" || authproofJSON != "{}" {
+		t.Fatalf("legacy replay proof defaults must fail closed: request=%q plan=%q seal=%q receipt=%q auth=%q", requestJSON, planJSON, sealJSON, receiptJSON, authproofJSON)
 	}
 	if _, err := db.Exec(`UPDATE semantic_idempotency_keys SET action='DELETE_FILE' WHERE idempotency_key='key-1'`); err == nil {
 		t.Fatal("expected idempotency update to be rejected")
@@ -123,8 +123,8 @@ INSERT INTO forge_k_audit_outbox(
 ) VALUES('out-1','sys-1','sha256:a','CREATE_NOTE','ws','control','corr','trace',1,'{}',200,'forge_k.kernel')`); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.QueryRow(`SELECT receipt_json FROM forge_k_audit_outbox WHERE id='out-1'`).Scan(&receiptJSON); err != nil || receiptJSON != "{}" {
-		t.Fatalf("audit outbox receipt default: value=%q err=%v", receiptJSON, err)
+	if err := db.QueryRow(`SELECT request_json,receipt_json,authproof_json FROM forge_k_audit_outbox WHERE id='out-1'`).Scan(&requestJSON, &receiptJSON, &authproofJSON); err != nil || requestJSON != "{}" || receiptJSON != "{}" || authproofJSON != "{}" {
+		t.Fatalf("audit outbox proof defaults: request=%q receipt=%q auth=%q err=%v", requestJSON, receiptJSON, authproofJSON, err)
 	}
 	if _, err := db.Exec(`UPDATE forge_k_audit_outbox SET success=0 WHERE id='out-1'`); err == nil {
 		t.Fatal("expected audit outbox update to be rejected")

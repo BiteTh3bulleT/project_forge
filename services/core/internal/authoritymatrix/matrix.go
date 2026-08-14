@@ -257,12 +257,12 @@ func backupCreateRow() Row {
 
 func backupRestoreRow() Row {
 	return Row{
-		ID: "backup.restore", Surface: "api.backup", Method: "POST", Route: "/api/backup/restore", Action: "backup.restore",
-		AuthorityOwner: OwnerBackup, CapabilityID: "backup.restore", GatewayCapabilityStatus: GatewayStatusApprovalOnly,
-		Mutating: true, Destructive: true, RequiresApproval: true, ApprovalMechanism: ApprovalBackupRestore,
-		AuditCategory: "backup", AuditAction: "backup.bundle.restore", ResponseVisibility: VisibilityOperator,
-		LiveAuthority: true, SemanticMemoryWrite: true, Status: StatusReal,
-		Notes: "Non-dry-run restore requires durable approval fingerprint before live store mutation.",
+		ID: "backup.restore", Surface: "api.backup", Method: "POST", Route: "/api/backup/restore", Action: "backup.restore.inspect",
+		AuthorityOwner: OwnerBackup, CapabilityID: "backup.restore", GatewayCapabilityStatus: GatewayStatusNotApplicable,
+		Mutating: false, Destructive: false, RequiresApproval: false, ApprovalMechanism: ApprovalNone,
+		AuditCategory: "backup", AuditAction: "backup.bundle.restore_inspected", ResponseVisibility: VisibilityOperator,
+		LiveAuthority: true, SemanticMemoryWrite: false, Status: StatusReadOnly,
+		Notes: "Dry-run inspection only; every non-dry request fails closed with FORGE_K_RESTORE_APPLY_DISABLED before approval or mutation.",
 	}
 }
 

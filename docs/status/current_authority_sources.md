@@ -31,7 +31,7 @@ This file maps the current authority docs for FORGE. It is a navigation document
 
 ## FORGE-K Boundary
 
-The simulator packages under `services/core/internal/forgek` remain simulator-only. The distinct production package `services/core/internal/forgekernel` owns live semantic syscall ingress by default (K20A), durable stage orchestration through its port contract (K20B), deterministic Courthouse admission/ruling decisions (K20C), and sealed commit-integrity verification (K20D). Full FORGE-K authority is still incomplete while the other subsystem, direct-writer, and restore gates remain staged and Control Lane implements validation/apply/SQLite details.
+The simulator packages under `services/core/internal/forgek` remain simulator-only. The distinct production package `services/core/internal/forgekernel` owns live semantic syscall ingress by default (K20A), durable stage orchestration through its port contract (K20B), deterministic Courthouse admission/ruling decisions (K20C), sealed commit-integrity verification (K20D), and authenticated principal/registry/capability/approval proof verification with proof-bound replay (K20E). K20E also retires live backup row-merge restore: dry inspection remains, while every apply attempt fails closed before approval or mutation. Full FORGE-K authority is still incomplete while the other subsystem and direct-writer gates remain staged, safe offline recovery is not yet implemented, and Control Lane implements validation/apply/SQLite details.
 
 Current partial live integrations are narrow validation/enforcement seams through shared pure packages and existing live Control Lane paths. They do not:
 

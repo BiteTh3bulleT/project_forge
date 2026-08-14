@@ -410,27 +410,7 @@ INSERT INTO retrieval_results(
 				RetrievalResultID: id,
 				Reason:            reason,
 			})
-			obs, obsErr := s.memory.RecordObservation(ctx, memory.RecordObservationRequest{
-				Type:              "retrieval_result",
-				RawContent:        row.Snippet,
-				Summary:           summarizeSnippet(row.Snippet),
-				DossierID:         req.DossierID,
-				SourcePath:        nonEmpty(row.AbsPath, row.RelPath),
-				RelatedFiles:      []string{nonEmpty(row.RelPath, row.AbsPath)},
-				TaskType:          "retrieval",
-				Confidence:        confidenceFromScores(row.KeywordScore, row.SemanticScore, row.HybridScore),
-				VerificationState: "unverified",
-				OriginKind:        "retrieval_result",
-				OriginID:          strconv.FormatInt(id, 10),
-			})
-			if obsErr == nil && obs != nil {
-				row.ObservationID = &obs.ID
-				_ = s.memory.LinkResultObservation(ctx, id, obs.ID, "Created from retrieval result persistence")
-			}
 			if vsaCfg.Mode != "off" {
-				if vsaSignal.ObservationID == nil && row.ObservationID != nil {
-					vsaSignal.ObservationID = row.ObservationID
-				}
 				vsaSignal.RetrievalResultID = id
 				vsaSignal.RetrievalRunID = runID
 				vsaSignal.AppliedScore = round(clampFloat(vsaSignal.AppliedScore, -vsaCfg.MaxAdditive, vsaCfg.MaxAdditive))
@@ -654,7 +634,6 @@ func (s *Service) MarkUsefulness(ctx context.Context, resultID int64, label, not
 				Weight:            1,
 				Note:              note,
 			})
-			_ = s.memory.TouchVSAReliabilityFromUsefulness(ctx, *obsID, label, 1)
 		}
 	}
 	_, err := s.db.ExecContext(ctx, `

@@ -273,14 +273,19 @@ func (s *Server) handleRunMemoryRepair(w http.ResponseWriter, r *http.Request) {
 		MaxAgeDays int           `json:"maxAgeDays"`
 		Limit      int           `json:"limit"`
 		Note       string        `json:"note"`
+		DryRun     *bool         `json:"dryRun"`
 	}
 	if err := decodeOptionalMemoryJSONBody(r, &body); err != nil {
 		writeMemoryDecodeError(w, err)
 		return
 	}
-	detail, err := s.memory.RunRepairPass(r.Context(), memory.RunRepairRequest{
+	if body.DryRun == nil || !*body.DryRun {
+		writeAPIError(w, http.StatusConflict, "memory_maintenance_proposal_only", "memory repair is proposal-only until FORGE-K owns the governed evidence revision commit; retry with dryRun=true", nil)
+		return
+	}
+	report, err := s.memory.PreviewRepairPass(r.Context(), memory.RunRepairRequest{
 		DossierID:  body.DossierID.Value,
-		Mode:       "manual",
+		Mode:       "manual_preview",
 		MaxAgeDays: body.MaxAgeDays,
 		Limit:      body.Limit,
 		Note:       body.Note,
@@ -289,7 +294,7 @@ func (s *Server) handleRunMemoryRepair(w http.ResponseWriter, r *http.Request) {
 		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"detail": detail})
+	writeJSON(w, http.StatusOK, map[string]any{"report": report})
 }
 
 func (s *Server) handleRunVSAReindex(w http.ResponseWriter, r *http.Request) {
@@ -302,15 +307,20 @@ func (s *Server) handleRunVSAReindex(w http.ResponseWriter, r *http.Request) {
 		Note        string        `json:"note"`
 		StaleOnly   bool          `json:"staleOnly"`
 		Force       bool          `json:"force"`
+		DryRun      *bool         `json:"dryRun"`
 	}
 	if err := decodeOptionalMemoryJSONBody(r, &body); err != nil {
 		writeMemoryDecodeError(w, err)
 		return
 	}
 	if strings.TrimSpace(body.Mode) == "" {
-		body.Mode = "manual"
+		body.Mode = "manual_preview"
 	}
-	detail, err := s.memory.RunVSAReindex(r.Context(), memory.RunVSAReindexRequest{
+	if body.DryRun == nil || !*body.DryRun {
+		writeAPIError(w, http.StatusConflict, "memory_maintenance_proposal_only", "VSA reindex is proposal-only until FORGE-K owns the governed acceleration rebuild commit; retry with dryRun=true", nil)
+		return
+	}
+	report, err := s.memory.PreviewVSAReindex(r.Context(), memory.RunVSAReindexRequest{
 		DossierID:   body.DossierID.Value,
 		Mode:        strings.TrimSpace(body.Mode),
 		Limit:       body.Limit,
@@ -324,7 +334,7 @@ func (s *Server) handleRunVSAReindex(w http.ResponseWriter, r *http.Request) {
 		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"detail": detail})
+	writeJSON(w, http.StatusOK, map[string]any{"report": report})
 }
 
 func decodeMemoryJSONBody(r *http.Request, target any) error {

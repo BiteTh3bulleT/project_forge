@@ -99,6 +99,12 @@ High-risk mappings are explicitly `approval_only` in `activeMappings`, including
 
 ## Policy behavior
 
+`backup.restore` remains classified as dangerous in the gateway capability
+taxonomy, but the live backup API no longer consumes that capability to apply
+state. `/api/backup/restore` accepts dry inspection only; every non-dry request
+fails with `FORGE_K_RESTORE_APPLY_DISABLED` before approval creation. This is a
+retirement guard, not an approval bypass or a claim that recovery is complete.
+
 - `approval_only` returns `approval_required` decision path with structured tool error.
 - `disabled` and `deprecated` deny execution with structured error.
 - Explicit `stubbed` without adapter returns deterministic unsupported operation.

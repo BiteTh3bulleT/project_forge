@@ -10,6 +10,8 @@ import (
 	"sync"
 
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/forgekernel"
+	"forge/projectforge/services/core/internal/forgekernel/authproof"
 	"forge/projectforge/services/core/internal/forgekernel/commitproof"
 	"forge/projectforge/services/core/internal/forgekernel/court"
 	forgejournal "forge/projectforge/services/core/internal/forgekernel/journal"
@@ -66,6 +68,7 @@ type IdempotencyRecord struct {
 	Plan                   commitproof.PreparedPlan     `json:"plan"`
 	Seal                   commitproof.PreparedPlanSeal `json:"seal"`
 	Receipt                commitproof.CommitReceipt    `json:"receipt"`
+	AuthorizationProof     authproof.Proof              `json:"authorizationProof"`
 	CreatedAt              int64                        `json:"createdAt"`
 	CorrelationID          string                       `json:"correlationId"`
 }
@@ -81,7 +84,9 @@ type AuditOutboxRecord struct {
 	TraceID            string                    `json:"traceId"`
 	Success            bool                      `json:"success"`
 	Result             domain.SyscallResult      `json:"result"`
+	Request            domain.SyscallRequest     `json:"request"`
 	Receipt            commitproof.CommitReceipt `json:"receipt"`
+	AuthorizationProof authproof.Proof           `json:"authorizationProof"`
 	CreatedAt          int64                     `json:"createdAt"`
 	CommittedBy        string                    `json:"committedBy"`
 }
@@ -1077,6 +1082,19 @@ func validateIdempotencyRecord(key string, rec IdempotencyRecord) error {
 		rec.Seal.Version != commitproof.PreparedPlanVersion || rec.Seal.RequestFingerprint != rec.RequestFingerprint {
 		return ErrInvalidIdempotencyRecord
 	}
+	owner, _ := rec.Request.Metadata["kernelAuthorityOwner"].(string)
+	productionReceipt := rec.Receipt.JournalEntry.CommittedBy == forgekernel.AuthorityOwnerForgeK
+	if productionReceipt && owner != forgekernel.AuthorityOwnerForgeK {
+		return ErrInvalidIdempotencyRecord
+	}
+	if owner == forgekernel.AuthorityOwnerForgeK {
+		if err := authproof.VerifyProof(rec.Request, rec.AuthorizationProof); err != nil {
+			return ErrInvalidIdempotencyRecord
+		}
+		if fingerprint, _ := rec.Request.Metadata["forgeKAuthorizationProof"].(string); fingerprint != rec.AuthorizationProof.AuthorizationFingerprint {
+			return ErrInvalidIdempotencyRecord
+		}
+	}
 	return nil
 }
 
@@ -1094,6 +1112,25 @@ func validateAuditOutboxRecord(rec AuditOutboxRecord) error {
 	if rec.Receipt.Version != commitproof.CommitReceiptVersion || rec.Receipt.RequestFingerprint != rec.RequestFingerprint ||
 		rec.Receipt.AuditOutboxID != rec.ID {
 		return ErrInvalidAuditOutboxRecord
+	}
+	owner, _ := rec.Request.Metadata["kernelAuthorityOwner"].(string)
+	productionRecord := rec.CommittedBy == forgekernel.AuthorityOwnerForgeK
+	if productionRecord != (owner == forgekernel.AuthorityOwnerForgeK) {
+		return ErrInvalidAuditOutboxRecord
+	}
+	if productionRecord {
+		fingerprint, err := commitproof.FingerprintRequest(rec.Request)
+		if err != nil || fingerprint != rec.RequestFingerprint || rec.Request.ID != rec.SyscallID || rec.Request.Action != rec.Action ||
+			rec.Request.Scope.WorkspaceID != rec.WorkspaceID || rec.Request.Scope.LaneID != rec.LaneID ||
+			rec.Request.CorrelationID != rec.CorrelationID || rec.Request.TraceID != rec.TraceID {
+			return ErrInvalidAuditOutboxRecord
+		}
+		if err := authproof.VerifyProof(rec.Request, rec.AuthorizationProof); err != nil {
+			return ErrInvalidAuditOutboxRecord
+		}
+		if proofFingerprint, _ := rec.Request.Metadata["forgeKAuthorizationProof"].(string); proofFingerprint != rec.AuthorizationProof.AuthorizationFingerprint {
+			return ErrInvalidAuditOutboxRecord
+		}
 	}
 	return nil
 }

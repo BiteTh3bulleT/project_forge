@@ -59,61 +59,62 @@ import (
 )
 
 type Server struct {
-	st              *store.Store
-	cfg             config.Config
-	log             *events.Logger
-	ingest          *ingest.Service
-	search          *search.Service
-	adapters        *adapters.Registry
-	approvals       *approvals.Service
-	packets         *packets.Service
-	artifacts       *artifacts.Service
-	chat            *chat.Service
-	canvas          *canvas.Service
-	projectCtx      *projectcontext.Service
-	embeddings      *embeddings.Service
-	retrieval       *retrieval.Service
-	memory          *memory.Service
-	dossiers        *dossiers.Service
-	evals           *evaluations.Service
-	lineage         *lineage.Service
-	imports         *imports.Service
-	insights        *insights.Service
-	strategies      *strategies.Service
-	policy          *policy.Service
-	automation      *automation.Service
-	packetOpt       *packetopt.Service
-	reviews         *reviews.Service
-	reconcile       *reconciliation.Service
-	failures        *failurepatterns.Service
-	dashboard       *dashboard.Service
-	jobs            *jobs.Service
-	gateway         *gateway.Gateway
-	capStoreOK      bool
-	capStoreErr     string
-	lanes           *lanes.Service
-	permissions     *permissions.Service
-	auditSvc        *audit.Service
-	backup          *backup.Service
-	release         *release.Service
-	modelRuntime    modelRuntimeService
-	dream           *dream.Service
-	gpuTelemetry    *gpu.Service
-	intelTelemetry  *gpu.IntelService
-	watch           *watch.Manager
-	watchStop       context.CancelFunc
-	shutdownOnce    sync.Once
-	autonomy        *AutonomyMaintenanceLoop
-	telegramMu      sync.RWMutex
-	telegramGateway *TelegramGateway
-	telegramErr     string
-	discordMu       sync.RWMutex
-	discordGateway  *DiscordGateway
-	discordErr      string
-	forgeKShadow    *forgekshadow.Observer
-	shadowDB        *sql.DB
-	kernelAuthority forgekernel.Selection
-	kernelErr       string
+	st                       *store.Store
+	cfg                      config.Config
+	log                      *events.Logger
+	ingest                   *ingest.Service
+	search                   *search.Service
+	adapters                 *adapters.Registry
+	approvals                *approvals.Service
+	packets                  *packets.Service
+	artifacts                *artifacts.Service
+	chat                     *chat.Service
+	canvas                   *canvas.Service
+	projectCtx               *projectcontext.Service
+	embeddings               *embeddings.Service
+	retrieval                *retrieval.Service
+	memory                   *memory.Service
+	dossiers                 *dossiers.Service
+	evals                    *evaluations.Service
+	lineage                  *lineage.Service
+	imports                  *imports.Service
+	insights                 *insights.Service
+	strategies               *strategies.Service
+	policy                   *policy.Service
+	automation               *automation.Service
+	packetOpt                *packetopt.Service
+	reviews                  *reviews.Service
+	reconcile                *reconciliation.Service
+	failures                 *failurepatterns.Service
+	dashboard                *dashboard.Service
+	jobs                     *jobs.Service
+	gateway                  *gateway.Gateway
+	capStoreOK               bool
+	capStoreErr              string
+	lanes                    *lanes.Service
+	permissions              *permissions.Service
+	auditSvc                 *audit.Service
+	backup                   *backup.Service
+	release                  *release.Service
+	modelRuntime             modelRuntimeService
+	dream                    *dream.Service
+	gpuTelemetry             *gpu.Service
+	intelTelemetry           *gpu.IntelService
+	watch                    *watch.Manager
+	watchStop                context.CancelFunc
+	shutdownOnce             sync.Once
+	autonomy                 *AutonomyMaintenanceLoop
+	telegramMu               sync.RWMutex
+	telegramGateway          *TelegramGateway
+	telegramErr              string
+	discordMu                sync.RWMutex
+	discordGateway           *DiscordGateway
+	discordErr               string
+	forgeKShadow             *forgekshadow.Observer
+	shadowDB                 *sql.DB
+	kernelAuthority          forgekernel.Selection
+	kernelErr                string
+	kernelAuthorizationReady bool
 
 	// chatAssistInflight tracks assistant generation (async job or SSE) per thread/user-message key.
 	chatAssistInflight sync.Map
@@ -211,8 +212,9 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		}
 		shadowObserver = forgekshadow.NewObserverWithSink(shadowConfig, shadowSink, nil)
 	}
+	actionRegistry := controllane.NewStaticActionRegistry()
 	commitAdapter := controllane.NewProcessor(controllane.ProcessorOptions{
-		Registry:                      controllane.NewStaticActionRegistry(),
+		Registry:                      actionRegistry,
 		Validator:                     controllane.NewDeterministicValidator(),
 		Capabilities:                  controllane.NewStaticCapabilityService(),
 		ApprovalGate:                  controllane.NewStaticApprovalGate(),
@@ -222,7 +224,17 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		NowMillis:                     domain.NowMillis,
 		ControlLaneValidationObserver: shadowObserver,
 	})
-	kernelAuthority, kernelAuthorityErr := forgekernel.SelectAuthority(cfg.ForgeKernelAuthorityMode, commitAdapter)
+	servicePrincipal := controllane.NewForgeCoreServicePrincipal()
+	productionAuthorization, authorizationErr := controllane.NewProductionAuthorizationService(controllane.ProductionAuthorizationOptions{
+		Registry: actionRegistry, DB: st.DB, ServicePrincipal: servicePrincipal,
+	})
+	var kernelAuthority forgekernel.Selection
+	var kernelAuthorityErr error
+	if authorizationErr != nil {
+		kernelAuthorityErr = authorizationErr
+	} else {
+		kernelAuthority, kernelAuthorityErr = forgekernel.SelectAuthority(cfg.ForgeKernelAuthorityMode, commitAdapter, productionAuthorization)
+	}
 	kernelErr := ""
 	if kernelAuthorityErr != nil {
 		kernelErr = kernelAuthorityErr.Error()
@@ -288,54 +300,55 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		go autonomyLoop.Run(ctx)
 	}
 	srv := &Server{
-		st:              st,
-		cfg:             cfg,
-		log:             ev,
-		ingest:          ing,
-		search:          searchSvc,
-		adapters:        reg,
-		approvals:       appSvc,
-		packets:         pktSvc,
-		artifacts:       artSvc,
-		chat:            chatSvc,
-		canvas:          canvasSvc,
-		projectCtx:      pcSvc,
-		embeddings:      embedSvc,
-		retrieval:       retrievalSvc,
-		memory:          memorySvc,
-		dossiers:        dossierSvc,
-		evals:           evalSvc,
-		lineage:         lineageSvc,
-		imports:         importSvc,
-		insights:        insightSvc,
-		strategies:      strategySvc,
-		policy:          policySvc,
-		automation:      automationSvc,
-		packetOpt:       packetOptSvc,
-		reviews:         reviewSvc,
-		reconcile:       reconcileSvc,
-		failures:        failureSvc,
-		dashboard:       dashboardSvc,
-		jobs:            jobSvc,
-		gateway:         gw,
-		capStoreOK:      capabilityOverrideStoreDurable,
-		capStoreErr:     capabilityOverrideStoreError,
-		lanes:           laneSvc,
-		permissions:     permSvc,
-		auditSvc:        auditSvc,
-		backup:          backupSvc,
-		release:         releaseSvc,
-		modelRuntime:    modelRuntimeSvc,
-		dream:           dreamSvc,
-		gpuTelemetry:    gpuTelemetrySvc,
-		intelTelemetry:  intelTelemetrySvc,
-		watch:           wm,
-		watchStop:       cancel,
-		autonomy:        autonomyLoop,
-		forgeKShadow:    shadowObserver,
-		shadowDB:        shadowDB,
-		kernelAuthority: kernelAuthority,
-		kernelErr:       kernelErr,
+		st:                       st,
+		cfg:                      cfg,
+		log:                      ev,
+		ingest:                   ing,
+		search:                   searchSvc,
+		adapters:                 reg,
+		approvals:                appSvc,
+		packets:                  pktSvc,
+		artifacts:                artSvc,
+		chat:                     chatSvc,
+		canvas:                   canvasSvc,
+		projectCtx:               pcSvc,
+		embeddings:               embedSvc,
+		retrieval:                retrievalSvc,
+		memory:                   memorySvc,
+		dossiers:                 dossierSvc,
+		evals:                    evalSvc,
+		lineage:                  lineageSvc,
+		imports:                  importSvc,
+		insights:                 insightSvc,
+		strategies:               strategySvc,
+		policy:                   policySvc,
+		automation:               automationSvc,
+		packetOpt:                packetOptSvc,
+		reviews:                  reviewSvc,
+		reconcile:                reconcileSvc,
+		failures:                 failureSvc,
+		dashboard:                dashboardSvc,
+		jobs:                     jobSvc,
+		gateway:                  gw,
+		capStoreOK:               capabilityOverrideStoreDurable,
+		capStoreErr:              capabilityOverrideStoreError,
+		lanes:                    laneSvc,
+		permissions:              permSvc,
+		auditSvc:                 auditSvc,
+		backup:                   backupSvc,
+		release:                  releaseSvc,
+		modelRuntime:             modelRuntimeSvc,
+		dream:                    dreamSvc,
+		gpuTelemetry:             gpuTelemetrySvc,
+		intelTelemetry:           intelTelemetrySvc,
+		watch:                    wm,
+		watchStop:                cancel,
+		autonomy:                 autonomyLoop,
+		forgeKShadow:             shadowObserver,
+		shadowDB:                 shadowDB,
+		kernelAuthority:          kernelAuthority,
+		kernelErr:                kernelErr,
+		kernelAuthorizationReady: authorizationErr == nil && kernelAuthorityErr == nil && kernelAuthority.Mode == forgekernel.ModeForgeK,
 	}
 	srv.telegramGateway = srv.tryStartTelegramGateway(ctx, cfg)
 	srv.discordGateway = srv.tryStartDiscordGateway(ctx, cfg)

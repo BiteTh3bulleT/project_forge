@@ -99,7 +99,6 @@ type SupersessionRepository interface {
 }
 
 type ContextPacketRepository interface {
-	CreateSnapshot(ctx context.Context, pkt domain.ContextPacket, syscallID, correlationID, traceID string, metadata map[string]any) error
 	GetSnapshotByID(ctx context.Context, id string) (domain.ContextPacket, bool, error)
 	ListSnapshotsByScope(ctx context.Context, scope ScopeFilter, limit int) ([]domain.ContextPacket, error)
 	ListSnapshotsByCorrelation(ctx context.Context, correlationID string, limit int) ([]domain.ContextPacket, error)

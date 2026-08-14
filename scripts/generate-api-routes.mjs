@@ -54,7 +54,7 @@ Check without writing with \`node scripts/generate-api-routes.mjs --check\`.
 ## Auth Posture
 
 - Public: mounted without \`requireAPIAuth\`.
-- Bearer token when \`APIToken\` is configured; open when \`APIToken\` is empty: mounted under \`requireAPIAuth\`.
+- Bearer token when \`APIToken\` is configured; transport-open when \`APIToken\` is empty: mounted under \`requireAPIAuth\`. An empty token does not grant semantic authority: only verified loopback peers receive \`local_loopback\` origin proof, while arbitrary remote peers receive no authenticated user/proposer origin and fail closed at FORGE-K authorization.
 - Handler-specific checks, approval gates, capability gates, and remote webhook signature/token validation are not expanded here unless visible at the route-mount layer.
 
 ## Inventory
@@ -67,7 +67,7 @@ ${rows.join("\n")}
 
 export function routeAuthPosture(route) {
   if (route.auth === "api_bearer_when_configured") {
-    return "Bearer token when `APIToken` is configured; open when `APIToken` is empty";
+    return "Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty";
   }
   return "Public";
 }

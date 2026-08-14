@@ -76,12 +76,6 @@ func NewAutonomyMaintenanceLoop(opts AutonomyMaintenanceLoopOptions) *AutonomyMa
 		librarianPipeline:   opts.LibrarianPipeline,
 		stopCh:              make(chan struct{}),
 	}
-	if loop.runMaintenance == nil {
-		loop.runMaintenance = loop.runMaintenancePass
-	}
-	if loop.runImprovement == nil {
-		loop.runImprovement = loop.runImprovementPass
-	}
 	return loop
 }
 
@@ -300,7 +294,10 @@ func (l *AutonomyMaintenanceLoop) RunSweep(ctx context.Context, req AutonomyMain
 	if reason == "" {
 		reason = "manual_request"
 	}
-	return l.runSweepInternal(ctx, "manual_api", reason, req.DryRun, true, true, !req.DryRun)
+	// K20F containment: manual maintenance is proposal-only until memory
+	// evidence revision and acceleration rebuild commits are FORGE-K-owned.
+	// Missing or false dryRun therefore fails closed to preview mode.
+	return l.runSweepInternal(ctx, "manual_api", reason, true, true, true, false)
 }
 
 func (l *AutonomyMaintenanceLoop) runSweepInternal(ctx context.Context, trigger, idleReason string, dryRun, includeMaintenance, includeImprovement, advanceTimestamps bool) (AutonomyMaintenanceSweepReport, error) {
@@ -408,6 +405,8 @@ func (l *AutonomyMaintenanceLoop) runSweepInternal(ctx context.Context, trigger,
 		"trigger":            report.Trigger,
 		"dryRun":             report.DryRun,
 		"status":             report.Status,
+		"maintenanceDryRun":  report.Maintenance.DryRun,
+		"improvementDryRun":  report.Improvement.DryRun,
 		"maintenanceStatus":  report.Maintenance.Status,
 		"improvementStatus":  report.Improvement.Status,
 		"diagnosticCount":    len(report.Diagnostics),
@@ -484,112 +483,15 @@ func (l *AutonomyMaintenanceLoop) executeMaintenancePhase(ctx context.Context, i
 		return phase, nil
 	}
 
-	memoryRepaired := 0
-	if l.memory != nil {
-		detail, err := l.memory.RunRepairPass(ctx, memory.RunRepairRequest{
-			Mode:       "autonomy_dream_maintenance",
-			MaxAgeDays: 14,
-			Limit:      120,
-			Note:       "idle dream-state maintenance: " + idleReason,
-		})
-		if err != nil {
-			phase.Status = "failed"
-			phase.Diagnostics = append(phase.Diagnostics, AutonomyMaintenanceDiagnostic{
-				Code:     "MEMORY_REPAIR_FAILED",
-				Severity: "error",
-				Message:  err.Error(),
-				Action:   "inspect memory_repair_runs and failing observation rows before retrying",
-			})
-			return phase, err
-		}
-		phase.Summary["memoryRunId"] = detail.Run.ID
-		phase.Summary["memoryCandidates"] = detail.Run.Candidates
-		phase.Summary["memoryRepaired"] = detail.Run.Repaired
-		phase.Summary["memorySkipped"] = detail.Run.Skipped
-		phase.Summary["memoryFailed"] = detail.Run.Failed
-		memoryRepaired = detail.Run.Repaired
-		for _, item := range detail.Items {
-			phase.Actions = append(phase.Actions, AutonomyMaintenanceAction{
-				ID:          fmt.Sprintf("memory-observation-%d", item.ObservationID),
-				Kind:        "memory.observation_repair",
-				Summary:     item.Note,
-				WouldCommit: true,
-				Metadata: map[string]any{
-					"observationId": item.ObservationID,
-					"status":        item.Status,
-					"issue":         item.Issue,
-				},
-			})
-			if item.Status == "failed" {
-				phase.Diagnostics = append(phase.Diagnostics, AutonomyMaintenanceDiagnostic{
-					Code:     "MEMORY_REPAIR_ITEM_FAILED",
-					Severity: "error",
-					Message:  item.Note,
-					Action:   "inspect the failing observation and retry after correcting source data",
-					Metadata: map[string]any{"observationId": item.ObservationID},
-				})
-			}
-		}
-	}
-
-	if l.runtime == nil || l.truth == nil {
-		phase.Warnings = append(phase.Warnings, "memory repair completed; autonomy rule runtime not configured")
-		phase.Summary["autonomyRuns"] = 0
-		phase.Summary["memoryRepaired"] = memoryRepaired
-		return phase, nil
-	}
-
-	now := l.nowMillis()
-	input := autonomy.BuildRuleAgentInput(
-		l.scope,
-		fmt.Sprintf("corr-dream-maintenance-%d", now),
-		fmt.Sprintf("trace-dream-maintenance-%d", now),
-		l.truth,
-		0,
-		"dream_state_idle",
-		now,
-	)
-	plans, planDiagnostics := l.runtime.PlanOnce(ctx, input)
-	for _, diag := range planDiagnostics {
-		phase.Diagnostics = append(phase.Diagnostics, autonomyRunDiagnostics("RULE_AGENT_EVALUATION_FAILED", diag, "inspect the rule-agent error and truth inputs before retrying")...)
-	}
-	runs, err := l.runtime.RunOnce(ctx, input)
-	phase.Summary["autonomyRuns"] = len(runs)
-	if err != nil {
-		phase.Status = "failed"
-		phase.Diagnostics = append(phase.Diagnostics, AutonomyMaintenanceDiagnostic{
-			Code:     "RULE_AGENT_RUNTIME_FAILED",
-			Severity: "error",
-			Message:  err.Error(),
-			Action:   "inspect autonomy runtime and truth engine connectivity before retrying",
-		})
-		return phase, err
-	}
-	for idx, plan := range plans {
-		actionCount := len(plan.Actions)
-		if actionCount == 0 {
-			continue
-		}
-		decision := domain.DecisionAllowProposeOnly
-		warnings := append([]string{}, plan.Warnings...)
-		errors := []domain.AutonomyError{}
-		if idx < len(runs) {
-			decision = runs[idx].Decision
-			warnings = append(warnings, runs[idx].Warnings...)
-			errors = append(errors, runs[idx].Errors...)
-		}
-		appendSyscallActions(&phase, "autonomy.rule_agent", plan.Actions, true, map[string]any{
-			"agentId":    plan.AgentID,
-			"intentId":   plan.Intent.ID,
-			"decision":   decision,
-			"idleReason": idleReason,
-		})
-		phase.Warnings = append(phase.Warnings, warnings...)
-		if len(errors) > 0 {
-			phase.Diagnostics = append(phase.Diagnostics, autonomyRunErrorDiagnostics("RULE_AGENT_RUN_BLOCKED", errors, "review autonomy policy/charter diagnostics before promoting this maintenance action")...)
-		}
-	}
-	return phase, nil
+	// The production maintenance path has no direct evidence mutation
+	// authority. A scheduled pass emits the same read-only report as an
+	// explicit dry-run; separately governed improvement syscalls remain in the
+	// improvement phase.
+	phase.DryRun = true
+	phase.Warnings = append(phase.Warnings, "memory maintenance is proposal-only pending FORGE-K evidence revision authority")
+	preview, err := l.previewMaintenancePhase(ctx, idleReason, phase)
+	markLymphaticProposalOnlyPhase(&preview)
+	return preview, err
 }
 
 func (l *AutonomyMaintenanceLoop) executeImprovementPhase(ctx context.Context, idleReason string, dryRun bool) (AutonomyMaintenancePhaseReport, error) {
@@ -1131,75 +1033,6 @@ func previewSummarizeRawContent(raw string) string {
 		return v
 	}
 	return v[:220] + "..."
-}
-
-func (l *AutonomyMaintenanceLoop) runMaintenancePass(ctx context.Context, idleReason string) error {
-	now := l.nowMillis()
-	if l.memory != nil {
-		_, err := l.memory.RunRepairPass(ctx, memory.RunRepairRequest{
-			Mode:       "autonomy_dream_maintenance",
-			MaxAgeDays: 14,
-			Limit:      120,
-			Note:       "idle dream-state maintenance: " + idleReason,
-		})
-		if err != nil {
-			return err
-		}
-	}
-	if l.runtime == nil || l.truth == nil {
-		_ = l.emit("autonomy.dream_loop.maintenance", map[string]any{
-			"workspaceId": l.scope.WorkspaceID,
-			"note":        "memory repair completed; autonomy runtime not configured",
-		})
-		return nil
-	}
-	input := autonomy.BuildRuleAgentInput(
-		l.scope,
-		fmt.Sprintf("corr-dream-maintenance-%d", now),
-		fmt.Sprintf("trace-dream-maintenance-%d", now),
-		l.truth,
-		0,
-		"dream_state_idle",
-		now,
-	)
-	runs, err := l.runtime.RunOnce(ctx, input)
-	if err != nil {
-		return err
-	}
-	committed := 0
-	for _, run := range runs {
-		committed += len(run.CommittedObjectIDs)
-	}
-	_ = l.emit("autonomy.dream_loop.maintenance", map[string]any{
-		"workspaceId":  l.scope.WorkspaceID,
-		"autonomyRuns": len(runs),
-		"committedIds": committed,
-	})
-	return nil
-}
-
-func (l *AutonomyMaintenanceLoop) runImprovementPass(ctx context.Context, idleReason string) error {
-	if l.runner == nil || l.truth == nil {
-		return nil
-	}
-	now := l.nowMillis()
-	activeLoops, _ := l.truth.ListActiveLoops(ctx, l.scope, 100)
-	blockedLoops, _ := l.truth.ListBlockedLoops(ctx, l.scope, 100)
-	staleLoops, _ := l.truth.ListStaleLoops(ctx, l.scope, now-int64((72*time.Hour)/time.Millisecond), 100)
-	contradictions, _ := l.truth.ListContradictionsByScope(ctx, l.scope, 100)
-	intent, actions, _ := l.buildImprovementPlan(now, idleReason, len(activeLoops), len(blockedLoops), len(staleLoops), len(contradictions))
-	run, err := l.runner.Run(ctx, intent, actions, domain.RunModeCommitIfAuthorized, l.mode)
-	if err != nil {
-		return err
-	}
-	_ = l.emit("autonomy.dream_loop.improvement", map[string]any{
-		"workspaceId":    l.scope.WorkspaceID,
-		"decision":       run.Decision,
-		"committedCount": len(run.CommittedObjectIDs),
-		"warnings":       run.Warnings,
-		"errors":         run.Errors,
-	})
-	return nil
 }
 
 func (l *AutonomyMaintenanceLoop) isIdle(ctx context.Context, now int64) (bool, string, error) {

@@ -34,7 +34,7 @@ type EventIngestionService interface {
 // ImportExportService handles durable portable bundles.
 type ImportExportService interface {
 	CreateBundle(ctx context.Context, req backup.CreateBundleRequest) (*backup.Bundle, error)
-	RestoreBundle(ctx context.Context, req backup.RestoreBundleRequest) (*backup.RestoreResult, error)
+	InspectBundle(ctx context.Context, req backup.RestoreBundleRequest) (*backup.RestoreResult, error)
 }
 
 // ExecutionImportService captures imported external execution outcomes as evidence.

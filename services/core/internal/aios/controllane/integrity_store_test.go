@@ -27,8 +27,11 @@ func TestSQLiteIntegrityRecordsAreConditionalAndImmutable(t *testing.T) {
 
 	for _, statement := range []string{
 		`UPDATE semantic_idempotency_keys SET request_fingerprint = 'changed' WHERE idempotency_key = 'idem-1'`,
+		`UPDATE semantic_idempotency_keys SET authproof_json = '{"swapped":true}' WHERE idempotency_key = 'idem-1'`,
 		`DELETE FROM semantic_idempotency_keys WHERE idempotency_key = 'idem-1'`,
 		`UPDATE forge_k_audit_outbox SET success = 0 WHERE id = 'audit-intent-1'`,
+		`UPDATE forge_k_audit_outbox SET request_json = '{"tampered":true}' WHERE id = 'audit-intent-1'`,
+		`UPDATE forge_k_audit_outbox SET authproof_json = '{"swapped":true}' WHERE id = 'audit-intent-1'`,
 		`DELETE FROM forge_k_audit_outbox WHERE id = 'audit-intent-1'`,
 	} {
 		if _, err := st.DB.Exec(statement); err == nil {
@@ -197,7 +200,7 @@ func assertIntegrityStorageContract(t *testing.T, semantic integrityStore) {
 		t.Fatalf("duplicate syscall audit intent did not fail closed: %v", err)
 	}
 	stored, ok := semantic.GetAuditOutbox(first.ID)
-	if !ok || stored.RequestFingerprint != first.RequestFingerprint || stored.Receipt.AuditOutboxID != first.ID || stored.CommittedBy != "forge_k.kernel" {
+	if !ok || stored.RequestFingerprint != first.RequestFingerprint || stored.Receipt.AuditOutboxID != first.ID || stored.CommittedBy != first.CommittedBy {
 		t.Fatalf("audit intent read mismatch: %#v", stored)
 	}
 	stored.Result.Warnings = append(stored.Result.Warnings, "caller mutation")
@@ -229,7 +232,7 @@ func testAuditOutboxRecord(id, syscallID, fingerprint string, createdAt int64) A
 		WorkspaceID: "ws-1", LaneID: "control.semantic", CorrelationID: "corr-" + syscallID,
 		TraceID: "trace-" + syscallID, Success: true,
 		Result:    domain.SyscallResult{Success: true, Action: domain.ActionCreateNote, RequestID: syscallID},
-		CreatedAt: createdAt, CommittedBy: "forge_k.kernel",
+		CreatedAt: createdAt, CommittedBy: "forge_kernel",
 	}
 	rec.Receipt = commitproof.CommitReceipt{Version: commitproof.CommitReceiptVersion, RequestFingerprint: fingerprint, AuditOutboxID: id}
 	return rec

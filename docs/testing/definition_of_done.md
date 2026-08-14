@@ -12,6 +12,11 @@ FORGE-K work is done only when the implementation, documentation, tests, and evi
 - A reported successful canonical commit has a typed, internally consistent
   receipt proving its transaction, journal identity/hash, object/provenance
   ids, durable audit intent, and idempotency fingerprint.
+- A production semantic syscall has a Kernel-verified authenticated principal,
+  effective registry definition, scope-exact capability grant, and explicit
+  approval-policy record; replay carries and verifies the original full proof.
+- Atomic audit intent contains the exact request and authorization proof and
+  rejects request/proof swaps independently of best-effort audit delivery.
 - No direct canonical mutation bypasses semantic syscalls.
 - No unvalidated model output receives authority.
 - Provenance is not destroyed.
@@ -23,6 +28,10 @@ FORGE-K work is done only when the implementation, documentation, tests, and evi
 - Superseded objects remain inspectable.
 - Contradictions are recorded instead of silently merged.
 - Runtime drivers remain isolated from Kernel authority.
+- Live backup endpoints never raw-merge canonical or immutable proof tables;
+  whole-store recovery is daemon-stopped and chain-verified.
+- Observe/default maintenance and explicit dry-run previews do not rewrite
+  historical evidence or rebuildable projections.
 - Research/tooling phases remain isolated from live daemon authority.
 
 ## Phase Evidence

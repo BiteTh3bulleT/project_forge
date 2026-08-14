@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestRestoreOutcomeFeedbackAPIIsScopedAndNonCanonical(t *testing.T) {
+func TestRestoreOutcomeFeedbackAPIFailsClosedWithoutMutation(t *testing.T) {
 	srv, st := newBackupAuditHarness(t)
 	_, err := st.DB.Exec(`INSERT INTO restore_outcome_events(id,created_at,updated_at,workspace_id,lane_id,query,context_packet_id,snapshot_id,snapshot_kind,restore_score,requires_fresh_compile,selected_evidence_json,selected_state_keys_json,selected_loop_ids_json,selected_artifact_ids_json,outcome,outcome_confidence,downstream_action_type,downstream_object_id,metadata_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		"restore-outcome-api", 1000, 1000, "ws-api", "control.semantic", "restore blockers", "ctx-api", "snap-api", "restore", 0.55, 0, `["note-a"]`, `[]`, `[]`, `[]`, "unknown", 0, "compile_context", "ctx-api", `{}`)
@@ -44,8 +44,11 @@ func TestRestoreOutcomeFeedbackAPIIsScopedAndNonCanonical(t *testing.T) {
 	feedbackReq := withRouteParam(httptest.NewRequest(http.MethodPost, "/api/context/restore/outcomes/restore-outcome-api/feedback", bytes.NewReader(body)), "id", "restore-outcome-api")
 	feedbackRR := httptest.NewRecorder()
 	srv.handleRestoreOutcomeFeedback(feedbackRR, feedbackReq)
-	if feedbackRR.Code != http.StatusOK {
+	if feedbackRR.Code != http.StatusConflict {
 		t.Fatalf("feedback status=%d body=%s", feedbackRR.Code, feedbackRR.Body.String())
+	}
+	if !strings.Contains(feedbackRR.Body.String(), "FORGE_K_RESTORE_OUTCOME_FEEDBACK_DISABLED") {
+		t.Fatalf("missing stable feedback-disabled code: %s", feedbackRR.Body.String())
 	}
 	var noteCount int
 	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM memory_notes`).Scan(&noteCount); err != nil {
@@ -58,12 +61,12 @@ func TestRestoreOutcomeFeedbackAPIIsScopedAndNonCanonical(t *testing.T) {
 	if err := st.DB.QueryRow(`SELECT outcome, correction_summary FROM restore_outcome_events WHERE id=?`, "restore-outcome-api").Scan(&outcome, &correction); err != nil {
 		t.Fatalf("read outcome: %v", err)
 	}
-	if outcome != "operator_corrected" || correction != "use newer notes" {
-		t.Fatalf("feedback not persisted as non-canonical evidence: outcome=%q correction=%q", outcome, correction)
+	if outcome != "unknown" || correction != "" {
+		t.Fatalf("disabled feedback mutated evidence: outcome=%q correction=%q", outcome, correction)
 	}
 }
 
-func TestRestoreOutcomeFeedbackRejectsOversizeRequestBody(t *testing.T) {
+func TestRestoreOutcomeFeedbackStillRejectsOversizeRequestBody(t *testing.T) {
 	t.Parallel()
 
 	s := &Server{}

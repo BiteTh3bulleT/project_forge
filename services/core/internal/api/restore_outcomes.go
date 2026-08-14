@@ -7,13 +7,10 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"forge/projectforge/services/core/internal/aios/controllane"
-	"forge/projectforge/services/core/internal/aios/domain"
-	"forge/projectforge/services/core/internal/audit"
 )
 
 type restoreOutcomeFeedbackRequest struct {
@@ -116,56 +113,13 @@ func (s *Server) handleRestoreOutcomeFeedback(w http.ResponseWriter, r *http.Req
 		writeAPIError(w, http.StatusBadRequest, "request_failed", "valid non-unknown outcome required", nil)
 		return
 	}
-	laneID := strings.TrimSpace(firstNonEmptyTrimmed(body.LaneID, r.URL.Query().Get("laneId")))
-	now := time.Now().UnixMilli()
-	if body.OutcomeConfidence == 0 {
-		body.OutcomeConfidence = 1
-	}
-	store := controllane.NewSQLiteSemanticStore(s.st.DB)
-	event, err := store.UpdateRestoreOutcomeFeedback(r.Context(), chi.URLParam(r, "id"), domain.ForgeScope{WorkspaceID: workspaceID, LaneID: laneID}, controllane.RestoreOutcomeFeedback{
-		Outcome:           outcome,
-		OutcomeConfidence: body.OutcomeConfidence,
-		OperatorFeedback:  body.OperatorFeedback,
-		CorrectionSummary: body.CorrectionSummary,
-		Metadata:          body.Metadata,
-		CorrelationID:     body.CorrelationID,
-		TraceID:           body.TraceID,
-		UpdatedBy:         body.UpdatedBy,
-		UpdatedAt:         now,
-	})
-	if err != nil {
-		if strings.Contains(err.Error(), "outside requested scope") || strings.Contains(err.Error(), "not found") {
-			writeAPIError(w, http.StatusNotFound, "request_failed", "restore outcome not found", nil)
-			return
-		}
-		writeAPIRequestError(w, http.StatusInternalServerError, err)
-		return
-	}
-	meta := requestAuditMetaForBackup(r, body.CorrelationID, body.TraceID, workspaceID, "restore.outcome.feedback")
-	_, _ = s.auditSvc.Record(r.Context(), audit.CreateRequest{
-		CorrelationID: meta.CorrelationID,
-		Category:      "context_restore",
-		Action:        "restore_outcome.feedback_updated",
-		SubjectType:   "restore_outcome_event",
-		SubjectID:     event.ID,
-		Outcome:       "ok",
-		Summary:       "restore outcome feedback updated",
-		Payload: requestAuditPayload(map[string]any{
-			"workspaceId":          workspaceID,
-			"laneId":               laneID,
-			"outcome":              event.Outcome,
-			"outcomeConfidence":    event.OutcomeConfidence,
-			"nonCanonicalEvidence": true,
-			"requestPath":          r.URL.Path,
-		}, meta),
-	})
-	_ = s.log.Emit(r.Context(), "context.restore.outcome.feedback", map[string]any{
-		"id":          event.ID,
-		"workspaceId": workspaceID,
-		"laneId":      laneID,
-		"outcome":     event.Outcome,
-	})
-	writeJSON(w, http.StatusOK, map[string]any{"outcome": event})
+	writeAPIError(
+		w,
+		http.StatusConflict,
+		"FORGE_K_RESTORE_OUTCOME_FEEDBACK_DISABLED",
+		"restore outcome feedback mutation is disabled until it is routed through a production FORGE-K syscall",
+		nil,
+	)
 }
 
 func restoreOutcomeInAPIScope(event controllane.RestoreOutcomeEvent, workspaceID, laneID string) bool {

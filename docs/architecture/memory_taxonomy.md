@@ -88,12 +88,12 @@ Horizon is about operating lifetime, not truth. A short-term event can be true e
 | `provenance_records` | Structural, Episodic | Long-term | IMPLEMENTED | Trace/source lineage for memory authority. |
 | `contradiction_records` | Salience, Reflective, Structural | Mid to long-term | IMPLEMENTED | Preserves disagreement; does not delete either side. |
 | `supersession_records` | Reflective, Structural, Semantic | Long-term | IMPLEMENTED | Durable lineage for replacement without erasure. |
-| `memory_observations` | Episodic, Working, Utility | Short to mid-term | PARTIAL | Legacy/retrieval observation layer; mutation routes are retired, but reads and repair/retrieval uses remain. |
+| `memory_observations` | Episodic, Working, Utility | Short to mid-term | PARTIAL | Historical legacy evidence. Mutation routes are retired; live retrieval no longer creates or links new observation rows, and repair is proposal-only pending a FORGE-K evidence-revision contract. |
 | `memory_usefulness_events` | Utility | Mid-term | IMPLEMENTED | Retrieval memory usefulness signal; non-canonical. |
 | `packet_alignment_notes` | Reflective, Utility | Mid-term | IMPLEMENTED | Packet-to-memory alignment evidence. |
-| `memory_repair_runs`, `memory_repair_items` | Reflective, Utility | Mid-term | PARTIAL | Repair workflow exists, projection repair remains incomplete. |
+| `memory_repair_runs`, `memory_repair_items` | Reflective, Utility | Mid-term | PARTIAL | Historical repair reports remain readable. Live/manual and scheduled repair execution is contained to read-only proposals pending FORGE-K ownership. |
 | `embedding_records` | Structural | Mid-term derived index | IMPLEMENTED | Retrieval index only; vectors are not truth authority. |
-| `memory_vsa_pointers`, `memory_vsa_role_bindings`, `memory_vsa_associations` | Structural, Utility | Mid-term derived index | PARTIAL | Derived from observations/fingerprints; export-only on restore by policy. |
+| `memory_vsa_pointers`, `memory_vsa_role_bindings`, `memory_vsa_associations` | Structural, Utility | Mid-term derived index | PARTIAL | Derived projection only. Manual rebuild is dry-run/report-only pending a FORGE-K-authorized atomic projection rebuild contract. |
 | `retrieval_runs`, `retrieval_results`, `retrieval_result_selection`, `retrieval_result_vsa_signals` | Working, Utility, Structural | Short to mid-term | IMPLEMENTED | Recall evidence and scoring traces, not semantic truth. |
 | `context_evidence` | Episodic, Utility | Short to mid-term | IMPLEMENTED | Evidence rows for downstream packet/job context. |
 | `task_packets`, `packet_retrieval_runs` | Working, Prospective | Short to mid-term | IMPLEMENTED | Execution/context scaffolding; not semantic truth by itself. |

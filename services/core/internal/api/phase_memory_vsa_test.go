@@ -146,7 +146,6 @@ func TestHandleVSAReindexEndpoints(t *testing.T) {
 
 	s := &Server{st: st, memory: memory.New(st.DB)}
 
-	var runID int64
 	{
 		body := map[string]any{
 			"mode":        "manual",
@@ -154,6 +153,7 @@ func TestHandleVSAReindexEndpoints(t *testing.T) {
 			"triggeredBy": "test",
 			"reason":      "api-test",
 			"note":        "vsa reindex from api test",
+			"dryRun":      true,
 		}
 		raw, _ := json.Marshal(body)
 		req := httptest.NewRequest(http.MethodPost, "/api/memory/vsa/reindex/run", bytes.NewReader(raw))
@@ -163,14 +163,13 @@ func TestHandleVSAReindexEndpoints(t *testing.T) {
 			t.Fatalf("run reindex status=%d want=%d body=%s", rr.Code, http.StatusOK, rr.Body.String())
 		}
 		var payload struct {
-			Detail memory.VSAReindexRunDetail `json:"detail"`
+			Report memory.MaintenancePreview `json:"report"`
 		}
 		if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("decode run reindex payload: %v", err)
 		}
-		runID = payload.Detail.Run.ID
-		if runID <= 0 {
-			t.Fatalf("run id=%d want > 0", runID)
+		if !payload.Report.DryRun || !payload.Report.ProposalOnly || payload.Report.Candidates != 1 {
+			t.Fatalf("unexpected proposal-only preview: %+v", payload.Report)
 		}
 	}
 
@@ -187,26 +186,27 @@ func TestHandleVSAReindexEndpoints(t *testing.T) {
 		if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 			t.Fatalf("decode list runs payload: %v", err)
 		}
-		if len(payload.Runs) == 0 {
-			t.Fatalf("expected at least one run")
+		if len(payload.Runs) != 0 {
+			t.Fatalf("dry-run must not create reindex runs: %+v", payload.Runs)
 		}
 	}
 
-	{
-		req := withRouteParam(httptest.NewRequest(http.MethodGet, "/api/memory/vsa/reindex-runs/"+strconv.FormatInt(runID, 10), nil), "id", strconv.FormatInt(runID, 10))
+	for _, raw := range []string{`{"limit":10}`, `{"limit":10,"dryRun":false}`} {
+		req := httptest.NewRequest(http.MethodPost, "/api/memory/vsa/reindex/run", bytes.NewReader([]byte(raw)))
 		rr := httptest.NewRecorder()
-		s.handleGetVSAReindexRun(rr, req)
-		if rr.Code != http.StatusOK {
-			t.Fatalf("get reindex run status=%d want=%d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		s.handleRunVSAReindex(rr, req)
+		if rr.Code != http.StatusConflict {
+			t.Fatalf("non-dry reindex status=%d want=%d body=%s", rr.Code, http.StatusConflict, rr.Body.String())
 		}
-		var payload struct {
-			Detail memory.VSAReindexRunDetail `json:"detail"`
+	}
+
+	for _, table := range []string{"memory_vsa_pointers", "memory_vsa_reindex_runs", "memory_vsa_reindex_items"} {
+		var count int
+		if err := st.DB.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&count); err != nil {
+			t.Fatalf("count %s: %v", table, err)
 		}
-		if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
-			t.Fatalf("decode run detail payload: %v", err)
-		}
-		if payload.Detail.Run.ID != runID {
-			t.Fatalf("run id=%d want=%d", payload.Detail.Run.ID, runID)
+		if count != 0 {
+			t.Fatalf("proposal-only reindex mutated %s: count=%d", table, count)
 		}
 	}
 }

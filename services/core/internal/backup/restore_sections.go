@@ -144,6 +144,11 @@ var restoreExportOnlyReasons = map[string]string{
 	"retrieval_result_vsa_signals": "restore export-only by policy: VSA signals are derived from retrieval runs/results and must be recomputed",
 	"memory_vsa_reindex_runs":      "restore export-only by policy: reindex runs are operational maintenance history tied to live memory state",
 	"memory_vsa_reindex_items":     "restore export-only by policy: reindex items are operational maintenance history tied to live memory state",
+	"court_exhibits":               "restore export-only by live policy: Courthouse state requires production Kernel recovery verification",
+	"court_rulings":                "restore export-only by live policy: immutable Courthouse ruling history cannot be live-merged",
+	"court_appeals":                "restore export-only by live policy: immutable Courthouse appeal history cannot be live-merged",
+	"forge_k_journal_head":         "restore export-only by live policy: the local journal head is whole-store recovery proof",
+	"forge_k_audit_outbox":         "restore export-only by live policy: immutable audit intents cannot be live-merged or redelivered",
 }
 
 func restoreExportOnlyReason(section string) (string, bool) {

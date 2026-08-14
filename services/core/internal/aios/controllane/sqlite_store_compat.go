@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/forgekernel/authproof"
 	"forge/projectforge/services/core/internal/forgekernel/commitproof"
 )
 
@@ -251,11 +252,12 @@ func (s *SQLiteSemanticStore) SetIdempotency(key string, rec IdempotencyRecord) 
 	result, err := s.exec.ExecContext(s.background, `
 INSERT INTO semantic_idempotency_keys(
   idempotency_key, action, request_fingerprint, idempotency_fingerprint, result_json,
-  request_json, plan_json, seal_json, receipt_json, created_at, correlation_id
-) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+  request_json, plan_json, seal_json, receipt_json, authproof_json, created_at, correlation_id
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(idempotency_key) DO NOTHING`,
 		key, string(rec.Action), rec.RequestFingerprint, rec.IdempotencyFingerprint, encodeJSON(rec.Result),
-		encodeJSON(rec.Request), encodeJSON(rec.Plan), encodeJSON(rec.Seal), encodeJSON(rec.Receipt), rec.CreatedAt, rec.CorrelationID,
+		encodeJSON(rec.Request), encodeJSON(rec.Plan), encodeJSON(rec.Seal), encodeJSON(rec.Receipt), encodeJSON(rec.AuthorizationProof),
+		rec.CreatedAt, rec.CorrelationID,
 	)
 	if err != nil {
 		return err
@@ -421,11 +423,11 @@ LIMIT 1`, scope.WorkspaceID, scope.LaneID, scope.LaneID, key)
 func (s *SQLiteSemanticStore) GetIdempotency(key string) (IdempotencyRecord, bool) {
 	row := s.exec.QueryRowContext(s.background, `
 SELECT action, request_fingerprint, idempotency_fingerprint, result_json,
-       request_json, plan_json, seal_json, receipt_json, created_at, correlation_id
+       request_json, plan_json, seal_json, receipt_json, authproof_json, created_at, correlation_id
 FROM semantic_idempotency_keys WHERE idempotency_key = ?`, strings.TrimSpace(key))
-	var action, requestFingerprint, idempotencyFingerprint, raw, requestRaw, planRaw, sealRaw, receiptRaw, correlationID string
+	var action, requestFingerprint, idempotencyFingerprint, raw, requestRaw, planRaw, sealRaw, receiptRaw, authproofRaw, correlationID string
 	var createdAt int64
-	if err := row.Scan(&action, &requestFingerprint, &idempotencyFingerprint, &raw, &requestRaw, &planRaw, &sealRaw, &receiptRaw, &createdAt, &correlationID); err != nil {
+	if err := row.Scan(&action, &requestFingerprint, &idempotencyFingerprint, &raw, &requestRaw, &planRaw, &sealRaw, &receiptRaw, &authproofRaw, &createdAt, &correlationID); err != nil {
 		return IdempotencyRecord{}, false
 	}
 	var result domain.SyscallResult
@@ -438,9 +440,12 @@ FROM semantic_idempotency_keys WHERE idempotency_key = ?`, strings.TrimSpace(key
 	_ = json.Unmarshal([]byte(sealRaw), &seal)
 	var receipt commitproof.CommitReceipt
 	_ = json.Unmarshal([]byte(receiptRaw), &receipt)
+	var authorizationProof authproof.Proof
+	_ = json.Unmarshal([]byte(authproofRaw), &authorizationProof)
 	return IdempotencyRecord{
 		Action: domain.SemanticActionType(action), RequestFingerprint: requestFingerprint, IdempotencyFingerprint: idempotencyFingerprint,
-		Result: result, Request: request, Plan: plan, Seal: seal, Receipt: receipt, CreatedAt: createdAt, CorrelationID: correlationID,
+		Result: result, Request: request, Plan: plan, Seal: seal, Receipt: receipt,
+		AuthorizationProof: authorizationProof, CreatedAt: createdAt, CorrelationID: correlationID,
 	}, true
 }
 

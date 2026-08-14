@@ -149,8 +149,90 @@ func TestRunVSAModesOffShadowActive(t *testing.T) {
 		t.Fatalf("expected persisted positive applied VSA signal in active mode")
 	}
 
+	var observationCount int
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM memory_observations`).Scan(&observationCount); err != nil {
+		t.Fatalf("observation count: %v", err)
+	}
+	if observationCount != 2 {
+		t.Fatalf("retrieval must not duplicate result evidence into memory_observations: got %d want seeded 2", observationCount)
+	}
+	var resultObservationLinks int
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM retrieval_result_observations`).Scan(&resultObservationLinks); err != nil {
+		t.Fatalf("result observation link count: %v", err)
+	}
+	if resultObservationLinks != 0 {
+		t.Fatalf("retrieval must not create legacy result-observation links: got %d", resultObservationLinks)
+	}
+	var selectionCount int
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM retrieval_result_selection`).Scan(&selectionCount); err != nil {
+		t.Fatalf("selection evidence count: %v", err)
+	}
+	if selectionCount != len(offRun.Results)+len(shadowRun.Results)+len(activeRun.Results) {
+		t.Fatalf("selection evidence count=%d want=%d", selectionCount, len(offRun.Results)+len(shadowRun.Results)+len(activeRun.Results))
+	}
+
 	if chunkA <= 0 || relA == "" {
 		t.Fatalf("seed invariant failed")
+	}
+}
+
+func TestMarkUsefulnessTouchesVSAReliabilityOnce(t *testing.T) {
+	t.Parallel()
+
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer st.Close()
+
+	memorySvc := memory.New(st.DB)
+	svc := New(st.DB, search.New(st.DB), embeddings.New(st.DB), memorySvc)
+	now := time.Now().UnixMilli()
+	obsID := seedObservationWithPointer(t, st.DB, "/repo/useful.go", memory.NewVSAEngine(16, 17).EncodeText("useful evidence"), 16)
+	if _, err := st.DB.Exec(`
+INSERT INTO memory_vsa_role_bindings(
+  observation_id, role, filler, weight, support_count, noise_count, binding_json, created_at, updated_at
+) VALUES(?,?,?,?,?,?,?,?,?)`, obsID, "source", "useful.go", 1, 0, 0, `[]`, now, now); err != nil {
+		t.Fatalf("insert role binding: %v", err)
+	}
+	setSetting(t, st.DB, "retrieval_vsa_mode", "active")
+	runRes, err := st.DB.Exec(`
+INSERT INTO retrieval_runs(created_at, query, mode, weighting_json, notes)
+VALUES(?,?,?,?,?)`, now, "useful", "keyword", `{}`, "")
+	if err != nil {
+		t.Fatalf("insert retrieval run: %v", err)
+	}
+	runID, _ := runRes.LastInsertId()
+	resultRes, err := st.DB.Exec(`
+INSERT INTO retrieval_results(
+  retrieval_run_id, abs_path, rel_path, rank_index, keyword_score, semantic_score, hybrid_score, snippet
+) VALUES(?,?,?,?,?,?,?,?)`, runID, "/repo/useful.go", "useful.go", 0, 1, 0, 1, "useful evidence")
+	if err != nil {
+		t.Fatalf("insert retrieval result: %v", err)
+	}
+	resultID, _ := resultRes.LastInsertId()
+	if _, err := st.DB.Exec(`
+INSERT INTO retrieval_result_observations(retrieval_result_id, observation_id, selection_note, created_at)
+VALUES(?,?,?,?)`, resultID, obsID, "legacy link", now); err != nil {
+		t.Fatalf("insert legacy result-observation link: %v", err)
+	}
+
+	if err := svc.MarkUsefulness(context.Background(), resultID, "useful", "operator confirmed", nil, nil); err != nil {
+		t.Fatalf("mark usefulness: %v", err)
+	}
+	var supportCount int
+	if err := st.DB.QueryRow(`SELECT support_count FROM memory_vsa_role_bindings WHERE observation_id = ?`, obsID).Scan(&supportCount); err != nil {
+		t.Fatalf("read support count: %v", err)
+	}
+	if supportCount != 1 {
+		t.Fatalf("one usefulness signal must touch VSA reliability once: got support_count=%d want=1", supportCount)
+	}
+	var usefulnessEvents int
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM memory_usefulness_events WHERE observation_id = ?`, obsID).Scan(&usefulnessEvents); err != nil {
+		t.Fatalf("count usefulness events: %v", err)
+	}
+	if usefulnessEvents != 1 {
+		t.Fatalf("usefulness event count=%d want=1", usefulnessEvents)
 	}
 }
 

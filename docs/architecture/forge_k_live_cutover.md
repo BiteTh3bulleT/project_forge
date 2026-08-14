@@ -112,5 +112,59 @@ conflicting fingerprint or legacy unbound replay record fails closed.
 
 K20D does not make FORGE-K the sole cognitive kernel. Control Lane still
 implements validation/apply and the SQLite port, and Memory Palace, Semantic
-Algebra, Context Compiler, Runtime, Snapshots, KV, Lymphatic, Consensus, direct
-writers, and restore paths retain staged authority work.
+Algebra, Context Compiler, Runtime, Snapshots, KV, Lymphatic, Consensus, and
+other direct writers retain staged authority work.
+
+## K20E authenticated authorization proof
+
+The production Kernel now resolves authorization before `Prepare` and seals a
+typed proof of the authenticated principal, action-registry definition,
+scope-exact capability grant, and approval policy/decision. System and
+internal requests bind the one `forge.core` service principal constructed at
+daemon assembly. User, adapter, and future-IRIS sources require an
+authenticated origin from request context; caller-supplied actor/source maps
+are attribution, not authority. Adapter and future-IRIS mutations remain
+proposal-only and require an approved durable decision from a separate actor.
+
+Bearer authentication contributes a non-secret credential fingerprint and
+session identity. If API token authentication is explicitly absent, only a
+verified loopback peer receives `local_loopback` origin evidence; arbitrary
+remote callers receive no authenticated origin and therefore cannot authorize
+a user/proposer semantic syscall.
+
+The Kernel verifies that the prepared plan matches the authorization record,
+then places the full proof in the atomic idempotency and audit-outbox records.
+The audit intent also stores the exact authorized request and revalidates its
+proof, row identity, and commit-receipt request fingerprint. Replay restores
+the original request, plan, seal, receipt, and authorization proof and requires
+the retry to resolve to the same immutable authority records. Missing,
+legacy-unbound, swapped, or tampered evidence fails closed without commit.
+
+## K20E restore apply retirement
+
+K20E removes backup restore from the live mutation boundary while a safe
+Kernel-owned recovery contract is absent. `POST /api/backup/restore` is now a
+dry-run inspection surface only. Every non-dry request returns
+`FORGE_K_RESTORE_APPLY_DISABLED` before path access, approval creation, or
+state mutation. The backup service applies the same fail-closed rule to direct
+callers, and the live I/O lane exposes inspection rather than restore apply.
+
+Inspection binds the raw bundle SHA-256 to normalized effective sections,
+computed counts and checksums, declared manifest policy and authority, and a
+deterministic plan digest. Each section reports a disposition and blockers.
+Journal events and idempotency proof are never live-mergeable; Courthouse
+state, journal head, and immutable audit-outbox intent are offline-recovery
+only. Historical/provenance evidence requires quarantine or a dedicated
+semantic migration rather than raw upsert.
+
+`full_backup` exports K20C/K20D Courthouse, journal-head, audit-outbox, and
+idempotency state for inspection and future whole-store recovery. Export does
+not grant restore authority. Live apply remains disabled until a daemon-stopped,
+whole-store recovery path verifies the bundle/manifest, SQLite integrity,
+journal chain and head, immutable proof state, workspace identity, and an exact
+rollback procedure before atomically replacing the store.
+
+Restore-outcome feedback writes are also temporarily disabled with
+`FORGE_K_RESTORE_OUTCOME_FEEDBACK_DISABLED`; list/get evidence reads remain
+available. Request decoding and size limits still run before that fail-closed
+response.

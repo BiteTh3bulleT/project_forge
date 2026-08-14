@@ -2,6 +2,7 @@ package forgekernel_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -107,8 +108,9 @@ func TestCourthouseFailsClosedOutsideKernelAndForProposerActors(t *testing.T) {
 			req := liveCourtRequest(domain.ActionAdmitEvidence, "court-source-"+name)
 			req.Source = source
 			req.Actor.Kind = string(source)
+			req.Provenance.ActorType = req.Actor.Kind
 			result, err := selection.Processor.Process(ctx, req)
-			if err != nil || result.Success || result.DeterministicErrCode != domain.ErrCapabilityDenied {
+			if !errors.Is(err, ErrInvalidAuthorization) || result.Success || result.DeterministicErrCode != domain.ErrUnauthorized {
 				t.Fatalf("proposer source did not fail closed: err=%v result=%#v", err, result)
 			}
 			assertNoCourtRows(t, st, req.ID)
@@ -118,6 +120,7 @@ func TestCourthouseFailsClosedOutsideKernelAndForProposerActors(t *testing.T) {
 		selection, st, _ := newLiveSQLiteAuthority(t)
 		req := liveCourtRequest(domain.ActionAdmitEvidence, "court-model")
 		req.Actor.Kind = "llm_model"
+		req.Provenance.ActorType = req.Actor.Kind
 		result, err := selection.Processor.Process(ctx, req)
 		if err != nil || result.Success || result.DeterministicErrCode != domain.ErrUnauthorized {
 			t.Fatalf("model actor did not fail closed: err=%v result=%#v", err, result)

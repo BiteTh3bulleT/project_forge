@@ -27,10 +27,10 @@ Last convergence sweep update: 2026-08-14 (K20A production authority alignment).
 
 ## FORGE-K Live Authority Boundary
 - `[SIMULATOR-ONLY]` The FORGE-K simulator under `services/core/internal/forgek` is not live daemon authority yet.
-- `[LIVE / CUTOVER IN PROGRESS]` `services/core/internal/forgekernel` is the production FORGE-K boundary. K20A makes it the default semantic syscall ingress owner; K20B makes it own the `prepare -> commit -> audit -> observe` orchestration through a narrow durable port. `aios/controllane` still implements validation/apply logic and the temporary SQLite port.
+- `[LIVE / CUTOVER IN PROGRESS]` `services/core/internal/forgekernel` is the production FORGE-K boundary. K20A-K20E make it the authenticated semantic syscall ingress, durable stage-order, Courthouse-decision, sealed commit/receipt/replay, and authorization-proof owner. `aios/controllane` still implements validation/apply logic and the temporary SQLite port.
 - Boot selects one authority with `FORGE_KERNEL_AUTHORITY_MODE=forge_k` (default) or `legacy_v1` (rollback). Dual commits are forbidden.
 - `[LIVE]` The daemon still uses existing gateway, permissions, lane, audit, model runtime, retrieval, embeddings, memory, API, and temporary Control Lane commit-adapter paths during staged migration.
-- `[PARTIAL]` Narrow live validation seams may share pure deterministic contracts with FORGE-K, but that does not make FORGE-K services live authority.
+- `[PARTIAL]` K20F makes default/manual memory repair and VSA reindex proposal-only and stops retrieval from rewriting legacy observations. Remaining evidence/projection writers are not canonical truth authority but still require later append-only or atomic-rebuild contracts.
 - Do not assume FORGE-K doctrine is enforced in live AI-OS, gateway, permissions, lane, audit, model runtime, retrieval, embeddings, memory, or API paths unless the live path has explicit integration tests.
 - Route live FORGE-K work only through the staged production boundary and gates in ADR 0017 and `docs/architecture/forge_k_live_cutover.md`; never import simulator services as live authority.
 
@@ -40,9 +40,13 @@ Last convergence sweep update: 2026-08-14 (K20A production authority alignment).
 - Use `docs/status/current_authority_sources.md` for the current authority-source map before treating older reviews, phase prompts, or roadmaps as active.
 - Use `docs/status/implementation_matrix.md` for live AI-OS and daemon implementation status; it is not the FORGE-K simulator phase matrix.
 - Keep branch and worktree policy in this file authoritative unless a task packet explicitly narrows it.
-- Do not overclaim FORGE-K live authority. Partial live validation/enforcement seams remain narrow and do not make simulator services live daemon authority.
+- Do not overclaim full FORGE-K authority. The production `forgekernel` boundary is live for the explicitly integrated K20A-K20E surfaces; simulator services and unintegrated subsystems remain non-authoritative.
 
 ## Project Priorities
+- **2026-08-14**: K20E requires a Kernel-verified service principal or trusted request origin plus registry, scope-exact capability, and approval evidence before prepare. Exact request and full authorization proof persist with immutable audit/idempotency evidence and are required for replay. Live raw backup restore and mutable restore-outcome feedback are retired pending daemon-stopped recovery and Kernel-owned append contracts.
+- **2026-08-14**: K20F contains legacy memory-plane writers: scheduled/manual repair and VSA rebuild are proposal-only, retrieval no longer creates or updates legacy observations, and usefulness updates VSA reliability once.
+- **2026-08-14**: K20D makes successful canonical commits require a sealed prepared plan and Kernel-validated receipt; semantic mutation, provenance, journal hash-chain/head, audit intent, and idempotency proof share one SQLite transaction.
+- **2026-08-14**: K20C makes production FORGE-K the deterministic Courthouse decision owner for admitted evidence and appeals, preserving immutable ruling history.
 - **2026-08-14**: K20B moves live syscall stage orchestration into production FORGE-K. The K-owned durable port separates preflight, one atomic apply+journal commit, audit recording, and best-effort observation. Control Lane remains the temporary policy/apply/SQLite implementation and the `legacy_v1` rollback facade; it is no longer the default production orchestrator.
 - **2026-08-14**: K20A begins the production FORGE-K cutover. `internal/forgekernel` is the default live semantic syscall ingress owner, the Control Lane processor is a single temporary durable commit adapter assembled at daemon boot, `legacy_v1` is rollback-only, and dual commits are forbidden. FORGE also selects the exact chat tool before any model proposal call; ambiguous turns expose no tool schema.
 - **2026-04-15**: Phase 2 execution/approval/packet/context systems landed.

@@ -281,9 +281,9 @@ INSERT INTO backup_bundles(
 	return s.Get(ctx, id)
 }
 
-// RestoreBundleRequest imports a bundle JSON file into the current FORGE
-// instance. Restores are conservative: existing records are only touched for
-// the sections explicitly listed in sections (or all by default).
+// RestoreBundleRequest describes an inspection proposal. Live apply is
+// retired; Sections selects which deterministic inspection plan entries to
+// return (or all bundle sections by default).
 type RestoreBundleRequest struct {
 	FilePath   string   `json:"filePath"`
 	Sections   []string `json:"sections"`
@@ -292,24 +292,30 @@ type RestoreBundleRequest struct {
 }
 
 type RestoreResult struct {
-	Accepted         bool              `json:"accepted"`
-	DryRun           bool              `json:"dryRun"`
-	Atomic           bool              `json:"atomic"`
-	AtomicScope      string            `json:"atomicScope"`
-	GlobalAtomic     bool              `json:"globalAtomic"`
-	Applied          bool              `json:"applied"`
-	RolledBack       bool              `json:"rolledBack"`
-	BundleKind       string            `json:"bundleKind"`
-	Imported         map[string]int    `json:"imported"`
-	Skipped          map[string]int    `json:"skipped"`
-	Unsupported      map[string]string `json:"unsupported,omitempty"`
-	ExportOnly       map[string]string `json:"exportOnly,omitempty"`
-	NonDBSideEffects map[string]string `json:"nonDbSideEffects,omitempty"`
-	Warnings         []string          `json:"warnings,omitempty"`
-	Errors           []string          `json:"errors"`
-	Schema           int               `json:"schema"`
-	Meta             map[string]string `json:"meta"`
-	Verification     map[string]any    `json:"verification,omitempty"`
+	Accepted           bool                                `json:"accepted"`
+	DryRun             bool                                `json:"dryRun"`
+	InspectionOnly     bool                                `json:"inspectionOnly"`
+	Atomic             bool                                `json:"atomic"`
+	AtomicScope        string                              `json:"atomicScope"`
+	GlobalAtomic       bool                                `json:"globalAtomic"`
+	Applied            bool                                `json:"applied"`
+	RolledBack         bool                                `json:"rolledBack"`
+	BundleKind         string                              `json:"bundleKind"`
+	Imported           map[string]int                      `json:"imported"`
+	Planned            map[string]int                      `json:"planned"`
+	Skipped            map[string]int                      `json:"skipped"`
+	Unsupported        map[string]string                   `json:"unsupported,omitempty"`
+	ExportOnly         map[string]string                   `json:"exportOnly,omitempty"`
+	NonDBSideEffects   map[string]string                   `json:"nonDbSideEffects,omitempty"`
+	Warnings           []string                            `json:"warnings,omitempty"`
+	Errors             []string                            `json:"errors"`
+	Schema             int                                 `json:"schema"`
+	Meta               map[string]string                   `json:"meta"`
+	Verification       map[string]any                      `json:"verification,omitempty"`
+	BundleSHA256       string                              `json:"bundleSha256,omitempty"`
+	EffectiveSections  []string                            `json:"effectiveSections,omitempty"`
+	PlanDigest         string                              `json:"planDigest,omitempty"`
+	SectionInspections map[string]RestoreSectionInspection `json:"sectionInspections,omitempty"`
 }
 
 type restoreSectionPlan struct {
@@ -317,7 +323,9 @@ type restoreSectionPlan struct {
 	rows []any
 }
 
-func (s *Service) RestoreBundle(ctx context.Context, req RestoreBundleRequest) (*RestoreResult, error) {
+// restoreBundleLegacyForTest preserves the pre-FORGE-K raw upsert engine only
+// for compatibility and rollback tests. Production code must never call it.
+func (s *Service) restoreBundleLegacyForTest(ctx context.Context, req RestoreBundleRequest) (*RestoreResult, error) {
 	filePath, err := s.ResolveRestorePath(req.FilePath)
 	if err != nil {
 		return nil, err
@@ -340,6 +348,7 @@ func (s *Service) RestoreBundle(ctx context.Context, req RestoreBundleRequest) (
 		GlobalAtomic:     false,
 		BundleKind:       doc.Kind,
 		Imported:         map[string]int{},
+		Planned:          map[string]int{},
 		Skipped:          map[string]int{},
 		Unsupported:      map[string]string{},
 		ExportOnly:       map[string]string{},
@@ -530,7 +539,9 @@ func (s *Service) pickSections(kind string) ([]string, error) {
 			"provenance_records", "journal_events", "memory_notes", "semantic_links",
 			"state_items", "state_versions", "open_loops", "artifact_refs",
 			"derived_models", "contradiction_records", "supersession_records",
+			"court_exhibits", "court_rulings", "court_appeals",
 			"context_packet_snapshots", "dream_reports", "restore_outcome_events", "semantic_idempotency_keys", "autonomy_settings",
+			"forge_k_journal_head", "forge_k_audit_outbox",
 			"chat_threads", "chat_messages", "canvas_boards", "canvas_notes",
 			"tool_capability_overrides", "feature_flags", "alert_rules", "scheduled_tasks",
 			"memory_vsa_pointers", "memory_vsa_role_bindings", "memory_vsa_associations",
@@ -736,6 +747,23 @@ func backupSectionManifest(section string) SectionManifest {
 	case "journal_events":
 		entry.AuthorityClass = "historical_truth"
 		entry.Purpose = "append-only semantic syscall journal"
+		entry.RestoreRequired = false
+		entry.ExportOnly = true
+	case "semantic_idempotency_keys":
+		entry.AuthorityClass = "kernel_commit_proof"
+		entry.Purpose = "local immutable replay proof; never portable live authority"
+		entry.RestoreRequired = false
+		entry.ExportOnly = true
+	case "court_exhibits", "court_rulings", "court_appeals":
+		entry.AuthorityClass = "canonical_or_historical_truth"
+		entry.Purpose = "production Courthouse current state and immutable ruling/appeal history"
+		entry.RestoreRequired = false
+		entry.ExportOnly = true
+	case "forge_k_journal_head", "forge_k_audit_outbox":
+		entry.AuthorityClass = "kernel_commit_proof"
+		entry.Purpose = "production FORGE-K journal head or immutable audit intent"
+		entry.RestoreRequired = false
+		entry.ExportOnly = true
 	case "context_packet_snapshots":
 		entry.AuthorityClass = "non_canonical_evidence"
 		entry.Purpose = "context restore snapshot evidence and scoring metadata"

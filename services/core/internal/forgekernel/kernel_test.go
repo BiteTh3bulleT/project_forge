@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"forge/projectforge/services/core/internal/aios/controllane"
 	"forge/projectforge/services/core/internal/aios/domain"
 	. "forge/projectforge/services/core/internal/forgekernel"
+	"forge/projectforge/services/core/internal/forgekernel/authproof"
 	"forge/projectforge/services/core/internal/forgekernel/commitproof"
 	"forge/projectforge/services/core/internal/forgekernel/court"
 	forgejournal "forge/projectforge/services/core/internal/forgekernel/journal"
@@ -29,7 +31,9 @@ type recordingProcessor struct {
 	plan          *commitproof.PreparedPlan
 	receipt       *commitproof.CommitReceipt
 	prepared      *PreparedSyscall
+	suppliedAuth  *authproof.Proof
 	committedPlan commitproof.PreparedPlan
+	committedAuth authproof.Proof
 }
 
 func (p *recordingProcessor) Prepare(_ context.Context, req domain.SyscallRequest) (PreparedSyscall, error) {
@@ -48,13 +52,18 @@ func (p *recordingProcessor) Prepare(_ context.Context, req domain.SyscallReques
 	if p.plan != nil {
 		plan = *p.plan
 	}
-	return PreparedSyscall{Request: req, Result: p.out, Disposition: disposition, Plan: plan}, p.err
+	prepared := PreparedSyscall{Request: req, Result: p.out, Disposition: disposition, Plan: plan}
+	if p.suppliedAuth != nil {
+		prepared.AuthorizationProof = *p.suppliedAuth
+	}
+	return prepared, p.err
 }
 
 func (p *recordingProcessor) Commit(_ context.Context, prepared PreparedSyscall, seal commitproof.PreparedPlanSeal) (CommitOutcome, error) {
 	p.calls++
 	p.events = append(p.events, "commit")
 	p.committedPlan = prepared.Plan
+	p.committedAuth = prepared.AuthorizationProof
 	receipt := recordingReceipt(prepared, seal)
 	if p.receipt != nil {
 		receipt = *p.receipt
@@ -94,9 +103,66 @@ func (p *recordingProcessor) Process(_ context.Context, _ domain.SyscallRequest)
 	return p.out, p.err
 }
 
+type testAuthorizationPort struct {
+	err    error
+	mutate func(*authproof.Proof)
+}
+
+func (p testAuthorizationPort) ResolveAuthorization(_ context.Context, req domain.SyscallRequest) (authproof.Proof, error) {
+	if p.err != nil {
+		return authproof.Proof{}, p.err
+	}
+	if err := testProductionAuthorizationPolicy(req); err != nil {
+		return authproof.Proof{}, err
+	}
+	proof, err := buildTestAuthorizationProof(req)
+	if err != nil {
+		return authproof.Proof{}, err
+	}
+	if p.mutate != nil {
+		p.mutate(&proof)
+	}
+	return proof, nil
+}
+
+func testProductionAuthorizationPolicy(req domain.SyscallRequest) error {
+	def, ok := controllane.NewStaticActionRegistry().Get(req.Action)
+	if !ok {
+		return errors.New("production authorization action missing")
+	}
+	allowed := req.Source == domain.SourceUser || req.Source == domain.SourceSystem || req.Source == domain.SourceInternal
+	switch req.Source {
+	case domain.SourceAdapter:
+		switch req.Action {
+		case domain.ActionCreateNote, domain.ActionCreateLink, domain.ActionCompileContext,
+			domain.ActionValidateKVIdentity, domain.ActionValidateRefShape, domain.ActionCompareRefShape,
+			domain.ActionValidateSourceObject, domain.ActionValidateSemanticOperation,
+			domain.ActionValidateAdmissionCandidate, domain.ActionValidateContextAttribution:
+			allowed = true
+		}
+	case domain.SourceFutureIRIS:
+		switch req.Action {
+		case domain.ActionCreateNote, domain.ActionCreateLink, domain.ActionRegisterContradict,
+			domain.ActionDeriveModel, domain.ActionCompileContext:
+			allowed = true
+		}
+	}
+	if !allowed {
+		return errors.New("production capability policy denied source/action")
+	}
+	mutating := def.Mutating || (req.Action == domain.ActionCompileContext && testCompileContextPersists(req.Payload))
+	if mutating && (req.Source == domain.SourceAdapter || req.Source == domain.SourceFutureIRIS) {
+		approved, _ := req.Metadata["testDurableApprovalVerified"].(bool)
+		if !approved {
+			return errors.New("production durable approval proof required")
+		}
+	}
+	return nil
+}
+
 func TestSelectAuthorityDefaultsToForgeKWithOneCommitAuthority(t *testing.T) {
 	delegate := &recordingProcessor{out: domain.SyscallResult{Success: true}}
-	selection, err := SelectAuthority("", delegate)
+	selection, err := SelectAuthority("", delegate, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}
@@ -116,6 +182,9 @@ func TestSelectAuthorityDefaultsToForgeKWithOneCommitAuthority(t *testing.T) {
 	if delegate.committedPlan.ExpectedJournalEventID != "sys-1:journal_event" || delegate.committedPlan.ExpectedJournalPayloadHash == "" {
 		t.Fatalf("Kernel did not bind prepared plan before commit: %#v", delegate.committedPlan)
 	}
+	if delegate.committedAuth.AuthorizationFingerprint == "" || result.StateSummary["authorizationProofVerified"] != true {
+		t.Fatalf("Kernel did not pass verified authorization to commit: auth=%#v result=%#v", delegate.committedAuth, result.StateSummary)
+	}
 	if !slices.Equal(delegate.events, []string{"prepare", "commit", "record", "observe"}) {
 		t.Fatalf("FORGE-K did not own durable stage order: %v", delegate.events)
 	}
@@ -126,16 +195,70 @@ func TestForgeKCompleteDispositionNeverCommits(t *testing.T) {
 		out:         domain.SyscallResult{Success: false, DeterministicErrCode: domain.ErrCapabilityDenied},
 		disposition: DispositionComplete,
 	}
-	selection, err := SelectAuthority(string(ModeForgeK), delegate)
+	selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}
-	result, err := selection.Processor.Process(context.Background(), domain.SyscallRequest{ID: "sys-complete"})
+	result, err := selection.Processor.Process(context.Background(), kernelTestRequest("sys-complete"))
 	if err != nil || result.Success || delegate.calls != 0 {
 		t.Fatalf("result=%#v err=%v delegate=%#v", result, err, delegate)
 	}
 	if !slices.Equal(delegate.events, []string{"prepare", "record", "observe"}) {
 		t.Fatalf("completed preflight reached wrong stages: %v", delegate.events)
+	}
+}
+
+func TestForgeKRejectsMissingOrTamperedAuthorizationBeforePrepare(t *testing.T) {
+	tests := []struct {
+		name string
+		port testAuthorizationPort
+	}{
+		{name: "resolver failure", port: testAuthorizationPort{err: errors.New("identity authority unavailable")}},
+		{name: "tampered origin", port: testAuthorizationPort{mutate: func(proof *authproof.Proof) {
+			proof.Origin.SubjectID = "mallory"
+		}}},
+		{name: "tampered capability", port: testAuthorizationPort{mutate: func(proof *authproof.Proof) {
+			proof.Capability.Scope.WorkspaceID = "other"
+		}}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			delegate := &recordingProcessor{out: domain.SyscallResult{Success: true}}
+			selection, err := SelectAuthority(string(ModeForgeK), delegate, tc.port)
+			if err != nil {
+				t.Fatalf("select authority: %v", err)
+			}
+			result, err := selection.Processor.Process(context.Background(), kernelTestRequest("sys-auth-fail"))
+			if !errors.Is(err, ErrInvalidAuthorization) || result.Success || result.DeterministicErrCode != domain.ErrUnauthorized {
+				t.Fatalf("result=%#v err=%v", result, err)
+			}
+			if delegate.prepares != 0 || delegate.calls != 0 || delegate.records != 1 || delegate.observes != 1 {
+				t.Fatalf("authorization failure crossed prepare/commit boundary: %#v", delegate)
+			}
+			if result.StateSummary["authorizationProofVerified"] != false {
+				t.Fatalf("authorization failure annotation missing: %#v", result.StateSummary)
+			}
+		})
+	}
+}
+
+func TestForgeKRejectsAdapterSuppliedAuthorizationMismatch(t *testing.T) {
+	req := authorizedKernelTestRequest("sys-adapter-auth")
+	supplied := mustBuildTestAuthorizationProof(t, req)
+	supplied.EvidenceSnapshotID = "adapter-injected-snapshot"
+	var err error
+	supplied, err = authproof.BuildProof(req, supplied)
+	if err != nil {
+		t.Fatalf("build mismatched proof: %v", err)
+	}
+	delegate := &recordingProcessor{out: domain.SyscallResult{Success: true}, suppliedAuth: &supplied}
+	selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
+	if err != nil {
+		t.Fatalf("select authority: %v", err)
+	}
+	result, err := selection.Processor.Process(context.Background(), req)
+	if !errors.Is(err, ErrInvalidAuthorization) || result.Success || delegate.calls != 0 {
+		t.Fatalf("result=%#v err=%v delegate=%#v", result, err, delegate)
 	}
 }
 
@@ -145,19 +268,19 @@ func TestForgeKRejectsMissingPreparedPlanBeforeCommit(t *testing.T) {
 		out:  domain.SyscallResult{Success: true},
 		plan: &missing,
 	}
-	selection, err := SelectAuthority(string(ModeForgeK), delegate)
+	selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}
 	result, err := selection.Processor.Process(context.Background(), kernelTestRequest("sys-missing-plan"))
-	if !errors.Is(err, ErrInvalidPreparedProof) {
-		t.Fatalf("process error = %v, want ErrInvalidPreparedProof", err)
+	if !errors.Is(err, ErrInvalidAuthorization) {
+		t.Fatalf("process error = %v, want ErrInvalidAuthorization", err)
 	}
-	if result.Success || result.DeterministicErrCode != domain.ErrInternal || delegate.calls != 0 || delegate.records != 1 || delegate.observes != 1 {
+	if result.Success || result.DeterministicErrCode != domain.ErrUnauthorized || delegate.calls != 0 || delegate.records != 1 || delegate.observes != 1 {
 		t.Fatalf("result=%#v delegate=%#v", result, delegate)
 	}
-	if result.StateSummary["commitProofVerified"] != false {
-		t.Fatalf("missing failure proof metadata: %#v", result.StateSummary)
+	if result.StateSummary["authorizationProofVerified"] != false {
+		t.Fatalf("missing authorization failure metadata: %#v", result.StateSummary)
 	}
 	if !slices.Equal(delegate.events, []string{"prepare", "record", "observe"}) {
 		t.Fatalf("invalid prepared plan reached commit: %v", delegate.events)
@@ -188,7 +311,7 @@ func TestForgeKRejectsMissingOrTamperedReceiptAfterCommit(t *testing.T) {
 				out:     domain.SyscallResult{Success: true},
 				receipt: &tc.receipt,
 			}
-			selection, err := SelectAuthority(string(ModeForgeK), delegate)
+			selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
 			if err != nil {
 				t.Fatalf("select authority: %v", err)
 			}
@@ -211,6 +334,8 @@ func TestForgeKRejectsMissingOrTamperedReceiptAfterCommit(t *testing.T) {
 
 func TestForgeKValidatesBoundReplayWithoutCommittingAgain(t *testing.T) {
 	original := authorizedKernelTestRequest("sys-original")
+	originalAuthorization := mustBuildTestAuthorizationProof(t, original)
+	original.Metadata["forgeKAuthorizationProof"] = originalAuthorization.AuthorizationFingerprint
 	plan := mustBindKernelPlan(t, original, recordingPlan(original))
 	seal, err := commitproof.SealPreparedPlan(original, plan)
 	if err != nil {
@@ -239,8 +364,9 @@ func TestForgeKValidatesBoundReplayWithoutCommittingAgain(t *testing.T) {
 	delegate := &recordingProcessor{prepared: &PreparedSyscall{
 		Result: stored, Disposition: DispositionReplay,
 		ReplayRequest: original, ReplayPlan: plan, ReplaySeal: seal, ReplayReceipt: receipt,
+		ReplayAuthorizationProof: originalAuthorization,
 	}}
-	selection, err := SelectAuthority(string(ModeForgeK), delegate)
+	selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}
@@ -261,6 +387,8 @@ func TestForgeKValidatesBoundReplayWithoutCommittingAgain(t *testing.T) {
 
 func TestForgeKRejectsLegacyUnboundOrTamperedReplay(t *testing.T) {
 	original := authorizedKernelTestRequest("sys-replay-source")
+	originalAuthorization := mustBuildTestAuthorizationProof(t, original)
+	original.Metadata["forgeKAuthorizationProof"] = originalAuthorization.AuthorizationFingerprint
 	plan := mustBindKernelPlan(t, original, recordingPlan(original))
 	seal, err := commitproof.SealPreparedPlan(original, plan)
 	if err != nil {
@@ -277,20 +405,25 @@ func TestForgeKRejectsLegacyUnboundOrTamperedReplay(t *testing.T) {
 		{name: "tampered-receipt", edit: func(p *PreparedSyscall) {
 			p.ReplayReceipt.PreparedPlanSeal = "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 		}},
+		{name: "tampered-authorization", edit: func(p *PreparedSyscall) {
+			p.ReplayAuthorizationProof.Capability.RecordID = "grant:tampered"
+		}},
+		{name: "missing-authorization", edit: func(p *PreparedSyscall) { p.ReplayAuthorizationProof = authproof.Proof{} }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			prepared := PreparedSyscall{
 				Result: result, Disposition: DispositionReplay,
 				ReplayRequest: original, ReplayPlan: cloneCommitPlan(plan), ReplaySeal: seal, ReplayReceipt: receipt,
+				ReplayAuthorizationProof: originalAuthorization,
 			}
 			tc.edit(&prepared)
 			delegate := &recordingProcessor{prepared: &prepared}
-			selection, err := SelectAuthority(string(ModeForgeK), delegate)
+			selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
 			if err != nil {
 				t.Fatalf("select authority: %v", err)
 			}
 			got, err := selection.Processor.Process(context.Background(), cloneKernelRequest(original))
-			if !errors.Is(err, ErrInvalidCommitReceipt) && !errors.Is(err, ErrInvalidPreparedProof) {
+			if !errors.Is(err, ErrInvalidCommitReceipt) && !errors.Is(err, ErrInvalidPreparedProof) && !errors.Is(err, ErrInvalidAuthorization) {
 				t.Fatalf("replay error = %v, want proof failure", err)
 			}
 			if got.Success || delegate.calls != 0 || delegate.records != 1 || delegate.observes != 1 {
@@ -313,10 +446,12 @@ func TestForgeKReplayReconstructsOriginalCourtDecision(t *testing.T) {
 	if len(issues) > 0 {
 		t.Fatalf("original Court decision: %#v", issues)
 	}
+	originalAuthorization := mustBuildTestAuthorizationProof(t, original)
+	original.Metadata["forgeKAuthorizationProof"] = originalAuthorization.AuthorizationFingerprint
 	sealedRequest := cloneKernelRequest(original)
 	sealedRequest.Metadata[court.MetadataDecisionKey] = decision
 	plan := commitproof.PreparedPlan{
-		Action: domain.ActionAdmitEvidence, Capability: "memory.evidence.admit", TargetObjectType: "court_exhibit",
+		Action: domain.ActionAdmitEvidence, Capability: controllane.CapEvidenceAdmit, TargetObjectType: "court_exhibit_ruling",
 		Mutating: true, JournalEventType: "semantic_syscall.admit_evidence",
 		ExpectedObjectIDs: []string{"exhibit-1", "ruling-1"}, ExpectedProvenanceIDs: []string{"prov-court-1"},
 		Details: map[string]any{"decision": court.DecisionAdmitted},
@@ -337,8 +472,9 @@ func TestForgeKReplayReconstructsOriginalCourtDecision(t *testing.T) {
 	delegate := &recordingProcessor{prepared: &PreparedSyscall{
 		Result: stored, Disposition: DispositionReplay,
 		ReplayRequest: original, ReplayPlan: plan, ReplaySeal: seal, ReplayReceipt: receipt,
+		ReplayAuthorizationProof: originalAuthorization,
 	}}
-	selection, err := SelectAuthority(string(ModeForgeK), delegate)
+	selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}
@@ -367,7 +503,7 @@ func TestForgeKRejectsExternalAuthorityClaimBeforeCommit(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			delegate := &recordingProcessor{out: domain.SyscallResult{Success: true}}
-			selection, err := SelectAuthority(string(ModeForgeK), delegate)
+			selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
 			if err != nil {
 				t.Fatalf("select authority: %v", err)
 			}
@@ -395,6 +531,9 @@ func TestSelectAuthorityFailsClosed(t *testing.T) {
 	if _, err := SelectAuthority(string(ModeForgeK), processorWithoutDurablePort{}); !errors.Is(err, ErrMissingDurablePort) {
 		t.Fatalf("missing durable port error=%v", err)
 	}
+	if _, err := SelectAuthority(string(ModeForgeK), &recordingProcessor{}); !errors.Is(err, ErrMissingAuthorization) {
+		t.Fatalf("missing authorization port error=%v", err)
+	}
 }
 
 func TestForgeKLiveCommitCarriesAuthorityIntoAuditAndJournal(t *testing.T) {
@@ -414,7 +553,7 @@ func TestForgeKLiveCommitCarriesAuthorityIntoAuditAndJournal(t *testing.T) {
 		AuditSink:    auditSink,
 		NowMillis:    func() int64 { return 1760000000000 },
 	})
-	selection, err := SelectAuthority(string(ModeForgeK), commit)
+	selection, err := SelectAuthority(string(ModeForgeK), commit, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}
@@ -502,9 +641,10 @@ func TestForgeKDurablePortGatesAndRollback(t *testing.T) {
 		req.Action = domain.ActionArchiveNote
 		req.Source = domain.SourceAdapter
 		req.Actor.Kind = string(domain.SourceAdapter)
+		req.Provenance.ActorType = req.Actor.Kind
 		req.Payload = map[string]any{"noteId": "note-k20b-capability", "reason": "must not commit"}
 		result, err := selection.Processor.Process(ctx, req)
-		if err != nil || result.Success || result.DeterministicErrCode != domain.ErrCapabilityDenied {
+		if !errors.Is(err, ErrInvalidAuthorization) || result.Success || result.DeterministicErrCode != domain.ErrUnauthorized {
 			t.Fatalf("result=%#v err=%v", result, err)
 		}
 		assertNoNoteOrJournal(t, st, req)
@@ -515,8 +655,9 @@ func TestForgeKDurablePortGatesAndRollback(t *testing.T) {
 		req := liveNoteRequest("k20b-approval", "note-k20b-approval")
 		req.Source = domain.SourceFutureIRIS
 		req.Actor.Kind = string(domain.SourceFutureIRIS)
+		req.Provenance.ActorType = req.Actor.Kind
 		result, err := selection.Processor.Process(ctx, req)
-		if err != nil || result.Success || result.DeterministicErrCode != domain.ErrApprovalRequired {
+		if !errors.Is(err, ErrInvalidAuthorization) || result.Success || result.DeterministicErrCode != domain.ErrUnauthorized {
 			t.Fatalf("result=%#v err=%v", result, err)
 		}
 		assertNoNoteOrJournal(t, st, req)
@@ -576,7 +717,7 @@ func newLiveSQLiteAuthority(t *testing.T) (Selection, *store.Store, *controllane
 		AuditSink: auditSink,
 		NowMillis: func() int64 { return 1760000000000 },
 	})
-	selection, err := SelectAuthority(string(ModeForgeK), adapter)
+	selection, err := SelectAuthority(string(ModeForgeK), adapter, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}
@@ -640,11 +781,100 @@ func recordingPlan(req domain.SyscallRequest) commitproof.PreparedPlan {
 		Capability:            "memory.note.create",
 		TargetObjectType:      "memory_note",
 		Mutating:              true,
-		JournalEventType:      "semantic_syscall_committed",
+		JournalEventType:      "semantic_syscall." + strings.ToLower(string(req.Action)),
 		ExpectedObjectIDs:     []string{objectID},
 		ExpectedProvenanceIDs: []string{req.ID + ":provenance"},
 		Details:               map[string]any{"write": "create_note"},
 	}
+}
+
+func buildTestAuthorizationProof(req domain.SyscallRequest) (authproof.Proof, error) {
+	def, ok := controllane.NewStaticActionRegistry().Get(req.Action)
+	if !ok {
+		return authproof.Proof{}, errors.New("test authorization registry action missing")
+	}
+	const credential = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	service := authproof.PrincipalRecord{
+		RecordID: "principal:forge.core", Version: "service_identity.v1",
+		SubjectID: "forge.core", SubjectKind: "service", Source: domain.SourceSystem,
+		Issuer: "forge.bootstrap", CredentialFingerprint: credential,
+		Status: authproof.StatusActive, AuthenticatedAt: 1,
+	}
+	proof := authproof.Proof{
+		EvidenceSnapshotID: "test-authorization-snapshot:v1",
+		ServicePrincipal:   service,
+		Registry: authproof.RegistryRecord{
+			RecordID: "action:" + string(req.Action), Version: "test-registry.v1", Authority: "forge_k.registry",
+			Action: req.Action, Capability: def.Capability, TargetObjectType: def.TargetObjectType,
+			Mutating: def.Mutating, MutationPolicy: authproof.MutationNever, AuthorizedMutating: false,
+			SupportsDryRun: def.SupportsDryRun, ApprovalPossible: def.ApprovalPossible,
+			JournalEventType: "semantic_syscall." + strings.ToLower(string(req.Action)),
+		},
+		Capability: authproof.CapabilityRecord{
+			RecordID: "grant:" + req.Actor.ID + ":" + def.Capability, Version: "test-capability.v1", Authority: "forge.capabilities",
+			SubjectID: req.Actor.ID, SubjectKind: req.Actor.Kind, Source: req.Source,
+			Action: req.Action, Capability: def.Capability, Scope: req.Scope,
+			Status: authproof.StatusActive, GrantedAt: 1,
+		},
+		Approval: authproof.ApprovalRecord{
+			PolicyRecordID: "approval-policy:test", PolicyVersion: "test-approval.v1", Authority: "forge.approvals",
+			Status: authproof.ApprovalNotNeeded,
+		},
+	}
+	if def.Mutating {
+		proof.Registry.MutationPolicy = authproof.MutationAlways
+		proof.Registry.AuthorizedMutating = true
+	} else if req.Action == domain.ActionCompileContext {
+		proof.Registry.MutationPolicy = authproof.MutationRequestDependent
+		proof.Registry.AuthorizedMutating = testCompileContextPersists(req.Payload)
+	}
+	switch req.Source {
+	case domain.SourceUser, domain.SourceAdapter, domain.SourceFutureIRIS:
+		proof.Origin = &authproof.PrincipalRecord{
+			RecordID: "authn:" + req.Actor.ID + ":session", Version: "test-identity.v1",
+			SubjectID: req.Actor.ID, SubjectKind: req.Actor.Kind, Source: req.Source,
+			Issuer: "forge.test.context", CredentialFingerprint: credential,
+			Status: authproof.StatusActive, AuthenticatedAt: 1,
+		}
+	default:
+		proof.Capability.SubjectID = service.SubjectID
+		proof.Capability.SubjectKind = service.SubjectKind
+	}
+	if def.Mutating && (req.Source == domain.SourceAdapter || req.Source == domain.SourceFutureIRIS) {
+		proof.Approval.Required = true
+		proof.Approval.Status = authproof.ApprovalApproved
+		proof.Approval.RequestID = "approval-request:test"
+		proof.Approval.DecisionID = "approval-decision:test"
+		proof.Approval.DecidedBy = "operator:reviewer"
+		proof.Approval.DecisionAt = 1
+	}
+	return authproof.BuildProof(req, proof)
+}
+
+func testCompileContextPersists(payload map[string]any) bool {
+	persist := false
+	apply := func(values map[string]any) {
+		if value, ok := values["persistSnapshot"].(bool); ok {
+			persist = value
+		}
+	}
+	apply(payload)
+	if nested, ok := payload["restoreSnapshot"].(map[string]any); ok {
+		apply(nested)
+	}
+	if nested, ok := payload["compileOptions"].(map[string]any); ok {
+		apply(nested)
+	}
+	return persist
+}
+
+func mustBuildTestAuthorizationProof(t *testing.T, req domain.SyscallRequest) authproof.Proof {
+	t.Helper()
+	proof, err := buildTestAuthorizationProof(req)
+	if err != nil {
+		t.Fatalf("build test authorization proof: %v", err)
+	}
+	return proof
 }
 
 func recordingReceipt(prepared PreparedSyscall, seal commitproof.PreparedPlanSeal) commitproof.CommitReceipt {

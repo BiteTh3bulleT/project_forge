@@ -31,11 +31,12 @@ func (s *SQLiteSemanticStore) CreateAuditOutbox(rec AuditOutboxRecord) error {
 	result, err := s.exec.ExecContext(s.background, `
 INSERT INTO forge_k_audit_outbox(
   id, syscall_id, request_fingerprint, action, workspace_id, lane_id,
-  correlation_id, trace_id, success, result_json, receipt_json, created_at, committed_by
-) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+  correlation_id, trace_id, success, result_json, request_json, receipt_json, authproof_json, created_at, committed_by
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT DO NOTHING`,
 		rec.ID, rec.SyscallID, rec.RequestFingerprint, string(rec.Action), rec.WorkspaceID, rec.LaneID,
-		rec.CorrelationID, rec.TraceID, boolToInt(rec.Success), encodeJSON(rec.Result), encodeJSON(rec.Receipt), rec.CreatedAt,
+		rec.CorrelationID, rec.TraceID, boolToInt(rec.Success), encodeJSON(rec.Result), encodeJSON(rec.Request), encodeJSON(rec.Receipt),
+		encodeJSON(rec.AuthorizationProof), rec.CreatedAt,
 		nonEmpty(rec.CommittedBy, "forge_k.kernel"),
 	)
 	if err != nil {
@@ -87,16 +88,16 @@ func (s *SQLiteSemanticStore) ListAuditOutbox(limit int) []AuditOutboxRecord {
 
 const auditOutboxSelect = `
 SELECT id, syscall_id, request_fingerprint, action, workspace_id, lane_id,
-       correlation_id, trace_id, success, result_json, receipt_json, created_at, committed_by
+       correlation_id, trace_id, success, result_json, request_json, receipt_json, authproof_json, created_at, committed_by
 FROM forge_k_audit_outbox`
 
 func scanAuditOutbox(row rowScanner) (AuditOutboxRecord, error) {
 	var rec AuditOutboxRecord
-	var action, resultJSON, receiptJSON string
+	var action, resultJSON, requestJSON, receiptJSON, authproofJSON string
 	var success int
 	err := row.Scan(
 		&rec.ID, &rec.SyscallID, &rec.RequestFingerprint, &action, &rec.WorkspaceID, &rec.LaneID,
-		&rec.CorrelationID, &rec.TraceID, &success, &resultJSON, &receiptJSON, &rec.CreatedAt, &rec.CommittedBy,
+		&rec.CorrelationID, &rec.TraceID, &success, &resultJSON, &requestJSON, &receiptJSON, &authproofJSON, &rec.CreatedAt, &rec.CommittedBy,
 	)
 	if err != nil {
 		return AuditOutboxRecord{}, err
@@ -106,7 +107,13 @@ func scanAuditOutbox(row rowScanner) (AuditOutboxRecord, error) {
 	if err := json.Unmarshal([]byte(resultJSON), &rec.Result); err != nil {
 		return AuditOutboxRecord{}, err
 	}
+	if err := json.Unmarshal([]byte(requestJSON), &rec.Request); err != nil {
+		return AuditOutboxRecord{}, err
+	}
 	if err := json.Unmarshal([]byte(receiptJSON), &rec.Receipt); err != nil {
+		return AuditOutboxRecord{}, err
+	}
+	if err := json.Unmarshal([]byte(authproofJSON), &rec.AuthorizationProof); err != nil {
 		return AuditOutboxRecord{}, err
 	}
 	return rec, nil
@@ -118,5 +125,7 @@ func auditOutboxRecordsEqual(left, right AuditOutboxRecord) bool {
 		left.CreatedAt != right.CreatedAt || nonEmpty(left.CommittedBy, "forge_k.kernel") != nonEmpty(right.CommittedBy, "forge_k.kernel") {
 		return false
 	}
-	return encodeJSON(left.Result) == encodeJSON(right.Result) && encodeJSON(left.Receipt) == encodeJSON(right.Receipt)
+	return encodeJSON(left.Result) == encodeJSON(right.Result) && encodeJSON(left.Request) == encodeJSON(right.Request) &&
+		encodeJSON(left.Receipt) == encodeJSON(right.Receipt) &&
+		encodeJSON(left.AuthorizationProof) == encodeJSON(right.AuthorizationProof)
 }

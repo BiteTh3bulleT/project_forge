@@ -25,8 +25,8 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 	if selection.Mode != forgekernel.ModeForgeK {
 		return report
 	}
-	report.Status = "forge_k_commit_integrity_live"
-	report.Summary = "FORGE-K owns live semantic syscall ingress, durable stage order, deterministic Courthouse decisions, and sealed commit-integrity verification; Control Lane implements the temporary durable SQLite port."
+	report.Status = "forge_k_authenticated_commit_integrity_live"
+	report.Summary = "FORGE-K owns authenticated semantic syscall ingress, actor/capability/approval proof verification, durable stage order, deterministic Courthouse decisions, and sealed commit-integrity verification; Control Lane implements the temporary durable SQLite port."
 	report.Mode = "live_authority_migration"
 	report.LiveOwner = selection.AuthorityOwner
 	report.KernelRuntimeState = "forge_k_orchestration_live_control_lane_sqlite_port"
@@ -43,6 +43,11 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 	report.NoEffect["typedCommitReceiptValidation"] = true
 	report.NoEffect["atomicAuditOutboxEvidence"] = true
 	report.NoEffect["verifiedIdempotentReplay"] = true
+	report.NoEffect["authenticatedAuthorizationProof"] = s.kernelAuthorizationReady
+	report.NoEffect["durableAuthorizationReplayProof"] = s.kernelAuthorizationReady
+	report.NoEffect["uniqueForgeCoreServicePrincipal"] = s.kernelAuthorizationReady
+	report.NoEffect["authenticatedUserOriginRequired"] = s.kernelAuthorizationReady
+	report.NoEffect["unauthenticatedRemoteOrigin"] = false
 	report.NoEffect["externalAuditSinkDelivery"] = false
 	report.NoEffect["auditIdBackfill"] = false
 	report.NoEffect["liveAuthorityMigration"] = true
@@ -64,6 +69,9 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 		"exact prepared requests and plans are sealed; successful commits require a validated typed receipt",
 		"semantic mutation, journal hash-chain head and provenance, immutable audit intent, and optional idempotency proof share one SQLite transaction",
 		"verified idempotent replay does not re-commit; legacy unbound replay proof fails closed",
+		"production authorization binds the constructed forge.core service principal, authenticated origin, registry definition, scoped capability grant, and approval policy/decision",
+		"bearer credentials are represented only by non-secret fingerprints; tokenless HTTP attests a user origin only for verified loopback peers",
+		"full authorization proof JSON is immutable atomic idempotency/audit-outbox evidence and is revalidated during replay",
 		"external audit sink delivery and audit_id backfill remain best-effort projections and cannot invalidate canonical atomic outbox evidence",
 		"full FORGE-K authority remains incomplete until Control Lane policy/apply implementations and remaining subsystem gates are migrated",
 	}
@@ -100,6 +108,7 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 				"prepared request/plan seal and typed receipt validation tests",
 				"atomic journal hash-chain, provenance, audit-outbox, and idempotency proof tests",
 				"verified replay, legacy-unbound rejection, and transaction rollback tests",
+				"authenticated service-principal, bearer/loopback origin, capability/approval proof, and tampered replay tests",
 			)
 			report.AuthorityMatrix[i].Blockers = []string{
 				"Control Lane still implements validation policies, semantic apply functions, and the SQLite durable port",

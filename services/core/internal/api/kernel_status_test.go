@@ -33,8 +33,12 @@ func liveForgeKStatusSelection() forgekernel.Selection {
 	}
 }
 
+func liveForgeKStatusServer() *Server {
+	return &Server{kernelAuthority: liveForgeKStatusSelection(), kernelAuthorizationReady: true}
+}
+
 func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
-	srv := &Server{kernelAuthority: liveForgeKStatusSelection()}
+	srv := liveForgeKStatusServer()
 	req := httptest.NewRequest(http.MethodGet, "/forge/kernel/status", nil)
 	rr := httptest.NewRecorder()
 
@@ -47,7 +51,7 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload["status"] != "forge_k_commit_integrity_live" {
+	if payload["status"] != "forge_k_authenticated_commit_integrity_live" {
 		t.Fatalf("unexpected kernel status payload: %#v", payload)
 	}
 	if payload["live_kernel_authority"] != false ||
@@ -66,6 +70,10 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 		"typedCommitReceiptValidation",
 		"atomicAuditOutboxEvidence",
 		"verifiedIdempotentReplay",
+		"authenticatedAuthorizationProof",
+		"durableAuthorizationReplayProof",
+		"uniqueForgeCoreServicePrincipal",
+		"authenticatedUserOriginRequired",
 	} {
 		if integrity[key] != true {
 			t.Fatalf("kernel status integrity flag %s=%v, want true: %#v", key, integrity[key], integrity)

@@ -9,9 +9,11 @@ package forgekernel
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/forgekernel/authproof"
 	"forge/projectforge/services/core/internal/forgekernel/commitproof"
 	"forge/projectforge/services/core/internal/forgekernel/court"
 )
@@ -31,7 +33,9 @@ var (
 	ErrInvalidAuthorityMode = errors.New("invalid kernel authority mode")
 	ErrMissingCommitAdapter = errors.New("missing durable kernel commit adapter")
 	ErrMissingDurablePort   = errors.New("commit adapter does not implement the FORGE-K durable port")
+	ErrMissingAuthorization = errors.New("missing production FORGE-K authorization port")
 	ErrInvalidDisposition   = errors.New("invalid durable port disposition")
+	ErrInvalidAuthorization = errors.New("invalid FORGE-K authorization proof")
 	ErrInvalidPreparedProof = errors.New("invalid FORGE-K prepared commit proof")
 	ErrInvalidCommitReceipt = errors.New("invalid FORGE-K commit receipt")
 )
@@ -49,14 +53,16 @@ const (
 )
 
 type PreparedSyscall struct {
-	Request       domain.SyscallRequest
-	Result        domain.SyscallResult
-	Disposition   Disposition
-	Plan          commitproof.PreparedPlan
-	ReplayRequest domain.SyscallRequest
-	ReplayPlan    commitproof.PreparedPlan
-	ReplaySeal    commitproof.PreparedPlanSeal
-	ReplayReceipt commitproof.CommitReceipt
+	Request                  domain.SyscallRequest
+	Result                   domain.SyscallResult
+	Disposition              Disposition
+	Plan                     commitproof.PreparedPlan
+	AuthorizationProof       authproof.Proof
+	ReplayRequest            domain.SyscallRequest
+	ReplayPlan               commitproof.PreparedPlan
+	ReplaySeal               commitproof.PreparedPlanSeal
+	ReplayReceipt            commitproof.CommitReceipt
+	ReplayAuthorizationProof authproof.Proof
 }
 
 type CommitOutcome struct {
@@ -75,6 +81,14 @@ type DurablePort interface {
 	ObserveResult(ctx context.Context, req domain.SyscallRequest, result domain.SyscallResult)
 }
 
+// AuthorizationPort resolves trusted identity, registry, capability, and
+// approval records. It must derive the active principal from trusted process
+// construction or request context, never from caller-filled Actor/Source
+// fields alone. Kernel validation remains independent of this resolver.
+type AuthorizationPort interface {
+	ResolveAuthorization(ctx context.Context, req domain.SyscallRequest) (authproof.Proof, error)
+}
+
 type Selection struct {
 	Processor       Processor
 	Mode            AuthorityMode
@@ -85,10 +99,34 @@ type Selection struct {
 }
 
 type Kernel struct {
-	port DurablePort
+	port          DurablePort
+	authorization AuthorizationPort
 }
 
-func SelectAuthority(rawMode string, commit Processor) (Selection, error) {
+type verifiedAuthorizationContextKey struct{}
+
+func withVerifiedAuthorizationContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, verifiedAuthorizationContextKey{}, true)
+}
+
+// HasVerifiedAuthorizationContext lets the temporary durable adapter detect
+// Kernel-owned production preparation without trusting request metadata.
+// Only Kernel.Process can attach the private context key.
+func HasVerifiedAuthorizationContext(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	verified, _ := ctx.Value(verifiedAuthorizationContextKey{}).(bool)
+	return verified
+}
+
+// SelectAuthority accepts the production authorization port as a variadic
+// parameter only to keep the explicit legacy_v1 rollback call source-compatible.
+// forge_k requires exactly one non-nil port and otherwise fails closed.
+func SelectAuthority(rawMode string, commit Processor, authorization ...AuthorizationPort) (Selection, error) {
 	mode, err := ParseAuthorityMode(rawMode)
 	if err != nil {
 		return Selection{}, err
@@ -110,8 +148,11 @@ func SelectAuthority(rawMode string, commit Processor) (Selection, error) {
 	if !ok {
 		return Selection{}, ErrMissingDurablePort
 	}
+	if len(authorization) != 1 || authorization[0] == nil {
+		return Selection{}, ErrMissingAuthorization
+	}
 	return Selection{
-		Processor:       &Kernel{port: port},
+		Processor:       &Kernel{port: port, authorization: authorization[0]},
 		Mode:            ModeForgeK,
 		AuthorityOwner:  AuthorityOwnerForgeK,
 		CommitAdapter:   DurableCommitAdapter,
@@ -135,6 +176,9 @@ func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain
 	if k == nil || k.port == nil {
 		return rejectedResult(req, domain.ErrPersistenceUnavailable, "kernel", ErrMissingCommitAdapter.Error()), ErrMissingCommitAdapter
 	}
+	if k.authorization == nil {
+		return rejectedResult(req, domain.ErrPersistenceUnavailable, "kernel.authorization", ErrMissingAuthorization.Error()), ErrMissingAuthorization
+	}
 	originalMetadata := req.Metadata
 	req.Metadata = cloneMetadata(req.Metadata)
 	req.Metadata["forgeKIngressAuthority"] = true
@@ -147,7 +191,15 @@ func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain
 		k.port.ObserveResult(ctx, req, result)
 		return result, nil
 	}
-	prepared, err := k.port.Prepare(ctx, req)
+	authorizationProof, authErr := k.authorization.ResolveAuthorization(ctx, req)
+	if authErr == nil {
+		authErr = authproof.VerifyProof(req, authorizationProof)
+	}
+	if authErr != nil {
+		return k.rejectAuthorizationProof(ctx, req, authErr)
+	}
+	req.Metadata["forgeKAuthorizationProof"] = authorizationProof.AuthorizationFingerprint
+	prepared, err := k.port.Prepare(withVerifiedAuthorizationContext(ctx), req)
 	if err != nil || prepared.Disposition == DispositionComplete {
 		result := annotateAuthority(prepared.Result)
 		result = k.port.RecordResult(ctx, prepared.Request, result)
@@ -161,8 +213,36 @@ func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain
 		k.port.ObserveResult(ctx, prepared.Request, result)
 		return result, ErrInvalidDisposition
 	}
+	if authErr = authproof.VerifyProof(prepared.Request, authorizationProof); authErr != nil {
+		return k.rejectAuthorizationProof(ctx, prepared.Request, authErr)
+	}
+	if !preparedAuthorityMetadataValid(prepared.Request, authorizationProof) {
+		return k.rejectAuthorizationProof(ctx, prepared.Request, authproof.ErrProofMismatch)
+	}
+	if supplied := prepared.AuthorizationProof; !reflect.DeepEqual(supplied, authproof.Proof{}) {
+		if authErr = authproof.VerifyProof(prepared.Request, supplied); authErr == nil {
+			authErr = authproof.SameAuthorization(supplied, authorizationProof)
+		}
+		if authErr != nil || supplied.AuthorizationFingerprint != authorizationProof.AuthorizationFingerprint {
+			if authErr == nil {
+				authErr = authproof.ErrProofMismatch
+			}
+			return k.rejectAuthorizationProof(ctx, prepared.Request, authErr)
+		}
+	}
+	// The Kernel owns this field. The durable adapter persists it atomically
+	// with idempotency/outbox evidence so replay never has to trust metadata as
+	// a substitute for the typed proof.
+	prepared.AuthorizationProof = authorizationProof
 	if prepared.Disposition == DispositionReplay {
-		return k.replay(ctx, prepared)
+		return k.replay(ctx, prepared, authorizationProof)
+	}
+	if proofErr := authproof.VerifyPlanBinding(authorizationProof, authproof.PlanBinding{
+		Action: prepared.Plan.Action, Capability: prepared.Plan.Capability,
+		TargetObjectType: prepared.Plan.TargetObjectType, Mutating: prepared.Plan.Mutating,
+		JournalEventType: prepared.Plan.JournalEventType,
+	}); proofErr != nil {
+		return k.rejectAuthorizationProof(ctx, prepared.Request, proofErr)
 	}
 	if court.IsAction(prepared.Request.Action) {
 		decision, issues := court.Decide(prepared.Request)
@@ -198,6 +278,7 @@ func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain
 			return k.rejectCommitProof(ctx, prepared.Request, domain.ErrPersistenceUnavailable, "kernel.commitProof.receipt", ErrInvalidCommitReceipt, proofErr)
 		}
 		result = annotateCommitProof(result, seal, outcome.Receipt)
+		result = annotateAuthorizationProof(result, authorizationProof)
 	} else if result.Success {
 		return k.rejectCommitProof(ctx, prepared.Request, domain.ErrPersistenceUnavailable, "kernel.commitProof.commit", ErrInvalidCommitReceipt, err)
 	}
@@ -207,13 +288,37 @@ func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain
 	return result, err
 }
 
-func (k *Kernel) replay(ctx context.Context, prepared PreparedSyscall) (domain.SyscallResult, error) {
+func preparedAuthorityMetadataValid(req domain.SyscallRequest, proof authproof.Proof) bool {
+	fingerprint, _ := req.Metadata["forgeKAuthorizationProof"].(string)
+	owner, _ := req.Metadata["kernelAuthorityOwner"].(string)
+	adapter, _ := req.Metadata["durableCommitAdapter"].(string)
+	ingress, _ := req.Metadata["forgeKIngressAuthority"].(bool)
+	return fingerprint == proof.AuthorizationFingerprint && owner == AuthorityOwnerForgeK && adapter == DurableCommitAdapter && ingress
+}
+
+func (k *Kernel) replay(ctx context.Context, prepared PreparedSyscall, currentAuthorization authproof.Proof) (domain.SyscallResult, error) {
 	currentIdempotency, proofErr := commitproof.IdempotencyFingerprint(prepared.Request)
 	if proofErr != nil {
 		return k.rejectCommitProof(ctx, prepared.Request, domain.ErrInternal, "kernel.commitProof.replayRequest", ErrInvalidPreparedProof, proofErr)
 	}
 
 	proofRequest := prepared.ReplayRequest
+	if proofErr = authproof.VerifyProof(proofRequest, prepared.ReplayAuthorizationProof); proofErr != nil {
+		return k.rejectAuthorizationProof(ctx, prepared.Request, proofErr)
+	}
+	if proofErr = authproof.SameAuthorization(prepared.ReplayAuthorizationProof, currentAuthorization); proofErr != nil {
+		return k.rejectAuthorizationProof(ctx, prepared.Request, proofErr)
+	}
+	if fingerprint, _ := proofRequest.Metadata["forgeKAuthorizationProof"].(string); fingerprint != prepared.ReplayAuthorizationProof.AuthorizationFingerprint {
+		return k.rejectAuthorizationProof(ctx, prepared.Request, authproof.ErrProofMismatch)
+	}
+	if proofErr = authproof.VerifyPlanBinding(prepared.ReplayAuthorizationProof, authproof.PlanBinding{
+		Action: prepared.ReplayPlan.Action, Capability: prepared.ReplayPlan.Capability,
+		TargetObjectType: prepared.ReplayPlan.TargetObjectType, Mutating: prepared.ReplayPlan.Mutating,
+		JournalEventType: prepared.ReplayPlan.JournalEventType,
+	}); proofErr != nil {
+		return k.rejectAuthorizationProof(ctx, prepared.Request, proofErr)
+	}
 	if court.IsAction(proofRequest.Action) {
 		proofRequest.Metadata = cloneMetadata(proofRequest.Metadata)
 		delete(proofRequest.Metadata, court.MetadataDecisionKey)
@@ -258,10 +363,31 @@ func (k *Kernel) replay(ctx context.Context, prepared PreparedSyscall) (domain.S
 		result.Warnings = append(result.Warnings, "idempotent replay")
 	}
 	result = annotateCommitProof(result, prepared.ReplaySeal, prepared.ReplayReceipt)
+	result = annotateAuthorizationProof(result, prepared.ReplayAuthorizationProof)
 	result = annotateAuthority(result)
 	result = k.port.RecordResult(ctx, prepared.Request, result)
 	k.port.ObserveResult(ctx, prepared.Request, result)
 	return result, nil
+}
+
+func (k *Kernel) rejectAuthorizationProof(ctx context.Context, req domain.SyscallRequest, cause error) (domain.SyscallResult, error) {
+	message := ErrInvalidAuthorization.Error()
+	if cause != nil {
+		message += ": " + cause.Error()
+	}
+	result := rejectedResult(req, domain.ErrUnauthorized, "kernel.authorizationProof", message)
+	result.ValidationDetails = append(result.ValidationDetails, domain.ValidationDetail{
+		Layer: "forge_k_authorization_proof", Passed: false,
+		Issues: append([]domain.SyscallError(nil), result.RejectedReasons...),
+	})
+	result = annotateAuthority(result)
+	result.StateSummary["authorizationProofVerified"] = false
+	result = k.port.RecordResult(ctx, req, result)
+	k.port.ObserveResult(ctx, req, result)
+	if cause == nil {
+		return result, ErrInvalidAuthorization
+	}
+	return result, errors.Join(ErrInvalidAuthorization, cause)
 }
 
 func (k *Kernel) rejectCommitProof(ctx context.Context, req domain.SyscallRequest, code domain.SyscallErrorCode, field string, sentinel, cause error) (domain.SyscallResult, error) {
@@ -301,6 +427,19 @@ func annotateCommitProof(result domain.SyscallResult, seal commitproof.PreparedP
 		Layer:  "forge_k_commit_integrity",
 		Passed: true,
 		Issues: []domain.SyscallError{},
+	})
+	return result
+}
+
+func annotateAuthorizationProof(result domain.SyscallResult, proof authproof.Proof) domain.SyscallResult {
+	if result.StateSummary == nil {
+		result.StateSummary = map[string]any{}
+	}
+	result.StateSummary["authorizationProofVerified"] = true
+	result.StateSummary["authorizationFingerprint"] = proof.AuthorizationFingerprint
+	result.StateSummary["authorizationEvidenceSnapshotId"] = proof.EvidenceSnapshotID
+	result.ValidationDetails = append(result.ValidationDetails, domain.ValidationDetail{
+		Layer: "forge_k_authorization_proof", Passed: true, Issues: []domain.SyscallError{},
 	})
 	return result
 }

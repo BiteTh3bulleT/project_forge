@@ -423,6 +423,10 @@ WHERE id = ?`,
 }
 
 func (s *Service) vsaReindexCandidates(ctx context.Context, req RunVSAReindexRequest) ([]int64, error) {
+	return s.selectVSAReindexCandidates(ctx, req, true)
+}
+
+func (s *Service) selectVSAReindexCandidates(ctx context.Context, req RunVSAReindexRequest, markStale bool) ([]int64, error) {
 	limit := req.Limit
 	if limit <= 0 || limit > 500 {
 		limit = 150
@@ -507,13 +511,36 @@ WHERE 1=1`
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if len(staleMarker) > 0 {
+	if markStale && len(staleMarker) > 0 {
 		now := time.Now().UnixMilli()
 		for _, id := range staleMarker {
 			_, _ = s.db.ExecContext(ctx, `UPDATE memory_vsa_pointers SET stale = 1, updated_at = ? WHERE observation_id = ?`, now, id)
 		}
 	}
 	return out, nil
+}
+
+// PreviewVSAReindex returns the deterministic candidate set without marking
+// pointers stale, creating run evidence, or replacing any VSA projection.
+func (s *Service) PreviewVSAReindex(ctx context.Context, req RunVSAReindexRequest) (*MaintenancePreview, error) {
+	if req.Limit <= 0 || req.Limit > 500 {
+		req.Limit = 150
+	}
+	ids, err := s.selectVSAReindexCandidates(ctx, req, false)
+	if err != nil {
+		return nil, err
+	}
+	return &MaintenancePreview{
+		Kind:          "memory.vsa_reindex",
+		DryRun:        true,
+		ProposalOnly:  true,
+		DossierID:     req.DossierID,
+		CandidateIDs:  ids,
+		Candidates:    len(ids),
+		WouldWrite:    []string{"memory_vsa_pointers", "memory_vsa_role_bindings", "memory_vsa_associations", "memory_vsa_reindex_runs", "memory_vsa_reindex_items"},
+		RequiresOwner: "forge_k.kernel",
+		Note:          strings.TrimSpace(req.Note),
+	}, nil
 }
 
 func (s *Service) RunVSAReindex(ctx context.Context, req RunVSAReindexRequest) (*VSAReindexRunDetail, error) {

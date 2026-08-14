@@ -1,6 +1,6 @@
 # ADR 0017 - FORGE-K Production Authority Cutover
 
-Status: Accepted; Stages K20A-K20D active
+Status: Accepted; Stages K20A-K20F active
 
 Date: 2026-08-14
 
@@ -42,11 +42,24 @@ FORGE-K moves to production one authority boundary at a time:
    immutable idempotency proof commit in one SQLite transaction. Matching
    replay is verified without another commit; conflicting or legacy unbound
    proof fails closed.
-7. Boot selects exactly one mode through `FORGE_KERNEL_AUTHORITY_MODE`:
+7. Stage K20E makes authorization evidence a Kernel prerequisite. The Kernel
+   resolves and independently verifies the constructed `forge.core` service
+   principal or trusted request origin, effective action definition,
+   scope-exact capability grant, and approval policy/decision before prepare.
+   The exact request and full proof persist with the atomic audit intent;
+   idempotent replay requires the same immutable authorization binding.
+8. K20E also retires raw live backup restore. The live endpoint performs
+   deterministic inspection only; whole-store recovery is daemon-stopped,
+   staged, chain-verified future work. Foreign journal and idempotency proof
+   can never be merged into the active local authority chain.
+9. Stage K20F contains behavior-affecting memory writers: automatic and manual
+   repair/reindex are proposal-only, retrieval no longer rewrites legacy
+   observations, and usefulness changes each VSA reliability projection once.
+10. Boot selects exactly one mode through `FORGE_KERNEL_AUTHORITY_MODE`:
    `forge_k` (default) or `legacy_v1` (rollback). There is no dual commit mode.
-8. Full FORGE-K authority is not claimed until the adapter implementation and remaining
+11. Full FORGE-K authority is not claimed until the adapter implementation and remaining
    subsystem gates are migrated and v1 is retired.
-9. FORGE deterministically decides whether a chat turn needs a tool and selects
+12. FORGE deterministically decides whether a chat turn needs a tool and selects
    exactly one eligible tool before any model proposal call. If it cannot do so,
    no tool schema is exposed. A model may only format bounded arguments for the
    schema FORGE selected; the gateway remains execution authority.
@@ -60,11 +73,18 @@ FORGE-K moves to production one authority boundary at a time:
    and idempotency proof, persisted journal hash chain, and replay divergence.
    Closed K20D for the canonical SQLite transaction and production Kernel
    receipt validation. External audit delivery remains a projection.
-5. Semantic Algebra operations and structured Memory Palace objects.
-6. Context Compiler live bundle authority.
-7. Runtime driver proposal boundary and response composition gate.
-8. Snapshots, KV acceleration, and Lymphatic proposal lanes.
-9. Remove `legacy_v1`, compatibility facades, and stale authority claims.
+5. Authenticated principal, registry, capability, approval, and replay proof.
+   Closed K20E for production semantic syscalls.
+6. Retire unsafe live restore and mutable restore-outcome feedback. Closed
+   K20E; daemon-stopped whole-store recovery and bounded semantic import remain.
+7. Contain legacy Memory Palace observation/repair/VSA writers. Closed K20F for
+   proposal-only maintenance and retrieval observation duplication; append-only
+   utility evidence and atomic projection rebuild remain.
+8. Semantic Algebra operations and structured Memory Palace objects.
+9. Context Compiler live bundle authority.
+10. Runtime driver proposal boundary and response composition gate.
+11. Snapshots, KV acceleration, and Lymphatic proposal lanes.
+12. Remove `legacy_v1`, compatibility facades, and stale authority claims.
 
 Each step requires deterministic parity tests, malformed-input failure tests,
 capability/approval tests, journal and audit evidence, a tested rollback path,
@@ -72,9 +92,9 @@ operator-visible status, and documentation updates.
 
 ## Consequences
 
-- FORGE-K ingress, durable stage orchestration, Courthouse decisions, and
-  commit-integrity verification are live now, but the full-kernel flag remains
-  false.
+- FORGE-K authenticated ingress, durable stage orchestration, Courthouse
+  decisions, and commit-integrity verification are live now, but the
+  full-kernel flag remains false.
 - Existing durable data remains in the current SQLite schema during migration.
 - The canonical immutable audit-outbox intent is atomic with the mutation and
   journal proof. External audit sink delivery and `audit_id` backfill remain

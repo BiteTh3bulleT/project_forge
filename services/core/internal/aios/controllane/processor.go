@@ -176,37 +176,47 @@ func (p *Processor) Prepare(ctx context.Context, req domain.SyscallRequest) (for
 		return reject("envelope_validation", envelopeIssues, nil)
 	}
 
-	allowed, reason, capErr := p.capabilities.HasCapability(ctx, req, def.Capability)
-	if capErr != nil {
-		return reject("capability_validation", []domain.SyscallError{
-			{Code: domain.ErrInternal, Field: "capability", Message: capErr.Error()},
-		}, capErr)
-	}
-	if !allowed {
-		return reject("capability_validation", []domain.SyscallError{
-			{Code: domain.ErrCapabilityDenied, Field: "capability", Message: reason},
-		}, nil)
-	}
-	result.ValidationDetails = append(result.ValidationDetails, detailFor("capability_validation", nil))
+	productionAuthorized := forgekernel.HasVerifiedAuthorizationContext(ctx) && hasKernelAuthorizationMetadata(req)
+	if productionAuthorized {
+		// Production identity/capability/approval authority was already resolved
+		// and verified by FORGE-K. Static services remain legacy_v1/test policy
+		// only and cannot override the production proof.
+		result.ApprovalStatus = domain.ApprovalAllowed
+		result.ValidationDetails = append(result.ValidationDetails,
+			detailFor("forge_k_capability_proof", nil), detailFor("forge_k_approval_proof", nil))
+	} else {
+		allowed, reason, capErr := p.capabilities.HasCapability(ctx, req, def.Capability)
+		if capErr != nil {
+			return reject("capability_validation", []domain.SyscallError{
+				{Code: domain.ErrInternal, Field: "capability", Message: capErr.Error()},
+			}, capErr)
+		}
+		if !allowed {
+			return reject("capability_validation", []domain.SyscallError{
+				{Code: domain.ErrCapabilityDenied, Field: "capability", Message: reason},
+			}, nil)
+		}
+		result.ValidationDetails = append(result.ValidationDetails, detailFor("capability_validation", nil))
 
-	approval, err := p.approvalGate.Evaluate(ctx, req, def)
-	if err != nil {
-		return reject("approval_gate", []domain.SyscallError{
-			{Code: domain.ErrInternal, Field: "approval", Message: err.Error()},
-		}, err)
+		approval, err := p.approvalGate.Evaluate(ctx, req, def)
+		if err != nil {
+			return reject("approval_gate", []domain.SyscallError{
+				{Code: domain.ErrInternal, Field: "approval", Message: err.Error()},
+			}, err)
+		}
+		result.ApprovalStatus = approval.Status
+		if approval.Status == domain.ApprovalRequired {
+			return reject("approval_gate", []domain.SyscallError{
+				{Code: domain.ErrApprovalRequired, Field: "approval", Message: approval.Reason},
+			}, nil)
+		}
+		if approval.Status == domain.ApprovalDenied {
+			return reject("approval_gate", []domain.SyscallError{
+				{Code: domain.ErrUnauthorized, Field: "approval", Message: approval.Reason},
+			}, nil)
+		}
+		result.ValidationDetails = append(result.ValidationDetails, detailFor("approval_gate", nil))
 	}
-	result.ApprovalStatus = approval.Status
-	if approval.Status == domain.ApprovalRequired {
-		return reject("approval_gate", []domain.SyscallError{
-			{Code: domain.ErrApprovalRequired, Field: "approval", Message: approval.Reason},
-		}, nil)
-	}
-	if approval.Status == domain.ApprovalDenied {
-		return reject("approval_gate", []domain.SyscallError{
-			{Code: domain.ErrUnauthorized, Field: "approval", Message: approval.Reason},
-		}, nil)
-	}
-	result.ValidationDetails = append(result.ValidationDetails, detailFor("approval_gate", nil))
 
 	if strings.TrimSpace(req.IdempotencyKey) != "" {
 		if existing, ok := p.txRunner.ReadStore().GetIdempotency(req.IdempotencyKey); ok {
@@ -223,13 +233,14 @@ func (p *Processor) Prepare(ctx context.Context, req domain.SyscallRequest) (for
 				}, nil)
 			}
 			return forgekernel.PreparedSyscall{
-				Request:       req,
-				Result:        existing.Result,
-				Disposition:   forgekernel.DispositionReplay,
-				ReplayRequest: existing.Request,
-				ReplayPlan:    existing.Plan,
-				ReplaySeal:    existing.Seal,
-				ReplayReceipt: existing.Receipt,
+				Request:                  req,
+				Result:                   existing.Result,
+				Disposition:              forgekernel.DispositionReplay,
+				ReplayRequest:            existing.Request,
+				ReplayPlan:               existing.Plan,
+				ReplaySeal:               existing.Seal,
+				ReplayReceipt:            existing.Receipt,
+				ReplayAuthorizationProof: existing.AuthorizationProof,
 			}, nil
 		}
 	}
@@ -363,6 +374,13 @@ func (p *Processor) Prepare(ctx context.Context, req domain.SyscallRequest) (for
 	return forgekernel.PreparedSyscall{Request: req, Result: result, Disposition: forgekernel.DispositionCommit, Plan: plan}, nil
 }
 
+func hasKernelAuthorizationMetadata(req domain.SyscallRequest) bool {
+	owner, _ := req.Metadata["kernelAuthorityOwner"].(string)
+	ingress, _ := req.Metadata["forgeKIngressAuthority"].(bool)
+	fingerprint, _ := req.Metadata["forgeKAuthorizationProof"].(string)
+	return owner == forgekernel.AuthorityOwnerForgeK && ingress && strings.HasPrefix(fingerprint, "sha256:")
+}
+
 // Commit performs one atomic apply + journal + idempotency transaction. It is
 // invoked by production FORGE-K only after Prepare returns DispositionCommit.
 func (p *Processor) Commit(ctx context.Context, prepared forgekernel.PreparedSyscall, seal commitproof.PreparedPlanSeal) (forgekernel.CommitOutcome, error) {
@@ -478,8 +496,8 @@ func (p *Processor) Commit(ctx context.Context, prepared forgekernel.PreparedSys
 			ID: auditOutboxID, SyscallID: req.ID, RequestFingerprint: seal.RequestFingerprint,
 			Action: req.Action, WorkspaceID: req.Scope.WorkspaceID, LaneID: req.Scope.LaneID,
 			CorrelationID: req.CorrelationID, TraceID: req.TraceID, Success: true,
-			Result: committedResult, Receipt: receipt, CreatedAt: req.RequestedAt,
-			CommittedBy: forgekernel.AuthorityOwnerForgeK,
+			Result: committedResult, Request: req, Receipt: receipt, AuthorizationProof: prepared.AuthorizationProof,
+			CreatedAt: req.RequestedAt, CommittedBy: prepared.Plan.ExpectedJournalCommittedBy,
 		}); outboxErr != nil {
 			return commitError{Issues: []domain.SyscallError{{
 				Code: domain.ErrPersistenceUnavailable, Field: "audit_outbox", Message: outboxErr.Error(),
@@ -490,7 +508,8 @@ func (p *Processor) Commit(ctx context.Context, prepared forgekernel.PreparedSys
 				Action: req.Action, RequestFingerprint: seal.RequestFingerprint,
 				IdempotencyFingerprint: idempotencyFingerprint, Result: committedResult,
 				Request: req, Plan: prepared.Plan, Seal: seal, Receipt: receipt,
-				CreatedAt: req.RequestedAt, CorrelationID: req.CorrelationID,
+				AuthorizationProof: prepared.AuthorizationProof,
+				CreatedAt:          req.RequestedAt, CorrelationID: req.CorrelationID,
 			}); idempotencyErr != nil {
 				return commitError{Issues: []domain.SyscallError{{
 					Code: domain.ErrPersistenceUnavailable, Field: "idempotency", Message: idempotencyErr.Error(),

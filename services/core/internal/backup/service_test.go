@@ -52,6 +52,7 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 		"memory_notes", "semantic_links", "state_items", "state_versions", "open_loops",
 		"contradiction_records", "supersession_records", "derived_models",
 		"context_packet_snapshots", "dream_reports", "restore_outcome_events", "semantic_idempotency_keys", "provenance_records",
+		"court_exhibits", "court_rulings", "court_appeals", "forge_k_journal_head", "forge_k_audit_outbox",
 		"project_context_records", "evaluation_records", "gateway_invocations", "audit_records",
 		"autonomy_settings",
 		"permission_profiles", "approval_presets", "execution_strategies",
@@ -116,7 +117,7 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 
 	dstSvc := New(target.DB, targetDir)
 	stagedBundlePath := stageBundleForRestore(t, dstSvc, bundle.FilePath)
-	restore, err := dstSvc.RestoreBundle(ctx, RestoreBundleRequest{
+	restore, err := dstSvc.restoreBundleLegacyForTest(ctx, RestoreBundleRequest{
 		FilePath: stagedBundlePath,
 		// Intentionally out-of-order; restore must normalize to FK-safe order.
 		Sections: []string{
@@ -383,7 +384,7 @@ FROM audit_records WHERE id = ?`, 604).Scan(&auditCategory, &auditAction, &audit
 		t.Fatalf("expected ui.theme to remain absent after restore, got err=%v value=%q", err, ignored)
 	}
 
-	secondRestore, err := dstSvc.RestoreBundle(ctx, RestoreBundleRequest{
+	secondRestore, err := dstSvc.restoreBundleLegacyForTest(ctx, RestoreBundleRequest{
 		FilePath: stagedBundlePath,
 		Sections: []string{"audit_records", "semantic_idempotency_keys"},
 	})
@@ -466,7 +467,7 @@ func TestRestoreDetectsMissingDreamReportsTable(t *testing.T) {
 	mustExec(t, ctx, target.DB, `DROP TABLE dream_reports`)
 
 	targetSvc := New(target.DB, targetDir)
-	result, err := targetSvc.RestoreBundle(ctx, RestoreBundleRequest{
+	result, err := targetSvc.restoreBundleLegacyForTest(ctx, RestoreBundleRequest{
 		FilePath: stageBundleForRestore(t, targetSvc, bundle.FilePath),
 		Sections: []string{"dream_reports"},
 	})
@@ -580,7 +581,7 @@ func TestRestoreBundleContextPacketSnapshotColumns(t *testing.T) {
 		t.Fatalf("write bundle doc: %v", err)
 	}
 
-	result, err := svc.RestoreBundle(ctx, RestoreBundleRequest{
+	result, err := svc.restoreBundleLegacyForTest(ctx, RestoreBundleRequest{
 		FilePath: filePath,
 		Sections: []string{"context_packet_snapshots"},
 	})
@@ -762,7 +763,7 @@ func TestRestoreBundleExplicitlyReportsUnsupportedSections(t *testing.T) {
 		t.Fatalf("write bundle doc: %v", err)
 	}
 
-	result, err := svc.RestoreBundle(ctx, RestoreBundleRequest{
+	result, err := svc.restoreBundleLegacyForTest(ctx, RestoreBundleRequest{
 		FilePath: filePath,
 		Sections: []string{"memory_vsa_pointers", "retrieval_result_vsa_signals", "missing_section"},
 	})
@@ -861,7 +862,7 @@ func TestRestoreBundleIntegrityDetectsMissingCriticalTable(t *testing.T) {
 		t.Fatalf("write bundle doc: %v", err)
 	}
 
-	result, err := svc.RestoreBundle(ctx, RestoreBundleRequest{FilePath: filePath})
+	result, err := svc.restoreBundleLegacyForTest(ctx, RestoreBundleRequest{FilePath: filePath})
 	if err != nil {
 		t.Fatalf("restore bundle: %v", err)
 	}
@@ -941,7 +942,7 @@ func TestRestoreBundleRollsBackOnLateSectionFailure(t *testing.T) {
 		t.Fatalf("write bundle doc: %v", err)
 	}
 
-	result, err := svc.RestoreBundle(ctx, RestoreBundleRequest{
+	result, err := svc.restoreBundleLegacyForTest(ctx, RestoreBundleRequest{
 		FilePath: filePath,
 		Sections: []string{"approval_requests", "dossiers"},
 	})

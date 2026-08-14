@@ -114,6 +114,38 @@ WHERE id = ?`,
 	return s.GetRepairRun(ctx, runID)
 }
 
+// PreviewRepairPass selects the same candidates as RunRepairPass without
+// creating a run, rewriting historical observations, or rebuilding VSA
+// projections. Live callers use this while repair commit authority is being
+// moved behind FORGE-K.
+func (s *Service) PreviewRepairPass(ctx context.Context, req RunRepairRequest) (*MaintenancePreview, error) {
+	if req.MaxAgeDays <= 0 || req.MaxAgeDays > 365 {
+		req.MaxAgeDays = 14
+	}
+	if req.Limit <= 0 || req.Limit > 300 {
+		req.Limit = 120
+	}
+	candidates, err := s.repairCandidates(ctx, req.DossierID, req.MaxAgeDays, req.Limit)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int64, 0, len(candidates))
+	for _, candidate := range candidates {
+		ids = append(ids, candidate.ID)
+	}
+	return &MaintenancePreview{
+		Kind:          "memory.repair",
+		DryRun:        true,
+		ProposalOnly:  true,
+		DossierID:     req.DossierID,
+		CandidateIDs:  ids,
+		Candidates:    len(ids),
+		WouldWrite:    []string{"memory_observations", "memory_repair_runs", "memory_repair_items", "memory_vsa_*"},
+		RequiresOwner: "forge_k.kernel",
+		Note:          strings.TrimSpace(req.Note),
+	}, nil
+}
+
 func (s *Service) repairCandidates(ctx context.Context, dossierID *int64, maxAgeDays, limit int) ([]Observation, error) {
 	cutoff := time.Now().Add(-time.Duration(maxAgeDays) * 24 * time.Hour).UnixMilli()
 	query := `
@@ -379,11 +411,11 @@ func (s *Service) RepairTicker(ctx context.Context, interval time.Duration, maxA
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			_, _ = s.RunRepairPass(ctx, RunRepairRequest{
+			_, _ = s.PreviewRepairPass(ctx, RunRepairRequest{
 				Mode:       "scheduled",
 				MaxAgeDays: maxAgeDays,
 				Limit:      limit,
-				Note:       fmt.Sprintf("scheduled repair every %s", interval),
+				Note:       fmt.Sprintf("scheduled repair proposal every %s", interval),
 			})
 		}
 	}

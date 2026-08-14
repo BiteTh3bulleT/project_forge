@@ -12,6 +12,10 @@ FORGE-K Online Phase 13 - Memory Observation Migration.
 
 Legacy memory observation mutation endpoints remain retired. This phase makes the retirement path explicit: attempted writes receive structured migration guidance and an audit record that points to Courthouse admission-candidate review and Control Lane semantic syscalls for canonical memory commits. Existing `memory_observations` rows remain readable historical evidence and are not deleted or rewritten.
 
+### 2026-08-14 K20F containment addendum
+
+The live containment now matches that historical-evidence rule: retrieval persists `retrieval_runs`, `retrieval_results`, and selection evidence without creating or updating `memory_observations` or `retrieval_result_observations`. Manual repair and VSA reindex endpoints accept only an explicit `dryRun: true` and return proposal reports; omitted or false `dryRun` is rejected. Scheduled production memory maintenance also produces proposals and does not call the legacy mutating repair pass. Existing repair/reindex reports remain readable. This is containment, not completion of the future FORGE-K evidence-revision or acceleration-rebuild syscall contracts.
+
 ## Live owner
 
 The live retirement gate is `services/core/internal/api`. Canonical replacement writes remain owned by `services/core/internal/aios/controllane`. Legacy observation storage remains under `services/core/internal/memory` and SQLite as historical evidence/retrieval data.

@@ -323,3 +323,18 @@ type RunVSAReindexRequest struct {
 	StaleOnly   bool
 	Force       bool
 }
+
+// MaintenancePreview is read-only evidence describing a maintenance action
+// that would require a future governed commit path. It never authorizes or
+// records a repair/reindex run and it never mutates evidence or projections.
+type MaintenancePreview struct {
+	Kind          string   `json:"kind"`
+	DryRun        bool     `json:"dryRun"`
+	ProposalOnly  bool     `json:"proposalOnly"`
+	DossierID     *int64   `json:"dossierId,omitempty"`
+	CandidateIDs  []int64  `json:"candidateIds"`
+	Candidates    int      `json:"candidates"`
+	WouldWrite    []string `json:"wouldWrite"`
+	RequiresOwner string   `json:"requiresOwner"`
+	Note          string   `json:"note,omitempty"`
+}

@@ -1437,7 +1437,8 @@ CREATE TABLE IF NOT EXISTS semantic_idempotency_keys (
   request_json TEXT NOT NULL DEFAULT '{}',
   plan_json TEXT NOT NULL DEFAULT '{}',
   seal_json TEXT NOT NULL DEFAULT '{}',
-  receipt_json TEXT NOT NULL DEFAULT '{}'
+  receipt_json TEXT NOT NULL DEFAULT '{}',
+  authproof_json TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS forge_k_audit_outbox (
@@ -1451,7 +1452,9 @@ CREATE TABLE IF NOT EXISTS forge_k_audit_outbox (
   trace_id TEXT NOT NULL,
   success INTEGER NOT NULL,
   result_json TEXT NOT NULL,
+  request_json TEXT NOT NULL DEFAULT '{}',
   receipt_json TEXT NOT NULL DEFAULT '{}',
+  authproof_json TEXT NOT NULL DEFAULT '{}',
   created_at INTEGER NOT NULL,
   committed_by TEXT NOT NULL DEFAULT 'forge_k.kernel'
 );
@@ -1667,11 +1670,14 @@ func ensureForgeKJournalChain(db *sql.DB) error {
 		{"plan_json", "TEXT NOT NULL DEFAULT '{}'"},
 		{"seal_json", "TEXT NOT NULL DEFAULT '{}'"},
 		{"receipt_json", "TEXT NOT NULL DEFAULT '{}'"},
+		{"authproof_json", "TEXT NOT NULL DEFAULT '{}'"},
 	}); err != nil {
 		return fmt.Errorf("idempotency fingerprint column: %w", err)
 	}
 	if err := ensureSQLiteColumns(tx, "forge_k_audit_outbox", []struct{ name, ddl string }{
+		{"request_json", "TEXT NOT NULL DEFAULT '{}'"},
 		{"receipt_json", "TEXT NOT NULL DEFAULT '{}'"},
+		{"authproof_json", "TEXT NOT NULL DEFAULT '{}'"},
 	}); err != nil {
 		return fmt.Errorf("audit outbox receipt column: %w", err)
 	}

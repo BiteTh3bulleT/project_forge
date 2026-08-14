@@ -39,7 +39,7 @@ type stubBundles struct{}
 func (stubBundles) CreateBundle(_ context.Context, _ backup.CreateBundleRequest) (*backup.Bundle, error) {
 	return &backup.Bundle{ID: 1, Kind: "portable_snapshot"}, nil
 }
-func (stubBundles) RestoreBundle(_ context.Context, _ backup.RestoreBundleRequest) (*backup.RestoreResult, error) {
+func (stubBundles) InspectBundle(_ context.Context, _ backup.RestoreBundleRequest) (*backup.RestoreResult, error) {
 	return &backup.RestoreResult{Accepted: true}, nil
 }
 

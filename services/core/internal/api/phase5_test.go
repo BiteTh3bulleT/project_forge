@@ -1,13 +1,11 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -80,12 +78,12 @@ func TestHandleBackupBundleAuditsCarryCorrelationAndTraceContext(t *testing.T) {
 		t.Fatalf("expected bundle restore success, got %d body=%s", restoreRR.Code, strings.TrimSpace(restoreRR.Body.String()))
 	}
 
-	restoreAuditCorr, restoreOutcome, restorePayload := mustAuditRecordByActionAndCorrelation(t, st, "bundle.restored", restoreCorrelation)
+	restoreAuditCorr, restoreOutcome, restorePayload := mustAuditRecordByActionAndCorrelation(t, st, "bundle.restore_inspected", restoreCorrelation)
 	if restoreAuditCorr != restoreCorrelation {
 		t.Fatalf("restore audit correlation = %q want %q", restoreAuditCorr, restoreCorrelation)
 	}
-	if restoreOutcome != "ok" {
-		t.Fatalf("restore audit outcome = %q want ok", restoreOutcome)
+	if restoreOutcome != "validated" {
+		t.Fatalf("restore audit outcome = %q want validated", restoreOutcome)
 	}
 	if !strings.Contains(restorePayload, `"traceId":"`+restoreTrace+`"`) {
 		t.Fatalf("expected restore audit trace id, got %s", restorePayload)
@@ -95,8 +93,8 @@ func TestHandleBackupBundleAuditsCarryCorrelationAndTraceContext(t *testing.T) {
 	}
 }
 
-func TestHandleRestoreBundleRequiresApprovalForNonDryRun(t *testing.T) {
-	srv, _ := newBackupAuditHarness(t)
+func TestHandleRestoreBundleFailsClosedBeforeApprovalForNonDryRun(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
 
 	createRR := httptest.NewRecorder()
 	srv.handleCreateBundle(createRR, httptest.NewRequest(
@@ -120,82 +118,37 @@ func TestHandleRestoreBundleRequiresApprovalForNonDryRun(t *testing.T) {
 		"filePath": createResp.Bundle.FilePath,
 		"dryRun":   false,
 	})
-	needsApprovalRR := httptest.NewRecorder()
-	srv.handleRestoreBundle(needsApprovalRR, httptest.NewRequest(
+	rejectedRR := httptest.NewRecorder()
+	srv.handleRestoreBundle(rejectedRR, httptest.NewRequest(
 		http.MethodPost,
 		"/api/backup/restore",
 		strings.NewReader(string(body)),
 	))
-	if needsApprovalRR.Code != http.StatusAccepted {
-		t.Fatalf("expected restore approval gate, got %d body=%s", needsApprovalRR.Code, strings.TrimSpace(needsApprovalRR.Body.String()))
+	if rejectedRR.Code != http.StatusConflict {
+		t.Fatalf("expected restore apply to fail closed, got %d body=%s", rejectedRR.Code, strings.TrimSpace(rejectedRR.Body.String()))
 	}
-	var needsApproval struct {
-		Governance struct {
-			RequiresApproval  bool  `json:"requiresApproval"`
-			Approved          bool  `json:"approved"`
-			ApprovalRequestID int64 `json:"approvalRequestId"`
-		} `json:"governance"`
+	if !strings.Contains(rejectedRR.Body.String(), "FORGE_K_RESTORE_APPLY_DISABLED") {
+		t.Fatalf("missing stable restore-disabled code: %s", rejectedRR.Body.String())
 	}
-	if err := json.Unmarshal(needsApprovalRR.Body.Bytes(), &needsApproval); err != nil {
-		t.Fatalf("decode approval response: %v body=%s", err, needsApprovalRR.Body.String())
+	var approvalCount, restoreJobCount int
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM approval_requests`).Scan(&approvalCount); err != nil {
+		t.Fatalf("count approval requests: %v", err)
 	}
-	if !needsApproval.Governance.RequiresApproval || needsApproval.Governance.Approved || needsApproval.Governance.ApprovalRequestID <= 0 {
-		t.Fatalf("expected pending approval governance, got %+v", needsApproval.Governance)
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM jobs WHERE requested_action='backup.restore'`).Scan(&restoreJobCount); err != nil {
+		t.Fatalf("count restore jobs: %v", err)
 	}
-
-	if _, err := srv.approvals.Decide(context.Background(), needsApproval.Governance.ApprovalRequestID, "operator-test", "approved", "approve restore"); err != nil {
-		t.Fatalf("approve restore request: %v", err)
-	}
-	approvedBody, _ := json.Marshal(map[string]any{
-		"filePath":   createResp.Bundle.FilePath,
-		"dryRun":     false,
-		"approvalId": strconv.FormatInt(needsApproval.Governance.ApprovalRequestID, 10),
-	})
-	approvedRR := httptest.NewRecorder()
-	srv.handleRestoreBundle(approvedRR, httptest.NewRequest(
-		http.MethodPost,
-		"/api/backup/restore",
-		strings.NewReader(string(approvedBody)),
-	))
-	if approvedRR.Code != http.StatusOK {
-		t.Fatalf("expected approved restore success, got %d body=%s", approvedRR.Code, strings.TrimSpace(approvedRR.Body.String()))
+	if approvalCount != 0 || restoreJobCount != 0 {
+		t.Fatalf("disabled restore created approval state: approvals=%d jobs=%d", approvalCount, restoreJobCount)
 	}
 }
 
-func TestHandleRestoreBundleRejectsApprovalReplayForDifferentBundle(t *testing.T) {
+func TestHandleRestoreBundleApprovalIDCannotReenableApply(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
-	firstPath := mustCreateBackupBundlePath(t, srv, "first")
-	secondPath := mustCreateBackupBundlePath(t, srv, "second")
-
-	body, _ := json.Marshal(map[string]any{"filePath": firstPath})
-	needsApprovalRR := httptest.NewRecorder()
-	srv.handleRestoreBundle(needsApprovalRR, httptest.NewRequest(http.MethodPost, "/api/backup/restore", strings.NewReader(string(body))))
-	if needsApprovalRR.Code != http.StatusAccepted {
-		t.Fatalf("expected approval gate, got %d body=%s", needsApprovalRR.Code, strings.TrimSpace(needsApprovalRR.Body.String()))
-	}
-	var needsApproval struct {
-		Governance struct {
-			ApprovalRequestID int64 `json:"approvalRequestId"`
-		} `json:"governance"`
-	}
-	if err := json.Unmarshal(needsApprovalRR.Body.Bytes(), &needsApproval); err != nil {
-		t.Fatalf("decode approval response: %v", err)
-	}
-	if _, err := srv.approvals.Decide(context.Background(), needsApproval.Governance.ApprovalRequestID, "operator-test", "approved", "approve restore"); err != nil {
-		t.Fatalf("approve restore request: %v", err)
-	}
-
-	replayBody, _ := json.Marshal(map[string]any{
-		"filePath":   secondPath,
-		"approvalId": strconv.FormatInt(needsApproval.Governance.ApprovalRequestID, 10),
-	})
-	replayRR := httptest.NewRecorder()
-	srv.handleRestoreBundle(replayRR, httptest.NewRequest(http.MethodPost, "/api/backup/restore", strings.NewReader(string(replayBody))))
-	if replayRR.Code != http.StatusForbidden {
-		t.Fatalf("expected approval replay rejection, got %d body=%s", replayRR.Code, strings.TrimSpace(replayRR.Body.String()))
-	}
-	if !strings.Contains(replayRR.Body.String(), "fingerprint mismatch") {
-		t.Fatalf("expected fingerprint mismatch response, got %s", replayRR.Body.String())
+	body, _ := json.Marshal(map[string]any{"filePath": "/not/read.json", "approvalId": "999", "dryRun": false})
+	rr := httptest.NewRecorder()
+	srv.handleRestoreBundle(rr, httptest.NewRequest(http.MethodPost, "/api/backup/restore", strings.NewReader(string(body))))
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "FORGE_K_RESTORE_APPLY_DISABLED") {
+		t.Fatalf("approval id reenabled restore apply: status=%d body=%s", rr.Code, rr.Body.String())
 	}
 }
 

@@ -68,8 +68,8 @@ func TestForgeSystemStatusReadOnlySurface(t *testing.T) {
 	}
 
 	kernel := asMap(t, payload["kernel_activation"])
-	if kernel["status"] != "forge_k_commit_integrity_live" {
-		t.Fatalf("kernel_activation.status=%v, want forge_k_commit_integrity_live", kernel["status"])
+	if kernel["status"] != "forge_k_authenticated_commit_integrity_live" {
+		t.Fatalf("kernel_activation.status=%v, want forge_k_authenticated_commit_integrity_live", kernel["status"])
 	}
 	if kernel["live_kernel_authority"] != false ||
 		kernel["simulator_authority"] != false ||

@@ -368,6 +368,65 @@ func TestAutonomyMaintenanceSweepDryRunNoCommitProducesDeterministicReport(t *te
 	assertTableCount(t, st, "memory_notes", 0)
 }
 
+func TestAutonomyMaintenanceSweepOmittedDryRunFailsClosedToProposal(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer st.Close()
+
+	now := int64(1_900_250_000_000)
+	if err := insertRepairCandidateObservation(st, now); err != nil {
+		t.Fatalf("insert repair candidate: %v", err)
+	}
+	loop := buildOperationalAutonomyLoop(t, st, now)
+
+	report, err := loop.RunSweep(context.Background(), AutonomyMaintenanceSweepRequest{Reason: "omitted_dry_run"})
+	if err != nil {
+		t.Fatalf("run fail-closed sweep: %v", err)
+	}
+	if !report.DryRun || !report.Maintenance.DryRun || !report.Improvement.DryRun {
+		t.Fatalf("omitted dryRun must fail closed to a proposal-only report: %+v", report)
+	}
+	for _, phase := range []AutonomyMaintenancePhaseReport{report.Maintenance, report.Improvement} {
+		for _, action := range phase.Actions {
+			if action.WouldCommit {
+				t.Fatalf("fail-closed sweep action claimed commit authority: %+v", action)
+			}
+		}
+	}
+	assertTableCount(t, st, "memory_repair_runs", 0)
+	assertTableCount(t, st, "memory_notes", 0)
+}
+
+func TestScheduledMemoryMaintenanceIsProposalOnly(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer st.Close()
+
+	now := int64(1_900_260_000_000)
+	if err := insertRepairCandidateObservation(st, now); err != nil {
+		t.Fatalf("insert repair candidate: %v", err)
+	}
+	loop := buildOperationalAutonomyLoop(t, st, now)
+
+	phase, err := loop.executeMaintenancePhase(context.Background(), "scheduled_idle", false)
+	if err != nil {
+		t.Fatalf("execute scheduled maintenance: %v", err)
+	}
+	if !phase.DryRun || phase.Summary["lymphaticMode"] != "proposal_only" || phase.Summary["executesCleanup"] != false {
+		t.Fatalf("scheduled memory maintenance must be proposal-only: %+v", phase)
+	}
+	for _, action := range phase.Actions {
+		if action.WouldCommit {
+			t.Fatalf("scheduled maintenance action claimed commit authority: %+v", action)
+		}
+	}
+	assertTableCount(t, st, "memory_repair_runs", 0)
+}
+
 func TestAutonomyMaintenanceSweepRejectsConcurrentRunWithDiagnostic(t *testing.T) {
 	st, err := store.Open(t.TempDir())
 	if err != nil {
