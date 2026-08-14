@@ -353,7 +353,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 	}
 
 	baseURL := ol.BaseURLForChat(ctx)
-	model := ol.ModelForChat(ctx)
+	model, modelSource := s.resolveNativeOllamaChatModel(ctx, ol, requestedModelID)
 	if strings.TrimSpace(model) == "" {
 		pushStage("runtime_fallback", map[string]any{"reason": "ollama model is not configured"})
 		am, reason := s.completeAssistantWithModelRuntime(ctx, threadID, userMessageID, th, lastUserContent, corr, manifests, stages, "ollama model is not configured", requestedModelID, requestStart, perf)
@@ -373,6 +373,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 		})
 		return am
 	}
+	pushStage("ollama_model_resolved", map[string]any{"model": model, "source": modelSource})
 
 	sys, userBody := s.buildChatLLMMessages(ctx, th)
 	msgs := []map[string]any{

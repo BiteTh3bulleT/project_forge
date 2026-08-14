@@ -389,6 +389,62 @@ func TestResolveNativeOllamaChatModelPrefersValidRequestOverPersistedDefault(t *
 	}
 }
 
+func TestChatToolPathUsesValidRequestedModelOverPersistedDefault(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.models["smuxo/smuxoAI:0.8b"] = ModelRuntimeModel{
+		ID:           "smuxo/smuxoAI:0.8b",
+		DisplayName:  "smuxoAI",
+		Backend:      "ollama_compat",
+		Format:       "gguf",
+		Status:       "available",
+		Capabilities: []string{"chat", "completion", "tools"},
+		Metadata: map[string]any{
+			"provider": "ollama",
+			"remote":   false,
+		},
+	}
+	srv.modelRuntime = fakeRuntime
+
+	var sawModel string
+	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/chat" {
+			t.Fatalf("unexpected ollama path %s", r.URL.Path)
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode ollama body: %v", err)
+		}
+		sawModel = strings.TrimSpace(asString(body["model"]))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"message":{"role":"assistant","content":""},"done":true}`))
+	}))
+	defer ollama.Close()
+
+	ctx := context.Background()
+	if err := upsertSetting(ctx, st.DB, "ollama_base_url", ollama.URL); err != nil {
+		t.Fatalf("set ollama base url: %v", err)
+	}
+	if err := upsertSetting(ctx, st.DB, "ollama_model", "gemma3:1b-it-q4_K_M"); err != nil {
+		t.Fatalf("set stale persisted ollama model: %v", err)
+	}
+
+	thread, err := srv.chat.CreateThread(ctx, "selected tool model", nil)
+	if err != nil {
+		t.Fatalf("create thread: %v", err)
+	}
+	raw := []byte(`{"content":"Show the modified files in the current workspace.","requestAssistant":true,"syncAssistant":true,"modelId":"smuxo/smuxoAI:0.8b"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	if sawModel != "smuxo/smuxoAI:0.8b" {
+		t.Fatalf("tool path used model=%q, want selected smuxo model", sawModel)
+	}
+}
+
 func TestChatPostSyncBoundsPlainModelRuntimePrompt(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	fakeRuntime := newFakeModelRuntime()
