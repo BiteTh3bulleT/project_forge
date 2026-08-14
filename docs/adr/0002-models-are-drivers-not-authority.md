@@ -20,6 +20,12 @@ Neural neurons propose. Rule neurons validate. Courthouse admits. Kernel commits
 - Runtime drivers must record model id, model revision, tokenizer information, prompt layout version, and provenance where relevant.
 - Canonical mutation remains impossible without semantic syscalls.
 - Capability and approval decisions remain deterministic Kernel or gateway concerns.
+- A worker selected for tool proposals must advertise and demonstrate structured
+  tool-call output for the active runtime protocol. Completion-only workers may
+  still answer text but must not be represented as tool-capable.
+- Runtime thinking/reasoning controls and output budgets may be bounded so a
+  small worker can emit the proposal envelope; this does not grant execution or
+  commit authority to that worker.
 
 ## Alternatives considered
 

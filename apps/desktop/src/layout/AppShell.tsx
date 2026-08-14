@@ -64,8 +64,8 @@ type AppShellProps = {
   children: ReactNode;
   isMainWindow: boolean;
   hostLabel?: string;
-  onForgeLock?: () => void;
-  onForgeLogout?: () => void;
+  onForgeLock?: () => void | Promise<void>;
+  onForgeLogout?: () => void | Promise<void>;
 };
 
 type AttentionLevel = "none" | "low" | "medium" | "high";
@@ -549,15 +549,21 @@ export function AppShell(props: AppShellProps) {
     if (!isMainWindow) return;
     let cancelled = false;
     async function loadTelemetry() {
-      const [auditRes, eventRes, autonomyRes, queueRes, backendsRes, contextRes] =
-        await Promise.allSettled([
-          api.audit.list({ limit: 20 }),
-          api.events(20),
-          api.autonomy.status(),
-          api.modelRuntime.queue(),
-          api.modelRuntime.backends(),
-          api.contextInspector.listSnapshots({ limit: 3 }),
-        ]);
+      const [
+        auditRes,
+        eventRes,
+        autonomyRes,
+        queueRes,
+        backendsRes,
+        contextRes,
+      ] = await Promise.allSettled([
+        api.audit.list({ limit: 20 }),
+        api.events(20),
+        api.autonomy.status(),
+        api.modelRuntime.queue(),
+        api.modelRuntime.backends(),
+        api.contextInspector.listSnapshots({ limit: 3 }),
+      ]);
       if (cancelled) return;
 
       const rejected = [
@@ -574,7 +580,8 @@ export function AppShell(props: AppShellProps) {
             ? (auditRes.value.records as ShellAuditRecord[])
             : [],
         eventRecords:
-          eventRes.status === "fulfilled" && Array.isArray(eventRes.value.events)
+          eventRes.status === "fulfilled" &&
+          Array.isArray(eventRes.value.events)
             ? (eventRes.value.events as ForgeEvent[])
             : [],
         autonomyStatus:
@@ -935,14 +942,30 @@ export function AppShell(props: AppShellProps) {
     setStartQuery("");
 
     if (action === "lock") {
-      props.onForgeLock?.();
+      try {
+        await props.onForgeLock?.();
+      } catch (error) {
+        setOperatorAppStatus(
+          error instanceof Error
+            ? error.message
+            : "Unable to lock the FORGE operator session.",
+        );
+      }
       return;
     }
 
     if (action === "logout") {
-      props.onForgeLogout?.();
-      if (!props.onForgeLogout) {
-        navigate("/login");
+      try {
+        await props.onForgeLogout?.();
+        if (!props.onForgeLogout) {
+          navigate("/login");
+        }
+      } catch (error) {
+        setOperatorAppStatus(
+          error instanceof Error
+            ? error.message
+            : "Unable to exit the FORGE operator session.",
+        );
       }
       return;
     }
@@ -991,32 +1014,28 @@ export function AppShell(props: AppShellProps) {
   const autonomyText = autonomySummary(telemetry.autonomyStatus);
   const activeLoopText = activeLoopSummary(telemetry.autonomyStatus);
   const pendingApprovalsText = `${approvalsPending} pending`;
-  const notifications = useMemo<ShellNotificationItem[]>(
-    () => {
-      const coreNotifications = telemetry.eventRecords
-        .filter(isNotificationEvent)
-        .slice(0, 20)
-        .map((event) => ({
-          id: `core:${event.id}`,
-          createdAtMs: event.createdAtMs,
-          type: event.type,
-          detail: notificationDetail(event),
-        }));
-      const nativeNotifications = desktopNotifications.map((notification) => ({
-        id: `desktop:${notification.id}`,
-        createdAtMs: notification.createdAtMs,
-        type: notification.appName,
-        detail: notification.summary,
-        body: notification.body,
+  const notifications = useMemo<ShellNotificationItem[]>(() => {
+    const coreNotifications = telemetry.eventRecords
+      .filter(isNotificationEvent)
+      .slice(0, 20)
+      .map((event) => ({
+        id: `core:${event.id}`,
+        createdAtMs: event.createdAtMs,
+        type: event.type,
+        detail: notificationDetail(event),
       }));
-      return [...nativeNotifications, ...coreNotifications]
-        .sort((a, b) => b.createdAtMs - a.createdAtMs)
-        .slice(0, 20);
-    },
-    [desktopNotifications, telemetry.eventRecords],
-  );
-  const queueText =
-    level === "none" ? "clear" : `attention ${attentionCount}`;
+    const nativeNotifications = desktopNotifications.map((notification) => ({
+      id: `desktop:${notification.id}`,
+      createdAtMs: notification.createdAtMs,
+      type: notification.appName,
+      detail: notification.summary,
+      body: notification.body,
+    }));
+    return [...nativeNotifications, ...coreNotifications]
+      .sort((a, b) => b.createdAtMs - a.createdAtMs)
+      .slice(0, 20);
+  }, [desktopNotifications, telemetry.eventRecords]);
+  const queueText = level === "none" ? "clear" : `attention ${attentionCount}`;
   const statusSummary = `Core: ${
     core === "online" ? "online" : core === "offline" ? "offline" : "checking"
   } · Runtime: ${runtimeState} · Queue: ${queueText}`;
@@ -1372,9 +1391,7 @@ export function AppShell(props: AppShellProps) {
           >
             <div className="forge-os-context-inspector__header">
               <div>
-                <div className="forge-os-context-inspector__eyebrow">
-                  Shell
-                </div>
+                <div className="forge-os-context-inspector__eyebrow">Shell</div>
                 <h2>Context Inspector</h2>
               </div>
               <span className="forge-os-context-inspector__pill">
@@ -1496,9 +1513,7 @@ export function AppShell(props: AppShellProps) {
         >
           <div className="forge-os-activity-log__header">
             <div>
-              <div className="forge-os-context-inspector__eyebrow">
-                Last 20
-              </div>
+              <div className="forge-os-context-inspector__eyebrow">Last 20</div>
               <h2>Activity log</h2>
             </div>
             <button
@@ -1556,10 +1571,7 @@ export function AppShell(props: AppShellProps) {
           <div className="forge-os-activity-log__list">
             {notifications.length > 0 ? (
               notifications.map((item) => (
-                <article
-                  key={item.id}
-                  className="forge-os-activity-log__item"
-                >
+                <article key={item.id} className="forge-os-activity-log__item">
                   <div className="forge-os-activity-log__meta">
                     <span>{item.type}</span>
                     <span>

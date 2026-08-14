@@ -61,6 +61,9 @@ func (o Ollama) ollamaChatWithModel(ctx context.Context, baseURL, model string, 
 		"messages": messages,
 		"stream":   false,
 	}
+	if think, configured := envOptionalBool("FORGE_OLLAMA_CHAT_THINK"); configured {
+		payload["think"] = think
+	}
 	if options := ollamaChatOptions(); len(options) > 0 {
 		payload["options"] = options
 	}
@@ -108,6 +111,9 @@ func (o Ollama) streamChatWithModel(ctx context.Context, baseURL, model string, 
 		"model":    model,
 		"messages": messages,
 		"stream":   true,
+	}
+	if think, configured := envOptionalBool("FORGE_OLLAMA_CHAT_THINK"); configured {
+		payload["think"] = think
 	}
 	if options := ollamaChatOptions(); len(options) > 0 {
 		payload["options"] = options
@@ -208,6 +214,21 @@ func envPositiveInt(key string, fallback int) int {
 		return fallback
 	}
 	return v
+}
+
+func envOptionalBool(key string) (bool, bool) {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return false, false
+	}
+	switch strings.ToLower(raw) {
+	case "1", "true", "yes", "on":
+		return true, true
+	case "0", "false", "no", "off":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 func uniqueStrings(input []string) []string {

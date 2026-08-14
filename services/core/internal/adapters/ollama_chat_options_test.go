@@ -13,6 +13,7 @@ func TestOllamaChatSendsDefaultOptions(t *testing.T) {
 	t.Setenv("FORGE_OLLAMA_CHAT_NUM_PREDICT", "")
 	t.Setenv("FORGE_OLLAMA_CHAT_NUM_CTX", "")
 	t.Setenv("FORGE_OLLAMA_CHAT_NUM_THREAD", "")
+	t.Setenv("FORGE_OLLAMA_CHAT_THINK", "")
 
 	reqBody := captureOllamaChatRequest(t, func(ollama Ollama, url string) error {
 		_, err := ollama.OllamaChat(context.Background(), url, "model", []map[string]any{{"role": "user", "content": "hi"}}, nil, nil, time.Second)
@@ -32,12 +33,16 @@ func TestOllamaChatSendsDefaultOptions(t *testing.T) {
 	if _, ok := options["num_thread"]; ok {
 		t.Fatalf("did not expect num_thread without positive env override, got %#v", options["num_thread"])
 	}
+	if _, ok := reqBody["think"]; ok {
+		t.Fatalf("did not expect think without an explicit env override, got %#v", reqBody["think"])
+	}
 }
 
 func TestOllamaChatHonorsEnvOptions(t *testing.T) {
 	t.Setenv("FORGE_OLLAMA_CHAT_NUM_PREDICT", "128")
 	t.Setenv("FORGE_OLLAMA_CHAT_NUM_CTX", "2048")
 	t.Setenv("FORGE_OLLAMA_CHAT_NUM_THREAD", "6")
+	t.Setenv("FORGE_OLLAMA_CHAT_THINK", "false")
 
 	reqBody := captureOllamaChatRequest(t, func(ollama Ollama, url string) error {
 		_, err := ollama.OllamaChat(context.Background(), url, "model", []map[string]any{{"role": "user", "content": "hi"}}, nil, nil, time.Second)
@@ -56,6 +61,9 @@ func TestOllamaChatHonorsEnvOptions(t *testing.T) {
 	}
 	if got := options["num_thread"]; got != float64(6) {
 		t.Fatalf("expected env num_thread 6, got %#v", got)
+	}
+	if got := reqBody["think"]; got != false {
+		t.Fatalf("expected explicit think=false, got %#v", got)
 	}
 }
 
@@ -78,6 +86,7 @@ func TestOllamaStreamChatSendsOptions(t *testing.T) {
 	t.Setenv("FORGE_OLLAMA_CHAT_NUM_PREDICT", "32")
 	t.Setenv("FORGE_OLLAMA_CHAT_NUM_CTX", "512")
 	t.Setenv("FORGE_OLLAMA_CHAT_NUM_THREAD", "2")
+	t.Setenv("FORGE_OLLAMA_CHAT_THINK", "true")
 
 	reqBody := captureOllamaChatRequest(t, func(ollama Ollama, url string) error {
 		_, _, err := ollama.StreamChat(context.Background(), url, "model", []map[string]any{{"role": "user", "content": "hi"}}, time.Second, nil)
@@ -99,6 +108,9 @@ func TestOllamaStreamChatSendsOptions(t *testing.T) {
 	}
 	if got := options["num_thread"]; got != float64(2) {
 		t.Fatalf("expected env num_thread 2, got %#v", got)
+	}
+	if got := reqBody["think"]; got != true {
+		t.Fatalf("expected explicit think=true, got %#v", got)
 	}
 }
 

@@ -40,6 +40,18 @@ with the `vm-safe` renderer and WebKit DMA-BUF rendering disabled. The Cage
 `fullscreen-shell` path remains installed as a single-application rollback and
 test lane; it cannot satisfy native multi-window launcher behavior.
 
+### Native session authentication boundary
+
+The native operator desktop has one authentication boundary: greetd/PAM and
+the Linux `operator` account. Its Nix-built frontend disables the legacy
+client-side boot login. Lock and Logout submit only the bounded Tauri
+`exit_session` action; on Linux operator-desktop sessions that action invokes
+Labwc's supported `--exit` request and returns the seat to greetd. It does not
+compare a browser-bundled password, mutate Linux credentials, grant host power
+authority, or bypass PAM. Development builds that explicitly enable
+`VITE_FORGE_BOOT_LOGIN` may retain the client overlay, but that overlay is not
+the native OS security boundary.
+
 ## Stack Position
 
 | Layer | Responsibility |

@@ -27,10 +27,14 @@ The target intentionally uses:
 - governed modelruntime with a single loopback-only Ollama worker;
 - a static, unprivileged Ollama service account in the `forge` group so the
   worker can access only its governed `/forge/models/ollama` subtree;
-- `gemma3:1b-it-q4_K_M` (approximately 815 MB) as the default governed worker;
-- `smuxo/smuxoAI:0.8b` as an optional downloaded secondary worker
-  (approximately 1 GB); only one model may be loaded and one request may run at
-  a time;
+- `smuxo/smuxoAI:0.8b` (approximately 1 GB) as the default governed worker
+  because its local Ollama manifest advertises structured tool calling;
+- `gemma3:1b-it-q4_K_M` (approximately 815 MB) as the completion-only
+  secondary worker; only one model may be loaded and one request may run at a
+  time;
+- bounded native chat settings (`num_ctx=2048`, `num_predict=192`, six CPU
+  threads, and `think=false`) so the small tool worker emits structured calls
+  instead of consuming its response budget with a thinking trace;
 - key-only SSH for the explicitly provisioned operator key;
 - a static offline direct Ethernet link at `192.168.50.2/24` with no gateway,
   no DNS, no IPv6, and `never-default=true`;

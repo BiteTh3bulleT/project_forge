@@ -206,3 +206,15 @@ A point-to-point test network between the build workstation and a FORGE target
 using static local addresses with no gateway, DNS, IPv6, forwarding, or NAT.
 It permits bounded local administration and artifact transfer without giving
 the target an internet route.
+
+## Native session boundary
+
+The greetd/PAM authentication boundary for a FORGE operator desktop. Native
+Lock and Logout exit the compositor session and return to this boundary; a
+client-side password comparison is not an OS session lock.
+
+## Tool-capable model worker
+
+An external model driver whose active runtime manifest and live protocol probe
+support structured tool-call proposals. The gateway still resolves,
+authorizes, validates, audits, and executes any accepted proposal.

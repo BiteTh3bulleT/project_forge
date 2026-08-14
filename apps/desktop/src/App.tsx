@@ -17,7 +17,11 @@ import {
 import { ForgeErrorBoundary } from "./components/ForgeErrorBoundary";
 import { AppShell } from "./layout/AppShell";
 import { clearForgeApiTokenCache } from "./lib/api/client";
-import { isTauriDesktop, isShellHostWindowLabel } from "./lib/desktop";
+import {
+  isTauriDesktop,
+  isShellHostWindowLabel,
+  requestShellSessionAction,
+} from "./lib/desktop";
 import { configuredRenderProfile } from "./lib/renderProfile";
 import {
   subscribeToCurrentWindowLifecycle,
@@ -73,7 +77,10 @@ const AutomationPage = lazyPage(
   () => import("./pages/AutomationPage"),
   "AutomationPage",
 );
-const CommandPage = lazyPage(() => import("./pages/CommandPage"), "CommandPage");
+const CommandPage = lazyPage(
+  () => import("./pages/CommandPage"),
+  "CommandPage",
+);
 const DashboardPage = lazyPage(
   () => import("./pages/DashboardPage"),
   "DashboardPage",
@@ -88,13 +95,19 @@ const EvaluationsPage = lazyPage(
   "EvaluationsPage",
 );
 const PolicyPage = lazyPage(() => import("./pages/PolicyPage"), "PolicyPage");
-const ReviewsPage = lazyPage(() => import("./pages/ReviewsPage"), "ReviewsPage");
+const ReviewsPage = lazyPage(
+  () => import("./pages/ReviewsPage"),
+  "ReviewsPage",
+);
 const JobDetailPage = lazyPage(
   () => import("./pages/JobDetailPage"),
   "JobDetailPage",
 );
 const JobsPage = lazyPage(() => import("./pages/JobsPage"), "JobsPage");
-const LineagePage = lazyPage(() => import("./pages/LineagePage"), "LineagePage");
+const LineagePage = lazyPage(
+  () => import("./pages/LineagePage"),
+  "LineagePage",
+);
 const MemoryDetailPage = lazyPage(
   () => import("./pages/MemoryDetailPage"),
   "MemoryDetailPage",
@@ -113,7 +126,10 @@ const ProjectContextPage = lazyPage(
   () => import("./pages/ProjectContextPage"),
   "ProjectContextPage",
 );
-const ReleasePage = lazyPage(() => import("./pages/ReleasePage"), "ReleasePage");
+const ReleasePage = lazyPage(
+  () => import("./pages/ReleasePage"),
+  "ReleasePage",
+);
 const RetrievalRunsPage = lazyPage(
   () => import("./pages/RetrievalRunsPage"),
   "RetrievalRunsPage",
@@ -138,7 +154,10 @@ const InspectorsPage = lazyPage(
   () => import("./pages/InspectorsPage"),
   "InspectorsPage",
 );
-const SourcesPage = lazyPage(() => import("./pages/SourcesPage"), "SourcesPage");
+const SourcesPage = lazyPage(
+  () => import("./pages/SourcesPage"),
+  "SourcesPage",
+);
 const StrategiesPage = lazyPage(
   () => import("./pages/StrategiesPage"),
   "StrategiesPage",
@@ -301,7 +320,19 @@ export default function App() {
     navigate(FORGE_OPERATOR_DESKTOP_ROUTE, { replace: true });
   };
 
-  const handleForgeLock = () => {
+  const exitNativeOperatorSession = async () => {
+    clearForgeApiTokenCache();
+    const result = await requestShellSessionAction("exit_session");
+    if (!result.requested) {
+      throw new Error(result.message);
+    }
+  };
+
+  const handleForgeLock = async () => {
+    if (!FORGE_BOOT_LOGIN_REQUIRED && isTauriDesktop()) {
+      await exitNativeOperatorSession();
+      return;
+    }
     setForgeShellLocked(true);
   };
 
@@ -309,7 +340,11 @@ export default function App() {
     setForgeShellLocked(false);
   };
 
-  const handleForgeLogout = () => {
+  const handleForgeLogout = async () => {
+    if (!FORGE_BOOT_LOGIN_REQUIRED && isTauriDesktop()) {
+      await exitNativeOperatorSession();
+      return;
+    }
     clearForgeApiTokenCache();
     window.sessionStorage.removeItem(FORGE_OPERATOR_LOGIN_SESSION_KEY);
     useDesktopWindowStore.getState().resetDesktopSession();

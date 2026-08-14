@@ -29,12 +29,19 @@ NixOS login / TTY
 
 The existing Cage session remains installed and supported as rollback.
 
+Greetd/PAM is the sole authentication boundary for the native operator
+desktop. Native Lock and Logout use a bounded `exit_session` Tauri command to
+ask Labwc to exit and return the seat to greetd. The browser-side development
+login form is not a native session lock and must not validate a second baked-in
+credential on this path.
+
 ## Consequences
 
 - NixOS remains responsible for boot, drivers, packages, services, display plumbing, and rollback.
 - FORGE remains the visible operator desktop surface.
 - The compositor becomes a narrow window-management substrate, not the product shell.
 - Terminal and file-manager access can exist without installing a full desktop environment.
+- Native session re-authentication uses the Linux operator account through PAM rather than a frontend credential.
 - G6 does not enable autologin, force a default graphical session, remove TTY fallback, or remove the Cage rollback path.
 - G6 does not authorize direct `systemctl`, `nixos-rebuild`, package-manager mutation, kernel/module changes, reboot/shutdown, modelruntime load/unload/spawn, semantic memory writes, route/API changes, gateway bypass, or FORGE-K live authority.
 

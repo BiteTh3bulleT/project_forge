@@ -142,15 +142,11 @@ The desktop shell's Tauri binary exposes a `request_host_power_action` command t
 
 ## Shell Session Controls
 
-Lock is an interim shell-owned overlay. It covers the primary FORGE shell
-window and re-authenticates with the local FORGE operator login form. It is a
-usability lock for the current shell surface, not a compositor/session security
-boundary against other native windows. Real session locking waits for
-`ext-session-lock-v1` in Track C.
-
-Logout remains an in-shell FORGE operator-login transition: it clears the
-cached API token promise, resets in-shell desktop session state, removes the
-operator login marker, and returns to the login surface.
+In the native operator desktop build, Lock and Logout both request the bounded
+`exit_session` shell action. Tauri asks the active Labwc compositor to exit, so
+greetd/PAM regains the seat and the Linux operator password remains the single
+authentication boundary. The client-side login overlay remains available only
+to explicit non-native/development builds that enable `VITE_FORGE_BOOT_LOGIN`.
 
 The lower-level `request_shell_session_action` command remains bounded to
 `restart_shell` and gated by `FORGE_SHELL_SESSION_ENABLED`, but it is not part

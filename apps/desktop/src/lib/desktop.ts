@@ -103,13 +103,9 @@ export type LinuxWindowSnapshot = {
 };
 
 export type LinuxWindowAction =
-  | "focus"
-  | "minimize"
-  | "maximize"
-  | "fullscreen"
-  | "close";
+  "focus" | "minimize" | "maximize" | "fullscreen" | "close";
 export type ForgeHostPowerAction = "shutdown" | "reboot";
-export type ForgeShellSessionAction = "restart_shell";
+export type ForgeShellSessionAction = "restart_shell" | "exit_session";
 
 export type ForgeHostPowerActionResult = {
   action: ForgeHostPowerAction;
@@ -940,7 +936,7 @@ export async function requestShellSessionAction(
   }
   const value = result as Record<string, unknown>;
   if (
-    value.action !== "restart_shell" ||
+    (value.action !== "restart_shell" && value.action !== "exit_session") ||
     typeof value.requested !== "boolean" ||
     typeof value.message !== "string"
   ) {

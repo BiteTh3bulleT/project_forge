@@ -32,8 +32,11 @@ Password login is required. Autologin is not allowed. TTY access and Nix
 generation rollback remain preserved recovery paths.
 
 The native/operator Nix shell build sets `bootLogin = false` and
-`emptyDesktopOnBoot = true`. ReGreet/PAM is the login boundary; the older
+`emptyDesktopOnBoot = true`. Greetd/PAM is the login boundary; the older
 client-side FORGE unlock screen is not part of the normal native desktop path.
+Native Lock and Logout request the bounded `exit_session` shell action, which
+asks Labwc to exit and returns the seat to greetd. They never compare against a
+baked-in browser credential.
 
 `FORGE_SHELL_BINARY` remains a development fallback for non-operator shell
 sessions. The `operator-desktop` path rejects that override and requires the

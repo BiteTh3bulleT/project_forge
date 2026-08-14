@@ -188,4 +188,23 @@ describe("desktop monitor spanning", () => {
       }),
     ]);
   });
+
+  it("requests the bounded native operator session exit action", async () => {
+    const { invoke } = await import("@tauri-apps/api/core");
+    const { requestShellSessionAction } = await import("./desktop");
+    vi.mocked(invoke).mockResolvedValueOnce({
+      action: "exit_session",
+      requested: true,
+      message: "FORGE operator session exit requested",
+    });
+
+    await expect(requestShellSessionAction("exit_session")).resolves.toEqual({
+      action: "exit_session",
+      requested: true,
+      message: "FORGE operator session exit requested",
+    });
+    expect(invoke).toHaveBeenCalledWith("request_shell_session_action", {
+      action: "exit_session",
+    });
+  });
 });

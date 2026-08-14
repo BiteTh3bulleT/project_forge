@@ -69,6 +69,7 @@ to bypass autodetect.
 |---|---|---|---|
 | `FORGE_OLLAMA_CHAT_NUM_PREDICT` | native Ollama `/api/chat` adapter | `96` | Sets Ollama `options.num_predict` for native chat and streaming chat calls. Set `0` to omit this option. |
 | `FORGE_OLLAMA_CHAT_NUM_CTX` | native Ollama `/api/chat` adapter | `1024` | Sets Ollama `options.num_ctx` for native chat and streaming chat calls. Set `0` to omit this option. |
+| `FORGE_OLLAMA_CHAT_THINK` | native Ollama `/api/chat` adapter | unset | When explicitly set to a boolean, forwards Ollama's top-level `think` control. The OptiPlex tool worker sets this to `false` so its bounded output budget is available for structured tool calls. |
 | `FORGE_OLLAMA_CHAT_NUM_THREAD` | native Ollama `/api/chat` adapter | unset | Sets Ollama `options.num_thread` when positive. Unset or `0` omits this option. |
 
 ### Model runtime GPU/safe-mode policy

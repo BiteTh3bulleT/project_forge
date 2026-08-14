@@ -905,6 +905,28 @@ fn spawn_shell_restart_command() -> Result<(), String> {
     Ok(())
 }
 
+fn spawn_operator_session_exit_command() -> Result<(), String> {
+    if std::env::var("FORGE_SHELL_MODE")
+        .map(|value| value.trim() != "operator-desktop")
+        .unwrap_or(true)
+    {
+        return Err("session exit is available only inside the FORGE operator desktop".to_string());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("labwc")
+            .arg("--exit")
+            .spawn()
+            .map(|_| ())
+            .map_err(|err| format!("failed to exit the FORGE operator session: {err}"))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Err("FORGE operator session exit is supported only on Linux".to_string())
+    }
+}
+
 fn request_shell_session_action_with_policy<F>(
     action: String,
     shell_session_enabled: bool,
@@ -914,7 +936,7 @@ where
     F: FnMut(&str) -> Result<(), String>,
 {
     let normalized = action.trim().to_ascii_lowercase();
-    if normalized != "restart_shell" {
+    if normalized != "restart_shell" && normalized != "exit_session" {
         return Err("shell session action is not allowlisted".to_string());
     }
 
@@ -922,22 +944,30 @@ where
         return Ok(ShellSessionActionResult {
             action: normalized,
             requested: false,
-            message: "FORGE shell restart is available only inside forge-shell-session".to_string(),
+            message: "FORGE shell session controls are available only inside forge-shell-session"
+                .to_string(),
         });
     }
 
     runner(&normalized)?;
     Ok(ShellSessionActionResult {
-        action: normalized,
+        action: normalized.clone(),
         requested: true,
-        message: "FORGE shell restart requested".to_string(),
+        message: if normalized == "exit_session" {
+            "FORGE operator session exit requested".to_string()
+        } else {
+            "FORGE shell restart requested".to_string()
+        },
     })
 }
 
 #[tauri::command]
 fn request_shell_session_action(action: String) -> Result<ShellSessionActionResult, String> {
-    request_shell_session_action_with_policy(action, shell_session_enabled(), |_| {
-        spawn_shell_restart_command()
+    request_shell_session_action_with_policy(action, shell_session_enabled(), |action| match action
+    {
+        "restart_shell" => spawn_shell_restart_command(),
+        "exit_session" => spawn_operator_session_exit_command(),
+        _ => Err("shell session action is not allowlisted".to_string()),
     })
 }
 
@@ -1367,5 +1397,24 @@ mod tests {
             result.err().expect("unknown action should fail"),
             "shell session action is not allowlisted"
         );
+    }
+
+    #[test]
+    fn operator_session_exit_uses_the_bounded_shell_action_runner() {
+        let mut requested = String::new();
+        let result = request_shell_session_action_with_policy(
+            " exit_session ".to_string(),
+            true,
+            |action| {
+                requested = action.to_string();
+                Ok(())
+            },
+        )
+        .expect("enabled operator session should call the runner");
+
+        assert_eq!(requested, "exit_session");
+        assert_eq!(result.action, "exit_session");
+        assert!(result.requested);
+        assert!(result.message.contains("session exit"));
     }
 }

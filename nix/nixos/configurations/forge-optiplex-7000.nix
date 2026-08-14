@@ -120,13 +120,14 @@ in
     safeModeForceCPUOnly = true;
     extraEnvironment = {
       OLLAMA_BASE_URL = "http://127.0.0.1:11434";
-      OLLAMA_MODEL = "gemma3:1b-it-q4_K_M";
+      OLLAMA_MODEL = "smuxo/smuxoAI:0.8b";
       FORGE_MODEL_DEFAULT_BACKEND = "ollama_compat";
-      FORGE_MODEL_DEFAULT_ID = "gemma3:1b-it-q4_K_M";
+      FORGE_MODEL_DEFAULT_ID = "smuxo/smuxoAI:0.8b";
       FORGE_MODEL_MAX_LOADED_MODELS = "1";
-      FORGE_OLLAMA_CHAT_NUM_CTX = "1024";
-      FORGE_OLLAMA_CHAT_NUM_PREDICT = "96";
+      FORGE_OLLAMA_CHAT_NUM_CTX = "2048";
+      FORGE_OLLAMA_CHAT_NUM_PREDICT = "192";
       FORGE_OLLAMA_CHAT_NUM_THREAD = "6";
+      FORGE_OLLAMA_CHAT_THINK = "false";
     };
   };
 
@@ -282,8 +283,8 @@ in
     FORGE_CORE_URL=http://127.0.0.1:18492
     FORGE_MODEL_RUNTIME_ENABLED=true
     FORGE_MODEL_DEFAULT_BACKEND=ollama_compat
-    FORGE_MODEL_DEFAULT_ID=gemma3:1b-it-q4_K_M
-    FORGE_MODEL_SECONDARY_ID=smuxo/smuxoAI:0.8b
+    FORGE_MODEL_DEFAULT_ID=smuxo/smuxoAI:0.8b
+    FORGE_MODEL_SECONDARY_ID=gemma3:1b-it-q4_K_M
     FORGE_MODEL_MAX_LOADED_MODELS=1
     FORGE_SAFE_MODE_FORCE_CPU_ONLY=true
     FORGE_SHELL_SAFE_MODE=true
