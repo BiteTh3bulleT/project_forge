@@ -407,6 +407,7 @@ func TestChatToolPathUsesValidRequestedModelOverPersistedDefault(t *testing.T) {
 	srv.modelRuntime = fakeRuntime
 
 	var sawModel string
+	var sawToolNames []string
 	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/chat" {
 			t.Fatalf("unexpected ollama path %s", r.URL.Path)
@@ -416,6 +417,13 @@ func TestChatToolPathUsesValidRequestedModelOverPersistedDefault(t *testing.T) {
 			t.Fatalf("decode ollama body: %v", err)
 		}
 		sawModel = strings.TrimSpace(asString(body["model"]))
+		if tools, ok := body["tools"].([]any); ok {
+			for _, rawTool := range tools {
+				tool, _ := rawTool.(map[string]any)
+				fn, _ := tool["function"].(map[string]any)
+				sawToolNames = append(sawToolNames, strings.TrimSpace(asString(fn["name"])))
+			}
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"message":{"role":"assistant","content":""},"done":true}`))
 	}))
@@ -442,6 +450,9 @@ func TestChatToolPathUsesValidRequestedModelOverPersistedDefault(t *testing.T) {
 	}
 	if sawModel != "smuxo/smuxoAI:0.8b" {
 		t.Fatalf("tool path used model=%q, want selected smuxo model", sawModel)
+	}
+	if strings.Join(sawToolNames, ",") != "forge_git_status" {
+		t.Fatalf("tool path attached tools=%v, want only forge_git_status", sawToolNames)
 	}
 }
 

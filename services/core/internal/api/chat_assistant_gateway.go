@@ -31,6 +31,21 @@ const (
 
 const assistantContentFallback = "I couldn't produce a clean assistant response. Try again, or check the selected model/runtime."
 
+func narrowOllamaToolsToForcedModel(tools []map[string]any, forcedModel string) ([]map[string]any, bool) {
+	forcedModel = strings.TrimSpace(forcedModel)
+	if forcedModel == "" {
+		return tools, false
+	}
+	for _, tool := range tools {
+		fn, _ := tool["function"].(map[string]any)
+		name, _ := fn["name"].(string)
+		if strings.TrimSpace(name) == forcedModel {
+			return []map[string]any{tool}, true
+		}
+	}
+	return tools, false
+}
+
 func (s *Server) completeAssistantWithGatewayTools(
 	ctx context.Context,
 	threadID, userMessageID int64,
@@ -130,9 +145,14 @@ func (s *Server) completeAssistantWithGatewayTools(
 		return am
 	}
 
-	loadToolCatalog()
-	pushStage("tools_attached", map[string]any{"tools": toolNames, "count": len(toolNames)})
 	forcedModel := gateway.ForcedChatModelName(lastUserContent)
+	loadToolCatalog()
+	if narrowed, ok := narrowOllamaToolsToForcedModel(ollamaTools, forcedModel); ok {
+		ollamaTools = narrowed
+		toolNames = []string{forcedModel}
+		pushStage("tools_narrowed", map[string]any{"reason": "deterministic_forced_tool", "tool": forcedModel})
+	}
+	pushStage("tools_attached", map[string]any{"tools": toolNames, "count": len(toolNames)})
 
 	if dryRun {
 		pushStage("dry_run", map[string]any{"note": "no_model_no_gateway"})

@@ -26,6 +26,10 @@ Neural neurons propose. Rule neurons validate. Courthouse admits. Kernel commits
 - Runtime thinking/reasoning controls and output budgets may be bounded so a
   small worker can emit the proposal envelope; this does not grant execution or
   commit authority to that worker.
+- When deterministic routing identifies one forced tool, the model-facing tool
+  catalog is narrowed to that matching schema for the proposal turn. The full
+  gateway manifest remains the authority record, and only the gateway may
+  validate or execute the resulting proposal.
 
 ## Alternatives considered
 
