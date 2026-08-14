@@ -104,7 +104,11 @@ Phase 8 adds `restore_outcome_events` as non-canonical evidence for the restore 
 
 Read-only compile paths and semantic dry-runs do not write outcome rows. They may return a draft outcome in the response summary so operators can inspect what would have been recorded.
 
-Operator feedback can update the non-canonical event outcome, confidence, feedback text, and correction summary through the restore outcome API. This update does not mutate canonical notes, state, loops, links, or memory truth.
+Operator feedback appends immutable K20G utility evidence through the restore
+outcome API. It never rewrites the original outcome. A separately labeled,
+noncanonical projection carries the latest confidence, feedback text, and
+correction summary for bounded scoring; this does not mutate canonical notes,
+state, loops, links, or memory truth.
 
 Future scoring consumes prior outcome evidence as a bounded utility signal:
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"forge/projectforge/services/core/internal/adapters"
+	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/approvals"
 	"forge/projectforge/services/core/internal/artifacts"
 	"forge/projectforge/services/core/internal/dossiers"
@@ -758,6 +759,17 @@ func (s *Service) ensurePacket(ctx context.Context, jobID string, job *Job, meta
 			JobID:           &jobID,
 			DossierID:       dossierID,
 			Notes:           "job.packet.prep",
+			Actor:           domain.ActorIdentity{ID: "forge.jobs", Kind: "service"},
+			Source:          domain.SourceInternal,
+			Scope: domain.ForgeScope{
+				WorkspaceID: strings.TrimSpace(s.workspaceDir), LaneID: "control.semantic",
+			},
+			Provenance:     domain.Provenance{Actor: "forge.jobs", ActorType: "system", Source: "job.packet.prep"},
+			CorrelationID:  "job-" + jobID + "-retrieval",
+			TraceID:        "job-" + jobID + "-retrieval",
+			RequestID:      "retrieval-evidence-job-" + jobID,
+			IdempotencyKey: "retrieval-evidence-job-" + jobID,
+			RequestedAt:    job.CreatedAtMs,
 		}
 		r, err := s.retrieval.Run(ctx, runReq)
 		if err != nil {
@@ -823,10 +835,6 @@ func (s *Service) ensurePacket(ctx context.Context, jobID string, job *Job, meta
 		"scopeSnapshot":    json.RawMessage(packet.ScopeSnapshot),
 		"sourceContextIds": json.RawMessage(packet.SourceContextRecordIDs),
 	})
-
-	if s.retrieval != nil && run != nil {
-		_ = s.retrieval.AttachRunToPacket(ctx, run.ID, packet.ID)
-	}
 
 	if s.dossiers != nil && dossierID != nil {
 		_ = s.dossiers.AttachJob(ctx, *dossierID, jobID)
@@ -1122,9 +1130,6 @@ func (s *Service) complete(ctx context.Context, jobID, summary string) error {
 		return err
 	}
 	_, _ = s.appendEvent(ctx, jobID, "job.completed", "Job completed successfully", map[string]any{"resultSummary": summary})
-	if s.retrieval != nil {
-		_ = s.retrieval.RecordOutcome(ctx, jobID, "succeeded")
-	}
 	if s.artifacts != nil {
 		_, _ = s.artifacts.CreateTextArtifact(ctx, artifacts.CreateTextArtifactRequest{
 			JobID:    &jobID,
@@ -1168,9 +1173,6 @@ WHERE id = ?`,
 		return err
 	}
 	_, _ = s.appendEvent(ctx, jobID, "job.failed", "Job failed", map[string]any{"failureCode": code, "message": message})
-	if s.retrieval != nil {
-		_ = s.retrieval.RecordOutcome(ctx, jobID, "failed")
-	}
 	if s.artifacts != nil {
 		_, _ = s.artifacts.CreateTextArtifact(ctx, artifacts.CreateTextArtifactRequest{
 			JobID:    &jobID,
@@ -1206,9 +1208,6 @@ WHERE id = ?`,
 		return err
 	}
 	_, _ = s.appendEvent(ctx, jobID, "job.cancelled", "Job cancelled", map[string]any{"failureCode": code, "message": message})
-	if s.retrieval != nil {
-		_ = s.retrieval.RecordOutcome(ctx, jobID, "cancelled")
-	}
 	return nil
 }
 

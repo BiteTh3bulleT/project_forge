@@ -189,32 +189,6 @@ func (s *SQLiteSemanticStore) ListRestoreOutcomes(ctx context.Context, filter Re
 	return scanRestoreOutcomeRows(rows)
 }
 
-func (s *SQLiteSemanticStore) UpdateRestoreOutcomeFeedback(ctx context.Context, id string, scope domain.ForgeScope, feedback RestoreOutcomeFeedback) (RestoreOutcomeEvent, error) {
-	event, ok, err := s.GetRestoreOutcome(ctx, id)
-	if err != nil {
-		return RestoreOutcomeEvent{}, err
-	}
-	if !ok {
-		return RestoreOutcomeEvent{}, restoreOutcomeNotFound(id)
-	}
-	if !restoreOutcomeMatchesScope(event, scope) {
-		return RestoreOutcomeEvent{}, fmt.Errorf("restore outcome %q outside requested scope", strings.TrimSpace(id))
-	}
-	event = applyRestoreOutcomeFeedback(event, feedback)
-	_, err = s.exec.ExecContext(ctx, `
-UPDATE restore_outcome_events
-SET updated_at = ?, outcome = ?, outcome_confidence = ?, operator_feedback = ?, correction_summary = ?,
-    correlation_id = ?, trace_id = ?, committed_by = ?, metadata_json = ?
-WHERE id = ?`,
-		event.UpdatedAt, string(event.Outcome), event.OutcomeConfidence, event.OperatorFeedback, event.CorrectionSummary,
-		event.CorrelationID, event.TraceID, event.CommittedBy, encodeJSON(nonNilMap(event.Metadata)), event.ID,
-	)
-	if err != nil {
-		return RestoreOutcomeEvent{}, err
-	}
-	return event, nil
-}
-
 // Extra read helpers used by tests and context compilation.
 func (s *SQLiteSemanticStore) ListLinksByScope(ctx context.Context, scope ScopeFilter, limit int) ([]domain.SemanticLink, error) {
 	return s.listLinks(ctx, "1=1", nil, scope, limit)

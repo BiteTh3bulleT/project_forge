@@ -1,6 +1,6 @@
 # ADR 0017 - FORGE-K Production Authority Cutover
 
-Status: Accepted; Stages K20A-K20F active
+Status: Accepted; Stages K20A-K20G active
 
 Date: 2026-08-14
 
@@ -53,13 +53,18 @@ FORGE-K moves to production one authority boundary at a time:
    staged, chain-verified future work. Foreign journal and idempotency proof
    can never be merged into the active local authority chain.
 9. Stage K20F contains behavior-affecting memory writers: automatic and manual
-   repair/reindex are proposal-only, retrieval no longer rewrites legacy
-   observations, and usefulness changes each VSA reliability projection once.
-10. Boot selects exactly one mode through `FORGE_KERNEL_AUTHORITY_MODE`:
+   repair/reindex are proposal-only and retrieval no longer rewrites legacy
+   observations. VSA state is a deterministic rebuildable projection rather
+   than a usefulness-feedback mutation target.
+10. Stage K20G admits utility feedback only as append-only FORGE-K evidence.
+   Retrieval usefulness and restore-outcome feedback preserve their original
+   evidence, atomically append immutable events, and update only separately
+   labeled rebuildable projections. Legacy direct writers are retired.
+11. Boot selects exactly one mode through `FORGE_KERNEL_AUTHORITY_MODE`:
    `forge_k` (default) or `legacy_v1` (rollback). There is no dual commit mode.
-11. Full FORGE-K authority is not claimed until the adapter implementation and remaining
+12. Full FORGE-K authority is not claimed until the adapter implementation and remaining
    subsystem gates are migrated and v1 is retired.
-12. FORGE deterministically decides whether a chat turn needs a tool and selects
+13. FORGE deterministically decides whether a chat turn needs a tool and selects
    exactly one eligible tool before any model proposal call. If it cannot do so,
    no tool schema is exposed. A model may only format bounded arguments for the
    schema FORGE selected; the gateway remains execution authority.
@@ -78,13 +83,16 @@ FORGE-K moves to production one authority boundary at a time:
 6. Retire unsafe live restore and mutable restore-outcome feedback. Closed
    K20E; daemon-stopped whole-store recovery and bounded semantic import remain.
 7. Contain legacy Memory Palace observation/repair/VSA writers. Closed K20F for
-   proposal-only maintenance and retrieval observation duplication; append-only
-   utility evidence and atomic projection rebuild remain.
-8. Semantic Algebra operations and structured Memory Palace objects.
-9. Context Compiler live bundle authority.
-10. Runtime driver proposal boundary and response composition gate.
-11. Snapshots, KV acceleration, and Lymphatic proposal lanes.
-12. Remove `legacy_v1`, compatibility facades, and stale authority claims.
+   proposal-only maintenance and retrieval observation duplication; K20G adds
+   deterministic, scoped VSA rebuild authority with an atomic manifest swap.
+8. Append-only utility evidence and noncanonical projection rebuild. Closed
+   K20G for retrieval usefulness and restore-outcome feedback; scoped retrieval
+   job-outcome evidence remains future work.
+9. Semantic Algebra operations and structured Memory Palace objects.
+10. Context Compiler live bundle authority.
+11. Runtime driver proposal boundary and response composition gate.
+12. Snapshots, KV acceleration, and Lymphatic proposal lanes.
+13. Remove `legacy_v1`, compatibility facades, and stale authority claims.
 
 Each step requires deterministic parity tests, malformed-input failure tests,
 capability/approval tests, journal and audit evidence, a tested rollback path,

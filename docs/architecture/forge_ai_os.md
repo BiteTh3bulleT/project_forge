@@ -66,7 +66,7 @@ The control lane is no longer in-memory-only. Durable semantic persistence exist
 - commit boundaries run through `SQLiteTransactionRunner`
 - `journal_events` remains append-only at the DB level
 - context snapshot evidence persists in `context_packet_snapshots`
-- restore outcome feedback persists in `restore_outcome_events` as non-canonical evidence
+- original restore outcomes persist in `restore_outcome_events`; K20G feedback appends immutable utility events with a separate noncanonical projection
 - `COMPILE_CONTEXT` can persist non-canonical snapshot evidence and restore-selection metadata
 
 This is real Phase 3 persistence, but not full mutation convergence across the whole repo.

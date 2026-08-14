@@ -12,6 +12,9 @@ func migrate(db *sql.DB) error {
 	if err := ensureForgeKJournalChain(db); err != nil {
 		return fmt.Errorf("migrate FORGE-K journal chain: %w", err)
 	}
+	if err := ensureMemoryVSAProjectionAuthority(db); err != nil {
+		return fmt.Errorf("migrate memory VSA projection authority: %w", err)
+	}
 	if err := ensureContextPacketSnapshotColumns(db); err != nil {
 		return fmt.Errorf("migrate context_packet_snapshots: %w", err)
 	}

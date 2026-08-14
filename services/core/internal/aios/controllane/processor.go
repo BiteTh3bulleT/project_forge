@@ -170,13 +170,19 @@ func (p *Processor) Prepare(ctx context.Context, req domain.SyscallRequest) (for
 		}, nil)
 	}
 
+	productionAuthorized := forgekernel.HasVerifiedAuthorizationContext(ctx) && hasKernelAuthorizationMetadata(req)
 	envelopeIssues := p.validator.ValidateEnvelope(req, def)
+	if isForgeKOnlyAction(req.Action) && !productionAuthorized {
+		envelopeIssues = append(envelopeIssues, domain.SyscallError{
+			Code: domain.ErrUnauthorized, Field: "kernel.authority",
+			Message: "action requires production FORGE-K orchestration",
+		})
+	}
 	result.ValidationDetails = append(result.ValidationDetails, detailFor("envelope_validation", envelopeIssues))
 	if len(envelopeIssues) > 0 {
 		return reject("envelope_validation", envelopeIssues, nil)
 	}
 
-	productionAuthorized := forgekernel.HasVerifiedAuthorizationContext(ctx) && hasKernelAuthorizationMetadata(req)
 	if productionAuthorized {
 		// Production identity/capability/approval authority was already resolved
 		// and verified by FORGE-K. Static services remain legacy_v1/test policy
@@ -372,6 +378,20 @@ func (p *Processor) Prepare(ctx context.Context, req domain.SyscallRequest) (for
 		}}, planErr)
 	}
 	return forgekernel.PreparedSyscall{Request: req, Result: result, Disposition: forgekernel.DispositionCommit, Plan: plan}, nil
+}
+
+func isForgeKOnlyAction(action domain.SemanticActionType) bool {
+	switch action {
+	case domain.ActionAdmitEvidence,
+		domain.ActionAppealRuling,
+		domain.ActionRecordRetrievalEvidence,
+		domain.ActionRebuildMemoryAcceleration,
+		domain.ActionRecordRetrievalUsefulness,
+		domain.ActionRecordRestoreOutcomeFeedback:
+		return true
+	default:
+		return false
+	}
 }
 
 func hasKernelAuthorizationMetadata(req domain.SyscallRequest) bool {

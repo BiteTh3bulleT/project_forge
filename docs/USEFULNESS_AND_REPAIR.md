@@ -4,7 +4,9 @@ FORGE tracks what memory helped and what memory hurt.
 
 ## Usefulness Signals
 
-Signals are stored in `memory_usefulness_events`.
+Legacy observation signals remain in `memory_usefulness_events`. K20G retrieval
+result feedback is stored instead as immutable FORGE-K utility evidence with a
+separate rebuildable projection.
 
 Signal sources:
 - retrieval result usefulness marking
@@ -25,8 +27,11 @@ Each observation keeps summary counters:
 - `usefulness_count`
 - `noise_count`
 
-Scores are updated on each usefulness event and used as ranking hints.
-When VSA data exists for an observation, usefulness/noise feedback also updates VSA binding/association reliability counters.
+K20G retrieval usefulness events update only
+`retrieval_usefulness_projection`, which ranking may use as a bounded hint.
+They do not mutate observations or VSA binding/association reliability
+counters; VSA projections are rebuilt deterministically from their governed
+source set.
 
 ## Drift / Staleness Controls
 

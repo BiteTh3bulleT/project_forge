@@ -125,6 +125,9 @@ type SemanticReadStore interface {
 	FindCourtExhibit(id string, scope domain.ForgeScope) (court.Exhibit, bool)
 	FindCourtRuling(id string, scope domain.ForgeScope) (court.Ruling, bool)
 	ListCourtRulings(scope domain.ForgeScope, caseID, exhibitID string) []court.Ruling
+	FindRetrievalUsefulnessTarget(ctx context.Context, resultID int64) (RetrievalUsefulnessTarget, bool, error)
+	FindRestoreOutcomeFeedbackTarget(ctx context.Context, id string) (RestoreOutcomeFeedbackTarget, bool, error)
+	GetRestoreOutcomeFeedbackProjection(ctx context.Context, id string, scope domain.ForgeScope) (RestoreOutcomeFeedbackProjection, bool, error)
 	BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket
 }
 
@@ -143,6 +146,10 @@ type SemanticStore interface {
 	CreateArtifactRef(ref domain.ArtifactRef) error
 	CreateContextSnapshot(pkt domain.ContextPacket) error
 	CreateCourtDecision(exhibit court.Exhibit, ruling court.Ruling, appeal *court.Appeal) error
+	RecordRetrievalEvidence(ctx context.Context, req domain.SyscallRequest, evidence RetrievalEvidence) (RetrievalEvidenceCommit, error)
+	CreateRetrievalUsefulnessEvent(event RetrievalUsefulnessEvent) error
+	CreateRestoreOutcomeFeedbackEvent(event RestoreOutcomeFeedbackEvent) error
+	RebuildMemoryAcceleration(ctx context.Context, req MemoryAccelerationRebuildRequest) (MemoryAccelerationCommit, error)
 	SetIdempotency(key string, rec IdempotencyRecord) error
 	CreateAuditOutbox(rec AuditOutboxRecord) error
 }
@@ -152,45 +159,57 @@ type CommitAwareStore interface {
 }
 
 type memoryState struct {
-	notes            map[string]domain.MemoryNote
-	links            map[string]domain.SemanticLink
-	states           map[string]domain.StateItem
-	stateByScopeKey  map[string][]string
-	loops            map[string]domain.OpenLoop
-	artifacts        map[string]domain.ArtifactRef
-	models           map[string]domain.AdaptivePolicyModel
-	contextSnapshots map[string]domain.ContextPacket
-	restoreOutcomes  map[string]RestoreOutcomeEvent
-	contradictions   map[string]ContradictionRecord
-	supersessions    map[string]SupersessionRecord
-	courtExhibits    map[string]court.Exhibit
-	courtRulings     map[string]court.Ruling
-	courtAppeals     map[string]court.Appeal
-	idempotency      map[string]IdempotencyRecord
-	auditOutbox      map[string]AuditOutboxRecord
-	journalEntries   []forgejournal.Entry
-	journalHead      forgejournal.Head
+	notes                      map[string]domain.MemoryNote
+	links                      map[string]domain.SemanticLink
+	states                     map[string]domain.StateItem
+	stateByScopeKey            map[string][]string
+	loops                      map[string]domain.OpenLoop
+	artifacts                  map[string]domain.ArtifactRef
+	models                     map[string]domain.AdaptivePolicyModel
+	contextSnapshots           map[string]domain.ContextPacket
+	restoreOutcomes            map[string]RestoreOutcomeEvent
+	contradictions             map[string]ContradictionRecord
+	supersessions              map[string]SupersessionRecord
+	courtExhibits              map[string]court.Exhibit
+	courtRulings               map[string]court.Ruling
+	courtAppeals               map[string]court.Appeal
+	retrievalEvidence          map[string]RetrievalEvidence
+	retrievalTargets           map[int64]RetrievalUsefulnessTarget
+	retrievalUtility           map[string]RetrievalUsefulnessEvent
+	retrievalUtilityProjection map[int64]RetrievalUsefulnessProjection
+	restoreFeedbackEvents      map[string]RestoreOutcomeFeedbackEvent
+	restoreFeedbackProjection  map[string]RestoreOutcomeFeedbackProjection
+	idempotency                map[string]IdempotencyRecord
+	auditOutbox                map[string]AuditOutboxRecord
+	journalEntries             []forgejournal.Entry
+	journalHead                forgejournal.Head
 }
 
 func newMemoryState() memoryState {
 	return memoryState{
-		notes:            map[string]domain.MemoryNote{},
-		links:            map[string]domain.SemanticLink{},
-		states:           map[string]domain.StateItem{},
-		stateByScopeKey:  map[string][]string{},
-		loops:            map[string]domain.OpenLoop{},
-		artifacts:        map[string]domain.ArtifactRef{},
-		models:           map[string]domain.AdaptivePolicyModel{},
-		contextSnapshots: map[string]domain.ContextPacket{},
-		restoreOutcomes:  map[string]RestoreOutcomeEvent{},
-		contradictions:   map[string]ContradictionRecord{},
-		supersessions:    map[string]SupersessionRecord{},
-		courtExhibits:    map[string]court.Exhibit{},
-		courtRulings:     map[string]court.Ruling{},
-		courtAppeals:     map[string]court.Appeal{},
-		idempotency:      map[string]IdempotencyRecord{},
-		auditOutbox:      map[string]AuditOutboxRecord{},
-		journalEntries:   []forgejournal.Entry{},
+		notes:                      map[string]domain.MemoryNote{},
+		links:                      map[string]domain.SemanticLink{},
+		states:                     map[string]domain.StateItem{},
+		stateByScopeKey:            map[string][]string{},
+		loops:                      map[string]domain.OpenLoop{},
+		artifacts:                  map[string]domain.ArtifactRef{},
+		models:                     map[string]domain.AdaptivePolicyModel{},
+		contextSnapshots:           map[string]domain.ContextPacket{},
+		restoreOutcomes:            map[string]RestoreOutcomeEvent{},
+		contradictions:             map[string]ContradictionRecord{},
+		supersessions:              map[string]SupersessionRecord{},
+		courtExhibits:              map[string]court.Exhibit{},
+		courtRulings:               map[string]court.Ruling{},
+		courtAppeals:               map[string]court.Appeal{},
+		retrievalEvidence:          map[string]RetrievalEvidence{},
+		retrievalTargets:           map[int64]RetrievalUsefulnessTarget{},
+		retrievalUtility:           map[string]RetrievalUsefulnessEvent{},
+		retrievalUtilityProjection: map[int64]RetrievalUsefulnessProjection{},
+		restoreFeedbackEvents:      map[string]RestoreOutcomeFeedbackEvent{},
+		restoreFeedbackProjection:  map[string]RestoreOutcomeFeedbackProjection{},
+		idempotency:                map[string]IdempotencyRecord{},
+		auditOutbox:                map[string]AuditOutboxRecord{},
+		journalEntries:             []forgejournal.Entry{},
 	}
 }
 
@@ -239,6 +258,24 @@ func cloneState(in memoryState) memoryState {
 	}
 	for k, v := range in.courtAppeals {
 		out.courtAppeals[k] = v
+	}
+	for k, v := range in.retrievalEvidence {
+		out.retrievalEvidence[k] = cloneIntegrityValue(v)
+	}
+	for k, v := range in.retrievalTargets {
+		out.retrievalTargets[k] = cloneIntegrityValue(v)
+	}
+	for k, v := range in.retrievalUtility {
+		out.retrievalUtility[k] = cloneIntegrityValue(v)
+	}
+	for k, v := range in.retrievalUtilityProjection {
+		out.retrievalUtilityProjection[k] = v
+	}
+	for k, v := range in.restoreFeedbackEvents {
+		out.restoreFeedbackEvents[k] = cloneIntegrityValue(v)
+	}
+	for k, v := range in.restoreFeedbackProjection {
+		out.restoreFeedbackProjection[k] = cloneIntegrityValue(v)
 	}
 	for k, v := range in.idempotency {
 		out.idempotency[k] = cloneIdempotencyRecord(v)
@@ -677,21 +714,6 @@ func (s *InMemorySemanticStore) ListRestoreOutcomes(ctx context.Context, filter 
 	return filterRestoreOutcomes(s.state.restoreOutcomes, filter), nil
 }
 
-func (s *InMemorySemanticStore) UpdateRestoreOutcomeFeedback(ctx context.Context, id string, scope domain.ForgeScope, feedback RestoreOutcomeFeedback) (RestoreOutcomeEvent, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	event, ok := s.state.restoreOutcomes[strings.TrimSpace(id)]
-	if !ok {
-		return RestoreOutcomeEvent{}, restoreOutcomeNotFound(id)
-	}
-	if !restoreOutcomeMatchesScope(event, scope) {
-		return RestoreOutcomeEvent{}, fmt.Errorf("restore outcome %q outside requested scope", strings.TrimSpace(id))
-	}
-	event = applyRestoreOutcomeFeedback(event, feedback)
-	s.state.restoreOutcomes[event.ID] = event
-	return event, nil
-}
-
 func (s *InMemorySemanticStore) BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1004,19 +1026,6 @@ func (s *TransactionalSemanticStore) GetRestoreOutcome(ctx context.Context, id s
 
 func (s *TransactionalSemanticStore) ListRestoreOutcomes(ctx context.Context, filter RestoreOutcomeFilter) ([]RestoreOutcomeEvent, error) {
 	return filterRestoreOutcomes(s.state.restoreOutcomes, filter), nil
-}
-
-func (s *TransactionalSemanticStore) UpdateRestoreOutcomeFeedback(ctx context.Context, id string, scope domain.ForgeScope, feedback RestoreOutcomeFeedback) (RestoreOutcomeEvent, error) {
-	event, ok := s.state.restoreOutcomes[strings.TrimSpace(id)]
-	if !ok {
-		return RestoreOutcomeEvent{}, restoreOutcomeNotFound(id)
-	}
-	if !restoreOutcomeMatchesScope(event, scope) {
-		return RestoreOutcomeEvent{}, fmt.Errorf("restore outcome %q outside requested scope", strings.TrimSpace(id))
-	}
-	event = applyRestoreOutcomeFeedback(event, feedback)
-	s.state.restoreOutcomes[event.ID] = event
-	return event, nil
 }
 
 func (s *TransactionalSemanticStore) SetIdempotency(key string, rec IdempotencyRecord) error {

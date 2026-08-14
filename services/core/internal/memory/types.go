@@ -74,6 +74,8 @@ type VSAPointerRecord struct {
 	Pointer           json.RawMessage `json:"pointer"`
 	Norm              float64         `json:"norm"`
 	SourceFingerprint string          `json:"sourceFingerprint"`
+	SupportCount      int             `json:"supportCount"`
+	NoiseCount        int             `json:"noiseCount"`
 	Stale             bool            `json:"stale"`
 	Metadata          json.RawMessage `json:"metadata"`
 	CreatedAtMs       int64           `json:"createdAtMs"`
@@ -240,9 +242,11 @@ type VSAQueryCandidate struct {
 }
 
 type VSAQuerySignalsRequest struct {
-	Query      string              `json:"query"`
-	DossierID  *int64              `json:"dossierId,omitempty"`
-	Candidates []VSAQueryCandidate `json:"candidates"`
+	WorkspaceID string              `json:"workspaceId"`
+	LaneID      string              `json:"laneId"`
+	Query       string              `json:"query"`
+	DossierID   *int64              `json:"dossierId,omitempty"`
+	Candidates  []VSAQueryCandidate `json:"candidates"`
 }
 
 type ListObservationsRequest struct {
@@ -291,11 +295,6 @@ type MarkUsefulnessRequest struct {
 	Signal            string
 	Weight            float64
 	Note              string
-}
-
-type SaveSelectionReasonRequest struct {
-	RetrievalResultID int64
-	Reason            map[string]any
 }
 
 type AddAlignmentNoteRequest struct {

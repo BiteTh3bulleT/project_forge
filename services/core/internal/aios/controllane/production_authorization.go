@@ -162,7 +162,14 @@ func productionMutationPolicy(req domain.SyscallRequest, def ActionDefinition) (
 func productionCapabilityPolicy(source domain.ActionSource, action domain.SemanticActionType) (string, bool) {
 	switch source {
 	case domain.SourceUser:
-		return "authenticated_user", true
+		switch action {
+		case domain.ActionRebuildMemoryAcceleration:
+			return "authenticated_user_scoped_acceleration_rebuild", true
+		case domain.ActionRecordRetrievalUsefulness, domain.ActionRecordRestoreOutcomeFeedback:
+			return "authenticated_user_utility_evidence", true
+		default:
+			return "authenticated_user", true
+		}
 	case domain.SourceSystem, domain.SourceInternal:
 		return "forge_core_service", true
 	case domain.SourceAdapter:

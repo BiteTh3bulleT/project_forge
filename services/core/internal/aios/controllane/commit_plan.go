@@ -23,6 +23,21 @@ func buildPreparedCommitPlan(req domain.SyscallRequest, def ActionDefinition, re
 	if mutating {
 		objectIDs = append(objectIDs, journalID)
 	}
+	details := map[string]any{
+		"semanticApplyObjectCount": len(objectIDs) - boolInt(mutating),
+		"journalEventId":           journalID,
+	}
+	if req.Action == domain.ActionRebuildMemoryAcceleration {
+		details["workspaceId"] = req.Scope.WorkspaceID
+		details["laneId"] = req.Scope.LaneID
+		details["expectedManifestHash"] = readString(req.Payload, "expectedManifestHash")
+		details["expectedPriorManifestHash"] = readString(req.Payload, "expectedPriorManifestHash")
+		details["algorithmName"] = readString(req.Payload, "algorithmName")
+		details["algorithmVersion"] = readString(req.Payload, "algorithmVersion")
+		details["dimensions"] = readInt(req.Payload, "dimensions", 0)
+		details["seed"] = readInt(req.Payload, "seed", 0)
+		details["requestedAtMs"] = readInt64(req.Payload, "requestedAtMs")
+	}
 	return commitproof.PreparedPlan{
 		Action:                req.Action,
 		Capability:            def.Capability,
@@ -31,10 +46,7 @@ func buildPreparedCommitPlan(req domain.SyscallRequest, def ActionDefinition, re
 		JournalEventType:      "semantic_syscall." + strings.ToLower(string(req.Action)),
 		ExpectedObjectIDs:     objectIDs,
 		ExpectedProvenanceIDs: []string{provenanceID(req.Scope, req.Provenance)},
-		Details: map[string]any{
-			"semanticApplyObjectCount": len(objectIDs) - boolInt(mutating),
-			"journalEventId":           journalID,
-		},
+		Details:               details,
 	}, nil
 }
 
@@ -83,6 +95,23 @@ func expectedCommitObjectIDs(req domain.SyscallRequest, read SemanticReadStore) 
 			nonEmpty(readString(req.Payload, "rulingId"), req.ID+":ruling"),
 			readString(req.Payload, "exhibitId"),
 		}, nil
+	case domain.ActionRecordRetrievalEvidence:
+		evidence, decodeErr := decodeRetrievalEvidence(req.Payload)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		ids := make([]string, 0, 1+len(evidence.Results))
+		ids = append(ids, evidence.EvidenceID)
+		for _, result := range evidence.Results {
+			ids = append(ids, result.EvidenceID)
+		}
+		return ids, nil
+	case domain.ActionRebuildMemoryAcceleration:
+		return []string{readString(req.Payload, "expectedManifestHash")}, nil
+	case domain.ActionRecordRetrievalUsefulness:
+		return []string{"retrieval-usefulness:" + strings.TrimSpace(req.ID)}, nil
+	case domain.ActionRecordRestoreOutcomeFeedback:
+		return []string{"restore-outcome-feedback:" + strings.TrimSpace(req.ID)}, nil
 	case domain.ActionValidateKVIdentity,
 		domain.ActionValidateRefShape,
 		domain.ActionCompareRefShape,

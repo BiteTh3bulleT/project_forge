@@ -231,21 +231,43 @@ CREATE TABLE IF NOT EXISTS embedding_records (
 
 CREATE TABLE IF NOT EXISTS retrieval_runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  evidence_id TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL,
   query TEXT NOT NULL,
   mode TEXT NOT NULL,
   dossier_id INTEGER REFERENCES dossiers(id) ON DELETE SET NULL,
   packet_id INTEGER REFERENCES task_packets(id) ON DELETE SET NULL,
   job_id TEXT REFERENCES jobs(id) ON DELETE SET NULL,
+  original_dossier_id INTEGER,
+  original_packet_id INTEGER,
+  original_job_id TEXT,
   weighting_json TEXT NOT NULL DEFAULT '{}',
-  notes TEXT NOT NULL DEFAULT ''
+  notes TEXT NOT NULL DEFAULT '',
+  workspace_id TEXT NOT NULL DEFAULT '',
+  lane_id TEXT NOT NULL DEFAULT '',
+  selected_paths_json TEXT NOT NULL DEFAULT '[]',
+  syscall_id TEXT NOT NULL DEFAULT '',
+  correlation_id TEXT NOT NULL DEFAULT '',
+  trace_id TEXT NOT NULL DEFAULT '',
+  provenance_id TEXT NOT NULL DEFAULT '',
+  provenance_json TEXT NOT NULL DEFAULT '{}',
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT '',
+  transaction_id TEXT NOT NULL DEFAULT '',
+  journal_event_id TEXT NOT NULL DEFAULT '',
+  audit_outbox_id TEXT NOT NULL DEFAULT '',
+  idempotency_key TEXT NOT NULL DEFAULT '',
+  authorization_fingerprint TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS retrieval_results (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  evidence_id TEXT NOT NULL DEFAULT '',
   retrieval_run_id INTEGER NOT NULL REFERENCES retrieval_runs(id) ON DELETE CASCADE,
   chunk_id INTEGER REFERENCES chunks(id) ON DELETE SET NULL,
   file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
+  original_chunk_id INTEGER,
+  original_file_id INTEGER,
   abs_path TEXT NOT NULL,
   rel_path TEXT NOT NULL,
   rank_index INTEGER NOT NULL,
@@ -330,6 +352,8 @@ CREATE TABLE IF NOT EXISTS context_evidence (
 
 CREATE TABLE IF NOT EXISTS memory_observations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id TEXT NOT NULL DEFAULT '',
+  lane_id TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   observed_at INTEGER NOT NULL,
@@ -358,6 +382,8 @@ CREATE TABLE IF NOT EXISTS memory_observations (
 
 CREATE TABLE IF NOT EXISTS memory_observation_links (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id TEXT NOT NULL DEFAULT '',
+  lane_id TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL,
   from_observation_id INTEGER NOT NULL REFERENCES memory_observations(id) ON DELETE CASCADE,
   to_observation_id INTEGER NOT NULL REFERENCES memory_observations(id) ON DELETE CASCADE,
@@ -424,11 +450,16 @@ CREATE TABLE IF NOT EXISTS memory_repair_items (
 
 CREATE TABLE IF NOT EXISTS memory_vsa_pointers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id TEXT NOT NULL DEFAULT '',
+  lane_id TEXT NOT NULL DEFAULT '',
+  manifest_hash TEXT NOT NULL DEFAULT '',
   observation_id INTEGER NOT NULL UNIQUE REFERENCES memory_observations(id) ON DELETE CASCADE,
   dims INTEGER NOT NULL DEFAULT 128,
   pointer_json TEXT NOT NULL DEFAULT '[]',
   norm REAL NOT NULL DEFAULT 0,
   source_fingerprint TEXT NOT NULL DEFAULT '',
+  support_count INTEGER NOT NULL DEFAULT 0,
+  noise_count INTEGER NOT NULL DEFAULT 0,
   stale INTEGER NOT NULL DEFAULT 0,
   metadata_json TEXT NOT NULL DEFAULT '{}',
   created_at INTEGER NOT NULL,
@@ -437,6 +468,9 @@ CREATE TABLE IF NOT EXISTS memory_vsa_pointers (
 
 CREATE TABLE IF NOT EXISTS memory_vsa_role_bindings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id TEXT NOT NULL DEFAULT '',
+  lane_id TEXT NOT NULL DEFAULT '',
+  manifest_hash TEXT NOT NULL DEFAULT '',
   observation_id INTEGER NOT NULL REFERENCES memory_observations(id) ON DELETE CASCADE,
   role TEXT NOT NULL,
   filler TEXT NOT NULL,
@@ -451,6 +485,9 @@ CREATE TABLE IF NOT EXISTS memory_vsa_role_bindings (
 
 CREATE TABLE IF NOT EXISTS memory_vsa_associations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id TEXT NOT NULL DEFAULT '',
+  lane_id TEXT NOT NULL DEFAULT '',
+  manifest_hash TEXT NOT NULL DEFAULT '',
   from_observation_id INTEGER NOT NULL REFERENCES memory_observations(id) ON DELETE CASCADE,
   to_observation_id INTEGER NOT NULL REFERENCES memory_observations(id) ON DELETE CASCADE,
   association_type TEXT NOT NULL DEFAULT 'related',
@@ -462,6 +499,52 @@ CREATE TABLE IF NOT EXISTS memory_vsa_associations (
   updated_at INTEGER NOT NULL,
   UNIQUE(from_observation_id, to_observation_id, association_type)
 );
+
+CREATE TABLE IF NOT EXISTS memory_vsa_projection_manifests (
+  manifest_hash TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL,
+  source_set_hash TEXT NOT NULL,
+  link_set_hash TEXT NOT NULL,
+  algorithm_name TEXT NOT NULL,
+  algorithm_version TEXT NOT NULL,
+  dimensions INTEGER NOT NULL,
+  seed INTEGER NOT NULL,
+  source_count INTEGER NOT NULL,
+  link_count INTEGER NOT NULL,
+  manifest_json TEXT NOT NULL,
+  syscall_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  trace_id TEXT NOT NULL,
+  committed_by TEXT NOT NULL DEFAULT 'forge_k.kernel',
+  created_at INTEGER NOT NULL,
+  UNIQUE(workspace_id, lane_id, manifest_hash)
+);
+
+CREATE TABLE IF NOT EXISTS memory_vsa_projection_heads (
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL,
+  manifest_hash TEXT NOT NULL REFERENCES memory_vsa_projection_manifests(manifest_hash),
+  prior_manifest_hash TEXT NOT NULL DEFAULT '',
+  syscall_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  trace_id TEXT NOT NULL,
+  committed_by TEXT NOT NULL DEFAULT 'forge_k.kernel',
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY(workspace_id, lane_id)
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_memory_vsa_manifests_no_update
+BEFORE UPDATE ON memory_vsa_projection_manifests
+BEGIN
+  SELECT RAISE(ABORT, 'VSA projection manifests are immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_memory_vsa_manifests_no_delete
+BEFORE DELETE ON memory_vsa_projection_manifests
+BEGIN
+  SELECT RAISE(ABORT, 'VSA projection manifests are immutable');
+END;
 
 CREATE TABLE IF NOT EXISTS retrieval_result_vsa_signals (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1426,6 +1509,112 @@ CREATE TABLE IF NOT EXISTS restore_outcome_events (
   metadata_json TEXT NOT NULL DEFAULT '{}'
 );
 
+CREATE TABLE IF NOT EXISTS forge_k_retrieval_usefulness_events (
+  id TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  retrieval_result_id INTEGER NOT NULL REFERENCES retrieval_results(id) ON DELETE RESTRICT,
+  retrieval_run_id INTEGER NOT NULL REFERENCES retrieval_runs(id) ON DELETE RESTRICT,
+  target_evidence_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL,
+  selected_paths_json TEXT NOT NULL,
+  label TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  job_id TEXT,
+  packet_id INTEGER,
+  prior_projection_json TEXT NOT NULL DEFAULT '{}',
+  source_provenance_json TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  correlation_id TEXT NOT NULL,
+  trace_id TEXT NOT NULL,
+  syscall_id TEXT NOT NULL,
+  provenance_id TEXT NOT NULL REFERENCES provenance_records(id) ON DELETE RESTRICT,
+  provenance_json TEXT NOT NULL,
+  proposed_by TEXT NOT NULL,
+  committed_by TEXT NOT NULL CHECK(committed_by = 'forge_k.kernel')
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_forge_k_retrieval_usefulness_syscall
+ON forge_k_retrieval_usefulness_events(syscall_id);
+CREATE INDEX IF NOT EXISTS idx_forge_k_retrieval_usefulness_target
+ON forge_k_retrieval_usefulness_events(workspace_id, lane_id, retrieval_result_id, created_at, id);
+
+CREATE TRIGGER IF NOT EXISTS forge_k_retrieval_usefulness_no_update
+BEFORE UPDATE ON forge_k_retrieval_usefulness_events
+BEGIN
+  SELECT RAISE(FAIL, 'FORGE-K retrieval usefulness evidence is immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS forge_k_retrieval_usefulness_no_delete
+BEFORE DELETE ON forge_k_retrieval_usefulness_events
+BEGIN
+  SELECT RAISE(FAIL, 'FORGE-K retrieval usefulness evidence is immutable');
+END;
+
+CREATE TABLE IF NOT EXISTS retrieval_usefulness_projection (
+  retrieval_result_id INTEGER PRIMARY KEY REFERENCES retrieval_results(id) ON DELETE CASCADE,
+  latest_event_id TEXT NOT NULL REFERENCES forge_k_retrieval_usefulness_events(id) ON DELETE RESTRICT,
+  label TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  updated_at INTEGER NOT NULL,
+  noncanonical INTEGER NOT NULL DEFAULT 1 CHECK(noncanonical = 1)
+);
+
+CREATE TABLE IF NOT EXISTS forge_k_restore_outcome_feedback_events (
+  id TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  restore_outcome_id TEXT NOT NULL REFERENCES restore_outcome_events(id) ON DELETE RESTRICT,
+  original_outcome TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL,
+  selected_paths_json TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  outcome_confidence REAL NOT NULL,
+  operator_feedback TEXT NOT NULL DEFAULT '',
+  correction_summary TEXT NOT NULL DEFAULT '',
+  prior_projection_json TEXT NOT NULL DEFAULT '{}',
+  projection_snapshot_json TEXT NOT NULL DEFAULT '{}',
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  correlation_id TEXT NOT NULL,
+  trace_id TEXT NOT NULL,
+  syscall_id TEXT NOT NULL,
+  provenance_id TEXT NOT NULL REFERENCES provenance_records(id) ON DELETE RESTRICT,
+  provenance_json TEXT NOT NULL,
+  proposed_by TEXT NOT NULL,
+  committed_by TEXT NOT NULL CHECK(committed_by = 'forge_k.kernel')
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_forge_k_restore_feedback_syscall
+ON forge_k_restore_outcome_feedback_events(syscall_id);
+CREATE INDEX IF NOT EXISTS idx_forge_k_restore_feedback_target
+ON forge_k_restore_outcome_feedback_events(workspace_id, lane_id, restore_outcome_id, created_at, id);
+
+CREATE TRIGGER IF NOT EXISTS forge_k_restore_feedback_no_update
+BEFORE UPDATE ON forge_k_restore_outcome_feedback_events
+BEGIN
+  SELECT RAISE(FAIL, 'FORGE-K restore outcome feedback evidence is immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS forge_k_restore_feedback_no_delete
+BEFORE DELETE ON forge_k_restore_outcome_feedback_events
+BEGIN
+  SELECT RAISE(FAIL, 'FORGE-K restore outcome feedback evidence is immutable');
+END;
+
+CREATE TABLE IF NOT EXISTS restore_outcome_feedback_projection (
+  restore_outcome_id TEXT PRIMARY KEY REFERENCES restore_outcome_events(id) ON DELETE CASCADE,
+  latest_event_id TEXT NOT NULL REFERENCES forge_k_restore_outcome_feedback_events(id) ON DELETE RESTRICT,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL,
+  selected_paths_json TEXT NOT NULL DEFAULT '[]',
+  outcome TEXT NOT NULL,
+  outcome_confidence REAL NOT NULL,
+  operator_feedback TEXT NOT NULL DEFAULT '',
+  correction_summary TEXT NOT NULL DEFAULT '',
+  updated_by TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  noncanonical INTEGER NOT NULL DEFAULT 1 CHECK(noncanonical = 1)
+);
+
 CREATE TABLE IF NOT EXISTS semantic_idempotency_keys (
   idempotency_key TEXT PRIMARY KEY,
   action TEXT NOT NULL,
@@ -1680,6 +1869,119 @@ func ensureForgeKJournalChain(db *sql.DB) error {
 		{"authproof_json", "TEXT NOT NULL DEFAULT '{}'"},
 	}); err != nil {
 		return fmt.Errorf("audit outbox receipt column: %w", err)
+	}
+	if err := ensureSQLiteColumns(tx, "retrieval_runs", []struct{ name, ddl string }{
+		{"evidence_id", "TEXT NOT NULL DEFAULT ''"},
+		{"original_dossier_id", "INTEGER"},
+		{"original_packet_id", "INTEGER"},
+		{"original_job_id", "TEXT"},
+		{"workspace_id", "TEXT NOT NULL DEFAULT ''"},
+		{"lane_id", "TEXT NOT NULL DEFAULT ''"},
+		{"selected_paths_json", "TEXT NOT NULL DEFAULT '[]'"},
+		{"syscall_id", "TEXT NOT NULL DEFAULT ''"},
+		{"correlation_id", "TEXT NOT NULL DEFAULT ''"},
+		{"trace_id", "TEXT NOT NULL DEFAULT ''"},
+		{"provenance_id", "TEXT NOT NULL DEFAULT ''"},
+		{"provenance_json", "TEXT NOT NULL DEFAULT '{}'"},
+		{"proposed_by", "TEXT NOT NULL DEFAULT ''"},
+		{"committed_by", "TEXT NOT NULL DEFAULT ''"},
+		{"transaction_id", "TEXT NOT NULL DEFAULT ''"},
+		{"journal_event_id", "TEXT NOT NULL DEFAULT ''"},
+		{"audit_outbox_id", "TEXT NOT NULL DEFAULT ''"},
+		{"idempotency_key", "TEXT NOT NULL DEFAULT ''"},
+		{"authorization_fingerprint", "TEXT NOT NULL DEFAULT ''"},
+	}); err != nil {
+		return fmt.Errorf("retrieval evidence run columns: %w", err)
+	}
+	if err := ensureSQLiteColumns(tx, "retrieval_results", []struct{ name, ddl string }{
+		{"evidence_id", "TEXT NOT NULL DEFAULT ''"},
+		{"original_chunk_id", "INTEGER"},
+		{"original_file_id", "INTEGER"},
+	}); err != nil {
+		return fmt.Errorf("retrieval evidence result columns: %w", err)
+	}
+	if err := ensureSQLiteColumns(tx, "restore_outcome_feedback_projection", []struct{ name, ddl string }{
+		{"selected_paths_json", "TEXT NOT NULL DEFAULT '[]'"},
+	}); err != nil {
+		return fmt.Errorf("restore outcome feedback projection scope columns: %w", err)
+	}
+	if _, err := tx.Exec(`
+DROP TRIGGER IF EXISTS retrieval_runs_forge_k_no_update;
+DROP TRIGGER IF EXISTS retrieval_results_forge_k_no_update;
+UPDATE retrieval_runs
+SET original_dossier_id=COALESCE(original_dossier_id,dossier_id),
+    original_packet_id=COALESCE(original_packet_id,packet_id),
+    original_job_id=COALESCE(original_job_id,job_id)
+WHERE evidence_id <> '';
+UPDATE retrieval_results
+SET original_chunk_id=COALESCE(original_chunk_id,chunk_id),
+    original_file_id=COALESCE(original_file_id,file_id)
+WHERE evidence_id <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_retrieval_runs_evidence_id
+ON retrieval_runs(evidence_id) WHERE evidence_id <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_retrieval_results_evidence_id
+ON retrieval_results(evidence_id) WHERE evidence_id <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_retrieval_results_run_rank
+ON retrieval_results(retrieval_run_id, rank_index) WHERE evidence_id <> '';
+CREATE TRIGGER retrieval_runs_forge_k_no_update
+BEFORE UPDATE ON retrieval_runs
+WHEN OLD.evidence_id <> '' AND NOT (
+  NEW.id IS OLD.id AND NEW.evidence_id IS OLD.evidence_id AND NEW.created_at IS OLD.created_at AND
+  NEW.query IS OLD.query AND NEW.mode IS OLD.mode AND
+  (NEW.dossier_id IS OLD.dossier_id OR (OLD.dossier_id IS NOT NULL AND NEW.dossier_id IS NULL)) AND
+  (NEW.packet_id IS OLD.packet_id OR (OLD.packet_id IS NOT NULL AND NEW.packet_id IS NULL)) AND
+  (NEW.job_id IS OLD.job_id OR (OLD.job_id IS NOT NULL AND NEW.job_id IS NULL)) AND
+  NEW.original_dossier_id IS OLD.original_dossier_id AND NEW.original_packet_id IS OLD.original_packet_id AND
+  NEW.original_job_id IS OLD.original_job_id AND NEW.weighting_json IS OLD.weighting_json AND NEW.notes IS OLD.notes AND
+  NEW.workspace_id IS OLD.workspace_id AND NEW.lane_id IS OLD.lane_id AND NEW.selected_paths_json IS OLD.selected_paths_json AND
+  NEW.syscall_id IS OLD.syscall_id AND NEW.correlation_id IS OLD.correlation_id AND NEW.trace_id IS OLD.trace_id AND
+  NEW.provenance_id IS OLD.provenance_id AND NEW.provenance_json IS OLD.provenance_json AND
+  NEW.proposed_by IS OLD.proposed_by AND NEW.committed_by IS OLD.committed_by AND
+  NEW.transaction_id IS OLD.transaction_id AND NEW.journal_event_id IS OLD.journal_event_id AND
+  NEW.audit_outbox_id IS OLD.audit_outbox_id AND NEW.idempotency_key IS OLD.idempotency_key AND
+  NEW.authorization_fingerprint IS OLD.authorization_fingerprint
+)
+BEGIN
+  SELECT RAISE(ABORT, 'FORGE-K retrieval evidence runs are immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS retrieval_runs_forge_k_no_delete
+BEFORE DELETE ON retrieval_runs WHEN OLD.evidence_id <> ''
+BEGIN
+  SELECT RAISE(ABORT, 'FORGE-K retrieval evidence runs are immutable');
+END;
+CREATE TRIGGER retrieval_results_forge_k_no_update
+BEFORE UPDATE ON retrieval_results
+WHEN OLD.evidence_id <> '' AND NOT (
+  NEW.id IS OLD.id AND NEW.evidence_id IS OLD.evidence_id AND NEW.retrieval_run_id IS OLD.retrieval_run_id AND
+  (NEW.chunk_id IS OLD.chunk_id OR (OLD.chunk_id IS NOT NULL AND NEW.chunk_id IS NULL)) AND
+  (NEW.file_id IS OLD.file_id OR (OLD.file_id IS NOT NULL AND NEW.file_id IS NULL)) AND
+  NEW.original_chunk_id IS OLD.original_chunk_id AND NEW.original_file_id IS OLD.original_file_id AND
+  NEW.abs_path IS OLD.abs_path AND NEW.rel_path IS OLD.rel_path AND NEW.rank_index IS OLD.rank_index AND
+  NEW.keyword_score IS OLD.keyword_score AND NEW.semantic_score IS OLD.semantic_score AND NEW.hybrid_score IS OLD.hybrid_score AND
+  NEW.snippet IS OLD.snippet AND NEW.selected_for_packet IS OLD.selected_for_packet AND
+  NEW.usefulness_label IS OLD.usefulness_label AND NEW.usefulness_note IS OLD.usefulness_note
+)
+BEGIN
+  SELECT RAISE(ABORT, 'FORGE-K retrieval evidence results are immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS retrieval_results_forge_k_no_delete
+BEFORE DELETE ON retrieval_results WHEN OLD.evidence_id <> ''
+BEGIN
+  SELECT RAISE(ABORT, 'FORGE-K retrieval evidence results are immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS retrieval_result_selection_forge_k_no_update
+BEFORE UPDATE ON retrieval_result_selection
+WHEN EXISTS (SELECT 1 FROM retrieval_results WHERE id = OLD.retrieval_result_id AND evidence_id <> '')
+BEGIN
+  SELECT RAISE(ABORT, 'FORGE-K retrieval selection reasons are immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS retrieval_result_selection_forge_k_no_delete
+BEFORE DELETE ON retrieval_result_selection
+WHEN EXISTS (SELECT 1 FROM retrieval_results WHERE id = OLD.retrieval_result_id AND evidence_id <> '')
+BEGIN
+  SELECT RAISE(ABORT, 'FORGE-K retrieval selection reasons are immutable');
+END;`); err != nil {
+		return fmt.Errorf("retrieval evidence integrity schema: %w", err)
 	}
 	if _, err := tx.Exec(`
 UPDATE semantic_idempotency_keys

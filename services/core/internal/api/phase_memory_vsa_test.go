@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"forge/projectforge/services/core/internal/forgekernel"
 	"forge/projectforge/services/core/internal/memory"
 	"forge/projectforge/services/core/internal/store"
 )
 
-func TestHandleGetObservationVSA(t *testing.T) {
+func TestHandleGetObservationVSAExcludesLegacyUnscopedProjection(t *testing.T) {
 	t.Parallel()
 
 	st, err := store.Open(t.TempDir())
@@ -50,11 +51,56 @@ INSERT INTO memory_vsa_pointers(
 	if payload.Detail.ObservationID != obsID {
 		t.Fatalf("observation id=%d want=%d", payload.Detail.ObservationID, obsID)
 	}
-	if payload.Detail.Pointer == nil {
-		t.Fatalf("expected pointer detail for observation %d", obsID)
+	if payload.Detail.Pointer != nil {
+		t.Fatalf("legacy unscoped pointer leaked into detail: %+v", payload.Detail.Pointer)
 	}
-	if payload.Detail.Pointer.ObservationID != obsID {
-		t.Fatalf("pointer observation id=%d want=%d", payload.Detail.Pointer.ObservationID, obsID)
+}
+
+func TestHandleVSARebuildRoutesScopedManifestThroughForgeK(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
+	processor := &capturingUtilityProcessor{}
+	srv.kernelAuthority = forgekernel.Selection{Processor: processor}
+	srv.kernelAuthorizationReady = true
+	if _, err := st.DB.Exec(`
+INSERT INTO memory_observations(workspace_id,lane_id,created_at,updated_at,observed_at,type,raw_content,summary,source_path)
+VALUES('workspace-a','lane-a',1,1,1,'file','alpha body','alpha summary','/repo/a.go')`); err != nil {
+		t.Fatal(err)
+	}
+	dryBody := []byte(`{"dryRun":true,"workspaceId":"workspace-a","laneId":"lane-a","dimensions":128,"seed":17}`)
+	dryRR := httptest.NewRecorder()
+	srv.handleRunVSAReindex(dryRR, httptest.NewRequest(http.MethodPost, "/api/memory/vsa/reindex/run", bytes.NewReader(dryBody)))
+	if dryRR.Code != http.StatusOK {
+		t.Fatalf("dry proposal status=%d body=%s", dryRR.Code, dryRR.Body.String())
+	}
+	var proposal struct {
+		Manifest struct {
+			ManifestHash string `json:"manifestHash"`
+		} `json:"manifest"`
+		ExpectedPrior string `json:"expectedPriorManifestHash"`
+	}
+	if err := json.Unmarshal(dryRR.Body.Bytes(), &proposal); err != nil || proposal.Manifest.ManifestHash == "" {
+		t.Fatalf("proposal = %+v err=%v", proposal, err)
+	}
+	commitBody, _ := json.Marshal(map[string]any{
+		"dryRun": false, "workspaceId": "workspace-a", "laneId": "lane-a",
+		"dimensions": 128, "seed": 17, "idempotencyKey": "vsa-rebuild-1",
+		"expectedManifestHash":      proposal.Manifest.ManifestHash,
+		"expectedPriorManifestHash": proposal.ExpectedPrior,
+	})
+	commitRR := httptest.NewRecorder()
+	srv.handleRunVSAReindex(commitRR, httptest.NewRequest(http.MethodPost, "/api/memory/vsa/reindex/run", bytes.NewReader(commitBody)))
+	if commitRR.Code != http.StatusOK {
+		t.Fatalf("commit status=%d body=%s", commitRR.Code, commitRR.Body.String())
+	}
+	if len(processor.requests) != 1 {
+		t.Fatalf("syscall count=%d", len(processor.requests))
+	}
+	req := processor.requests[0]
+	if req.Action != "REBUILD_MEMORY_ACCELERATION" || req.Scope.WorkspaceID != "workspace-a" || req.Scope.LaneID != "lane-a" || req.IdempotencyKey != "vsa-rebuild-1" {
+		t.Fatalf("governed request = %+v", req)
+	}
+	if req.Payload["requestedAtMs"] != req.RequestedAt || req.Payload["expectedManifestHash"] != proposal.Manifest.ManifestHash {
+		t.Fatalf("unsealed rebuild payload = %+v requestedAt=%d", req.Payload, req.RequestedAt)
 	}
 }
 
@@ -191,12 +237,18 @@ func TestHandleVSAReindexEndpoints(t *testing.T) {
 		}
 	}
 
-	for _, raw := range []string{`{"limit":10}`, `{"limit":10,"dryRun":false}`} {
-		req := httptest.NewRequest(http.MethodPost, "/api/memory/vsa/reindex/run", bytes.NewReader([]byte(raw)))
+	for _, tc := range []struct {
+		raw  string
+		want int
+	}{
+		{raw: `{"limit":10}`, want: http.StatusConflict},
+		{raw: `{"limit":10,"dryRun":false}`, want: http.StatusBadRequest},
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/api/memory/vsa/reindex/run", bytes.NewReader([]byte(tc.raw)))
 		rr := httptest.NewRecorder()
 		s.handleRunVSAReindex(rr, req)
-		if rr.Code != http.StatusConflict {
-			t.Fatalf("non-dry reindex status=%d want=%d body=%s", rr.Code, http.StatusConflict, rr.Body.String())
+		if rr.Code != tc.want {
+			t.Fatalf("non-dry reindex status=%d want=%d body=%s", rr.Code, tc.want, rr.Body.String())
 		}
 	}
 
@@ -252,8 +304,8 @@ INSERT INTO memory_vsa_pointers(
 	if payload.Summary.DossierID != dossierID {
 		t.Fatalf("dossier id=%d want=%d", payload.Summary.DossierID, dossierID)
 	}
-	if payload.Summary.PointerCount < 1 {
-		t.Fatalf("pointer count=%d want>=1", payload.Summary.PointerCount)
+	if payload.Summary.PointerCount != 0 || payload.Summary.Health != "unindexed" {
+		t.Fatalf("legacy pointer influenced governed summary: %+v", payload.Summary)
 	}
 }
 

@@ -9,13 +9,16 @@ import (
 	"testing"
 	"time"
 
+	"forge/projectforge/services/core/internal/aios/controllane"
+	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/embeddings"
+	"forge/projectforge/services/core/internal/forgekernel"
 	"forge/projectforge/services/core/internal/memory"
 	"forge/projectforge/services/core/internal/search"
 	"forge/projectforge/services/core/internal/store"
 )
 
-func TestRunVSAModesOffShadowActive(t *testing.T) {
+func TestRunCommitsRetrievalEvidenceWithoutDirectVSAWrites(t *testing.T) {
 	t.Parallel()
 
 	st, err := store.Open(t.TempDir())
@@ -28,6 +31,7 @@ func TestRunVSAModesOffShadowActive(t *testing.T) {
 	embedSvc := embeddings.New(st.DB)
 	memorySvc := memory.New(st.DB)
 	svc := New(st.DB, searchSvc, embedSvc, memorySvc)
+	installTestForgeKAuthority(t, svc, st.DB)
 
 	sourceID := seedSource(t, st.DB, "/repo")
 	chunkA, absA, relA := seedChunk(t, st.DB, sourceID, "a.go", "/repo/a.go", "vsa query alpha")
@@ -46,107 +50,38 @@ func TestRunVSAModesOffShadowActive(t *testing.T) {
 	seedObservationWithPointer(t, st.DB, absB, engine.EncodeText("irrelevant context"), 16)
 
 	ctx := context.Background()
-	req := RunRequest{
+	baseReq := RunRequest{
 		Query:           "vsa query",
 		Mode:            ModeKeyword,
 		Limit:           2,
 		SelectForPacket: 2,
+		Actor:           domain.ActorIdentity{ID: "forge.core", Kind: "service"},
+		Source:          domain.SourceInternal,
+		Scope:           domain.ForgeScope{WorkspaceID: "/repo", LaneID: "control.semantic"},
+		Provenance:      domain.Provenance{Actor: "forge.core", ActorType: "system", Source: "test.retrieval"},
+		CorrelationID:   "corr-retrieval-vsa",
+		TraceID:         "trace-retrieval-vsa",
+		RequestedAt:     1760000000000,
 	}
 
-	setSetting(t, st.DB, "retrieval_vsa_mode", "off")
-	offRun, err := svc.Run(ctx, req)
-	if err != nil {
-		t.Fatalf("run off mode: %v", err)
-	}
-	if len(offRun.Results) != 2 {
-		t.Fatalf("off mode results=%d, want 2", len(offRun.Results))
-	}
-	var offSignalCount int
-	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM retrieval_result_vsa_signals WHERE retrieval_run_id = ?`, offRun.ID).Scan(&offSignalCount); err != nil {
-		t.Fatalf("off signal count: %v", err)
-	}
-	if offSignalCount != 0 {
-		t.Fatalf("off mode should not persist vsa signals, got %d", offSignalCount)
-	}
-
-	setSetting(t, st.DB, "retrieval_vsa_mode", "shadow")
-	shadowRun, err := svc.Run(ctx, req)
-	if err != nil {
-		t.Fatalf("run shadow mode: %v", err)
-	}
-	if len(shadowRun.Results) != len(offRun.Results) {
-		t.Fatalf("shadow results=%d, want %d", len(shadowRun.Results), len(offRun.Results))
-	}
-	for i := range offRun.Results {
-		if shadowRun.Results[i].RelPath != offRun.Results[i].RelPath {
-			t.Fatalf("shadow ranking parity failed at index %d: got %q want %q", i, shadowRun.Results[i].RelPath, offRun.Results[i].RelPath)
+	runs := make([]*Run, 0, 3)
+	for index, configuredMode := range []string{"off", "shadow", "active"} {
+		setSetting(t, st.DB, "retrieval_vsa_mode", configuredMode)
+		req := baseReq
+		req.RequestID = "retrieval-k20g-" + configuredMode
+		req.IdempotencyKey = req.RequestID
+		req.RequestedAt += int64(index)
+		run, err := svc.Run(ctx, req)
+		if err != nil {
+			t.Fatalf("run with legacy VSA mode %s: %v", configuredMode, err)
 		}
-		if math.Abs(shadowRun.Results[i].HybridScore-offRun.Results[i].HybridScore) > 0.000001 {
-			t.Fatalf("shadow score parity failed at index %d: got %.6f want %.6f", i, shadowRun.Results[i].HybridScore, offRun.Results[i].HybridScore)
+		if len(run.Results) != 2 {
+			t.Fatalf("mode %s results=%d, want 2", configuredMode, len(run.Results))
 		}
-		assertSelectionReasonVSAMode(t, shadowRun.Results[i].SelectionReason, "shadow")
-	}
-
-	var shadowSignalCount int
-	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM retrieval_result_vsa_signals WHERE retrieval_run_id = ?`, shadowRun.ID).Scan(&shadowSignalCount); err != nil {
-		t.Fatalf("shadow signal count: %v", err)
-	}
-	if shadowSignalCount != len(shadowRun.Results) {
-		t.Fatalf("shadow signal count=%d, want %d", shadowSignalCount, len(shadowRun.Results))
-	}
-	var shadowMaxApplied float64
-	if err := st.DB.QueryRow(`SELECT COALESCE(MAX(ABS(applied_score)), 0) FROM retrieval_result_vsa_signals WHERE retrieval_run_id = ?`, shadowRun.ID).Scan(&shadowMaxApplied); err != nil {
-		t.Fatalf("shadow max applied: %v", err)
-	}
-	if shadowMaxApplied > 0.000001 {
-		t.Fatalf("shadow applied score should be zero, got %.6f", shadowMaxApplied)
-	}
-
-	setSetting(t, st.DB, "retrieval_vsa_mode", "active")
-	activeRun, err := svc.Run(ctx, req)
-	if err != nil {
-		t.Fatalf("run active mode: %v", err)
-	}
-	if len(activeRun.Results) != len(shadowRun.Results) {
-		t.Fatalf("active results=%d, want %d", len(activeRun.Results), len(shadowRun.Results))
-	}
-
-	shadowByPath := map[string]Result{}
-	for _, row := range shadowRun.Results {
-		shadowByPath[row.RelPath] = row
-	}
-	seenPositiveDelta := false
-	for _, row := range activeRun.Results {
-		shadowRow, ok := shadowByPath[row.RelPath]
-		if !ok {
-			t.Fatalf("active row path %q missing from shadow run", row.RelPath)
+		for _, result := range run.Results {
+			assertVSAInfluenceDisabled(t, result.SelectionReason)
 		}
-		delta := row.HybridScore - shadowRow.HybridScore
-		if delta > 0.000001 {
-			seenPositiveDelta = true
-		}
-		if math.Abs(delta) > 0.050001 {
-			t.Fatalf("active delta %.6f exceeded max additive clamp for %s", delta, row.RelPath)
-		}
-		assertSelectionReasonVSAMode(t, row.SelectionReason, "active")
-	}
-	if !seenPositiveDelta {
-		t.Fatalf("expected at least one positive active additive delta")
-	}
-
-	var activeMaxApplied float64
-	if err := st.DB.QueryRow(`SELECT COALESCE(MAX(ABS(applied_score)), 0) FROM retrieval_result_vsa_signals WHERE retrieval_run_id = ?`, activeRun.ID).Scan(&activeMaxApplied); err != nil {
-		t.Fatalf("active max applied: %v", err)
-	}
-	if activeMaxApplied > 0.050001 {
-		t.Fatalf("active applied score exceeded clamp: %.6f", activeMaxApplied)
-	}
-	var activePositive int
-	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM retrieval_result_vsa_signals WHERE retrieval_run_id = ? AND applied_score > 0`, activeRun.ID).Scan(&activePositive); err != nil {
-		t.Fatalf("active positive applied count: %v", err)
-	}
-	if activePositive == 0 {
-		t.Fatalf("expected persisted positive applied VSA signal in active mode")
+		runs = append(runs, run)
 	}
 
 	var observationCount int
@@ -167,8 +102,19 @@ func TestRunVSAModesOffShadowActive(t *testing.T) {
 	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM retrieval_result_selection`).Scan(&selectionCount); err != nil {
 		t.Fatalf("selection evidence count: %v", err)
 	}
-	if selectionCount != len(offRun.Results)+len(shadowRun.Results)+len(activeRun.Results) {
-		t.Fatalf("selection evidence count=%d want=%d", selectionCount, len(offRun.Results)+len(shadowRun.Results)+len(activeRun.Results))
+	wantSelectionCount := 0
+	for _, run := range runs {
+		wantSelectionCount += len(run.Results)
+	}
+	if selectionCount != wantSelectionCount {
+		t.Fatalf("selection evidence count=%d want=%d", selectionCount, wantSelectionCount)
+	}
+	var signalCount int
+	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM retrieval_result_vsa_signals`).Scan(&signalCount); err != nil {
+		t.Fatalf("signal count: %v", err)
+	}
+	if signalCount != 0 {
+		t.Fatalf("retrieval must not persist legacy VSA signals: got %d", signalCount)
 	}
 
 	if chunkA <= 0 || relA == "" {
@@ -176,83 +122,107 @@ func TestRunVSAModesOffShadowActive(t *testing.T) {
 	}
 }
 
-func TestMarkUsefulnessTouchesVSAReliabilityOnce(t *testing.T) {
+func TestPathUsefulnessScoresIgnoreLegacyLabelsAndUseGovernedProjection(t *testing.T) {
 	t.Parallel()
-
 	st, err := store.Open(t.TempDir())
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
 	defer st.Close()
+	svc := New(st.DB, search.New(st.DB), embeddings.New(st.DB), memory.New(st.DB))
 
-	memorySvc := memory.New(st.DB)
-	svc := New(st.DB, search.New(st.DB), embeddings.New(st.DB), memorySvc)
-	now := time.Now().UnixMilli()
-	obsID := seedObservationWithPointer(t, st.DB, "/repo/useful.go", memory.NewVSAEngine(16, 17).EncodeText("useful evidence"), 16)
-	if _, err := st.DB.Exec(`
-INSERT INTO memory_vsa_role_bindings(
-  observation_id, role, filler, weight, support_count, noise_count, binding_json, created_at, updated_at
-) VALUES(?,?,?,?,?,?,?,?,?)`, obsID, "source", "useful.go", 1, 0, 0, `[]`, now, now); err != nil {
-		t.Fatalf("insert role binding: %v", err)
-	}
-	setSetting(t, st.DB, "retrieval_vsa_mode", "active")
-	runRes, err := st.DB.Exec(`
-INSERT INTO retrieval_runs(created_at, query, mode, weighting_json, notes)
-VALUES(?,?,?,?,?)`, now, "useful", "keyword", `{}`, "")
+	result, err := st.DB.Exec(`INSERT INTO retrieval_runs(evidence_id,created_at,query,mode,workspace_id,lane_id,selected_paths_json,syscall_id,provenance_id,provenance_json,proposed_by,committed_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"run-evidence-usefulness", 100, "utility", "keyword", "ws-utility", "control.semantic", `["/repo"]`, "source-syscall", "source-prov", `{"actor":"forge.core"}`, "internal", "forge_k.kernel")
 	if err != nil {
 		t.Fatalf("insert retrieval run: %v", err)
 	}
-	runID, _ := runRes.LastInsertId()
-	resultRes, err := st.DB.Exec(`
-INSERT INTO retrieval_results(
-  retrieval_run_id, abs_path, rel_path, rank_index, keyword_score, semantic_score, hybrid_score, snippet
-) VALUES(?,?,?,?,?,?,?,?)`, runID, "/repo/useful.go", "useful.go", 0, 1, 0, 1, "useful evidence")
+	runID, _ := result.LastInsertId()
+	legacyResult, err := st.DB.Exec(`INSERT INTO retrieval_results(evidence_id,retrieval_run_id,abs_path,rel_path,rank_index,usefulness_label) VALUES(?,?,?,?,?,?)`,
+		"result-evidence-legacy-label", runID, "/repo/legacy.go", "legacy.go", 0, "useful")
 	if err != nil {
-		t.Fatalf("insert retrieval result: %v", err)
+		t.Fatalf("insert legacy-labeled result: %v", err)
 	}
-	resultID, _ := resultRes.LastInsertId()
-	if _, err := st.DB.Exec(`
-INSERT INTO retrieval_result_observations(retrieval_result_id, observation_id, selection_note, created_at)
-VALUES(?,?,?,?)`, resultID, obsID, "legacy link", now); err != nil {
-		t.Fatalf("insert legacy result-observation link: %v", err)
+	if _, err := legacyResult.LastInsertId(); err != nil {
+		t.Fatal(err)
+	}
+	governedResult, err := st.DB.Exec(`INSERT INTO retrieval_results(evidence_id,retrieval_run_id,abs_path,rel_path,rank_index,usefulness_label) VALUES(?,?,?,?,?,?)`,
+		"result-evidence-governed", runID, "/repo/governed.go", "governed.go", 1, "unknown")
+	if err != nil {
+		t.Fatalf("insert governed result: %v", err)
+	}
+	governedID, _ := governedResult.LastInsertId()
+	otherRun, err := st.DB.Exec(`INSERT INTO retrieval_runs(evidence_id,created_at,query,mode,workspace_id,lane_id,selected_paths_json,syscall_id,provenance_id,provenance_json,proposed_by,committed_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"run-evidence-other-workspace", 100, "utility", "keyword", "ws-other", "control.semantic", `["/repo"]`, "source-syscall-other", "source-prov-other", `{"actor":"forge.core"}`, "internal", "forge_k.kernel")
+	if err != nil {
+		t.Fatalf("insert other-workspace run: %v", err)
+	}
+	otherRunID, _ := otherRun.LastInsertId()
+	if _, err := st.DB.Exec(`INSERT INTO retrieval_results(evidence_id,retrieval_run_id,abs_path,rel_path,rank_index,usefulness_label) VALUES(?,?,?,?,?,?)`,
+		"result-evidence-other-workspace", otherRunID, "/repo/governed.go", "governed.go", 0, "useful"); err != nil {
+		t.Fatalf("insert other-workspace result: %v", err)
+	}
+	if _, err := st.DB.Exec(`INSERT INTO provenance_records(id,actor,actor_type,source,trace_id,workspace_id,lane_id,selected_paths_json,metadata_json,created_at,proposed_by,committed_by,syscall_id,correlation_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"utility-provenance", "forge.core", "system", "test", "trace-utility", "ws-utility", "control.semantic", `["/repo"]`, `{}`, 101, "internal", "forge_k.kernel", "utility-syscall", "corr-utility"); err != nil {
+		t.Fatalf("insert utility provenance: %v", err)
+	}
+	if _, err := st.DB.Exec(`INSERT INTO forge_k_retrieval_usefulness_events(id,created_at,retrieval_result_id,retrieval_run_id,target_evidence_id,workspace_id,lane_id,selected_paths_json,label,note,prior_projection_json,source_provenance_json,metadata_json,correlation_id,trace_id,syscall_id,provenance_id,provenance_json,proposed_by,committed_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"utility-event", 101, governedID, runID, "result-evidence-governed", "ws-utility", "control.semantic", `["/repo"]`, "useful", "governed", `{}`, `{"actor":"forge.core"}`, `{}`, "corr-utility", "trace-utility", "utility-syscall", "utility-provenance", `{}`, "internal", "forge_k.kernel"); err != nil {
+		t.Fatalf("insert governed event: %v", err)
+	}
+	if _, err := st.DB.Exec(`INSERT INTO retrieval_usefulness_projection(retrieval_result_id,latest_event_id,label,note,updated_at,noncanonical) VALUES(?,?,?,?,?,1)`,
+		governedID, "utility-event", "useful", "governed", 101); err != nil {
+		t.Fatalf("insert usefulness projection: %v", err)
 	}
 
-	if err := svc.MarkUsefulness(context.Background(), resultID, "useful", "operator confirmed", nil, nil); err != nil {
-		t.Fatalf("mark usefulness: %v", err)
+	scores, err := svc.pathUsefulnessScores(context.Background(), domain.ForgeScope{WorkspaceID: "ws-utility", LaneID: "control.semantic"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	var supportCount int
-	if err := st.DB.QueryRow(`SELECT support_count FROM memory_vsa_role_bindings WHERE observation_id = ?`, obsID).Scan(&supportCount); err != nil {
-		t.Fatalf("read support count: %v", err)
+	if scores["/repo/legacy.go"] != 0 {
+		t.Fatalf("legacy mutable label influenced score: %v", scores)
 	}
-	if supportCount != 1 {
-		t.Fatalf("one usefulness signal must touch VSA reliability once: got support_count=%d want=1", supportCount)
+	if scores["/repo/governed.go"] != 0.12 {
+		t.Fatalf("governed projection did not influence score: %v", scores)
 	}
-	var usefulnessEvents int
-	if err := st.DB.QueryRow(`SELECT COUNT(*) FROM memory_usefulness_events WHERE observation_id = ?`, obsID).Scan(&usefulnessEvents); err != nil {
-		t.Fatalf("count usefulness events: %v", err)
+	otherScores, err := svc.pathUsefulnessScores(context.Background(), domain.ForgeScope{WorkspaceID: "ws-other", LaneID: "control.semantic"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if usefulnessEvents != 1 {
-		t.Fatalf("usefulness event count=%d want=1", usefulnessEvents)
+	if otherScores["/repo/governed.go"] != 0 {
+		t.Fatalf("workspace A utility projection crossed into workspace B: %v", otherScores)
 	}
 }
 
-func assertSelectionReasonVSAMode(t *testing.T, raw json.RawMessage, wantMode string) {
+func installTestForgeKAuthority(t *testing.T, svc *Service, db *sql.DB) {
+	t.Helper()
+	registry := controllane.NewStaticActionRegistry()
+	adapter := controllane.NewProcessor(controllane.ProcessorOptions{
+		Registry: registry, TxRunner: controllane.NewSQLiteTransactionRunner(db),
+	})
+	authorization, err := controllane.NewProductionAuthorizationService(controllane.ProductionAuthorizationOptions{
+		Registry: registry, DB: db, ServicePrincipal: controllane.NewForgeCoreServicePrincipal(),
+	})
+	if err != nil {
+		t.Fatalf("production authorization: %v", err)
+	}
+	selection, err := forgekernel.SelectAuthority(string(forgekernel.ModeForgeK), adapter, authorization)
+	if err != nil {
+		t.Fatalf("select FORGE-K authority: %v", err)
+	}
+	svc.SetSyscallProcessor(selection.Processor)
+}
+
+func assertVSAInfluenceDisabled(t *testing.T, raw json.RawMessage) {
 	t.Helper()
 	var reason map[string]any
 	if err := json.Unmarshal(raw, &reason); err != nil {
 		t.Fatalf("decode selection reason: %v", err)
 	}
-	vsaAny, ok := reason["vsa"]
-	if !ok {
-		t.Fatalf("selection reason missing vsa block: %s", string(raw))
+	if got, _ := reason["vsaInfluence"].(string); got != "disabled_unscoped" {
+		t.Fatalf("selection reason vsaInfluence=%q, want disabled_unscoped", got)
 	}
-	vsa, ok := vsaAny.(map[string]any)
-	if !ok {
-		t.Fatalf("selection reason vsa block type=%T", vsaAny)
-	}
-	mode, _ := vsa["mode"].(string)
-	if mode != wantMode {
-		t.Fatalf("selection reason vsa mode=%q, want %q", mode, wantMode)
+	if _, present := reason["vsa"]; present {
+		t.Fatalf("selection reason contains legacy unscoped VSA evidence: %s", string(raw))
 	}
 }
 

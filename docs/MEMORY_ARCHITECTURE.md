@@ -69,7 +69,7 @@ Retrieval and ranking use:
 - dossier scope (`dossier_id`, linked sources)
 - file path metadata (`abs_path`, `rel_path`)
 - dossier profile biases (`high_value_files`, `noisy_files`)
-- historical usefulness labels from prior results
+- governed retrieval usefulness projections rebuilt from immutable K20G utility events; legacy result labels are ignored
 
 ## Retrieval Run Inspectability
 
@@ -103,7 +103,7 @@ Implemented:
 - observation persistence with metadata
 - retrieval-result-to-observation linking
 - selection reason persistence
-- usefulness event recording and score aggregation
+- append-only FORGE-K retrieval-usefulness events and separately stored noncanonical score projections
 - stale flags + verification timestamp updates
 - persisted repair runs with before/after item traces
 - persisted VSA reindex runs/items with fingerprint transitions
@@ -114,3 +114,17 @@ Deferred:
 - automated contradiction clustering
 - automatic summary refresh scheduling
 - embedding refresh orchestration based on stale observations
+
+## K20G Utility Boundary
+
+Retrieval usefulness is not a Memory Palace observation mutation. Production
+FORGE-K appends immutable `forge_k_retrieval_usefulness_events` and atomically
+updates the disposable `retrieval_usefulness_projection`. The source retrieval
+result, `memory_observations`, legacy `memory_usefulness_events`, and VSA
+reliability counters remain unchanged. Ranking reads the governed projection
+and ignores legacy mutable result labels.
+
+Restore-outcome feedback follows the same split: the original
+`restore_outcome_events` row remains evidence, immutable feedback events hold
+history, and `restore_outcome_feedback_projection` is a separately labeled
+noncanonical view. Original and projection must never be merged in reads.

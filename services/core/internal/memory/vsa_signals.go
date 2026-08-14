@@ -18,7 +18,24 @@ func (s *Service) ComputeVSAQuerySignals(ctx context.Context, req VSAQuerySignal
 	if len(req.Candidates) == 0 {
 		return out, nil
 	}
+	scopeWorkspace := strings.TrimSpace(req.WorkspaceID)
+	scopeLane := strings.TrimSpace(req.LaneID)
+	if scopeWorkspace == "" || scopeLane == "" {
+		return out, nil
+	}
+	manifestDims, manifestSeed, active, err := s.activeVSAProjectionAlgorithm(ctx, scopeWorkspace, scopeLane)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "no such table") {
+			return out, nil
+		}
+		return nil, err
+	}
+	if !active {
+		return out, nil
+	}
 	cfg := s.runtimeVSASettings(ctx)
+	cfg.Dims = manifestDims
+	cfg.Seed = manifestSeed
 	engine := NewVSAEngine(cfg.Dims, cfg.Seed)
 	queryVec := engine.EncodeText(req.Query)
 	queryTokens := tokenSet(req.Query)
@@ -38,7 +55,7 @@ func (s *Service) ComputeVSAQuerySignals(ctx context.Context, req VSAQuerySignal
 		}
 	}
 
-	obsByPath, pointerByObs, usefulnessByObs, err := s.vsaObservationPointersByPath(ctx, paths)
+	obsByPath, pointerByObs, usefulnessByObs, err := s.vsaObservationPointersByPath(ctx, scopeWorkspace, scopeLane, paths)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "no such table") {
 			return out, nil
@@ -50,8 +67,8 @@ func (s *Service) ComputeVSAQuerySignals(ctx context.Context, req VSAQuerySignal
 	for id := range pointerByObs {
 		obsIDs = append(obsIDs, id)
 	}
-	bindingsByObs, _ := s.vsaBindingsByObservation(ctx, obsIDs)
-	assocByObs, _ := s.vsaAssociationsByObservation(ctx, obsIDs)
+	bindingsByObs, _ := s.vsaBindingsByObservation(ctx, scopeWorkspace, scopeLane, obsIDs)
+	assocByObs, _ := s.vsaAssociationsByObservation(ctx, scopeWorkspace, scopeLane, obsIDs)
 	candidateObs := map[int64]struct{}{}
 	obsByChunk := map[int64]int64{}
 
@@ -119,19 +136,46 @@ func (s *Service) ComputeVSAQuerySignals(ctx context.Context, req VSAQuerySignal
 	return out, nil
 }
 
-func (s *Service) vsaObservationPointersByPath(ctx context.Context, paths []string) (map[string]int64, map[int64][]float64, map[int64]float64, error) {
+func (s *Service) activeVSAProjectionAlgorithm(ctx context.Context, workspaceID, laneID string) (int, uint64, bool, error) {
+	var dimensions int
+	var seed int64
+	err := s.db.QueryRowContext(ctx, `
+SELECT m.dimensions, m.seed
+FROM memory_vsa_projection_heads h
+JOIN memory_vsa_projection_manifests m ON m.manifest_hash=h.manifest_hash
+WHERE h.workspace_id=? AND h.lane_id=? AND h.workspace_id<>'' AND h.lane_id<>''
+  AND m.workspace_id=h.workspace_id AND m.lane_id=h.lane_id`, workspaceID, laneID).Scan(&dimensions, &seed)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, 0, false, nil
+	}
+	if err != nil {
+		return 0, 0, false, err
+	}
+	if dimensions <= 0 || seed <= 0 {
+		return 0, 0, false, nil
+	}
+	return dimensions, uint64(seed), true, nil
+}
+
+func (s *Service) vsaObservationPointersByPath(ctx context.Context, workspaceID, laneID string, paths []string) (map[string]int64, map[int64][]float64, map[int64]float64, error) {
 	pathToObs := map[string]int64{}
 	pointerByObs := map[int64][]float64{}
 	usefulnessByObs := map[int64]float64{}
 	if len(paths) == 0 {
 		return pathToObs, pointerByObs, usefulnessByObs, nil
 	}
+	args := []any{workspaceID, laneID}
+	args = append(args, toAny(paths)...)
 	rows, err := s.db.QueryContext(ctx, `
-SELECT mo.id, mo.source_path, mo.usefulness_score, mo.usefulness_count, mo.noise_count, vp.pointer_json
+SELECT mo.id, mo.source_path, vp.support_count, vp.noise_count, vp.pointer_json
 FROM memory_observations mo
 JOIN memory_vsa_pointers vp ON vp.observation_id = mo.id
-WHERE mo.source_path IN (`+sqlutil.Placeholders(len(paths))+`)
-ORDER BY mo.observed_at DESC, mo.id DESC`, toAny(paths)...)
+JOIN memory_vsa_projection_heads h
+  ON h.workspace_id=mo.workspace_id AND h.lane_id=mo.lane_id AND h.manifest_hash=vp.manifest_hash
+WHERE mo.workspace_id=? AND mo.lane_id=? AND mo.workspace_id<>'' AND mo.lane_id<>''
+  AND vp.workspace_id=mo.workspace_id AND vp.lane_id=mo.lane_id
+  AND mo.source_path IN (`+sqlutil.Placeholders(len(paths))+`)
+ORDER BY mo.observed_at DESC, mo.id DESC`, args...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -139,11 +183,10 @@ ORDER BY mo.observed_at DESC, mo.id DESC`, toAny(paths)...)
 	for rows.Next() {
 		var obsID int64
 		var sourcePath string
-		var usefulness float64
 		var usefulCount int
 		var noiseCount int
 		var pointerRaw string
-		if err := rows.Scan(&obsID, &sourcePath, &usefulness, &usefulCount, &noiseCount, &pointerRaw); err != nil {
+		if err := rows.Scan(&obsID, &sourcePath, &usefulCount, &noiseCount, &pointerRaw); err != nil {
 			return nil, nil, nil, err
 		}
 		if _, ok := pathToObs[sourcePath]; !ok {
@@ -153,26 +196,29 @@ ORDER BY mo.observed_at DESC, mo.id DESC`, toAny(paths)...)
 			vec := []float64{}
 			_ = json.Unmarshal([]byte(strings.TrimSpace(pointerRaw)), &vec)
 			pointerByObs[obsID] = vec
-			usefulnessByObs[obsID] = normalizeUsefulness(usefulness, usefulCount, noiseCount)
+			usefulnessByObs[obsID] = normalizeUsefulness(float64(usefulCount-noiseCount), usefulCount, noiseCount)
 		}
 	}
 	return pathToObs, pointerByObs, usefulnessByObs, rows.Err()
 }
 
-func (s *Service) vsaBindingsByObservation(ctx context.Context, obsIDs []int64) (map[int64][]VSARoleBinding, error) {
+func (s *Service) vsaBindingsByObservation(ctx context.Context, workspaceID, laneID string, obsIDs []int64) (map[int64][]VSARoleBinding, error) {
 	out := map[int64][]VSARoleBinding{}
 	if len(obsIDs) == 0 {
 		return out, nil
 	}
-	args := make([]any, len(obsIDs))
+	args := []any{workspaceID, laneID}
 	for i := range obsIDs {
-		args[i] = obsIDs[i]
+		args = append(args, obsIDs[i])
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, observation_id, role, filler, weight, support_count, noise_count, binding_json, created_at, updated_at
-FROM memory_vsa_role_bindings
-WHERE observation_id IN (`+sqlutil.Placeholders(len(obsIDs))+`)
-ORDER BY observation_id ASC, role ASC, filler ASC`, args...)
+SELECT b.id, b.observation_id, b.role, b.filler, b.weight, b.support_count, b.noise_count, b.binding_json, b.created_at, b.updated_at
+FROM memory_vsa_role_bindings b
+JOIN memory_vsa_projection_heads h
+  ON h.workspace_id=b.workspace_id AND h.lane_id=b.lane_id AND h.manifest_hash=b.manifest_hash
+WHERE b.workspace_id=? AND b.lane_id=? AND b.workspace_id<>'' AND b.lane_id<>''
+  AND b.observation_id IN (`+sqlutil.Placeholders(len(obsIDs))+`)
+ORDER BY b.observation_id ASC, b.role ASC, b.filler ASC`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -189,21 +235,26 @@ ORDER BY observation_id ASC, role ASC, filler ASC`, args...)
 	return out, rows.Err()
 }
 
-func (s *Service) vsaAssociationsByObservation(ctx context.Context, obsIDs []int64) (map[int64][]VSAAssociation, error) {
+func (s *Service) vsaAssociationsByObservation(ctx context.Context, workspaceID, laneID string, obsIDs []int64) (map[int64][]VSAAssociation, error) {
 	out := map[int64][]VSAAssociation{}
 	if len(obsIDs) == 0 {
 		return out, nil
 	}
-	args := make([]any, len(obsIDs)*2)
+	args := []any{workspaceID, laneID}
 	for i := range obsIDs {
-		args[i] = obsIDs[i]
-		args[i+len(obsIDs)] = obsIDs[i]
+		args = append(args, obsIDs[i])
+	}
+	for i := range obsIDs {
+		args = append(args, obsIDs[i])
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, from_observation_id, to_observation_id, association_type, strength, support_count, noise_count, evidence_json, created_at, updated_at
-FROM memory_vsa_associations
-WHERE from_observation_id IN (`+sqlutil.Placeholders(len(obsIDs))+`) OR to_observation_id IN (`+sqlutil.Placeholders(len(obsIDs))+`)
-ORDER BY strength DESC`, args...)
+SELECT a.id, a.from_observation_id, a.to_observation_id, a.association_type, a.strength, a.support_count, a.noise_count, a.evidence_json, a.created_at, a.updated_at
+FROM memory_vsa_associations a
+JOIN memory_vsa_projection_heads h
+  ON h.workspace_id=a.workspace_id AND h.lane_id=a.lane_id AND h.manifest_hash=a.manifest_hash
+WHERE a.workspace_id=? AND a.lane_id=? AND a.workspace_id<>'' AND a.lane_id<>''
+  AND (a.from_observation_id IN (`+sqlutil.Placeholders(len(obsIDs))+`) OR a.to_observation_id IN (`+sqlutil.Placeholders(len(obsIDs))+`))
+ORDER BY a.strength DESC`, args...)
 	if err != nil {
 		return nil, err
 	}

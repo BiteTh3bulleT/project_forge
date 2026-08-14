@@ -1084,6 +1084,7 @@ func (r compileContextRestoreCandidateScore) explainableBreakdown() map[string]a
 func restoreOutcomeUtilityAdjustment(score compileContextRestoreCandidateScore, query string, outcomes []RestoreOutcomeEvent) (float64, map[string]any) {
 	total := 0.0
 	counts := map[string]int{}
+	sources := map[string]string{}
 	ids := []string{}
 	queryFamily := normalizeRestoreQuery(query)
 	for _, event := range outcomes {
@@ -1111,6 +1112,9 @@ func restoreOutcomeUtilityAdjustment(score compileContextRestoreCandidateScore, 
 		total += delta
 		counts[string(event.Outcome)]++
 		ids = append(ids, event.ID)
+		if source, _ := event.Metadata["utilityEvidenceSource"].(string); strings.TrimSpace(source) != "" {
+			sources[event.ID] = source
+		}
 	}
 	if total > maxRestoreOutcomeScoreAdjustment {
 		total = maxRestoreOutcomeScoreAdjustment
@@ -1126,6 +1130,7 @@ func restoreOutcomeUtilityAdjustment(score compileContextRestoreCandidateScore, 
 	return total, map[string]any{
 		"outcome_ids":           ids,
 		"outcome_counts":        counts,
+		"outcome_sources":       sources,
 		"individual_cap":        maxRestoreOutcomeIndividualAdjust,
 		"total_cap":             maxRestoreOutcomeScoreAdjustment,
 		"bounded_adjustment":    total,

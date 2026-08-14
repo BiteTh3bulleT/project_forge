@@ -113,6 +113,50 @@ func TestRestoreOutcomeFeedbackAdjustsCandidateScoreWithinCaps(t *testing.T) {
 	}
 }
 
+func TestGovernedRestoreFeedbackProjectionDrivesEffectiveUtilityWithoutRewritingOriginal(t *testing.T) {
+	currentPacket := createTestContextPacketSnapshot("ctx-current-projected-feedback", "ws-main", 1760004100000)
+	currentPacket.Query = "summarize blockers"
+	current := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
+		Packet: currentPacket, SnapshotID: currentPacket.ID, SnapshotKind: "restore",
+		CorrelationID: "corr-projected-feedback", TraceID: "trace-projected-feedback",
+		SyscallID: "syscall-projected-feedback", ProposedBy: "user", CommittedBy: "forge_kernel",
+	}, nil)
+	candidate := makeSnapshotCandidatePacket("ctx-projected-candidate", currentPacket, 1760004000000, "restore")
+	original := RestoreOutcomeEvent{
+		ID: "outcome-projected", CreatedAt: 1760004090000, UpdatedAt: 1760004090000,
+		WorkspaceID: "ws-main", LaneID: "control.semantic", Query: "summarize blockers",
+		SnapshotID: "ctx-projected-candidate", Outcome: RestoreOutcomeHarmful,
+		OutcomeConfidence: 1, OperatorFeedback: "legacy mutable feedback",
+		Metadata: map[string]any{"non_canonical_evidence": true},
+	}
+	legacyIgnored := effectiveRestoreOutcomeUtilitySignal(original, nil)
+	if original.Outcome != RestoreOutcomeHarmful || original.OperatorFeedback == "" {
+		t.Fatalf("effective utility view rewrote original: %+v", original)
+	}
+	if legacyIgnored.Outcome != RestoreOutcomeUnknown || legacyIgnored.Metadata["utilityEvidenceSource"] != "legacy_mutable_feedback_ignored" {
+		t.Fatalf("legacy mutable feedback was not ignored: %+v", legacyIgnored)
+	}
+	projection := RestoreOutcomeFeedbackProjection{
+		RestoreOutcomeID: original.ID, LatestEventID: "feedback-event-governed",
+		Scope:   domain.ForgeScope{WorkspaceID: "ws-main", LaneID: "control.semantic", SelectedPaths: []string{"/repo"}},
+		Outcome: RestoreOutcomeHelpful, OutcomeConfidence: 1, UpdatedAt: 1760004095000, NonCanonical: true,
+	}
+	governed := effectiveRestoreOutcomeUtilitySignal(original, &projection)
+	if governed.Outcome != RestoreOutcomeHelpful || governed.Metadata["utilityEvidenceSource"] != "governed_feedback_projection" ||
+		governed.Metadata["utilityProjectionEventId"] != projection.LatestEventID {
+		t.Fatalf("governed projection not represented explicitly: %+v", governed)
+	}
+	base := selectCompileContextRestoreCandidateWithFeedback(context.Background(), nil, currentPacket.CreatedAt, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{}, []RestoreOutcomeEvent{legacyIgnored})
+	projected := selectCompileContextRestoreCandidateWithFeedback(context.Background(), nil, currentPacket.CreatedAt, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{}, []RestoreOutcomeEvent{governed})
+	if base.Candidates[0].Score.OutcomeAdjustment != 0 || projected.Candidates[0].Score.OutcomeAdjustment <= 0 {
+		t.Fatalf("effective utility score did not distinguish legacy/projected evidence: base=%+v projected=%+v", base.Candidates[0].Score, projected.Candidates[0].Score)
+	}
+	sources, _ := projected.Candidates[0].Score.OutcomeTrace["outcome_sources"].(map[string]string)
+	if sources[original.ID] != "governed_feedback_projection" {
+		t.Fatalf("score trace missing governed source: %+v", projected.Candidates[0].Score.OutcomeTrace)
+	}
+}
+
 func TestSelectCompileContextRestoreCandidateRecencyWindowFiltersCandidates(t *testing.T) {
 	currentPacket := createTestContextPacketSnapshot("ctx-current-recency", "ws-main", 1760004300000)
 	currentPacket.Query = "summarize blockers"

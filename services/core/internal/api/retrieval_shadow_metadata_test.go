@@ -271,6 +271,7 @@ func seedRetrievalShadowContent(t *testing.T, st *store.Store, content string) {
 func postRetrievalRunForShadow(t *testing.T, srv *Server, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/api/retrieval/runs", bytes.NewBufferString(body))
+	req.RemoteAddr = "127.0.0.1:4242"
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Request-ID", "request-retrieval-shadow")
 	rr := httptest.NewRecorder()

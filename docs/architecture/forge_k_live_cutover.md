@@ -1,6 +1,6 @@
 # FORGE-K Live Cutover
 
-Status: K20A-K20D active; full cutover in progress.
+Status: K20A-K20G active; full cutover in progress.
 
 Date: 2026-08-14.
 
@@ -52,6 +52,7 @@ removed after final parity acceptance. No mode performs dual commits.
 | Tool need and selection | Deterministic FORGE chat routing | FORGE-K/Gateway policy contract | No model-selected schema or tool |
 | Tool execution | Gateway | Gateway external driver | Keep single execution ingress |
 | Courthouse | Production FORGE-K deterministic admission/rejection, immutable rulings, and appeals | FORGE-K | Closed in K20C; K20D makes its commit receipt, journal chain, provenance, audit intent, and optional idempotency proof atomic with the Court mutation |
+| Utility evidence | FORGE-K append-only retrieval usefulness and restore-outcome feedback events; separate rebuildable projections | FORGE-K | K20G closes the mutable feedback writers; retrieval job-outcome recording remains fail-closed pending an exact batch contract |
 | Semantic Algebra | Shape validation only | Governed live operations | Operation parity and journal tests |
 | Memory Palace | Shadow/mirror plus current memory stores | Structured governed objects/routes | Current/history separation and migration proof |
 | Context Compiler | Legacy `COMPILE_CONTEXT` plus attribution validation | FORGE-K bundles | Prompt parity, attribution, token-budget tests |
@@ -164,7 +165,26 @@ whole-store recovery path verifies the bundle/manifest, SQLite integrity,
 journal chain and head, immutable proof state, workspace identity, and an exact
 rollback procedure before atomically replacing the store.
 
-Restore-outcome feedback writes are also temporarily disabled with
-`FORGE_K_RESTORE_OUTCOME_FEEDBACK_DISABLED`; list/get evidence reads remain
-available. Request decoding and size limits still run before that fail-closed
-response.
+## K20G append-only utility evidence
+
+K20G replaces mutable retrieval-usefulness and restore-outcome feedback with
+`RECORD_RETRIEVAL_USEFULNESS` and
+`RECORD_RESTORE_OUTCOME_FEEDBACK`. Both actions require production FORGE-K
+ingress, exact workspace/lane/selected-path identity, source evidence bound to
+a prior syscall and provenance, and an idempotency key. Adapter, future-IRIS,
+model-proposer, legacy-unbound, and `legacy_v1` attempts fail closed.
+
+Each accepted request appends an immutable utility event in the same SQLite
+transaction as provenance, the journal hash-chain entry/head, canonical audit
+intent, and idempotency proof. The original `retrieval_results` and
+`restore_outcome_events` rows are never rewritten. Separately labeled
+`retrieval_usefulness_projection` and
+`restore_outcome_feedback_projection` rows are explicitly noncanonical and
+rebuildable. Reads expose the original restore evidence and its
+`feedbackProjection` separately; governed retrieval projections ignore legacy
+mutable usefulness columns.
+
+Usefulness events do not mutate Memory Palace observations or VSA reliability
+counters. Retrieval job-outcome recording is fail-closed because its legacy
+signature cannot carry exact scope, actor, provenance, and idempotency; a
+future batch syscall must establish those bindings before that writer returns.

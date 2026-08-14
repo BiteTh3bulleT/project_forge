@@ -32,6 +32,21 @@ func TestProductionAuthorizationRequiresConstructedForgeCorePrincipal(t *testing
 	}
 }
 
+func TestAccelerationRebuildHasExplicitAuthenticatedUserPolicy(t *testing.T) {
+	policy, allowed := productionCapabilityPolicy(domain.SourceUser, domain.ActionRebuildMemoryAcceleration)
+	if !allowed || policy != "authenticated_user_scoped_acceleration_rebuild" {
+		t.Fatalf("user acceleration policy=(%q,%v)", policy, allowed)
+	}
+	for _, source := range []domain.ActionSource{domain.SourceAdapter, domain.SourceFutureIRIS} {
+		if policy, allowed := productionCapabilityPolicy(source, domain.ActionRebuildMemoryAcceleration); allowed {
+			t.Fatalf("proposal source %q received acceleration policy %q", source, policy)
+		}
+	}
+	if policy, allowed := productionCapabilityPolicy(domain.SourceInternal, domain.ActionRebuildMemoryAcceleration); !allowed || policy != "forge_core_service" {
+		t.Fatalf("internal acceleration policy=(%q,%v)", policy, allowed)
+	}
+}
+
 func TestProductionAuthorizationBindsServicePrincipalForSystemTaxonomy(t *testing.T) {
 	svc, _ := newProductionAuthorizationHarness(t)
 	req := productionAuthorizationRequest(domain.SourceInternal)

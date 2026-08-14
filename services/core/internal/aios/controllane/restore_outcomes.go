@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-
-	"forge/projectforge/services/core/internal/aios/domain"
 )
 
 type RestoreOutcome string
@@ -84,7 +82,6 @@ type RestoreOutcomeStore interface {
 	CreateRestoreOutcome(ctx context.Context, event RestoreOutcomeEvent) error
 	GetRestoreOutcome(ctx context.Context, id string) (RestoreOutcomeEvent, bool, error)
 	ListRestoreOutcomes(ctx context.Context, filter RestoreOutcomeFilter) ([]RestoreOutcomeEvent, error)
-	UpdateRestoreOutcomeFeedback(ctx context.Context, id string, scope domain.ForgeScope, feedback RestoreOutcomeFeedback) (RestoreOutcomeEvent, error)
 }
 
 func NewRestoreOutcomeID(parts ...string) string {
@@ -175,14 +172,6 @@ func normalizeRestoreOutcomeFeedback(feedback RestoreOutcomeFeedback) RestoreOut
 	return feedback
 }
 
-func restoreOutcomeMatchesScope(event RestoreOutcomeEvent, scope domain.ForgeScope) bool {
-	if strings.TrimSpace(scope.WorkspaceID) == "" || strings.TrimSpace(event.WorkspaceID) != strings.TrimSpace(scope.WorkspaceID) {
-		return false
-	}
-	laneID := strings.TrimSpace(scope.LaneID)
-	return laneID == "" || strings.TrimSpace(event.LaneID) == "" || strings.TrimSpace(event.LaneID) == laneID
-}
-
 func normalizeStringSet(values []string) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(values))
@@ -199,51 +188,6 @@ func normalizeStringSet(values []string) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-func applyRestoreOutcomeFeedback(event RestoreOutcomeEvent, feedback RestoreOutcomeFeedback) RestoreOutcomeEvent {
-	feedback = normalizeRestoreOutcomeFeedback(feedback)
-	event = normalizeRestoreOutcomeEvent(event)
-	if event.Metadata == nil {
-		event.Metadata = map[string]any{}
-	}
-	historyEntry := map[string]any{
-		"outcome":            event.Outcome,
-		"outcomeConfidence":  event.OutcomeConfidence,
-		"operatorFeedback":   event.OperatorFeedback,
-		"correctionSummary":  event.CorrectionSummary,
-		"correlationId":      event.CorrelationID,
-		"traceId":            event.TraceID,
-		"updatedAt":          event.UpdatedAt,
-		"nonCanonicalUpdate": true,
-	}
-	history, _ := event.Metadata["feedback_history"].([]any)
-	history = append(history, historyEntry)
-	event.Metadata["feedback_history"] = history
-	for k, v := range feedback.Metadata {
-		key := strings.TrimSpace(k)
-		if key == "" {
-			continue
-		}
-		event.Metadata[key] = v
-	}
-	event.Metadata["last_feedback_by"] = feedback.UpdatedBy
-	event.Metadata["non_canonical_evidence"] = true
-	event.CommittedBy = feedback.UpdatedBy
-	event.Outcome = feedback.Outcome
-	event.OutcomeConfidence = feedback.OutcomeConfidence
-	event.OperatorFeedback = feedback.OperatorFeedback
-	event.CorrectionSummary = feedback.CorrectionSummary
-	if feedback.CorrelationID != "" {
-		event.CorrelationID = feedback.CorrelationID
-	}
-	if feedback.TraceID != "" {
-		event.TraceID = feedback.TraceID
-	}
-	if feedback.UpdatedAt > 0 {
-		event.UpdatedAt = feedback.UpdatedAt
-	}
-	return event
 }
 
 func restoreOutcomeNotFound(id string) error {

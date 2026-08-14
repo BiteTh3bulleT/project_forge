@@ -115,12 +115,15 @@ Persisted inspectability:
 
 ## Usefulness Evidence
 
-Marking a retrieval result as `useful`, `not_useful`, `noisy`, or `insufficient` updates:
+Marking a retrieval result as `useful`, `not_useful`, `noisy`, or `insufficient` through K20G:
 
-- `retrieval_results.usefulness_*`
-- `context_evidence` rows for downstream insights
+- appends an immutable `forge_k_retrieval_usefulness_events` row through production FORGE-K
+- updates only `retrieval_usefulness_projection`, which is explicitly noncanonical and rebuildable
+- does not rewrite `retrieval_results`, memory observations, legacy usefulness events, context evidence, or VSA counters
 
-Job terminal outcomes additionally emit evidence for selected packet results.
+Job terminal outcome evidence is temporarily fail-closed until an exact scoped
+batch syscall carries job/run/result identity, actor, provenance, and
+idempotency.
 
 ## Packet Integration
 

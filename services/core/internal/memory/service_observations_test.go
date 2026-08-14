@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 )
 
@@ -199,8 +200,8 @@ func TestUpdateObservationPreservesUnsetFieldsAndHydratesLinksAndSignals(t *test
 		Signal:        "noise",
 		Weight:        2.5,
 		Note:          "too broad",
-	}); err != nil {
-		t.Fatalf("mark observation noise: %v", err)
+	}); !errors.Is(err, ErrMemoryEvidenceAuthorityRequired) {
+		t.Fatalf("legacy usefulness error: %v", err)
 	}
 	hydrated, err := svc.GetObservation(ctx, from.ID)
 	if err != nil {
@@ -212,8 +213,8 @@ func TestUpdateObservationPreservesUnsetFieldsAndHydratesLinksAndSignals(t *test
 	if hydrated.OutgoingLinks[0].RelationType != "related" || hydrated.OutgoingLinks[0].Note != "link note" {
 		t.Fatalf("expected default related link with trimmed note, got %+v", hydrated.OutgoingLinks[0])
 	}
-	if len(hydrated.Signals) != 1 || hydrated.Signals[0].Signal != "noise" {
-		t.Fatalf("expected one hydrated usefulness signal, got %+v", hydrated.Signals)
+	if len(hydrated.Signals) != 0 {
+		t.Fatalf("legacy usefulness writer created signals: %+v", hydrated.Signals)
 	}
 
 	target, err := svc.GetObservation(ctx, to.ID)

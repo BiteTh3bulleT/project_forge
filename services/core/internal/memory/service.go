@@ -129,7 +129,6 @@ WHERE id = ?`,
 			if execErr != nil {
 				return nil, execErr
 			}
-			s.triggerObservationVSAReindex(ctx, existingID, "observation_upsert")
 			detail, fetchErr := s.getObservation(ctx, existingID)
 			if fetchErr != nil {
 				return nil, fetchErr
@@ -171,7 +170,6 @@ INSERT INTO memory_observations(
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
-	s.triggerObservationVSAReindex(ctx, id, "observation_insert")
 	detail, err := s.getObservation(ctx, id)
 	if err != nil {
 		return nil, err
@@ -287,7 +285,6 @@ WHERE id = ?`,
 	if err != nil {
 		return nil, err
 	}
-	s.triggerObservationVSAReindex(ctx, id, "observation_update")
 	return s.getObservation(ctx, id)
 }
 
@@ -307,20 +304,7 @@ VALUES(?,?,?,?,?)`,
 		strings.TrimSpace(relationType),
 		strings.TrimSpace(note),
 	)
-	if err == nil {
-		_, _, _, _ = s.reindexObservationVSAWithEvidence(ctx, fromObs, "link_update", nil, true, nil, nil, "")
-		if toObs != fromObs {
-			_, _, _, _ = s.reindexObservationVSAWithEvidence(ctx, toObs, "link_update", nil, true, nil, nil, "")
-		}
-	}
 	return err
-}
-
-func (s *Service) triggerObservationVSAReindex(ctx context.Context, observationID int64, reason string) {
-	if s == nil || s.db == nil || observationID <= 0 {
-		return
-	}
-	_ = s.ReindexObservationVSA(ctx, observationID, reason, nil)
 }
 
 func (s *Service) linksFor(ctx context.Context, observationID int64, incoming bool) ([]ObservationLink, error) {

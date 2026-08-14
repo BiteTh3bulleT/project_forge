@@ -2,15 +2,19 @@ package retrieval
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/embeddings"
 	"forge/projectforge/services/core/internal/memory"
 	"forge/projectforge/services/core/internal/search"
@@ -70,6 +74,19 @@ type RunRequest struct {
 	JobID           *string
 	PacketID        *int64
 	Notes           string
+	Actor           domain.ActorIdentity
+	Source          domain.ActionSource
+	Scope           domain.ForgeScope
+	Provenance      domain.Provenance
+	CorrelationID   string
+	TraceID         string
+	RequestID       string
+	IdempotencyKey  string
+	RequestedAt     int64
+}
+
+type SemanticSyscallProcessor interface {
+	Process(ctx context.Context, req domain.SyscallRequest) (domain.SyscallResult, error)
 }
 
 type Service struct {
@@ -77,6 +94,7 @@ type Service struct {
 	search     *search.Service
 	embeddings *embeddings.Service
 	memory     *memory.Service
+	syscalls   SemanticSyscallProcessor
 }
 
 type aggregateHit struct {
@@ -96,22 +114,37 @@ type rankedCandidate struct {
 	usefulnessBoost    float64
 	structuralBoost    float64
 	recencyBoost       float64
-	vsaAdditiveScore   float64
-	vsaAppliedScore    float64
-	vsaSignal          memory.RetrievalResultVSASignal
 	selectionDiversity float64
-}
-
-type vsaRuntimeConfig struct {
-	Mode        string
-	MaxAdditive float64
 }
 
 func New(db *sql.DB, searchSvc *search.Service, embedSvc *embeddings.Service, memorySvc *memory.Service) *Service {
 	return &Service{db: db, search: searchSvc, embeddings: embedSvc, memory: memorySvc}
 }
 
+func (s *Service) SetSyscallProcessor(processor SemanticSyscallProcessor) {
+	if s != nil {
+		s.syscalls = processor
+	}
+}
+
+func NewEvidenceRequestID() string {
+	var suffix [12]byte
+	if _, err := rand.Read(suffix[:]); err != nil {
+		return fmt.Sprintf("retrieval-evidence-%d", time.Now().UnixNano())
+	}
+	return "retrieval-evidence-" + hex.EncodeToString(suffix[:])
+}
+
 func (s *Service) Run(ctx context.Context, req RunRequest) (*Run, error) {
+	if s == nil || s.syscalls == nil {
+		return nil, fmt.Errorf("FORGE-K retrieval evidence authority is unavailable")
+	}
+	if strings.TrimSpace(req.Actor.ID) == "" || strings.TrimSpace(req.Actor.Kind) == "" ||
+		strings.TrimSpace(string(req.Source)) == "" || strings.TrimSpace(req.Scope.WorkspaceID) == "" ||
+		strings.TrimSpace(req.Scope.LaneID) == "" || strings.TrimSpace(req.Provenance.Actor) == "" ||
+		strings.TrimSpace(req.Provenance.ActorType) == "" {
+		return nil, fmt.Errorf("trusted retrieval actor, source, scope, and provenance are required")
+	}
 	query := strings.TrimSpace(req.Query)
 	if query == "" {
 		return nil, fmt.Errorf("query is required")
@@ -126,14 +159,37 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*Run, error) {
 	if req.SelectForPacket <= 0 || req.SelectForPacket > req.Limit {
 		req.SelectForPacket = min(req.Limit, 8)
 	}
+	requestID := strings.TrimSpace(req.RequestID)
+	if requestID == "" {
+		requestID = NewEvidenceRequestID()
+	}
+	req.RequestID = requestID
+	if strings.TrimSpace(req.IdempotencyKey) == "" {
+		req.IdempotencyKey = requestID
+	}
+	if req.RequestedAt <= 0 {
+		req.RequestedAt = time.Now().UnixMilli()
+	}
 
 	sourceIDs, err := s.resolveSourceScope(ctx, req.DossierID, req.SourceIDs)
 	if err != nil {
 		return nil, err
 	}
+	canonicalPaths, err := s.canonicalSourcePaths(ctx, sourceIDs)
+	if err != nil {
+		return nil, err
+	}
+	if len(req.Scope.SelectedPaths) > 0 && !equalCanonicalPaths(req.Scope.SelectedPaths, canonicalPaths) {
+		return nil, fmt.Errorf("retrieval selected paths must exactly match resolved source roots")
+	}
+	req.Scope.SelectedPaths = canonicalPaths
+	if existing, found, err := s.existingEvidenceRun(ctx, req, query, mode); err != nil {
+		return nil, err
+	} else if found {
+		return existing, nil
+	}
 
 	wKeyword, wSemantic := s.resolveWeights(ctx, req.WeightKeyword, req.WeightSemantic)
-	vsaCfg := s.runtimeVSAConfig(ctx)
 
 	agg := map[int64]*aggregateHit{}
 
@@ -185,29 +241,10 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*Run, error) {
 	}
 
 	if len(agg) == 0 {
-		return s.persistRun(ctx, query, mode, req, wKeyword, wSemantic, vsaCfg, nil, nil)
+		return s.persistRun(ctx, query, mode, req, wKeyword, wSemantic, nil)
 	}
 
-	vsaSignalsByChunk := map[int64]memory.RetrievalResultVSASignal{}
-	if s.memory != nil && (vsaCfg.Mode == "shadow" || vsaCfg.Mode == "active") {
-		candidates := make([]memory.VSAQueryCandidate, 0, len(agg))
-		for _, item := range agg {
-			candidates = append(candidates, memory.VSAQueryCandidate{
-				ChunkID: item.ChunkID,
-				AbsPath: item.AbsPath,
-				RelPath: item.RelPath,
-			})
-		}
-		signals, signalErr := s.memory.ComputeVSAQuerySignals(ctx, memory.VSAQuerySignalsRequest{
-			Query:      query,
-			Candidates: candidates,
-		})
-		if signalErr == nil {
-			vsaSignalsByChunk = signals
-		}
-	}
-
-	pathUsefulness, _ := s.pathUsefulnessScores(ctx)
+	pathUsefulness, _ := s.pathUsefulnessScores(ctx, req.Scope)
 	highValueFiles, noisyFiles := s.dossierFileBias(ctx, req.DossierID)
 	rankedRows := make([]rankedCandidate, 0, len(agg))
 	for _, v := range agg {
@@ -241,34 +278,14 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*Run, error) {
 		if v.KeywordScore > 0 && v.SemanticScore > 0 {
 			recencyBoost = 0.02
 		}
-		vsaSignal := memory.RetrievalResultVSASignal{
-			ChunkID: v.ChunkID,
-			Mode:    vsaCfg.Mode,
-		}
-		if signal, ok := vsaSignalsByChunk[v.ChunkID]; ok {
-			vsaSignal = signal
-			vsaSignal.ChunkID = v.ChunkID
-			if strings.TrimSpace(vsaSignal.Mode) == "" {
-				vsaSignal.Mode = vsaCfg.Mode
-			}
-		}
-		vsaSignal.AdditiveScore = round(vsaSignal.AdditiveScore)
-		vsaApplied := 0.0
-		if vsaCfg.Mode == "active" {
-			vsaApplied = clampFloat(vsaSignal.AdditiveScore, -vsaCfg.MaxAdditive, vsaCfg.MaxAdditive)
-		}
-		vsaSignal.AppliedScore = round(vsaApplied)
-		score := base + usefulnessBoost + structuralBoost + recencyBoost + vsaSignal.AppliedScore
+		score := base + usefulnessBoost + structuralBoost + recencyBoost
 		rankedRows = append(rankedRows, rankedCandidate{
-			item:             v,
-			score:            score,
-			baseScore:        base,
-			usefulnessBoost:  usefulnessBoost,
-			structuralBoost:  structuralBoost,
-			recencyBoost:     recencyBoost,
-			vsaAdditiveScore: vsaSignal.AdditiveScore,
-			vsaAppliedScore:  vsaSignal.AppliedScore,
-			vsaSignal:        vsaSignal,
+			item:            v,
+			score:           score,
+			baseScore:       base,
+			usefulnessBoost: usefulnessBoost,
+			structuralBoost: structuralBoost,
+			recencyBoost:    recencyBoost,
 		})
 	}
 	sort.Slice(rankedRows, func(i, j int) bool { return rankedRows[i].score > rankedRows[j].score })
@@ -282,17 +299,12 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*Run, error) {
 		chunk := row.item.ChunkID
 		file := row.item.FileID
 		_, selected := selectedIndices[idx]
-		vsaExplain := map[string]any{}
-		if len(row.vsaSignal.Explain) > 0 {
-			_ = json.Unmarshal(row.vsaSignal.Explain, &vsaExplain)
-		}
 		reasonPayload, _ := json.Marshal(map[string]any{
 			"baseScore":         round(row.baseScore),
 			"usefulnessBoost":   round(row.usefulnessBoost),
 			"structuralBoost":   round(row.structuralBoost),
 			"recencyBoost":      round(row.recencyBoost),
-			"vsaAdditiveScore":  round(row.vsaAdditiveScore),
-			"vsaAppliedScore":   round(row.vsaAppliedScore),
+			"vsaInfluence":      "disabled_unscoped",
 			"selectedForPacket": selected,
 			"coverageBucket": func() string {
 				if strings.TrimSpace(row.item.RelPath) == "" {
@@ -300,18 +312,6 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*Run, error) {
 				}
 				return strings.Split(strings.TrimSpace(row.item.RelPath), "/")[0]
 			}(),
-			"vsa": map[string]any{
-				"mode":             nonEmpty(strings.TrimSpace(row.vsaSignal.Mode), "off"),
-				"observationId":    row.vsaSignal.ObservationID,
-				"associativeScore": round(row.vsaSignal.AssociativeScore),
-				"roleMatchScore":   round(row.vsaSignal.RoleMatchScore),
-				"relationalScore":  round(row.vsaSignal.RelationalScore),
-				"feedbackScore":    round(row.vsaSignal.FeedbackScore),
-				"additiveScore":    round(row.vsaSignal.AdditiveScore),
-				"appliedScore":     round(row.vsaSignal.AppliedScore),
-				"maxAdditive":      round(vsaCfg.MaxAdditive),
-				"explain":          vsaExplain,
-			},
 		})
 		results = append(results, Result{
 			ChunkID:           &chunk,
@@ -329,7 +329,7 @@ func (s *Service) Run(ctx context.Context, req RunRequest) (*Run, error) {
 		})
 	}
 
-	return s.persistRun(ctx, query, mode, req, wKeyword, wSemantic, vsaCfg, vsaSignalsByChunk, results)
+	return s.persistRun(ctx, query, mode, req, wKeyword, wSemantic, results)
 }
 
 func (s *Service) persistRun(
@@ -339,98 +339,164 @@ func (s *Service) persistRun(
 	req RunRequest,
 	wKeyword,
 	wSemantic float64,
-	vsaCfg vsaRuntimeConfig,
-	vsaSignalsByChunk map[int64]memory.RetrievalResultVSASignal,
 	results []Result,
 ) (*Run, error) {
-	now := time.Now().UnixMilli()
-	weighting, _ := json.Marshal(map[string]any{
-		"keyword":        wKeyword,
-		"semantic":       wSemantic,
-		"mode":           mode,
-		"vsaMode":        vsaCfg.Mode,
-		"vsaMaxAdditive": round(vsaCfg.MaxAdditive),
+	now := req.RequestedAt
+	if now <= 0 {
+		now = time.Now().UnixMilli()
+	}
+	weighting := map[string]any{
+		"keyword":      wKeyword,
+		"semantic":     wSemantic,
+		"mode":         mode,
+		"vsaInfluence": "disabled_unscoped",
+	}
+	requestID := strings.TrimSpace(req.RequestID)
+	if requestID == "" {
+		requestID = NewEvidenceRequestID()
+	}
+	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
+	if idempotencyKey == "" {
+		idempotencyKey = requestID
+	}
+	resultEvidence := make([]map[string]any, 0, len(results))
+	for index := range results {
+		row := &results[index]
+		reason := map[string]any{}
+		if len(row.SelectionReason) > 0 {
+			if err := json.Unmarshal(row.SelectionReason, &reason); err != nil {
+				return nil, fmt.Errorf("selection reason %d: %w", index, err)
+			}
+		}
+		resultEvidence = append(resultEvidence, map[string]any{
+			"evidenceId": requestID + ":retrieval_result:" + strconv.Itoa(index),
+			"chunkId":    row.ChunkID, "fileId": row.FileID,
+			"absPath": row.AbsPath, "relPath": row.RelPath, "rankIndex": index,
+			"keywordScore": row.KeywordScore, "semanticScore": row.SemanticScore, "hybridScore": row.HybridScore,
+			"snippet": row.Snippet, "selectedForPacket": row.SelectedForPacket, "selectionReason": reason,
+		})
+	}
+	payload := map[string]any{
+		"evidenceId": requestID + ":retrieval_run", "createdAt": now,
+		"query": query, "mode": string(mode), "weighting": weighting, "notes": req.Notes,
+		"results": resultEvidence,
+	}
+	if req.DossierID != nil {
+		payload["dossierId"] = *req.DossierID
+	}
+	if req.PacketID != nil {
+		payload["packetId"] = *req.PacketID
+	}
+	if req.JobID != nil {
+		payload["jobId"] = *req.JobID
+	}
+	correlationID := strings.TrimSpace(req.CorrelationID)
+	if correlationID == "" {
+		correlationID = "corr-" + requestID
+	}
+	traceID := strings.TrimSpace(req.TraceID)
+	if traceID == "" {
+		traceID = correlationID
+	}
+	provenance := req.Provenance
+	provenance.TraceID = traceID
+	result, err := s.syscalls.Process(ctx, domain.SyscallRequest{
+		ID: requestID, Action: domain.ActionRecordRetrievalEvidence,
+		Actor: req.Actor, Source: req.Source, Scope: req.Scope, Payload: payload,
+		Provenance: provenance, CorrelationID: correlationID, TraceID: traceID,
+		IdempotencyKey: idempotencyKey, RequestedAt: now,
+		RequiredCapability: "retrieval.evidence.record",
+		Metadata:           map[string]any{"modelCanonicalAuthority": false, "memoryObservationMutation": false},
 	})
-	res, err := s.db.ExecContext(ctx, `
-INSERT INTO retrieval_runs(created_at, query, mode, dossier_id, packet_id, job_id, weighting_json, notes)
-VALUES(?,?,?,?,?,?,?,?)`,
-		now, query, string(mode), req.DossierID, req.PacketID, req.JobID, string(weighting), req.Notes,
-	)
 	if err != nil {
+		return nil, fmt.Errorf("record retrieval evidence: %w", err)
+	}
+	if !result.Success {
+		return nil, fmt.Errorf("record retrieval evidence rejected: %s", result.DeterministicErrCode)
+	}
+	return s.GetRunByEvidenceID(ctx, requestID+":retrieval_run")
+}
+
+func (s *Service) GetRunByEvidenceID(ctx context.Context, evidenceID string) (*Run, error) {
+	var runID int64
+	if err := s.db.QueryRowContext(ctx, `SELECT id FROM retrieval_runs WHERE evidence_id = ?`, strings.TrimSpace(evidenceID)).Scan(&runID); err != nil {
 		return nil, err
 	}
-	runID, _ := res.LastInsertId()
-
-	for i := range results {
-		row := &results[i]
-		vsaSignal := memory.RetrievalResultVSASignal{Mode: vsaCfg.Mode}
-		if row.ChunkID != nil && vsaSignalsByChunk != nil {
-			if signal, ok := vsaSignalsByChunk[*row.ChunkID]; ok {
-				vsaSignal = signal
-			}
-		}
-		if row.ChunkID != nil {
-			vsaSignal.ChunkID = *row.ChunkID
-		}
-		if strings.TrimSpace(vsaSignal.Mode) == "" {
-			vsaSignal.Mode = vsaCfg.Mode
-		}
-		resultRes, err := s.db.ExecContext(ctx, `
-INSERT INTO retrieval_results(
-  retrieval_run_id, chunk_id, file_id, abs_path, rel_path,
-  rank_index, keyword_score, semantic_score, hybrid_score, snippet,
-  selected_for_packet, usefulness_label, usefulness_note
-) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			runID,
-			row.ChunkID,
-			row.FileID,
-			row.AbsPath,
-			row.RelPath,
-			row.RankIndex,
-			row.KeywordScore,
-			row.SemanticScore,
-			row.HybridScore,
-			row.Snippet,
-			boolToInt(row.SelectedForPacket),
-			"unknown",
-			"",
-		)
-		if err != nil {
-			return nil, err
-		}
-		id, _ := resultRes.LastInsertId()
-		row.ID = id
-		row.RetrievalRunID = runID
-		if s.memory != nil {
-			reason := map[string]any{}
-			if len(row.SelectionReason) > 0 {
-				_ = json.Unmarshal(row.SelectionReason, &reason)
-			}
-			_ = s.memory.SaveSelectionReason(ctx, memory.SaveSelectionReasonRequest{
-				RetrievalResultID: id,
-				Reason:            reason,
-			})
-			if vsaCfg.Mode != "off" {
-				vsaSignal.RetrievalResultID = id
-				vsaSignal.RetrievalRunID = runID
-				vsaSignal.AppliedScore = round(clampFloat(vsaSignal.AppliedScore, -vsaCfg.MaxAdditive, vsaCfg.MaxAdditive))
-				_ = s.memory.SaveRetrievalResultVSASignal(ctx, vsaSignal)
-			}
-		}
-	}
-
-	if req.PacketID != nil {
-		_, _ = s.db.ExecContext(ctx, `
-INSERT INTO packet_retrieval_runs(packet_id, retrieval_run_id, created_at)
-VALUES(?,?,?) ON CONFLICT(packet_id, retrieval_run_id) DO NOTHING`, *req.PacketID, runID, now)
-	}
-
 	return s.GetRun(ctx, runID)
+}
+
+func (s *Service) existingEvidenceRun(ctx context.Context, req RunRequest, query string, mode Mode) (*Run, bool, error) {
+	// Only the deterministic in-process job principal may use the read-before-
+	// search shortcut. User and proposal sources must always traverse Kernel
+	// authorization, and random interactive request IDs do not need this path.
+	if req.Source != domain.SourceInternal || req.JobID == nil || strings.TrimSpace(*req.JobID) == "" ||
+		req.Actor.ID != "forge.jobs" || req.Actor.Kind != "service" {
+		return nil, false, nil
+	}
+	var (
+		runID                              int64
+		storedQuery, storedMode, workspace string
+		lane, selectedJSON                 string
+		proposedBy, provenanceJSON         string
+		authorizationFingerprint           string
+		dossierID, packetID                sql.NullInt64
+		jobID                              sql.NullString
+	)
+	err := s.db.QueryRowContext(ctx, `
+SELECT id, query, mode, COALESCE(original_dossier_id,dossier_id), COALESCE(original_packet_id,packet_id),
+       COALESCE(original_job_id,job_id), workspace_id, lane_id, selected_paths_json,
+       proposed_by, provenance_json, authorization_fingerprint
+FROM retrieval_runs WHERE evidence_id = ?`, req.RequestID+":retrieval_run").Scan(
+		&runID, &storedQuery, &storedMode, &dossierID, &packetID, &jobID, &workspace, &lane, &selectedJSON,
+		&proposedBy, &provenanceJSON, &authorizationFingerprint,
+	)
+	if err == sql.ErrNoRows {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("look up immutable retrieval evidence: %w", err)
+	}
+	var storedPaths []string
+	if err := json.Unmarshal([]byte(selectedJSON), &storedPaths); err != nil {
+		return nil, false, fmt.Errorf("stored retrieval evidence scope is invalid: %w", err)
+	}
+	var storedProvenance domain.Provenance
+	if err := json.Unmarshal([]byte(provenanceJSON), &storedProvenance); err != nil {
+		return nil, false, fmt.Errorf("stored retrieval evidence provenance is invalid: %w", err)
+	}
+	expectedProvenance := req.Provenance
+	expectedProvenance.TraceID = strings.TrimSpace(req.TraceID)
+	if expectedProvenance.TraceID == "" {
+		expectedProvenance.TraceID = strings.TrimSpace(req.CorrelationID)
+	}
+	if strings.TrimSpace(storedQuery) != query || Mode(storedMode) != mode ||
+		strings.TrimSpace(workspace) != strings.TrimSpace(req.Scope.WorkspaceID) ||
+		strings.TrimSpace(lane) != strings.TrimSpace(req.Scope.LaneID) ||
+		!equalCanonicalPaths(storedPaths, req.Scope.SelectedPaths) ||
+		!sameOptionalInt64(dossierID, req.DossierID) || !sameOptionalInt64(packetID, req.PacketID) ||
+		!sameOptionalString(jobID, req.JobID) || proposedBy != req.Actor.ID ||
+		strings.TrimSpace(authorizationFingerprint) == "" || storedProvenance != expectedProvenance {
+		return nil, false, fmt.Errorf("existing retrieval evidence does not match retry identity or scope")
+	}
+	run, err := s.GetRun(ctx, runID)
+	if err != nil {
+		return nil, false, err
+	}
+	return run, true, nil
+}
+
+func sameOptionalInt64(stored sql.NullInt64, expected *int64) bool {
+	return (expected == nil && !stored.Valid) || (expected != nil && stored.Valid && stored.Int64 == *expected)
+}
+
+func sameOptionalString(stored sql.NullString, expected *string) bool {
+	return (expected == nil && !stored.Valid) || (expected != nil && stored.Valid && stored.String == *expected)
 }
 
 func (s *Service) GetRun(ctx context.Context, runID int64) (*Run, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT id, created_at, query, mode, dossier_id, packet_id, job_id, weighting_json, notes
+SELECT id, created_at, query, mode, COALESCE(original_dossier_id,dossier_id),
+       COALESCE(original_packet_id,packet_id), COALESCE(original_job_id,job_id), weighting_json, notes
 FROM retrieval_runs WHERE id = ?`, runID)
 	var r Run
 	var dossierID sql.NullInt64
@@ -501,7 +567,7 @@ func (s *Service) ListRunsByJob(ctx context.Context, jobID string, limit int) ([
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM retrieval_runs WHERE job_id = ? ORDER BY id DESC LIMIT ?`, jobID, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM retrieval_runs WHERE COALESCE(original_job_id,job_id) = ? ORDER BY id DESC LIMIT ?`, jobID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -521,31 +587,18 @@ func (s *Service) ListRunsByJob(ctx context.Context, jobID string, limit int) ([
 	return out, rows.Err()
 }
 
-func (s *Service) AttachRunToPacket(ctx context.Context, runID, packetID int64) error {
-	if runID <= 0 || packetID <= 0 {
-		return nil
-	}
-	now := time.Now().UnixMilli()
-	if _, err := s.db.ExecContext(ctx, `UPDATE retrieval_runs SET packet_id = ? WHERE id = ?`, packetID, runID); err != nil {
-		return err
-	}
-	_, err := s.db.ExecContext(ctx, `
-INSERT INTO packet_retrieval_runs(packet_id, retrieval_run_id, created_at)
-VALUES(?,?,?)
-ON CONFLICT(packet_id, retrieval_run_id) DO NOTHING`, packetID, runID, now)
-	return err
-}
-
 func (s *Service) resultsForRun(ctx context.Context, runID int64) ([]Result, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, retrieval_run_id, chunk_id, file_id, abs_path, rel_path, rank_index,
-       keyword_score, semantic_score, hybrid_score, snippet,
-       selected_for_packet, usefulness_label, usefulness_note,
-       COALESCE((SELECT reason_json FROM retrieval_result_selection WHERE retrieval_result_id = retrieval_results.id), '{}') AS reason_json,
-       (SELECT observation_id FROM retrieval_result_observations WHERE retrieval_result_id = retrieval_results.id ORDER BY created_at DESC LIMIT 1) AS observation_id
-FROM retrieval_results
-WHERE retrieval_run_id = ?
-ORDER BY rank_index ASC`, runID)
+SELECT rr.id, rr.retrieval_run_id, COALESCE(rr.original_chunk_id,rr.chunk_id),
+       COALESCE(rr.original_file_id,rr.file_id), rr.abs_path, rr.rel_path, rr.rank_index,
+       rr.keyword_score, rr.semantic_score, rr.hybrid_score, rr.snippet,
+	       rr.selected_for_packet, COALESCE(rup.label,'unknown'), COALESCE(rup.note,''),
+       COALESCE((SELECT reason_json FROM retrieval_result_selection WHERE retrieval_result_id = rr.id), '{}') AS reason_json,
+       (SELECT observation_id FROM retrieval_result_observations WHERE retrieval_result_id = rr.id ORDER BY created_at DESC LIMIT 1) AS observation_id
+FROM retrieval_results rr
+LEFT JOIN retrieval_usefulness_projection rup ON rup.retrieval_result_id = rr.id
+WHERE rr.retrieval_run_id = ?
+ORDER BY rr.rank_index ASC`, runID)
 	if err != nil {
 		return nil, err
 	}
@@ -600,127 +653,84 @@ ORDER BY rank_index ASC`, runID)
 	return out, rows.Err()
 }
 
-func (s *Service) MarkUsefulness(ctx context.Context, resultID int64, label, note string, jobID *string, packetID *int64) error {
-	label = strings.TrimSpace(strings.ToLower(label))
-	if label == "" {
-		label = "unknown"
-	}
-	if _, err := s.db.ExecContext(ctx,
-		`UPDATE retrieval_results SET usefulness_label = ?, usefulness_note = ? WHERE id = ?`,
-		label, strings.TrimSpace(note), resultID,
-	); err != nil {
-		return err
-	}
-
-	var runID sql.NullInt64
-	var chunkID sql.NullInt64
-	if err := s.db.QueryRowContext(ctx, `SELECT retrieval_run_id, chunk_id FROM retrieval_results WHERE id = ?`, resultID).Scan(&runID, &chunkID); err != nil {
-		return err
-	}
-	if !runID.Valid {
-		return nil
-	}
-	if s.memory != nil {
-		obsID, err := s.memory.ObservationByResult(ctx, resultID)
-		if err == nil && obsID != nil {
-			runIDValue := runID.Int64
-			_ = s.memory.MarkObservationUsefulness(ctx, memory.MarkUsefulnessRequest{
-				ObservationID:     *obsID,
-				RetrievalResultID: &resultID,
-				RetrievalRunID:    &runIDValue,
-				PacketID:          packetID,
-				JobID:             jobID,
-				Signal:            label,
-				Weight:            1,
-				Note:              note,
-			})
-		}
-	}
-	_, err := s.db.ExecContext(ctx, `
-INSERT INTO context_evidence(created_at, retrieval_result_id, retrieval_run_id, job_id, packet_id, chunk_id, evidence_type, weight, note)
-VALUES(?,?,?,?,?,?,?,?,?)`,
-		time.Now().UnixMilli(),
-		resultID,
-		runID.Int64,
-		jobID,
-		packetID,
-		nullInt64(chunkID),
-		usefulnessToEvidence(label),
-		1.0,
-		note,
-	)
-	return err
+type UsefulnessRequest struct {
+	ResultID       int64
+	Label          string
+	Note           string
+	JobID          *string
+	PacketID       *int64
+	Metadata       map[string]any
+	Actor          domain.ActorIdentity
+	Source         domain.ActionSource
+	Scope          domain.ForgeScope
+	Provenance     domain.Provenance
+	CorrelationID  string
+	TraceID        string
+	RequestID      string
+	IdempotencyKey string
+	RequestedAt    int64
 }
 
-func (s *Service) RecordOutcome(ctx context.Context, jobID string, outcome string) error {
-	jobID = strings.TrimSpace(jobID)
-	if jobID == "" {
-		return nil
+// RecordUsefulness submits utility evidence to the production FORGE-K
+// boundary. The retrieval service has no direct write authority over source
+// evidence, memory aggregates, VSA counters, or the rebuildable projection.
+func (s *Service) RecordUsefulness(ctx context.Context, req UsefulnessRequest) (domain.SyscallResult, error) {
+	if s == nil || s.syscalls == nil {
+		return domain.SyscallResult{}, fmt.Errorf("FORGE-K retrieval usefulness authority is unavailable")
 	}
-	outcome = strings.TrimSpace(strings.ToLower(outcome))
-	if outcome == "" {
-		outcome = "unknown"
+	if strings.TrimSpace(req.IdempotencyKey) == "" {
+		return domain.SyscallResult{}, fmt.Errorf("idempotency key is required")
 	}
-	evidenceType := "packet.in_unknown_outcome_job"
-	switch outcome {
-	case "succeeded", "success":
-		evidenceType = "packet.in_successful_job"
-	case "failed", "failure":
-		evidenceType = "packet.in_failed_job"
-	case "cancelled", "canceled":
-		evidenceType = "packet.in_cancelled_job"
+	if strings.TrimSpace(req.RequestID) == "" {
+		req.RequestID = NewEvidenceRequestID()
 	}
-
-	rows, err := s.db.QueryContext(ctx, `
-SELECT rr.id, rr.retrieval_run_id, rr.chunk_id
-FROM retrieval_results rr
-JOIN retrieval_runs r ON r.id = rr.retrieval_run_id
-WHERE r.job_id = ? AND rr.selected_for_packet = 1
-ORDER BY rr.id ASC`, jobID)
+	if req.RequestedAt <= 0 {
+		req.RequestedAt = time.Now().UnixMilli()
+	}
+	if strings.TrimSpace(req.CorrelationID) == "" {
+		req.CorrelationID = "corr-" + req.RequestID
+	}
+	if strings.TrimSpace(req.TraceID) == "" {
+		req.TraceID = req.CorrelationID
+	}
+	req.Provenance.TraceID = req.TraceID
+	payload := map[string]any{
+		"resultId": req.ResultID, "label": strings.TrimSpace(strings.ToLower(req.Label)),
+		"note": strings.TrimSpace(req.Note), "metadata": req.Metadata,
+	}
+	if req.JobID != nil {
+		payload["jobId"] = *req.JobID
+	}
+	if req.PacketID != nil {
+		payload["packetId"] = *req.PacketID
+	}
+	result, err := s.syscalls.Process(ctx, domain.SyscallRequest{
+		ID: req.RequestID, Action: domain.ActionRecordRetrievalUsefulness,
+		Actor: req.Actor, Source: req.Source, Scope: req.Scope, Payload: payload,
+		Provenance: req.Provenance, CorrelationID: req.CorrelationID, TraceID: req.TraceID,
+		IdempotencyKey: req.IdempotencyKey, RequestedAt: req.RequestedAt,
+		RequiredCapability: "retrieval.usefulness.record",
+	})
 	if err != nil {
-		return err
+		return result, err
 	}
-	defer rows.Close()
-	now := time.Now().UnixMilli()
-	for rows.Next() {
-		var resultID int64
-		var runID int64
-		var chunkID sql.NullInt64
-		if err := rows.Scan(&resultID, &runID, &chunkID); err != nil {
-			return err
-		}
-		var exists int
-		if err := s.db.QueryRowContext(ctx, `
-SELECT 1 FROM context_evidence
-WHERE retrieval_result_id = ? AND job_id = ? AND evidence_type = ?
-LIMIT 1`, resultID, jobID, evidenceType).Scan(&exists); err == nil {
-			continue
-		}
-		_, _ = s.db.ExecContext(ctx, `
-INSERT INTO context_evidence(created_at, retrieval_result_id, retrieval_run_id, job_id, packet_id, chunk_id, evidence_type, weight, note)
-VALUES(?,?,?,?,?,?,?, ?, ?)`,
-			now,
-			resultID,
-			runID,
-			jobID,
-			nil,
-			nullInt64(chunkID),
-			evidenceType,
-			1.0,
-			"",
-		)
+	if !result.Success {
+		return result, fmt.Errorf("record retrieval usefulness rejected: %s", result.DeterministicErrCode)
 	}
-	return rows.Err()
+	return result, nil
 }
 
 func (s *Service) resolveSourceScope(ctx context.Context, dossierID *int64, explicit []int64) ([]int64, error) {
 	if len(explicit) > 0 {
-		return explicit, nil
+		return normalizedSourceIDs(explicit)
 	}
-	if dossierID == nil {
-		return nil, nil
+	query := `SELECT id FROM sources ORDER BY id ASC`
+	args := []any{}
+	if dossierID != nil {
+		query = `SELECT source_id FROM dossier_sources WHERE dossier_id = ? ORDER BY source_id ASC`
+		args = append(args, *dossierID)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT source_id FROM dossier_sources WHERE dossier_id = ? ORDER BY source_id ASC`, *dossierID)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -733,7 +743,90 @@ func (s *Service) resolveSourceScope(ctx context.Context, dossierID *int64, expl
 		}
 		out = append(out, id)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("retrieval requires at least one resolved source")
+	}
+	return normalizedSourceIDs(out)
+}
+
+func normalizedSourceIDs(ids []int64) ([]int64, error) {
+	seen := make(map[int64]struct{}, len(ids))
+	out := make([]int64, 0, len(ids))
+	for _, id := range ids {
+		if id <= 0 {
+			return nil, fmt.Errorf("retrieval source ids must be positive")
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out, nil
+}
+
+func (s *Service) canonicalSourcePaths(ctx context.Context, sourceIDs []int64) ([]string, error) {
+	if len(sourceIDs) == 0 {
+		return nil, fmt.Errorf("retrieval requires at least one resolved source")
+	}
+	paths := make([]string, 0, len(sourceIDs))
+	for _, sourceID := range sourceIDs {
+		var sourcePath string
+		if err := s.db.QueryRowContext(ctx, `SELECT path FROM sources WHERE id = ?`, sourceID).Scan(&sourcePath); err != nil {
+			if err == sql.ErrNoRows {
+				return nil, fmt.Errorf("retrieval source %d does not exist", sourceID)
+			}
+			return nil, fmt.Errorf("resolve retrieval source %d: %w", sourceID, err)
+		}
+		path := filepath.Clean(strings.TrimSpace(sourcePath))
+		if path == "" || path == "." {
+			return nil, fmt.Errorf("retrieval source %d has no canonical path", sourceID)
+		}
+		paths = append(paths, path)
+	}
+	return canonicalPathSet(paths)
+}
+
+func canonicalPathSet(paths []string) ([]string, error) {
+	seen := make(map[string]struct{}, len(paths))
+	out := make([]string, 0, len(paths))
+	for _, raw := range paths {
+		path := filepath.Clean(strings.TrimSpace(raw))
+		if path == "" || path == "." {
+			return nil, fmt.Errorf("retrieval selected paths must be non-empty canonical paths")
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		out = append(out, path)
+	}
+	sort.Strings(out)
+	if len(out) == 0 {
+		return nil, fmt.Errorf("retrieval requires at least one selected source path")
+	}
+	return out, nil
+}
+
+func equalCanonicalPaths(left, right []string) bool {
+	a, err := canonicalPathSet(left)
+	if err != nil {
+		return false
+	}
+	b, err := canonicalPathSet(right)
+	if err != nil || len(a) != len(b) {
+		return false
+	}
+	for index := range a {
+		if a[index] != b[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Service) resolveWeights(ctx context.Context, reqKeyword, reqSemantic float64) (float64, float64) {
@@ -766,18 +859,6 @@ func (s *Service) setting(ctx context.Context, key, def string) string {
 		return def
 	}
 	return strings.TrimSpace(v)
-}
-
-func (s *Service) runtimeVSAConfig(ctx context.Context) vsaRuntimeConfig {
-	mode := strings.ToLower(strings.TrimSpace(s.setting(ctx, "retrieval_vsa_mode", "off")))
-	if mode != "off" && mode != "shadow" && mode != "active" {
-		mode = "off"
-	}
-	maxAdditive := clampFloat(parseFloat(s.setting(ctx, "retrieval_vsa_max_additive", "0.12"), 0.12), 0, 1)
-	return vsaRuntimeConfig{
-		Mode:        mode,
-		MaxAdditive: maxAdditive,
-	}
 }
 
 func boolToInt(v bool) int {
@@ -858,12 +939,18 @@ func coverageSelectIndices(rows []rankedCandidate, selectCount int) map[int]stru
 	return out
 }
 
-func (s *Service) pathUsefulnessScores(ctx context.Context) (map[string]float64, error) {
+func (s *Service) pathUsefulnessScores(ctx context.Context, scope domain.ForgeScope) (map[string]float64, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT abs_path, usefulness_label, COUNT(*)
-FROM retrieval_results
-WHERE abs_path <> ''
-GROUP BY abs_path, usefulness_label`)
+SELECT rr.abs_path, COALESCE(rup.label, 'unknown'), COUNT(*)
+FROM retrieval_results rr
+JOIN retrieval_runs r ON r.id = rr.retrieval_run_id
+LEFT JOIN retrieval_usefulness_projection rup ON rup.retrieval_result_id = rr.id
+WHERE rr.abs_path <> ''
+  AND rr.evidence_id <> '' AND r.evidence_id <> ''
+  AND r.syscall_id <> '' AND r.provenance_id <> ''
+  AND r.workspace_id = ? AND r.lane_id = ?
+GROUP BY rr.abs_path, COALESCE(rup.label, 'unknown')`,
+		strings.TrimSpace(scope.WorkspaceID), strings.TrimSpace(scope.LaneID))
 	if err != nil {
 		return nil, err
 	}
@@ -977,31 +1064,9 @@ func nonEmpty(v, fallback string) string {
 	return strings.TrimSpace(fallback)
 }
 
-func usefulnessToEvidence(label string) string {
-	switch label {
-	case "useful":
-		return "retrieval.useful"
-	case "not_useful":
-		return "retrieval.not_useful"
-	case "noisy":
-		return "retrieval.noisy"
-	case "insufficient":
-		return "retrieval.insufficient"
-	default:
-		return "retrieval.unknown"
-	}
-}
-
 func min(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
-}
-
-func nullInt64(v sql.NullInt64) any {
-	if v.Valid {
-		return v.Int64
-	}
-	return nil
 }

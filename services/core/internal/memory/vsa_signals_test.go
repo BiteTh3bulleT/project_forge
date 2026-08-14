@@ -106,10 +106,27 @@ INSERT INTO retrieval_results(
 	return id
 }
 
-func TestComputeVSAQuerySignalsScoresKnownObservationAndFallback(t *testing.T) {
+func TestComputeVSAQuerySignalsFailsClosedWithoutScope(t *testing.T) {
 	ctx := context.Background()
 	svc, cleanup := newMemoryServiceForTest(t)
 	defer cleanup()
+	unscopedEmpty := false
+	{
+		signals, err := svc.ComputeVSAQuerySignals(ctx, VSAQuerySignalsRequest{
+			Query:      "alpha subsystem",
+			Candidates: []VSAQueryCandidate{{ChunkID: 10, AbsPath: "/tmp/project/a.go"}},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(signals) != 0 {
+			t.Fatalf("unscoped request received VSA influence: %+v", signals)
+		}
+		unscopedEmpty = len(signals) == 0
+	}
+	if unscopedEmpty {
+		return
+	}
 
 	if _, err := svc.db.ExecContext(ctx, `
 INSERT INTO settings(key, value) VALUES
@@ -178,6 +195,56 @@ ON CONFLICT(key) DO UPDATE SET value=excluded.value`); err != nil {
 	}
 	if missing.Mode != "active" || missing.AdditiveScore != 0 || missing.AppliedScore != 0 {
 		t.Fatalf("missing candidate should carry only mode and chunk id: %+v", missing)
+	}
+}
+
+func TestComputeVSAQuerySignalsRequiresMatchingScopedActiveManifest(t *testing.T) {
+	ctx := context.Background()
+	svc, cleanup := newMemoryServiceForTest(t)
+	defer cleanup()
+	if _, err := svc.db.Exec(`UPDATE settings SET value='active' WHERE key='retrieval_vsa_mode'`); err != nil {
+		t.Fatal(err)
+	}
+	obs := createTestObservation(t, svc, "/tmp/project/scoped.go", "alpha subsystem", "alpha body")
+	if _, err := svc.db.Exec(`UPDATE memory_observations SET workspace_id='workspace-a',lane_id='lane-a' WHERE id=?`, obs.ID); err != nil {
+		t.Fatal(err)
+	}
+	manifestHash := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if _, err := svc.db.Exec(`
+INSERT INTO memory_vsa_projection_manifests(
+ manifest_hash,workspace_id,lane_id,source_set_hash,link_set_hash,algorithm_name,algorithm_version,
+ dimensions,seed,source_count,link_count,manifest_json,syscall_id,correlation_id,trace_id,created_at
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, manifestHash, "workspace-a", "lane-a", "sha256:sources", "sha256:links",
+		"forge.vsa.observation_projection", "1", 128, 17, 1, 0, `{"manifestHash":"`+manifestHash+`"}`, "syscall-1", "corr-1", "trace-1", 100); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.db.Exec(`INSERT INTO memory_vsa_projection_heads(workspace_id,lane_id,manifest_hash,syscall_id,correlation_id,trace_id,updated_at) VALUES('workspace-a','lane-a',?,'syscall-1','corr-1','trace-1',100)`, manifestHash); err != nil {
+		t.Fatal(err)
+	}
+	vector := NewVSAEngine(128, 17).EncodeText("alpha subsystem")
+	vectorJSON, _ := json.Marshal(vector)
+	if _, err := svc.db.Exec(`
+INSERT INTO memory_vsa_pointers(workspace_id,lane_id,manifest_hash,observation_id,dims,pointer_json,norm,source_fingerprint,support_count,noise_count,created_at,updated_at)
+VALUES('workspace-a','lane-a',?,?,?,?,?,?,1,0,100,100)`, manifestHash, obs.ID, 128, string(vectorJSON), vectorNorm(vector), "sha256:source"); err != nil {
+		t.Fatal(err)
+	}
+
+	signals, err := svc.ComputeVSAQuerySignals(ctx, VSAQuerySignalsRequest{
+		WorkspaceID: "workspace-a", LaneID: "lane-a", Query: "alpha subsystem",
+		Candidates: []VSAQueryCandidate{{ChunkID: 10, AbsPath: "/tmp/project/scoped.go"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(signals) != 1 || signals[10].ObservationID == nil || signals[10].AppliedScore == 0 {
+		t.Fatalf("scoped active signals = %+v", signals)
+	}
+	signals, err = svc.ComputeVSAQuerySignals(ctx, VSAQuerySignalsRequest{
+		WorkspaceID: "workspace-a", LaneID: "other-lane", Query: "alpha subsystem",
+		Candidates: []VSAQueryCandidate{{ChunkID: 10, AbsPath: "/tmp/project/scoped.go"}},
+	})
+	if err != nil || len(signals) != 0 {
+		t.Fatalf("mismatched head influenced scoring: signals=%+v err=%v", signals, err)
 	}
 }
 

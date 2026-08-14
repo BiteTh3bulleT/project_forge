@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/artifacts"
 	"forge/projectforge/services/core/internal/dossiers"
 	"forge/projectforge/services/core/internal/evaluations"
@@ -148,6 +149,7 @@ func (s *Server) handleCreateRetrievalRun(w http.ResponseWriter, r *http.Request
 		return
 	}
 	started := time.Now()
+	retrievalRequestID := retrieval.NewEvidenceRequestID()
 	run, err := s.retrieval.Run(r.Context(), retrieval.RunRequest{
 		Query:           body.Query,
 		Mode:            retrieval.Mode(strings.TrimSpace(body.Mode)),
@@ -162,6 +164,15 @@ func (s *Server) handleCreateRetrievalRun(w http.ResponseWriter, r *http.Request
 		JobID:           body.JobID,
 		PacketID:        body.PacketID.Value,
 		Notes:           body.Notes,
+		Actor:           domain.ActorIdentity{ID: authenticatedActorName(r), Kind: "user"},
+		Source:          domain.SourceUser,
+		Scope:           domain.ForgeScope{WorkspaceID: strings.TrimSpace(s.cfg.WorkspaceDir), LaneID: "control.semantic"},
+		Provenance:      domain.Provenance{Actor: authenticatedActorName(r), ActorType: "user", Source: "api.retrieval"},
+		CorrelationID:   middleware.GetReqID(r.Context()),
+		TraceID:         middleware.GetReqID(r.Context()),
+		RequestID:       retrievalRequestID,
+		IdempotencyKey:  retrievalRequestID,
+		RequestedAt:     started.UnixMilli(),
 	})
 	if err != nil {
 		writeAPIRequestError(w, http.StatusBadRequest, err)
@@ -326,20 +337,53 @@ func (s *Server) handleMarkRetrievalUsefulness(w http.ResponseWriter, r *http.Re
 		return
 	}
 	var body struct {
-		Label    string        `json:"label"`
-		Note     string        `json:"note"`
-		JobID    *string       `json:"jobId"`
-		PacketID optionalInt64 `json:"packetId"`
+		Label          string         `json:"label"`
+		Note           string         `json:"note"`
+		JobID          *string        `json:"jobId"`
+		PacketID       optionalInt64  `json:"packetId"`
+		WorkspaceID    string         `json:"workspaceId"`
+		LaneID         string         `json:"laneId"`
+		SelectedPaths  []string       `json:"selectedPaths"`
+		IdempotencyKey string         `json:"idempotencyKey"`
+		CorrelationID  string         `json:"correlationId,omitempty"`
+		TraceID        string         `json:"traceId,omitempty"`
+		Metadata       map[string]any `json:"metadata,omitempty"`
 	}
 	if err := decodePhase3JSONBody(r, &body); err != nil {
 		writePhase3DecodeError(w, err)
 		return
 	}
-	if err := s.retrieval.MarkUsefulness(r.Context(), resultID, body.Label, body.Note, body.JobID, body.PacketID.Value); err != nil {
+	workspaceID := strings.TrimSpace(body.WorkspaceID)
+	laneID := strings.TrimSpace(body.LaneID)
+	idempotencyKey := strings.TrimSpace(body.IdempotencyKey)
+	if workspaceID == "" || laneID == "" || len(body.SelectedPaths) == 0 || idempotencyKey == "" {
+		writeAPIError(w, http.StatusBadRequest, "request_failed", "workspaceId, laneId, selectedPaths, and idempotencyKey are required", nil)
+		return
+	}
+	actor := authenticatedActorName(r)
+	actorSource := authenticatedActorSource(r)
+	requestID := utilitySyscallRequestID("retrieval-usefulness", idempotencyKey, strconv.FormatInt(resultID, 10))
+	correlationID := strings.TrimSpace(body.CorrelationID)
+	if correlationID == "" {
+		correlationID = requestID + ":correlation"
+	}
+	traceID := strings.TrimSpace(body.TraceID)
+	if traceID == "" {
+		traceID = requestID + ":trace"
+	}
+	result, err := s.retrieval.RecordUsefulness(r.Context(), retrieval.UsefulnessRequest{
+		ResultID: resultID, Label: body.Label, Note: body.Note, JobID: body.JobID, PacketID: body.PacketID.Value,
+		Metadata: body.Metadata, Actor: domain.ActorIdentity{ID: actor, Kind: "user"}, Source: domain.SourceUser,
+		Scope:         domain.ForgeScope{WorkspaceID: workspaceID, LaneID: laneID, SelectedPaths: append([]string(nil), body.SelectedPaths...)},
+		Provenance:    domain.Provenance{Actor: actor, ActorType: "user", Source: actorSource, TraceID: traceID},
+		CorrelationID: correlationID, TraceID: traceID, RequestID: requestID,
+		IdempotencyKey: idempotencyKey, RequestedAt: time.Now().UnixMilli(),
+	})
+	if err != nil {
 		writeAPIRequestError(w, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "resultId": resultID})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "resultId": resultID, "result": result})
 }
 
 func (s *Server) handleCreateDossier(w http.ResponseWriter, r *http.Request) {

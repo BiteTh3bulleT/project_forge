@@ -73,6 +73,14 @@ func (p *Processor) apply(ctx context.Context, store SemanticStore, req domain.S
 		return applyValidateContextAttribution(req)
 	case domain.ActionAdmitEvidence, domain.ActionAppealRuling:
 		return applyCourtDecision(store, req)
+	case domain.ActionRecordRetrievalEvidence:
+		return applyRecordRetrievalEvidence(ctx, store, req)
+	case domain.ActionRebuildMemoryAcceleration:
+		return applyRebuildMemoryAcceleration(ctx, store, req)
+	case domain.ActionRecordRetrievalUsefulness:
+		return applyRecordRetrievalUsefulness(ctx, store, req)
+	case domain.ActionRecordRestoreOutcomeFeedback:
+		return applyRecordRestoreOutcomeFeedback(ctx, store, req)
 	default:
 		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrUnsupportedAction, Field: "action", Message: "unsupported action"}}
 	}
@@ -709,7 +717,64 @@ func listRestoreOutcomeSignals(ctx context.Context, store SemanticStore, scope d
 	if err != nil {
 		return nil, []string{"restore outcome feedback lookup failed: " + err.Error()}
 	}
+	for index := range events {
+		projection, found, projectionErr := store.GetRestoreOutcomeFeedbackProjection(ctx, events[index].ID, domain.ForgeScope{
+			WorkspaceID:   events[index].WorkspaceID,
+			LaneID:        events[index].LaneID,
+			SelectedPaths: append([]string(nil), scope.SelectedPaths...),
+		})
+		if projectionErr != nil {
+			return nil, []string{"restore outcome feedback projection lookup failed: " + projectionErr.Error()}
+		}
+		if found && exactUtilityScopeMatches(scope, projection.Scope) {
+			events[index] = effectiveRestoreOutcomeUtilitySignal(events[index], &projection)
+		} else {
+			events[index] = effectiveRestoreOutcomeUtilitySignal(events[index], nil)
+		}
+	}
 	return events, nil
+}
+
+func effectiveRestoreOutcomeUtilitySignal(original RestoreOutcomeEvent, projection *RestoreOutcomeFeedbackProjection) RestoreOutcomeEvent {
+	effective := original
+	effective.Metadata = cloneIntegrityValue(nonNilMap(original.Metadata))
+	effective.Metadata["utilityOriginalOutcome"] = original.Outcome
+	if projection != nil && projection.NonCanonical && projection.RestoreOutcomeID == original.ID &&
+		strings.TrimSpace(projection.LatestEventID) != "" {
+		effective.Outcome = projection.Outcome
+		effective.OutcomeConfidence = projection.OutcomeConfidence
+		effective.OperatorFeedback = projection.OperatorFeedback
+		effective.CorrectionSummary = projection.CorrectionSummary
+		effective.UpdatedAt = projection.UpdatedAt
+		effective.Metadata["utilityEvidenceSource"] = "governed_feedback_projection"
+		effective.Metadata["utilityProjectionEventId"] = projection.LatestEventID
+		return effective
+	}
+	if hasLegacyMutableRestoreFeedback(original) {
+		effective.Outcome = RestoreOutcomeUnknown
+		effective.OutcomeConfidence = 0
+		effective.OperatorFeedback = ""
+		effective.CorrectionSummary = ""
+		effective.Metadata["utilityEvidenceSource"] = "legacy_mutable_feedback_ignored"
+		return effective
+	}
+	effective.Metadata["utilityEvidenceSource"] = "original_restore_outcome"
+	return effective
+}
+
+func hasLegacyMutableRestoreFeedback(event RestoreOutcomeEvent) bool {
+	if strings.TrimSpace(event.OperatorFeedback) != "" || strings.TrimSpace(event.CorrectionSummary) != "" {
+		return true
+	}
+	if event.UpdatedAt > event.CreatedAt {
+		return true
+	}
+	for _, key := range []string{"feedback_history", "last_feedback_by", "non_canonical_evidence"} {
+		if _, exists := event.Metadata[key]; exists {
+			return true
+		}
+	}
+	return false
 }
 
 func buildRestoreOutcomeEvent(req domain.SyscallRequest, packet domain.ContextPacket, snapshot compiledContextSnapshot, selection compileContextRestoreSelection, selectedEvidence []string, selectedHeaderOnly bool) RestoreOutcomeEvent {

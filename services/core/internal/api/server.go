@@ -239,6 +239,8 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	if kernelAuthorityErr != nil {
 		kernelErr = kernelAuthorityErr.Error()
 		apiLogWarn("semantic kernel authority unavailable; semantic mutation paths disabled", apiLogErr(kernelAuthorityErr))
+	} else {
+		retrievalSvc.SetSyscallProcessor(kernelAuthority.Processor)
 	}
 	var autonomyLoop *AutonomyMaintenanceLoop
 	if kernelAuthorityErr == nil {

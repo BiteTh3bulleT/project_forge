@@ -11,8 +11,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 )
+
+var ErrVSAProjectionAuthorityRequired = errors.New("VSA projection writes require governed FORGE-K rebuild")
 
 type vsaRuntimeSettings struct {
 	Mode              string
@@ -84,61 +85,11 @@ func (s *Service) setting(ctx context.Context, key, def string) string {
 }
 
 func (s *Service) upsertVSAPointer(ctx context.Context, pointer VSAPointerRecord) error {
-	now := time.Now().UnixMilli()
-	_, err := s.db.ExecContext(ctx, `
-INSERT INTO memory_vsa_pointers(
-  observation_id, dims, pointer_json, norm, source_fingerprint, stale, metadata_json, created_at, updated_at
-) VALUES(?,?,?,?,?,?,?,?,?)
-ON CONFLICT(observation_id) DO UPDATE SET
-  dims=excluded.dims,
-  pointer_json=excluded.pointer_json,
-  norm=excluded.norm,
-  source_fingerprint=excluded.source_fingerprint,
-  stale=excluded.stale,
-  metadata_json=excluded.metadata_json,
-  updated_at=excluded.updated_at`,
-		pointer.ObservationID,
-		pointer.Dims,
-		string(pointer.Pointer),
-		pointer.Norm,
-		pointer.SourceFingerprint,
-		boolToInt(pointer.Stale),
-		string(pointer.Metadata),
-		now,
-		now,
-	)
-	return err
+	return ErrVSAProjectionAuthorityRequired
 }
 
 func (s *Service) updateVSABindings(ctx context.Context, observationID int64, engine *VSAEngine, obs Observation) error {
-	bindings := extractObservationRoleBindings(obs)
-	_, _ = s.db.ExecContext(ctx, `DELETE FROM memory_vsa_role_bindings WHERE observation_id = ?`, observationID)
-	if len(bindings) == 0 {
-		return nil
-	}
-	now := time.Now().UnixMilli()
-	for _, b := range bindings {
-		vec := engine.Bind(engine.EncodeText(b.Role), engine.EncodeText(b.Filler))
-		vecJSON, _ := json.Marshal(vec)
-		_, err := s.db.ExecContext(ctx, `
-INSERT INTO memory_vsa_role_bindings(
-  observation_id, role, filler, weight, support_count, noise_count, binding_json, created_at, updated_at
-) VALUES(?,?,?,?,?,?,?,?,?)`,
-			observationID,
-			b.Role,
-			b.Filler,
-			b.Weight,
-			0,
-			0,
-			string(vecJSON),
-			now,
-			now,
-		)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return ErrVSAProjectionAuthorityRequired
 }
 
 func extractObservationRoleBindings(obs Observation) []VSARoleBindingSeed {
@@ -174,71 +125,7 @@ func extractObservationRoleBindings(obs Observation) []VSARoleBindingSeed {
 }
 
 func (s *Service) refreshVSAAssociationsFromLinks(ctx context.Context, observationID int64) error {
-	// Clear existing directional associations involving this observation and regenerate.
-	_, _ = s.db.ExecContext(ctx, `DELETE FROM memory_vsa_associations WHERE from_observation_id = ? OR to_observation_id = ?`, observationID, observationID)
-	rows, err := s.db.QueryContext(ctx, `
-SELECT from_observation_id, to_observation_id, relation_type
-FROM memory_observation_links
-WHERE from_observation_id = ? OR to_observation_id = ?
-ORDER BY id ASC`, observationID, observationID)
-	if err != nil {
-		return err
-	}
-	type assocSeed struct {
-		fromID       int64
-		toID         int64
-		relationType string
-	}
-	seeds := []assocSeed{}
-	for rows.Next() {
-		var seed assocSeed
-		if err := rows.Scan(&seed.fromID, &seed.toID, &seed.relationType); err != nil {
-			_ = rows.Close()
-			return err
-		}
-		seeds = append(seeds, seed)
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return err
-	}
-	_ = rows.Close()
-
-	now := time.Now().UnixMilli()
-	for _, seed := range seeds {
-		strength := 0.5
-		switch strings.TrimSpace(strings.ToLower(seed.relationType)) {
-		case "depends_on", "blocks", "blocked_by":
-			strength = 0.75
-		case "duplicates", "similar", "related":
-			strength = 0.6
-		case "supports", "evidence":
-			strength = 0.7
-		}
-		evidenceJSON, _ := json.Marshal(map[string]any{"relationType": seed.relationType})
-		_, err := s.db.ExecContext(ctx, `
-INSERT INTO memory_vsa_associations(
-  from_observation_id, to_observation_id, association_type, strength, support_count, noise_count, evidence_json, created_at, updated_at
-) VALUES(?,?,?,?,?,?,?,?,?)
-ON CONFLICT(from_observation_id, to_observation_id, association_type) DO UPDATE SET
-  strength=excluded.strength,
-  evidence_json=excluded.evidence_json,
-  updated_at=excluded.updated_at`,
-			seed.fromID,
-			seed.toID,
-			nonEmptyStr(strings.TrimSpace(seed.relationType), "related"),
-			strength,
-			0,
-			0,
-			string(evidenceJSON),
-			now,
-			now,
-		)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return ErrVSAProjectionAuthorityRequired
 }
 
 func nonEmptyStr(v, fallback string) string {
@@ -275,100 +162,88 @@ func (s *Service) reindexObservationVSA(ctx context.Context, observationID int64
 }
 
 func (s *Service) reindexObservationVSAWithEvidence(ctx context.Context, observationID int64, reason string, runID *int64, force bool, beforeEvidence, afterEvidence map[string]any, note string) (string, string, string, error) {
-	reason = nonEmptyStr(strings.TrimSpace(reason), "reindex")
-	obsDetail, err := s.GetObservation(ctx, observationID)
-	if err != nil {
-		return "", "", "failed", err
-	}
-	obs := obsDetail.Observation
-	fingerprint := s.observationFingerprint(obs)
-	cfg := s.runtimeVSASettings(ctx)
+	// Observation-local indexing cannot prove an exact scoped source-set and
+	// algorithm manifest. The governed FORGE-K rebuild is the sole writer.
+	return "", "", "blocked", ErrVSAProjectionAuthorityRequired
+	/*
+		reason = nonEmptyStr(strings.TrimSpace(reason), "reindex")
+		obsDetail, err := s.GetObservation(ctx, observationID)
+		if err != nil {
+			return "", "", "failed", err
+		}
+		obs := obsDetail.Observation
+		fingerprint := s.observationFingerprint(obs)
+		cfg := s.runtimeVSASettings(ctx)
 
-	var existingFP sql.NullString
-	_ = s.db.QueryRowContext(ctx, `SELECT source_fingerprint FROM memory_vsa_pointers WHERE observation_id = ?`, observationID).Scan(&existingFP)
-	before := ""
-	if existingFP.Valid {
-		before = existingFP.String
-	}
-	beforePayload := map[string]any{"fingerprint": before}
-	for k, v := range beforeEvidence {
-		beforePayload[k] = v
-	}
-	afterPayload := map[string]any{"fingerprint": fingerprint}
-	for k, v := range afterEvidence {
-		afterPayload[k] = v
-	}
-	if cfg.Mode == "off" {
-		if runID != nil {
-			beforePayload["reason"] = "vsa_mode_off"
-			_ = s.insertVSAReindexItem(ctx, *runID, observationID, "skipped", reason, before, fingerprint, beforePayload, afterPayload, nonEmptyStr(note, "retrieval_vsa_mode=off"))
+		var existingFP sql.NullString
+		_ = s.db.QueryRowContext(ctx, `SELECT source_fingerprint FROM memory_vsa_pointers WHERE observation_id = ?`, observationID).Scan(&existingFP)
+		before := ""
+		if existingFP.Valid {
+			before = existingFP.String
 		}
-		return before, fingerprint, "skipped", nil
-	}
-	if !force && before != "" && before == fingerprint {
-		if runID != nil {
-			beforePayload["reason"] = "fingerprint_unchanged"
-			_ = s.insertVSAReindexItem(ctx, *runID, observationID, "skipped", reason, before, fingerprint, beforePayload, afterPayload, note)
+		beforePayload := map[string]any{"fingerprint": before}
+		for k, v := range beforeEvidence {
+			beforePayload[k] = v
 		}
-		return before, fingerprint, "skipped", nil
-	}
+		afterPayload := map[string]any{"fingerprint": fingerprint}
+		for k, v := range afterEvidence {
+			afterPayload[k] = v
+		}
+		if cfg.Mode == "off" {
+			if runID != nil {
+				beforePayload["reason"] = "vsa_mode_off"
+				_ = s.insertVSAReindexItem(ctx, *runID, observationID, "skipped", reason, before, fingerprint, beforePayload, afterPayload, nonEmptyStr(note, "retrieval_vsa_mode=off"))
+			}
+			return before, fingerprint, "skipped", nil
+		}
+		if !force && before != "" && before == fingerprint {
+			if runID != nil {
+				beforePayload["reason"] = "fingerprint_unchanged"
+				_ = s.insertVSAReindexItem(ctx, *runID, observationID, "skipped", reason, before, fingerprint, beforePayload, afterPayload, note)
+			}
+			return before, fingerprint, "skipped", nil
+		}
 
-	engine := NewVSAEngine(cfg.Dims, cfg.Seed)
-	pointerVec := engine.ComposeObservationPointer(obs)
-	pointerJSON, _ := json.Marshal(pointerVec)
-	pointer := VSAPointerRecord{
-		ObservationID:     observationID,
-		Dims:              cfg.Dims,
-		Pointer:           pointerJSON,
-		Norm:              vectorNorm(pointerVec),
-		SourceFingerprint: fingerprint,
-		Stale:             false,
-		Metadata:          mustRawJSON(map[string]any{"updatedAtMs": time.Now().UnixMilli()}),
-	}
-	if err := s.upsertVSAPointer(ctx, pointer); err != nil {
-		if runID != nil {
-			_ = s.insertVSAReindexItem(ctx, *runID, observationID, "failed", reason, before, fingerprint, beforePayload, afterPayload, err.Error())
+		engine := NewVSAEngine(cfg.Dims, cfg.Seed)
+		pointerVec := engine.ComposeObservationPointer(obs)
+		pointerJSON, _ := json.Marshal(pointerVec)
+		pointer := VSAPointerRecord{
+			ObservationID:     observationID,
+			Dims:              cfg.Dims,
+			Pointer:           pointerJSON,
+			Norm:              vectorNorm(pointerVec),
+			SourceFingerprint: fingerprint,
+			Stale:             false,
+			Metadata:          mustRawJSON(map[string]any{"updatedAtMs": time.Now().UnixMilli()}),
 		}
-		return before, fingerprint, "failed", err
-	}
-	if err := s.updateVSABindings(ctx, observationID, engine, obs); err != nil {
-		if runID != nil {
-			_ = s.insertVSAReindexItem(ctx, *runID, observationID, "failed", reason, before, fingerprint, beforePayload, afterPayload, err.Error())
+		if err := s.upsertVSAPointer(ctx, pointer); err != nil {
+			if runID != nil {
+				_ = s.insertVSAReindexItem(ctx, *runID, observationID, "failed", reason, before, fingerprint, beforePayload, afterPayload, err.Error())
+			}
+			return before, fingerprint, "failed", err
 		}
-		return before, fingerprint, "failed", err
-	}
-	if err := s.refreshVSAAssociationsFromLinks(ctx, observationID); err != nil {
-		if runID != nil {
-			_ = s.insertVSAReindexItem(ctx, *runID, observationID, "failed", reason, before, fingerprint, beforePayload, afterPayload, err.Error())
+		if err := s.updateVSABindings(ctx, observationID, engine, obs); err != nil {
+			if runID != nil {
+				_ = s.insertVSAReindexItem(ctx, *runID, observationID, "failed", reason, before, fingerprint, beforePayload, afterPayload, err.Error())
+			}
+			return before, fingerprint, "failed", err
 		}
-		return before, fingerprint, "failed", err
-	}
+		if err := s.refreshVSAAssociationsFromLinks(ctx, observationID); err != nil {
+			if runID != nil {
+				_ = s.insertVSAReindexItem(ctx, *runID, observationID, "failed", reason, before, fingerprint, beforePayload, afterPayload, err.Error())
+			}
+			return before, fingerprint, "failed", err
+		}
 
-	if runID != nil {
-		_ = s.insertVSAReindexItem(ctx, *runID, observationID, "indexed", reason, before, fingerprint, beforePayload, afterPayload, note)
-	}
-	return before, fingerprint, "indexed", nil
+		if runID != nil {
+			_ = s.insertVSAReindexItem(ctx, *runID, observationID, "indexed", reason, before, fingerprint, beforePayload, afterPayload, note)
+		}
+		return before, fingerprint, "indexed", nil
+	*/
 }
 
 func (s *Service) insertVSAReindexItem(ctx context.Context, runID, observationID int64, status, reason, beforeFP, afterFP string, before, after map[string]any, note string) error {
-	beforeJSON, _ := json.Marshal(before)
-	afterJSON, _ := json.Marshal(after)
-	_, err := s.db.ExecContext(ctx, `
-INSERT INTO memory_vsa_reindex_items(
-  reindex_run_id, observation_id, status, reason, before_fingerprint, after_fingerprint, before_json, after_json, note, created_at
-) VALUES(?,?,?,?,?,?,?,?,?,?)`,
-		runID,
-		observationID,
-		status,
-		reason,
-		beforeFP,
-		afterFP,
-		string(beforeJSON),
-		string(afterJSON),
-		note,
-		time.Now().UnixMilli(),
-	)
-	return err
+	return ErrVSAProjectionAuthorityRequired
 }
 
 func (s *Service) ReindexObservationVSA(ctx context.Context, observationID int64, reason string, runID *int64) error {
@@ -377,53 +252,14 @@ func (s *Service) ReindexObservationVSA(ctx context.Context, observationID int64
 }
 
 func (s *Service) createVSAReindexRun(ctx context.Context, req RunVSAReindexRequest) (int64, error) {
-	now := time.Now().UnixMilli()
-	mode := strings.TrimSpace(req.Mode)
-	if mode == "" {
-		mode = "manual"
-	}
-	if req.Limit <= 0 || req.Limit > 500 {
-		req.Limit = 150
-	}
-	cfg := s.runtimeVSASettings(ctx)
-	settingsJSON, _ := json.Marshal(cfg)
-	res, err := s.db.ExecContext(ctx, `
-INSERT INTO memory_vsa_reindex_runs(
-  created_at, started_at, dossier_id, mode, status, triggered_by, note, settings_json
-) VALUES(?,?,?,?,?,?,?,?)`,
-		now,
-		now,
-		nullInt64(req.DossierID),
-		mode,
-		"running",
-		nonEmptyStr(req.TriggeredBy, "operator"),
-		strings.TrimSpace(req.Note),
-		string(settingsJSON),
-	)
-	if err != nil {
-		return 0, err
-	}
-	id, _ := res.LastInsertId()
-	return id, nil
+	return 0, ErrVSAProjectionAuthorityRequired
 }
 
 func (s *Service) completeVSAReindexRun(ctx context.Context, runID int64, candidates, indexed, skipped, failed int) {
-	_, _ = s.db.ExecContext(ctx, `
-UPDATE memory_vsa_reindex_runs
-SET completed_at = ?, status = ?, candidates = ?, indexed = ?, skipped = ?, failed = ?
-WHERE id = ?`,
-		time.Now().UnixMilli(),
-		"completed",
-		candidates,
-		indexed,
-		skipped,
-		failed,
-		runID,
-	)
 }
 
 func (s *Service) vsaReindexCandidates(ctx context.Context, req RunVSAReindexRequest) ([]int64, error) {
-	return s.selectVSAReindexCandidates(ctx, req, true)
+	return s.selectVSAReindexCandidates(ctx, req, false)
 }
 
 func (s *Service) selectVSAReindexCandidates(ctx context.Context, req RunVSAReindexRequest, markStale bool) ([]int64, error) {
@@ -511,12 +347,8 @@ WHERE 1=1`
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	if markStale && len(staleMarker) > 0 {
-		now := time.Now().UnixMilli()
-		for _, id := range staleMarker {
-			_, _ = s.db.ExecContext(ctx, `UPDATE memory_vsa_pointers SET stale = 1, updated_at = ? WHERE observation_id = ?`, now, id)
-		}
-	}
+	_ = markStale
+	_ = staleMarker
 	return out, nil
 }
 
@@ -544,37 +376,7 @@ func (s *Service) PreviewVSAReindex(ctx context.Context, req RunVSAReindexReques
 }
 
 func (s *Service) RunVSAReindex(ctx context.Context, req RunVSAReindexRequest) (*VSAReindexRunDetail, error) {
-	if req.Limit <= 0 || req.Limit > 500 {
-		req.Limit = 150
-	}
-	runID, err := s.createVSAReindexRun(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	ids, err := s.vsaReindexCandidates(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	indexed := 0
-	skipped := 0
-	failed := 0
-	for _, observationID := range ids {
-		_, _, status, reindexErr := s.reindexObservationVSA(ctx, observationID, nonEmptyStr(req.Reason, "manual_reindex"), &runID, req.Force)
-		if reindexErr != nil {
-			failed++
-			continue
-		}
-		switch status {
-		case "indexed":
-			indexed++
-		case "skipped":
-			skipped++
-		default:
-			skipped++
-		}
-	}
-	s.completeVSAReindexRun(ctx, runID, len(ids), indexed, skipped, failed)
-	return s.GetVSAReindexRun(ctx, runID)
+	return nil, ErrVSAProjectionAuthorityRequired
 }
 
 func (s *Service) ListVSAReindexRuns(ctx context.Context, limit int, dossierID *int64) ([]VSAReindexRun, error) {
@@ -660,9 +462,14 @@ func (s *Service) GetObservationVSA(ctx context.Context, observationID int64) (*
 		return detail, nil
 	}
 	row := s.db.QueryRowContext(ctx, `
-SELECT id, observation_id, dims, pointer_json, norm, source_fingerprint, stale, metadata_json, created_at, updated_at
-FROM memory_vsa_pointers
-WHERE observation_id = ?`, observationID)
+SELECT vp.id, vp.observation_id, vp.dims, vp.pointer_json, vp.norm, vp.source_fingerprint,
+       vp.support_count, vp.noise_count, vp.stale, vp.metadata_json, vp.created_at, vp.updated_at
+FROM memory_vsa_pointers vp
+JOIN memory_observations mo ON mo.id=vp.observation_id
+JOIN memory_vsa_projection_heads h
+  ON h.workspace_id=vp.workspace_id AND h.lane_id=vp.lane_id AND h.manifest_hash=vp.manifest_hash
+WHERE vp.observation_id=? AND vp.workspace_id<>'' AND vp.lane_id<>'' AND vp.manifest_hash<>''
+  AND mo.workspace_id=vp.workspace_id AND mo.lane_id=vp.lane_id`, observationID)
 	var stale int
 	var pointer, metadata string
 	pointerRecord := VSAPointerRecord{}
@@ -673,6 +480,8 @@ WHERE observation_id = ?`, observationID)
 		&pointer,
 		&pointerRecord.Norm,
 		&pointerRecord.SourceFingerprint,
+		&pointerRecord.SupportCount,
+		&pointerRecord.NoiseCount,
 		&stale,
 		&metadata,
 		&pointerRecord.CreatedAtMs,
@@ -703,10 +512,12 @@ WHERE observation_id = ?`, observationID)
 
 func (s *Service) loadVSARoleBindings(ctx context.Context, observationID int64) ([]VSARoleBinding, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, observation_id, role, filler, weight, support_count, noise_count, binding_json, created_at, updated_at
-FROM memory_vsa_role_bindings
-WHERE observation_id = ?
-ORDER BY role ASC, filler ASC`, observationID)
+SELECT b.id, b.observation_id, b.role, b.filler, b.weight, b.support_count, b.noise_count, b.binding_json, b.created_at, b.updated_at
+FROM memory_vsa_role_bindings b
+JOIN memory_vsa_projection_heads h
+  ON h.workspace_id=b.workspace_id AND h.lane_id=b.lane_id AND h.manifest_hash=b.manifest_hash
+WHERE b.observation_id=? AND b.workspace_id<>'' AND b.lane_id<>'' AND b.manifest_hash<>''
+ORDER BY b.role ASC, b.filler ASC`, observationID)
 	if err != nil {
 		return nil, err
 	}
@@ -740,10 +551,13 @@ func (s *Service) loadVSAAssociations(ctx context.Context, observationID int64, 
 		limit = 120
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, from_observation_id, to_observation_id, association_type, strength, support_count, noise_count, evidence_json, created_at, updated_at
-FROM memory_vsa_associations
-WHERE from_observation_id = ? OR to_observation_id = ?
-ORDER BY strength DESC, id DESC
+SELECT a.id, a.from_observation_id, a.to_observation_id, a.association_type, a.strength, a.support_count, a.noise_count, a.evidence_json, a.created_at, a.updated_at
+FROM memory_vsa_associations a
+JOIN memory_vsa_projection_heads h
+  ON h.workspace_id=a.workspace_id AND h.lane_id=a.lane_id AND h.manifest_hash=a.manifest_hash
+WHERE a.workspace_id<>'' AND a.lane_id<>'' AND a.manifest_hash<>''
+  AND (a.from_observation_id=? OR a.to_observation_id=?)
+ORDER BY a.strength DESC, a.id DESC
 LIMIT ?`, observationID, observationID, limit)
 	if err != nil {
 		return nil, err
@@ -782,17 +596,20 @@ func (s *Service) DossierVSASummary(ctx context.Context, dossierID int64) (*Doss
 SELECT COUNT(*)
 FROM memory_vsa_pointers vp
 JOIN memory_observations mo ON mo.id = vp.observation_id
-WHERE mo.dossier_id = ?`, dossierID).Scan(&summary.PointerCount)
+JOIN memory_vsa_projection_heads h ON h.workspace_id=vp.workspace_id AND h.lane_id=vp.lane_id AND h.manifest_hash=vp.manifest_hash
+WHERE mo.dossier_id=? AND vp.workspace_id<>'' AND vp.lane_id<>'' AND vp.manifest_hash<>''`, dossierID).Scan(&summary.PointerCount)
 	_ = s.db.QueryRowContext(ctx, `
 SELECT COUNT(*)
 FROM memory_vsa_role_bindings vb
 JOIN memory_observations mo ON mo.id = vb.observation_id
-WHERE mo.dossier_id = ?`, dossierID).Scan(&summary.BindingCount)
+JOIN memory_vsa_projection_heads h ON h.workspace_id=vb.workspace_id AND h.lane_id=vb.lane_id AND h.manifest_hash=vb.manifest_hash
+WHERE mo.dossier_id=? AND vb.workspace_id<>'' AND vb.lane_id<>'' AND vb.manifest_hash<>''`, dossierID).Scan(&summary.BindingCount)
 	_ = s.db.QueryRowContext(ctx, `
 SELECT COUNT(*)
 FROM memory_vsa_associations va
 JOIN memory_observations mo ON mo.id = va.from_observation_id
-WHERE mo.dossier_id = ?`, dossierID).Scan(&summary.AssociationCount)
+JOIN memory_vsa_projection_heads h ON h.workspace_id=va.workspace_id AND h.lane_id=va.lane_id AND h.manifest_hash=va.manifest_hash
+WHERE mo.dossier_id=? AND va.workspace_id<>'' AND va.lane_id<>'' AND va.manifest_hash<>''`, dossierID).Scan(&summary.AssociationCount)
 
 	var runID sql.NullInt64
 	var created sql.NullInt64
@@ -825,35 +642,7 @@ LIMIT 1`, dossierID).Scan(&runID, &created)
 }
 
 func (s *Service) TouchVSAReliabilityFromUsefulness(ctx context.Context, observationID int64, signal string, weight float64) error {
-	if s.runtimeVSASettings(ctx).Mode == "off" {
-		return nil
-	}
-	signal = strings.ToLower(strings.TrimSpace(signal))
-	if signal == "" {
-		return nil
-	}
-	deltaSupport := 0
-	deltaNoise := 0
-	switch signal {
-	case "useful", "success", "succeeded":
-		deltaSupport = int(math.Max(1, math.Round(math.Abs(weight))))
-	case "not_useful", "noisy", "misleading", "failed", "failure":
-		deltaNoise = int(math.Max(1, math.Round(math.Abs(weight))))
-	default:
-		return nil
-	}
-	if deltaSupport == 0 && deltaNoise == 0 {
-		return nil
-	}
-	_, _ = s.db.ExecContext(ctx, `
-UPDATE memory_vsa_role_bindings
-SET support_count = support_count + ?, noise_count = noise_count + ?, updated_at = ?
-WHERE observation_id = ?`, deltaSupport, deltaNoise, time.Now().UnixMilli(), observationID)
-	_, _ = s.db.ExecContext(ctx, `
-UPDATE memory_vsa_associations
-SET support_count = support_count + ?, noise_count = noise_count + ?, updated_at = ?
-WHERE from_observation_id = ? OR to_observation_id = ?`, deltaSupport, deltaNoise, time.Now().UnixMilli(), observationID, observationID)
-	return nil
+	return ErrVSAProjectionAuthorityRequired
 }
 
 func scanVSAReindexRun(scanner interface{ Scan(dest ...any) error }) (VSAReindexRun, error) {

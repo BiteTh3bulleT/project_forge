@@ -27,6 +27,10 @@ const (
 	CapContextAttributionValidate = "context.attribution.validate"
 	CapEvidenceAdmit              = "court.evidence.admit"
 	CapRulingAppeal               = "court.ruling.appeal"
+	CapRetrievalEvidenceRecord    = "retrieval.evidence.record"
+	CapMemoryAccelerationRebuild  = "memory.acceleration.rebuild"
+	CapRetrievalUsefulnessRecord  = "retrieval.usefulness.record"
+	CapRestoreOutcomeFeedback     = "context.restore.outcome.feedback.record"
 )
 
 type ActionDefinition struct {
@@ -220,6 +224,42 @@ func NewStaticActionRegistry() *StaticActionRegistry {
 			ApprovalPossible: true,
 			TargetObjectType: "court_appeal_ruling",
 			AuditEventName:   "semantic_syscall.appeal_ruling",
+		},
+		domain.ActionRecordRetrievalEvidence: {
+			Action:           domain.ActionRecordRetrievalEvidence,
+			Capability:       CapRetrievalEvidenceRecord,
+			Mutating:         true,
+			SupportsDryRun:   true,
+			ApprovalPossible: false,
+			TargetObjectType: "retrieval_evidence_bundle",
+			AuditEventName:   "semantic_syscall.record_retrieval_evidence",
+		},
+		domain.ActionRebuildMemoryAcceleration: {
+			Action:           domain.ActionRebuildMemoryAcceleration,
+			Capability:       CapMemoryAccelerationRebuild,
+			Mutating:         true,
+			SupportsDryRun:   false,
+			ApprovalPossible: true,
+			TargetObjectType: "memory_acceleration_projection",
+			AuditEventName:   "semantic_syscall.rebuild_memory_acceleration",
+		},
+		domain.ActionRecordRetrievalUsefulness: {
+			Action:           domain.ActionRecordRetrievalUsefulness,
+			Capability:       CapRetrievalUsefulnessRecord,
+			Mutating:         true,
+			SupportsDryRun:   true,
+			ApprovalPossible: false,
+			TargetObjectType: "retrieval_usefulness_evidence",
+			AuditEventName:   "semantic_syscall.record_retrieval_usefulness",
+		},
+		domain.ActionRecordRestoreOutcomeFeedback: {
+			Action:           domain.ActionRecordRestoreOutcomeFeedback,
+			Capability:       CapRestoreOutcomeFeedback,
+			Mutating:         true,
+			SupportsDryRun:   true,
+			ApprovalPossible: false,
+			TargetObjectType: "restore_outcome_feedback_evidence",
+			AuditEventName:   "semantic_syscall.record_restore_outcome_feedback",
 		},
 	}
 	return &StaticActionRegistry{definitions: defs}

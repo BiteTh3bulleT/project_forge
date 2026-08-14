@@ -136,6 +136,20 @@ original request, plan, seal, receipt, and stable idempotency fingerprint. A
 verified replay performs no new canonical commit. Conflicting fingerprints and
 legacy unbound records fail closed.
 
+## Utility evidence event
+
+An immutable, provenance-bound FORGE-K event recording an operator utility
+assessment without rewriting its source evidence. K20G uses these events for
+retrieval usefulness and restore-outcome feedback. Their journal, audit-outbox,
+and optional idempotency proof share the canonical commit transaction.
+
+## Utility feedback projection
+
+A separately stored, explicitly noncanonical view rebuilt from ordered utility
+evidence events. It may support ranking or operator display, but never replaces
+the original retrieval result, restore outcome, event history, or journal
+proof.
+
 ## AuthorizationProof
 
 Typed production FORGE-K evidence binding a trusted service principal or
