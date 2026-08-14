@@ -25,6 +25,8 @@ const (
 	CapSemanticOperationValidate  = "semantic.operation.validate"
 	CapAdmissionCandidateValidate = "admission.candidate.validate"
 	CapContextAttributionValidate = "context.attribution.validate"
+	CapEvidenceAdmit              = "court.evidence.admit"
+	CapRulingAppeal               = "court.ruling.appeal"
 )
 
 type ActionDefinition struct {
@@ -200,6 +202,24 @@ func NewStaticActionRegistry() *StaticActionRegistry {
 			ApprovalPossible: false,
 			TargetObjectType: "context_attribution_validation",
 			AuditEventName:   "semantic_syscall.validate_context_attribution",
+		},
+		domain.ActionAdmitEvidence: {
+			Action:           domain.ActionAdmitEvidence,
+			Capability:       CapEvidenceAdmit,
+			Mutating:         true,
+			SupportsDryRun:   true,
+			ApprovalPossible: true,
+			TargetObjectType: "court_exhibit_ruling",
+			AuditEventName:   "semantic_syscall.admit_evidence",
+		},
+		domain.ActionAppealRuling: {
+			Action:           domain.ActionAppealRuling,
+			Capability:       CapRulingAppeal,
+			Mutating:         true,
+			SupportsDryRun:   true,
+			ApprovalPossible: true,
+			TargetObjectType: "court_appeal_ruling",
+			AuditEventName:   "semantic_syscall.appeal_ruling",
 		},
 	}
 	return &StaticActionRegistry{definitions: defs}

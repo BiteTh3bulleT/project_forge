@@ -70,9 +70,83 @@ func (v *DeterministicValidator) ValidatePayload(req domain.SyscallRequest, def 
 		return validateAdmissionCandidate(req)
 	case domain.ActionValidateContextAttribution:
 		return validateContextAttribution(req)
+	case domain.ActionAdmitEvidence:
+		return validateAdmitEvidence(req, store)
+	case domain.ActionAppealRuling:
+		return validateAppealRuling(req, store)
 	default:
 		return []domain.SyscallError{errField(domain.ErrUnsupportedAction, "action", "unsupported action")}
 	}
+}
+
+func validateAdmitEvidence(req domain.SyscallRequest, store SemanticReadStore) []domain.SyscallError {
+	var issues []domain.SyscallError
+	caseID := strings.TrimSpace(readString(req.Payload, "caseId"))
+	if caseID == "" {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.caseId", "caseId is required"))
+	}
+	if strings.TrimSpace(readString(req.Payload, "sourceType")) == "" {
+		issues = append(issues, errField(domain.ErrMissingRequiredField, "payload.sourceType", "sourceType is required"))
+	}
+	exhibitID := strings.TrimSpace(readString(req.Payload, "exhibitId"))
+	if exhibitID != "" && store != nil {
+		if _, exists := store.FindCourtExhibit(exhibitID, req.Scope); exists {
+			issues = append(issues, errField(domain.ErrDuplicate, "payload.exhibitId", "court exhibit already exists"))
+		}
+	}
+	if hasCourtDecisionClaim(req.Payload) {
+		issues = append(issues, errField(domain.ErrUnauthorized, "payload.decision", "Courthouse decisions are computed by FORGE-K"))
+	}
+	return issues
+}
+
+func validateAppealRuling(req domain.SyscallRequest, store SemanticReadStore) []domain.SyscallError {
+	var issues []domain.SyscallError
+	caseID := strings.TrimSpace(readString(req.Payload, "caseId"))
+	exhibitID := strings.TrimSpace(readString(req.Payload, "exhibitId"))
+	priorRulingID := strings.TrimSpace(readString(req.Payload, "priorRulingId"))
+	grounds := strings.TrimSpace(readString(req.Payload, "grounds"))
+	for field, value := range map[string]string{
+		"payload.caseId": caseID, "payload.exhibitId": exhibitID,
+		"payload.priorRulingId": priorRulingID, "payload.grounds": grounds,
+	} {
+		if value == "" {
+			issues = append(issues, errField(domain.ErrMissingRequiredField, field, strings.TrimPrefix(field, "payload.")+" is required"))
+		}
+	}
+	if hasCourtDecisionClaim(req.Payload) {
+		issues = append(issues, errField(domain.ErrUnauthorized, "payload.decision", "Courthouse decisions are computed by FORGE-K"))
+	}
+	if store == nil || caseID == "" || exhibitID == "" || priorRulingID == "" {
+		return issues
+	}
+	exhibit, ok := store.FindCourtExhibit(exhibitID, req.Scope)
+	if !ok {
+		return append(issues, errField(domain.ErrNotFound, "payload.exhibitId", "court exhibit not found"))
+	}
+	if exhibit.CaseID != caseID || exhibit.Scope.WorkspaceID != req.Scope.WorkspaceID || exhibit.Scope.LaneID != req.Scope.LaneID {
+		issues = append(issues, errField(domain.ErrInvalidScope, "payload.exhibitId", "court exhibit does not match request workspace/case/lane"))
+	}
+	prior, ok := store.FindCourtRuling(priorRulingID, req.Scope)
+	if !ok {
+		return append(issues, errField(domain.ErrNotFound, "payload.priorRulingId", "prior ruling not found"))
+	}
+	if prior.CaseID != caseID || prior.ExhibitID != exhibitID || prior.Scope.WorkspaceID != req.Scope.WorkspaceID || prior.Scope.LaneID != req.Scope.LaneID {
+		issues = append(issues, errField(domain.ErrInvalidScope, "payload.priorRulingId", "prior ruling does not match request workspace/case/exhibit/lane"))
+	}
+	if exhibit.CurrentRulingID != priorRulingID {
+		issues = append(issues, errField(domain.ErrConflict, "payload.priorRulingId", "appeal must target the current ruling"))
+	}
+	return issues
+}
+
+func hasCourtDecisionClaim(payload map[string]any) bool {
+	for _, key := range []string{"decision", "admitted", "rejected", "reasonCode", "policyVersion"} {
+		if _, exists := payload[key]; exists {
+			return true
+		}
+	}
+	return false
 }
 
 func validateCreateNote(req domain.SyscallRequest) []domain.SyscallError {

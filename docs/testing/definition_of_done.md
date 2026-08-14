@@ -9,12 +9,17 @@ FORGE-K work is done only when the implementation, documentation, tests, and evi
 - Docs are updated for architecture changes.
 - Tests are added where code changes exist.
 - Semantic syscalls are journaled.
+- A reported successful canonical commit has a typed, internally consistent
+  receipt proving its transaction, journal identity/hash, object/provenance
+  ids, durable audit intent, and idempotency fingerprint.
 - No direct canonical mutation bypasses semantic syscalls.
 - No unvalidated model output receives authority.
 - Provenance is not destroyed.
 - Snapshot-as-truth behavior is not introduced.
 - KV-as-memory behavior is not introduced.
 - Rejected evidence records rejection reasons.
+- Courthouse decisions are deterministic, model/proposal sources cannot rule,
+  and appeals preserve the prior immutable ruling.
 - Superseded objects remain inspectable.
 - Contradictions are recorded instead of silently merged.
 - Runtime drivers remain isolated from Kernel authority.

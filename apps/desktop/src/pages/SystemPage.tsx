@@ -24,7 +24,7 @@ function statusClass(status?: string) {
   if (normalized === "partial_live_validation_ready" || normalized === "ready") {
     return "forge-ops-status forge-ops-status--ok";
   }
-  if (["degraded", "elevated", "constrained", "warning", "proposed", "stale", "deferred", "legacy_gate", "forge_k_ingress_live", "forge_k_durable_orchestration_live"].includes(normalized)) {
+  if (["degraded", "elevated", "constrained", "warning", "proposed", "stale", "deferred", "legacy_gate", "forge_k_ingress_live", "forge_k_durable_orchestration_live", "forge_k_courthouse_live"].includes(normalized)) {
     return "forge-ops-status forge-ops-status--warn";
   }
   if (["critical", "failed", "unreachable", "error", "kernel_authority_unavailable"].includes(normalized)) {

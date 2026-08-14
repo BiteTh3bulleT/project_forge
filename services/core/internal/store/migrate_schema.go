@@ -1173,6 +1173,135 @@ CREATE TABLE IF NOT EXISTS supersession_records (
   audit_id TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS court_exhibits (
+  id TEXT PRIMARY KEY,
+  case_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  selected_paths_json TEXT NOT NULL DEFAULT '[]',
+  source_type TEXT NOT NULL,
+  source_refs_json TEXT NOT NULL DEFAULT '[]',
+  content_summary TEXT NOT NULL DEFAULT '',
+  raw_ref TEXT NOT NULL DEFAULT '',
+  content_hash TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL,
+  current_ruling_id TEXT NOT NULL,
+  provenance_id TEXT REFERENCES provenance_records(id) ON DELETE SET NULL,
+  provenance_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_k.kernel',
+  syscall_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  trace_id TEXT NOT NULL,
+  audit_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS court_rulings (
+  id TEXT PRIMARY KEY,
+  case_id TEXT NOT NULL,
+  exhibit_id TEXT NOT NULL REFERENCES court_exhibits(id) ON DELETE RESTRICT,
+  appeal_id TEXT NOT NULL DEFAULT '',
+  prior_ruling_id TEXT NOT NULL DEFAULT '',
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  selected_paths_json TEXT NOT NULL DEFAULT '[]',
+  decision TEXT NOT NULL,
+  reason_code TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  policy_version TEXT NOT NULL,
+  policy_refs_json TEXT NOT NULL DEFAULT '[]',
+  input_refs_json TEXT NOT NULL DEFAULT '[]',
+  content_hash TEXT NOT NULL DEFAULT '',
+  provenance_id TEXT REFERENCES provenance_records(id) ON DELETE SET NULL,
+  provenance_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_k.kernel',
+  syscall_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  trace_id TEXT NOT NULL,
+  audit_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS court_appeals (
+  id TEXT PRIMARY KEY,
+  case_id TEXT NOT NULL,
+  exhibit_id TEXT NOT NULL REFERENCES court_exhibits(id) ON DELETE RESTRICT,
+  prior_ruling_id TEXT NOT NULL REFERENCES court_rulings(id) ON DELETE RESTRICT,
+  new_ruling_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  selected_paths_json TEXT NOT NULL DEFAULT '[]',
+  grounds TEXT NOT NULL,
+  new_source_refs_json TEXT NOT NULL DEFAULT '[]',
+  new_content_hash TEXT NOT NULL DEFAULT '',
+  provenance_id TEXT REFERENCES provenance_records(id) ON DELETE SET NULL,
+  provenance_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  proposed_by TEXT NOT NULL DEFAULT '',
+  committed_by TEXT NOT NULL DEFAULT 'forge_k.kernel',
+  syscall_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  trace_id TEXT NOT NULL,
+  audit_id TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_court_exhibits_case_current ON court_exhibits(workspace_id, case_id, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_court_rulings_history ON court_rulings(workspace_id, case_id, exhibit_id, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_court_appeals_history ON court_appeals(workspace_id, case_id, exhibit_id, created_at ASC);
+
+CREATE TRIGGER IF NOT EXISTS court_rulings_no_delete
+BEFORE DELETE ON court_rulings
+BEGIN
+  SELECT RAISE(FAIL, 'court rulings are append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS court_appeals_no_delete
+BEFORE DELETE ON court_appeals
+BEGIN
+  SELECT RAISE(FAIL, 'court appeals are append-only');
+END;
+
+-- Audit ids are linked after the authoritative commit by the existing audit
+-- adapter. No other ruling or appeal update is permitted.
+CREATE TRIGGER IF NOT EXISTS court_rulings_immutable
+BEFORE UPDATE ON court_rulings
+WHEN NOT (
+  OLD.audit_id = '' AND NEW.audit_id <> '' AND
+  OLD.id = NEW.id AND OLD.case_id = NEW.case_id AND OLD.exhibit_id = NEW.exhibit_id AND
+  OLD.appeal_id = NEW.appeal_id AND OLD.prior_ruling_id = NEW.prior_ruling_id AND
+  OLD.workspace_id = NEW.workspace_id AND OLD.lane_id = NEW.lane_id AND
+  OLD.selected_paths_json = NEW.selected_paths_json AND OLD.decision = NEW.decision AND
+  OLD.reason_code = NEW.reason_code AND OLD.reason = NEW.reason AND OLD.policy_version = NEW.policy_version AND
+  OLD.policy_refs_json = NEW.policy_refs_json AND OLD.input_refs_json = NEW.input_refs_json AND
+  OLD.content_hash = NEW.content_hash AND COALESCE(OLD.provenance_id, '') = COALESCE(NEW.provenance_id, '') AND
+  OLD.provenance_json = NEW.provenance_json AND OLD.created_at = NEW.created_at AND
+  OLD.proposed_by = NEW.proposed_by AND OLD.committed_by = NEW.committed_by AND
+  OLD.syscall_id = NEW.syscall_id AND OLD.correlation_id = NEW.correlation_id AND OLD.trace_id = NEW.trace_id
+)
+BEGIN
+  SELECT RAISE(FAIL, 'court rulings are immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS court_appeals_immutable
+BEFORE UPDATE ON court_appeals
+WHEN NOT (
+  OLD.audit_id = '' AND NEW.audit_id <> '' AND
+  OLD.id = NEW.id AND OLD.case_id = NEW.case_id AND OLD.exhibit_id = NEW.exhibit_id AND
+  OLD.prior_ruling_id = NEW.prior_ruling_id AND OLD.new_ruling_id = NEW.new_ruling_id AND
+  OLD.workspace_id = NEW.workspace_id AND OLD.lane_id = NEW.lane_id AND
+  OLD.selected_paths_json = NEW.selected_paths_json AND OLD.grounds = NEW.grounds AND
+  OLD.new_source_refs_json = NEW.new_source_refs_json AND OLD.new_content_hash = NEW.new_content_hash AND
+  COALESCE(OLD.provenance_id, '') = COALESCE(NEW.provenance_id, '') AND OLD.provenance_json = NEW.provenance_json AND
+  OLD.created_at = NEW.created_at AND OLD.proposed_by = NEW.proposed_by AND OLD.committed_by = NEW.committed_by AND
+  OLD.syscall_id = NEW.syscall_id AND OLD.correlation_id = NEW.correlation_id AND OLD.trace_id = NEW.trace_id
+)
+BEGIN
+  SELECT RAISE(FAIL, 'court appeals are immutable');
+END;
+
 CREATE TABLE IF NOT EXISTS context_packet_snapshots (
   id TEXT PRIMARY KEY,
   query TEXT NOT NULL,

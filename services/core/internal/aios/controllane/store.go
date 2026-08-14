@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/forgekernel/court"
 )
 
 type ContradictionRecord struct {
@@ -79,6 +80,9 @@ type SemanticReadStore interface {
 	GetIdempotency(key string) (IdempotencyRecord, bool)
 	FindLatestContextSnapshot(scope domain.ForgeScope, query, snapshotKind string) (domain.ContextPacket, bool)
 	ListContextSnapshots(scope domain.ForgeScope, query, snapshotKind string, limit int) []domain.ContextPacket
+	FindCourtExhibit(id string, scope domain.ForgeScope) (court.Exhibit, bool)
+	FindCourtRuling(id string, scope domain.ForgeScope) (court.Ruling, bool)
+	ListCourtRulings(scope domain.ForgeScope, caseID, exhibitID string) []court.Ruling
 	BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket
 }
 
@@ -96,6 +100,7 @@ type SemanticStore interface {
 	CreateSupersession(record SupersessionRecord) error
 	CreateArtifactRef(ref domain.ArtifactRef) error
 	CreateContextSnapshot(pkt domain.ContextPacket) error
+	CreateCourtDecision(exhibit court.Exhibit, ruling court.Ruling, appeal *court.Appeal) error
 	SetIdempotency(key string, rec IdempotencyRecord)
 }
 
@@ -115,6 +120,9 @@ type memoryState struct {
 	restoreOutcomes  map[string]RestoreOutcomeEvent
 	contradictions   map[string]ContradictionRecord
 	supersessions    map[string]SupersessionRecord
+	courtExhibits    map[string]court.Exhibit
+	courtRulings     map[string]court.Ruling
+	courtAppeals     map[string]court.Appeal
 	idempotency      map[string]IdempotencyRecord
 }
 
@@ -131,6 +139,9 @@ func newMemoryState() memoryState {
 		restoreOutcomes:  map[string]RestoreOutcomeEvent{},
 		contradictions:   map[string]ContradictionRecord{},
 		supersessions:    map[string]SupersessionRecord{},
+		courtExhibits:    map[string]court.Exhibit{},
+		courtRulings:     map[string]court.Ruling{},
+		courtAppeals:     map[string]court.Appeal{},
 		idempotency:      map[string]IdempotencyRecord{},
 	}
 }
@@ -171,6 +182,15 @@ func cloneState(in memoryState) memoryState {
 	}
 	for k, v := range in.supersessions {
 		out.supersessions[k] = v
+	}
+	for k, v := range in.courtExhibits {
+		out.courtExhibits[k] = v
+	}
+	for k, v := range in.courtRulings {
+		out.courtRulings[k] = v
+	}
+	for k, v := range in.courtAppeals {
+		out.courtAppeals[k] = v
 	}
 	for k, v := range in.idempotency {
 		out.idempotency[k] = v
@@ -316,6 +336,26 @@ func (s *InMemorySemanticStore) ListContextSnapshots(scope domain.ForgeScope, qu
 	return filterContextSnapshots(s.state.contextSnapshots, scope, query, snapshotKind, limit)
 }
 
+func (s *InMemorySemanticStore) FindCourtExhibit(id string, scope domain.ForgeScope) (court.Exhibit, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	exhibit, ok := s.state.courtExhibits[id]
+	return exhibit, ok && scopeMatchesBuildContext(scope, exhibit.Scope)
+}
+
+func (s *InMemorySemanticStore) FindCourtRuling(id string, scope domain.ForgeScope) (court.Ruling, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ruling, ok := s.state.courtRulings[id]
+	return ruling, ok && scopeMatchesBuildContext(scope, ruling.Scope)
+}
+
+func (s *InMemorySemanticStore) ListCourtRulings(scope domain.ForgeScope, caseID, exhibitID string) []court.Ruling {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return filterCourtRulings(s.state.courtRulings, scope, caseID, exhibitID)
+}
+
 func (s *InMemorySemanticStore) SetIdempotency(key string, rec IdempotencyRecord) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -441,6 +481,31 @@ func (s *InMemorySemanticStore) CreateContextSnapshot(pkt domain.ContextPacket) 
 		return fmt.Errorf("context snapshot %q already exists", pkt.ID)
 	}
 	s.state.contextSnapshots[pkt.ID] = pkt
+	return nil
+}
+
+func (s *InMemorySemanticStore) CreateCourtDecision(exhibit court.Exhibit, ruling court.Ruling, appeal *court.Appeal) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.state.courtRulings[ruling.ID]; exists {
+		return fmt.Errorf("court ruling %q already exists", ruling.ID)
+	}
+	if appeal == nil {
+		if _, exists := s.state.courtExhibits[exhibit.ID]; exists {
+			return fmt.Errorf("court exhibit %q already exists", exhibit.ID)
+		}
+	} else {
+		current, exists := s.state.courtExhibits[exhibit.ID]
+		if !exists || current.CurrentRulingID != appeal.PriorRulingID {
+			return fmt.Errorf("court appeal prior ruling is not current")
+		}
+		if _, exists := s.state.courtAppeals[appeal.ID]; exists {
+			return fmt.Errorf("court appeal %q already exists", appeal.ID)
+		}
+		s.state.courtAppeals[appeal.ID] = *appeal
+	}
+	s.state.courtExhibits[exhibit.ID] = exhibit
+	s.state.courtRulings[ruling.ID] = ruling
 	return nil
 }
 
@@ -738,6 +803,20 @@ func (s *TransactionalSemanticStore) ListContextSnapshots(scope domain.ForgeScop
 	return filterContextSnapshots(s.state.contextSnapshots, scope, query, snapshotKind, limit)
 }
 
+func (s *TransactionalSemanticStore) FindCourtExhibit(id string, scope domain.ForgeScope) (court.Exhibit, bool) {
+	exhibit, ok := s.state.courtExhibits[id]
+	return exhibit, ok && scopeMatchesBuildContext(scope, exhibit.Scope)
+}
+
+func (s *TransactionalSemanticStore) FindCourtRuling(id string, scope domain.ForgeScope) (court.Ruling, bool) {
+	ruling, ok := s.state.courtRulings[id]
+	return ruling, ok && scopeMatchesBuildContext(scope, ruling.Scope)
+}
+
+func (s *TransactionalSemanticStore) ListCourtRulings(scope domain.ForgeScope, caseID, exhibitID string) []court.Ruling {
+	return filterCourtRulings(s.state.courtRulings, scope, caseID, exhibitID)
+}
+
 func (s *TransactionalSemanticStore) CreateRestoreOutcome(ctx context.Context, event RestoreOutcomeEvent) error {
 	event = normalizeRestoreOutcomeEvent(event)
 	if event.ID == "" {
@@ -949,6 +1028,52 @@ func (s *TransactionalSemanticStore) CreateContextSnapshot(pkt domain.ContextPac
 	}
 	s.state.contextSnapshots[pkt.ID] = pkt
 	return nil
+}
+
+func (s *TransactionalSemanticStore) CreateCourtDecision(exhibit court.Exhibit, ruling court.Ruling, appeal *court.Appeal) error {
+	if _, exists := s.state.courtRulings[ruling.ID]; exists {
+		return fmt.Errorf("court ruling %q already exists", ruling.ID)
+	}
+	if appeal == nil {
+		if _, exists := s.state.courtExhibits[exhibit.ID]; exists {
+			return fmt.Errorf("court exhibit %q already exists", exhibit.ID)
+		}
+	} else {
+		current, exists := s.state.courtExhibits[exhibit.ID]
+		if !exists || current.CurrentRulingID != appeal.PriorRulingID {
+			return fmt.Errorf("court appeal prior ruling is not current")
+		}
+		if _, exists := s.state.courtAppeals[appeal.ID]; exists {
+			return fmt.Errorf("court appeal %q already exists", appeal.ID)
+		}
+		s.state.courtAppeals[appeal.ID] = *appeal
+	}
+	s.state.courtExhibits[exhibit.ID] = exhibit
+	s.state.courtRulings[ruling.ID] = ruling
+	return nil
+}
+
+func filterCourtRulings(all map[string]court.Ruling, scope domain.ForgeScope, caseID, exhibitID string) []court.Ruling {
+	out := make([]court.Ruling, 0)
+	for _, ruling := range all {
+		if !scopeMatchesBuildContext(scope, ruling.Scope) {
+			continue
+		}
+		if strings.TrimSpace(caseID) != "" && ruling.CaseID != strings.TrimSpace(caseID) {
+			continue
+		}
+		if strings.TrimSpace(exhibitID) != "" && ruling.ExhibitID != strings.TrimSpace(exhibitID) {
+			continue
+		}
+		out = append(out, ruling)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt == out[j].CreatedAt {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].CreatedAt < out[j].CreatedAt
+	})
+	return out
 }
 
 func stateScopeKey(scope domain.ForgeScope, key string) string {

@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/forgekernel/court"
 )
 
 type AuthorityMode string
@@ -145,6 +146,20 @@ func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain
 		result = k.port.RecordResult(ctx, prepared.Request, result)
 		k.port.ObserveResult(ctx, prepared.Request, result)
 		return result, ErrInvalidDisposition
+	}
+	if court.IsAction(prepared.Request.Action) {
+		decision, issues := court.Decide(prepared.Request)
+		if len(issues) > 0 {
+			result := rejectedResult(prepared.Request, issues[0].Code, issues[0].Field, issues[0].Message)
+			result.ValidationDetails = append(result.ValidationDetails, domain.ValidationDetail{Layer: "forge_k_courthouse", Passed: false, Issues: issues})
+			result = annotateAuthority(result)
+			result = k.port.RecordResult(ctx, prepared.Request, result)
+			k.port.ObserveResult(ctx, prepared.Request, result)
+			return result, nil
+		}
+		prepared.Request.Metadata = cloneMetadata(prepared.Request.Metadata)
+		prepared.Request.Metadata[court.MetadataDecisionKey] = decision
+		prepared.Result.ValidationDetails = append(prepared.Result.ValidationDetails, domain.ValidationDetail{Layer: "forge_k_courthouse", Passed: true, Issues: []domain.SyscallError{}})
 	}
 	result, err := k.port.Commit(ctx, prepared)
 	result = annotateAuthority(result)

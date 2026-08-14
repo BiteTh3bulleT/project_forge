@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/forgekernel/court"
 )
 
 func (p *Processor) normalize(req domain.SyscallRequest) domain.SyscallRequest {
@@ -70,9 +71,81 @@ func (p *Processor) apply(ctx context.Context, store SemanticStore, req domain.S
 		return applyValidateAdmissionCandidate(req)
 	case domain.ActionValidateContextAttribution:
 		return applyValidateContextAttribution(req)
+	case domain.ActionAdmitEvidence, domain.ActionAppealRuling:
+		return applyCourtDecision(store, req)
 	default:
 		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrUnsupportedAction, Field: "action", Message: "unsupported action"}}
 	}
+}
+
+func applyCourtDecision(store SemanticStore, req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {
+	if ingress, _ := req.Metadata["forgeKIngressAuthority"].(bool); !ingress {
+		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrUnauthorized, Field: "metadata.forgeKIngressAuthority", Message: "Courthouse mutation requires production FORGE-K ingress"}}
+	}
+	decision, ok := court.DecisionFromMetadata(req.Metadata)
+	if !ok || decision.Action != req.Action {
+		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrUnauthorized, Field: "metadata." + court.MetadataDecisionKey, Message: "missing production FORGE-K Courthouse decision"}}
+	}
+	proposedBy := nonEmpty(req.Actor.ID, string(req.Source))
+	committedBy := nonEmpty(readString(req.Metadata, "kernelAuthorityOwner"), "forge_k.kernel")
+	exhibit := court.Exhibit{
+		ID: decision.ExhibitID, CaseID: decision.CaseID, Scope: req.Scope,
+		SourceType: readString(req.Payload, "sourceType"), SourceRefs: append([]string{}, decision.InputRefs...),
+		ContentSummary: readString(req.Payload, "contentSummary"), RawRef: readString(req.Payload, "rawRef"),
+		ContentHash: decision.ContentHash, Status: decision.Decision,
+		CurrentRulingID: decision.RulingID, CreatedAt: req.RequestedAt, UpdatedAt: req.RequestedAt,
+		Provenance: req.Provenance, SyscallID: req.ID, CorrelationID: req.CorrelationID, TraceID: req.TraceID,
+		ProposedBy: proposedBy, CommittedBy: committedBy,
+	}
+	ruling := court.Ruling{
+		ID: decision.RulingID, CaseID: decision.CaseID, ExhibitID: decision.ExhibitID,
+		AppealID: decision.AppealID, PriorRulingID: decision.PriorRulingID, Scope: req.Scope,
+		Decision: decision.Decision, ReasonCode: decision.ReasonCode, Reason: decision.Reason,
+		PolicyVersion: decision.PolicyVersion, PolicyRefs: append([]string{}, decision.PolicyRefs...),
+		InputRefs: append([]string{}, decision.InputRefs...), ContentHash: decision.ContentHash,
+		CreatedAt: req.RequestedAt, Provenance: req.Provenance, SyscallID: req.ID,
+		CorrelationID: req.CorrelationID, TraceID: req.TraceID, ProposedBy: proposedBy, CommittedBy: committedBy,
+	}
+	var appeal *court.Appeal
+	if req.Action == domain.ActionAppealRuling {
+		current, found := store.FindCourtExhibit(decision.ExhibitID, req.Scope)
+		if !found {
+			return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrNotFound, Field: "payload.exhibitId", Message: "court exhibit not found at commit"}}
+		}
+		exhibit = current
+		exhibit.Status = decision.Decision
+		exhibit.CurrentRulingID = decision.RulingID
+		exhibit.UpdatedAt = req.RequestedAt
+		exhibit.SyscallID = req.ID
+		exhibit.CorrelationID = req.CorrelationID
+		exhibit.TraceID = req.TraceID
+		exhibit.ProposedBy = proposedBy
+		exhibit.CommittedBy = committedBy
+		appeal = &court.Appeal{
+			ID: decision.AppealID, CaseID: decision.CaseID, ExhibitID: decision.ExhibitID,
+			PriorRulingID: decision.PriorRulingID, NewRulingID: decision.RulingID, Scope: req.Scope,
+			Grounds: readString(req.Payload, "grounds"), NewSourceRefs: append([]string{}, decision.InputRefs...),
+			NewContentHash: decision.ContentHash, CreatedAt: req.RequestedAt,
+			Provenance: req.Provenance, SyscallID: req.ID, CorrelationID: req.CorrelationID, TraceID: req.TraceID,
+			ProposedBy: proposedBy, CommittedBy: committedBy,
+		}
+	}
+	if err := store.CreateCourtDecision(exhibit, ruling, appeal); err != nil {
+		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrConflict, Field: "court", Message: err.Error()}}
+	}
+	ids := []string{decision.ExhibitID, decision.RulingID}
+	if appeal != nil {
+		ids = []string{decision.AppealID, decision.RulingID, decision.ExhibitID}
+	}
+	return ids, map[string]any{
+		"courthouse": map[string]any{
+			"caseId": decision.CaseID, "exhibitId": decision.ExhibitID, "rulingId": decision.RulingID,
+			"appealId": decision.AppealID, "priorRulingId": decision.PriorRulingID,
+			"decision": decision.Decision, "reasonCode": decision.ReasonCode,
+			"policyVersion": decision.PolicyVersion, "kernelDecisionAuthority": true,
+			"modelAdmissionAuthority": false,
+		},
+	}, nil, nil
 }
 
 func applyValidateKVIdentity(req domain.SyscallRequest) ([]string, map[string]any, []string, []domain.SyscallError) {

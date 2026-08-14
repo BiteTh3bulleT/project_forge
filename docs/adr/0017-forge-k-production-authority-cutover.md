@@ -1,6 +1,6 @@
 # ADR 0017 - FORGE-K Production Authority Cutover
 
-Status: Accepted; Stages K20A-K20B active
+Status: Accepted; Stages K20A-K20C active
 
 Date: 2026-08-14
 
@@ -30,11 +30,16 @@ FORGE-K moves to production one authority boundary at a time:
    commit, audit recording/linkage, then best-effort observation. The existing
    Control Lane code implements that temporary port and the rollback facade;
    it is not a second authority.
-5. Boot selects exactly one mode through `FORGE_KERNEL_AUTHORITY_MODE`:
+5. Stage K20C makes production FORGE-K the only deterministic Courthouse
+   decision owner. `ADMIT_EVIDENCE` and `APPEAL_RULING` atomically persist
+   current exhibit state, immutable ruling/appeal history, provenance, and the
+   semantic journal event. Proposal-only sources, model actors, and
+   `legacy_v1` cannot rule.
+6. Boot selects exactly one mode through `FORGE_KERNEL_AUTHORITY_MODE`:
    `forge_k` (default) or `legacy_v1` (rollback). There is no dual commit mode.
-6. Full FORGE-K authority is not claimed until the adapter implementation and remaining
+7. Full FORGE-K authority is not claimed until the adapter implementation and remaining
    subsystem gates are migrated and v1 is retired.
-7. FORGE deterministically decides whether a chat turn needs a tool and selects
+8. FORGE deterministically decides whether a chat turn needs a tool and selects
    exactly one eligible tool before any model proposal call. If it cannot do so,
    no tool schema is exposed. A model may only format bounded arguments for the
    schema FORGE selected; the gateway remains execution authority.
@@ -43,12 +48,15 @@ FORGE-K moves to production one authority boundary at a time:
 
 1. Production Kernel ingress and single-authority boot selection. Closed K20A.
 2. Durable journal/commit orchestration owned by FORGE-K through narrow ports. Closed K20B; Control Lane implementation extraction remains.
-3. Courthouse admission and ruling authority.
-4. Semantic Algebra operations and structured Memory Palace objects.
-5. Context Compiler live bundle authority.
-6. Runtime driver proposal boundary and response composition gate.
-7. Snapshots/replay, KV acceleration, and Lymphatic proposal lanes.
-8. Remove `legacy_v1`, compatibility facades, and stale authority claims.
+3. Courthouse admission and ruling authority. Closed K20C, except the
+   kernel-wide atomic audit receipt/linkage gate carried by K20D.
+4. Commit integrity: sealed prepare plans, typed receipts, atomic audit intent
+   and idempotency proof, persisted journal hash chain, and replay divergence.
+5. Semantic Algebra operations and structured Memory Palace objects.
+6. Context Compiler live bundle authority.
+7. Runtime driver proposal boundary and response composition gate.
+8. Snapshots, KV acceleration, and Lymphatic proposal lanes.
+9. Remove `legacy_v1`, compatibility facades, and stale authority claims.
 
 Each step requires deterministic parity tests, malformed-input failure tests,
 capability/approval tests, journal and audit evidence, a tested rollback path,
@@ -56,7 +64,7 @@ operator-visible status, and documentation updates.
 
 ## Consequences
 
-- FORGE-K ingress and durable stage orchestration are live now, but the full-kernel flag remains false.
+- FORGE-K ingress, durable stage orchestration, and Courthouse decisions are live now, but the full-kernel flag remains false.
 - Existing durable data remains in the current SQLite schema during migration.
 - The Control Lane can be reduced behind ports rather than duplicated or
   bypassed.

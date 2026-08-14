@@ -23,7 +23,7 @@ not mistaken for stale or conflicting authority.
 | [0014 - FORGE Workstation Substrate and Nix Mutation Proposals](0014-forge-workstation-substrate-and-nix-mutation-proposals.md) | Accepted | Workstation substrate and advisory Nix mutation proposal boundary. |
 | [0015 - Ref Model Unification](0015-ref-model-unification.md) | Accepted | Shared deterministic ref contracts across simulator and production validation seams. |
 | [0016 - FORGE AXIOM Cognition Engine](0016-forge-axiom-cognition-engine.md) | Accepted | AXIOM proposal and deterministic cognition boundary. |
-| [0017 - FORGE-K Production Authority Cutover](0017-forge-k-production-authority-cutover.md) | Accepted; K20A-K20B active | Staged single-authority production cutover from Control Lane v1 to FORGE-K. |
+| [0017 - FORGE-K Production Authority Cutover](0017-forge-k-production-authority-cutover.md) | Accepted; K20A-K20C active | Staged single-authority production cutover from Control Lane v1 to FORGE-K. |
 
 ## Superseded Decisions
 

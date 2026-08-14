@@ -35,6 +35,8 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 		CapSemanticOperationValidate,
 		CapAdmissionCandidateValidate,
 		CapContextAttributionValidate,
+		CapEvidenceAdmit,
+		CapRulingAppeal,
 	)
 	return &StaticCapabilityService{
 		sourceCapabilities: map[domain.ActionSource]map[string]struct{}{
@@ -59,6 +61,8 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 				CapSemanticOperationValidate,
 				CapAdmissionCandidateValidate,
 				CapContextAttributionValidate,
+				CapEvidenceAdmit,
+				CapRulingAppeal,
 			),
 			domain.SourceAdapter: setOf(
 				CapMemoryNoteCreate,

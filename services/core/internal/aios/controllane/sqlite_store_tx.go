@@ -57,6 +57,9 @@ func linkAuditOnExecutor(ctx context.Context, exec sqlExecutor, correlationID, s
 		"derived_models",
 		"contradiction_records",
 		"supersession_records",
+		"court_exhibits",
+		"court_rulings",
+		"court_appeals",
 		"context_packet_snapshots",
 		"restore_outcome_events",
 	}

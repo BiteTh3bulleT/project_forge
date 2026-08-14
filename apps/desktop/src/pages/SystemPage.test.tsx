@@ -125,7 +125,7 @@ describe("SystemPage", () => {
       },
       kernel_activation: {
         phase: "19",
-        status: "forge_k_durable_orchestration_live",
+        status: "forge_k_courthouse_live",
         summary:
           "FORGE-K owns live semantic syscall ingress; the existing Control Lane SQLite transaction path is the temporary durable commit adapter.",
         mode: "live_authority_migration",
@@ -216,14 +216,14 @@ describe("SystemPage", () => {
         authority_matrix: [
           {
             subsystem: "Courthouse",
-            current_status: "ADMISSION_CANDIDATE_ONLY",
-            live_owner: "aios.controllane",
-            target_owner: "forgek.court",
-            feature_flag: "n/a; admission candidate validation only",
-            rollback_path: "remove admission candidate validation",
-            tests_required: ["admission candidate validation tests"],
-            tests_passing: ["Control Lane validation action registry tests"],
-            blockers: ["live evidence admission and ruling authority remain disabled"],
+            current_status: "FORGE_K_ADMISSION_AND_RULING_LIVE",
+            live_owner: "forge_k.kernel",
+            target_owner: "forge_k.kernel",
+            feature_flag: "production FORGE-K authority mode only; legacy_v1 fails closed",
+            rollback_path: "select legacy_v1 to disable admission/ruling mutations",
+            tests_required: ["admission and ruling tests"],
+            tests_passing: ["immutable ruling and appeal history tests"],
+            blockers: ["atomic audit receipt integration remains"],
             operator_visible: true,
           },
           {
@@ -536,7 +536,7 @@ describe("SystemPage", () => {
     expect(screen.getByText("audit/journal trace APIs")).toBeTruthy();
     expect(screen.getByText("Lymphatic reports")).toBeTruthy();
     expect(screen.getByText("autonomy maintenance dry-run reports")).toBeTruthy();
-    expect(screen.getAllByText("forge_k_durable_orchestration_live").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("forge_k_courthouse_live").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("7/7")).toBeTruthy();
     expect(screen.getByText("Simulator authority disabled")).toBeTruthy();
     expect(screen.getByText("FORGE-K syscall ingress live")).toBeTruthy();
@@ -551,7 +551,7 @@ describe("SystemPage", () => {
     expect(screen.getByText("keep source-object authority lookup read-only while evidence admission and mutation routing gates are designed")).toBeTruthy();
     expect(screen.getByText("FORGE-K Subsystem Cockpit")).toBeTruthy();
     expect(screen.getByText("Courthouse")).toBeTruthy();
-    expect(screen.getByText("ADMISSION_CANDIDATE_ONLY")).toBeTruthy();
+    expect(screen.getByText("FORGE_K_ADMISSION_AND_RULING_LIVE")).toBeTruthy();
     expect(screen.getByText("Context Compiler")).toBeTruthy();
     expect(screen.getByText("CONTEXT_ATTRIBUTION_VALIDATION_ONLY")).toBeTruthy();
     expect(screen.getByText("Lymphatic Lane")).toBeTruthy();

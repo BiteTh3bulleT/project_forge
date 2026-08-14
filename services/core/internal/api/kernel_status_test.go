@@ -47,7 +47,7 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload["status"] != "forge_k_durable_orchestration_live" {
+	if payload["status"] != "forge_k_courthouse_live" {
 		t.Fatalf("unexpected kernel status payload: %#v", payload)
 	}
 	if payload["live_kernel_authority"] != false ||
@@ -141,10 +141,10 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 		if entry["operator_visible"] != true {
 			t.Fatalf("authority matrix entry must be operator visible: %#v", entry)
 		}
-		if subsystem == "Courthouse" && entry["current_status"] != "ADMISSION_CANDIDATE_ONLY" {
-			t.Fatalf("courthouse must remain candidate-only, got %#v", entry)
+		if subsystem == "Courthouse" && (entry["current_status"] != "FORGE_K_ADMISSION_AND_RULING_LIVE" || entry["live_owner"] != "forge_k.kernel") {
+			t.Fatalf("courthouse live authority not reported, got %#v", entry)
 		}
-		if subsystem == "Kernel" && (entry["current_status"] != "FORGE_K_DURABLE_ORCHESTRATION_LIVE" || entry["live_owner"] != "forge_k.kernel") {
+		if subsystem == "Kernel" && (entry["current_status"] != "FORGE_K_COURTHOUSE_LIVE" || entry["live_owner"] != "forge_k.kernel") {
 			t.Fatalf("kernel ingress authority not reported: %#v", entry)
 		}
 		if entry["live_owner"] == "" || entry["target_owner"] == "" || entry["rollback_path"] == "" {

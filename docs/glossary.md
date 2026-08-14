@@ -104,7 +104,10 @@ A structured assertion extracted from an exhibit. Phase 3 defines a minimal mode
 
 ## Ruling
 
-A Courthouse decision that admits, rejects, defers, marks contradiction, or records supersession.
+A Courthouse decision that admits, rejects, defers, marks contradiction, or
+records supersession. In the production K20C path, rulings and appeals are
+append-only historical truth; an exhibit points to its current ruling without
+rewriting prior decisions.
 
 ## Contradiction
 

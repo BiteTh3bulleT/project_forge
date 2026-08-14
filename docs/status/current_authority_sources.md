@@ -1,6 +1,6 @@
 # Current Authority Sources
 
-Status date: 2026-05-20.
+Status date: 2026-08-14.
 
 This file maps the current authority docs for FORGE. It is a navigation document, not a new authority path.
 
@@ -18,6 +18,7 @@ This file maps the current authority docs for FORGE. It is a navigation document
 |---|---|---|
 | Canonical semantic syscall ingress | `services/core/internal/forgekernel`, `docs/architecture/forge_k_live_cutover.md` | K20A default live FORGE-K ingress authority. Boot selects exactly one owner and rejects external authority claims. |
 | Canonical durable orchestration | `services/core/internal/forgekernel`, `services/core/internal/aios/controllane`, `docs/architecture/forge_k_live_cutover.md` | K20B FORGE-K owns prepare/commit/audit/observe order through `DurablePort`; Control Lane remains the temporary validation/apply/SQLite implementation and rollback facade. |
+| Courthouse admission/ruling | `services/core/internal/forgekernel/court`, production Kernel, Control Lane SQLite court adapter | K20C FORGE-K computes deterministic admission/rejection and appeal rulings; current exhibit state plus immutable ruling/appeal history, provenance, and journal commit atomically. Audit linkage remains post-commit pending K20D. |
 | Tool execution | `services/core/internal/gateway`, `docs/TOOL_GATEWAY.md`, `docs/CAPABILITY_BROKERS.md` | Gateway-only execution authority; legacy adapter invoke ingress is not authority. |
 | Model runtime | `services/core/internal/modelruntime`, `services/core/internal/api/model_runtime*.go`, `docs/architecture/model_runtime.md` | Models are governed drivers. Streaming, vLLM-compatible external endpoint support, and managed delete-file approval exist inside modelruntime boundaries. |
 | Memory and retrieval | `services/core/internal/memory`, `services/core/internal/retrieval`, `docs/MEMORY_ARCHITECTURE.md`, `docs/RETRIEVAL_PIPELINE.md` | Tool/model output is evidence, not automatic truth. |
@@ -29,7 +30,7 @@ This file maps the current authority docs for FORGE. It is a navigation document
 
 ## FORGE-K Boundary
 
-The simulator packages under `services/core/internal/forgek` remain simulator-only. The distinct production package `services/core/internal/forgekernel` owns live semantic syscall ingress by default (K20A) and durable stage orchestration through its port contract (K20B). Full FORGE-K authority is still incomplete while Control Lane implements validation/apply/SQLite details and other subsystem gates remain staged.
+The simulator packages under `services/core/internal/forgek` remain simulator-only. The distinct production package `services/core/internal/forgekernel` owns live semantic syscall ingress by default (K20A), durable stage orchestration through its port contract (K20B), and deterministic Courthouse admission/ruling decisions (K20C). Full FORGE-K authority is still incomplete while audit/idempotency/journal integrity and the other subsystem gates remain staged and Control Lane implements validation/apply/SQLite details.
 
 Current partial live integrations are narrow validation/enforcement seams through shared pure packages and existing live Control Lane paths. They do not:
 
@@ -38,7 +39,7 @@ Current partial live integrations are narrow validation/enforcement seams throug
 - admit evidence, compile live context, execute semantic operations, or write canonical truth outside existing live authority paths
 - enable live KV reuse or runtime cache reuse
 
-Current Courthouse-related live work is admission-candidate validation only through `VALIDATE_ADMISSION_CANDIDATE` in the existing Control Lane. It does not admit evidence, reject evidence, issue rulings, or make `services/core/internal/forgek/court` live authority.
+Current Courthouse authority is production-owned under `services/core/internal/forgekernel/court`. `ADMIT_EVIDENCE` and `APPEAL_RULING` are decided only by the production Kernel and atomically persist current exhibit state, immutable ruling/appeal history, provenance, and the syscall journal event. `legacy_v1`, adapter/Future IRIS proposer sources, and model actors fail closed. The earlier `VALIDATE_ADMISSION_CANDIDATE` seam remains validation-only, and the simulator under `services/core/internal/forgek/court` remains non-authoritative. The audit sink and `audit_id` linkage are still post-commit/best-effort until K20D.
 
 Current Memory Palace-related live work is mirror-only through existing disabled-by-default `services/core/internal/forgekshadow` retrieval metadata diagnostics. It mirrors bounded metadata refs only and does not run retrieval/search/embeddings, read raw source/chunk/memory content, write memory, admit evidence, compile context, change routes/APIs, or make `services/core/internal/forgek/palace` live authority.
 

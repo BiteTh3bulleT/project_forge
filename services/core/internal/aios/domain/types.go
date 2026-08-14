@@ -239,6 +239,8 @@ const (
 	ActionValidateSemanticOperation  SemanticActionType = "VALIDATE_SEMANTIC_OPERATION"
 	ActionValidateAdmissionCandidate SemanticActionType = "VALIDATE_ADMISSION_CANDIDATE"
 	ActionValidateContextAttribution SemanticActionType = "VALIDATE_CONTEXT_ATTRIBUTION"
+	ActionAdmitEvidence              SemanticActionType = "ADMIT_EVIDENCE"
+	ActionAppealRuling               SemanticActionType = "APPEAL_RULING"
 )
 
 type SyscallRequest struct {

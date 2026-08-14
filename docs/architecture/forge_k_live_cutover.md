@@ -1,6 +1,6 @@
 # FORGE-K Live Cutover
 
-Status: K20A-K20B active; full cutover in progress.
+Status: K20A-K20C active; full cutover in progress.
 
 Date: 2026-08-14.
 
@@ -45,7 +45,7 @@ removed after final parity acceptance. No mode performs dual commits.
 | Durable commit/journal orchestration | FORGE-K-owned `DurablePort`; Control Lane implementation | FORGE-K | Closed in K20B: stage order, parity, replay, denial, approval, rollback |
 | Tool need and selection | Deterministic FORGE chat routing | FORGE-K/Gateway policy contract | No model-selected schema or tool |
 | Tool execution | Gateway | Gateway external driver | Keep single execution ingress |
-| Courthouse | Candidate validation only | Live admission/ruling authority | Evidence provenance and appeal tests |
+| Courthouse | Production FORGE-K deterministic admission/rejection, immutable rulings, and appeals | FORGE-K | Closed in K20C for admission/ruling authority; K20D must make audit intent/linkage atomic |
 | Semantic Algebra | Shape validation only | Governed live operations | Operation parity and journal tests |
 | Memory Palace | Shadow/mirror plus current memory stores | Structured governed objects/routes | Current/history separation and migration proof |
 | Context Compiler | Legacy `COMPILE_CONTEXT` plus attribution validation | FORGE-K bundles | Prompt parity, attribution, token-budget tests |
@@ -71,10 +71,27 @@ removed after final parity acceptance. No mode performs dual commits.
 - `legacy_v1` mode and stale v1 authority documentation are removed only after
   all prior gates close.
 
-## Next bounded slice: K20C
+## K20C Courthouse cutover
 
-Promote Courthouse admission/ruling contracts behind the production Kernel.
-K20C must preserve evidence provenance, deterministic admission policy,
-appeal/rejection history, current-versus-historical truth separation, and no
-model admission authority. The simulator Courthouse remains isolated; only
-pure contracts or production-owned implementations may cross the boundary.
+K20C promotes production-owned Courthouse contracts under
+`services/core/internal/forgekernel/court`. `ADMIT_EVIDENCE` and
+`APPEAL_RULING` pass ordinary capability, approval, scope, payload, and
+idempotency preflight before the production Kernel computes the ruling. The
+durable adapter may persist that typed decision but cannot invent one. Initial
+exhibit/current-state rows, append-only ruling/appeal history, provenance, and
+the semantic journal event share one SQLite transaction. Model actors,
+proposal-only sources, and `legacy_v1` fail closed. The simulator Courthouse is
+not imported.
+
+K20C deliberately does not close the kernel-wide audit-integrity gate. The
+existing audit sink and `audit_id` backfill still occur after the canonical
+transaction and remain best-effort.
+
+## Next bounded slice: K20D
+
+Make commit evidence fail closed. K20D must seal the prepared request/plan,
+return a typed commit receipt, stage durable audit intent and immutable
+idempotency proof in the canonical transaction, persist a sequenced journal
+hash chain, and verify replay/divergence. No successful syscall may be reported
+without internally consistent object, provenance, journal, audit-outbox, and
+idempotency evidence.
