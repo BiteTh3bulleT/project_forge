@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"forge/projectforge/services/core/internal/adapters"
 	"forge/projectforge/services/core/internal/config"
 	"forge/projectforge/services/core/internal/memory"
 	"forge/projectforge/services/core/internal/store"
@@ -357,6 +358,34 @@ func TestChatPostSyncUsesSelectedLocalOllamaModelWhenSettingsModelBlank(t *testi
 	}
 	if fakeRuntime.chatCalls != 0 {
 		t.Fatalf("expected selected local ollama model to bypass model runtime chat, got %d calls", fakeRuntime.chatCalls)
+	}
+}
+
+func TestResolveNativeOllamaChatModelPrefersValidRequestOverPersistedDefault(t *testing.T) {
+	srv, st := newBackupAuditHarness(t)
+	fakeRuntime := newFakeModelRuntime()
+	fakeRuntime.models["smuxo/smuxoAI:0.8b"] = ModelRuntimeModel{
+		ID:           "smuxo/smuxoAI:0.8b",
+		DisplayName:  "smuxoAI",
+		Backend:      "ollama_compat",
+		Format:       "gguf",
+		Status:       "available",
+		Capabilities: []string{"chat", "completion", "tools"},
+		Metadata: map[string]any{
+			"provider": "ollama",
+			"remote":   false,
+		},
+	}
+	srv.modelRuntime = fakeRuntime
+
+	ctx := context.Background()
+	if err := upsertSetting(ctx, st.DB, "ollama_model", "gemma3:1b-it-q4_K_M"); err != nil {
+		t.Fatalf("set stale persisted ollama model: %v", err)
+	}
+
+	model, source := srv.resolveNativeOllamaChatModel(ctx, adapters.NewOllama(st.DB), "smuxo/smuxoAI:0.8b")
+	if model != "smuxo/smuxoAI:0.8b" || source != "selected_model" {
+		t.Fatalf("resolved model=%q source=%q, want selected smuxo model", model, source)
 	}
 }
 

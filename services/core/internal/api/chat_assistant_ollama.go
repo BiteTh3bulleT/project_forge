@@ -368,43 +368,48 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 }
 
 func (s *Server) resolveNativeOllamaChatModel(ctx context.Context, ol adapters.Ollama, requestedModelID string) (string, string) {
+	requested := strings.TrimSpace(requestedModelID)
+	if requested != "" && s.modelRuntime != nil {
+		models, err := s.modelRuntime.ListModels(ctx, ModelRuntimeListRequest{SkipDiscovery: true})
+		if err == nil {
+			for _, model := range models {
+				if !strings.EqualFold(strings.TrimSpace(model.ID), requested) {
+					continue
+				}
+				if !modelRuntimeModelSupportsChat(model) || !modelRuntimeModelUsableForChat(model) {
+					break
+				}
+				if strings.ToLower(strings.TrimSpace(model.Backend)) != "ollama_compat" {
+					break
+				}
+				if remote, ok := model.Metadata["remote"].(bool); ok && remote {
+					break
+				}
+				if provider, ok := model.Metadata["provider"].(string); ok && strings.TrimSpace(provider) != "" && !strings.EqualFold(strings.TrimSpace(provider), "ollama") {
+					break
+				}
+				// An explicitly selected, locally discovered model is request scope.
+				// It must take precedence over a persisted default from an older
+				// deployment, which may not support the requested capabilities.
+				return strings.TrimSpace(model.ID), "selected_model"
+			}
+		}
+	}
 	if configured := strings.TrimSpace(ol.ModelForChat(ctx)); configured != "" {
 		return configured, "settings"
-	}
-	requested := strings.TrimSpace(requestedModelID)
-	if requested == "" || s.modelRuntime == nil {
-		return "", ""
-	}
-	models, err := s.modelRuntime.ListModels(ctx, ModelRuntimeListRequest{SkipDiscovery: true})
-	if err != nil {
-		return "", ""
-	}
-	for _, model := range models {
-		if !strings.EqualFold(strings.TrimSpace(model.ID), requested) {
-			continue
-		}
-		if !modelRuntimeModelSupportsChat(model) || !modelRuntimeModelUsableForChat(model) {
-			return "", ""
-		}
-		if strings.ToLower(strings.TrimSpace(model.Backend)) != "ollama_compat" {
-			return "", ""
-		}
-		if remote, ok := model.Metadata["remote"].(bool); ok && remote {
-			return "", ""
-		}
-		if provider, ok := model.Metadata["provider"].(string); ok && strings.TrimSpace(provider) != "" && !strings.EqualFold(strings.TrimSpace(provider), "ollama") {
-			return "", ""
-		}
-		return strings.TrimSpace(model.ID), "selected_model"
 	}
 	return "", ""
 }
 
 func (s *Server) nativeOllamaSelectedModelAvailable(ctx context.Context, ollamaAdapter adapters.Adapter, requestedModelID string) bool {
 	ol, ok := ollamaAdapter.(adapters.Ollama)
-	if !ok {
+	if !ok || s.modelRuntime == nil {
 		return false
 	}
 	model, source := s.resolveNativeOllamaChatModel(ctx, ol, requestedModelID)
-	return strings.TrimSpace(model) != "" && source == "selected_model"
+	if strings.TrimSpace(model) == "" || source != "selected_model" {
+		return false
+	}
+	health, err := s.modelRuntime.Health(ctx, ModelRuntimeRequestMeta{WorkspaceID: strings.TrimSpace(s.cfg.WorkspaceDir)})
+	return err == nil && modelRuntimeBackendHealthy(health, "ollama_compat")
 }

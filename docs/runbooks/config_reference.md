@@ -160,7 +160,7 @@ Full list in [server.go handleGetSettings / handleUpdateSettings](../../services
 | `extensions_csv` | (ingest defaults) | File types the watch/ingest pipeline considers |
 | `theme` | `dark` | Desktop theme |
 | `ollama_base_url` | `http://127.0.0.1:11434` | Local LLM endpoint |
-| `ollama_model` | — | Model override for ollama adapter |
+| `ollama_model` | — | Persisted default for the Ollama adapter. A valid locally discovered model explicitly selected for a chat request takes precedence for that request; otherwise this value, then `OLLAMA_MODEL`, is used. |
 | `embedding_provider` | `local_hash` | Retrieval embedding backend |
 | `embedding_model` | provider default | Embedding provider model label |
 | `embedding_dims` | `128` | Embedding vector size |
