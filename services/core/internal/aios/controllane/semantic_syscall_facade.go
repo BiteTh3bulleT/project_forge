@@ -27,21 +27,22 @@ type SemanticSyscallFacade struct {
 }
 
 func BuildSemanticSyscallFacade(req domain.SyscallRequest, def ActionDefinition) SemanticSyscallFacade {
+	mutating := semanticSyscallMutating(req, def)
 	return SemanticSyscallFacade{
 		SchemaVersion:      SemanticSyscallFacadeSchemaVersion,
 		SyscallID:          strings.TrimSpace(req.ID),
 		Action:             def.Action,
-		ExpectedEffect:     expectedEffect(def),
+		ExpectedEffect:     expectedEffect(def, mutating),
 		TargetObjectType:   def.TargetObjectType,
 		RequiredCapability: nonEmpty(req.RequiredCapability, def.Capability),
-		Mutating:           def.Mutating,
+		Mutating:           mutating,
 		DryRun:             req.DryRun,
 		WorkspaceID:        strings.TrimSpace(req.Scope.WorkspaceID),
 		LaneID:             strings.TrimSpace(req.Scope.LaneID),
 		Refs:               syscallRefs(req),
 		CapabilityScope:    capabilityScope(req),
-		RollbackMetadata:   rollbackMetadata(req, def),
-		AuthorityEffects:   authorityEffects(req, def),
+		RollbackMetadata:   rollbackMetadata(req, def, mutating),
+		AuthorityEffects:   authorityEffects(req, def, mutating),
 	}
 }
 
@@ -64,19 +65,26 @@ func (f SemanticSyscallFacade) ToAuditFields() map[string]any {
 	}
 }
 
-func expectedEffect(def ActionDefinition) string {
+func semanticSyscallMutating(req domain.SyscallRequest, def ActionDefinition) bool {
+	if def.Mutating {
+		return true
+	}
+	return req.Action == domain.ActionCompileContext && mergeCompileContextOptions(req.Payload).PersistSnapshot
+}
+
+func expectedEffect(def ActionDefinition, mutating bool) string {
 	target := strings.TrimSpace(def.TargetObjectType)
 	if target == "" {
 		target = "semantic_object"
 	}
-	if def.Mutating {
+	if mutating {
 		return "commit_" + target
 	}
 	return "validate_" + target
 }
 
-func rollbackMetadata(req domain.SyscallRequest, def ActionDefinition) map[string]any {
-	if !def.Mutating || req.DryRun {
+func rollbackMetadata(req domain.SyscallRequest, def ActionDefinition, mutating bool) map[string]any {
+	if !mutating || req.DryRun {
 		return map[string]any{
 			"required": false,
 			"strategy": "no_state_rollback_required",
@@ -98,12 +106,13 @@ func capabilityScope(req domain.SyscallRequest) map[string]any {
 	}
 }
 
-func authorityEffects(req domain.SyscallRequest, def ActionDefinition) map[string]bool {
+func authorityEffects(req domain.SyscallRequest, def ActionDefinition, mutating bool) map[string]bool {
 	forgeKIngress, _ := req.Metadata["forgeKIngressAuthority"].(bool)
 	return map[string]bool{
 		"forgeKIngressOwned":       forgeKIngress,
 		"controlLaneOwned":         !forgeKIngress,
 		"controlLaneCommitAdapter": forgeKIngress,
+		"mutatesDurableData":       mutating,
 		"mutatesCanonicalData":     def.Mutating,
 		"callsModelRuntime":        false,
 		"executesGatewayTool":      false,

@@ -59,6 +59,33 @@ func TestBuildSemanticSyscallFacadeRedactsUnsafeRefs(t *testing.T) {
 	}
 }
 
+func TestBuildSemanticSyscallFacadeReportsPersistedCompileAsMutating(t *testing.T) {
+	registry := NewStaticActionRegistry()
+	def, ok := registry.Get(domain.ActionCompileContext)
+	if !ok {
+		t.Fatal("COMPILE_CONTEXT registry definition missing")
+	}
+	req := validBaseRequest(domain.ActionCompileContext)
+	req.Payload = map[string]any{"query": "bounded context", "persistSnapshot": true}
+
+	facade := BuildSemanticSyscallFacade(req, def)
+	if !facade.Mutating || facade.ExpectedEffect != "commit_context_packet" {
+		t.Fatalf("persisted compile must report its effective mutation, got %+v", facade)
+	}
+	if required, _ := facade.RollbackMetadata["required"].(bool); !required {
+		t.Fatalf("persisted compile must report rollback evidence, got %+v", facade.RollbackMetadata)
+	}
+	if !facade.AuthorityEffects["mutatesDurableData"] || facade.AuthorityEffects["mutatesCanonicalData"] {
+		t.Fatalf("persisted compile must report durable writes, got %+v", facade.AuthorityEffects)
+	}
+
+	req.Payload["persistSnapshot"] = false
+	facade = BuildSemanticSyscallFacade(req, def)
+	if facade.Mutating || facade.ExpectedEffect != "validate_context_packet" {
+		t.Fatalf("non-persisted compile must remain non-mutating, got %+v", facade)
+	}
+}
+
 func TestProcessorAuditIncludesSemanticSyscallFacade(t *testing.T) {
 	ctx := context.Background()
 	kernel, _, auditSink := newTestKernel()
