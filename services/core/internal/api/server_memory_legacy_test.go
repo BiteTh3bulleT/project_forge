@@ -35,6 +35,7 @@ func TestLegacyMemoryMutationEndpointsAreRetiredAndAudited(t *testing.T) {
 		path          string
 		expectAction  string
 		expectSubject string
+		body          string
 	}{
 		{
 			name:          "create observation",
@@ -42,6 +43,7 @@ func TestLegacyMemoryMutationEndpointsAreRetiredAndAudited(t *testing.T) {
 			path:          "/api/memory/observations",
 			expectAction:  "legacy.memory.observation.create.retired",
 			expectSubject: "new",
+			body:          `{not-json`,
 		},
 		{
 			name:          "patch observation",
@@ -49,6 +51,7 @@ func TestLegacyMemoryMutationEndpointsAreRetiredAndAudited(t *testing.T) {
 			path:          "/api/memory/observations/42",
 			expectAction:  "legacy.memory.observation.patch.retired",
 			expectSubject: "42",
+			body:          strings.Repeat("x", memoryMutationRequestBodyLimit+1),
 		},
 		{
 			name:          "mark observation usefulness",
@@ -56,6 +59,7 @@ func TestLegacyMemoryMutationEndpointsAreRetiredAndAudited(t *testing.T) {
 			path:          "/api/memory/observations/42/usefulness",
 			expectAction:  "legacy.memory.observation.usefulness.retired",
 			expectSubject: "42",
+			body:          `{`,
 		},
 	}
 
@@ -69,7 +73,7 @@ func TestLegacyMemoryMutationEndpointsAreRetiredAndAudited(t *testing.T) {
 				separator = "&"
 			}
 			url := tc.path + separator + "correlationId=" + correlation + "&traceId=" + trace + "&workspaceId=" + workspace
-			req := httptest.NewRequest(tc.method, url, bytes.NewReader([]byte(`{}`)))
+			req := httptest.NewRequest(tc.method, url, bytes.NewReader([]byte(tc.body)))
 			rr := httptest.NewRecorder()
 			h.ServeHTTP(rr, req)
 
@@ -83,8 +87,8 @@ func TestLegacyMemoryMutationEndpointsAreRetiredAndAudited(t *testing.T) {
 			if body["historyPreserved"] != true {
 				t.Fatalf("expected historyPreserved response, got %#v", body)
 			}
-			if got := rr.Body.String(); !strings.Contains(got, "Courthouse admission review") || !strings.Contains(got, "Control Lane semantic syscall path") {
-				t.Fatalf("expected Courthouse/Kernel migration guidance message, got %q", got)
+			if got := rr.Body.String(); !strings.Contains(got, "MATERIALIZE_ADMITTED_EVIDENCE") || !strings.Contains(got, "REVISE_MEMORY_EVIDENCE") {
+				t.Fatalf("expected production FORGE-K migration guidance message, got %q", got)
 			}
 
 			var observationCount int
@@ -119,7 +123,7 @@ WHERE category = 'memory' AND action = ? AND subject_id = ? AND outcome = 'denie
 			if !strings.Contains(payload, `"workspaceId":"`+workspace+`"`) {
 				t.Fatalf("expected workspaceId in legacy memory audit payload, got %s", payload)
 			}
-			if !strings.Contains(payload, `"historyPreserved":true`) || !strings.Contains(payload, `"VALIDATE_ADMISSION_CANDIDATE"`) {
+			if !strings.Contains(payload, `"historyPreserved":true`) || !strings.Contains(payload, `"MATERIALIZE_ADMITTED_EVIDENCE"`) || !strings.Contains(payload, `"REVISE_MEMORY_EVIDENCE"`) {
 				t.Fatalf("expected migration review path in legacy memory audit payload, got %s", payload)
 			}
 		})

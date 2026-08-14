@@ -11,6 +11,13 @@ Check without writing with `node scripts/generate-api-routes.mjs --check`.
 - Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty: mounted under `requireAPIAuth`. An empty token does not grant semantic authority: only verified loopback peers receive `local_loopback` origin proof, while arbitrary remote peers receive no authenticated user/proposer origin and fail closed at FORGE-K authorization.
 - Handler-specific checks, approval gates, capability gates, and remote webhook signature/token validation are not expanded here unless visible at the route-mount layer.
 
+## Retired memory mutation behavior
+
+- `POST /api/memory/observations`, `PATCH /api/memory/observations/{id}`, and `POST /api/memory/observations/{id}/usefulness` are terminal audited retirement gates. They return `410 Gone` without decoding the request body or reaching a writer.
+- No legacy observation-link mutation route is mounted.
+- `POST /api/memory/repair/run` is deterministic proposal inspection only with explicit `dryRun=true`; non-dry requests fail closed.
+- Historical observation, link, usefulness, and repair read surfaces remain available. Canonical creation and revision belong to authenticated production FORGE-K semantic syscalls.
+
 ## Inventory
 
 | Method | Path | Auth posture | Mount condition |
@@ -113,9 +120,9 @@ Check without writing with `node scripts/generate-api-routes.mjs --check`.
 | GET | `/api/context/restore/{id}/candidates` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
 | GET | `/api/context/restore/{id}/score` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
 | GET | `/api/context/restore/{id}/resume-hints` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
-| GET | `/api/context/restore/outcomes` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted; K20G returns original evidence plus a separately labeled `feedbackProjection` |
-| GET | `/api/context/restore/outcomes/{id}` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted; K20G returns original evidence plus a separately labeled `feedbackProjection` |
-| POST | `/api/context/restore/outcomes/{id}/feedback` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | K20G production FORGE-K utility syscall; exact workspace/lane/selected paths and idempotency required |
+| GET | `/api/context/restore/outcomes` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
+| GET | `/api/context/restore/outcomes/{id}` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
+| POST | `/api/context/restore/outcomes/{id}/feedback` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
 | GET | `/api/process/health` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
 | GET | `/api/project-context` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
 | POST | `/api/project-context/import` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
@@ -127,7 +134,7 @@ Check without writing with `node scripts/generate-api-routes.mjs --check`.
 | GET | `/api/retrieval/runs/{id}` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
 | GET | `/api/retrieval/runs/{id}/vsa-signals` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
 | GET | `/api/retrieval/results/{id}/vsa-signal` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
-| POST | `/api/retrieval/results/{id}/usefulness` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | K20G production FORGE-K utility syscall; appends immutable evidence and a rebuildable projection |
+| POST | `/api/retrieval/results/{id}/usefulness` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
 | GET | `/api/memory/observations` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
 | POST | `/api/memory/observations` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
 | GET | `/api/memory/observations/{id}` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |

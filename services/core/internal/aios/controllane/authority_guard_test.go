@@ -105,6 +105,125 @@ func TestGatewayHasSingleConstructionSite(t *testing.T) {
 	assertProductionCallSites(t, `\bgateway\.New\(`, expected, "gateway.New")
 }
 
+func TestForgeKMemoryEvidenceHasOneProductionWriter(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve guard source")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", ".."))
+	internalRoot := filepath.Join(repoRoot, "services", "core", "internal")
+	adapter := filepath.Join("services", "core", "internal", "aios", "controllane", "sqlite_store_memory_evidence.go")
+	migration := filepath.Join("services", "core", "internal", "store", "migrate_schema.go")
+	apply := filepath.Join("services", "core", "internal", "aios", "controllane", "memory_evidence.go")
+	sqlWrite := regexp.MustCompile(`(?i)\b(?:insert\s+into|update|delete\s+from)\s+(forge_k_memory_evidence(?:_supersessions)?)\b`)
+	createCall := regexp.MustCompile(`\.CreateMemoryEvidence\s*\(`)
+	writes := map[string]int{}
+	calls := []string{}
+	violations := []string{}
+	err := filepath.WalkDir(internalRoot, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() || filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(repoRoot, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.Clean(rel)
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, match := range sqlWrite.FindAllStringSubmatch(string(body), -1) {
+			writes[match[1]]++
+			if rel != adapter && rel != migration {
+				violations = append(violations, rel+": "+match[0])
+			}
+		}
+		if createCall.Match(body) {
+			calls = append(calls, rel)
+			if rel != apply {
+				violations = append(violations, rel+": CreateMemoryEvidence call")
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(violations) != 0 {
+		t.Fatalf("memory evidence authority bypasses found: %v", violations)
+	}
+	if writes["forge_k_memory_evidence"] != 1 || writes["forge_k_memory_evidence_supersessions"] != 1 {
+		t.Fatalf("unexpected governed SQL writer counts: %v", writes)
+	}
+	if len(calls) != 1 || calls[0] != apply {
+		t.Fatalf("unexpected CreateMemoryEvidence callsites: %v", calls)
+	}
+}
+
+func TestForgeKMemoryVSAProjectionHasOneProductionWriter(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve guard source")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", ".."))
+	internalRoot := filepath.Join(repoRoot, "services", "core", "internal")
+	adapter := filepath.Join("services", "core", "internal", "aios", "controllane", "sqlite_store_acceleration.go")
+	apply := filepath.Join("services", "core", "internal", "aios", "controllane", "memory_acceleration.go")
+	sqlWrite := regexp.MustCompile(`(?i)\b(insert\s+into|update|delete\s+from)\s+(forge_k_memory_vsa_(?:pointers|role_bindings|associations))\b`)
+	rebuildCall := regexp.MustCompile(`\.RebuildMemoryAcceleration\s*\(`)
+	writes := map[string]int{}
+	calls := []string{}
+	violations := []string{}
+	err := filepath.WalkDir(internalRoot, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() || filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(repoRoot, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.Clean(rel)
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, match := range sqlWrite.FindAllStringSubmatch(string(body), -1) {
+			writes[strings.ToLower(match[1])+" "+strings.ToLower(match[2])]++
+			if rel != adapter {
+				violations = append(violations, rel+": "+match[0])
+			}
+		}
+		if rebuildCall.Match(body) {
+			calls = append(calls, rel)
+			if rel != apply {
+				violations = append(violations, rel+": RebuildMemoryAcceleration call")
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(violations) != 0 {
+		t.Fatalf("governed memory VSA authority bypasses found: %v", violations)
+	}
+	for _, table := range []string{"forge_k_memory_vsa_pointers", "forge_k_memory_vsa_role_bindings", "forge_k_memory_vsa_associations"} {
+		if writes["insert into "+table] != 1 || writes["delete from "+table] != 1 {
+			t.Fatalf("unexpected governed projection writer counts for %s: %v", table, writes)
+		}
+	}
+	if len(calls) != 1 || calls[0] != apply {
+		t.Fatalf("unexpected RebuildMemoryAcceleration callsites: %v", calls)
+	}
+}
+
 func assertProductionCallSites(t *testing.T, pattern string, expected []string, label string) {
 	t.Helper()
 	_, thisFile, _, ok := runtime.Caller(0)

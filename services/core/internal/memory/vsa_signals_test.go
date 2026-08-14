@@ -198,7 +198,7 @@ ON CONFLICT(key) DO UPDATE SET value=excluded.value`); err != nil {
 	}
 }
 
-func TestComputeVSAQuerySignalsRequiresMatchingScopedActiveManifest(t *testing.T) {
+func TestComputeVSAQuerySignalsRejectsLegacyObservationManifest(t *testing.T) {
 	ctx := context.Background()
 	svc, cleanup := newMemoryServiceForTest(t)
 	defer cleanup()
@@ -236,8 +236,8 @@ VALUES('workspace-a','lane-a',?,?,?,?,?,?,1,0,100,100)`, manifestHash, obs.ID, 1
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(signals) != 1 || signals[10].ObservationID == nil || signals[10].AppliedScore == 0 {
-		t.Fatalf("scoped active signals = %+v", signals)
+	if len(signals) != 0 {
+		t.Fatalf("legacy observation manifest influenced governed scoring: %+v", signals)
 	}
 	signals, err = svc.ComputeVSAQuerySignals(ctx, VSAQuerySignalsRequest{
 		WorkspaceID: "workspace-a", LaneID: "other-lane", Query: "alpha subsystem",
@@ -251,7 +251,7 @@ VALUES('workspace-a','lane-a',?,?,?,?,?,?,1,0,100,100)`, manifestHash, obs.ID, 1
 func TestVSASignalScoringHelpers(t *testing.T) {
 	t.Parallel()
 
-	role := scoreRoleMatch(tokenSet("alpha owner"), []VSARoleBinding{
+	role := scoreRoleMatch(tokenSet("alpha owner"), []governedVSABinding{
 		{Role: "owner", Filler: "alpha", Weight: 1, SupportCount: 3},
 		{Role: "status", Filler: "beta", Weight: 1, SupportCount: 0, NoiseCount: 3},
 	})
@@ -259,9 +259,9 @@ func TestVSASignalScoringHelpers(t *testing.T) {
 		t.Fatalf("role score = %v, want within (0,1]", role)
 	}
 
-	relational := scoreRelational(1, []VSAAssociation{
-		{FromObservationID: 1, ToObservationID: 2, Strength: 0.8, SupportCount: 3},
-		{FromObservationID: 1, ToObservationID: 3, Strength: 0.9, SupportCount: 3},
+	relational := scoreRelational(1, []governedVSAAssociation{
+		{FromMemoryEvidenceRowID: 1, ToMemoryEvidenceRowID: 2, Strength: 0.8, SupportCount: 3},
+		{FromMemoryEvidenceRowID: 1, ToMemoryEvidenceRowID: 3, Strength: 0.9, SupportCount: 3},
 	}, map[int64]struct{}{2: {}})
 	if relational <= 0 || relational > 1 {
 		t.Fatalf("relational score = %v, want within (0,1]", relational)

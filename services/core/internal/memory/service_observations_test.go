@@ -2,234 +2,75 @@ package memory
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 )
 
-func requireStringSlice(t *testing.T, raw json.RawMessage, want []string) {
-	t.Helper()
-	var got []string
-	if err := json.Unmarshal(raw, &got); err != nil {
-		t.Fatalf("unmarshal raw string slice %q: %v", string(raw), err)
+func TestLegacyObservationWritersFailClosed(t *testing.T) {
+	ctx := context.Background()
+	svc, cleanup := newMemoryServiceForTest(t)
+	defer cleanup()
+	if _, err := svc.RecordObservation(ctx, RecordObservationRequest{Type: "note"}); !errors.Is(err, ErrMemoryEvidenceAuthorityRequired) {
+		t.Fatalf("record error = %v", err)
 	}
-	if len(got) != len(want) {
-		t.Fatalf("slice length mismatch: got %v want %v", got, want)
+	if _, err := svc.UpdateObservation(ctx, 1, UpdateObservationRequest{}); !errors.Is(err, ErrMemoryEvidenceAuthorityRequired) {
+		t.Fatalf("update error = %v", err)
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("slice mismatch at %d: got %v want %v", i, got, want)
+	if err := svc.AddLink(ctx, 1, 2, "related", "legacy"); !errors.Is(err, ErrMemoryEvidenceAuthorityRequired) {
+		t.Fatalf("link error = %v", err)
+	}
+	if err := svc.MarkObservationUsefulness(ctx, MarkUsefulnessRequest{ObservationID: 1, Signal: "useful"}); !errors.Is(err, ErrMemoryEvidenceAuthorityRequired) {
+		t.Fatalf("usefulness error = %v", err)
+	}
+	if err := svc.LinkResultObservation(ctx, 1, 1, "legacy"); !errors.Is(err, ErrMemoryEvidenceAuthorityRequired) {
+		t.Fatalf("result link error = %v", err)
+	}
+	if detail, err := svc.RunRepairPass(ctx, RunRepairRequest{Mode: "legacy"}); detail != nil || !errors.Is(err, ErrMemoryEvidenceAuthorityRequired) {
+		t.Fatalf("repair detail=%+v error=%v", detail, err)
+	}
+	for _, table := range []string{
+		"memory_observations",
+		"memory_observation_links",
+		"memory_usefulness_events",
+		"retrieval_result_observations",
+		"memory_repair_runs",
+		"memory_repair_items",
+	} {
+		var count int
+		if err := svc.db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&count); err != nil {
+			t.Fatalf("count %s: %v", table, err)
+		}
+		if count != 0 {
+			t.Fatalf("legacy writer changed %s: count=%d", table, count)
 		}
 	}
 }
 
-func TestRecordObservationNormalizesAndUpsertsByOrigin(t *testing.T) {
+func TestLegacyObservationReadsRemainAvailable(t *testing.T) {
 	ctx := context.Background()
 	svc, cleanup := newMemoryServiceForTest(t)
 	defer cleanup()
-
-	first, err := svc.RecordObservation(ctx, RecordObservationRequest{
-		Type:              " memory_note ",
-		RawContent:        " raw content ",
-		Summary:           " summary ",
-		EmbeddingRef:      " embedding:a ",
-		ProjectKey:        " project-a ",
-		SourcePath:        " /workspace/a.go ",
-		Entities:          []string{" alpha ", "", "beta"},
-		Tags:              []string{" tag-a ", "\t", "tag-b"},
-		RelatedFiles:      []string{" /workspace/b.go "},
-		Lineage:           []string{" seed "},
-		TaskType:          " research ",
-		Confidence:        1.8,
-		VerificationState: "",
-		OriginKind:        " job ",
-		OriginID:          " job-1 ",
-		ObservedAtMs:      1234,
-	})
+	for _, statement := range []string{
+		`INSERT INTO memory_observations(created_at,updated_at,observed_at,type,raw_content,summary,source_path,origin_kind,origin_id) VALUES(1,1,1,'note','alpha','alpha summary','/a','fixture','a')`,
+		`INSERT INTO memory_observations(created_at,updated_at,observed_at,type,raw_content,summary,source_path,origin_kind,origin_id) VALUES(2,2,2,'other','beta','beta summary','/b','fixture','b')`,
+		`INSERT INTO memory_observation_links(created_at,from_observation_id,to_observation_id,relation_type,note) VALUES(3,1,2,'related','legacy read')`,
+	} {
+		if _, err := svc.db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows, err := svc.ListObservations(ctx, ListObservationsRequest{Type: "note", Limit: 10})
 	if err != nil {
-		t.Fatalf("record first observation: %v", err)
+		t.Fatal(err)
 	}
-	if first.Type != "memory_note" || first.RawContent != "raw content" || first.Summary != "summary" {
-		t.Fatalf("observation text fields were not normalized: %+v", first)
+	if len(rows) != 1 || rows[0].Summary != "alpha summary" {
+		t.Fatalf("legacy list = %+v", rows)
 	}
-	if first.Confidence != 1 {
-		t.Fatalf("expected confidence to clamp to 1, got %v", first.Confidence)
-	}
-	if first.VerificationState != "unknown" {
-		t.Fatalf("expected default verification state unknown, got %q", first.VerificationState)
-	}
-	if first.OriginKind != "job" || first.OriginID != "job-1" {
-		t.Fatalf("origin fields were not normalized: %+v", first)
-	}
-	requireStringSlice(t, first.Entities, []string{"alpha", "beta"})
-	requireStringSlice(t, first.Tags, []string{"tag-a", "tag-b"})
-	requireStringSlice(t, first.RelatedFiles, []string{"/workspace/b.go"})
-	requireStringSlice(t, first.Lineage, []string{"seed"})
-
-	second, err := svc.RecordObservation(ctx, RecordObservationRequest{
-		Type:         "decision",
-		RawContent:   "updated raw",
-		Summary:      "updated summary",
-		Tags:         []string{"updated"},
-		Confidence:   -2,
-		OriginKind:   "job",
-		OriginID:     "job-1",
-		ObservedAtMs: 5678,
-	})
+	detail, err := svc.GetObservation(ctx, 1)
 	if err != nil {
-		t.Fatalf("record origin upsert: %v", err)
+		t.Fatal(err)
 	}
-	if second.ID != first.ID {
-		t.Fatalf("expected origin upsert to reuse id %d, got %d", first.ID, second.ID)
+	if len(detail.OutgoingLinks) != 1 || detail.OutgoingLinks[0].ToObservationID != 2 {
+		t.Fatalf("legacy detail links = %+v", detail.OutgoingLinks)
 	}
-	if second.Type != "decision" || second.Summary != "updated summary" || second.ObservedAtMs != 5678 {
-		t.Fatalf("origin upsert did not update canonical fields: %+v", second)
-	}
-	if second.Confidence != 0.5 {
-		t.Fatalf("expected non-positive confidence to default to 0.5, got %v", second.Confidence)
-	}
-
-	all, err := svc.ListObservations(ctx, ListObservationsRequest{Limit: 10})
-	if err != nil {
-		t.Fatalf("list observations: %v", err)
-	}
-	if len(all) != 1 || all[0].ID != first.ID {
-		t.Fatalf("expected one upserted observation id %d, got %+v", first.ID, all)
-	}
-}
-
-func TestListObservationsFiltersAndDefaultLimit(t *testing.T) {
-	ctx := context.Background()
-	svc, cleanup := newMemoryServiceForTest(t)
-	defer cleanup()
-
-	res, err := svc.db.ExecContext(ctx, `
-INSERT INTO dossiers(created_at, updated_at, name)
-VALUES(100, 100, 'memory-service-test')`)
-	if err != nil {
-		t.Fatalf("insert dossier: %v", err)
-	}
-	dossierID, err := res.LastInsertId()
-	if err != nil {
-		t.Fatalf("read dossier id: %v", err)
-	}
-	first, err := svc.RecordObservation(ctx, RecordObservationRequest{
-		Type:         "decision",
-		Summary:      "first",
-		DossierID:    &dossierID,
-		OriginKind:   "job",
-		OriginID:     "one",
-		ObservedAtMs: 1000,
-	})
-	if err != nil {
-		t.Fatalf("record first observation: %v", err)
-	}
-	second, err := svc.RecordObservation(ctx, RecordObservationRequest{
-		Type:         "decision",
-		Summary:      "second",
-		DossierID:    &dossierID,
-		OriginKind:   "manual",
-		OriginID:     "two",
-		ObservedAtMs: 2000,
-	})
-	if err != nil {
-		t.Fatalf("record second observation: %v", err)
-	}
-	if _, err := svc.UpdateObservation(ctx, second.ID, UpdateObservationRequest{Stale: ptrBool(true)}); err != nil {
-		t.Fatalf("mark second stale: %v", err)
-	}
-
-	filtered, err := svc.ListObservations(ctx, ListObservationsRequest{
-		DossierID:  &dossierID,
-		Type:       " decision ",
-		OriginKind: " manual ",
-		StaleOnly:  true,
-		Limit:      -5,
-	})
-	if err != nil {
-		t.Fatalf("list filtered observations: %v", err)
-	}
-	if len(filtered) != 1 || filtered[0].ID != second.ID {
-		t.Fatalf("expected only stale manual observation id %d, got %+v", second.ID, filtered)
-	}
-
-	all, err := svc.ListObservations(ctx, ListObservationsRequest{Limit: 10})
-	if err != nil {
-		t.Fatalf("list all observations: %v", err)
-	}
-	if len(all) != 2 || all[0].ID != second.ID || all[1].ID != first.ID {
-		t.Fatalf("expected observed_at desc order [%d %d], got %+v", second.ID, first.ID, all)
-	}
-}
-
-func TestUpdateObservationPreservesUnsetFieldsAndHydratesLinksAndSignals(t *testing.T) {
-	ctx := context.Background()
-	svc, cleanup := newMemoryServiceForTest(t)
-	defer cleanup()
-
-	from := createTestObservation(t, svc, "/tmp/project/from.go", "from summary", "from raw")
-	to := createTestObservation(t, svc, "/tmp/project/to.go", "to summary", "to raw")
-	if err := svc.AddLink(ctx, from.ID, to.ID, "", " link note "); err != nil {
-		t.Fatalf("add default link: %v", err)
-	}
-	lastVerified := int64(4242)
-	detail, err := svc.UpdateObservation(ctx, from.ID, UpdateObservationRequest{
-		VerificationState: ptrString(" verified "),
-		Stale:             ptrBool(true),
-		LastVerifiedAtMs:  &lastVerified,
-		Tags:              []string{" keep ", "", "new"},
-		RelatedFiles:      []string{" /tmp/project/related.go "},
-	})
-	if err != nil {
-		t.Fatalf("update observation: %v", err)
-	}
-	if detail.Summary != "from summary" {
-		t.Fatalf("expected nil summary update to preserve summary, got %q", detail.Summary)
-	}
-	if detail.VerificationState != "verified" || !detail.Stale {
-		t.Fatalf("expected trimmed verification and stale flag, got %+v", detail.Observation)
-	}
-	if detail.LastVerifiedAtMs == nil || *detail.LastVerifiedAtMs != lastVerified {
-		t.Fatalf("expected last verified timestamp %d, got %+v", lastVerified, detail.LastVerifiedAtMs)
-	}
-	requireStringSlice(t, detail.Tags, []string{"keep", "new"})
-	requireStringSlice(t, detail.RelatedFiles, []string{"/tmp/project/related.go"})
-
-	if err := svc.MarkObservationUsefulness(ctx, MarkUsefulnessRequest{
-		ObservationID: from.ID,
-		Signal:        "noise",
-		Weight:        2.5,
-		Note:          "too broad",
-	}); !errors.Is(err, ErrMemoryEvidenceAuthorityRequired) {
-		t.Fatalf("legacy usefulness error: %v", err)
-	}
-	hydrated, err := svc.GetObservation(ctx, from.ID)
-	if err != nil {
-		t.Fatalf("get hydrated observation: %v", err)
-	}
-	if len(hydrated.OutgoingLinks) != 1 {
-		t.Fatalf("expected one outgoing link, got %+v", hydrated.OutgoingLinks)
-	}
-	if hydrated.OutgoingLinks[0].RelationType != "related" || hydrated.OutgoingLinks[0].Note != "link note" {
-		t.Fatalf("expected default related link with trimmed note, got %+v", hydrated.OutgoingLinks[0])
-	}
-	if len(hydrated.Signals) != 0 {
-		t.Fatalf("legacy usefulness writer created signals: %+v", hydrated.Signals)
-	}
-
-	target, err := svc.GetObservation(ctx, to.ID)
-	if err != nil {
-		t.Fatalf("get target observation: %v", err)
-	}
-	if len(target.IncomingLinks) != 1 || target.IncomingLinks[0].FromObservationID != from.ID {
-		t.Fatalf("expected incoming link from %d, got %+v", from.ID, target.IncomingLinks)
-	}
-}
-
-func ptrBool(v bool) *bool {
-	return &v
-}
-
-func ptrString(v string) *string {
-	return &v
 }

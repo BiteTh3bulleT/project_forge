@@ -91,6 +91,16 @@ tears down cleanly. See
 [../status/smoke_test_status.md](../status/smoke_test_status.md).
 Expected output ends with `==> smoke OK`.
 
+### Memory mutation retirement check
+
+Historical observation and repair reads remain available. Do not use the
+legacy observation create/patch/usefulness/link APIs or direct memory-service
+writers: they are retired. The three mounted observation mutation routes
+return `410 Gone`, no link mutation route is mounted, and repair accepts only
+an explicit `{"dryRun":true}` proposal request. Non-dry repair fails closed.
+Canonical evidence creation or revision must enter the authenticated
+production FORGE-K materialization syscalls; model output cannot write it.
+
 ## 3. Orchestrated bring-up with desktop
 
 ```sh

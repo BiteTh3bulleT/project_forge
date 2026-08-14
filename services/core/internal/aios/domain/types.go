@@ -245,6 +245,8 @@ const (
 	ActionRebuildMemoryAcceleration    SemanticActionType = "REBUILD_MEMORY_ACCELERATION"
 	ActionRecordRetrievalUsefulness    SemanticActionType = "RECORD_RETRIEVAL_USEFULNESS"
 	ActionRecordRestoreOutcomeFeedback SemanticActionType = "RECORD_RESTORE_OUTCOME_FEEDBACK"
+	ActionMaterializeAdmittedEvidence  SemanticActionType = "MATERIALIZE_ADMITTED_EVIDENCE"
+	ActionReviseMemoryEvidence         SemanticActionType = "REVISE_MEMORY_EVIDENCE"
 )
 
 type SyscallRequest struct {

@@ -8,10 +8,12 @@ Legacy observation signals remain in `memory_usefulness_events`. K20G retrieval
 result feedback is stored instead as immutable FORGE-K utility evidence with a
 separate rebuildable projection.
 
-Signal sources:
-- retrieval result usefulness marking
-- memory observation marking from operator UI
-- outcome tagging for selected retrieval context
+Governed signal sources:
+- retrieval-result usefulness through K20G immutable utility events
+- restore-outcome feedback through K20G immutable utility events
+
+Legacy operator observation usefulness is read-only history. Its API route is
+a terminal `410 Gone` gate and its Go writer fails closed.
 
 Tracked signal values include:
 - `useful`
@@ -22,7 +24,7 @@ Tracked signal values include:
 
 ## Score Aggregation
 
-Each observation keeps summary counters:
+Historical observations may contain legacy summary counters:
 - `usefulness_score`
 - `usefulness_count`
 - `noise_count`
@@ -40,33 +42,29 @@ Each observation supports:
 - `last_verified_at`
 - `verification_state`
 
-Operators can mark stale or re-verified from the Memory page.
+Legacy stale/re-verification mutation is retired. The fields remain readable;
+new evidence revision requires the governed FORGE-K revision syscall.
 
 ## Repair Workflow
 
-1. Inspect observation detail.
-2. Mark stale/noisy/useful explicitly.
+1. Inspect observation detail and immutable evidence history.
+2. Request a deterministic repair preview with `dryRun=true`.
 3. Review retrieval runs that repeatedly surface noisy memory.
-4. Adjust dossier high-value/noisy file lists.
-5. Inspect VSA breakdown for noisy results (associative/role/relational/feedback).
-6. Trigger VSA reindex if pointers/bindings are stale or missing.
-7. Re-run retrieval and verify selection reasons.
+4. Submit usefulness only through the governed retrieval utility surface.
+5. Inspect VSA breakdown and governed projection provenance.
+6. Submit any evidence revision through `REVISE_MEMORY_EVIDENCE`.
 
 ## Repair Runs
 
-FORGE now persists repair passes:
+FORGE preserves historical repair passes for read compatibility:
 
 - `memory_repair_runs`: run-level metadata and totals
 - `memory_repair_items`: per-observation before/after snapshots and status
 
-Run modes:
-- `manual`: operator-triggered from Memory UI
-- `scheduled`: background ticker pass in core runtime
-
-Operator controls:
-- run repair now from `#/memory`
-- inspect run history and per-item outcomes
-- verify repaired/skipped/failed counts and notes
+Live repair execution is retired. `POST /api/memory/repair/run` accepts only
+explicit `dryRun=true` and returns a proposal without writing either table.
+Non-dry requests and direct `RunRepairPass` calls fail closed. The scheduled
+ticker runs the same preview-only selection.
 
 ## VSA Reindex Runs
 

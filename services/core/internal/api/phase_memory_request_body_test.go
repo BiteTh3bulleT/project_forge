@@ -20,29 +20,6 @@ func TestMemoryMutationHandlersRejectOversizeRequestBodies(t *testing.T) {
 		handle  func(http.ResponseWriter, *http.Request)
 	}{
 		{
-			name:    "create observation",
-			request: httptest.NewRequest(http.MethodPost, "/api/memory/observations", bytes.NewReader([]byte(oversizeBody))),
-			handle:  s.handleCreateMemoryObservation,
-		},
-		{
-			name: "patch observation",
-			request: withRouteParam(
-				httptest.NewRequest(http.MethodPatch, "/api/memory/observations/42", bytes.NewReader([]byte(oversizeBody))),
-				"id",
-				"42",
-			),
-			handle: s.handlePatchMemoryObservation,
-		},
-		{
-			name: "mark usefulness",
-			request: withRouteParam(
-				httptest.NewRequest(http.MethodPost, "/api/memory/observations/42/usefulness", bytes.NewReader([]byte(oversizeBody))),
-				"id",
-				"42",
-			),
-			handle: s.handleMarkMemoryObservationUsefulness,
-		},
-		{
 			name:    "repair run",
 			request: httptest.NewRequest(http.MethodPost, "/api/memory/repair/run", bytes.NewReader([]byte(oversizeBody))),
 			handle:  s.handleRunMemoryRepair,

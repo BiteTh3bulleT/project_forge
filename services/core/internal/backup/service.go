@@ -540,6 +540,7 @@ func (s *Service) pickSections(kind string) ([]string, error) {
 			"state_items", "state_versions", "open_loops", "artifact_refs",
 			"derived_models", "contradiction_records", "supersession_records",
 			"court_exhibits", "court_rulings", "court_appeals",
+			"forge_k_memory_evidence", "forge_k_memory_evidence_supersessions",
 			"context_packet_snapshots", "dream_reports", "restore_outcome_events", "semantic_idempotency_keys", "autonomy_settings",
 			"forge_k_journal_head", "forge_k_audit_outbox",
 			"chat_threads", "chat_messages", "canvas_boards", "canvas_notes",
@@ -757,6 +758,11 @@ func backupSectionManifest(section string) SectionManifest {
 	case "court_exhibits", "court_rulings", "court_appeals":
 		entry.AuthorityClass = "canonical_or_historical_truth"
 		entry.Purpose = "production Courthouse current state and immutable ruling/appeal history"
+		entry.RestoreRequired = false
+		entry.ExportOnly = true
+	case "forge_k_memory_evidence", "forge_k_memory_evidence_supersessions":
+		entry.AuthorityClass = "canonical_or_historical_truth"
+		entry.Purpose = "immutable Court-admitted Memory Palace evidence and revision lineage"
 		entry.RestoreRequired = false
 		entry.ExportOnly = true
 	case "forge_k_journal_head", "forge_k_audit_outbox":

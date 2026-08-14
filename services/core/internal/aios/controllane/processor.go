@@ -387,7 +387,9 @@ func isForgeKOnlyAction(action domain.SemanticActionType) bool {
 		domain.ActionRecordRetrievalEvidence,
 		domain.ActionRebuildMemoryAcceleration,
 		domain.ActionRecordRetrievalUsefulness,
-		domain.ActionRecordRestoreOutcomeFeedback:
+		domain.ActionRecordRestoreOutcomeFeedback,
+		domain.ActionMaterializeAdmittedEvidence,
+		domain.ActionReviseMemoryEvidence:
 		return true
 	default:
 		return false

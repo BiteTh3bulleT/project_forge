@@ -1,6 +1,6 @@
 # FORGE-K Current Phase Status
 
-Latest K20G VSA note (2026-08-14): `REBUILD_MEMORY_ACCELERATION` is now a production-only semantic syscall with an exact workspace/lane scope, deterministic algorithm identity, sealed source-set manifest, expected prior-head CAS, and transaction-local staging plus atomic projection swap. Runtime readers accept only rows matching the active scoped manifest; legacy, unscoped, mismatched, and manifest-less VSA rows have zero influence. Legacy memory-package VSA/usefulness writers fail closed. Useful activation intentionally remains blocked because no production syscall yet creates Courthouse-admitted, exact-scope Memory Palace source observations; the next cutover must add that source contract rather than trusting legacy rows.
+Latest K20H VSA note (2026-08-14): `REBUILD_MEMORY_ACCELERATION` now seals only exact-scope, current-leaf `forge_k_memory_evidence` joined to its current admitted Courthouse exhibit/ruling. Dedicated `forge_k_memory_vsa_*` tables reference immutable memory-evidence rows and carry semantic evidence identity; they never reuse legacy observation IDs. Runtime readers revalidate Court/current-leaf integrity under the active v2 manifest, so legacy, corrupt, superseded, unscoped, mismatched, and stale-head rows have zero influence. Production end-to-end coverage proves Kernel admit -> materialize -> rebuild -> revise -> rollback-safe replacement rebuild and scoring.
 
 Latest K20G retrieval note (2026-08-14): live retrieval run persistence now enters production FORGE-K through the narrow `RECORD_RETRIEVAL_EVIDENCE` action. Canonical source ids resolve to an exact sorted selected-path scope before search; one transaction writes the immutable run, ordered results, selection reasons, optional already-known packet join, provenance-linked journal hash-chain transition, audit intent, authorization proof, and idempotency proof. No memory observation or VSA-signal duplicate is created, manifest-less VSA influence is disabled, and models remain proposal-only. Original dossier/packet/job/chunk/file identities survive detachable live-FK cleanup. API calls retain authenticated user attribution; system/internal calls bind the constructed service principal. Full FORGE-K authority remains partial because search/embedding execution is still live-service-owned, Control Lane remains the temporary apply/SQLite port, safe whole-store recovery is incomplete, and other subsystem/direct-writer gates remain.
 
@@ -46,7 +46,21 @@ Latest FORGE-K Online Phase 11 note: `CREATE_NOTE` is closed as the first low-ri
 
 Latest FORGE-K Online Phase 12 note: `UPDATE_STATE`, `OPEN_LOOP`, and `CLOSE_LOOP` are closed as existing state/open-loop commit types as `STATE_AND_LOOP_COMMIT_LIVE / CONTROL_LANE_OWNED / STATE_AND_OPEN_LOOP_OBJECTS / JOURNALED_COMMIT / NO_FORGE_K_KERNEL_AUTHORITY_MIGRATION`. The paths use existing live Control Lane deterministic validation, capability/approval gates, SQLite transaction commit, journal append, audit linkage, provenance, state version history, loop transition enforcement, and semantic read-store visibility. This does not make FORGE-K simulator Kernel services live authority, create a second mutation path, migrate links/tags/memory observations, admit evidence, execute gateway tools, call modelruntime, or expand route/API authority.
 
-Latest FORGE-K Online Phase 13 note: legacy memory observation mutation endpoints remain retired as `MEMORY_OBSERVATION_WRITES_RETIRED / HISTORY_PRESERVED / COURTHOUSE_REVIEW_GUIDANCE / CONTROL_LANE_CANONICAL_COMMIT / NO_FORGE_K_AUTHORITY_MIGRATION`. Attempts to write through `POST/PATCH /api/memory/observations*` receive structured migration guidance and audit metadata pointing to `VALIDATE_ADMISSION_CANDIDATE` plus Control Lane semantic syscalls. Existing `memory_observations` rows remain readable historical/retrieval evidence. This does not admit evidence, auto-migrate legacy observations, write canonical memory, call modelruntime, execute gateway tools, import FORGE-K simulator Courthouse/Kernel services, or expand route/API authority.
+Latest FORGE-K K20H note: legacy observation create, patch, usefulness, link,
+and repair mutation are retired as `LEGACY_MEMORY_WRITERS_SEALED /
+READ_SURFACES_PRESERVED / REPAIR_PROPOSAL_ONLY / PRODUCTION_FORGE_K_ONLY`.
+Mounted observation mutation routes are terminal audited `410 Gone` gates with
+no latent handler reference; there is no observation-link mutation route.
+Direct Go writer seams fail closed, and repair preview/ticker code never calls
+a writer. Production FORGE-K owns `MATERIALIZE_ADMITTED_EVIDENCE` and
+`REVISE_MEMORY_EVIDENCE`; models and the simulator remain proposal-only and
+non-authoritative. These actions accept Court identities only, derive all
+memory content from the admitted current exhibit/ruling, require exact
+workspace/lane/selected-path scope and idempotency, and atomically persist an
+immutable evidence row or a new row plus append-only linear supersession edge
+with journal, provenance, audit-outbox, authorization, and commit proof. Legacy
+observation IDs are never promoted. See
+`docs/reports/k20h_memory_evidence_materialization.md`.
 
 Latest FORGE-K Online Phase 14 note: autonomy maintenance dry-run sweeps expose proposal-only Lymphatic metadata as `LYMPHATIC_PROPOSAL_ONLY_ONLINE / LIVE_AUTONOMY_DRY_RUN_OWNED / MAINTENANCE_REPORTS_AND_CLEANUP_PROPOSALS_ONLY / NO_CLEANUP_EXECUTION / NO_FORGE_K_LYMPHATIC_AUTHORITY_MIGRATION`. Dry-run maintenance and improvement actions are marked as cleanup proposals that cannot execute cleanup and cannot claim commit authority. This does not run FORGE-K Lymphatic Lane live, mutate memory, delete/archive records, execute gateway tools, call modelruntime, admit evidence, change non-dry-run autonomy ownership, or expand route/API authority.
 

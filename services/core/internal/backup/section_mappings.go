@@ -90,6 +90,11 @@ var extractQueries = map[string]string{
 	"scheduled_tasks":               "SELECT * FROM scheduled_tasks ORDER BY id ASC",
 }
 
+func init() {
+	extractQueries["forge_k_memory_evidence"] = "SELECT * FROM forge_k_memory_evidence ORDER BY id ASC"
+	extractQueries["forge_k_memory_evidence_supersessions"] = "SELECT * FROM forge_k_memory_evidence_supersessions ORDER BY created_at ASC, id ASC"
+}
+
 // Section upserts used during restore.
 var insertStatements = func() map[string]insertMap {
 	m := map[string]insertMap{

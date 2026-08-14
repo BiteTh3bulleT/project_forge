@@ -2,6 +2,8 @@ package api
 
 import (
 	"bytes"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,7 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"forge/projectforge/services/core/internal/aios/controllane"
+	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/forgekernel"
+	"forge/projectforge/services/core/internal/forgekernel/court"
 	"forge/projectforge/services/core/internal/memory"
 	"forge/projectforge/services/core/internal/store"
 )
@@ -61,11 +66,7 @@ func TestHandleVSARebuildRoutesScopedManifestThroughForgeK(t *testing.T) {
 	processor := &capturingUtilityProcessor{}
 	srv.kernelAuthority = forgekernel.Selection{Processor: processor}
 	srv.kernelAuthorizationReady = true
-	if _, err := st.DB.Exec(`
-INSERT INTO memory_observations(workspace_id,lane_id,created_at,updated_at,observed_at,type,raw_content,summary,source_path)
-VALUES('workspace-a','lane-a',1,1,1,'file','alpha body','alpha summary','/repo/a.go')`); err != nil {
-		t.Fatal(err)
-	}
+	seedGovernedVSAEvidenceAPI(t, st, "/repo/a.go")
 	dryBody := []byte(`{"dryRun":true,"workspaceId":"workspace-a","laneId":"lane-a","dimensions":128,"seed":17}`)
 	dryRR := httptest.NewRecorder()
 	srv.handleRunVSAReindex(dryRR, httptest.NewRequest(http.MethodPost, "/api/memory/vsa/reindex/run", bytes.NewReader(dryBody)))
@@ -102,6 +103,43 @@ VALUES('workspace-a','lane-a',1,1,1,'file','alpha body','alpha summary','/repo/a
 	if req.Payload["requestedAtMs"] != req.RequestedAt || req.Payload["expectedManifestHash"] != proposal.Manifest.ManifestHash {
 		t.Fatalf("unsealed rebuild payload = %+v requestedAt=%d", req.Payload, req.RequestedAt)
 	}
+}
+
+func seedGovernedVSAEvidenceAPI(t *testing.T, st *store.Store, path string) {
+	t.Helper()
+	hash := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	scope := domain.ForgeScope{WorkspaceID: "workspace-a", LaneID: "lane-a", SelectedPaths: []string{path}}
+	sourceProvenance := domain.Provenance{Actor: "operator", ActorType: "human", Source: "api-test", TraceID: "trace-source"}
+	materializationProvenance := domain.Provenance{Actor: "forge-k", ActorType: "service", Source: "api-test", TraceID: "trace-materialize"}
+	adapter := controllane.NewSQLiteSemanticStore(st.DB)
+	adapter.SetCommitMetadata(controllane.CommitMetadata{SyscallID: "admit-1", CorrelationID: "corr-admit-1", TraceID: "trace-admit-1", CommittedBy: "forge_k.kernel"})
+	exhibit := court.Exhibit{ID: "exhibit-1", CaseID: "case-1", Scope: scope, SourceType: "file", SourceRefs: []string{path}, ContentSummary: "alpha summary", RawRef: path, ContentHash: hash, Status: court.DecisionAdmitted, CurrentRulingID: "ruling-1", CreatedAt: 1, UpdatedAt: 1, Provenance: sourceProvenance, SyscallID: "admit-1", CorrelationID: "corr-admit-1", TraceID: "trace-admit-1", ProposedBy: "operator", CommittedBy: "forge_k.kernel"}
+	ruling := court.Ruling{ID: "ruling-1", CaseID: "case-1", ExhibitID: "exhibit-1", Scope: scope, Decision: court.DecisionAdmitted, ReasonCode: "policy_match", Reason: "admitted", PolicyVersion: court.PolicyVersion, PolicyRefs: []string{"policy:test"}, InputRefs: []string{path}, ContentHash: hash, CreatedAt: 1, Provenance: sourceProvenance, SyscallID: "admit-1", CorrelationID: "corr-admit-1", TraceID: "trace-admit-1", ProposedBy: "operator", CommittedBy: "forge_k.kernel"}
+	if err := adapter.CreateCourtDecision(exhibit, ruling, nil); err != nil {
+		t.Fatal(err)
+	}
+	adapter.SetCommitMetadata(controllane.CommitMetadata{SyscallID: "materialize-1", CorrelationID: "corr-materialize-1", TraceID: "trace-materialize-1", CommittedBy: "forge_k.kernel"})
+	evidence := controllane.MemoryEvidence{
+		EvidenceID: "evidence-1", RootEvidenceID: "evidence-1", Revision: 1, CourtCaseID: "case-1",
+		CourtExhibitID: "exhibit-1", CourtRulingID: "ruling-1", AdmissionSyscallID: "admit-1",
+		SourceObjectKind: "court_exhibit", SourceObjectID: "exhibit-1", SourceObjectVersion: "ruling-1", SourceObjectHash: hash,
+		Scope: scope, SourceType: "file", SourceRefs: []string{path}, ContentSummary: "alpha summary", RawRef: path, ContentHash: hash,
+		SourceProvenanceID: testMemoryEvidenceProvenanceID(scope, sourceProvenance), SourceProvenance: sourceProvenance,
+		MaterializationProvenanceID: testMemoryEvidenceProvenanceID(scope, materializationProvenance), MaterializationProvenance: materializationProvenance,
+		CreatedAt: 2, ProposedBy: "operator", CommittedBy: "forge_k.kernel", SyscallID: "materialize-1",
+		CorrelationID: "corr-materialize-1", TraceID: "trace-materialize-1", TransactionID: "materialize-1:transaction",
+		JournalEventID: "materialize-1:journal_event", AuditOutboxID: "materialize-1:audit_outbox",
+		IdempotencyKey: "memory-evidence-1", AuthorizationFingerprint: hash,
+	}
+	if err := adapter.CreateMemoryEvidence(evidence, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func testMemoryEvidenceProvenanceID(scope domain.ForgeScope, provenance domain.Provenance) string {
+	key := scope.WorkspaceID + "|" + scope.LaneID + "|" + provenance.Actor + "|" + provenance.ActorType + "|" + provenance.Source + "|" + provenance.TraceID
+	sum := sha1.Sum([]byte(key))
+	return "prov-" + hex.EncodeToString(sum[:12])
 }
 
 func TestHandleRetrievalVSASignalEndpoints(t *testing.T) {

@@ -3,11 +3,7 @@ package memory
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"strings"
-	"time"
 )
 
 type Service struct {
@@ -71,112 +67,12 @@ func (s *Service) ListObservations(ctx context.Context, req ListObservationsRequ
 	return out, nil
 }
 
+// RecordObservation is retained only as a source-compatibility fail-closed
+// seam. Production evidence creation is owned by the governed FORGE-K
+// materialization syscall.
 func (s *Service) RecordObservation(ctx context.Context, req RecordObservationRequest) (*Observation, error) {
-	typeName := strings.TrimSpace(req.Type)
-	if typeName == "" {
-		return nil, fmt.Errorf("observation type is required")
-	}
-	now := time.Now().UnixMilli()
-	observedAt := req.ObservedAtMs
-	if observedAt <= 0 {
-		observedAt = now
-	}
-	if req.Confidence <= 0 {
-		req.Confidence = 0.5
-	}
-	if req.Confidence > 1 {
-		req.Confidence = 1
-	}
-	if strings.TrimSpace(req.VerificationState) == "" {
-		req.VerificationState = "unknown"
-	}
-	entitiesJSON, _ := json.Marshal(nonNilStrings(req.Entities))
-	tagsJSON, _ := json.Marshal(nonNilStrings(req.Tags))
-	relatedFilesJSON, _ := json.Marshal(nonNilStrings(req.RelatedFiles))
-	lineageJSON, _ := json.Marshal(nonNilStrings(req.Lineage))
-
-	if strings.TrimSpace(req.OriginKind) != "" && strings.TrimSpace(req.OriginID) != "" {
-		var existingID int64
-		err := s.db.QueryRowContext(ctx,
-			`SELECT id FROM memory_observations WHERE origin_kind = ? AND origin_id = ? LIMIT 1`,
-			strings.TrimSpace(req.OriginKind), strings.TrimSpace(req.OriginID),
-		).Scan(&existingID)
-		if err == nil {
-			_, execErr := s.db.ExecContext(ctx, `
-UPDATE memory_observations
-SET updated_at = ?, observed_at = ?, type = ?, raw_content = ?, summary = ?, embedding_ref = ?,
-    dossier_id = ?, project_key = ?, source_path = ?, entities_json = ?, tags_json = ?, related_files_json = ?,
-    task_type = ?, confidence = ?, verification_state = ?, lineage_json = ?
-WHERE id = ?`,
-				now,
-				observedAt,
-				typeName,
-				strings.TrimSpace(req.RawContent),
-				strings.TrimSpace(req.Summary),
-				strings.TrimSpace(req.EmbeddingRef),
-				req.DossierID,
-				strings.TrimSpace(req.ProjectKey),
-				strings.TrimSpace(req.SourcePath),
-				string(entitiesJSON),
-				string(tagsJSON),
-				string(relatedFilesJSON),
-				strings.TrimSpace(req.TaskType),
-				req.Confidence,
-				strings.TrimSpace(req.VerificationState),
-				string(lineageJSON),
-				existingID,
-			)
-			if execErr != nil {
-				return nil, execErr
-			}
-			detail, fetchErr := s.getObservation(ctx, existingID)
-			if fetchErr != nil {
-				return nil, fetchErr
-			}
-			return &detail.Observation, nil
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return nil, err
-		}
-	}
-
-	res, err := s.db.ExecContext(ctx, `
-INSERT INTO memory_observations(
-  created_at, updated_at, observed_at, type, raw_content, summary, embedding_ref,
-  dossier_id, project_key, source_path, entities_json, tags_json, related_files_json,
-  task_type, confidence, verification_state, lineage_json, origin_kind, origin_id
-) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		now,
-		now,
-		observedAt,
-		typeName,
-		strings.TrimSpace(req.RawContent),
-		strings.TrimSpace(req.Summary),
-		strings.TrimSpace(req.EmbeddingRef),
-		req.DossierID,
-		strings.TrimSpace(req.ProjectKey),
-		strings.TrimSpace(req.SourcePath),
-		string(entitiesJSON),
-		string(tagsJSON),
-		string(relatedFilesJSON),
-		strings.TrimSpace(req.TaskType),
-		req.Confidence,
-		strings.TrimSpace(req.VerificationState),
-		string(lineageJSON),
-		strings.TrimSpace(req.OriginKind),
-		strings.TrimSpace(req.OriginID),
-	)
-	if err != nil {
-		return nil, err
-	}
-	id, _ := res.LastInsertId()
-	detail, err := s.getObservation(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return &detail.Observation, nil
+	return nil, ErrMemoryEvidenceAuthorityRequired
 }
-
 func (s *Service) GetObservation(ctx context.Context, id int64) (*ObservationDetail, error) {
 	return s.getObservation(ctx, id)
 }
@@ -237,76 +133,17 @@ WHERE id = ?`, id)
 	return &ObservationDetail{Observation: o, IncomingLinks: incoming, OutgoingLinks: outgoing, Signals: signals, VSA: vsa}, nil
 }
 
+// UpdateObservation is a retired compatibility seam. Evidence revisions must
+// preserve the original row through the governed FORGE-K revision syscall.
 func (s *Service) UpdateObservation(ctx context.Context, id int64, req UpdateObservationRequest) (*ObservationDetail, error) {
-	now := time.Now().UnixMilli()
-	cur, err := s.getObservation(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	summary := cur.Summary
-	if req.Summary != nil {
-		summary = strings.TrimSpace(*req.Summary)
-	}
-	verification := cur.VerificationState
-	if req.VerificationState != nil {
-		verification = strings.TrimSpace(*req.VerificationState)
-	}
-	stale := cur.Stale
-	if req.Stale != nil {
-		stale = *req.Stale
-	}
-	lastVerified := cur.LastVerifiedAtMs
-	if req.LastVerifiedAtMs != nil {
-		lastVerified = req.LastVerifiedAtMs
-	}
-	tags := cur.Tags
-	if req.Tags != nil {
-		b, _ := json.Marshal(nonNilStrings(req.Tags))
-		tags = json.RawMessage(b)
-	}
-	related := cur.RelatedFiles
-	if req.RelatedFiles != nil {
-		b, _ := json.Marshal(nonNilStrings(req.RelatedFiles))
-		related = json.RawMessage(b)
-	}
-	_, err = s.db.ExecContext(ctx, `
-UPDATE memory_observations
-SET updated_at = ?, summary = ?, verification_state = ?, stale = ?, last_verified_at = ?, tags_json = ?, related_files_json = ?
-WHERE id = ?`,
-		now,
-		summary,
-		verification,
-		boolToInt(stale),
-		nullInt64(lastVerified),
-		string(tags),
-		string(related),
-		id,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return s.getObservation(ctx, id)
+	return nil, ErrMemoryEvidenceAuthorityRequired
 }
 
+// AddLink is a retired compatibility seam. Callers cannot directly mutate the
+// legacy observation graph.
 func (s *Service) AddLink(ctx context.Context, fromObs, toObs int64, relationType, note string) error {
-	if fromObs <= 0 || toObs <= 0 {
-		return fmt.Errorf("observation ids are required")
-	}
-	if strings.TrimSpace(relationType) == "" {
-		relationType = "related"
-	}
-	_, err := s.db.ExecContext(ctx, `
-INSERT INTO memory_observation_links(created_at, from_observation_id, to_observation_id, relation_type, note)
-VALUES(?,?,?,?,?)`,
-		time.Now().UnixMilli(),
-		fromObs,
-		toObs,
-		strings.TrimSpace(relationType),
-		strings.TrimSpace(note),
-	)
-	return err
+	return ErrMemoryEvidenceAuthorityRequired
 }
-
 func (s *Service) linksFor(ctx context.Context, observationID int64, incoming bool) ([]ObservationLink, error) {
 	query := `
 SELECT id, created_at, from_observation_id, to_observation_id, relation_type, note

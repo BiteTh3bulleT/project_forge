@@ -116,11 +116,11 @@ func (s *SQLiteSemanticStore) RebuildMemoryAcceleration(ctx context.Context, req
 	}
 	if _, err := s.exec.ExecContext(ctx, `
 INSERT OR IGNORE INTO memory_vsa_projection_manifests(
-  manifest_hash, workspace_id, lane_id, source_set_hash, link_set_hash,
+  manifest_hash, source_kind, workspace_id, lane_id, source_set_hash, link_set_hash,
   algorithm_name, algorithm_version, dimensions, seed, source_count, link_count,
   manifest_json, syscall_id, correlation_id, trace_id, committed_by, created_at
-) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		projection.Manifest.ManifestHash, req.Scope.WorkspaceID, req.Scope.LaneID,
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		projection.Manifest.ManifestHash, "forge_k_memory_evidence", req.Scope.WorkspaceID, req.Scope.LaneID,
 		projection.Manifest.SourceSetHash, projection.Manifest.LinkSetHash,
 		projection.Manifest.Algorithm.Name, projection.Manifest.Algorithm.Version,
 		projection.Manifest.Algorithm.Dimensions, projection.Manifest.Algorithm.Seed,
@@ -181,16 +181,31 @@ func (s *SQLiteSemanticStore) loadMemoryAccelerationSources(ctx context.Context,
 		return nil, vsaprojection.ErrInvalidScope
 	}
 	rows, err := s.exec.QueryContext(ctx, `
-SELECT mo.id, mo.workspace_id, mo.lane_id, mo.type, mo.task_type, mo.project_key,
-       mo.source_path, mo.summary, mo.raw_content, mo.entities_json, mo.tags_json,
-       mo.related_files_json, mo.lineage_json,
-       COALESCE(SUM(CASE WHEN lower(trim(mue.signal)) IN ('useful','success','succeeded') THEN 1 ELSE 0 END),0),
-       COALESCE(SUM(CASE WHEN lower(trim(mue.signal)) IN ('noisy','not_useful','misleading','failed','failure') THEN 1 ELSE 0 END),0)
-FROM memory_observations mo
-LEFT JOIN memory_usefulness_events mue ON mue.observation_id=mo.id
-WHERE mo.workspace_id=? AND mo.lane_id=? AND mo.workspace_id<>'' AND mo.lane_id<>''
-GROUP BY mo.id
-ORDER BY mo.id ASC`, scope.WorkspaceID, scope.LaneID)
+SELECT e.id,e.evidence_id,e.root_evidence_id,e.revision,
+       e.court_case_id,e.court_exhibit_id,e.court_ruling_id,e.admission_syscall_id,
+       e.source_object_kind,e.source_object_id,e.source_object_version,e.source_object_hash,
+       e.workspace_id,e.lane_id,e.source_type,e.raw_ref,e.content_summary,
+       e.source_refs_json,e.selected_paths_json,e.source_provenance_id,e.materialization_provenance_id,
+       e.syscall_id,e.transaction_id,e.journal_event_id,e.audit_outbox_id,e.authorization_fingerprint,e.committed_by
+FROM forge_k_memory_evidence e
+JOIN court_exhibits x
+  ON x.id=e.court_exhibit_id AND x.case_id=e.court_case_id
+ AND x.workspace_id=e.workspace_id AND x.lane_id=e.lane_id
+ AND x.status='admitted' AND x.current_ruling_id=e.court_ruling_id
+ AND x.content_hash=e.source_object_hash AND x.committed_by='forge_k.kernel'
+JOIN court_rulings r
+  ON r.id=e.court_ruling_id AND r.exhibit_id=e.court_exhibit_id AND r.case_id=e.court_case_id
+ AND r.workspace_id=e.workspace_id AND r.lane_id=e.lane_id
+ AND r.decision='admitted' AND r.content_hash=e.source_object_hash
+ AND r.syscall_id=e.admission_syscall_id AND r.committed_by='forge_k.kernel'
+LEFT JOIN forge_k_memory_evidence_supersessions superseded
+  ON superseded.superseded_evidence_id=e.evidence_id
+WHERE e.workspace_id=? AND e.lane_id=? AND e.workspace_id<>'' AND e.lane_id<>''
+  AND e.source_object_kind='court_exhibit'
+  AND e.source_object_id=e.court_exhibit_id AND e.source_object_version=e.court_ruling_id
+  AND e.content_hash=e.source_object_hash AND e.committed_by='forge_k.kernel'
+  AND superseded.id IS NULL
+ORDER BY e.evidence_id ASC,e.id ASC`, scope.WorkspaceID, scope.LaneID)
 	if err != nil {
 		return nil, err
 	}
@@ -198,26 +213,26 @@ ORDER BY mo.id ASC`, scope.WorkspaceID, scope.LaneID)
 	out := []vsaprojection.Source{}
 	for rows.Next() {
 		var source vsaprojection.Source
-		var entities, tags, related, lineage string
+		var sourceRefsJSON, selectedPathsJSON string
 		if err := rows.Scan(
-			&source.ID, &source.WorkspaceID, &source.LaneID, &source.Type, &source.TaskType, &source.ProjectKey,
-			&source.SourcePath, &source.Summary, &source.RawContent, &entities, &tags, &related, &lineage,
-			&source.SupportCount, &source.NoiseCount,
+			&source.MemoryEvidenceRowID, &source.EvidenceID, &source.RootEvidenceID, &source.Revision,
+			&source.CourtCaseID, &source.CourtExhibitID, &source.CourtRulingID, &source.AdmissionSyscallID,
+			&source.SourceObjectKind, &source.SourceObjectID, &source.SourceObjectVersion, &source.SourceObjectHash,
+			&source.WorkspaceID, &source.LaneID, &source.Type, &source.SourcePath, &source.Summary,
+			&sourceRefsJSON, &selectedPathsJSON, &source.SourceProvenanceID, &source.MaterializationProvenanceID,
+			&source.SyscallID, &source.TransactionID, &source.JournalEventID, &source.AuditOutboxID,
+			&source.AuthorizationFingerprint, &source.CommittedBy,
 		); err != nil {
 			return nil, err
 		}
-		if err := decodeStringList(entities, &source.Entities); err != nil {
-			return nil, fmt.Errorf("observation %d entities: %w", source.ID, err)
+		if err := decodeStringList(sourceRefsJSON, &source.Entities); err != nil {
+			return nil, fmt.Errorf("memory evidence %s source refs: %w", source.EvidenceID, err)
 		}
-		if err := decodeStringList(tags, &source.Tags); err != nil {
-			return nil, fmt.Errorf("observation %d tags: %w", source.ID, err)
+		if err := decodeStringList(selectedPathsJSON, &source.RelatedFiles); err != nil {
+			return nil, fmt.Errorf("memory evidence %s selected paths: %w", source.EvidenceID, err)
 		}
-		if err := decodeStringList(related, &source.RelatedFiles); err != nil {
-			return nil, fmt.Errorf("observation %d related files: %w", source.ID, err)
-		}
-		if err := decodeStringList(lineage, &source.Lineage); err != nil {
-			return nil, fmt.Errorf("observation %d lineage: %w", source.ID, err)
-		}
+		source.Tags = []string{"court_admitted", source.CourtCaseID, source.SourceObjectKind}
+		source.Lineage = []string{source.RootEvidenceID, source.EvidenceID, source.CourtExhibitID, source.CourtRulingID}
 		out = append(out, source)
 	}
 	return out, rows.Err()
@@ -232,24 +247,12 @@ func decodeStringList(raw string, target *[]string) error {
 }
 
 func (s *SQLiteSemanticStore) loadMemoryAccelerationLinks(ctx context.Context, scope vsaprojection.Scope) ([]vsaprojection.Link, error) {
-	rows, err := s.exec.QueryContext(ctx, `
-SELECT id, workspace_id, lane_id, from_observation_id, to_observation_id, relation_type
-FROM memory_observation_links
-WHERE workspace_id=? AND lane_id=? AND workspace_id<>'' AND lane_id<>''
-ORDER BY id ASC`, scope.WorkspaceID, scope.LaneID)
-	if err != nil {
-		return nil, err
+	if strings.TrimSpace(scope.WorkspaceID) == "" || strings.TrimSpace(scope.LaneID) == "" {
+		return nil, vsaprojection.ErrInvalidScope
 	}
-	defer rows.Close()
-	out := []vsaprojection.Link{}
-	for rows.Next() {
-		var link vsaprojection.Link
-		if err := rows.Scan(&link.ID, &link.WorkspaceID, &link.LaneID, &link.FromObservationID, &link.ToObservationID, &link.RelationType); err != nil {
-			return nil, err
-		}
-		out = append(out, link)
-	}
-	return out, rows.Err()
+	// K20H admits immutable evidence but does not yet define governed semantic
+	// relationship edges. Legacy memory_observation_links are never imported.
+	return []vsaprojection.Link{}, nil
 }
 
 func (s *SQLiteSemanticStore) memoryAccelerationHead(ctx context.Context, scope vsaprojection.Scope) (string, bool, error) {
@@ -264,9 +267,9 @@ SELECT manifest_hash FROM memory_vsa_projection_heads WHERE workspace_id=? AND l
 
 func (s *SQLiteSemanticStore) stageMemoryAccelerationProjection(ctx context.Context, projection vsaprojection.Projection) error {
 	statements := []string{
-		`CREATE TEMP TABLE IF NOT EXISTS forge_vsa_pointer_stage(observation_id INTEGER PRIMARY KEY, dims INTEGER NOT NULL, pointer_json TEXT NOT NULL, norm REAL NOT NULL, source_fingerprint TEXT NOT NULL, support_count INTEGER NOT NULL, noise_count INTEGER NOT NULL)`,
-		`CREATE TEMP TABLE IF NOT EXISTS forge_vsa_binding_stage(observation_id INTEGER NOT NULL, role TEXT NOT NULL, filler TEXT NOT NULL, weight REAL NOT NULL, support_count INTEGER NOT NULL, noise_count INTEGER NOT NULL, binding_json TEXT NOT NULL, PRIMARY KEY(observation_id,role,filler))`,
-		`CREATE TEMP TABLE IF NOT EXISTS forge_vsa_association_stage(from_observation_id INTEGER NOT NULL, to_observation_id INTEGER NOT NULL, association_type TEXT NOT NULL, strength REAL NOT NULL, support_count INTEGER NOT NULL, noise_count INTEGER NOT NULL, evidence_json TEXT NOT NULL, PRIMARY KEY(from_observation_id,to_observation_id,association_type))`,
+		`CREATE TEMP TABLE IF NOT EXISTS forge_vsa_pointer_stage(memory_evidence_row_id INTEGER PRIMARY KEY, memory_evidence_id TEXT NOT NULL UNIQUE, dims INTEGER NOT NULL, pointer_json TEXT NOT NULL, norm REAL NOT NULL, source_fingerprint TEXT NOT NULL, support_count INTEGER NOT NULL, noise_count INTEGER NOT NULL)`,
+		`CREATE TEMP TABLE IF NOT EXISTS forge_vsa_binding_stage(memory_evidence_row_id INTEGER NOT NULL, memory_evidence_id TEXT NOT NULL, role TEXT NOT NULL, filler TEXT NOT NULL, weight REAL NOT NULL, support_count INTEGER NOT NULL, noise_count INTEGER NOT NULL, binding_json TEXT NOT NULL, PRIMARY KEY(memory_evidence_row_id,role,filler))`,
+		`CREATE TEMP TABLE IF NOT EXISTS forge_vsa_association_stage(from_memory_evidence_row_id INTEGER NOT NULL, to_memory_evidence_row_id INTEGER NOT NULL, association_type TEXT NOT NULL, strength REAL NOT NULL, support_count INTEGER NOT NULL, noise_count INTEGER NOT NULL, evidence_json TEXT NOT NULL, PRIMARY KEY(from_memory_evidence_row_id,to_memory_evidence_row_id,association_type))`,
 		`DELETE FROM forge_vsa_pointer_stage`,
 		`DELETE FROM forge_vsa_binding_stage`,
 		`DELETE FROM forge_vsa_association_stage`,
@@ -281,7 +284,7 @@ func (s *SQLiteSemanticStore) stageMemoryAccelerationProjection(ctx context.Cont
 		if err != nil {
 			return err
 		}
-		if _, err := s.exec.ExecContext(ctx, `INSERT INTO forge_vsa_pointer_stage VALUES(?,?,?,?,?,?,?)`, pointer.ObservationID, pointer.Dimensions, string(vector), pointer.Norm, pointer.SourceFingerprint, pointer.SupportCount, pointer.NoiseCount); err != nil {
+		if _, err := s.exec.ExecContext(ctx, `INSERT INTO forge_vsa_pointer_stage VALUES(?,?,?,?,?,?,?,?)`, pointer.MemoryEvidenceRowID, pointer.EvidenceID, pointer.Dimensions, string(vector), pointer.Norm, pointer.SourceFingerprint, pointer.SupportCount, pointer.NoiseCount); err != nil {
 			return err
 		}
 	}
@@ -290,7 +293,7 @@ func (s *SQLiteSemanticStore) stageMemoryAccelerationProjection(ctx context.Cont
 		if err != nil {
 			return err
 		}
-		if _, err := s.exec.ExecContext(ctx, `INSERT INTO forge_vsa_binding_stage VALUES(?,?,?,?,?,?,?)`, binding.ObservationID, binding.Role, binding.Filler, binding.Weight, binding.SupportCount, binding.NoiseCount, string(vector)); err != nil {
+		if _, err := s.exec.ExecContext(ctx, `INSERT INTO forge_vsa_binding_stage VALUES(?,?,?,?,?,?,?,?)`, binding.MemoryEvidenceRowID, binding.EvidenceID, binding.Role, binding.Filler, binding.Weight, binding.SupportCount, binding.NoiseCount, string(vector)); err != nil {
 			return err
 		}
 	}
@@ -299,7 +302,7 @@ func (s *SQLiteSemanticStore) stageMemoryAccelerationProjection(ctx context.Cont
 		if err != nil {
 			return err
 		}
-		if _, err := s.exec.ExecContext(ctx, `INSERT INTO forge_vsa_association_stage VALUES(?,?,?,?,?,?,?)`, association.FromObservationID, association.ToObservationID, association.RelationType, association.Strength, association.SupportCount, association.NoiseCount, string(evidence)); err != nil {
+		if _, err := s.exec.ExecContext(ctx, `INSERT INTO forge_vsa_association_stage VALUES(?,?,?,?,?,?,?)`, association.FromMemoryEvidenceRowID, association.ToMemoryEvidenceRowID, association.RelationType, association.Strength, association.SupportCount, association.NoiseCount, string(evidence)); err != nil {
 			return err
 		}
 	}
@@ -308,9 +311,9 @@ func (s *SQLiteSemanticStore) stageMemoryAccelerationProjection(ctx context.Cont
 
 func (s *SQLiteSemanticStore) swapMemoryAccelerationProjection(ctx context.Context, scope vsaprojection.Scope, manifestHash string, now int64) error {
 	deletes := []string{
-		`DELETE FROM memory_vsa_associations WHERE workspace_id=? AND lane_id=?`,
-		`DELETE FROM memory_vsa_role_bindings WHERE workspace_id=? AND lane_id=?`,
-		`DELETE FROM memory_vsa_pointers WHERE workspace_id=? AND lane_id=?`,
+		`DELETE FROM forge_k_memory_vsa_associations WHERE workspace_id=? AND lane_id=?`,
+		`DELETE FROM forge_k_memory_vsa_role_bindings WHERE workspace_id=? AND lane_id=?`,
+		`DELETE FROM forge_k_memory_vsa_pointers WHERE workspace_id=? AND lane_id=?`,
 	}
 	for _, statement := range deletes {
 		if _, err := s.exec.ExecContext(ctx, statement, scope.WorkspaceID, scope.LaneID); err != nil {
@@ -318,20 +321,20 @@ func (s *SQLiteSemanticStore) swapMemoryAccelerationProjection(ctx context.Conte
 		}
 	}
 	if _, err := s.exec.ExecContext(ctx, `
-INSERT INTO memory_vsa_pointers(workspace_id,lane_id,manifest_hash,observation_id,dims,pointer_json,norm,source_fingerprint,support_count,noise_count,stale,metadata_json,created_at,updated_at)
-SELECT ?,?,?,observation_id,dims,pointer_json,norm,source_fingerprint,support_count,noise_count,0,?, ?, ? FROM forge_vsa_pointer_stage`,
+INSERT INTO forge_k_memory_vsa_pointers(workspace_id,lane_id,manifest_hash,memory_evidence_row_id,memory_evidence_id,dims,pointer_json,norm,source_fingerprint,support_count,noise_count,metadata_json,created_at,updated_at)
+SELECT ?,?,?,memory_evidence_row_id,memory_evidence_id,dims,pointer_json,norm,source_fingerprint,support_count,noise_count,?, ?, ? FROM forge_vsa_pointer_stage`,
 		scope.WorkspaceID, scope.LaneID, manifestHash, `{"authority":"forge_k","projection":"vsa"}`, now, now); err != nil {
 		return err
 	}
 	if _, err := s.exec.ExecContext(ctx, `
-INSERT INTO memory_vsa_role_bindings(workspace_id,lane_id,manifest_hash,observation_id,role,filler,weight,support_count,noise_count,binding_json,created_at,updated_at)
-SELECT ?,?,?,observation_id,role,filler,weight,support_count,noise_count,binding_json,?,? FROM forge_vsa_binding_stage`,
+INSERT INTO forge_k_memory_vsa_role_bindings(workspace_id,lane_id,manifest_hash,memory_evidence_row_id,memory_evidence_id,role,filler,weight,support_count,noise_count,binding_json,created_at,updated_at)
+SELECT ?,?,?,memory_evidence_row_id,memory_evidence_id,role,filler,weight,support_count,noise_count,binding_json,?,? FROM forge_vsa_binding_stage`,
 		scope.WorkspaceID, scope.LaneID, manifestHash, now, now); err != nil {
 		return err
 	}
 	if _, err := s.exec.ExecContext(ctx, `
-INSERT INTO memory_vsa_associations(workspace_id,lane_id,manifest_hash,from_observation_id,to_observation_id,association_type,strength,support_count,noise_count,evidence_json,created_at,updated_at)
-SELECT ?,?,?,from_observation_id,to_observation_id,association_type,strength,support_count,noise_count,evidence_json,?,? FROM forge_vsa_association_stage`,
+INSERT INTO forge_k_memory_vsa_associations(workspace_id,lane_id,manifest_hash,from_memory_evidence_row_id,to_memory_evidence_row_id,association_type,strength,support_count,noise_count,evidence_json,created_at,updated_at)
+SELECT ?,?,?,from_memory_evidence_row_id,to_memory_evidence_row_id,association_type,strength,support_count,noise_count,evidence_json,?,? FROM forge_vsa_association_stage`,
 		scope.WorkspaceID, scope.LaneID, manifestHash, now, now); err != nil {
 		return err
 	}

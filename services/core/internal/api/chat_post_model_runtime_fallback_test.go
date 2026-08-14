@@ -17,7 +17,6 @@ import (
 
 	"forge/projectforge/services/core/internal/adapters"
 	"forge/projectforge/services/core/internal/config"
-	"forge/projectforge/services/core/internal/memory"
 	"forge/projectforge/services/core/internal/store"
 )
 
@@ -622,20 +621,14 @@ func TestChatLLMMessagesBoundTranscriptAfterLargeAssistantReply(t *testing.T) {
 }
 
 func TestChatLLMMessagesIncludeMemoryObservations(t *testing.T) {
-	srv, _ := newBackupAuditHarness(t)
-	obs, err := srv.memory.RecordObservation(context.Background(), memory.RecordObservationRequest{
-		Type:              "decision",
-		Summary:           "The operator prefers compact context cards for memory-heavy chat.",
-		RawContent:        "Memory observation fallback content",
-		OriginKind:        "test",
-		OriginID:          "chat-memory-observation",
-		Confidence:        0.9,
-		VerificationState: "observed",
-	})
+	srv, st := newBackupAuditHarness(t)
+	res, err := st.DB.Exec(`
+INSERT INTO memory_observations(created_at,updated_at,observed_at,type,summary,raw_content,origin_kind,origin_id,confidence,verification_state)
+VALUES(1,1,1,'decision','The operator prefers compact context cards for memory-heavy chat.','Memory observation fallback content','test','chat-memory-observation',0.9,'observed')`)
 	if err != nil {
-		t.Fatalf("record observation: %v", err)
+		t.Fatalf("seed legacy observation: %v", err)
 	}
-	if obs.ID == 0 {
+	if id, _ := res.LastInsertId(); id == 0 {
 		t.Fatalf("expected observation id")
 	}
 
@@ -665,17 +658,10 @@ func TestChatLLMMessagesIncludeMemoryObservationsAfterStoreReopen(t *testing.T) 
 	if err != nil {
 		t.Fatalf("open initial store: %v", err)
 	}
-	memorySvc := memory.New(st1.DB)
-	if _, err := memorySvc.RecordObservation(ctx, memory.RecordObservationRequest{
-		Type:              "decision",
-		Summary:           "Cross-session recall marker: remember the basalt notebook.",
-		RawContent:        "The basalt notebook belongs in reopened chat memory.",
-		OriginKind:        "test",
-		OriginID:          "cross-session-memory-observation",
-		Confidence:        0.95,
-		VerificationState: "observed",
-	}); err != nil {
-		t.Fatalf("record observation before reopen: %v", err)
+	if _, err := st1.DB.Exec(`
+INSERT INTO memory_observations(created_at,updated_at,observed_at,type,summary,raw_content,origin_kind,origin_id,confidence,verification_state)
+VALUES(1,1,1,'decision','Cross-session recall marker: remember the basalt notebook.','The basalt notebook belongs in reopened chat memory.','test','cross-session-memory-observation',0.95,'observed')`); err != nil {
+		t.Fatalf("seed observation before reopen: %v", err)
 	}
 	if err := st1.Close(); err != nil {
 		t.Fatalf("close initial store: %v", err)

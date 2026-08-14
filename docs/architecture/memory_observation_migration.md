@@ -1,12 +1,15 @@
 # Memory Observation Migration
 
-Status date: 2026-05-18.
+Status date: 2026-08-14.
 
-Status: `MEMORY_OBSERVATION_WRITES_RETIRED / HISTORY_PRESERVED / COURTHOUSE_REVIEW_GUIDANCE / CONTROL_LANE_CANONICAL_COMMIT / NO_FORGE_K_AUTHORITY_MIGRATION`.
+Status: `K20H / LEGACY_MEMORY_WRITERS_SEALED / HISTORY_PRESERVED / REPAIR_PROPOSAL_ONLY / PRODUCTION_FORGE_K_MATERIALIZATION`.
 
 ## Intent
 
-FORGE-K Online Phase 13 closes the legacy memory observation write surface without losing historical observation data. Existing observation rows remain retrieval/history evidence. New canonical memory must be reviewed and committed through governed semantic paths.
+K20H closes the remaining legacy observation, link, usefulness, and repair
+write surfaces without deleting historical data. Existing rows remain readable
+evidence. New admitted evidence and later revisions use deterministic,
+authenticated production FORGE-K semantic syscalls.
 
 ## Live Owner
 
@@ -16,27 +19,47 @@ The live retirement gate is `services/core/internal/api`:
 - `PATCH /api/memory/observations/{id}`
 - `POST /api/memory/observations/{id}/usefulness`
 
-Those endpoints return `410 Gone` and write audit records. Canonical replacement writes remain owned by `services/core/internal/aios/controllane`.
+Those endpoints are terminal handlers: they return `410 Gone`, write denied
+audit records, do not decode request bodies, and cannot reach a writer. No
+legacy observation-link mutation route is mounted. Observation and repair
+history reads remain available.
 
-## Target Owners
+## Production Owner
 
-Target FORGE-K owners remain:
+Production authority is `services/core/internal/forgekernel`:
 
-- Courthouse for future evidence admission semantics
-- Kernel for future canonical commit authority
+- `MATERIALIZE_ADMITTED_EVIDENCE` commits admitted evidence.
+- `REVISE_MEMORY_EVIDENCE` appends a superseding revision while preserving the
+  original evidence.
 
-This phase does not import or invoke `services/core/internal/forgek/court` or `services/core/internal/forgek/kernel` as live daemon authority.
+The Control Lane SQLite implementation is a temporary durable adapter, not the
+orchestration owner. The simulator under `services/core/internal/forgek` and
+model/runtime proposals have no commit authority.
 
 ## Migration Rule
 
 Legacy observation rows are evidence, not canonical truth. They may remain readable through observation and retrieval APIs for history, inspection, VSA signals, and packet alignment.
 
-New canonical memory derived from an observation must follow the governed path:
+New governed memory evidence derived from an observation follows the governed path:
 
 1. Preserve the legacy observation row or source reference as historical evidence.
-2. Validate observation-derived evidence shape through `VALIDATE_ADMISSION_CANDIDATE`.
-3. Commit accepted canonical memory through existing Control Lane semantic syscalls such as `CREATE_NOTE`, `UPDATE_STATE`, `OPEN_LOOP`, or `CLOSE_LOOP`.
+2. Admit evidence through deterministic Courthouse policy and exact scoped provenance.
+3. Commit accepted evidence through `MATERIALIZE_ADMITTED_EVIDENCE`.
+4. Preserve the original and append later changes through `REVISE_MEMORY_EVIDENCE`.
+
+Legacy exported service methods remain source-compatible but return
+`ErrMemoryEvidenceAuthorityRequired`. Production code contains no callsite for
+them and the legacy memory package contains no observation/link/usefulness or
+repair SQL writer.
+
+Repair remains proposal-only. `PreviewRepairPass` and the background ticker
+select deterministic candidates and describe possible effects without
+creating repair runs, rewriting evidence, or rebuilding VSA projections.
+Non-dry API requests and direct `RunRepairPass` calls fail closed.
 
 ## Boundary
 
-The retired endpoint does not auto-convert legacy observations into notes, state, or loops. The response and audit payload only provide migration guidance. There is no batch migrator, no evidence admission, no direct memory write, and no live FORGE-K authority migration in this phase.
+The retired routes do not auto-convert legacy observations, mutate usefulness,
+create links, or execute repair. K20H adds no model-driven endpoint and no
+batch migrator. Any future public evidence endpoint must authenticate and enter
+the production Kernel; it cannot reconnect a legacy service writer.

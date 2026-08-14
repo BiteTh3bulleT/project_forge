@@ -22,14 +22,18 @@ func newMemoryServiceForTest(t *testing.T) (*Service, func()) {
 
 func createTestObservation(t *testing.T, svc *Service, path, summary, raw string) *Observation {
 	t.Helper()
-	obs, err := svc.RecordObservation(context.Background(), RecordObservationRequest{
-		Type: "memory_note", SourcePath: path, TaskType: "test", Summary: summary,
-		RawContent: raw, Tags: []string{"test"},
-	})
+	res, err := svc.db.Exec(`
+INSERT INTO memory_observations(created_at,updated_at,observed_at,type,raw_content,summary,source_path,task_type,tags_json)
+VALUES(1,1,1,'memory_note',?,?,?,'test','["test"]')`, raw, summary, path)
 	if err != nil {
-		t.Fatalf("record observation: %v", err)
+		t.Fatalf("seed observation: %v", err)
 	}
-	return obs
+	id, _ := res.LastInsertId()
+	detail, err := svc.GetObservation(context.Background(), id)
+	if err != nil {
+		t.Fatalf("read seeded observation: %v", err)
+	}
+	return &detail.Observation
 }
 
 func TestLegacyVSAProjectionWritersFailClosed(t *testing.T) {
@@ -92,12 +96,12 @@ func TestObservationAndLinkWritesDoNotAutoReindex(t *testing.T) {
 	defer cleanup()
 	a := createTestObservation(t, svc, "/tmp/project/a.go", "a", "a")
 	b := createTestObservation(t, svc, "/tmp/project/b.go", "b", "b")
-	if err := svc.AddLink(ctx, a.ID, b.ID, "related", "no projection side effect"); err != nil {
-		t.Fatal(err)
+	if err := svc.AddLink(ctx, a.ID, b.ID, "related", "no projection side effect"); !errors.Is(err, ErrMemoryEvidenceAuthorityRequired) {
+		t.Fatalf("legacy link error = %v", err)
 	}
 	updated := "changed"
-	if _, err := svc.UpdateObservation(ctx, a.ID, UpdateObservationRequest{Summary: &updated}); err != nil {
-		t.Fatal(err)
+	if _, err := svc.UpdateObservation(ctx, a.ID, UpdateObservationRequest{Summary: &updated}); !errors.Is(err, ErrMemoryEvidenceAuthorityRequired) {
+		t.Fatalf("legacy update error = %v", err)
 	}
 	var rows int
 	if err := svc.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM memory_vsa_pointers`).Scan(&rows); err != nil {

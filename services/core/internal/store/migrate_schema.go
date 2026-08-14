@@ -502,6 +502,7 @@ CREATE TABLE IF NOT EXISTS memory_vsa_associations (
 
 CREATE TABLE IF NOT EXISTS memory_vsa_projection_manifests (
   manifest_hash TEXT PRIMARY KEY,
+  source_kind TEXT NOT NULL DEFAULT '',
   workspace_id TEXT NOT NULL,
   lane_id TEXT NOT NULL,
   source_set_hash TEXT NOT NULL,
@@ -534,6 +535,62 @@ CREATE TABLE IF NOT EXISTS memory_vsa_projection_heads (
   PRIMARY KEY(workspace_id, lane_id)
 );
 
+-- Governed VSA rows are keyed to immutable FORGE-K memory evidence.  They are
+-- deliberately separate from legacy observation-FK projection tables.
+CREATE TABLE IF NOT EXISTS forge_k_memory_vsa_pointers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL,
+  manifest_hash TEXT NOT NULL REFERENCES memory_vsa_projection_manifests(manifest_hash),
+  memory_evidence_row_id INTEGER NOT NULL REFERENCES forge_k_memory_evidence(id) ON DELETE RESTRICT,
+  memory_evidence_id TEXT NOT NULL,
+  dims INTEGER NOT NULL,
+  pointer_json TEXT NOT NULL,
+  norm REAL NOT NULL,
+  source_fingerprint TEXT NOT NULL,
+  support_count INTEGER NOT NULL DEFAULT 0,
+  noise_count INTEGER NOT NULL DEFAULT 0,
+  metadata_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(workspace_id,lane_id,manifest_hash,memory_evidence_id)
+);
+
+CREATE TABLE IF NOT EXISTS forge_k_memory_vsa_role_bindings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL,
+  manifest_hash TEXT NOT NULL REFERENCES memory_vsa_projection_manifests(manifest_hash),
+  memory_evidence_row_id INTEGER NOT NULL REFERENCES forge_k_memory_evidence(id) ON DELETE RESTRICT,
+  memory_evidence_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  filler TEXT NOT NULL,
+  weight REAL NOT NULL,
+  support_count INTEGER NOT NULL DEFAULT 0,
+  noise_count INTEGER NOT NULL DEFAULT 0,
+  binding_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(workspace_id,lane_id,manifest_hash,memory_evidence_id,role,filler)
+);
+
+CREATE TABLE IF NOT EXISTS forge_k_memory_vsa_associations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL,
+  manifest_hash TEXT NOT NULL REFERENCES memory_vsa_projection_manifests(manifest_hash),
+  from_memory_evidence_row_id INTEGER NOT NULL REFERENCES forge_k_memory_evidence(id) ON DELETE RESTRICT,
+  to_memory_evidence_row_id INTEGER NOT NULL REFERENCES forge_k_memory_evidence(id) ON DELETE RESTRICT,
+  association_type TEXT NOT NULL,
+  strength REAL NOT NULL,
+  support_count INTEGER NOT NULL DEFAULT 0,
+  noise_count INTEGER NOT NULL DEFAULT 0,
+  evidence_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(workspace_id,lane_id,manifest_hash,from_memory_evidence_row_id,to_memory_evidence_row_id,association_type)
+);
+
 CREATE TRIGGER IF NOT EXISTS trg_memory_vsa_manifests_no_update
 BEFORE UPDATE ON memory_vsa_projection_manifests
 BEGIN
@@ -551,6 +608,8 @@ CREATE TABLE IF NOT EXISTS retrieval_result_vsa_signals (
   retrieval_result_id INTEGER NOT NULL UNIQUE REFERENCES retrieval_results(id) ON DELETE CASCADE,
   retrieval_run_id INTEGER NOT NULL REFERENCES retrieval_runs(id) ON DELETE CASCADE,
   observation_id INTEGER REFERENCES memory_observations(id) ON DELETE SET NULL,
+  memory_evidence_row_id INTEGER REFERENCES forge_k_memory_evidence(id) ON DELETE SET NULL,
+  memory_evidence_id TEXT NOT NULL DEFAULT '',
   mode TEXT NOT NULL DEFAULT 'off',
   associative_score REAL NOT NULL DEFAULT 0,
   role_match_score REAL NOT NULL DEFAULT 0,
@@ -824,6 +883,9 @@ CREATE INDEX IF NOT EXISTS idx_memory_vsa_pointers_fp ON memory_vsa_pointers(sou
 CREATE INDEX IF NOT EXISTS idx_memory_vsa_bindings_obs ON memory_vsa_role_bindings(observation_id, role);
 CREATE INDEX IF NOT EXISTS idx_memory_vsa_assoc_from ON memory_vsa_associations(from_observation_id, strength DESC);
 CREATE INDEX IF NOT EXISTS idx_memory_vsa_assoc_to ON memory_vsa_associations(to_observation_id, strength DESC);
+CREATE INDEX IF NOT EXISTS idx_forge_k_memory_vsa_pointer_head ON forge_k_memory_vsa_pointers(workspace_id,lane_id,manifest_hash,memory_evidence_row_id);
+CREATE INDEX IF NOT EXISTS idx_forge_k_memory_vsa_binding_head ON forge_k_memory_vsa_role_bindings(workspace_id,lane_id,manifest_hash,memory_evidence_row_id);
+CREATE INDEX IF NOT EXISTS idx_forge_k_memory_vsa_assoc_head ON forge_k_memory_vsa_associations(workspace_id,lane_id,manifest_hash,from_memory_evidence_row_id,to_memory_evidence_row_id);
 CREATE INDEX IF NOT EXISTS idx_result_vsa_signals_run ON retrieval_result_vsa_signals(retrieval_run_id, retrieval_result_id);
 CREATE INDEX IF NOT EXISTS idx_result_vsa_signals_obs ON retrieval_result_vsa_signals(observation_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_result_vsa_signals_mode ON retrieval_result_vsa_signals(mode, applied_score DESC, created_at DESC);
@@ -1411,6 +1473,95 @@ WHEN NOT (
 )
 BEGIN
   SELECT RAISE(FAIL, 'court appeals are immutable');
+END;
+
+-- K20H immutable Memory Palace evidence.  These rows are derived only from an
+-- admitted, current Court exhibit/ruling pair by the production FORGE-K
+-- syscall path.  They intentionally do not share identity or foreign keys
+-- with legacy memory_observations.
+CREATE TABLE IF NOT EXISTS forge_k_memory_evidence (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  evidence_id TEXT NOT NULL UNIQUE,
+  root_evidence_id TEXT NOT NULL,
+  revision INTEGER NOT NULL CHECK (revision > 0),
+  court_case_id TEXT NOT NULL,
+  court_exhibit_id TEXT NOT NULL REFERENCES court_exhibits(id) ON DELETE RESTRICT,
+  court_ruling_id TEXT NOT NULL REFERENCES court_rulings(id) ON DELETE RESTRICT,
+  admission_syscall_id TEXT NOT NULL,
+  source_object_kind TEXT NOT NULL CHECK (source_object_kind = 'court_exhibit'),
+  source_object_id TEXT NOT NULL,
+  source_object_version TEXT NOT NULL,
+  source_object_hash TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  selected_paths_json TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  source_refs_json TEXT NOT NULL,
+  content_summary TEXT NOT NULL,
+  raw_ref TEXT NOT NULL DEFAULT '',
+  content_hash TEXT NOT NULL,
+  source_provenance_id TEXT NOT NULL REFERENCES provenance_records(id) ON DELETE RESTRICT,
+  source_provenance_json TEXT NOT NULL,
+  materialization_provenance_id TEXT NOT NULL REFERENCES provenance_records(id) ON DELETE RESTRICT,
+  materialization_provenance_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  proposed_by TEXT NOT NULL,
+  committed_by TEXT NOT NULL CHECK (committed_by = 'forge_k.kernel'),
+  syscall_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  trace_id TEXT NOT NULL,
+  transaction_id TEXT NOT NULL,
+  journal_event_id TEXT NOT NULL,
+  audit_outbox_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  authorization_fingerprint TEXT NOT NULL,
+  UNIQUE(court_exhibit_id, court_ruling_id),
+  UNIQUE(root_evidence_id, revision)
+);
+
+CREATE TABLE IF NOT EXISTS forge_k_memory_evidence_supersessions (
+  id TEXT PRIMARY KEY,
+  root_evidence_id TEXT NOT NULL,
+  superseded_evidence_id TEXT NOT NULL UNIQUE REFERENCES forge_k_memory_evidence(evidence_id) ON DELETE RESTRICT,
+  replacement_evidence_id TEXT NOT NULL UNIQUE REFERENCES forge_k_memory_evidence(evidence_id) ON DELETE RESTRICT,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  selected_paths_json TEXT NOT NULL,
+  provenance_id TEXT NOT NULL REFERENCES provenance_records(id) ON DELETE RESTRICT,
+  provenance_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  syscall_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  trace_id TEXT NOT NULL,
+  committed_by TEXT NOT NULL CHECK (committed_by = 'forge_k.kernel'),
+  CHECK (superseded_evidence_id <> replacement_evidence_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_forge_k_memory_evidence_scope_leaf
+ON forge_k_memory_evidence(workspace_id, lane_id, court_case_id, root_evidence_id, revision DESC);
+
+CREATE TRIGGER IF NOT EXISTS forge_k_memory_evidence_no_update
+BEFORE UPDATE ON forge_k_memory_evidence
+BEGIN
+  SELECT RAISE(FAIL, 'FORGE-K memory evidence is immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS forge_k_memory_evidence_no_delete
+BEFORE DELETE ON forge_k_memory_evidence
+BEGIN
+  SELECT RAISE(FAIL, 'FORGE-K memory evidence is immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS forge_k_memory_evidence_supersessions_no_update
+BEFORE UPDATE ON forge_k_memory_evidence_supersessions
+BEGIN
+  SELECT RAISE(FAIL, 'FORGE-K memory supersessions are append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS forge_k_memory_evidence_supersessions_no_delete
+BEFORE DELETE ON forge_k_memory_evidence_supersessions
+BEGIN
+  SELECT RAISE(FAIL, 'FORGE-K memory supersessions are append-only');
 END;
 
 CREATE TABLE IF NOT EXISTS context_packet_snapshots (

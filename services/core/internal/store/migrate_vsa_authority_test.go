@@ -20,6 +20,7 @@ func TestMemoryVSAProjectionAuthorityMigrationLeavesLegacyRowsUntrusted(t *testi
 		`CREATE TABLE memory_vsa_role_bindings(id INTEGER PRIMARY KEY, observation_id INTEGER NOT NULL)`,
 		`CREATE TABLE memory_vsa_associations(id INTEGER PRIMARY KEY, from_observation_id INTEGER NOT NULL, to_observation_id INTEGER NOT NULL)`,
 		`CREATE TABLE memory_vsa_projection_manifests(manifest_hash TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, lane_id TEXT NOT NULL, created_at INTEGER NOT NULL)`,
+		`INSERT INTO memory_vsa_projection_manifests(manifest_hash,workspace_id,lane_id,created_at) VALUES('legacy-manifest','ws','lane',1)`,
 		`INSERT INTO memory_observations(id,type) VALUES(1,'legacy')`,
 		`INSERT INTO memory_vsa_pointers(id,observation_id) VALUES(1,1)`,
 	}
@@ -40,6 +41,13 @@ func TestMemoryVSAProjectionAuthorityMigrationLeavesLegacyRowsUntrusted(t *testi
 	}
 	if workspaceID != "" || laneID != "" || manifestHash != "" {
 		t.Fatalf("legacy projection gained invented authority: %q/%q %q", workspaceID, laneID, manifestHash)
+	}
+	var sourceKind string
+	if err := db.QueryRow(`SELECT source_kind FROM memory_vsa_projection_manifests WHERE manifest_hash='legacy-manifest'`).Scan(&sourceKind); err != nil {
+		t.Fatal(err)
+	}
+	if sourceKind != "" {
+		t.Fatalf("legacy manifest gained governed source kind %q", sourceKind)
 	}
 }
 

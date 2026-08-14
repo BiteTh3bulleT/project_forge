@@ -42,56 +42,6 @@ func (s *Server) handleListMemoryObservations(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, map[string]any{"observations": rows})
 }
 
-func (s *Server) handleCreateMemoryObservation(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Type              string        `json:"type"`
-		RawContent        string        `json:"rawContent"`
-		Summary           string        `json:"summary"`
-		EmbeddingRef      string        `json:"embeddingRef"`
-		DossierID         optionalInt64 `json:"dossierId"`
-		ProjectKey        string        `json:"projectKey"`
-		SourcePath        string        `json:"sourcePath"`
-		Entities          []string      `json:"entities"`
-		Tags              []string      `json:"tags"`
-		RelatedFiles      []string      `json:"relatedFiles"`
-		TaskType          string        `json:"taskType"`
-		Confidence        float64       `json:"confidence"`
-		VerificationState string        `json:"verificationState"`
-		Lineage           []string      `json:"lineage"`
-		OriginKind        string        `json:"originKind"`
-		OriginID          string        `json:"originId"`
-		ObservedAtMs      int64         `json:"observedAtMs"`
-	}
-	if err := decodeMemoryJSONBody(r, &body); err != nil {
-		writeMemoryDecodeError(w, err)
-		return
-	}
-	obs, err := s.memory.RecordObservation(r.Context(), memory.RecordObservationRequest{
-		Type:              body.Type,
-		RawContent:        body.RawContent,
-		Summary:           body.Summary,
-		EmbeddingRef:      body.EmbeddingRef,
-		DossierID:         body.DossierID.Value,
-		ProjectKey:        body.ProjectKey,
-		SourcePath:        body.SourcePath,
-		Entities:          body.Entities,
-		Tags:              body.Tags,
-		RelatedFiles:      body.RelatedFiles,
-		TaskType:          body.TaskType,
-		Confidence:        body.Confidence,
-		VerificationState: body.VerificationState,
-		Lineage:           body.Lineage,
-		OriginKind:        body.OriginKind,
-		OriginID:          body.OriginID,
-		ObservedAtMs:      body.ObservedAtMs,
-	})
-	if err != nil {
-		writeAPIRequestError(w, http.StatusBadRequest, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"observation": obs})
-}
-
 func (s *Server) handleGetMemoryObservation(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
@@ -118,63 +68,6 @@ func (s *Server) handleGetObservationVSA(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"detail": detail})
-}
-
-func (s *Server) handlePatchMemoryObservation(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
-		return
-	}
-	var body struct {
-		Summary           *string  `json:"summary"`
-		VerificationState *string  `json:"verificationState"`
-		Stale             *bool    `json:"stale"`
-		LastVerifiedAtMs  *int64   `json:"lastVerifiedAtMs"`
-		Tags              []string `json:"tags"`
-		RelatedFiles      []string `json:"relatedFiles"`
-	}
-	if err := decodeMemoryJSONBody(r, &body); err != nil {
-		writeMemoryDecodeError(w, err)
-		return
-	}
-	updated, err := s.memory.UpdateObservation(r.Context(), id, memory.UpdateObservationRequest{
-		Summary:           body.Summary,
-		VerificationState: body.VerificationState,
-		Stale:             body.Stale,
-		LastVerifiedAtMs:  body.LastVerifiedAtMs,
-		Tags:              body.Tags,
-		RelatedFiles:      body.RelatedFiles,
-	})
-	if err != nil {
-		writeAPIRequestError(w, http.StatusBadRequest, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"observation": updated})
-}
-
-func (s *Server) handleMarkMemoryObservationUsefulness(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		writeAPIError(w, http.StatusBadRequest, "request_failed", "bad id", nil)
-		return
-	}
-	var body struct {
-		Signal            string        `json:"signal"`
-		Weight            float64       `json:"weight"`
-		Note              string        `json:"note"`
-		RetrievalResultID optionalInt64 `json:"retrievalResultId"`
-		RetrievalRunID    optionalInt64 `json:"retrievalRunId"`
-		PacketID          optionalInt64 `json:"packetId"`
-		JobID             *string       `json:"jobId"`
-	}
-	if err := decodeMemoryJSONBody(r, &body); err != nil {
-		writeMemoryDecodeError(w, err)
-		return
-	}
-	_ = id
-	_ = body
-	writeAPIError(w, http.StatusConflict, "memory_usefulness_requires_forge_k", "observation usefulness is immutable utility evidence and must be submitted through the governed FORGE-K utility syscall", nil)
 }
 
 func (s *Server) handleGetRetrievalSelection(w http.ResponseWriter, r *http.Request) {
@@ -438,14 +331,6 @@ func (s *Server) handleGovernedMemoryAccelerationRebuild(w http.ResponseWriter, 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"result": result, "manifest": projection.Manifest, "projectionOnly": true})
-}
-
-func decodeMemoryJSONBody(r *http.Request, target any) error {
-	raw, err := readMemoryRequestBody(r)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(raw, target)
 }
 
 func decodeOptionalMemoryJSONBody(r *http.Request, target any) error {

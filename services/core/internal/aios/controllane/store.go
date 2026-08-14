@@ -128,6 +128,8 @@ type SemanticReadStore interface {
 	FindRetrievalUsefulnessTarget(ctx context.Context, resultID int64) (RetrievalUsefulnessTarget, bool, error)
 	FindRestoreOutcomeFeedbackTarget(ctx context.Context, id string) (RestoreOutcomeFeedbackTarget, bool, error)
 	GetRestoreOutcomeFeedbackProjection(ctx context.Context, id string, scope domain.ForgeScope) (RestoreOutcomeFeedbackProjection, bool, error)
+	FindMemoryEvidence(id string, scope domain.ForgeScope) (MemoryEvidence, bool)
+	HasMemoryEvidenceSupersession(id string) bool
 	BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket
 }
 
@@ -150,6 +152,7 @@ type SemanticStore interface {
 	CreateRetrievalUsefulnessEvent(event RetrievalUsefulnessEvent) error
 	CreateRestoreOutcomeFeedbackEvent(event RestoreOutcomeFeedbackEvent) error
 	RebuildMemoryAcceleration(ctx context.Context, req MemoryAccelerationRebuildRequest) (MemoryAccelerationCommit, error)
+	CreateMemoryEvidence(evidence MemoryEvidence, supersession *MemoryEvidenceSupersession) error
 	SetIdempotency(key string, rec IdempotencyRecord) error
 	CreateAuditOutbox(rec AuditOutboxRecord) error
 }
@@ -179,6 +182,8 @@ type memoryState struct {
 	retrievalUtilityProjection map[int64]RetrievalUsefulnessProjection
 	restoreFeedbackEvents      map[string]RestoreOutcomeFeedbackEvent
 	restoreFeedbackProjection  map[string]RestoreOutcomeFeedbackProjection
+	memoryEvidence             map[string]MemoryEvidence
+	memoryEvidenceSupersession map[string]MemoryEvidenceSupersession
 	idempotency                map[string]IdempotencyRecord
 	auditOutbox                map[string]AuditOutboxRecord
 	journalEntries             []forgejournal.Entry
@@ -207,6 +212,8 @@ func newMemoryState() memoryState {
 		retrievalUtilityProjection: map[int64]RetrievalUsefulnessProjection{},
 		restoreFeedbackEvents:      map[string]RestoreOutcomeFeedbackEvent{},
 		restoreFeedbackProjection:  map[string]RestoreOutcomeFeedbackProjection{},
+		memoryEvidence:             map[string]MemoryEvidence{},
+		memoryEvidenceSupersession: map[string]MemoryEvidenceSupersession{},
 		idempotency:                map[string]IdempotencyRecord{},
 		auditOutbox:                map[string]AuditOutboxRecord{},
 		journalEntries:             []forgejournal.Entry{},
@@ -276,6 +283,12 @@ func cloneState(in memoryState) memoryState {
 	}
 	for k, v := range in.restoreFeedbackProjection {
 		out.restoreFeedbackProjection[k] = cloneIntegrityValue(v)
+	}
+	for k, v := range in.memoryEvidence {
+		out.memoryEvidence[k] = cloneIntegrityValue(v)
+	}
+	for k, v := range in.memoryEvidenceSupersession {
+		out.memoryEvidenceSupersession[k] = cloneIntegrityValue(v)
 	}
 	for k, v := range in.idempotency {
 		out.idempotency[k] = cloneIdempotencyRecord(v)

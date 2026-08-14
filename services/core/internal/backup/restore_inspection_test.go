@@ -64,13 +64,15 @@ func TestInspectFullBackupProducesDeterministicNonMergeablePlan(t *testing.T) {
 	}
 
 	wantDisposition := map[string]string{
-		"journal_events":            "never_live_merge",
-		"semantic_idempotency_keys": "never_live_merge",
-		"forge_k_journal_head":      "offline_recovery_only",
-		"forge_k_audit_outbox":      "offline_recovery_only",
-		"court_exhibits":            "offline_recovery_only",
-		"court_rulings":             "offline_recovery_only",
-		"court_appeals":             "offline_recovery_only",
+		"journal_events":                        "never_live_merge",
+		"semantic_idempotency_keys":             "never_live_merge",
+		"forge_k_journal_head":                  "offline_recovery_only",
+		"forge_k_audit_outbox":                  "offline_recovery_only",
+		"court_exhibits":                        "offline_recovery_only",
+		"court_rulings":                         "offline_recovery_only",
+		"court_appeals":                         "offline_recovery_only",
+		"forge_k_memory_evidence":               "offline_recovery_only",
+		"forge_k_memory_evidence_supersessions": "offline_recovery_only",
 	}
 	for section, want := range wantDisposition {
 		inspection, ok := first.SectionInspections[section]
@@ -82,6 +84,9 @@ func TestInspectFullBackupProducesDeterministicNonMergeablePlan(t *testing.T) {
 		}
 		if len(inspection.Blockers) == 0 {
 			t.Fatalf("section %s has no explicit blocker", section)
+		}
+		if inspection.ComputedCount != inspection.DeclaredCount || inspection.ComputedChecksum == "" || inspection.ComputedChecksum != inspection.DeclaredChecksum {
+			t.Fatalf("section %s lacks count/checksum inspection proof: %#v", section, inspection)
 		}
 	}
 }

@@ -149,11 +149,11 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	if matrix["KV System"].CurrentStatus != "KV_REUSE_CANARY_VALIDATION_ONLY" {
 		t.Fatalf("kv matrix status=%q, want KV_REUSE_CANARY_VALIDATION_ONLY", matrix["KV System"].CurrentStatus)
 	}
-	if matrix["Courthouse"].CurrentStatus != "ADMISSION_CANDIDATE_ONLY" {
-		t.Fatalf("courthouse matrix status=%q, want ADMISSION_CANDIDATE_ONLY", matrix["Courthouse"].CurrentStatus)
+	if matrix["Courthouse"].CurrentStatus != "DETERMINISTIC_ADMISSION_RULING_PARTIAL" {
+		t.Fatalf("courthouse matrix status=%q, want DETERMINISTIC_ADMISSION_RULING_PARTIAL", matrix["Courthouse"].CurrentStatus)
 	}
-	if matrix["Memory Palace"].CurrentStatus != "MEMORY_PALACE_MIRROR_ONLY" {
-		t.Fatalf("memory palace matrix status=%q, want MEMORY_PALACE_MIRROR_ONLY", matrix["Memory Palace"].CurrentStatus)
+	if matrix["Memory Palace"].CurrentStatus != "ADMITTED_EVIDENCE_MATERIALIZATION_PARTIAL" {
+		t.Fatalf("memory palace matrix status=%q, want ADMITTED_EVIDENCE_MATERIALIZATION_PARTIAL", matrix["Memory Palace"].CurrentStatus)
 	}
 	if matrix["Context Compiler"].CurrentStatus != "CONTEXT_ATTRIBUTION_VALIDATION_ONLY" {
 		t.Fatalf("context compiler matrix status=%q, want CONTEXT_ATTRIBUTION_VALIDATION_ONLY", matrix["Context Compiler"].CurrentStatus)

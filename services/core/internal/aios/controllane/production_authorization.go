@@ -163,6 +163,8 @@ func productionCapabilityPolicy(source domain.ActionSource, action domain.Semant
 	switch source {
 	case domain.SourceUser:
 		switch action {
+		case domain.ActionMaterializeAdmittedEvidence, domain.ActionReviseMemoryEvidence:
+			return "authenticated_user_scoped_admitted_evidence", true
 		case domain.ActionRebuildMemoryAcceleration:
 			return "authenticated_user_scoped_acceleration_rebuild", true
 		case domain.ActionRecordRetrievalUsefulness, domain.ActionRecordRestoreOutcomeFeedback:

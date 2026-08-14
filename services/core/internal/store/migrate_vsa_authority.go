@@ -35,6 +35,13 @@ func ensureMemoryVSAProjectionAuthority(db *sql.DB) error {
 			{name: "lane_id", ddl: "TEXT NOT NULL DEFAULT ''"},
 			{name: "manifest_hash", ddl: "TEXT NOT NULL DEFAULT ''"},
 		},
+		"memory_vsa_projection_manifests": {
+			{name: "source_kind", ddl: "TEXT NOT NULL DEFAULT ''"},
+		},
+		"retrieval_result_vsa_signals": {
+			{name: "memory_evidence_row_id", ddl: "INTEGER REFERENCES forge_k_memory_evidence(id) ON DELETE SET NULL"},
+			{name: "memory_evidence_id", ddl: "TEXT NOT NULL DEFAULT ''"},
+		},
 	}
 	for table, additions := range upgrades {
 		if err := ensureVSAProjectionColumns(db, table, additions); err != nil {
@@ -76,6 +83,12 @@ func ensureVSAProjectionColumns(db *sql.DB, table string, additions []struct{ na
 		return err
 	}
 	_ = rows.Close()
+	// Partial legacy fixtures and pre-VSA databases may not contain every
+	// optional table. The static schema creates them before this hook in the
+	// ordinary migration path; absence here must not invent a partial table.
+	if len(existing) == 0 {
+		return nil
+	}
 	for _, addition := range additions {
 		if _, ok := existing[addition.name]; ok {
 			continue

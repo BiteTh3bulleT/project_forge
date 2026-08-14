@@ -47,6 +47,30 @@ func TestAccelerationRebuildHasExplicitAuthenticatedUserPolicy(t *testing.T) {
 	}
 }
 
+func TestAdmittedMemoryEvidenceHasExplicitAuthenticatedUserPolicy(t *testing.T) {
+	svc, _ := newProductionAuthorizationHarness(t)
+	for _, action := range []domain.SemanticActionType{domain.ActionMaterializeAdmittedEvidence, domain.ActionReviseMemoryEvidence} {
+		policy, allowed := productionCapabilityPolicy(domain.SourceUser, action)
+		if !allowed || policy != "authenticated_user_scoped_admitted_evidence" {
+			t.Fatalf("user action %q policy=(%q,%v)", action, policy, allowed)
+		}
+		req := productionAuthorizationRequest(domain.SourceUser)
+		req.Action = action
+		def, _ := NewStaticActionRegistry().Get(action)
+		req.RequiredCapability = def.Capability
+		ctx := authproof.WithTrustedOrigin(context.Background(), productionTestOrigin(req.Actor, req.Source, "memory-evidence-session"))
+		proof, err := svc.ResolveAuthorization(ctx, req)
+		if err != nil || proof.Origin == nil || proof.Capability.Action != action {
+			t.Fatalf("authenticated user action %q proof=%#v err=%v", action, proof, err)
+		}
+		for _, source := range []domain.ActionSource{domain.SourceAdapter, domain.SourceFutureIRIS} {
+			if policy, allowed := productionCapabilityPolicy(source, action); allowed {
+				t.Fatalf("proposal source %q action %q received policy %q", source, action, policy)
+			}
+		}
+	}
+}
+
 func TestProductionAuthorizationBindsServicePrincipalForSystemTaxonomy(t *testing.T) {
 	svc, _ := newProductionAuthorizationHarness(t)
 	req := productionAuthorizationRequest(domain.SourceInternal)

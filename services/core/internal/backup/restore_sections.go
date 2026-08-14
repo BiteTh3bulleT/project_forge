@@ -138,17 +138,19 @@ var restoreSectionPriority = map[string]int{
 }
 
 var restoreExportOnlyReasons = map[string]string{
-	"memory_vsa_pointers":          "restore export-only by policy: VSA pointers are derived from observation lineage and fingerprint state",
-	"memory_vsa_role_bindings":     "restore export-only by policy: VSA role bindings are derived from observation lineage and role reconciliation",
-	"memory_vsa_associations":      "restore export-only by policy: VSA associations are derived graph edges and must be recomputed",
-	"retrieval_result_vsa_signals": "restore export-only by policy: VSA signals are derived from retrieval runs/results and must be recomputed",
-	"memory_vsa_reindex_runs":      "restore export-only by policy: reindex runs are operational maintenance history tied to live memory state",
-	"memory_vsa_reindex_items":     "restore export-only by policy: reindex items are operational maintenance history tied to live memory state",
-	"court_exhibits":               "restore export-only by live policy: Courthouse state requires production Kernel recovery verification",
-	"court_rulings":                "restore export-only by live policy: immutable Courthouse ruling history cannot be live-merged",
-	"court_appeals":                "restore export-only by live policy: immutable Courthouse appeal history cannot be live-merged",
-	"forge_k_journal_head":         "restore export-only by live policy: the local journal head is whole-store recovery proof",
-	"forge_k_audit_outbox":         "restore export-only by live policy: immutable audit intents cannot be live-merged or redelivered",
+	"memory_vsa_pointers":                   "restore export-only by policy: VSA pointers are derived from observation lineage and fingerprint state",
+	"memory_vsa_role_bindings":              "restore export-only by policy: VSA role bindings are derived from observation lineage and role reconciliation",
+	"memory_vsa_associations":               "restore export-only by policy: VSA associations are derived graph edges and must be recomputed",
+	"retrieval_result_vsa_signals":          "restore export-only by policy: VSA signals are derived from retrieval runs/results and must be recomputed",
+	"memory_vsa_reindex_runs":               "restore export-only by policy: reindex runs are operational maintenance history tied to live memory state",
+	"memory_vsa_reindex_items":              "restore export-only by policy: reindex items are operational maintenance history tied to live memory state",
+	"court_exhibits":                        "restore export-only by live policy: Courthouse state requires production Kernel recovery verification",
+	"court_rulings":                         "restore export-only by live policy: immutable Courthouse ruling history cannot be live-merged",
+	"court_appeals":                         "restore export-only by live policy: immutable Courthouse appeal history cannot be live-merged",
+	"forge_k_memory_evidence":               "restore export-only by live policy: immutable admitted memory evidence requires whole-store Kernel recovery verification",
+	"forge_k_memory_evidence_supersessions": "restore export-only by live policy: immutable memory evidence lineage cannot be live-merged",
+	"forge_k_journal_head":                  "restore export-only by live policy: the local journal head is whole-store recovery proof",
+	"forge_k_audit_outbox":                  "restore export-only by live policy: immutable audit intents cannot be live-merged or redelivered",
 }
 
 func restoreExportOnlyReason(section string) (string, bool) {

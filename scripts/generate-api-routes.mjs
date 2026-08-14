@@ -57,6 +57,13 @@ Check without writing with \`node scripts/generate-api-routes.mjs --check\`.
 - Bearer token when \`APIToken\` is configured; transport-open when \`APIToken\` is empty: mounted under \`requireAPIAuth\`. An empty token does not grant semantic authority: only verified loopback peers receive \`local_loopback\` origin proof, while arbitrary remote peers receive no authenticated user/proposer origin and fail closed at FORGE-K authorization.
 - Handler-specific checks, approval gates, capability gates, and remote webhook signature/token validation are not expanded here unless visible at the route-mount layer.
 
+## Retired memory mutation behavior
+
+- \`POST /api/memory/observations\`, \`PATCH /api/memory/observations/{id}\`, and \`POST /api/memory/observations/{id}/usefulness\` are terminal audited retirement gates. They return \`410 Gone\` without decoding the request body or reaching a writer.
+- No legacy observation-link mutation route is mounted.
+- \`POST /api/memory/repair/run\` is deterministic proposal inspection only with explicit \`dryRun=true\`; non-dry requests fail closed.
+- Historical observation, link, usefulness, and repair read surfaces remain available. Canonical creation and revision belong to authenticated production FORGE-K semantic syscalls.
+
 ## Inventory
 
 | Method | Path | Auth posture | Mount condition |

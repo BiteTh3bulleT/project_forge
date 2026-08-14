@@ -31,6 +31,8 @@ const (
 	CapMemoryAccelerationRebuild  = "memory.acceleration.rebuild"
 	CapRetrievalUsefulnessRecord  = "retrieval.usefulness.record"
 	CapRestoreOutcomeFeedback     = "context.restore.outcome.feedback.record"
+	CapMemoryEvidenceMaterialize  = "memory.evidence.materialize"
+	CapMemoryEvidenceRevise       = "memory.evidence.revise"
 )
 
 type ActionDefinition struct {
@@ -260,6 +262,16 @@ func NewStaticActionRegistry() *StaticActionRegistry {
 			ApprovalPossible: false,
 			TargetObjectType: "restore_outcome_feedback_evidence",
 			AuditEventName:   "semantic_syscall.record_restore_outcome_feedback",
+		},
+		domain.ActionMaterializeAdmittedEvidence: {
+			Action: domain.ActionMaterializeAdmittedEvidence, Capability: CapMemoryEvidenceMaterialize,
+			Mutating: true, SupportsDryRun: true, ApprovalPossible: false,
+			TargetObjectType: "forge_k_memory_evidence", AuditEventName: "semantic_syscall.materialize_admitted_evidence",
+		},
+		domain.ActionReviseMemoryEvidence: {
+			Action: domain.ActionReviseMemoryEvidence, Capability: CapMemoryEvidenceRevise,
+			Mutating: true, SupportsDryRun: true, ApprovalPossible: false,
+			TargetObjectType: "forge_k_memory_evidence_revision", AuditEventName: "semantic_syscall.revise_memory_evidence",
 		},
 	}
 	return &StaticActionRegistry{definitions: defs}

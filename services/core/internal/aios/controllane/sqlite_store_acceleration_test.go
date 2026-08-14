@@ -6,6 +6,9 @@ import (
 	"errors"
 	"testing"
 
+	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/forgekernel/court"
+	"forge/projectforge/services/core/internal/memory"
 	"forge/projectforge/services/core/internal/memory/vsaprojection"
 	forgestore "forge/projectforge/services/core/internal/store"
 )
@@ -23,10 +26,10 @@ func TestMemoryAccelerationRebuildScopesManifestAndFiltersLegacyRows(t *testing.
 	seedAccelerationSources(t, db)
 
 	commit := rebuildAcceleration(t, db, "", "syscall-1")
-	if commit.Manifest.SourceCount != 2 || commit.Manifest.LinkCount != 1 {
+	if commit.Manifest.SourceCount != 2 || commit.Manifest.LinkCount != 0 {
 		t.Fatalf("manifest counts = sources %d links %d", commit.Manifest.SourceCount, commit.Manifest.LinkCount)
 	}
-	if commit.PointerCount != 2 || commit.AssociationCount != 1 {
+	if commit.PointerCount != 2 || commit.AssociationCount != 0 {
 		t.Fatalf("projection counts = pointers %d associations %d", commit.PointerCount, commit.AssociationCount)
 	}
 	var head string
@@ -44,7 +47,7 @@ func TestMemoryAccelerationRebuildScopesManifestAndFiltersLegacyRows(t *testing.
 		t.Fatalf("manifest created_at = %d, want sealed timestamp 100", createdAt)
 	}
 	var scoped, legacy int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM memory_vsa_pointers WHERE workspace_id='workspace-a' AND lane_id='lane-a' AND manifest_hash=?`, head).Scan(&scoped); err != nil {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM forge_k_memory_vsa_pointers WHERE workspace_id='workspace-a' AND lane_id='lane-a' AND manifest_hash=?`, head).Scan(&scoped); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.QueryRow(`SELECT COUNT(*) FROM memory_vsa_pointers WHERE workspace_id='' OR lane_id='' OR manifest_hash=''`).Scan(&legacy); err != nil {
@@ -52,6 +55,20 @@ func TestMemoryAccelerationRebuildScopesManifestAndFiltersLegacyRows(t *testing.
 	}
 	if scoped != 2 || legacy != 0 {
 		t.Fatalf("pointer rows = scoped %d legacy %d", scoped, legacy)
+	}
+	if _, err := db.Exec(`INSERT INTO settings(key,value) VALUES('retrieval_vsa_mode','active') ON CONFLICT(key) DO UPDATE SET value=excluded.value`); err != nil {
+		t.Fatal(err)
+	}
+	signals, err := memory.New(db).ComputeVSAQuerySignals(context.Background(), memory.VSAQuerySignalsRequest{
+		WorkspaceID: "workspace-a", LaneID: "lane-a", Query: "alpha",
+		Candidates: []memory.VSAQueryCandidate{{ChunkID: 10, AbsPath: "/a.txt"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	signal, ok := signals[10]
+	if !ok || signal.MemoryEvidenceID != "evidence-1" || signal.MemoryEvidenceRowID == nil || signal.ObservationID != nil || signal.AppliedScore == 0 {
+		t.Fatalf("governed memory evidence did not drive scoped VSA scoring: %+v", signals)
 	}
 }
 
@@ -104,9 +121,7 @@ func TestMemoryAccelerationRebuildRejectsManifestAndHeadDivergence(t *testing.T)
 	}
 
 	first := rebuildAcceleration(t, db, "", "syscall-1")
-	if _, err := db.Exec(`UPDATE memory_observations SET summary='changed source' WHERE workspace_id='workspace-a' AND id=(SELECT MIN(id) FROM memory_observations WHERE workspace_id='workspace-a')`); err != nil {
-		t.Fatal(err)
-	}
+	seedAccelerationEvidence(t, db, 3, "gamma", "/c.txt")
 	expected := expectedAccelerationManifest(t, db)
 	tx, err = db.BeginTx(context.Background(), nil)
 	if err != nil {
@@ -135,11 +150,9 @@ func TestMemoryAccelerationSwapFailureRollsBackOldProjection(t *testing.T) {
 	db := openAccelerationTestStore(t)
 	seedAccelerationSources(t, db)
 	first := rebuildAcceleration(t, db, "", "syscall-1")
-	if _, err := db.Exec(`UPDATE memory_observations SET summary='new source identity' WHERE workspace_id='workspace-a' AND id=(SELECT MIN(id) FROM memory_observations WHERE workspace_id='workspace-a')`); err != nil {
-		t.Fatal(err)
-	}
+	seedAccelerationEvidence(t, db, 3, "gamma", "/c.txt")
 	expected := expectedAccelerationManifest(t, db)
-	if _, err := db.Exec(`CREATE TRIGGER fail_vsa_pointer_swap BEFORE INSERT ON memory_vsa_pointers BEGIN SELECT RAISE(ABORT,'injected swap failure'); END`); err != nil {
+	if _, err := db.Exec(`CREATE TRIGGER fail_vsa_pointer_swap BEFORE INSERT ON forge_k_memory_vsa_pointers BEGIN SELECT RAISE(ABORT,'injected swap failure'); END`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -165,7 +178,7 @@ func TestMemoryAccelerationSwapFailureRollsBackOldProjection(t *testing.T) {
 		t.Fatalf("head after failed swap = %q", head)
 	}
 	var active, failedManifest int
-	if err := db.QueryRow(`SELECT COUNT(*) FROM memory_vsa_pointers WHERE manifest_hash=?`, first.Manifest.ManifestHash).Scan(&active); err != nil {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM forge_k_memory_vsa_pointers WHERE manifest_hash=?`, first.Manifest.ManifestHash).Scan(&active); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.QueryRow(`SELECT COUNT(*) FROM memory_vsa_projection_manifests WHERE manifest_hash=?`, expected).Scan(&failedManifest); err != nil {
@@ -188,16 +201,45 @@ func openAccelerationTestStore(t *testing.T) *sql.DB {
 
 func seedAccelerationSources(t *testing.T, db *sql.DB) {
 	t.Helper()
-	for _, statement := range []string{
-		`INSERT INTO memory_observations(workspace_id,lane_id,created_at,updated_at,observed_at,type,raw_content,summary,source_path,entities_json,tags_json,related_files_json,lineage_json) VALUES('workspace-a','lane-a',1,1,1,'file','alpha body','alpha summary','/a.txt','["alpha"]','["tag"]','[]','[]')`,
-		`INSERT INTO memory_observations(workspace_id,lane_id,created_at,updated_at,observed_at,type,raw_content,summary,source_path,entities_json,tags_json,related_files_json,lineage_json) VALUES('workspace-a','lane-a',2,2,2,'file','beta body','beta summary','/b.txt','["beta"]','[]','[]','[]')`,
-		`INSERT INTO memory_observations(created_at,updated_at,observed_at,type,raw_content,summary,source_path) VALUES(3,3,3,'legacy','legacy body','legacy untrusted','/legacy.txt')`,
-		`INSERT INTO memory_observation_links(workspace_id,lane_id,created_at,from_observation_id,to_observation_id,relation_type) SELECT 'workspace-a','lane-a',4,MIN(id),MAX(id),'supports' FROM memory_observations WHERE workspace_id='workspace-a'`,
-		`INSERT INTO memory_usefulness_events(created_at,observation_id,signal,weight) SELECT 5,MIN(id),'useful',1 FROM memory_observations WHERE workspace_id='workspace-a'`,
-	} {
-		if _, err := db.Exec(statement); err != nil {
-			t.Fatalf("seed: %v\n%s", err, statement)
-		}
+	seedAccelerationEvidence(t, db, 1, "alpha", "/a.txt")
+	seedAccelerationEvidence(t, db, 2, "beta", "/b.txt")
+	if _, err := db.Exec(`INSERT INTO memory_observations(created_at,updated_at,observed_at,type,raw_content,summary,source_path) VALUES(3,3,3,'legacy','legacy body','legacy untrusted','/legacy.txt')`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func seedAccelerationEvidence(t *testing.T, db *sql.DB, n int, summary, path string) {
+	t.Helper()
+	suffix := string(rune('0' + n))
+	hash := "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	scope := domain.ForgeScope{WorkspaceID: "workspace-a", LaneID: "lane-a", SelectedPaths: []string{path}}
+	sourceProvenance := domain.Provenance{Actor: "operator", ActorType: "human", Source: "test", TraceID: "trace-source-" + suffix}
+	materializationProvenance := domain.Provenance{Actor: "forge-k", ActorType: "service", Source: "test", TraceID: "trace-materialize-" + suffix}
+	exhibitID, rulingID := "exhibit-"+suffix, "ruling-"+suffix
+	admitSyscall, materializeSyscall := "admit-"+suffix, "materialize-"+suffix
+	store := NewSQLiteSemanticStore(db)
+	store.SetCommitMetadata(CommitMetadata{SyscallID: admitSyscall, CorrelationID: "corr-admit-" + suffix, TraceID: "trace-admit-" + suffix, CommittedBy: "forge_k.kernel"})
+	exhibit := court.Exhibit{ID: exhibitID, CaseID: "case-" + suffix, Scope: scope, SourceType: "file", SourceRefs: []string{path}, ContentSummary: summary, RawRef: path, ContentHash: hash, Status: court.DecisionAdmitted, CurrentRulingID: rulingID, CreatedAt: int64(n), UpdatedAt: int64(n), Provenance: sourceProvenance, SyscallID: admitSyscall, CorrelationID: "corr-admit-" + suffix, TraceID: "trace-admit-" + suffix, ProposedBy: "operator", CommittedBy: "forge_k.kernel"}
+	ruling := court.Ruling{ID: rulingID, CaseID: exhibit.CaseID, ExhibitID: exhibitID, Scope: scope, Decision: court.DecisionAdmitted, ReasonCode: "policy_match", Reason: "admitted", PolicyVersion: court.PolicyVersion, PolicyRefs: []string{"policy:test"}, InputRefs: []string{path}, ContentHash: hash, CreatedAt: int64(n), Provenance: sourceProvenance, SyscallID: admitSyscall, CorrelationID: exhibit.CorrelationID, TraceID: exhibit.TraceID, ProposedBy: "operator", CommittedBy: "forge_k.kernel"}
+	if err := store.CreateCourtDecision(exhibit, ruling, nil); err != nil {
+		t.Fatal(err)
+	}
+	store.SetCommitMetadata(accelerationCommitMetadata(materializeSyscall))
+	evidenceID := "evidence-" + suffix
+	evidence := MemoryEvidence{
+		EvidenceID: evidenceID, RootEvidenceID: evidenceID, Revision: 1, CourtCaseID: exhibit.CaseID,
+		CourtExhibitID: exhibitID, CourtRulingID: rulingID, AdmissionSyscallID: admitSyscall,
+		SourceObjectKind: "court_exhibit", SourceObjectID: exhibitID, SourceObjectVersion: rulingID, SourceObjectHash: hash,
+		Scope: scope, SourceType: "file", SourceRefs: []string{path}, ContentSummary: summary, RawRef: path, ContentHash: hash,
+		SourceProvenanceID: provenanceID(scope, sourceProvenance), SourceProvenance: sourceProvenance,
+		MaterializationProvenanceID: provenanceID(scope, materializationProvenance), MaterializationProvenance: materializationProvenance,
+		CreatedAt: int64(n), ProposedBy: "operator", CommittedBy: "forge_k.kernel", SyscallID: materializeSyscall,
+		CorrelationID: "corr-" + materializeSyscall, TraceID: "trace-" + materializeSyscall,
+		TransactionID: materializeSyscall + ":transaction", JournalEventID: materializeSyscall + ":journal_event",
+		AuditOutboxID: materializeSyscall + ":audit_outbox", IdempotencyKey: "key-" + suffix, AuthorizationFingerprint: hash,
+	}
+	if err := store.CreateMemoryEvidence(evidence, nil); err != nil {
+		t.Fatal(err)
 	}
 }
 

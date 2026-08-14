@@ -456,6 +456,9 @@ ORDER BY id DESC`, runID)
 	return &VSAReindexRunDetail{Run: run, Items: items}, nil
 }
 
+// GetObservationVSA exposes legacy observation projection rows for historical
+// inspection only. Governed active-head scoring reads forge_k_memory_vsa_* in
+// vsa_signals.go and never treats these rows as current authority.
 func (s *Service) GetObservationVSA(ctx context.Context, observationID int64) (*ObservationVSADetail, error) {
 	detail := &ObservationVSADetail{ObservationID: observationID}
 	if s == nil || s.db == nil {
@@ -466,8 +469,6 @@ SELECT vp.id, vp.observation_id, vp.dims, vp.pointer_json, vp.norm, vp.source_fi
        vp.support_count, vp.noise_count, vp.stale, vp.metadata_json, vp.created_at, vp.updated_at
 FROM memory_vsa_pointers vp
 JOIN memory_observations mo ON mo.id=vp.observation_id
-JOIN memory_vsa_projection_heads h
-  ON h.workspace_id=vp.workspace_id AND h.lane_id=vp.lane_id AND h.manifest_hash=vp.manifest_hash
 WHERE vp.observation_id=? AND vp.workspace_id<>'' AND vp.lane_id<>'' AND vp.manifest_hash<>''
   AND mo.workspace_id=vp.workspace_id AND mo.lane_id=vp.lane_id`, observationID)
 	var stale int
@@ -514,8 +515,6 @@ func (s *Service) loadVSARoleBindings(ctx context.Context, observationID int64) 
 	rows, err := s.db.QueryContext(ctx, `
 SELECT b.id, b.observation_id, b.role, b.filler, b.weight, b.support_count, b.noise_count, b.binding_json, b.created_at, b.updated_at
 FROM memory_vsa_role_bindings b
-JOIN memory_vsa_projection_heads h
-  ON h.workspace_id=b.workspace_id AND h.lane_id=b.lane_id AND h.manifest_hash=b.manifest_hash
 WHERE b.observation_id=? AND b.workspace_id<>'' AND b.lane_id<>'' AND b.manifest_hash<>''
 ORDER BY b.role ASC, b.filler ASC`, observationID)
 	if err != nil {
@@ -553,8 +552,6 @@ func (s *Service) loadVSAAssociations(ctx context.Context, observationID int64, 
 	rows, err := s.db.QueryContext(ctx, `
 SELECT a.id, a.from_observation_id, a.to_observation_id, a.association_type, a.strength, a.support_count, a.noise_count, a.evidence_json, a.created_at, a.updated_at
 FROM memory_vsa_associations a
-JOIN memory_vsa_projection_heads h
-  ON h.workspace_id=a.workspace_id AND h.lane_id=a.lane_id AND h.manifest_hash=a.manifest_hash
 WHERE a.workspace_id<>'' AND a.lane_id<>'' AND a.manifest_hash<>''
   AND (a.from_observation_id=? OR a.to_observation_id=?)
 ORDER BY a.strength DESC, a.id DESC
@@ -587,6 +584,8 @@ LIMIT ?`, observationID, observationID, limit)
 	return out, rows.Err()
 }
 
+// DossierVSASummary reports legacy observation projection coverage. It is not
+// an active governed-head status surface.
 func (s *Service) DossierVSASummary(ctx context.Context, dossierID int64) (*DossierVSASummary, error) {
 	summary := &DossierVSASummary{DossierID: dossierID}
 	if dossierID <= 0 {
@@ -596,19 +595,16 @@ func (s *Service) DossierVSASummary(ctx context.Context, dossierID int64) (*Doss
 SELECT COUNT(*)
 FROM memory_vsa_pointers vp
 JOIN memory_observations mo ON mo.id = vp.observation_id
-JOIN memory_vsa_projection_heads h ON h.workspace_id=vp.workspace_id AND h.lane_id=vp.lane_id AND h.manifest_hash=vp.manifest_hash
 WHERE mo.dossier_id=? AND vp.workspace_id<>'' AND vp.lane_id<>'' AND vp.manifest_hash<>''`, dossierID).Scan(&summary.PointerCount)
 	_ = s.db.QueryRowContext(ctx, `
 SELECT COUNT(*)
 FROM memory_vsa_role_bindings vb
 JOIN memory_observations mo ON mo.id = vb.observation_id
-JOIN memory_vsa_projection_heads h ON h.workspace_id=vb.workspace_id AND h.lane_id=vb.lane_id AND h.manifest_hash=vb.manifest_hash
 WHERE mo.dossier_id=? AND vb.workspace_id<>'' AND vb.lane_id<>'' AND vb.manifest_hash<>''`, dossierID).Scan(&summary.BindingCount)
 	_ = s.db.QueryRowContext(ctx, `
 SELECT COUNT(*)
 FROM memory_vsa_associations va
 JOIN memory_observations mo ON mo.id = va.from_observation_id
-JOIN memory_vsa_projection_heads h ON h.workspace_id=va.workspace_id AND h.lane_id=va.lane_id AND h.manifest_hash=va.manifest_hash
 WHERE mo.dossier_id=? AND va.workspace_id<>'' AND va.lane_id<>'' AND va.manifest_hash<>''`, dossierID).Scan(&summary.AssociationCount)
 
 	var runID sql.NullInt64

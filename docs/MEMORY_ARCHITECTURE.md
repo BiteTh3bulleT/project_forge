@@ -1,6 +1,7 @@
 # FORGE Memory Architecture
 
-FORGE memory is observation-based. It does not use a single merged memory blob.
+FORGE memory is governed evidence layered with historical observation data. It
+does not use a single merged memory blob.
 
 ## Storage Backend Direction
 
@@ -25,7 +26,7 @@ Phase 13A introduces `FORGE_STORE_BACKEND=sqlite|postgres` and backend capabilit
 2. `Warm memory`
 - Summaries, structural metadata, tags/entities, dossier scope, retrieval selection reasons, and usefulness stats.
 - Includes retrieval result linkage and packet alignment notes.
-- Includes VSA pointer/binding/association records used for inspectable additive reranking.
+- Includes governed evidence-FK VSA pointer/binding/association records used for inspectable additive reranking.
 
 3. `Hot working memory`
 - Active retrieval run results selected for packet assembly.
@@ -39,7 +40,13 @@ Phase 13A introduces `FORGE_STORE_BACKEND=sqlite|postgres` and backend capabilit
 
 Primary table: `memory_observations`.
 
-Write status: legacy observation mutation endpoints are retired. Existing rows remain readable historical/retrieval evidence, but new canonical memory must be submitted through Courthouse admission-candidate validation and committed through Control Lane semantic syscalls. See `docs/architecture/memory_observation_migration.md`.
+Write status: K20H retires the legacy observation create, patch, usefulness,
+link, and repair writers. Existing rows and repair history remain readable.
+The three mounted legacy mutation routes are terminal `410 Gone` gates and no
+production link route exists. New evidence is admitted and committed only
+through production FORGE-K `MATERIALIZE_ADMITTED_EVIDENCE`; revisions preserve
+the original through `REVISE_MEMORY_EVIDENCE`. The legacy exported Go methods
+remain only as fail-closed source-compatibility seams.
 
 Observation records include:
 - id/timestamps
@@ -55,13 +62,17 @@ Observation records include:
 - usefulness score + counts
 - stale + last verified
 
-Relations:
+Historical legacy relations:
 - `memory_observation_links`
 - `retrieval_result_observations`
 - `memory_usefulness_events`
 - `memory_vsa_pointers`
 - `memory_vsa_role_bindings`
 - `memory_vsa_associations`
+
+Governed K20H evidence and acceleration use separate immutable/source-bound
+tables: `forge_k_memory_evidence`,
+`forge_k_memory_evidence_supersessions`, and `forge_k_memory_vsa_*`.
 
 ## Structural Metadata Routing
 
@@ -84,10 +95,11 @@ Every run stores:
 ## VSA Inspectability
 
 Operator UI/API now exposes:
-- observation-level VSA pointer/binding/association detail
+- historical observation-level VSA detail without active-head authority
+- governed memory-evidence VSA identity and active-manifest scoring
 - retrieval-result VSA component scores (associative/role/relational/feedback/additive/applied)
 - dossier-level VSA coverage/health summary
-- persisted VSA reindex run/item history
+- persisted legacy VSA reindex run/item history
 
 ## Packet Alignment
 
@@ -100,13 +112,12 @@ Each note explains why a retrieval result was included and can optionally link t
 ## Implemented vs Deferred
 
 Implemented:
-- observation persistence with metadata
-- retrieval-result-to-observation linking
+- read compatibility for historical observation metadata and links
+- governed FORGE-K memory evidence materialization and immutable supersession
 - selection reason persistence
 - append-only FORGE-K retrieval-usefulness events and separately stored noncanonical score projections
-- stale flags + verification timestamp updates
-- persisted repair runs with before/after item traces
-- persisted VSA reindex runs/items with fingerprint transitions
+- read compatibility for historical stale/verification and repair-run traces
+- read compatibility for historical VSA reindex runs/items
 - dossier memory view API
 - packet alignment notes
 
@@ -114,6 +125,11 @@ Deferred:
 - automated contradiction clustering
 - automatic summary refresh scheduling
 - embedding refresh orchestration based on stale observations
+
+Repair is deterministic proposal inspection only. `PreviewRepairPass` selects
+candidates and reports the rows a future governed action would affect; it does
+not create repair runs, rewrite observations, or rebuild projections. The
+background ticker also previews only.
 
 ## K20G Utility Boundary
 

@@ -30,11 +30,20 @@ The legacy memory package no longer writes VSA projection tables or usefulness e
 - `dryRun: false` requires exact scope, idempotency key, expected manifest hash, and an explicitly supplied expected prior manifest hash (empty is valid for the first head). The server recomputes both identities before submitting `REBUILD_MEMORY_ACCELERATION` through the selected production FORGE-K processor.
 - An omitted `dryRun` is rejected. Direct legacy reindex is not a fallback.
 
-## Remaining blocker
+## K20H source cutover and remaining blocker
 
-K20F stopped retrieval from manufacturing `memory_observations`, and legacy observations remain intentionally unscoped. No production admitted-evidence path currently creates exact workspace/lane-bound governed VSA source rows. Therefore the new rebuild path is operational and fail-closed but normally cannot activate a useful projection yet.
+K20H supplies the missing source contract through immutable,
+Courthouse-admitted `forge_k_memory_evidence` and dedicated evidence-FK VSA
+projection tables. The v2 planner and runtime exclude legacy observations and
+superseded or no-longer-current Court evidence. Direct observation, link,
+repair, usefulness, and legacy projection writer bodies now fail closed, with
+static callsite and SQL guards preventing their reconnection.
 
-The next slice must introduce a narrow Courthouse-admitted, FORGE-K-committed scoped memory source contract and propagate exact workspace/lane scope through retrieval requests. Until both land, runtime VSA influence remains off. Existing direct observation and repair mutation APIs are a separate memory-plane legacy-removal blocker and are not claimed as resolved by K20G.
+Retrieval callers must still propagate an exact nonempty workspace/lane scope.
+Callers without it receive zero VSA influence. Governed semantic relationship
+edges and usefulness aggregation for immutable memory evidence also remain
+future contracts; legacy links and counters are never imported into the v2
+manifest.
 
 ## Verification expectations
 

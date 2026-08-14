@@ -10,7 +10,7 @@ import (
 	"forge/projectforge/services/core/internal/audit"
 )
 
-func (s *Server) withLegacyMemoryMutationGate(baseAction string, next http.HandlerFunc) http.HandlerFunc {
+func (s *Server) legacyMemoryMutationRetired(baseAction string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		subjectID := strings.TrimSpace(chi.URLParam(r, "id"))
 		if subjectID == "" {
@@ -27,7 +27,7 @@ func (s *Server) withLegacyMemoryMutationGate(baseAction string, next http.Handl
 				SubjectType:   "observation",
 				SubjectID:     subjectID,
 				Outcome:       "denied",
-				Summary:       "legacy memory mutation endpoint retired; use Courthouse review and semantic syscall path",
+				Summary:       "legacy memory mutation endpoint retired; use production FORGE-K evidence syscalls",
 				Payload: requestAuditPayload(map[string]any{
 					"method":               r.Method,
 					"path":                 r.URL.Path,
@@ -42,7 +42,7 @@ func (s *Server) withLegacyMemoryMutationGate(baseAction string, next http.Handl
 		w.WriteHeader(http.StatusGone)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"error":               "legacy_memory_mutation_retired",
-			"message":             "legacy memory mutation endpoints are retired; submit evidence through Courthouse admission review and commit canonical memory through the Control Lane semantic syscall path",
+			"message":             "legacy memory mutation endpoints are retired; use production FORGE-K MATERIALIZE_ADMITTED_EVIDENCE or REVISE_MEMORY_EVIDENCE",
 			"historyPreserved":    true,
 			"migrationReviewPath": migration,
 		})
@@ -52,25 +52,23 @@ func (s *Server) withLegacyMemoryMutationGate(baseAction string, next http.Handl
 func legacyMemoryObservationMigrationReviewPath() map[string]any {
 	return map[string]any{
 		"status":      "retired_write_surface",
-		"liveOwner":   "services/core/internal/api legacy gate + services/core/internal/aios/controllane",
-		"targetOwner": "forgek.court + forgek.kernel",
+		"liveOwner":   "services/core/internal/api terminal retirement gate",
+		"targetOwner": "services/core/internal/forgekernel + governed semantic syscall",
 		"steps": []string{
 			"preserve existing memory_observations rows as historical evidence",
-			"validate new observation-derived evidence through VALIDATE_ADMISSION_CANDIDATE",
-			"commit accepted canonical memory only through Control Lane semantic syscalls",
+			"submit new observation-derived evidence through deterministic FORGE-K admission",
+			"commit accepted memory evidence only through MATERIALIZE_ADMITTED_EVIDENCE",
+			"preserve prior evidence and commit revisions only through REVISE_MEMORY_EVIDENCE",
 		},
 		"canonicalActions": []string{
-			"VALIDATE_ADMISSION_CANDIDATE",
-			"CREATE_NOTE",
-			"UPDATE_STATE",
-			"OPEN_LOOP",
-			"CLOSE_LOOP",
+			"MATERIALIZE_ADMITTED_EVIDENCE",
+			"REVISE_MEMORY_EVIDENCE",
 		},
 		"noAuthorityClaims": []string{
 			"does_not_import_forgek_simulator_services",
 			"does_not_write_memory_observations",
 			"does_not_admit_evidence",
-			"does_not_commit_truth_outside_control_lane",
+			"does_not_bypass_production_forge_k_kernel",
 		},
 	}
 }

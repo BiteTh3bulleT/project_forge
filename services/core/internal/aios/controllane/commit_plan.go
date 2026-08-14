@@ -106,6 +106,10 @@ func expectedCommitObjectIDs(req domain.SyscallRequest, read SemanticReadStore) 
 			ids = append(ids, result.EvidenceID)
 		}
 		return ids, nil
+	case domain.ActionMaterializeAdmittedEvidence:
+		return []string{req.ID + ":memory_evidence"}, nil
+	case domain.ActionReviseMemoryEvidence:
+		return []string{req.ID + ":memory_evidence", req.ID + ":memory_supersession"}, nil
 	case domain.ActionRebuildMemoryAcceleration:
 		return []string{readString(req.Payload, "expectedManifestHash")}, nil
 	case domain.ActionRecordRetrievalUsefulness:

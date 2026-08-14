@@ -219,20 +219,22 @@ type DossierVSASummary struct {
 }
 
 type RetrievalResultVSASignal struct {
-	ID                int64           `json:"id"`
-	RetrievalResultID int64           `json:"retrievalResultId"`
-	RetrievalRunID    int64           `json:"retrievalRunId"`
-	ChunkID           int64           `json:"chunkId"`
-	ObservationID     *int64          `json:"observationId"`
-	Mode              string          `json:"mode"`
-	AssociativeScore  float64         `json:"associativeScore"`
-	RoleMatchScore    float64         `json:"roleMatchScore"`
-	RelationalScore   float64         `json:"relationalScore"`
-	FeedbackScore     float64         `json:"feedbackScore"`
-	AdditiveScore     float64         `json:"additiveScore"`
-	AppliedScore      float64         `json:"appliedScore"`
-	Explain           json.RawMessage `json:"explain"`
-	CreatedAtMs       int64           `json:"createdAtMs"`
+	ID                  int64           `json:"id"`
+	RetrievalResultID   int64           `json:"retrievalResultId"`
+	RetrievalRunID      int64           `json:"retrievalRunId"`
+	ChunkID             int64           `json:"chunkId"`
+	ObservationID       *int64          `json:"observationId"`
+	MemoryEvidenceRowID *int64          `json:"memoryEvidenceRowId,omitempty"`
+	MemoryEvidenceID    string          `json:"memoryEvidenceId,omitempty"`
+	Mode                string          `json:"mode"`
+	AssociativeScore    float64         `json:"associativeScore"`
+	RoleMatchScore      float64         `json:"roleMatchScore"`
+	RelationalScore     float64         `json:"relationalScore"`
+	FeedbackScore       float64         `json:"feedbackScore"`
+	AdditiveScore       float64         `json:"additiveScore"`
+	AppliedScore        float64         `json:"appliedScore"`
+	Explain             json.RawMessage `json:"explain"`
+	CreatedAtMs         int64           `json:"createdAtMs"`
 }
 
 type VSAQueryCandidate struct {

@@ -18,9 +18,9 @@ import (
 )
 
 const (
-	ManifestVersion  = "forge.vsa.projection_manifest.v1"
-	AlgorithmName    = "forge.vsa.observation_projection"
-	AlgorithmVersion = "1"
+	ManifestVersion  = "forge.vsa.memory_evidence_projection_manifest.v2"
+	AlgorithmName    = "forge.vsa.memory_evidence_projection"
+	AlgorithmVersion = "2"
 	DefaultDims      = 128
 	DefaultSeed      = uint64(17)
 )
@@ -50,31 +50,50 @@ func DefaultAlgorithm() Algorithm {
 }
 
 type Source struct {
-	ID                int64    `json:"id"`
-	WorkspaceID       string   `json:"workspaceId"`
-	LaneID            string   `json:"laneId"`
-	Type              string   `json:"type"`
-	TaskType          string   `json:"taskType"`
-	ProjectKey        string   `json:"projectKey"`
-	SourcePath        string   `json:"sourcePath"`
-	Summary           string   `json:"summary"`
-	RawContent        string   `json:"rawContent"`
-	Entities          []string `json:"entities"`
-	Tags              []string `json:"tags"`
-	RelatedFiles      []string `json:"relatedFiles"`
-	Lineage           []string `json:"lineage"`
-	SupportCount      int      `json:"supportCount"`
-	NoiseCount        int      `json:"noiseCount"`
-	SourceFingerprint string   `json:"sourceFingerprint"`
+	MemoryEvidenceRowID         int64    `json:"memoryEvidenceRowId"`
+	EvidenceID                  string   `json:"evidenceId"`
+	RootEvidenceID              string   `json:"rootEvidenceId"`
+	Revision                    int      `json:"revision"`
+	CourtCaseID                 string   `json:"courtCaseId"`
+	CourtExhibitID              string   `json:"courtExhibitId"`
+	CourtRulingID               string   `json:"courtRulingId"`
+	AdmissionSyscallID          string   `json:"admissionSyscallId"`
+	SourceObjectKind            string   `json:"sourceObjectKind"`
+	SourceObjectID              string   `json:"sourceObjectId"`
+	SourceObjectVersion         string   `json:"sourceObjectVersion"`
+	SourceObjectHash            string   `json:"sourceObjectHash"`
+	WorkspaceID                 string   `json:"workspaceId"`
+	LaneID                      string   `json:"laneId"`
+	Type                        string   `json:"type"`
+	TaskType                    string   `json:"taskType"`
+	ProjectKey                  string   `json:"projectKey"`
+	SourcePath                  string   `json:"sourcePath"`
+	Summary                     string   `json:"summary"`
+	RawContent                  string   `json:"rawContent"`
+	Entities                    []string `json:"entities"`
+	Tags                        []string `json:"tags"`
+	RelatedFiles                []string `json:"relatedFiles"`
+	Lineage                     []string `json:"lineage"`
+	SupportCount                int      `json:"supportCount"`
+	NoiseCount                  int      `json:"noiseCount"`
+	SourceProvenanceID          string   `json:"sourceProvenanceId"`
+	MaterializationProvenanceID string   `json:"materializationProvenanceId"`
+	SyscallID                   string   `json:"syscallId"`
+	TransactionID               string   `json:"transactionId"`
+	JournalEventID              string   `json:"journalEventId"`
+	AuditOutboxID               string   `json:"auditOutboxId"`
+	AuthorizationFingerprint    string   `json:"authorizationFingerprint"`
+	CommittedBy                 string   `json:"committedBy"`
+	SourceFingerprint           string   `json:"sourceFingerprint"`
 }
 
 type Link struct {
-	ID                int64  `json:"id"`
-	WorkspaceID       string `json:"workspaceId"`
-	LaneID            string `json:"laneId"`
-	FromObservationID int64  `json:"fromObservationId"`
-	ToObservationID   int64  `json:"toObservationId"`
-	RelationType      string `json:"relationType"`
+	ID                      int64  `json:"id"`
+	WorkspaceID             string `json:"workspaceId"`
+	LaneID                  string `json:"laneId"`
+	FromMemoryEvidenceRowID int64  `json:"fromMemoryEvidenceRowId"`
+	ToMemoryEvidenceRowID   int64  `json:"toMemoryEvidenceRowId"`
+	RelationType            string `json:"relationType"`
 }
 
 type Manifest struct {
@@ -89,32 +108,34 @@ type Manifest struct {
 }
 
 type Pointer struct {
-	ObservationID     int64     `json:"observationId"`
-	Dimensions        int       `json:"dimensions"`
-	Vector            []float64 `json:"vector"`
-	Norm              float64   `json:"norm"`
-	SourceFingerprint string    `json:"sourceFingerprint"`
-	SupportCount      int       `json:"supportCount"`
-	NoiseCount        int       `json:"noiseCount"`
+	MemoryEvidenceRowID int64     `json:"memoryEvidenceRowId"`
+	EvidenceID          string    `json:"evidenceId"`
+	Dimensions          int       `json:"dimensions"`
+	Vector              []float64 `json:"vector"`
+	Norm                float64   `json:"norm"`
+	SourceFingerprint   string    `json:"sourceFingerprint"`
+	SupportCount        int       `json:"supportCount"`
+	NoiseCount          int       `json:"noiseCount"`
 }
 
 type Binding struct {
-	ObservationID int64     `json:"observationId"`
-	Role          string    `json:"role"`
-	Filler        string    `json:"filler"`
-	Weight        float64   `json:"weight"`
-	SupportCount  int       `json:"supportCount"`
-	NoiseCount    int       `json:"noiseCount"`
-	Vector        []float64 `json:"vector"`
+	MemoryEvidenceRowID int64     `json:"memoryEvidenceRowId"`
+	EvidenceID          string    `json:"evidenceId"`
+	Role                string    `json:"role"`
+	Filler              string    `json:"filler"`
+	Weight              float64   `json:"weight"`
+	SupportCount        int       `json:"supportCount"`
+	NoiseCount          int       `json:"noiseCount"`
+	Vector              []float64 `json:"vector"`
 }
 
 type Association struct {
-	FromObservationID int64   `json:"fromObservationId"`
-	ToObservationID   int64   `json:"toObservationId"`
-	RelationType      string  `json:"relationType"`
-	Strength          float64 `json:"strength"`
-	SupportCount      int     `json:"supportCount"`
-	NoiseCount        int     `json:"noiseCount"`
+	FromMemoryEvidenceRowID int64   `json:"fromMemoryEvidenceRowId"`
+	ToMemoryEvidenceRowID   int64   `json:"toMemoryEvidenceRowId"`
+	RelationType            string  `json:"relationType"`
+	Strength                float64 `json:"strength"`
+	SupportCount            int     `json:"supportCount"`
+	NoiseCount              int     `json:"noiseCount"`
 }
 
 type Projection struct {
@@ -165,26 +186,28 @@ func Build(scope Scope, algorithm Algorithm, sources []Source, links []Link) (Pr
 	projection := Projection{Manifest: manifest, Pointers: []Pointer{}, Bindings: []Binding{}, Associations: []Association{}}
 	sourceByID := make(map[int64]Source, len(normalizedSources))
 	for _, source := range normalizedSources {
-		sourceByID[source.ID] = source
+		sourceByID[source.MemoryEvidenceRowID] = source
 		vector := engine.compose(source)
 		projection.Pointers = append(projection.Pointers, Pointer{
-			ObservationID: source.ID, Dimensions: algorithm.Dimensions, Vector: vector,
+			MemoryEvidenceRowID: source.MemoryEvidenceRowID, EvidenceID: source.EvidenceID,
+			Dimensions: algorithm.Dimensions, Vector: vector,
 			Norm: vectorNorm(vector), SourceFingerprint: source.SourceFingerprint,
 			SupportCount: source.SupportCount, NoiseCount: source.NoiseCount,
 		})
 		for _, seed := range bindingSeeds(source) {
 			projection.Bindings = append(projection.Bindings, Binding{
-				ObservationID: source.ID, Role: seed.role, Filler: seed.filler, Weight: seed.weight,
+				MemoryEvidenceRowID: source.MemoryEvidenceRowID, EvidenceID: source.EvidenceID,
+				Role: seed.role, Filler: seed.filler, Weight: seed.weight,
 				SupportCount: source.SupportCount, NoiseCount: source.NoiseCount,
 				Vector: engine.bind(engine.encode(seed.role), engine.encode(seed.filler)),
 			})
 		}
 	}
 	for _, link := range normalizedLinks {
-		from := sourceByID[link.FromObservationID]
-		to := sourceByID[link.ToObservationID]
+		from := sourceByID[link.FromMemoryEvidenceRowID]
+		to := sourceByID[link.ToMemoryEvidenceRowID]
 		projection.Associations = append(projection.Associations, Association{
-			FromObservationID: link.FromObservationID, ToObservationID: link.ToObservationID,
+			FromMemoryEvidenceRowID: link.FromMemoryEvidenceRowID, ToMemoryEvidenceRowID: link.ToMemoryEvidenceRowID,
 			RelationType: link.RelationType, Strength: relationStrength(link.RelationType),
 			SupportCount: from.SupportCount + to.SupportCount,
 			NoiseCount:   from.NoiseCount + to.NoiseCount,
@@ -217,13 +240,39 @@ func normalizeSources(scope Scope, sources []Source) ([]Source, error) {
 	for i, source := range sources {
 		source.WorkspaceID = strings.TrimSpace(source.WorkspaceID)
 		source.LaneID = strings.TrimSpace(source.LaneID)
-		if source.ID <= 0 || source.WorkspaceID == "" || source.LaneID == "" || source.WorkspaceID != scope.WorkspaceID || source.LaneID != scope.LaneID {
-			return nil, fmt.Errorf("%w: source %d is not bound to exact scope", ErrInvalidSource, source.ID)
+		if source.MemoryEvidenceRowID <= 0 || source.WorkspaceID == "" || source.LaneID == "" || source.WorkspaceID != scope.WorkspaceID || source.LaneID != scope.LaneID {
+			return nil, fmt.Errorf("%w: source row %d is not bound to exact scope", ErrInvalidSource, source.MemoryEvidenceRowID)
 		}
-		if _, ok := seen[source.ID]; ok {
-			return nil, fmt.Errorf("%w: duplicate source %d", ErrInvalidSource, source.ID)
+		if _, ok := seen[source.MemoryEvidenceRowID]; ok {
+			return nil, fmt.Errorf("%w: duplicate source row %d", ErrInvalidSource, source.MemoryEvidenceRowID)
 		}
-		seen[source.ID] = struct{}{}
+		seen[source.MemoryEvidenceRowID] = struct{}{}
+		source.EvidenceID = normalizeText(source.EvidenceID)
+		source.RootEvidenceID = normalizeText(source.RootEvidenceID)
+		source.CourtCaseID = normalizeText(source.CourtCaseID)
+		source.CourtExhibitID = normalizeText(source.CourtExhibitID)
+		source.CourtRulingID = normalizeText(source.CourtRulingID)
+		source.AdmissionSyscallID = normalizeText(source.AdmissionSyscallID)
+		source.SourceObjectKind = normalizeText(source.SourceObjectKind)
+		source.SourceObjectID = normalizeText(source.SourceObjectID)
+		source.SourceObjectVersion = normalizeText(source.SourceObjectVersion)
+		source.SourceObjectHash = normalizeText(source.SourceObjectHash)
+		source.SourceProvenanceID = normalizeText(source.SourceProvenanceID)
+		source.MaterializationProvenanceID = normalizeText(source.MaterializationProvenanceID)
+		source.SyscallID = normalizeText(source.SyscallID)
+		source.TransactionID = normalizeText(source.TransactionID)
+		source.JournalEventID = normalizeText(source.JournalEventID)
+		source.AuditOutboxID = normalizeText(source.AuditOutboxID)
+		source.AuthorizationFingerprint = normalizeText(source.AuthorizationFingerprint)
+		source.CommittedBy = normalizeText(source.CommittedBy)
+		if source.EvidenceID == "" || source.RootEvidenceID == "" || source.Revision <= 0 ||
+			source.CourtCaseID == "" || source.CourtExhibitID == "" || source.CourtRulingID == "" || source.AdmissionSyscallID == "" ||
+			source.SourceObjectKind != "court_exhibit" || source.SourceObjectID != source.CourtExhibitID || source.SourceObjectVersion != source.CourtRulingID ||
+			!validSHA256(source.SourceObjectHash) || source.SourceProvenanceID == "" || source.MaterializationProvenanceID == "" ||
+			source.SyscallID == "" || source.TransactionID == "" || source.JournalEventID == "" || source.AuditOutboxID == "" ||
+			!validSHA256(source.AuthorizationFingerprint) || source.CommittedBy != "forge_k.kernel" {
+			return nil, fmt.Errorf("%w: source row %d lacks governed Court/K identity", ErrInvalidSource, source.MemoryEvidenceRowID)
+		}
 		source.Type = normalizeText(source.Type)
 		source.TaskType = normalizeText(source.TaskType)
 		source.ProjectKey = normalizeText(source.ProjectKey)
@@ -235,7 +284,7 @@ func normalizeSources(scope Scope, sources []Source) ([]Source, error) {
 		source.RelatedFiles = normalizeStrings(source.RelatedFiles)
 		source.Lineage = normalizeStrings(source.Lineage)
 		if source.SupportCount < 0 || source.NoiseCount < 0 {
-			return nil, fmt.Errorf("%w: negative utility counts for source %d", ErrInvalidSource, source.ID)
+			return nil, fmt.Errorf("%w: negative utility counts for source row %d", ErrInvalidSource, source.MemoryEvidenceRowID)
 		}
 		source.SourceFingerprint = ""
 		fingerprint, err := hashJSON(source)
@@ -245,14 +294,19 @@ func normalizeSources(scope Scope, sources []Source) ([]Source, error) {
 		source.SourceFingerprint = fingerprint
 		out[i] = source
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].EvidenceID != out[j].EvidenceID {
+			return out[i].EvidenceID < out[j].EvidenceID
+		}
+		return out[i].MemoryEvidenceRowID < out[j].MemoryEvidenceRowID
+	})
 	return out, nil
 }
 
 func normalizeLinks(scope Scope, sources []Source, links []Link) ([]Link, error) {
 	validSources := make(map[int64]struct{}, len(sources))
 	for _, source := range sources {
-		validSources[source.ID] = struct{}{}
+		validSources[source.MemoryEvidenceRowID] = struct{}{}
 	}
 	out := make([]Link, len(links))
 	seen := make(map[int64]struct{}, len(links))
@@ -260,27 +314,27 @@ func normalizeLinks(scope Scope, sources []Source, links []Link) ([]Link, error)
 		link.WorkspaceID = strings.TrimSpace(link.WorkspaceID)
 		link.LaneID = strings.TrimSpace(link.LaneID)
 		link.RelationType = strings.ToLower(normalizeText(link.RelationType))
-		if link.ID <= 0 || link.WorkspaceID != scope.WorkspaceID || link.LaneID != scope.LaneID || link.FromObservationID <= 0 || link.ToObservationID <= 0 || link.FromObservationID == link.ToObservationID || link.RelationType == "" {
+		if link.ID <= 0 || link.WorkspaceID != scope.WorkspaceID || link.LaneID != scope.LaneID || link.FromMemoryEvidenceRowID <= 0 || link.ToMemoryEvidenceRowID <= 0 || link.FromMemoryEvidenceRowID == link.ToMemoryEvidenceRowID || link.RelationType == "" {
 			return nil, fmt.Errorf("%w: invalid link %d", ErrInvalidLink, link.ID)
 		}
 		if _, ok := seen[link.ID]; ok {
 			return nil, fmt.Errorf("%w: duplicate link %d", ErrInvalidLink, link.ID)
 		}
-		if _, ok := validSources[link.FromObservationID]; !ok {
+		if _, ok := validSources[link.FromMemoryEvidenceRowID]; !ok {
 			return nil, fmt.Errorf("%w: link %d source is outside source set", ErrInvalidLink, link.ID)
 		}
-		if _, ok := validSources[link.ToObservationID]; !ok {
+		if _, ok := validSources[link.ToMemoryEvidenceRowID]; !ok {
 			return nil, fmt.Errorf("%w: link %d target is outside source set", ErrInvalidLink, link.ID)
 		}
 		seen[link.ID] = struct{}{}
 		out[i] = link
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].FromObservationID != out[j].FromObservationID {
-			return out[i].FromObservationID < out[j].FromObservationID
+		if out[i].FromMemoryEvidenceRowID != out[j].FromMemoryEvidenceRowID {
+			return out[i].FromMemoryEvidenceRowID < out[j].FromMemoryEvidenceRowID
 		}
-		if out[i].ToObservationID != out[j].ToObservationID {
-			return out[i].ToObservationID < out[j].ToObservationID
+		if out[i].ToMemoryEvidenceRowID != out[j].ToMemoryEvidenceRowID {
+			return out[i].ToMemoryEvidenceRowID < out[j].ToMemoryEvidenceRowID
 		}
 		if out[i].RelationType != out[j].RelationType {
 			return out[i].RelationType < out[j].RelationType
@@ -291,6 +345,14 @@ func normalizeLinks(scope Scope, sources []Source, links []Link) ([]Link, error)
 }
 
 func normalizeText(value string) string { return strings.TrimSpace(value) }
+
+func validSHA256(value string) bool {
+	if len(value) != 71 || !strings.HasPrefix(value, "sha256:") {
+		return false
+	}
+	_, err := hex.DecodeString(strings.TrimPrefix(value, "sha256:"))
+	return err == nil
+}
 
 func normalizeStrings(values []string) []string {
 	seen := map[string]struct{}{}
