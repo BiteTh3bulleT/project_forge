@@ -205,7 +205,8 @@ func TestProcessorOpenLoopUpdatePreservesTransitionRules(t *testing.T) {
 	if err != nil || !res.Success {
 		t.Fatalf("update open loop failed: err=%v res=%+v", err, res)
 	}
-	if len(res.CommittedObjectIDs) != 1 || res.CommittedObjectIDs[0] != "loop-update-1" {
+	if len(res.CommittedObjectIDs) != 2 || !stringInSlice(res.CommittedObjectIDs, "loop-update-1") ||
+		!stringInSlice(res.CommittedObjectIDs, "open-loop-update-valid:journal_event") {
 		t.Fatalf("committed ids = %v", res.CommittedObjectIDs)
 	}
 	loop, ok := store.FindLoop("loop-update-1")

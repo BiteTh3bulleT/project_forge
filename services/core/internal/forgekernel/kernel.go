@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/forgekernel/commitproof"
 	"forge/projectforge/services/core/internal/forgekernel/court"
 )
 
@@ -31,6 +32,8 @@ var (
 	ErrMissingCommitAdapter = errors.New("missing durable kernel commit adapter")
 	ErrMissingDurablePort   = errors.New("commit adapter does not implement the FORGE-K durable port")
 	ErrInvalidDisposition   = errors.New("invalid durable port disposition")
+	ErrInvalidPreparedProof = errors.New("invalid FORGE-K prepared commit proof")
+	ErrInvalidCommitReceipt = errors.New("invalid FORGE-K commit receipt")
 )
 
 type Processor interface {
@@ -42,12 +45,23 @@ type Disposition string
 const (
 	DispositionComplete Disposition = "complete"
 	DispositionCommit   Disposition = "commit"
+	DispositionReplay   Disposition = "replay"
 )
 
 type PreparedSyscall struct {
-	Request     domain.SyscallRequest
-	Result      domain.SyscallResult
-	Disposition Disposition
+	Request       domain.SyscallRequest
+	Result        domain.SyscallResult
+	Disposition   Disposition
+	Plan          commitproof.PreparedPlan
+	ReplayRequest domain.SyscallRequest
+	ReplayPlan    commitproof.PreparedPlan
+	ReplaySeal    commitproof.PreparedPlanSeal
+	ReplayReceipt commitproof.CommitReceipt
+}
+
+type CommitOutcome struct {
+	Result  domain.SyscallResult
+	Receipt commitproof.CommitReceipt
 }
 
 // DurablePort is the temporary compatibility boundary implemented by the
@@ -56,7 +70,7 @@ type PreparedSyscall struct {
 // persistence, and best-effort observation.
 type DurablePort interface {
 	Prepare(ctx context.Context, req domain.SyscallRequest) (PreparedSyscall, error)
-	Commit(ctx context.Context, prepared PreparedSyscall) (domain.SyscallResult, error)
+	Commit(ctx context.Context, prepared PreparedSyscall, seal commitproof.PreparedPlanSeal) (CommitOutcome, error)
 	RecordResult(ctx context.Context, req domain.SyscallRequest, result domain.SyscallResult) domain.SyscallResult
 	ObserveResult(ctx context.Context, req domain.SyscallRequest, result domain.SyscallResult)
 }
@@ -140,12 +154,15 @@ func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain
 		k.port.ObserveResult(ctx, prepared.Request, result)
 		return result, err
 	}
-	if prepared.Disposition != DispositionCommit {
+	if prepared.Disposition != DispositionCommit && prepared.Disposition != DispositionReplay {
 		result := rejectedResult(prepared.Request, domain.ErrInternal, "kernel.disposition", ErrInvalidDisposition.Error())
 		result = annotateAuthority(result)
 		result = k.port.RecordResult(ctx, prepared.Request, result)
 		k.port.ObserveResult(ctx, prepared.Request, result)
 		return result, ErrInvalidDisposition
+	}
+	if prepared.Disposition == DispositionReplay {
+		return k.replay(ctx, prepared)
 	}
 	if court.IsAction(prepared.Request.Action) {
 		decision, issues := court.Decide(prepared.Request)
@@ -161,11 +178,131 @@ func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain
 		prepared.Request.Metadata[court.MetadataDecisionKey] = decision
 		prepared.Result.ValidationDetails = append(prepared.Result.ValidationDetails, domain.ValidationDetail{Layer: "forge_k_courthouse", Passed: true, Issues: []domain.SyscallError{}})
 	}
-	result, err := k.port.Commit(ctx, prepared)
+	boundPlan, proofErr := commitproof.BindPreparedPlan(prepared.Request, prepared.Plan)
+	prepared.Plan = boundPlan
+	var seal commitproof.PreparedPlanSeal
+	if proofErr == nil {
+		seal, proofErr = commitproof.SealPreparedPlan(prepared.Request, prepared.Plan)
+	}
+	if proofErr == nil {
+		proofErr = commitproof.VerifyPreparedPlan(prepared.Request, prepared.Plan, seal)
+	}
+	if proofErr != nil {
+		return k.rejectCommitProof(ctx, prepared.Request, domain.ErrInternal, "kernel.commitProof.preparedPlan", ErrInvalidPreparedProof, proofErr)
+	}
+	outcome, err := k.port.Commit(ctx, prepared, seal)
+	result := outcome.Result
+	if err == nil && result.Success {
+		proofErr = commitproof.ValidateCommitReceipt(prepared.Request, prepared.Plan, seal, outcome.Receipt, result)
+		if proofErr != nil {
+			return k.rejectCommitProof(ctx, prepared.Request, domain.ErrPersistenceUnavailable, "kernel.commitProof.receipt", ErrInvalidCommitReceipt, proofErr)
+		}
+		result = annotateCommitProof(result, seal, outcome.Receipt)
+	} else if result.Success {
+		return k.rejectCommitProof(ctx, prepared.Request, domain.ErrPersistenceUnavailable, "kernel.commitProof.commit", ErrInvalidCommitReceipt, err)
+	}
 	result = annotateAuthority(result)
 	result = k.port.RecordResult(ctx, prepared.Request, result)
 	k.port.ObserveResult(ctx, prepared.Request, result)
 	return result, err
+}
+
+func (k *Kernel) replay(ctx context.Context, prepared PreparedSyscall) (domain.SyscallResult, error) {
+	currentIdempotency, proofErr := commitproof.IdempotencyFingerprint(prepared.Request)
+	if proofErr != nil {
+		return k.rejectCommitProof(ctx, prepared.Request, domain.ErrInternal, "kernel.commitProof.replayRequest", ErrInvalidPreparedProof, proofErr)
+	}
+
+	proofRequest := prepared.ReplayRequest
+	if court.IsAction(proofRequest.Action) {
+		proofRequest.Metadata = cloneMetadata(proofRequest.Metadata)
+		delete(proofRequest.Metadata, court.MetadataDecisionKey)
+		decision, issues := court.Decide(proofRequest)
+		if len(issues) > 0 {
+			return k.rejectCommitProof(ctx, prepared.Request, domain.ErrPersistenceUnavailable, "kernel.commitProof.replayCourt", ErrInvalidPreparedProof, errors.New(issues[0].Message))
+		}
+		proofRequest.Metadata[court.MetadataDecisionKey] = decision
+	}
+	prepared.ReplayPlan, proofErr = commitproof.BindPreparedPlan(proofRequest, prepared.ReplayPlan)
+	var computedSeal commitproof.PreparedPlanSeal
+	if proofErr == nil {
+		computedSeal, proofErr = commitproof.SealPreparedPlan(proofRequest, prepared.ReplayPlan)
+	}
+	if proofErr == nil {
+		proofErr = commitproof.VerifyPreparedPlan(proofRequest, prepared.ReplayPlan, prepared.ReplaySeal)
+	}
+	if proofErr == nil && computedSeal != prepared.ReplaySeal {
+		proofErr = commitproof.ErrSealMismatch
+	}
+	if proofErr != nil {
+		return k.rejectCommitProof(ctx, prepared.Request, domain.ErrPersistenceUnavailable, "kernel.commitProof.replaySeal", ErrInvalidPreparedProof, proofErr)
+	}
+	if !prepared.Result.Success || prepared.Result.Action != proofRequest.Action {
+		return k.rejectCommitProof(ctx, prepared.Request, domain.ErrPersistenceUnavailable, "kernel.commitProof.replayResult", ErrInvalidCommitReceipt, commitproof.ErrReceiptMismatch)
+	}
+	proofErr = commitproof.ValidateCommitReceipt(proofRequest, prepared.ReplayPlan, prepared.ReplaySeal, prepared.ReplayReceipt, prepared.Result)
+	if proofErr != nil {
+		return k.rejectCommitProof(ctx, prepared.Request, domain.ErrPersistenceUnavailable, "kernel.commitProof.replayReceipt", ErrInvalidCommitReceipt, proofErr)
+	}
+	if currentIdempotency != prepared.ReplayReceipt.IdempotencyFingerprint {
+		return k.rejectCommitProof(ctx, prepared.Request, domain.ErrDuplicate, "idempotencyKey", ErrInvalidCommitReceipt, commitproof.ErrReceiptMismatch)
+	}
+
+	result := prepared.Result
+	result.Action = prepared.Request.Action
+	result.RequestID = prepared.Request.ID
+	result.CorrelationID = prepared.Request.CorrelationID
+	result.TraceID = prepared.Request.TraceID
+	result.IdempotencyKey = prepared.Request.IdempotencyKey
+	if !containsString(result.Warnings, "idempotent replay") {
+		result.Warnings = append(result.Warnings, "idempotent replay")
+	}
+	result = annotateCommitProof(result, prepared.ReplaySeal, prepared.ReplayReceipt)
+	result = annotateAuthority(result)
+	result = k.port.RecordResult(ctx, prepared.Request, result)
+	k.port.ObserveResult(ctx, prepared.Request, result)
+	return result, nil
+}
+
+func (k *Kernel) rejectCommitProof(ctx context.Context, req domain.SyscallRequest, code domain.SyscallErrorCode, field string, sentinel, cause error) (domain.SyscallResult, error) {
+	message := sentinel.Error()
+	if cause != nil {
+		message += ": " + cause.Error()
+	}
+	result := rejectedResult(req, code, field, message)
+	result.ValidationDetails = append(result.ValidationDetails, domain.ValidationDetail{
+		Layer:  "forge_k_commit_integrity",
+		Passed: false,
+		Issues: append([]domain.SyscallError(nil), result.RejectedReasons...),
+	})
+	result = annotateAuthority(result)
+	result.StateSummary["commitProofVerified"] = false
+	result = k.port.RecordResult(ctx, req, result)
+	k.port.ObserveResult(ctx, req, result)
+	if cause == nil {
+		return result, sentinel
+	}
+	return result, errors.Join(sentinel, cause)
+}
+
+func annotateCommitProof(result domain.SyscallResult, seal commitproof.PreparedPlanSeal, receipt commitproof.CommitReceipt) domain.SyscallResult {
+	if result.StateSummary == nil {
+		result.StateSummary = map[string]any{}
+	}
+	result.StateSummary["commitProofVerified"] = true
+	result.StateSummary["requestFingerprint"] = seal.RequestFingerprint
+	result.StateSummary["preparedPlanSeal"] = seal.SealDigest
+	result.StateSummary["transactionId"] = receipt.TransactionID
+	result.StateSummary["journalEventId"] = receipt.JournalEventID
+	result.StateSummary["journalEventHash"] = receipt.JournalEventHash
+	result.StateSummary["auditOutboxId"] = receipt.AuditOutboxID
+	result.StateSummary["idempotencyFingerprint"] = receipt.IdempotencyFingerprint
+	result.ValidationDetails = append(result.ValidationDetails, domain.ValidationDetail{
+		Layer:  "forge_k_commit_integrity",
+		Passed: true,
+		Issues: []domain.SyscallError{},
+	})
+	return result
 }
 
 func annotateAuthority(result domain.SyscallResult) domain.SyscallResult {
@@ -179,6 +316,15 @@ func annotateAuthority(result domain.SyscallResult) domain.SyscallResult {
 	result.StateSummary["modelExecutionAuthority"] = false
 	result.StateSummary["modelCanonicalMutationAuthority"] = false
 	return result
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func cloneMetadata(in map[string]any) map[string]any {

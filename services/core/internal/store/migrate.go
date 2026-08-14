@@ -9,6 +9,9 @@ func migrate(db *sql.DB) error {
 	if _, err := db.Exec(schema); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
+	if err := ensureForgeKJournalChain(db); err != nil {
+		return fmt.Errorf("migrate FORGE-K journal chain: %w", err)
+	}
 	if err := ensureContextPacketSnapshotColumns(db); err != nil {
 		return fmt.Errorf("migrate context_packet_snapshots: %w", err)
 	}

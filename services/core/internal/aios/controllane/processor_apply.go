@@ -664,12 +664,11 @@ func applyCompileContext(ctx context.Context, store SemanticStore, req domain.Sy
 	outcomeEvent := buildRestoreOutcomeEvent(req, packet, snapshot, restoreSelection, selectedEvidence, selectedHeaderOnly)
 	if outcomeStore, ok := store.(RestoreOutcomeStore); ok {
 		if err := outcomeStore.CreateRestoreOutcome(ctx, outcomeEvent); err != nil {
-			warnings = append(warnings, "restore outcome evidence persist failed: "+err.Error())
-		} else {
-			committedIDs = append(committedIDs, outcomeEvent.ID)
+			return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrPersistenceUnavailable, Field: "restore_outcome_events", Message: err.Error()}}
 		}
+		committedIDs = append(committedIDs, outcomeEvent.ID)
 	} else {
-		warnings = append(warnings, "restore outcome evidence store unavailable; returning non-persisted draft")
+		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrPersistenceUnavailable, Field: "restore_outcome_events", Message: "restore outcome evidence store unavailable"}}
 	}
 
 	return committedIDs, map[string]any{
@@ -739,7 +738,7 @@ func buildRestoreOutcomeEvent(req domain.SyscallRequest, packet domain.ContextPa
 		selectedArtifactIDs = stripGraphIDPrefix(dominantIDsByPrefix(snapshot.Graph, "artifact:"), "artifact:")
 	}
 	event := RestoreOutcomeEvent{
-		ID:                   NewRestoreOutcomeID(req.ID, packet.ID, selection.selectedSnapshotID(), selection.Decision),
+		ID:                   NewRestoreOutcomeID(req.ID, packet.ID, "compiled"),
 		CreatedAt:            req.RequestedAt,
 		UpdatedAt:            req.RequestedAt,
 		WorkspaceID:          req.Scope.WorkspaceID,

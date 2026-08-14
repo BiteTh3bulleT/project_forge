@@ -2,13 +2,17 @@ package controllane
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
 
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/forgekernel/commitproof"
 	"forge/projectforge/services/core/internal/forgekernel/court"
+	forgejournal "forge/projectforge/services/core/internal/forgekernel/journal"
 )
 
 type ContradictionRecord struct {
@@ -54,9 +58,40 @@ type SupersessionRecord struct {
 }
 
 type IdempotencyRecord struct {
-	Action domain.SemanticActionType `json:"action"`
-	Result domain.SyscallResult      `json:"result"`
+	Action                 domain.SemanticActionType    `json:"action"`
+	RequestFingerprint     string                       `json:"requestFingerprint"`
+	IdempotencyFingerprint string                       `json:"idempotencyFingerprint"`
+	Result                 domain.SyscallResult         `json:"result"`
+	Request                domain.SyscallRequest        `json:"request"`
+	Plan                   commitproof.PreparedPlan     `json:"plan"`
+	Seal                   commitproof.PreparedPlanSeal `json:"seal"`
+	Receipt                commitproof.CommitReceipt    `json:"receipt"`
+	CreatedAt              int64                        `json:"createdAt"`
+	CorrelationID          string                       `json:"correlationId"`
 }
+
+type AuditOutboxRecord struct {
+	ID                 string                    `json:"id"`
+	SyscallID          string                    `json:"syscallId"`
+	RequestFingerprint string                    `json:"requestFingerprint"`
+	Action             domain.SemanticActionType `json:"action"`
+	WorkspaceID        string                    `json:"workspaceId"`
+	LaneID             string                    `json:"laneId"`
+	CorrelationID      string                    `json:"correlationId"`
+	TraceID            string                    `json:"traceId"`
+	Success            bool                      `json:"success"`
+	Result             domain.SyscallResult      `json:"result"`
+	Receipt            commitproof.CommitReceipt `json:"receipt"`
+	CreatedAt          int64                     `json:"createdAt"`
+	CommittedBy        string                    `json:"committedBy"`
+}
+
+var (
+	ErrInvalidIdempotencyRecord = errors.New("invalid idempotency record")
+	ErrIdempotencyConflict      = errors.New("idempotency key fingerprint conflict")
+	ErrInvalidAuditOutboxRecord = errors.New("invalid audit outbox record")
+	ErrAuditOutboxConflict      = errors.New("audit outbox record conflict")
+)
 
 type CommitMetadata struct {
 	SyscallID     string              `json:"syscallId"`
@@ -78,6 +113,8 @@ type SemanticReadStore interface {
 	FindStateByKey(key string) (domain.StateItem, bool)
 	FindStateByScopeKey(scope domain.ForgeScope, key string) (domain.StateItem, bool)
 	GetIdempotency(key string) (IdempotencyRecord, bool)
+	GetAuditOutbox(id string) (AuditOutboxRecord, bool)
+	ListAuditOutbox(limit int) []AuditOutboxRecord
 	FindLatestContextSnapshot(scope domain.ForgeScope, query, snapshotKind string) (domain.ContextPacket, bool)
 	ListContextSnapshots(scope domain.ForgeScope, query, snapshotKind string, limit int) []domain.ContextPacket
 	FindCourtExhibit(id string, scope domain.ForgeScope) (court.Exhibit, bool)
@@ -101,7 +138,8 @@ type SemanticStore interface {
 	CreateArtifactRef(ref domain.ArtifactRef) error
 	CreateContextSnapshot(pkt domain.ContextPacket) error
 	CreateCourtDecision(exhibit court.Exhibit, ruling court.Ruling, appeal *court.Appeal) error
-	SetIdempotency(key string, rec IdempotencyRecord)
+	SetIdempotency(key string, rec IdempotencyRecord) error
+	CreateAuditOutbox(rec AuditOutboxRecord) error
 }
 
 type CommitAwareStore interface {
@@ -124,6 +162,9 @@ type memoryState struct {
 	courtRulings     map[string]court.Ruling
 	courtAppeals     map[string]court.Appeal
 	idempotency      map[string]IdempotencyRecord
+	auditOutbox      map[string]AuditOutboxRecord
+	journalEntries   []forgejournal.Entry
+	journalHead      forgejournal.Head
 }
 
 func newMemoryState() memoryState {
@@ -143,6 +184,8 @@ func newMemoryState() memoryState {
 		courtRulings:     map[string]court.Ruling{},
 		courtAppeals:     map[string]court.Appeal{},
 		idempotency:      map[string]IdempotencyRecord{},
+		auditOutbox:      map[string]AuditOutboxRecord{},
+		journalEntries:   []forgejournal.Entry{},
 	}
 }
 
@@ -193,14 +236,24 @@ func cloneState(in memoryState) memoryState {
 		out.courtAppeals[k] = v
 	}
 	for k, v := range in.idempotency {
-		out.idempotency[k] = v
+		out.idempotency[k] = cloneIdempotencyRecord(v)
 	}
+	for k, v := range in.auditOutbox {
+		out.auditOutbox[k] = cloneAuditOutboxRecord(v)
+	}
+	out.journalEntries = make([]forgejournal.Entry, len(in.journalEntries))
+	for i, entry := range in.journalEntries {
+		entry.SelectedPaths = append([]string{}, entry.SelectedPaths...)
+		out.journalEntries[i] = entry
+	}
+	out.journalHead = in.journalHead
 	return out
 }
 
 type InMemorySemanticStore struct {
 	mu    sync.RWMutex
 	state memoryState
+	meta  CommitMetadata
 }
 
 func NewInMemorySemanticStore() *InMemorySemanticStore {
@@ -217,6 +270,37 @@ func (s *InMemorySemanticStore) replace(next memoryState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.state = next
+}
+
+func (s *InMemorySemanticStore) SetCommitMetadata(meta CommitMetadata) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.meta = meta
+}
+
+func (s *InMemorySemanticStore) Append(ctx context.Context, evt domain.JournalEvent) error {
+	_, err := s.AppendWithEvidence(ctx, evt)
+	return err
+}
+
+func (s *InMemorySemanticStore) AppendWithEvidence(_ context.Context, evt domain.JournalEvent) (JournalAppendEvidence, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return appendMemoryJournal(&s.state, s.meta, evt)
+}
+
+func (s *InMemorySemanticStore) JournalChainHead(_ context.Context) (forgejournal.Head, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.state.journalHead, nil
+}
+
+func (s *InMemorySemanticStore) VerifyJournalChain(_ context.Context) (forgejournal.VerificationReport, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entries := cloneJournalEntries(s.state.journalEntries)
+	head := s.state.journalHead
+	return forgejournal.Verify(entries, &head), nil
 }
 
 func (s *InMemorySemanticStore) FindNote(id string) (domain.MemoryNote, bool) {
@@ -317,7 +401,7 @@ func (s *InMemorySemanticStore) GetIdempotency(key string) (IdempotencyRecord, b
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	v, ok := s.state.idempotency[key]
-	return v, ok
+	return cloneIdempotencyRecord(v), ok
 }
 
 func (s *InMemorySemanticStore) FindLatestContextSnapshot(scope domain.ForgeScope, query, snapshotKind string) (domain.ContextPacket, bool) {
@@ -356,10 +440,62 @@ func (s *InMemorySemanticStore) ListCourtRulings(scope domain.ForgeScope, caseID
 	return filterCourtRulings(s.state.courtRulings, scope, caseID, exhibitID)
 }
 
-func (s *InMemorySemanticStore) SetIdempotency(key string, rec IdempotencyRecord) {
+func (s *InMemorySemanticStore) SetIdempotency(key string, rec IdempotencyRecord) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ErrInvalidIdempotencyRecord
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.state.idempotency[key] = rec
+	if existing, ok := s.state.idempotency[key]; ok {
+		if idempotencyRecordsMatch(existing, rec) {
+			return nil
+		}
+		return fmt.Errorf("%w: key %q", ErrIdempotencyConflict, key)
+	}
+	if err := validateIdempotencyRecord(key, rec); err != nil {
+		return err
+	}
+	s.state.idempotency[key] = cloneIdempotencyRecord(rec)
+	return nil
+}
+
+func (s *InMemorySemanticStore) GetAuditOutbox(id string) (AuditOutboxRecord, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	rec, ok := s.state.auditOutbox[strings.TrimSpace(id)]
+	return cloneAuditOutboxRecord(rec), ok
+}
+
+func (s *InMemorySemanticStore) ListAuditOutbox(limit int) []AuditOutboxRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return listAuditOutboxRecords(s.state.auditOutbox, limit)
+}
+
+func (s *InMemorySemanticStore) CreateAuditOutbox(rec AuditOutboxRecord) error {
+	rec = normalizeAuditOutboxRecord(rec)
+	if rec.ID == "" || rec.SyscallID == "" {
+		return ErrInvalidAuditOutboxRecord
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if existing, ok := s.state.auditOutbox[rec.ID]; ok {
+		if auditOutboxRecordsEqual(existing, rec) {
+			return nil
+		}
+		return fmt.Errorf("%w: id %q", ErrAuditOutboxConflict, rec.ID)
+	}
+	for _, existing := range s.state.auditOutbox {
+		if existing.SyscallID == rec.SyscallID {
+			return fmt.Errorf("%w: syscall %q", ErrAuditOutboxConflict, rec.SyscallID)
+		}
+	}
+	if err := validateAuditOutboxRecord(rec); err != nil {
+		return err
+	}
+	s.state.auditOutbox[rec.ID] = cloneAuditOutboxRecord(rec)
+	return nil
 }
 
 func (s *InMemorySemanticStore) CreateNote(note domain.MemoryNote) error {
@@ -683,6 +819,7 @@ type TransactionRunner interface {
 
 type InMemoryTransactionRunner struct {
 	base *InMemorySemanticStore
+	txMu sync.Mutex
 }
 
 func NewInMemoryTransactionRunner(store *InMemorySemanticStore) *InMemoryTransactionRunner {
@@ -694,6 +831,8 @@ func (r *InMemoryTransactionRunner) ReadStore() SemanticReadStore {
 }
 
 func (r *InMemoryTransactionRunner) Run(_ context.Context, fn func(uow UnitOfWork) error) error {
+	r.txMu.Lock()
+	defer r.txMu.Unlock()
 	next := r.base.snapshot()
 	txStore := &TransactionalSemanticStore{state: &next}
 	uow := &txUnitOfWork{store: txStore}
@@ -706,6 +845,30 @@ func (r *InMemoryTransactionRunner) Run(_ context.Context, fn func(uow UnitOfWor
 
 type TransactionalSemanticStore struct {
 	state *memoryState
+	meta  CommitMetadata
+}
+
+func (s *TransactionalSemanticStore) SetCommitMetadata(meta CommitMetadata) {
+	s.meta = meta
+}
+
+func (s *TransactionalSemanticStore) Append(ctx context.Context, evt domain.JournalEvent) error {
+	_, err := s.AppendWithEvidence(ctx, evt)
+	return err
+}
+
+func (s *TransactionalSemanticStore) AppendWithEvidence(_ context.Context, evt domain.JournalEvent) (JournalAppendEvidence, error) {
+	return appendMemoryJournal(s.state, s.meta, evt)
+}
+
+func (s *TransactionalSemanticStore) JournalChainHead(_ context.Context) (forgejournal.Head, error) {
+	return s.state.journalHead, nil
+}
+
+func (s *TransactionalSemanticStore) VerifyJournalChain(_ context.Context) (forgejournal.VerificationReport, error) {
+	entries := cloneJournalEntries(s.state.journalEntries)
+	head := s.state.journalHead
+	return forgejournal.Verify(entries, &head), nil
 }
 
 func (s *TransactionalSemanticStore) FindNote(id string) (domain.MemoryNote, bool) {
@@ -788,7 +951,7 @@ func (s *TransactionalSemanticStore) FindStateByScopeKey(scope domain.ForgeScope
 
 func (s *TransactionalSemanticStore) GetIdempotency(key string) (IdempotencyRecord, bool) {
 	v, ok := s.state.idempotency[key]
-	return v, ok
+	return cloneIdempotencyRecord(v), ok
 }
 
 func (s *TransactionalSemanticStore) FindLatestContextSnapshot(scope domain.ForgeScope, query, snapshotKind string) (domain.ContextPacket, bool) {
@@ -851,8 +1014,145 @@ func (s *TransactionalSemanticStore) UpdateRestoreOutcomeFeedback(ctx context.Co
 	return event, nil
 }
 
-func (s *TransactionalSemanticStore) SetIdempotency(key string, rec IdempotencyRecord) {
-	s.state.idempotency[key] = rec
+func (s *TransactionalSemanticStore) SetIdempotency(key string, rec IdempotencyRecord) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ErrInvalidIdempotencyRecord
+	}
+	if existing, ok := s.state.idempotency[key]; ok {
+		if idempotencyRecordsMatch(existing, rec) {
+			return nil
+		}
+		return fmt.Errorf("%w: key %q", ErrIdempotencyConflict, key)
+	}
+	if err := validateIdempotencyRecord(key, rec); err != nil {
+		return err
+	}
+	s.state.idempotency[key] = cloneIdempotencyRecord(rec)
+	return nil
+}
+
+func (s *TransactionalSemanticStore) GetAuditOutbox(id string) (AuditOutboxRecord, bool) {
+	rec, ok := s.state.auditOutbox[strings.TrimSpace(id)]
+	return cloneAuditOutboxRecord(rec), ok
+}
+
+func (s *TransactionalSemanticStore) ListAuditOutbox(limit int) []AuditOutboxRecord {
+	return listAuditOutboxRecords(s.state.auditOutbox, limit)
+}
+
+func (s *TransactionalSemanticStore) CreateAuditOutbox(rec AuditOutboxRecord) error {
+	rec = normalizeAuditOutboxRecord(rec)
+	if rec.ID == "" || rec.SyscallID == "" {
+		return ErrInvalidAuditOutboxRecord
+	}
+	if existing, ok := s.state.auditOutbox[rec.ID]; ok {
+		if auditOutboxRecordsEqual(existing, rec) {
+			return nil
+		}
+		return fmt.Errorf("%w: id %q", ErrAuditOutboxConflict, rec.ID)
+	}
+	for _, existing := range s.state.auditOutbox {
+		if existing.SyscallID == rec.SyscallID {
+			return fmt.Errorf("%w: syscall %q", ErrAuditOutboxConflict, rec.SyscallID)
+		}
+	}
+	if err := validateAuditOutboxRecord(rec); err != nil {
+		return err
+	}
+	s.state.auditOutbox[rec.ID] = cloneAuditOutboxRecord(rec)
+	return nil
+}
+
+func validateIdempotencyRecord(key string, rec IdempotencyRecord) error {
+	if strings.TrimSpace(key) == "" || strings.TrimSpace(string(rec.Action)) == "" ||
+		strings.TrimSpace(rec.RequestFingerprint) == "" || strings.TrimSpace(rec.IdempotencyFingerprint) == "" || rec.CreatedAt <= 0 {
+		return ErrInvalidIdempotencyRecord
+	}
+	if rec.Receipt.Version != commitproof.CommitReceiptVersion || rec.Receipt.RequestFingerprint != rec.RequestFingerprint ||
+		rec.Receipt.IdempotencyFingerprint != rec.IdempotencyFingerprint {
+		return ErrInvalidIdempotencyRecord
+	}
+	if rec.Request.ID == "" || rec.Request.Action != rec.Action || rec.Plan.Action != rec.Action ||
+		rec.Seal.Version != commitproof.PreparedPlanVersion || rec.Seal.RequestFingerprint != rec.RequestFingerprint {
+		return ErrInvalidIdempotencyRecord
+	}
+	return nil
+}
+
+func idempotencyRecordsMatch(left, right IdempotencyRecord) bool {
+	return left.Action == right.Action && left.RequestFingerprint == right.RequestFingerprint &&
+		left.IdempotencyFingerprint == right.IdempotencyFingerprint
+}
+
+func validateAuditOutboxRecord(rec AuditOutboxRecord) error {
+	if strings.TrimSpace(rec.ID) == "" || strings.TrimSpace(rec.SyscallID) == "" ||
+		strings.TrimSpace(rec.RequestFingerprint) == "" || strings.TrimSpace(string(rec.Action)) == "" ||
+		strings.TrimSpace(rec.WorkspaceID) == "" || strings.TrimSpace(rec.CorrelationID) == "" || rec.CreatedAt <= 0 {
+		return ErrInvalidAuditOutboxRecord
+	}
+	if rec.Receipt.Version != commitproof.CommitReceiptVersion || rec.Receipt.RequestFingerprint != rec.RequestFingerprint ||
+		rec.Receipt.AuditOutboxID != rec.ID {
+		return ErrInvalidAuditOutboxRecord
+	}
+	return nil
+}
+
+func normalizeAuditOutboxRecord(rec AuditOutboxRecord) AuditOutboxRecord {
+	rec.ID = strings.TrimSpace(rec.ID)
+	rec.SyscallID = strings.TrimSpace(rec.SyscallID)
+	rec.RequestFingerprint = strings.TrimSpace(rec.RequestFingerprint)
+	rec.WorkspaceID = strings.TrimSpace(rec.WorkspaceID)
+	rec.LaneID = strings.TrimSpace(rec.LaneID)
+	rec.CorrelationID = strings.TrimSpace(rec.CorrelationID)
+	rec.TraceID = strings.TrimSpace(rec.TraceID)
+	rec.CommittedBy = nonEmpty(strings.TrimSpace(rec.CommittedBy), "forge_k.kernel")
+	return rec
+}
+
+func auditOutboxSameIdentity(left, right AuditOutboxRecord) bool {
+	return left.ID == right.ID && left.SyscallID == right.SyscallID &&
+		left.RequestFingerprint == right.RequestFingerprint && left.Action == right.Action
+}
+
+func listAuditOutboxRecords(all map[string]AuditOutboxRecord, limit int) []AuditOutboxRecord {
+	if limit <= 0 {
+		limit = 100
+	}
+	out := make([]AuditOutboxRecord, 0, min(limit, len(all)))
+	for _, rec := range all {
+		out = append(out, cloneAuditOutboxRecord(rec))
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt == out[j].CreatedAt {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].CreatedAt < out[j].CreatedAt
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+func cloneIdempotencyRecord(rec IdempotencyRecord) IdempotencyRecord {
+	return cloneIntegrityValue(rec)
+}
+
+func cloneAuditOutboxRecord(rec AuditOutboxRecord) AuditOutboxRecord {
+	return cloneIntegrityValue(rec)
+}
+
+func cloneIntegrityValue[T any](value T) T {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return value
+	}
+	var out T
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return value
+	}
+	return out
 }
 
 func filterRestoreOutcomes(all map[string]RestoreOutcomeEvent, filter RestoreOutcomeFilter) []RestoreOutcomeEvent {
@@ -1073,6 +1373,55 @@ func filterCourtRulings(all map[string]court.Ruling, scope domain.ForgeScope, ca
 		}
 		return out[i].CreatedAt < out[j].CreatedAt
 	})
+	return out
+}
+
+func appendMemoryJournal(state *memoryState, meta CommitMetadata, evt domain.JournalEvent) (JournalAppendEvidence, error) {
+	if state == nil {
+		return JournalAppendEvidence{}, fmt.Errorf("memory journal state is unavailable")
+	}
+	for _, existing := range state.journalEntries {
+		if existing.EventID == evt.ID {
+			return JournalAppendEvidence{}, fmt.Errorf("duplicate journal event id %q", evt.ID)
+		}
+	}
+	payloadHash, err := forgejournal.HashJSON([]byte(encodeJSON(evt.Payload)))
+	if err != nil {
+		return JournalAppendEvidence{}, err
+	}
+	provenanceHash, err := forgejournal.HashJSON([]byte(encodeJSON(evt.Provenance)))
+	if err != nil {
+		return JournalAppendEvidence{}, err
+	}
+	metadataHash, err := forgejournal.HashJSON([]byte(encodeJSON(map[string]any{})))
+	if err != nil {
+		return JournalAppendEvidence{}, err
+	}
+	previous := state.journalHead
+	entry, err := forgejournal.PlanAppend(previous, forgejournal.AppendInput{
+		EventID: evt.ID, EventType: evt.Type, Source: evt.Source, Actor: evt.Provenance.Actor,
+		WorkspaceID: evt.Scope.WorkspaceID, LaneID: evt.Scope.LaneID,
+		SelectedPaths: append([]string{}, evt.Scope.SelectedPaths...), CorrelationID: evt.CorrelationID,
+		TraceID: nonEmpty(evt.Provenance.TraceID, meta.TraceID), ProvenanceID: provenanceID(evt.Scope, evt.Provenance),
+		ProvenanceHash: provenanceHash, PayloadHash: payloadHash, MetadataHash: metadataHash,
+		ProposedBy: string(meta.Source), CommittedBy: nonEmpty(meta.CommittedBy, "forge_kernel"),
+		SyscallID: nonEmpty(meta.SyscallID, "legacy:"+evt.ID), CreatedAt: evt.Timestamp,
+	})
+	if err != nil {
+		return JournalAppendEvidence{}, err
+	}
+	head := forgejournal.Head{Sequence: entry.Sequence, EventID: entry.EventID, Hash: entry.Hash}
+	state.journalEntries = append(state.journalEntries, entry)
+	state.journalHead = head
+	return JournalAppendEvidence{PreviousHead: previous, Entry: entry, Head: head}, nil
+}
+
+func cloneJournalEntries(entries []forgejournal.Entry) []forgejournal.Entry {
+	out := make([]forgejournal.Entry, len(entries))
+	for i, entry := range entries {
+		entry.SelectedPaths = append([]string{}, entry.SelectedPaths...)
+		out[i] = entry
+	}
 	return out
 }
 

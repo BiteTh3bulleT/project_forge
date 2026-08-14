@@ -1,6 +1,6 @@
 # FORGE-K Live Cutover
 
-Status: K20A-K20C active; full cutover in progress.
+Status: K20A-K20D active; full cutover in progress.
 
 Date: 2026-08-14.
 
@@ -24,8 +24,14 @@ caller
   -> forgekernel.Kernel                    [live ingress authority]
      -> deterministic authority-claim gate
      -> DurablePort.Prepare                 [deterministic preflight]
-     -> DurablePort.Commit                  [one atomic apply+journal transaction]
-     -> DurablePort.RecordResult            [audit + lineage linkage]
+     -> seal exact prepared request + plan
+     -> DurablePort.Commit                  [one atomic canonical transaction]
+        -> semantic mutation
+        -> provenance-linked journal hash-chain entry + head
+        -> immutable audit intent with typed commit receipt
+        -> immutable idempotency proof, when a key is supplied
+     -> validate typed commit receipt        [production Kernel]
+     -> DurablePort.RecordResult            [best-effort external audit projection]
      -> DurablePort.ObserveResult           [best-effort, no decision authority]
 
 The temporary DurablePort implementation lives in
@@ -42,10 +48,10 @@ removed after final parity acceptance. No mode performs dual commits.
 | Boundary | Current | Target | Exit gate |
 | --- | --- | --- | --- |
 | Kernel ingress | `forgekernel.Kernel` live by default | FORGE-K | Closed in K20A |
-| Durable commit/journal orchestration | FORGE-K-owned `DurablePort`; Control Lane implementation | FORGE-K | Closed in K20B: stage order, parity, replay, denial, approval, rollback |
+| Durable commit/journal orchestration | FORGE-K-owned `DurablePort`; Control Lane SQLite implementation | FORGE-K | Closed in K20B for stage ownership; K20D adds sealed plans, typed receipts, atomic integrity evidence, and verified replay |
 | Tool need and selection | Deterministic FORGE chat routing | FORGE-K/Gateway policy contract | No model-selected schema or tool |
 | Tool execution | Gateway | Gateway external driver | Keep single execution ingress |
-| Courthouse | Production FORGE-K deterministic admission/rejection, immutable rulings, and appeals | FORGE-K | Closed in K20C for admission/ruling authority; K20D must make audit intent/linkage atomic |
+| Courthouse | Production FORGE-K deterministic admission/rejection, immutable rulings, and appeals | FORGE-K | Closed in K20C; K20D makes its commit receipt, journal chain, provenance, audit intent, and optional idempotency proof atomic with the Court mutation |
 | Semantic Algebra | Shape validation only | Governed live operations | Operation parity and journal tests |
 | Memory Palace | Shadow/mirror plus current memory stores | Structured governed objects/routes | Current/history separation and migration proof |
 | Context Compiler | Legacy `COMPILE_CONTEXT` plus attribution validation | FORGE-K bundles | Prompt parity, attribution, token-budget tests |
@@ -83,15 +89,28 @@ the semantic journal event share one SQLite transaction. Model actors,
 proposal-only sources, and `legacy_v1` fail closed. The simulator Courthouse is
 not imported.
 
-K20C deliberately does not close the kernel-wide audit-integrity gate. The
-existing audit sink and `audit_id` backfill still occur after the canonical
-transaction and remain best-effort.
+K20D closes the canonical commit-integrity gap described by the K20C report.
+The external audit sink and `audit_id` backfill still occur after the canonical
+transaction and remain best-effort projections, but failures there cannot
+invalidate or erase the immutable audit intent committed in the canonical
+transaction.
 
-## Next bounded slice: K20D
+## K20D commit integrity
 
-Make commit evidence fail closed. K20D must seal the prepared request/plan,
-return a typed commit receipt, stage durable audit intent and immutable
-idempotency proof in the canonical transaction, persist a sequenced journal
-hash chain, and verify replay/divergence. No successful syscall may be reported
-without internally consistent object, provenance, journal, audit-outbox, and
-idempotency evidence.
+K20D seals the exact post-Courthouse request and prepared plan before commit.
+The temporary SQLite durable port returns a typed receipt binding that seal to
+the transaction, committed object IDs, provenance IDs, journal event and hash,
+audit-outbox record, and stable idempotency fingerprint. The production Kernel
+validates the receipt before reporting success.
+
+Semantic mutation, the sequenced journal hash-chain entry and head,
+provenance, immutable audit-outbox intent, and immutable idempotency proof when
+a caller supplies a key are committed in one SQLite transaction. Any failure
+rolls back the whole unit. A matching retry reconstructs and validates the
+original request, plan, seal, receipt, and result without re-committing. A
+conflicting fingerprint or legacy unbound replay record fails closed.
+
+K20D does not make FORGE-K the sole cognitive kernel. Control Lane still
+implements validation/apply and the SQLite port, and Memory Palace, Semantic
+Algebra, Context Compiler, Runtime, Snapshots, KV, Lymphatic, Consensus, direct
+writers, and restore paths retain staged authority work.

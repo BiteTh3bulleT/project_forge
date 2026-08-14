@@ -109,6 +109,33 @@ records supersession. In the production K20C path, rulings and appeals are
 append-only historical truth; an exhibit points to its current ruling without
 rewriting prior decisions.
 
+## PreparedPlanSeal
+
+A deterministic digest binding the exact production syscall request to its
+normalized prepared commit plan. FORGE-K verifies the seal before commit and
+again when proving replay.
+
+## CommitReceipt
+
+Typed evidence returned by the durable commit boundary and validated by the
+production Kernel. It binds the prepared-plan seal to the transaction, object
+and provenance IDs, journal event and hash, immutable audit-outbox record, and
+stable idempotency fingerprint. It is proof of a commit, not model output.
+
+## Audit outbox
+
+An immutable canonical audit intent persisted in the same transaction as the
+semantic mutation, provenance, and journal hash-chain transition. Delivery to
+the external audit sink and later `audit_id` backfill are best-effort
+projections; their failure does not erase or invalidate the outbox evidence.
+
+## Verified idempotent replay
+
+A retry result returned only after FORGE-K reconstructs and validates the
+original request, plan, seal, receipt, and stable idempotency fingerprint. A
+verified replay performs no new canonical commit. Conflicting fingerprints and
+legacy unbound records fail closed.
+
 ## Contradiction
 
 An explicit record that two exhibits or claims conflict. Contradictions do not delete or silently merge evidence.

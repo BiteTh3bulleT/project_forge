@@ -2,11 +2,13 @@ package controllane
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/aios/rulecells"
 	"forge/projectforge/services/core/internal/forgekernel"
+	"forge/projectforge/services/core/internal/forgekernel/commitproof"
 	"forge/projectforge/services/core/internal/forgekshadow"
 )
 
@@ -102,7 +104,33 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (dom
 		p.ObserveResult(ctx, prepared.Request, result)
 		return result, err
 	}
-	result, err := p.Commit(ctx, prepared)
+	if prepared.Disposition == forgekernel.DispositionReplay {
+		result, replayErr := verifyLegacyReplay(prepared)
+		result = p.RecordResult(ctx, prepared.Request, result)
+		p.ObserveResult(ctx, prepared.Request, result)
+		return result, replayErr
+	}
+	boundPlan, bindErr := commitproof.BindPreparedPlan(prepared.Request, prepared.Plan)
+	if bindErr != nil {
+		result := p.rejectResult(prepared.Request, prepared.Result, "legacy_commit_proof", []domain.SyscallError{{
+			Code: domain.ErrInternal, Field: "kernel.commitPlan", Message: bindErr.Error(),
+		}})
+		result = p.RecordResult(ctx, prepared.Request, result)
+		p.ObserveResult(ctx, prepared.Request, result)
+		return result, bindErr
+	}
+	prepared.Plan = boundPlan
+	seal, sealErr := commitproof.SealPreparedPlan(prepared.Request, prepared.Plan)
+	if sealErr != nil {
+		result := p.rejectResult(prepared.Request, prepared.Result, "legacy_commit_proof", []domain.SyscallError{{
+			Code: domain.ErrInternal, Field: "kernel.commitProof", Message: sealErr.Error(),
+		}})
+		result = p.RecordResult(ctx, prepared.Request, result)
+		p.ObserveResult(ctx, prepared.Request, result)
+		return result, sealErr
+	}
+	outcome, err := p.Commit(ctx, prepared, seal)
+	result := outcome.Result
 	result = p.RecordResult(ctx, prepared.Request, result)
 	p.ObserveResult(ctx, prepared.Request, result)
 	return result, err
@@ -183,18 +211,26 @@ func (p *Processor) Prepare(ctx context.Context, req domain.SyscallRequest) (for
 	if strings.TrimSpace(req.IdempotencyKey) != "" {
 		if existing, ok := p.txRunner.ReadStore().GetIdempotency(req.IdempotencyKey); ok {
 			result.ValidationDetails = append(result.ValidationDetails, detailFor("idempotency", nil))
-			if existing.Action != req.Action {
+			fingerprint, fingerprintErr := commitproof.IdempotencyFingerprint(req)
+			if fingerprintErr != nil {
+				return reject("idempotency", []domain.SyscallError{{
+					Code: domain.ErrInternal, Field: "idempotencyKey", Message: fingerprintErr.Error(),
+				}}, fingerprintErr)
+			}
+			if existing.Action != req.Action || existing.IdempotencyFingerprint != fingerprint {
 				return reject("idempotency", []domain.SyscallError{
-					{Code: domain.ErrDuplicate, Field: "idempotencyKey", Message: "idempotency key already used for a different action"},
+					{Code: domain.ErrDuplicate, Field: "idempotencyKey", Message: "idempotency key already binds a different semantic request"},
 				}, nil)
 			}
-			replayed := existing.Result
-			replayed.Warnings = append(replayed.Warnings, "idempotent replay")
-			replayed.RequestID = req.ID
-			replayed.CorrelationID = req.CorrelationID
-			replayed.TraceID = req.TraceID
-			replayed.IdempotencyKey = req.IdempotencyKey
-			return complete(replayed, nil)
+			return forgekernel.PreparedSyscall{
+				Request:       req,
+				Result:        existing.Result,
+				Disposition:   forgekernel.DispositionReplay,
+				ReplayRequest: existing.Request,
+				ReplayPlan:    existing.Plan,
+				ReplaySeal:    existing.Seal,
+				ReplayReceipt: existing.Receipt,
+			}, nil
 		}
 	}
 	result.ValidationDetails = append(result.ValidationDetails, detailFor("idempotency", nil))
@@ -318,28 +354,43 @@ func (p *Processor) Prepare(ctx context.Context, req domain.SyscallRequest) (for
 		result.Warnings = append(result.Warnings, "dry-run: request validated without commit")
 		return complete(result, nil)
 	}
-	return forgekernel.PreparedSyscall{Request: req, Result: result, Disposition: forgekernel.DispositionCommit}, nil
+	plan, planErr := buildPreparedCommitPlan(req, def, p.txRunner.ReadStore())
+	if planErr != nil {
+		return reject("commit_plan", []domain.SyscallError{{
+			Code: domain.ErrInternal, Field: "kernel.commitPlan", Message: planErr.Error(),
+		}}, planErr)
+	}
+	return forgekernel.PreparedSyscall{Request: req, Result: result, Disposition: forgekernel.DispositionCommit, Plan: plan}, nil
 }
 
 // Commit performs one atomic apply + journal + idempotency transaction. It is
 // invoked by production FORGE-K only after Prepare returns DispositionCommit.
-func (p *Processor) Commit(ctx context.Context, prepared forgekernel.PreparedSyscall) (domain.SyscallResult, error) {
+func (p *Processor) Commit(ctx context.Context, prepared forgekernel.PreparedSyscall, seal commitproof.PreparedPlanSeal) (forgekernel.CommitOutcome, error) {
 	req := prepared.Request
 	result := prepared.Result
+	rejectOutcome := func(layer string, issues []domain.SyscallError) forgekernel.CommitOutcome {
+		return forgekernel.CommitOutcome{Result: p.rejectResult(req, result, layer, issues)}
+	}
 	if prepared.Disposition != forgekernel.DispositionCommit {
-		return p.rejectResult(req, result, "commit_disposition", []domain.SyscallError{{
+		return rejectOutcome("commit_disposition", []domain.SyscallError{{
 			Code: domain.ErrInternal, Field: "kernel.disposition", Message: "durable commit called without commit disposition",
 		}}), nil
 	}
 	def, ok := p.registry.Get(req.Action)
 	if !ok {
-		return p.rejectResult(req, result, "commit_registry", []domain.SyscallError{{
+		return rejectOutcome("commit_registry", []domain.SyscallError{{
 			Code: domain.ErrUnsupportedAction, Field: "action", Message: "unsupported action at commit",
 		}}), nil
+	}
+	if err := commitproof.VerifyPreparedPlan(req, prepared.Plan, seal); err != nil {
+		return rejectOutcome("commit_proof", []domain.SyscallError{{
+			Code: domain.ErrInternal, Field: "kernel.commitProof", Message: err.Error(),
+		}}), errors.Join(forgekernel.ErrInvalidPreparedProof, err)
 	}
 	var commitIDs []string
 	var commitWarnings []string
 	var summary map[string]any
+	var receipt commitproof.CommitReceipt
 	err := p.txRunner.Run(ctx, func(uow UnitOfWork) error {
 		store := uow.Store()
 		if aware, ok := store.(CommitAwareStore); ok {
@@ -350,7 +401,7 @@ func (p *Processor) Commit(ctx context.Context, prepared forgekernel.PreparedSys
 				Source:        req.Source,
 				ActorID:       req.Actor.ID,
 				ActorKind:     req.Actor.Kind,
-				CommittedBy:   nonEmpty(readString(req.Metadata, "kernelAuthorityOwner"), "forge_kernel"),
+				CommittedBy:   prepared.Plan.ExpectedJournalCommittedBy,
 			})
 		}
 		var applyErrs []domain.SyscallError
@@ -358,79 +409,160 @@ func (p *Processor) Commit(ctx context.Context, prepared forgekernel.PreparedSys
 		if len(applyErrs) > 0 {
 			return commitError{Issues: applyErrs}
 		}
-		if journalStore, ok := store.(interface {
-			Append(ctx context.Context, evt domain.JournalEvent) error
-		}); ok {
-			evt := domain.JournalEvent{
-				ID:        req.ID + ":journal_event",
-				Type:      "semantic_syscall." + strings.ToLower(string(req.Action)),
-				Timestamp: req.RequestedAt,
-				Source:    "forge_kernel",
-				Scope:     req.Scope,
-				Payload: map[string]any{
-					"action":               req.Action,
-					"committedObjectIds":   append([]string{}, commitIDs...),
-					"dryRun":               false,
-					"kernelAuthorityOwner": nonEmpty(readString(req.Metadata, "kernelAuthorityOwner"), "aios.controllane"),
-					"durableCommitAdapter": nonEmpty(readString(req.Metadata, "durableCommitAdapter"), "aios.controllane.sqlite"),
-				},
-				CorrelationID: req.CorrelationID,
-				Provenance:    req.Provenance,
-			}
-			if evt.Provenance.Source == "" {
-				evt.Provenance.Source = string(req.Source)
-			}
-			if evt.Provenance.TraceID == "" {
-				evt.Provenance.TraceID = req.TraceID
-			}
-			if err := journalStore.Append(ctx, evt); err != nil {
-				return commitError{Issues: []domain.SyscallError{{
-					Code:    domain.ErrPersistenceUnavailable,
-					Field:   "journal_events",
-					Message: err.Error(),
-				}}}
-			}
+		journalStore, ok := store.(interface {
+			AppendWithEvidence(context.Context, domain.JournalEvent) (JournalAppendEvidence, error)
+		})
+		if !ok {
+			return commitError{Issues: []domain.SyscallError{{
+				Code: domain.ErrPersistenceUnavailable, Field: "journal_events", Message: "durable journal evidence adapter is required",
+			}}}
+		}
+		auditOutboxID := prepared.Plan.ExpectedAuditOutboxID
+		transactionID := prepared.Plan.ExpectedTransactionID
+		journalPayload, payloadErr := commitproof.BuildJournalPayload(req, prepared.Plan)
+		if payloadErr != nil {
+			return commitError{Issues: []domain.SyscallError{{
+				Code: domain.ErrInternal, Field: "journal_events.payload", Message: payloadErr.Error(),
+			}}}
+		}
+		evt := domain.JournalEvent{
+			ID:            prepared.Plan.ExpectedJournalEventID,
+			Type:          prepared.Plan.JournalEventType,
+			Timestamp:     req.RequestedAt,
+			Source:        prepared.Plan.ExpectedJournalSource,
+			Scope:         req.Scope,
+			Payload:       journalPayload,
+			CorrelationID: req.CorrelationID,
+			Provenance:    commitproof.BuildJournalProvenance(req),
+		}
+		journalEvidence, journalErr := journalStore.AppendWithEvidence(ctx, evt)
+		if journalErr != nil {
+			return commitError{Issues: []domain.SyscallError{{
+				Code: domain.ErrPersistenceUnavailable, Field: "journal_events", Message: journalErr.Error(),
+			}}}
+		}
+		if prepared.Plan.Mutating {
 			commitIDs = append(commitIDs, evt.ID)
 		}
-		if strings.TrimSpace(req.IdempotencyKey) != "" {
-			uow.Store().SetIdempotency(req.IdempotencyKey, IdempotencyRecord{
-				Action: req.Action,
-				Result: domain.SyscallResult{
-					Success:            true,
-					Action:             req.Action,
-					RequestID:          req.ID,
-					CorrelationID:      req.CorrelationID,
-					TraceID:            req.TraceID,
-					IdempotencyKey:     req.IdempotencyKey,
-					DryRun:             false,
-					ApprovalStatus:     domain.ApprovalAllowed,
-					CommittedObjectIDs: append([]string{}, commitIDs...),
-					Warnings:           append([]string{}, commitWarnings...),
-					ValidationDetails:  []domain.ValidationDetail{},
-					StateSummary:       cloneMap(summary),
-				},
-			})
+		idempotencyFingerprint, fingerprintErr := commitproof.IdempotencyFingerprint(req)
+		if fingerprintErr != nil {
+			return commitError{Issues: []domain.SyscallError{{
+				Code: domain.ErrInternal, Field: "idempotencyFingerprint", Message: fingerprintErr.Error(),
+			}}}
 		}
+		receipt = commitproof.CommitReceipt{
+			Version:                commitproof.CommitReceiptVersion,
+			RequestFingerprint:     seal.RequestFingerprint,
+			PreparedPlanSeal:       seal.SealDigest,
+			TransactionID:          transactionID,
+			JournalEventID:         journalEvidence.Entry.EventID,
+			JournalEventHash:       journalEvidence.Entry.Hash,
+			ObjectIDs:              append([]string{}, commitIDs...),
+			ProvenanceIDs:          []string{journalEvidence.Entry.ProvenanceID},
+			AuditOutboxID:          auditOutboxID,
+			IdempotencyFingerprint: idempotencyFingerprint,
+			JournalEntry:           journalEvidence.Entry,
+		}
+		committedResult := result
+		committedResult.Success = true
+		committedResult.CommittedObjectIDs = append([]string{}, commitIDs...)
+		committedResult.Warnings = append(committedResult.Warnings, commitWarnings...)
+		committedResult.StateSummary = cloneMap(summary)
+		committedResult.ValidationDetails = append(committedResult.ValidationDetails, detailFor("commit", nil))
+		if proofErr := commitproof.ValidateCommitReceipt(req, prepared.Plan, seal, receipt, committedResult); proofErr != nil {
+			return commitError{Issues: []domain.SyscallError{{
+				Code: domain.ErrPersistenceUnavailable, Field: "commit_receipt", Message: proofErr.Error(),
+			}}}
+		}
+		if outboxErr := store.CreateAuditOutbox(AuditOutboxRecord{
+			ID: auditOutboxID, SyscallID: req.ID, RequestFingerprint: seal.RequestFingerprint,
+			Action: req.Action, WorkspaceID: req.Scope.WorkspaceID, LaneID: req.Scope.LaneID,
+			CorrelationID: req.CorrelationID, TraceID: req.TraceID, Success: true,
+			Result: committedResult, Receipt: receipt, CreatedAt: req.RequestedAt,
+			CommittedBy: forgekernel.AuthorityOwnerForgeK,
+		}); outboxErr != nil {
+			return commitError{Issues: []domain.SyscallError{{
+				Code: domain.ErrPersistenceUnavailable, Field: "audit_outbox", Message: outboxErr.Error(),
+			}}}
+		}
+		if strings.TrimSpace(req.IdempotencyKey) != "" {
+			if idempotencyErr := store.SetIdempotency(req.IdempotencyKey, IdempotencyRecord{
+				Action: req.Action, RequestFingerprint: seal.RequestFingerprint,
+				IdempotencyFingerprint: idempotencyFingerprint, Result: committedResult,
+				Request: req, Plan: prepared.Plan, Seal: seal, Receipt: receipt,
+				CreatedAt: req.RequestedAt, CorrelationID: req.CorrelationID,
+			}); idempotencyErr != nil {
+				return commitError{Issues: []domain.SyscallError{{
+					Code: domain.ErrPersistenceUnavailable, Field: "idempotency", Message: idempotencyErr.Error(),
+				}}}
+			}
+		}
+		result = committedResult
 		return nil
 	})
 	if err != nil {
 		if ce, ok := err.(commitError); ok {
-			return p.rejectResult(req, result, "commit", ce.Issues), nil
+			return rejectOutcome("commit", ce.Issues), nil
 		}
-		return p.rejectResult(req, result, "commit", []domain.SyscallError{
+		return rejectOutcome("commit", []domain.SyscallError{
 			{Code: domain.ErrInternal, Field: "commit", Message: err.Error()},
 		}), err
 	}
 
-	result.Success = true
-	result.CommittedObjectIDs = commitIDs
-	result.Warnings = append(result.Warnings, commitWarnings...)
-	result.StateSummary = summary
-	result.ValidationDetails = append(result.ValidationDetails, detailFor("commit", nil))
 	if req.Action == domain.ActionValidateKVIdentity {
 		p.recordKVIdentityDecision(EnforceKVIdentity(req))
 	}
+	return forgekernel.CommitOutcome{Result: result, Receipt: receipt}, nil
+}
+
+// verifyLegacyReplay keeps the explicit rollback mode compatible without
+// trusting an unproved cached result. Production requests use Kernel.replay;
+// this path exists only until legacy_v1 is retired.
+func verifyLegacyReplay(prepared forgekernel.PreparedSyscall) (domain.SyscallResult, error) {
+	currentFingerprint, err := commitproof.IdempotencyFingerprint(prepared.Request)
+	if err == nil {
+		err = commitproof.VerifyPreparedPlan(prepared.ReplayRequest, prepared.ReplayPlan, prepared.ReplaySeal)
+	}
+	if err == nil {
+		err = commitproof.ValidateCommitReceipt(
+			prepared.ReplayRequest,
+			prepared.ReplayPlan,
+			prepared.ReplaySeal,
+			prepared.ReplayReceipt,
+			prepared.Result,
+		)
+	}
+	if err == nil && currentFingerprint != prepared.ReplayReceipt.IdempotencyFingerprint {
+		err = commitproof.ErrReceiptMismatch
+	}
+	if err != nil {
+		result := prepared.Result
+		result.Success = false
+		result.RejectedReasons = append(result.RejectedReasons, domain.SyscallError{
+			Code: domain.ErrPersistenceUnavailable, Field: "idempotencyKey", Message: "verified idempotent replay failed: " + err.Error(),
+		})
+		result.DeterministicErrCode = domain.ErrPersistenceUnavailable
+		result.ValidationDetails = append(result.ValidationDetails, detailFor("legacy_replay_proof", result.RejectedReasons[len(result.RejectedReasons)-1:]))
+		return result, errors.Join(forgekernel.ErrInvalidCommitReceipt, err)
+	}
+	result := prepared.Result
+	result.RequestID = prepared.Request.ID
+	result.CorrelationID = prepared.Request.CorrelationID
+	result.TraceID = prepared.Request.TraceID
+	result.IdempotencyKey = prepared.Request.IdempotencyKey
+	if !containsExactWarning(result.Warnings, "idempotent replay") {
+		result.Warnings = append(result.Warnings, "idempotent replay")
+	}
 	return result, nil
+}
+
+func containsExactWarning(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Processor) recordKVIdentityDecision(decision KVIdentityEnforcementDecision) {
@@ -464,9 +596,10 @@ func (p *Processor) rejectResult(req domain.SyscallRequest, result domain.Syscal
 	return result
 }
 
-// RecordResult persists exactly one immutable audit result after FORGE-K has
-// selected a terminal disposition. Successful commits are linked back into the
-// same transaction lineage after the audit id exists.
+// RecordResult projects a terminal result into the external audit service.
+// Successful commits already contain an immutable audit-outbox intent and
+// typed receipt in their canonical transaction; this best-effort projection
+// may subsequently backfill the external audit id onto the transaction lineage.
 func (p *Processor) RecordResult(ctx context.Context, req domain.SyscallRequest, result domain.SyscallResult) domain.SyscallResult {
 	result.AuditID = p.writeAudit(ctx, req, result)
 	if result.Success && !req.DryRun && result.AuditID != "" {

@@ -25,8 +25,8 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 	if selection.Mode != forgekernel.ModeForgeK {
 		return report
 	}
-	report.Status = "forge_k_courthouse_live"
-	report.Summary = "FORGE-K owns live semantic syscall ingress, durable stage order, and deterministic Courthouse admission/ruling decisions; Control Lane implements the temporary durable SQLite port."
+	report.Status = "forge_k_commit_integrity_live"
+	report.Summary = "FORGE-K owns live semantic syscall ingress, durable stage order, deterministic Courthouse decisions, and sealed commit-integrity verification; Control Lane implements the temporary durable SQLite port."
 	report.Mode = "live_authority_migration"
 	report.LiveOwner = selection.AuthorityOwner
 	report.KernelRuntimeState = "forge_k_orchestration_live_control_lane_sqlite_port"
@@ -38,6 +38,13 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 	}
 	report.NoEffect["kernelIngressAuthority"] = true
 	report.NoEffect["durableOrchestrationAuthority"] = true
+	report.NoEffect["commitIntegrityAuthority"] = true
+	report.NoEffect["sealedPreparedPlans"] = true
+	report.NoEffect["typedCommitReceiptValidation"] = true
+	report.NoEffect["atomicAuditOutboxEvidence"] = true
+	report.NoEffect["verifiedIdempotentReplay"] = true
+	report.NoEffect["externalAuditSinkDelivery"] = false
+	report.NoEffect["auditIdBackfill"] = false
 	report.NoEffect["liveAuthorityMigration"] = true
 	for i := range report.ValidationActions {
 		report.ValidationActions[i].LiveOwner = selection.AuthorityOwner
@@ -48,13 +55,16 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 			report.Gates[i].Reason = "production semantic syscall ingress owner is forge_k.kernel"
 		case "live_kernel_authority_disabled":
 			report.Gates[i].Name = "full_kernel_authority_gated"
-			report.Gates[i].Reason = "FORGE-K ingress and durable stage orchestration are live; subsystem authority remains staged"
+			report.Gates[i].Reason = "FORGE-K ingress, durable stage orchestration, Courthouse decisions, and commit integrity are live; subsystem authority remains staged"
 		}
 	}
 	report.Notes = []string{
 		"production semantic syscall construction selects exactly one boot authority",
 		"FORGE_KERNEL_AUTHORITY_MODE=legacy_v1 is the tested rollback mode",
-		"Courthouse evidence, immutable rulings, and appeals are live; kernel-wide atomic audit receipts remain the next integrity gate",
+		"exact prepared requests and plans are sealed; successful commits require a validated typed receipt",
+		"semantic mutation, journal hash-chain head and provenance, immutable audit intent, and optional idempotency proof share one SQLite transaction",
+		"verified idempotent replay does not re-commit; legacy unbound replay proof fails closed",
+		"external audit sink delivery and audit_id backfill remain best-effort projections and cannot invalidate canonical atomic outbox evidence",
 		"full FORGE-K authority remains incomplete until Control Lane policy/apply implementations and remaining subsystem gates are migrated",
 	}
 	for i := range report.AuthorityMatrix {
@@ -72,10 +82,10 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 				"journal collision atomic rollback tests",
 			)
 			report.AuthorityMatrix[i].Blockers = []string{
-				"audit sink and audit_id linkage are still post-commit pending K20D atomic receipt/outbox integration",
+				"external audit sink delivery and audit_id backfill remain best-effort projections; canonical audit-outbox evidence is already atomic",
 			}
 		case "Kernel":
-			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_COURTHOUSE_LIVE"
+			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_COMMIT_INTEGRITY_LIVE"
 			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
 			report.AuthorityMatrix[i].TargetOwner = selection.AuthorityOwner
 			report.AuthorityMatrix[i].FeatureFlag = "FORGE_KERNEL_AUTHORITY_MODE=forge_k (default); legacy_v1 is rollback only"
@@ -87,10 +97,14 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 				"FORGE-K durable stage-order tests",
 				"idempotency/capability/approval/journal-rollback port tests",
 				"FORGE-K Courthouse decision authority tests",
+				"prepared request/plan seal and typed receipt validation tests",
+				"atomic journal hash-chain, provenance, audit-outbox, and idempotency proof tests",
+				"verified replay, legacy-unbound rejection, and transaction rollback tests",
 			)
 			report.AuthorityMatrix[i].Blockers = []string{
 				"Control Lane still implements validation policies, semantic apply functions, and the SQLite durable port",
-				"atomic commit receipts, audit outbox, journal hash chain, and remaining subsystem authority gates are staged",
+				"Memory Palace, Semantic Algebra, Context Compiler, Runtime, Snapshot, KV, Lymphatic, and Consensus authority gates remain staged",
+				"external audit sink delivery and audit_id backfill remain best-effort projections over canonical atomic outbox evidence",
 			}
 		}
 	}

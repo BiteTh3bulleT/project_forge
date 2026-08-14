@@ -1,6 +1,6 @@
 # ADR 0017 - FORGE-K Production Authority Cutover
 
-Status: Accepted; Stages K20A-K20C active
+Status: Accepted; Stages K20A-K20D active
 
 Date: 2026-08-14
 
@@ -35,11 +35,18 @@ FORGE-K moves to production one authority boundary at a time:
    current exhibit state, immutable ruling/appeal history, provenance, and the
    semantic journal event. Proposal-only sources, model actors, and
    `legacy_v1` cannot rule.
-6. Boot selects exactly one mode through `FORGE_KERNEL_AUTHORITY_MODE`:
+6. Stage K20D makes canonical commit evidence fail closed. The production
+   Kernel seals the exact request and prepared plan, and validates a typed
+   receipt returned by the durable port. Semantic mutation, provenance-linked
+   journal hash-chain entry/head, immutable audit intent, and optional
+   immutable idempotency proof commit in one SQLite transaction. Matching
+   replay is verified without another commit; conflicting or legacy unbound
+   proof fails closed.
+7. Boot selects exactly one mode through `FORGE_KERNEL_AUTHORITY_MODE`:
    `forge_k` (default) or `legacy_v1` (rollback). There is no dual commit mode.
-7. Full FORGE-K authority is not claimed until the adapter implementation and remaining
+8. Full FORGE-K authority is not claimed until the adapter implementation and remaining
    subsystem gates are migrated and v1 is retired.
-8. FORGE deterministically decides whether a chat turn needs a tool and selects
+9. FORGE deterministically decides whether a chat turn needs a tool and selects
    exactly one eligible tool before any model proposal call. If it cannot do so,
    no tool schema is exposed. A model may only format bounded arguments for the
    schema FORGE selected; the gateway remains execution authority.
@@ -48,10 +55,11 @@ FORGE-K moves to production one authority boundary at a time:
 
 1. Production Kernel ingress and single-authority boot selection. Closed K20A.
 2. Durable journal/commit orchestration owned by FORGE-K through narrow ports. Closed K20B; Control Lane implementation extraction remains.
-3. Courthouse admission and ruling authority. Closed K20C, except the
-   kernel-wide atomic audit receipt/linkage gate carried by K20D.
+3. Courthouse admission and ruling authority. Closed K20C.
 4. Commit integrity: sealed prepare plans, typed receipts, atomic audit intent
    and idempotency proof, persisted journal hash chain, and replay divergence.
+   Closed K20D for the canonical SQLite transaction and production Kernel
+   receipt validation. External audit delivery remains a projection.
 5. Semantic Algebra operations and structured Memory Palace objects.
 6. Context Compiler live bundle authority.
 7. Runtime driver proposal boundary and response composition gate.
@@ -64,8 +72,13 @@ operator-visible status, and documentation updates.
 
 ## Consequences
 
-- FORGE-K ingress, durable stage orchestration, and Courthouse decisions are live now, but the full-kernel flag remains false.
+- FORGE-K ingress, durable stage orchestration, Courthouse decisions, and
+  commit-integrity verification are live now, but the full-kernel flag remains
+  false.
 - Existing durable data remains in the current SQLite schema during migration.
+- The canonical immutable audit-outbox intent is atomic with the mutation and
+  journal proof. External audit sink delivery and `audit_id` backfill remain
+  best-effort projections and cannot invalidate that canonical evidence.
 - The Control Lane can be reduced behind ports rather than duplicated or
   bypassed.
 - Simulator service imports remain forbidden in live paths.

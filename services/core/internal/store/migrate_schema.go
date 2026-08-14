@@ -1,5 +1,15 @@
 package store
 
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	forgejournal "forge/projectforge/services/core/internal/forgekernel/journal"
+)
+
 const schema = `
 PRAGMA foreign_keys = ON;
 
@@ -956,8 +966,26 @@ CREATE TABLE IF NOT EXISTS journal_events (
   proposed_by TEXT NOT NULL DEFAULT '',
   committed_by TEXT NOT NULL DEFAULT 'forge_kernel',
   syscall_id TEXT NOT NULL DEFAULT '',
-  audit_id TEXT NOT NULL DEFAULT ''
+  audit_id TEXT NOT NULL DEFAULT '',
+  journal_schema_version TEXT NOT NULL DEFAULT '',
+  chain_sequence INTEGER NOT NULL DEFAULT 0,
+  payload_hash TEXT NOT NULL DEFAULT '',
+  provenance_hash TEXT NOT NULL DEFAULT '',
+  journal_metadata_hash TEXT NOT NULL DEFAULT '',
+  prior_hash TEXT NOT NULL DEFAULT '',
+  event_hash TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS forge_k_journal_head (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  sequence INTEGER NOT NULL DEFAULT 0,
+  event_id TEXT NOT NULL DEFAULT '',
+  head_hash TEXT NOT NULL DEFAULT '',
+  updated_at INTEGER NOT NULL DEFAULT 0
+);
+
+INSERT OR IGNORE INTO forge_k_journal_head(id, sequence, event_id, head_hash, updated_at)
+VALUES(1, 0, '', '', 0);
 
 CREATE TRIGGER IF NOT EXISTS journal_events_no_update
 BEFORE UPDATE ON journal_events
@@ -1403,8 +1431,47 @@ CREATE TABLE IF NOT EXISTS semantic_idempotency_keys (
   action TEXT NOT NULL,
   result_json TEXT NOT NULL,
   created_at INTEGER NOT NULL DEFAULT 0,
-  correlation_id TEXT NOT NULL DEFAULT ''
+  correlation_id TEXT NOT NULL DEFAULT '',
+  request_fingerprint TEXT NOT NULL DEFAULT '',
+  idempotency_fingerprint TEXT NOT NULL DEFAULT '',
+  request_json TEXT NOT NULL DEFAULT '{}',
+  plan_json TEXT NOT NULL DEFAULT '{}',
+  seal_json TEXT NOT NULL DEFAULT '{}',
+  receipt_json TEXT NOT NULL DEFAULT '{}'
 );
+
+CREATE TABLE IF NOT EXISTS forge_k_audit_outbox (
+  id TEXT PRIMARY KEY,
+  syscall_id TEXT NOT NULL UNIQUE,
+  request_fingerprint TEXT NOT NULL,
+  action TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL DEFAULT '',
+  correlation_id TEXT NOT NULL,
+  trace_id TEXT NOT NULL,
+  success INTEGER NOT NULL,
+  result_json TEXT NOT NULL,
+  receipt_json TEXT NOT NULL DEFAULT '{}',
+  created_at INTEGER NOT NULL,
+  committed_by TEXT NOT NULL DEFAULT 'forge_k.kernel'
+);
+
+CREATE INDEX IF NOT EXISTS idx_forge_k_audit_outbox_created
+ON forge_k_audit_outbox(created_at ASC, id ASC);
+CREATE INDEX IF NOT EXISTS idx_forge_k_audit_outbox_correlation
+ON forge_k_audit_outbox(correlation_id, created_at ASC);
+
+CREATE TRIGGER IF NOT EXISTS forge_k_audit_outbox_no_update
+BEFORE UPDATE ON forge_k_audit_outbox
+BEGIN
+  SELECT RAISE(FAIL, 'forge_k audit outbox is immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS forge_k_audit_outbox_no_delete
+BEFORE DELETE ON forge_k_audit_outbox
+BEGIN
+  SELECT RAISE(FAIL, 'forge_k audit outbox is immutable');
+END;
 
 CREATE INDEX IF NOT EXISTS idx_provenance_workspace_created ON provenance_records(workspace_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_journal_workspace_created ON journal_events(workspace_id, created_at DESC);
@@ -1567,3 +1634,279 @@ CREATE INDEX IF NOT EXISTS idx_identity_tokens_status ON identity_tokens(status,
 CREATE INDEX IF NOT EXISTS idx_alert_rules_status ON alert_rules(status, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_status ON scheduled_tasks(status, updated_at DESC);
 `
+
+const legacyUnboundRequestFingerprint = "legacy-unbound"
+
+// ensureForgeKJournalChain upgrades existing SQLite databases after the static
+// CREATE TABLE IF NOT EXISTS schema has run. Existing journal order is frozen as
+// (created_at ASC, id ASC), matching the legacy replay order. A mixed or invalid
+// chain fails migration rather than silently rewriting integrity evidence.
+func ensureForgeKJournalChain(db *sql.DB) error {
+	tx, err := db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	journalColumns := []struct{ name, ddl string }{
+		{"journal_schema_version", "TEXT NOT NULL DEFAULT ''"},
+		{"chain_sequence", "INTEGER NOT NULL DEFAULT 0"},
+		{"payload_hash", "TEXT NOT NULL DEFAULT ''"},
+		{"provenance_hash", "TEXT NOT NULL DEFAULT ''"},
+		{"journal_metadata_hash", "TEXT NOT NULL DEFAULT ''"},
+		{"prior_hash", "TEXT NOT NULL DEFAULT ''"},
+		{"event_hash", "TEXT NOT NULL DEFAULT ''"},
+	}
+	if err := ensureSQLiteColumns(tx, "journal_events", journalColumns); err != nil {
+		return fmt.Errorf("journal chain columns: %w", err)
+	}
+	if err := ensureSQLiteColumns(tx, "semantic_idempotency_keys", []struct{ name, ddl string }{
+		{"request_fingerprint", "TEXT NOT NULL DEFAULT ''"},
+		{"idempotency_fingerprint", "TEXT NOT NULL DEFAULT ''"},
+		{"request_json", "TEXT NOT NULL DEFAULT '{}'"},
+		{"plan_json", "TEXT NOT NULL DEFAULT '{}'"},
+		{"seal_json", "TEXT NOT NULL DEFAULT '{}'"},
+		{"receipt_json", "TEXT NOT NULL DEFAULT '{}'"},
+	}); err != nil {
+		return fmt.Errorf("idempotency fingerprint column: %w", err)
+	}
+	if err := ensureSQLiteColumns(tx, "forge_k_audit_outbox", []struct{ name, ddl string }{
+		{"receipt_json", "TEXT NOT NULL DEFAULT '{}'"},
+	}); err != nil {
+		return fmt.Errorf("audit outbox receipt column: %w", err)
+	}
+	if _, err := tx.Exec(`
+UPDATE semantic_idempotency_keys
+SET request_fingerprint = CASE WHEN request_fingerprint = '' THEN ? ELSE request_fingerprint END,
+    idempotency_fingerprint = CASE WHEN idempotency_fingerprint = '' THEN ? ELSE idempotency_fingerprint END
+WHERE request_fingerprint = '' OR idempotency_fingerprint = ''`, legacyUnboundRequestFingerprint, legacyUnboundRequestFingerprint); err != nil {
+		return fmt.Errorf("backfill idempotency fingerprints: %w", err)
+	}
+	if _, err := tx.Exec(`
+CREATE TRIGGER IF NOT EXISTS semantic_idempotency_keys_no_update
+BEFORE UPDATE ON semantic_idempotency_keys
+BEGIN
+  SELECT RAISE(FAIL, 'semantic idempotency keys are immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS semantic_idempotency_keys_no_delete
+BEFORE DELETE ON semantic_idempotency_keys
+BEGIN
+  SELECT RAISE(FAIL, 'semantic idempotency keys are immutable');
+END;`); err != nil {
+		return fmt.Errorf("idempotency immutability triggers: %w", err)
+	}
+	if _, err := tx.Exec(`
+INSERT OR IGNORE INTO forge_k_journal_head(id, sequence, event_id, head_hash, updated_at)
+VALUES(1, 0, '', '', 0)`); err != nil {
+		return fmt.Errorf("initialize journal head: %w", err)
+	}
+
+	entries, legacy, err := loadMigrationJournalEntries(tx)
+	if err != nil {
+		return err
+	}
+	head, err := loadMigrationJournalHead(tx)
+	if err != nil {
+		return err
+	}
+	if legacy {
+		if head != (forgejournal.Head{}) {
+			return fmt.Errorf("legacy journal rows conflict with a non-empty FORGE-K journal head")
+		}
+		if err := backfillMigrationJournalEntries(tx, entries); err != nil {
+			return err
+		}
+		entries, legacy, err = loadMigrationJournalEntries(tx)
+		if err != nil {
+			return err
+		}
+		if legacy {
+			return fmt.Errorf("journal chain backfill left legacy rows")
+		}
+		head, err = loadMigrationJournalHead(tx)
+		if err != nil {
+			return err
+		}
+	}
+	report := forgejournal.Verify(entries, &head)
+	if !report.Passed {
+		encoded, _ := json.Marshal(report.Issues)
+		return fmt.Errorf("FORGE-K journal integrity verification failed: %s", encoded)
+	}
+	if _, err := tx.Exec(`
+CREATE UNIQUE INDEX IF NOT EXISTS idx_journal_chain_sequence
+ON journal_events(chain_sequence) WHERE chain_sequence > 0;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_journal_event_hash
+ON journal_events(event_hash) WHERE event_hash <> '';`); err != nil {
+		return fmt.Errorf("journal integrity indexes: %w", err)
+	}
+	return tx.Commit()
+}
+
+func ensureSQLiteColumns(tx *sql.Tx, table string, additions []struct{ name, ddl string }) error {
+	rows, err := tx.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return err
+	}
+	existing := map[string]struct{}{}
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, columnType string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &pk); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		existing[name] = struct{}{}
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, addition := range additions {
+		if _, ok := existing[addition.name]; ok {
+			continue
+		}
+		if _, err := tx.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, addition.name, addition.ddl)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func loadMigrationJournalHead(tx *sql.Tx) (forgejournal.Head, error) {
+	var head forgejournal.Head
+	if err := tx.QueryRow(`SELECT sequence,event_id,head_hash FROM forge_k_journal_head WHERE id=1`).Scan(&head.Sequence, &head.EventID, &head.Hash); err != nil {
+		return forgejournal.Head{}, fmt.Errorf("load journal head: %w", err)
+	}
+	return head, nil
+}
+
+func loadMigrationJournalEntries(tx *sql.Tx) ([]forgejournal.Entry, bool, error) {
+	rows, err := tx.Query(`
+SELECT id,type,source,actor,workspace_id,lane_id,selected_paths_json,
+       correlation_id,trace_id,COALESCE(provenance_id,''),provenance_json,
+       payload_json,metadata_json,proposed_by,committed_by,syscall_id,audit_id,
+       created_at,journal_schema_version,chain_sequence,payload_hash,
+       provenance_hash,journal_metadata_hash,prior_hash,event_hash
+FROM journal_events
+ORDER BY created_at ASC,id ASC`)
+	if err != nil {
+		return nil, false, fmt.Errorf("load journal rows for migration: %w", err)
+	}
+	defer rows.Close()
+	entries := []forgejournal.Entry{}
+	legacyCount := 0
+	for rows.Next() {
+		var entry forgejournal.Entry
+		var selectedRaw, provenanceRaw, payloadRaw, metadataRaw string
+		if err := rows.Scan(
+			&entry.EventID, &entry.EventType, &entry.Source, &entry.Actor,
+			&entry.WorkspaceID, &entry.LaneID, &selectedRaw, &entry.CorrelationID,
+			&entry.TraceID, &entry.ProvenanceID, &provenanceRaw, &payloadRaw,
+			&metadataRaw, &entry.ProposedBy, &entry.CommittedBy, &entry.SyscallID,
+			&entry.AuditID, &entry.CreatedAt, &entry.SchemaVersion, &entry.Sequence,
+			&entry.PayloadHash, &entry.ProvenanceHash, &entry.MetadataHash,
+			&entry.PriorHash, &entry.Hash,
+		); err != nil {
+			return nil, false, fmt.Errorf("scan journal row for migration: %w", err)
+		}
+		if err := json.Unmarshal([]byte(selectedRaw), &entry.SelectedPaths); err != nil {
+			return nil, false, fmt.Errorf("journal event %q selected paths: %w", entry.EventID, err)
+		}
+		payloadHash, err := forgejournal.HashJSON([]byte(payloadRaw))
+		if err != nil {
+			return nil, false, fmt.Errorf("journal event %q payload: %w", entry.EventID, err)
+		}
+		provenanceHash, err := forgejournal.HashJSON([]byte(provenanceRaw))
+		if err != nil {
+			return nil, false, fmt.Errorf("journal event %q provenance: %w", entry.EventID, err)
+		}
+		metadataHash, err := forgejournal.HashJSON([]byte(metadataRaw))
+		if err != nil {
+			return nil, false, fmt.Errorf("journal event %q metadata: %w", entry.EventID, err)
+		}
+		unchained := entry.SchemaVersion == "" && entry.Sequence == 0 && entry.PayloadHash == "" &&
+			entry.ProvenanceHash == "" && entry.MetadataHash == "" && entry.PriorHash == "" && entry.Hash == ""
+		if unchained {
+			legacyCount++
+			entry.PayloadHash = payloadHash
+			entry.ProvenanceHash = provenanceHash
+			entry.MetadataHash = metadataHash
+			entry.SyscallID = nonEmptyMigration(entry.SyscallID, "legacy:"+entry.EventID)
+			entry.CommittedBy = nonEmptyMigration(entry.CommittedBy, "forge_kernel")
+		} else if entry.PayloadHash != payloadHash {
+			return nil, false, fmt.Errorf("journal event %q payload hash mismatch", entry.EventID)
+		} else if entry.ProvenanceHash != provenanceHash {
+			return nil, false, fmt.Errorf("journal event %q provenance hash mismatch", entry.EventID)
+		} else if entry.MetadataHash != metadataHash {
+			return nil, false, fmt.Errorf("journal event %q metadata hash mismatch", entry.EventID)
+		}
+		entries = append(entries, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	if legacyCount != 0 && legacyCount != len(entries) {
+		return nil, false, fmt.Errorf("journal contains mixed chained and unchained rows")
+	}
+	return entries, legacyCount > 0, nil
+}
+
+func backfillMigrationJournalEntries(tx *sql.Tx, legacyEntries []forgejournal.Entry) error {
+	if len(legacyEntries) == 0 {
+		return nil
+	}
+	if _, err := tx.Exec(`DROP TRIGGER IF EXISTS journal_events_no_update`); err != nil {
+		return err
+	}
+	head := forgejournal.Head{}
+	for _, legacy := range legacyEntries {
+		planned, err := forgejournal.PlanAppend(head, legacy.AppendInput)
+		if err != nil {
+			return fmt.Errorf("plan journal backfill for %q: %w", legacy.EventID, err)
+		}
+		if _, err := tx.Exec(`
+UPDATE journal_events
+SET journal_schema_version=?,chain_sequence=?,payload_hash=?,provenance_hash=?,
+    journal_metadata_hash=?,prior_hash=?,event_hash=?,syscall_id=?,committed_by=?
+WHERE id=? AND chain_sequence=0 AND event_hash=''`,
+			planned.SchemaVersion, planned.Sequence, planned.PayloadHash,
+			planned.ProvenanceHash, planned.MetadataHash, planned.PriorHash,
+			planned.Hash, planned.SyscallID, planned.CommittedBy, planned.EventID,
+		); err != nil {
+			return fmt.Errorf("persist journal backfill for %q: %w", planned.EventID, err)
+		}
+		head = forgejournal.Head{Sequence: planned.Sequence, EventID: planned.EventID, Hash: planned.Hash}
+	}
+	result, err := tx.Exec(`
+UPDATE forge_k_journal_head
+SET sequence=?,event_id=?,head_hash=?,updated_at=?
+WHERE id=1 AND sequence=0 AND event_id='' AND head_hash=''`,
+		head.Sequence, head.EventID, head.Hash, legacyEntries[len(legacyEntries)-1].CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("persist journal backfill head: %w", err)
+	}
+	if affected, err := result.RowsAffected(); err != nil || affected != 1 {
+		return fmt.Errorf("persist journal backfill head: compare-and-swap failed")
+	}
+	if _, err := tx.Exec(`
+CREATE TRIGGER journal_events_no_update
+BEFORE UPDATE ON journal_events
+BEGIN
+  SELECT RAISE(FAIL, 'journal_events are append-only');
+END;`); err != nil {
+		return fmt.Errorf("restore journal immutability trigger: %w", err)
+	}
+	return nil
+}
+
+func nonEmptyMigration(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
+}

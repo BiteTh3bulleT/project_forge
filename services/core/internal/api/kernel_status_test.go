@@ -47,7 +47,7 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload["status"] != "forge_k_courthouse_live" {
+	if payload["status"] != "forge_k_commit_integrity_live" {
 		t.Fatalf("unexpected kernel status payload: %#v", payload)
 	}
 	if payload["live_kernel_authority"] != false ||
@@ -58,6 +58,21 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 		payload["shadow_authoritative"] != false ||
 		payload["mutation_controls_available"] != false {
 		t.Fatalf("kernel status claimed forbidden authority or mutation controls: %#v", payload)
+	}
+	integrity := asMap(t, payload["no_effect"])
+	for _, key := range []string{
+		"commitIntegrityAuthority",
+		"sealedPreparedPlans",
+		"typedCommitReceiptValidation",
+		"atomicAuditOutboxEvidence",
+		"verifiedIdempotentReplay",
+	} {
+		if integrity[key] != true {
+			t.Fatalf("kernel status integrity flag %s=%v, want true: %#v", key, integrity[key], integrity)
+		}
+	}
+	if integrity["externalAuditSinkDelivery"] != false || integrity["auditIdBackfill"] != false {
+		t.Fatalf("kernel status overclaimed external audit projection completion: %#v", integrity)
 	}
 
 	actions, ok := payload["validation_actions"].([]any)
@@ -144,8 +159,8 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 		if subsystem == "Courthouse" && (entry["current_status"] != "FORGE_K_ADMISSION_AND_RULING_LIVE" || entry["live_owner"] != "forge_k.kernel") {
 			t.Fatalf("courthouse live authority not reported, got %#v", entry)
 		}
-		if subsystem == "Kernel" && (entry["current_status"] != "FORGE_K_COURTHOUSE_LIVE" || entry["live_owner"] != "forge_k.kernel") {
-			t.Fatalf("kernel ingress authority not reported: %#v", entry)
+		if subsystem == "Kernel" && (entry["current_status"] != "FORGE_K_COMMIT_INTEGRITY_LIVE" || entry["live_owner"] != "forge_k.kernel") {
+			t.Fatalf("kernel commit integrity authority not reported: %#v", entry)
 		}
 		if entry["live_owner"] == "" || entry["target_owner"] == "" || entry["rollback_path"] == "" {
 			t.Fatalf("authority matrix entry missing owner/rollback fields: %#v", entry)

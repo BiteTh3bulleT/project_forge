@@ -34,6 +34,7 @@ func TestCanonicalCognitiveWritesStayBounded(t *testing.T) {
 		filepath.Join("services", "core", "internal", "backup", "section_mappings.go"):                  {},
 		filepath.Join("services", "core", "internal", "store", "migrate_columns.go"):                    {},
 		filepath.Join("services", "core", "internal", "store", "migrate.go"):                            {},
+		filepath.Join("services", "core", "internal", "store", "migrate_schema.go"):                     {},
 	}
 
 	// Canonical cognitive filesystem tables that must remain kernel-governed.

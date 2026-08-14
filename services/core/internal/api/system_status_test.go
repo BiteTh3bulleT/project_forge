@@ -68,8 +68,8 @@ func TestForgeSystemStatusReadOnlySurface(t *testing.T) {
 	}
 
 	kernel := asMap(t, payload["kernel_activation"])
-	if kernel["status"] != "forge_k_courthouse_live" {
-		t.Fatalf("kernel_activation.status=%v, want forge_k_courthouse_live", kernel["status"])
+	if kernel["status"] != "forge_k_commit_integrity_live" {
+		t.Fatalf("kernel_activation.status=%v, want forge_k_commit_integrity_live", kernel["status"])
 	}
 	if kernel["live_kernel_authority"] != false ||
 		kernel["simulator_authority"] != false ||
@@ -81,6 +81,16 @@ func TestForgeSystemStatusReadOnlySurface(t *testing.T) {
 	}
 	if kernel["authority_ready_gates"] != float64(4) || kernel["authority_blocked_gates"] != float64(3) {
 		t.Fatalf("kernel_activation authority gate counts unexpected: %#v", kernel)
+	}
+	integrity := asMap(t, kernel["no_effect"])
+	if integrity["commitIntegrityAuthority"] != true ||
+		integrity["sealedPreparedPlans"] != true ||
+		integrity["typedCommitReceiptValidation"] != true ||
+		integrity["atomicAuditOutboxEvidence"] != true ||
+		integrity["verifiedIdempotentReplay"] != true ||
+		integrity["externalAuditSinkDelivery"] != false ||
+		integrity["auditIdBackfill"] != false {
+		t.Fatalf("kernel_activation commit integrity posture unexpected: %#v", integrity)
 	}
 
 	operatorCockpit := asMap(t, payload["operator_cockpit"])

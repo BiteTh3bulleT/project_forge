@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/forgekernel/commitproof"
 )
 
 func (s *SQLiteSemanticStore) CreateNote(note domain.MemoryNote) error {
@@ -233,16 +234,40 @@ func (s *SQLiteSemanticStore) CreateSupersession(record SupersessionRecord) erro
 	return s.CreateSupersessionWithKinds(context.Background(), record, nonEmpty(record.OldKind, "object"), nonEmpty(record.NewKind, "object"), scope)
 }
 
-func (s *SQLiteSemanticStore) SetIdempotency(key string, rec IdempotencyRecord) {
-	_, _ = s.exec.ExecContext(s.background, `
-INSERT INTO semantic_idempotency_keys(idempotency_key, action, result_json, created_at, correlation_id)
-VALUES(?,?,?,?,?)
-ON CONFLICT(idempotency_key) DO UPDATE SET
- action = excluded.action,
- result_json = excluded.result_json,
- correlation_id = excluded.correlation_id`,
-		key, string(rec.Action), encodeJSON(rec.Result), domain.NowMillis(), rec.Result.CorrelationID,
+func (s *SQLiteSemanticStore) SetIdempotency(key string, rec IdempotencyRecord) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ErrInvalidIdempotencyRecord
+	}
+	if existing, ok := s.GetIdempotency(key); ok {
+		if idempotencyRecordsMatch(existing, rec) {
+			return nil
+		}
+		return fmt.Errorf("%w: key %q", ErrIdempotencyConflict, key)
+	}
+	if err := validateIdempotencyRecord(key, rec); err != nil {
+		return err
+	}
+	result, err := s.exec.ExecContext(s.background, `
+INSERT INTO semantic_idempotency_keys(
+  idempotency_key, action, request_fingerprint, idempotency_fingerprint, result_json,
+  request_json, plan_json, seal_json, receipt_json, created_at, correlation_id
+) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+ON CONFLICT(idempotency_key) DO NOTHING`,
+		key, string(rec.Action), rec.RequestFingerprint, rec.IdempotencyFingerprint, encodeJSON(rec.Result),
+		encodeJSON(rec.Request), encodeJSON(rec.Plan), encodeJSON(rec.Seal), encodeJSON(rec.Receipt), rec.CreatedAt, rec.CorrelationID,
 	)
+	if err != nil {
+		return err
+	}
+	if inserted, _ := result.RowsAffected(); inserted == 1 {
+		return nil
+	}
+	existing, ok := s.GetIdempotency(key)
+	if ok && idempotencyRecordsMatch(existing, rec) {
+		return nil
+	}
+	return fmt.Errorf("%w: key %q", ErrIdempotencyConflict, key)
 }
 
 func (s *SQLiteSemanticStore) FindNote(id string) (domain.MemoryNote, bool) {
@@ -394,14 +419,29 @@ LIMIT 1`, scope.WorkspaceID, scope.LaneID, scope.LaneID, key)
 }
 
 func (s *SQLiteSemanticStore) GetIdempotency(key string) (IdempotencyRecord, bool) {
-	row := s.exec.QueryRowContext(s.background, `SELECT action, result_json FROM semantic_idempotency_keys WHERE idempotency_key = ?`, key)
-	var action, raw string
-	if err := row.Scan(&action, &raw); err != nil {
+	row := s.exec.QueryRowContext(s.background, `
+SELECT action, request_fingerprint, idempotency_fingerprint, result_json,
+       request_json, plan_json, seal_json, receipt_json, created_at, correlation_id
+FROM semantic_idempotency_keys WHERE idempotency_key = ?`, strings.TrimSpace(key))
+	var action, requestFingerprint, idempotencyFingerprint, raw, requestRaw, planRaw, sealRaw, receiptRaw, correlationID string
+	var createdAt int64
+	if err := row.Scan(&action, &requestFingerprint, &idempotencyFingerprint, &raw, &requestRaw, &planRaw, &sealRaw, &receiptRaw, &createdAt, &correlationID); err != nil {
 		return IdempotencyRecord{}, false
 	}
 	var result domain.SyscallResult
 	_ = json.Unmarshal([]byte(raw), &result)
-	return IdempotencyRecord{Action: domain.SemanticActionType(action), Result: result}, true
+	var request domain.SyscallRequest
+	_ = json.Unmarshal([]byte(requestRaw), &request)
+	var plan commitproof.PreparedPlan
+	_ = json.Unmarshal([]byte(planRaw), &plan)
+	var seal commitproof.PreparedPlanSeal
+	_ = json.Unmarshal([]byte(sealRaw), &seal)
+	var receipt commitproof.CommitReceipt
+	_ = json.Unmarshal([]byte(receiptRaw), &receipt)
+	return IdempotencyRecord{
+		Action: domain.SemanticActionType(action), RequestFingerprint: requestFingerprint, IdempotencyFingerprint: idempotencyFingerprint,
+		Result: result, Request: request, Plan: plan, Seal: seal, Receipt: receipt, CreatedAt: createdAt, CorrelationID: correlationID,
+	}, true
 }
 
 func (s *SQLiteSemanticStore) FindLatestContextSnapshot(scope domain.ForgeScope, query, snapshotKind string) (domain.ContextPacket, bool) {
