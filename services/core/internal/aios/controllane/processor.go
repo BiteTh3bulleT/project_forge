@@ -6,6 +6,7 @@ import (
 
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/aios/rulecells"
+	"forge/projectforge/services/core/internal/forgekernel"
 	"forge/projectforge/services/core/internal/forgekshadow"
 )
 
@@ -38,6 +39,11 @@ type Processor struct {
 	kvIdentityMetrics             KVIdentityEnforcementMetrics
 	controlLaneValidationObserver ControlLaneValidationObserver
 }
+
+var (
+	_ forgekernel.Processor   = (*Processor)(nil)
+	_ forgekernel.DurablePort = (*Processor)(nil)
+)
 
 type RuleEngine interface {
 	Run(ctx context.Context, in rulecells.RunInput, opts rulecells.RunOptions) (rulecells.RunResult, error)
@@ -87,7 +93,25 @@ func NewProcessor(opts ProcessorOptions) *Processor {
 	}
 }
 
-func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out domain.SyscallResult, err error) {
+// Process is the legacy_v1 rollback orchestration. Production FORGE-K calls
+// Prepare, Commit, RecordResult, and ObserveResult itself through DurablePort.
+func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (domain.SyscallResult, error) {
+	prepared, err := p.Prepare(ctx, req)
+	if err != nil || prepared.Disposition == forgekernel.DispositionComplete {
+		result := p.RecordResult(ctx, prepared.Request, prepared.Result)
+		p.ObserveResult(ctx, prepared.Request, result)
+		return result, err
+	}
+	result, err := p.Commit(ctx, prepared)
+	result = p.RecordResult(ctx, prepared.Request, result)
+	p.ObserveResult(ctx, prepared.Request, result)
+	return result, err
+}
+
+// Prepare performs deterministic normalization, registry, capability,
+// approval, idempotency, payload, and validation-lane checks without opening a
+// write transaction. It returns either a completed result or a commit request.
+func (p *Processor) Prepare(ctx context.Context, req domain.SyscallRequest) (forgekernel.PreparedSyscall, error) {
 	req = p.normalize(req)
 	result := domain.SyscallResult{
 		Success:            false,
@@ -104,52 +128,55 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 		ValidationDetails:  []domain.ValidationDetail{},
 		StateSummary:       map[string]any{},
 	}
-	defer func() {
-		p.observeControlLaneValidation(ctx, req, out)
-	}()
+	complete := func(result domain.SyscallResult, err error) (forgekernel.PreparedSyscall, error) {
+		return forgekernel.PreparedSyscall{Request: req, Result: result, Disposition: forgekernel.DispositionComplete}, err
+	}
+	reject := func(layer string, issues []domain.SyscallError, err error) (forgekernel.PreparedSyscall, error) {
+		return complete(p.rejectResult(req, result, layer, issues), err)
+	}
 
 	def, ok := p.registry.Get(req.Action)
 	if !ok {
-		return p.reject(ctx, req, result, "registry", []domain.SyscallError{
+		return reject("registry", []domain.SyscallError{
 			{Code: domain.ErrUnsupportedAction, Field: "action", Message: "unsupported action"},
-		}), nil
+		}, nil)
 	}
 
 	envelopeIssues := p.validator.ValidateEnvelope(req, def)
 	result.ValidationDetails = append(result.ValidationDetails, detailFor("envelope_validation", envelopeIssues))
 	if len(envelopeIssues) > 0 {
-		return p.reject(ctx, req, result, "envelope_validation", envelopeIssues), nil
+		return reject("envelope_validation", envelopeIssues, nil)
 	}
 
 	allowed, reason, capErr := p.capabilities.HasCapability(ctx, req, def.Capability)
 	if capErr != nil {
-		return p.reject(ctx, req, result, "capability_validation", []domain.SyscallError{
+		return reject("capability_validation", []domain.SyscallError{
 			{Code: domain.ErrInternal, Field: "capability", Message: capErr.Error()},
-		}), capErr
+		}, capErr)
 	}
 	if !allowed {
-		return p.reject(ctx, req, result, "capability_validation", []domain.SyscallError{
+		return reject("capability_validation", []domain.SyscallError{
 			{Code: domain.ErrCapabilityDenied, Field: "capability", Message: reason},
-		}), nil
+		}, nil)
 	}
 	result.ValidationDetails = append(result.ValidationDetails, detailFor("capability_validation", nil))
 
 	approval, err := p.approvalGate.Evaluate(ctx, req, def)
 	if err != nil {
-		return p.reject(ctx, req, result, "approval_gate", []domain.SyscallError{
+		return reject("approval_gate", []domain.SyscallError{
 			{Code: domain.ErrInternal, Field: "approval", Message: err.Error()},
-		}), err
+		}, err)
 	}
 	result.ApprovalStatus = approval.Status
 	if approval.Status == domain.ApprovalRequired {
-		return p.reject(ctx, req, result, "approval_gate", []domain.SyscallError{
+		return reject("approval_gate", []domain.SyscallError{
 			{Code: domain.ErrApprovalRequired, Field: "approval", Message: approval.Reason},
-		}), nil
+		}, nil)
 	}
 	if approval.Status == domain.ApprovalDenied {
-		return p.reject(ctx, req, result, "approval_gate", []domain.SyscallError{
+		return reject("approval_gate", []domain.SyscallError{
 			{Code: domain.ErrUnauthorized, Field: "approval", Message: approval.Reason},
-		}), nil
+		}, nil)
 	}
 	result.ValidationDetails = append(result.ValidationDetails, detailFor("approval_gate", nil))
 
@@ -157,9 +184,9 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 		if existing, ok := p.txRunner.ReadStore().GetIdempotency(req.IdempotencyKey); ok {
 			result.ValidationDetails = append(result.ValidationDetails, detailFor("idempotency", nil))
 			if existing.Action != req.Action {
-				return p.reject(ctx, req, result, "idempotency", []domain.SyscallError{
+				return reject("idempotency", []domain.SyscallError{
 					{Code: domain.ErrDuplicate, Field: "idempotencyKey", Message: "idempotency key already used for a different action"},
-				}), nil
+				}, nil)
 			}
 			replayed := existing.Result
 			replayed.Warnings = append(replayed.Warnings, "idempotent replay")
@@ -167,8 +194,7 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 			replayed.CorrelationID = req.CorrelationID
 			replayed.TraceID = req.TraceID
 			replayed.IdempotencyKey = req.IdempotencyKey
-			replayed.AuditID = p.writeAudit(ctx, req, replayed)
-			return replayed, nil
+			return complete(replayed, nil)
 		}
 	}
 	result.ValidationDetails = append(result.ValidationDetails, detailFor("idempotency", nil))
@@ -179,7 +205,7 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 		if !kvIdentityDecision.Accepted {
 			result.StateSummary = kvIdentityDecision.ToStateSummary()
 			p.recordKVIdentityDecision(kvIdentityDecision)
-			return p.reject(ctx, req, result, "kv_identity_enforcement", []domain.SyscallError{kvIdentityDecision.ToSyscallError()}), nil
+			return reject("kv_identity_enforcement", []domain.SyscallError{kvIdentityDecision.ToSyscallError()}, nil)
 		}
 		result.ValidationDetails = append(result.ValidationDetails, detailFor("kv_identity_enforcement", nil))
 	}
@@ -187,7 +213,7 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 	payloadIssues := p.validator.ValidatePayload(req, def, p.txRunner.ReadStore())
 	result.ValidationDetails = append(result.ValidationDetails, detailFor("payload_validation", payloadIssues))
 	if len(payloadIssues) > 0 {
-		return p.reject(ctx, req, result, "payload_validation", payloadIssues), nil
+		return reject("payload_validation", payloadIssues, nil)
 	}
 
 	var semanticOperationDecision SemanticOperationValidationDecision
@@ -198,7 +224,7 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 		refShapeDecision = EnforceRefShape(req)
 		if !refShapeDecision.Accepted {
 			result.StateSummary = refShapeDecision.ToStateSummary()
-			return p.reject(ctx, req, result, "ref_shape_validation", []domain.SyscallError{refShapeDecision.ToSyscallError()}), nil
+			return reject("ref_shape_validation", []domain.SyscallError{refShapeDecision.ToSyscallError()}, nil)
 		}
 		result.ValidationDetails = append(result.ValidationDetails, detailFor("ref_shape_validation", nil))
 	}
@@ -207,7 +233,7 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 		refShapeComparisonDecision = EnforceRefShapeComparison(req)
 		if !refShapeComparisonDecision.Accepted {
 			result.StateSummary = refShapeComparisonDecision.ToStateSummary()
-			return p.reject(ctx, req, result, "ref_shape_comparison", []domain.SyscallError{refShapeComparisonDecision.ToSyscallError()}), nil
+			return reject("ref_shape_comparison", []domain.SyscallError{refShapeComparisonDecision.ToSyscallError()}, nil)
 		}
 		result.ValidationDetails = append(result.ValidationDetails, detailFor("ref_shape_comparison", nil))
 	}
@@ -216,7 +242,7 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 		sourceObjectAuthorityDecision = EnforceSourceObjectAuthority(req, p.txRunner.ReadStore())
 		if !sourceObjectAuthorityDecision.Accepted {
 			result.StateSummary = sourceObjectAuthorityDecision.ToStateSummary()
-			return p.reject(ctx, req, result, "source_object_authority_validation", []domain.SyscallError{sourceObjectAuthorityDecision.ToSyscallError()}), nil
+			return reject("source_object_authority_validation", []domain.SyscallError{sourceObjectAuthorityDecision.ToSyscallError()}, nil)
 		}
 		result.ValidationDetails = append(result.ValidationDetails, detailFor("source_object_authority_validation", nil))
 	}
@@ -224,7 +250,7 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 		semanticOperationDecision = EnforceSemanticOperation(req)
 		if !semanticOperationDecision.Accepted {
 			result.StateSummary = semanticOperationDecision.ToStateSummary()
-			return p.reject(ctx, req, result, "semantic_operation_validation", []domain.SyscallError{semanticOperationDecision.ToSyscallError()}), nil
+			return reject("semantic_operation_validation", []domain.SyscallError{semanticOperationDecision.ToSyscallError()}, nil)
 		}
 		result.ValidationDetails = append(result.ValidationDetails, detailFor("semantic_operation_validation", nil))
 	}
@@ -232,7 +258,7 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 		admissionCandidateDecision = EnforceAdmissionCandidate(req)
 		if !admissionCandidateDecision.Accepted {
 			result.StateSummary = admissionCandidateDecision.ToStateSummary()
-			return p.reject(ctx, req, result, "admission_candidate_validation", []domain.SyscallError{admissionCandidateDecision.ToSyscallError()}), nil
+			return reject("admission_candidate_validation", []domain.SyscallError{admissionCandidateDecision.ToSyscallError()}, nil)
 		}
 		result.ValidationDetails = append(result.ValidationDetails, detailFor("admission_candidate_validation", nil))
 	}
@@ -240,7 +266,7 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 		contextAttributionDecision = EnforceContextAttribution(req)
 		if !contextAttributionDecision.Accepted {
 			result.StateSummary = contextAttributionDecision.ToStateSummary()
-			return p.reject(ctx, req, result, "context_attribution_validation", []domain.SyscallError{contextAttributionDecision.ToSyscallError()}), nil
+			return reject("context_attribution_validation", []domain.SyscallError{contextAttributionDecision.ToSyscallError()}, nil)
 		}
 		result.ValidationDetails = append(result.ValidationDetails, detailFor("context_attribution_validation", nil))
 	}
@@ -290,14 +316,31 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 			result.StateSummary["dryRun"] = true
 		}
 		result.Warnings = append(result.Warnings, "dry-run: request validated without commit")
-		result.AuditID = p.writeAudit(ctx, req, result)
-		return result, nil
+		return complete(result, nil)
 	}
+	return forgekernel.PreparedSyscall{Request: req, Result: result, Disposition: forgekernel.DispositionCommit}, nil
+}
 
+// Commit performs one atomic apply + journal + idempotency transaction. It is
+// invoked by production FORGE-K only after Prepare returns DispositionCommit.
+func (p *Processor) Commit(ctx context.Context, prepared forgekernel.PreparedSyscall) (domain.SyscallResult, error) {
+	req := prepared.Request
+	result := prepared.Result
+	if prepared.Disposition != forgekernel.DispositionCommit {
+		return p.rejectResult(req, result, "commit_disposition", []domain.SyscallError{{
+			Code: domain.ErrInternal, Field: "kernel.disposition", Message: "durable commit called without commit disposition",
+		}}), nil
+	}
+	def, ok := p.registry.Get(req.Action)
+	if !ok {
+		return p.rejectResult(req, result, "commit_registry", []domain.SyscallError{{
+			Code: domain.ErrUnsupportedAction, Field: "action", Message: "unsupported action at commit",
+		}}), nil
+	}
 	var commitIDs []string
 	var commitWarnings []string
 	var summary map[string]any
-	err = p.txRunner.Run(ctx, func(uow UnitOfWork) error {
+	err := p.txRunner.Run(ctx, func(uow UnitOfWork) error {
 		store := uow.Store()
 		if aware, ok := store.(CommitAwareStore); ok {
 			aware.SetCommitMetadata(CommitMetadata{
@@ -307,7 +350,7 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 				Source:        req.Source,
 				ActorID:       req.Actor.ID,
 				ActorKind:     req.Actor.Kind,
-				CommittedBy:   "forge_kernel",
+				CommittedBy:   nonEmpty(readString(req.Metadata, "kernelAuthorityOwner"), "forge_kernel"),
 			})
 		}
 		var applyErrs []domain.SyscallError
@@ -372,9 +415,9 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 	})
 	if err != nil {
 		if ce, ok := err.(commitError); ok {
-			return p.reject(ctx, req, result, "commit", ce.Issues), nil
+			return p.rejectResult(req, result, "commit", ce.Issues), nil
 		}
-		return p.reject(ctx, req, result, "commit", []domain.SyscallError{
+		return p.rejectResult(req, result, "commit", []domain.SyscallError{
 			{Code: domain.ErrInternal, Field: "commit", Message: err.Error()},
 		}), err
 	}
@@ -384,19 +427,8 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (out
 	result.Warnings = append(result.Warnings, commitWarnings...)
 	result.StateSummary = summary
 	result.ValidationDetails = append(result.ValidationDetails, detailFor("commit", nil))
-	result.AuditID = p.writeAudit(ctx, req, result)
 	if req.Action == domain.ActionValidateKVIdentity {
-		if kvIdentityDecision.Decision == "" {
-			kvIdentityDecision = EnforceKVIdentity(req)
-		}
-		p.recordKVIdentityDecision(kvIdentityDecision)
-	}
-	if result.AuditID != "" {
-		if linker, ok := p.txRunner.(auditLinkingRunner); ok {
-			if err := linker.LinkAudit(ctx, req.CorrelationID, req.ID, result.AuditID); err != nil {
-				result.Warnings = append(result.Warnings, "audit linkage update failed: "+err.Error())
-			}
-		}
+		p.recordKVIdentityDecision(EnforceKVIdentity(req))
 	}
 	return result, nil
 }
@@ -419,7 +451,7 @@ func (e commitError) Error() string {
 	return e.Issues[0].Message
 }
 
-func (p *Processor) reject(ctx context.Context, req domain.SyscallRequest, result domain.SyscallResult, layer string, issues []domain.SyscallError) domain.SyscallResult {
+func (p *Processor) rejectResult(req domain.SyscallRequest, result domain.SyscallResult, layer string, issues []domain.SyscallError) domain.SyscallResult {
 	if layer != "" {
 		result.ValidationDetails = append(result.ValidationDetails, detailFor(layer, issues))
 	}
@@ -429,15 +461,28 @@ func (p *Processor) reject(ctx context.Context, req domain.SyscallRequest, resul
 		result.DeterministicErrCode = issues[0].Code
 	}
 	result.StateSummary["dryRun"] = req.DryRun
-	result.AuditID = p.writeAudit(ctx, req, result)
 	return result
 }
 
-// RecordKernelRejection persists a production FORGE-K ingress rejection through
-// the same immutable audit sink as Control Lane validation and commit results.
-func (p *Processor) RecordKernelRejection(ctx context.Context, req domain.SyscallRequest, result domain.SyscallResult) domain.SyscallResult {
+// RecordResult persists exactly one immutable audit result after FORGE-K has
+// selected a terminal disposition. Successful commits are linked back into the
+// same transaction lineage after the audit id exists.
+func (p *Processor) RecordResult(ctx context.Context, req domain.SyscallRequest, result domain.SyscallResult) domain.SyscallResult {
 	result.AuditID = p.writeAudit(ctx, req, result)
+	if result.Success && !req.DryRun && result.AuditID != "" {
+		if linker, ok := p.txRunner.(auditLinkingRunner); ok {
+			if err := linker.LinkAudit(ctx, req.CorrelationID, req.ID, result.AuditID); err != nil {
+				result.Warnings = append(result.Warnings, "audit linkage update failed: "+err.Error())
+			}
+		}
+	}
 	return result
+}
+
+// ObserveResult exposes bounded best-effort validation metadata after the
+// authoritative result is final. Observers cannot change that result.
+func (p *Processor) ObserveResult(ctx context.Context, req domain.SyscallRequest, result domain.SyscallResult) {
+	p.observeControlLaneValidation(ctx, req, result)
 }
 
 func (p *Processor) writeAudit(ctx context.Context, req domain.SyscallRequest, result domain.SyscallResult) string {

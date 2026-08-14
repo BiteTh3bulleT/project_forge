@@ -852,6 +852,7 @@ export type ForgeSystemStatus = {
     no_effect?: Record<string, boolean>;
     simulator_authority?: boolean;
     live_kernel_ingress_authority?: boolean;
+    live_durable_orchestration?: boolean;
     live_kernel_authority?: boolean;
     live_authority_migration?: boolean;
     shadow_authoritative?: boolean;

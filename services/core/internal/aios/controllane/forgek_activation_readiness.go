@@ -28,6 +28,7 @@ type ForgeKActivationReadinessReport struct {
 	NoEffect                   map[string]any                    `json:"no_effect"`
 	SimulatorAuthority         bool                              `json:"simulator_authority"`
 	LiveKernelIngressAuthority bool                              `json:"live_kernel_ingress_authority"`
+	LiveDurableOrchestration   bool                              `json:"live_durable_orchestration"`
 	LiveKernelAuthority        bool                              `json:"live_kernel_authority"`
 	LiveAuthorityMigration     bool                              `json:"live_authority_migration"`
 	ShadowAuthoritative        bool                              `json:"shadow_authoritative"`

@@ -1,6 +1,6 @@
 # FORGE-K Architecture Overview
 
-Status: Current overview with historical simulator context and K20A production cutover. FORGE-K simulator services are implemented through Consensus Mesh and remain `SIMULATOR_ONLY`; the distinct production `internal/forgekernel` package now owns semantic syscall ingress by default while Control Lane remains a temporary durable commit adapter. Full FORGE-K authority is not complete.
+Status: Current overview with historical simulator context and K20A-K20B production cutover. FORGE-K simulator services remain `SIMULATOR_ONLY`; the distinct production `internal/forgekernel` package owns semantic syscall ingress and durable stage orchestration while Control Lane implements the temporary validation/apply/SQLite port. Full FORGE-K authority is not complete.
 
 ## Read This If You Want
 
@@ -12,6 +12,7 @@ Current boundary banner:
 - `[LIVE / READ_ONLY]` Phase 12 shadow diagnostics can observe bounded metadata and produce advisory reports; they cannot affect output or state.
 - `[PARTIAL LIVE VALIDATION]` Phase 14 Control Lane seams validate identity, ref shape, source-object authority, comparison shape, and semantic-operation envelopes without executing those operations.
 - `[LIVE / K20A]` `internal/forgekernel` owns semantic syscall ingress by default; daemon boot selects it or the rollback-only `legacy_v1` path, never both.
+- `[LIVE / K20B]` FORGE-K owns prepare/commit/audit/observe order through `DurablePort`; the Control Lane combined processor path is rollback-only.
 - `[BLOCKED]` Live Courthouse admission, live Context Compiler prompt authority, FORGE-K-owned durable commit ports, runtime driver authority, and full Kernel authority require later migration gates.
 
 As target architecture, FORGE-K is a deterministic cognitive microkernel for governed semantic work. In the simulator and future migrated authority model, it owns canonical truth through semantic syscalls, deterministic validation, journaled commits, and replayable evidence. Model runtimes are drivers attached to the operating system; they may propose interpretations, actions, or text, but they do not own truth authority.

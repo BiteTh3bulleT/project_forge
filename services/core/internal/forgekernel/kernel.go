@@ -26,17 +26,38 @@ const (
 )
 
 var (
-	ErrInvalidAuthorityMode  = errors.New("invalid kernel authority mode")
-	ErrMissingCommitAdapter  = errors.New("missing durable kernel commit adapter")
-	ErrMissingRejectionAudit = errors.New("missing kernel rejection audit adapter")
+	ErrInvalidAuthorityMode = errors.New("invalid kernel authority mode")
+	ErrMissingCommitAdapter = errors.New("missing durable kernel commit adapter")
+	ErrMissingDurablePort   = errors.New("commit adapter does not implement the FORGE-K durable port")
+	ErrInvalidDisposition   = errors.New("invalid durable port disposition")
 )
 
 type Processor interface {
 	Process(ctx context.Context, req domain.SyscallRequest) (domain.SyscallResult, error)
 }
 
-type RejectionAuditor interface {
-	RecordKernelRejection(ctx context.Context, req domain.SyscallRequest, result domain.SyscallResult) domain.SyscallResult
+type Disposition string
+
+const (
+	DispositionComplete Disposition = "complete"
+	DispositionCommit   Disposition = "commit"
+)
+
+type PreparedSyscall struct {
+	Request     domain.SyscallRequest
+	Result      domain.SyscallResult
+	Disposition Disposition
+}
+
+// DurablePort is the temporary compatibility boundary implemented by the
+// Control Lane adapter. FORGE-K owns the stage order; the port supplies
+// non-mutating preflight work, one atomic commit/journal operation, audit
+// persistence, and best-effort observation.
+type DurablePort interface {
+	Prepare(ctx context.Context, req domain.SyscallRequest) (PreparedSyscall, error)
+	Commit(ctx context.Context, prepared PreparedSyscall) (domain.SyscallResult, error)
+	RecordResult(ctx context.Context, req domain.SyscallRequest, result domain.SyscallResult) domain.SyscallResult
+	ObserveResult(ctx context.Context, req domain.SyscallRequest, result domain.SyscallResult)
 }
 
 type Selection struct {
@@ -49,8 +70,7 @@ type Selection struct {
 }
 
 type Kernel struct {
-	commit  Processor
-	rejects RejectionAuditor
+	port DurablePort
 }
 
 func SelectAuthority(rawMode string, commit Processor) (Selection, error) {
@@ -71,12 +91,12 @@ func SelectAuthority(rawMode string, commit Processor) (Selection, error) {
 			SingleAuthority: true,
 		}, nil
 	}
-	rejects, ok := commit.(RejectionAuditor)
+	port, ok := commit.(DurablePort)
 	if !ok {
-		return Selection{}, ErrMissingRejectionAudit
+		return Selection{}, ErrMissingDurablePort
 	}
 	return Selection{
-		Processor:       &Kernel{commit: commit, rejects: rejects},
+		Processor:       &Kernel{port: port},
 		Mode:            ModeForgeK,
 		AuthorityOwner:  AuthorityOwnerForgeK,
 		CommitAdapter:   DurableCommitAdapter,
@@ -97,7 +117,7 @@ func ParseAuthorityMode(raw string) (AuthorityMode, error) {
 }
 
 func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain.SyscallResult, error) {
-	if k == nil || k.commit == nil {
+	if k == nil || k.port == nil {
 		return rejectedResult(req, domain.ErrPersistenceUnavailable, "kernel", ErrMissingCommitAdapter.Error()), ErrMissingCommitAdapter
 	}
 	originalMetadata := req.Metadata
@@ -107,9 +127,33 @@ func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain
 	req.Metadata["durableCommitAdapter"] = DurableCommitAdapter
 	if field, ok := forbiddenAuthorityClaim(originalMetadata); ok {
 		result := rejectedResult(req, domain.ErrUnauthorized, "metadata."+field, "external workers cannot claim FORGE authority")
-		return k.rejects.RecordKernelRejection(ctx, req, result), nil
+		result = annotateAuthority(result)
+		result = k.port.RecordResult(ctx, req, result)
+		k.port.ObserveResult(ctx, req, result)
+		return result, nil
 	}
-	result, err := k.commit.Process(ctx, req)
+	prepared, err := k.port.Prepare(ctx, req)
+	if err != nil || prepared.Disposition == DispositionComplete {
+		result := annotateAuthority(prepared.Result)
+		result = k.port.RecordResult(ctx, prepared.Request, result)
+		k.port.ObserveResult(ctx, prepared.Request, result)
+		return result, err
+	}
+	if prepared.Disposition != DispositionCommit {
+		result := rejectedResult(prepared.Request, domain.ErrInternal, "kernel.disposition", ErrInvalidDisposition.Error())
+		result = annotateAuthority(result)
+		result = k.port.RecordResult(ctx, prepared.Request, result)
+		k.port.ObserveResult(ctx, prepared.Request, result)
+		return result, ErrInvalidDisposition
+	}
+	result, err := k.port.Commit(ctx, prepared)
+	result = annotateAuthority(result)
+	result = k.port.RecordResult(ctx, prepared.Request, result)
+	k.port.ObserveResult(ctx, prepared.Request, result)
+	return result, err
+}
+
+func annotateAuthority(result domain.SyscallResult) domain.SyscallResult {
 	if result.StateSummary == nil {
 		result.StateSummary = map[string]any{}
 	}
@@ -119,7 +163,7 @@ func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain
 	result.StateSummary["modelToolSelectionAuthority"] = false
 	result.StateSummary["modelExecutionAuthority"] = false
 	result.StateSummary["modelCanonicalMutationAuthority"] = false
-	return result, err
+	return result
 }
 
 func cloneMetadata(in map[string]any) map[string]any {

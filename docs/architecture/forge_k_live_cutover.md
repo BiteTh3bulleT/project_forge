@@ -1,6 +1,6 @@
 # FORGE-K Live Cutover
 
-Status: K20A active; full cutover in progress.
+Status: K20A-K20B active; full cutover in progress.
 
 Date: 2026-08-14.
 
@@ -23,12 +23,14 @@ ports; simulator services are never imported wholesale into the daemon.
 caller
   -> forgekernel.Kernel                    [live ingress authority]
      -> deterministic authority-claim gate
-     -> aios/controllane.Processor         [temporary commit adapter]
-        -> capability + approval gates
-        -> SQLite transaction
-        -> canonical object/version rows
-        -> append-only journal event
-        -> audit linkage
+     -> DurablePort.Prepare                 [deterministic preflight]
+     -> DurablePort.Commit                  [one atomic apply+journal transaction]
+     -> DurablePort.RecordResult            [audit + lineage linkage]
+     -> DurablePort.ObserveResult           [best-effort, no decision authority]
+
+The temporary DurablePort implementation lives in
+`aios/controllane.Processor`; its combined `Process` method is used only by the
+`legacy_v1` rollback mode and tests.
 ```
 
 Boot selects one chain only. `FORGE_KERNEL_AUTHORITY_MODE=forge_k` is the
@@ -40,7 +42,7 @@ removed after final parity acceptance. No mode performs dual commits.
 | Boundary | Current | Target | Exit gate |
 | --- | --- | --- | --- |
 | Kernel ingress | `forgekernel.Kernel` live by default | FORGE-K | Closed in K20A |
-| Durable commit/journal | Control Lane SQLite adapter | FORGE-K durable ports | Parity, replay, rollback, no bypass |
+| Durable commit/journal orchestration | FORGE-K-owned `DurablePort`; Control Lane implementation | FORGE-K | Closed in K20B: stage order, parity, replay, denial, approval, rollback |
 | Tool need and selection | Deterministic FORGE chat routing | FORGE-K/Gateway policy contract | No model-selected schema or tool |
 | Tool execution | Gateway | Gateway external driver | Keep single execution ingress |
 | Courthouse | Candidate validation only | Live admission/ruling authority | Evidence provenance and appeal tests |
@@ -69,11 +71,10 @@ removed after final parity acceptance. No mode performs dual commits.
 - `legacy_v1` mode and stale v1 authority documentation are removed only after
   all prior gates close.
 
-## Next bounded slice: K20B
+## Next bounded slice: K20C
 
-Move the durable transaction/journal contract behind production FORGE-K-owned
-ports while preserving the current SQLite schema. `controllane.Processor` may
-remain as a compatibility facade during that slice, but it must no longer be
-the object that owns validation/commit orchestration. K20B must include commit
-parity, idempotency, capability denial, approval, journal failure rollback, and
-legacy-mode rollback tests.
+Promote Courthouse admission/ruling contracts behind the production Kernel.
+K20C must preserve evidence provenance, deterministic admission policy,
+appeal/rejection history, current-versus-historical truth separation, and no
+model admission authority. The simulator Courthouse remains isolated; only
+pure contracts or production-owned implementations may cross the boundary.

@@ -17,7 +17,7 @@ This file maps the current authority docs for FORGE. It is a navigation document
 | Area | Current source | Authority note |
 |---|---|---|
 | Canonical semantic syscall ingress | `services/core/internal/forgekernel`, `docs/architecture/forge_k_live_cutover.md` | K20A default live FORGE-K ingress authority. Boot selects exactly one owner and rejects external authority claims. |
-| Canonical durable commit adapter | `services/core/internal/aios/controllane`, `docs/architecture/forge_ai_os.md` | Temporary K20A SQLite transaction/journal/audit adapter behind FORGE-K ingress; K20B will extract FORGE-K-owned durable ports. |
+| Canonical durable orchestration | `services/core/internal/forgekernel`, `services/core/internal/aios/controllane`, `docs/architecture/forge_k_live_cutover.md` | K20B FORGE-K owns prepare/commit/audit/observe order through `DurablePort`; Control Lane remains the temporary validation/apply/SQLite implementation and rollback facade. |
 | Tool execution | `services/core/internal/gateway`, `docs/TOOL_GATEWAY.md`, `docs/CAPABILITY_BROKERS.md` | Gateway-only execution authority; legacy adapter invoke ingress is not authority. |
 | Model runtime | `services/core/internal/modelruntime`, `services/core/internal/api/model_runtime*.go`, `docs/architecture/model_runtime.md` | Models are governed drivers. Streaming, vLLM-compatible external endpoint support, and managed delete-file approval exist inside modelruntime boundaries. |
 | Memory and retrieval | `services/core/internal/memory`, `services/core/internal/retrieval`, `docs/MEMORY_ARCHITECTURE.md`, `docs/RETRIEVAL_PIPELINE.md` | Tool/model output is evidence, not automatic truth. |
@@ -29,7 +29,7 @@ This file maps the current authority docs for FORGE. It is a navigation document
 
 ## FORGE-K Boundary
 
-The simulator packages under `services/core/internal/forgek` remain simulator-only. The distinct production package `services/core/internal/forgekernel` owns live semantic syscall ingress by default in K20A. Full FORGE-K authority is still incomplete while Control Lane remains the durable commit adapter and other subsystem gates remain staged.
+The simulator packages under `services/core/internal/forgek` remain simulator-only. The distinct production package `services/core/internal/forgekernel` owns live semantic syscall ingress by default (K20A) and durable stage orchestration through its port contract (K20B). Full FORGE-K authority is still incomplete while Control Lane implements validation/apply/SQLite details and other subsystem gates remain staged.
 
 Current partial live integrations are narrow validation/enforcement seams through shared pure packages and existing live Control Lane paths. They do not:
 

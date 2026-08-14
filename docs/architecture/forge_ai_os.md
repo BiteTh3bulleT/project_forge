@@ -21,7 +21,7 @@ Rule of operation:
 | Concern | Current authority | Evidence |
 |---|---|---|
 | Canonical semantic syscall ingress | production FORGE-K Kernel | `services/core/internal/forgekernel/kernel.go`, daemon assembly in `services/core/internal/api/server.go` |
-| Canonical durable commit | temporary Control Lane SQLite adapter | `services/core/internal/aios/controllane/processor.go`, `validator.go`, `processor_apply.go`, `sqlite_store.go` |
+| Canonical durable orchestration | FORGE-K `DurablePort` stage order with temporary Control Lane SQLite implementation | `services/core/internal/forgekernel/kernel.go`, `services/core/internal/aios/controllane/processor.go`, `processor_apply.go`, `sqlite_store.go` |
 | Tool execution | gateway only | `services/core/internal/gateway/service.go`, `/api/gateway/invoke` in `services/core/internal/api/server.go` |
 | Model execution and model management | model runtime service | `services/core/internal/modelruntime/service.go`, `management.go`, `store_management.go`, `services/core/internal/api/model_runtime*.go` |
 | Approval and capability gates | approvals + permissions + gateway/tool policy | `services/core/internal/approvals`, `services/core/internal/permissions`, `services/core/internal/gateway/tool_policy.go` |

@@ -1,6 +1,6 @@
 # FORGE-K Operational Cutover Design
 
-Status: Historical Phase 14 design plus active K20A cutover. K20A makes `internal/forgekernel` the default live semantic syscall ingress owner while retaining Control Lane as a temporary durable commit adapter. Full FORGE-K authority is not yet complete.
+Status: Historical Phase 14 design plus active K20A-K20B cutover. Production FORGE-K owns default syscall ingress and durable stage orchestration; Control Lane remains the temporary validation/apply/SQLite port implementation. Full FORGE-K authority is not yet complete.
 
 Date: 2026-05-09. Updated: 2026-08-14.
 
@@ -186,6 +186,14 @@ boundary. The default boot mode is `forge_k`; `legacy_v1` is an explicit tested
 rollback. Only one processor is selected and only one durable commit occurs.
 
 K20A does not import `services/core/internal/forgek`, replace SQLite, duplicate
-journal writes, or claim full Kernel completion. The existing Control Lane
-processor remains the temporary durable commit adapter while K20B extracts
-FORGE-K-owned durable ports and orchestration.
+journal writes, or claim full Kernel completion. It established the temporary
+Control Lane adapter boundary that K20B subsequently split into FORGE-K-owned
+durable port stages.
+
+## K20B Durable Orchestration Cutover
+
+K20B closes that extraction gate. `forgekernel.Kernel` now owns the live stage
+order through `DurablePort`: deterministic prepare, exactly one atomic
+apply+journal commit, audit persistence/linkage, then best-effort observation.
+Control Lane implements those port methods and retains combined orchestration
+only for the explicit `legacy_v1` rollback mode.

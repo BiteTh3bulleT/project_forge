@@ -1,6 +1,6 @@
 # ADR 0017 - FORGE-K Production Authority Cutover
 
-Status: Accepted; Stage K20A active
+Status: Accepted; Stages K20A-K20B active
 
 Date: 2026-08-14
 
@@ -25,21 +25,24 @@ FORGE-K moves to production one authority boundary at a time:
 2. The simulator under `internal/forgek` remains isolated until its pure
    deterministic contracts are promoted into production-owned packages.
 3. Stage K20A makes FORGE-K the default live semantic syscall ingress owner.
-   The existing Control Lane SQLite transaction path is a temporary durable
-   commit adapter, not a second authority.
-4. Boot selects exactly one mode through `FORGE_KERNEL_AUTHORITY_MODE`:
+4. Stage K20B makes FORGE-K own the durable stage order through its
+   `DurablePort`: deterministic prepare, exactly one atomic apply+journal
+   commit, audit recording/linkage, then best-effort observation. The existing
+   Control Lane code implements that temporary port and the rollback facade;
+   it is not a second authority.
+5. Boot selects exactly one mode through `FORGE_KERNEL_AUTHORITY_MODE`:
    `forge_k` (default) or `legacy_v1` (rollback). There is no dual commit mode.
-5. Full FORGE-K authority is not claimed until the commit adapter and remaining
+6. Full FORGE-K authority is not claimed until the adapter implementation and remaining
    subsystem gates are migrated and v1 is retired.
-6. FORGE deterministically decides whether a chat turn needs a tool and selects
+7. FORGE deterministically decides whether a chat turn needs a tool and selects
    exactly one eligible tool before any model proposal call. If it cannot do so,
    no tool schema is exposed. A model may only format bounded arguments for the
    schema FORGE selected; the gateway remains execution authority.
 
 ## Cutover order
 
-1. Production Kernel ingress and single-authority boot selection.
-2. Durable journal/commit ports owned by FORGE-K; retire Control Lane as owner.
+1. Production Kernel ingress and single-authority boot selection. Closed K20A.
+2. Durable journal/commit orchestration owned by FORGE-K through narrow ports. Closed K20B; Control Lane implementation extraction remains.
 3. Courthouse admission and ruling authority.
 4. Semantic Algebra operations and structured Memory Palace objects.
 5. Context Compiler live bundle authority.
@@ -53,7 +56,7 @@ operator-visible status, and documentation updates.
 
 ## Consequences
 
-- FORGE-K ingress is live now, but the full-kernel flag remains false.
+- FORGE-K ingress and durable stage orchestration are live now, but the full-kernel flag remains false.
 - Existing durable data remains in the current SQLite schema during migration.
 - The Control Lane can be reduced behind ports rather than duplicated or
   bypassed.

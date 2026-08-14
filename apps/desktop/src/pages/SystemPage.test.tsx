@@ -125,13 +125,13 @@ describe("SystemPage", () => {
       },
       kernel_activation: {
         phase: "19",
-        status: "forge_k_ingress_live",
+        status: "forge_k_durable_orchestration_live",
         summary:
           "FORGE-K owns live semantic syscall ingress; the existing Control Lane SQLite transaction path is the temporary durable commit adapter.",
         mode: "live_authority_migration",
         live_owner: "forge_k.kernel",
         policy_version: "phase-14f-control-lane-enforcement-v1",
-        kernel_runtime_state: "forge_k_ingress_live_control_lane_commit_adapter",
+        kernel_runtime_state: "forge_k_orchestration_live_control_lane_sqlite_port",
         closed_validation_lanes: 7,
         total_validation_lanes: 7,
         validation_actions: [
@@ -260,10 +260,12 @@ describe("SystemPage", () => {
           gatewayExecution: false,
           retrievalExecution: false,
           kernelIngressAuthority: true,
+          durableOrchestrationAuthority: true,
           liveAuthorityMigration: true,
         },
         simulator_authority: false,
         live_kernel_ingress_authority: true,
+        live_durable_orchestration: true,
         live_kernel_authority: false,
         live_authority_migration: true,
         shadow_authoritative: false,
@@ -534,10 +536,11 @@ describe("SystemPage", () => {
     expect(screen.getByText("audit/journal trace APIs")).toBeTruthy();
     expect(screen.getByText("Lymphatic reports")).toBeTruthy();
     expect(screen.getByText("autonomy maintenance dry-run reports")).toBeTruthy();
-    expect(screen.getAllByText("forge_k_ingress_live").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("forge_k_durable_orchestration_live").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("7/7")).toBeTruthy();
     expect(screen.getByText("Simulator authority disabled")).toBeTruthy();
     expect(screen.getByText("FORGE-K syscall ingress live")).toBeTruthy();
+    expect(screen.getByText("FORGE-K durable orchestration live")).toBeTruthy();
     expect(screen.getByText("Full FORGE-K authority still gated")).toBeTruthy();
     expect(screen.getByText("Live authority migration active")).toBeTruthy();
     expect(screen.getByText("Mutation controls absent")).toBeTruthy();

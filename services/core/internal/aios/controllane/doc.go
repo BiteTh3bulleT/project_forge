@@ -1,8 +1,9 @@
-// Package controllane is the temporary durable SQLite commit adapter behind
-// the production FORGE-K authority. It persists canonical cognitive state
+// Package controllane is the temporary durable SQLite port implementation
+// behind the production FORGE-K authority. It persists canonical cognitive state
 // (memory notes, semantic links, state items/versions, open loops,
 // contradictions, supersessions, derived models, context packet snapshots,
-// artifact refs, journal events) while the durable ports are migrated.
+// artifact refs, journal events). K20B moved orchestration into FORGE-K-owned
+// port stages; this package still supplies validation, apply, and persistence.
 //
 // Authority invariants enforced by tests in this package:
 //
@@ -19,7 +20,8 @@
 //     Enforced by TestKernelProcessorHasSingleConstructionSite.
 //
 // Adapters, autonomy rule cells, and any future IRIS bridge propose
-// SyscallRequests; production FORGE-K owns ingress and this package applies the
-// durable transaction until K20B retires the compatibility adapter. Do not
-// bypass either boundary.
+// SyscallRequests; production FORGE-K owns ingress and stage orchestration while
+// this package applies the durable transaction until later subsystem and store
+// extraction phases retire the compatibility implementation. Do not bypass
+// either boundary.
 package controllane

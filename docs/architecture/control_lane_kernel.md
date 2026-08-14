@@ -1,8 +1,10 @@
-# Control Lane Durable Commit Adapter (Phase 2, K20A compatibility)
+# Control Lane Durable Port Implementation (Phase 2, K20B compatibility)
 
 Phase 2 made Control Lane a deterministic semantic syscall processor. K20A
-places that processor behind the production FORGE-K ingress boundary as the
-single temporary durable SQLite commit adapter.
+placed it behind production FORGE-K ingress. K20B split its behavior into the
+K-owned `DurablePort` stages: `Prepare`, `Commit`, `RecordResult`, and
+`ObserveResult`. The combined `Process` method is now the `legacy_v1` rollback
+facade rather than the default production orchestrator.
 
 Implementation location:
 
@@ -10,7 +12,7 @@ Implementation location:
 
 ## Read This If You Want
 
-Read this if you want the temporary durable adapter boundary: how semantic syscalls are validated, authorized, committed, and audited after production FORGE-K admits them, and where older partial validation/enforcement seams remain.
+Read this if you want the temporary durable port implementation: how semantic syscalls are validated and applied after production FORGE-K admits and orchestrates them, and where older partial validation/enforcement seams remain.
 
 ## Responsibilities
 

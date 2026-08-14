@@ -27,7 +27,7 @@ Last convergence sweep update: 2026-08-14 (K20A production authority alignment).
 
 ## FORGE-K Live Authority Boundary
 - `[SIMULATOR-ONLY]` The FORGE-K simulator under `services/core/internal/forgek` is not live daemon authority yet.
-- `[LIVE / CUTOVER IN PROGRESS]` `services/core/internal/forgekernel` is the production FORGE-K boundary. K20A makes it the default semantic syscall ingress owner; `aios/controllane` remains the temporary durable SQLite commit adapter.
+- `[LIVE / CUTOVER IN PROGRESS]` `services/core/internal/forgekernel` is the production FORGE-K boundary. K20A makes it the default semantic syscall ingress owner; K20B makes it own the `prepare -> commit -> audit -> observe` orchestration through a narrow durable port. `aios/controllane` still implements validation/apply logic and the temporary SQLite port.
 - Boot selects one authority with `FORGE_KERNEL_AUTHORITY_MODE=forge_k` (default) or `legacy_v1` (rollback). Dual commits are forbidden.
 - `[LIVE]` The daemon still uses existing gateway, permissions, lane, audit, model runtime, retrieval, embeddings, memory, API, and temporary Control Lane commit-adapter paths during staged migration.
 - `[PARTIAL]` Narrow live validation seams may share pure deterministic contracts with FORGE-K, but that does not make FORGE-K services live authority.
@@ -43,6 +43,7 @@ Last convergence sweep update: 2026-08-14 (K20A production authority alignment).
 - Do not overclaim FORGE-K live authority. Partial live validation/enforcement seams remain narrow and do not make simulator services live daemon authority.
 
 ## Project Priorities
+- **2026-08-14**: K20B moves live syscall stage orchestration into production FORGE-K. The K-owned durable port separates preflight, one atomic apply+journal commit, audit recording, and best-effort observation. Control Lane remains the temporary policy/apply/SQLite implementation and the `legacy_v1` rollback facade; it is no longer the default production orchestrator.
 - **2026-08-14**: K20A begins the production FORGE-K cutover. `internal/forgekernel` is the default live semantic syscall ingress owner, the Control Lane processor is a single temporary durable commit adapter assembled at daemon boot, `legacy_v1` is rollback-only, and dual commits are forbidden. FORGE also selects the exact chat tool before any model proposal call; ambiguous turns expose no tool schema.
 - **2026-04-15**: Phase 2 execution/approval/packet/context systems landed.
 - **2026-04-22**: Legacy adapter invoke ingress is removed from API routing; tool execution authority is gateway-only.

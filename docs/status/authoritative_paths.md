@@ -11,8 +11,8 @@ Legend:
 | Operation | Official path | Legacy/alternate path | Status | Current guard |
 |---|---|---|---|---|
 | Tool execution | `/api/gateway/invoke` -> `gateway.Execute` | none | official | legacy adapter invoke route removed; `/api/adapters/{id}/invoke` is not registered |
-| Memory semantic mutation (AI-OS) | `forgekernel.Kernel` -> durable Control Lane adapter | `FORGE_KERNEL_AUTHORITY_MODE=legacy_v1` rollback | partial cutover | one boot authority, deterministic validation, approval, SQLite transaction, journal, audit; no dual commit |
-| Retired memory observation mutation | `forgekernel.Kernel` -> durable Control Lane adapter | `/api/memory/observations` POST, `/api/memory/observations/{id}` PATCH, `/api/memory/observations/{id}/usefulness` POST | retired | mutation endpoints return `410 Gone`; retired attempts are audited with correlation/trace/workspace payload context |
+| Memory semantic mutation (AI-OS) | `forgekernel.Kernel` -> K-owned `DurablePort` -> Control Lane SQLite implementation | `FORGE_KERNEL_AUTHORITY_MODE=legacy_v1` rollback | partial cutover (K20B) | one boot authority; K owns prepare/commit/audit/observe order; atomic object+journal commit; no dual commit |
+| Retired memory observation mutation | production FORGE-K semantic syscall path | `/api/memory/observations` POST, `/api/memory/observations/{id}` PATCH, `/api/memory/observations/{id}/usefulness` POST | retired | mutation endpoints return `410 Gone`; retired attempts are audited with correlation/trace/workspace payload context |
 | Memory/read inspection | `/api/memory/*` GET read routes | n/a | official | read-only inspection remains enabled |
 | Approval gate | `approvals.Service` via gateway/syscall flows | direct approval decision APIs | official | request/decision split preserved |
 | Audit write authority | `audit.Service` | none observed | official | gateway/syscall/backup/memory guards emit audit records |

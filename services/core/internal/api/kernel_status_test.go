@@ -47,12 +47,13 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload["status"] != "forge_k_ingress_live" {
+	if payload["status"] != "forge_k_durable_orchestration_live" {
 		t.Fatalf("unexpected kernel status payload: %#v", payload)
 	}
 	if payload["live_kernel_authority"] != false ||
 		payload["simulator_authority"] != false ||
 		payload["live_kernel_ingress_authority"] != true ||
+		payload["live_durable_orchestration"] != true ||
 		payload["live_authority_migration"] != true ||
 		payload["shadow_authoritative"] != false ||
 		payload["mutation_controls_available"] != false {
@@ -143,7 +144,7 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 		if subsystem == "Courthouse" && entry["current_status"] != "ADMISSION_CANDIDATE_ONLY" {
 			t.Fatalf("courthouse must remain candidate-only, got %#v", entry)
 		}
-		if subsystem == "Kernel" && (entry["current_status"] != "FORGE_K_INGRESS_LIVE" || entry["live_owner"] != "forge_k.kernel") {
+		if subsystem == "Kernel" && (entry["current_status"] != "FORGE_K_DURABLE_ORCHESTRATION_LIVE" || entry["live_owner"] != "forge_k.kernel") {
 			t.Fatalf("kernel ingress authority not reported: %#v", entry)
 		}
 		if entry["live_owner"] == "" || entry["target_owner"] == "" || entry["rollback_path"] == "" {
@@ -193,7 +194,7 @@ func TestForgeKernelStatusReportsLegacyRollbackMode(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload["status"] != "partial_live_validation_ready" || payload["live_kernel_ingress_authority"] != false || payload["live_authority_migration"] != false {
+	if payload["status"] != "partial_live_validation_ready" || payload["live_kernel_ingress_authority"] != false || payload["live_durable_orchestration"] != false || payload["live_authority_migration"] != false {
 		t.Fatalf("legacy rollback posture incorrect: %#v", payload)
 	}
 }
@@ -227,7 +228,7 @@ func TestForgeKernelStatusReportsBootSelectionFailureClosed(t *testing.T) {
 	if payload["status"] != "kernel_authority_unavailable" || payload["mode"] != "fail_closed" || payload["live_owner"] != "none" {
 		t.Fatalf("boot selection failure posture incorrect: %#v", payload)
 	}
-	if payload["live_kernel_ingress_authority"] != false || payload["live_authority_migration"] != false {
+	if payload["live_kernel_ingress_authority"] != false || payload["live_durable_orchestration"] != false || payload["live_authority_migration"] != false {
 		t.Fatalf("boot selection failure claimed live authority: %#v", payload)
 	}
 }
