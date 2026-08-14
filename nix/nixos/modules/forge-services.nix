@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   cfg = config.services.forge-core;
@@ -93,6 +98,10 @@ in
       wants = [ "network-online.target" ];
       after = [ "network-online.target" ];
 
+      # Gateway git lanes execute the packaged client inside the bounded service
+      # environment; host-wide systemPackages do not populate a systemd PATH.
+      path = [ pkgs.git ];
+
       environment = {
         FORGE_DATA_DIR = toString cfg.dataDir;
         FORGE_CORE_PORT = toString cfg.port;
@@ -113,7 +122,8 @@ in
         FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED = "false";
         FORGE_K_SHADOW_ADVISORY_ENABLED = "false";
         FORGE_K_SHADOW_CONTROL_LANE_VALIDATION_ENABLED = "false";
-      } // cfg.extraEnvironment;
+      }
+      // cfg.extraEnvironment;
 
       serviceConfig = {
         Type = "simple";
@@ -150,7 +160,12 @@ in
 
     assertions = [
       {
-        assertion = cfg.allowWildcardBind || !(lib.elem cfg.bindHost [ "0.0.0.0" "::" ]);
+        assertion =
+          cfg.allowWildcardBind
+          || !(lib.elem cfg.bindHost [
+            "0.0.0.0"
+            "::"
+          ]);
         message = "services.forge-core.bindHost may not bind all interfaces unless services.forge-core.allowWildcardBind = true.";
       }
     ];

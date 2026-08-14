@@ -89,6 +89,10 @@ safe FORGE operator desktop. Forge fills the output as the desktop canvas; it
 must not appear with ordinary application decorations. TTY fallback remains
 available.
 
+The `forge-core` systemd service carries Git in its own declared runtime path.
+Installing Git only in `environment.systemPackages` is insufficient for the
+governed `git.*` gateway lanes because system services use an isolated PATH.
+
 For an offline target, stage an Ollama cache containing only the declared model
 manifests and their referenced blobs at `/forge/models/ollama/models`. Preserve
 ownership as `ollama:forge` and mode `0750` for directories; do not copy an
