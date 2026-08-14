@@ -185,3 +185,17 @@ A future FORGE-H resource-governed claim over a bounded GPU memory region. A VRA
 ## System cockpit
 
 The planned read-only workstation status surface for core, authority gates, FORGE-H, HostBridge, modelruntime, storage, Nix, safe mode, approvals, warnings, and build/test posture.
+
+## FORGE graphical shell
+
+The visible operator-facing desktop surface above the NixOS substrate. It owns
+Forge chrome, launcher, taskbar, workspaces, and governed operator surfaces but
+does not become the Linux kernel, Wayland compositor, package manager, or a new
+truth authority.
+
+## Operator desktop
+
+The native multi-window FORGE session. FORGE is a fixed desktop canvas while
+Labwc composites native application windows above it and supplies bounded
+window lifecycle/control data to the Forge taskbar. “Inside FORGE” means inside
+this Forge-owned desktop session, not embedded inside the Tauri webview.

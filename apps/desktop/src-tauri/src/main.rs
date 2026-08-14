@@ -973,7 +973,7 @@ fn main() {
                     window.set_focus()?;
                 } else if operator_desktop_locked() {
                     window.set_decorations(false)?;
-                    window.set_resizable(true)?;
+                    window.set_resizable(false)?;
                     fit_operator_desktop_window(&window);
                     window.set_focus()?;
                 }

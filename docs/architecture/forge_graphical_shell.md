@@ -12,6 +12,28 @@ Current G6/G7 status: the desktop shell has a read-only System surface at `/syst
 
 This is not a web dashboard controlling a headless server. FORGE is intended to become the visible operating interface: the desktop shell, launcher, workspace surface, command center, approval surface, and system context surface. NixOS remains the boot, hardware, graphics, service, and host configuration substrate.
 
+## Native Desktop Containment
+
+The current `operator-desktop` session makes FORGE the visible desktop canvas,
+not an ordinary application beside a separate desktop. Labwc is the invisible
+Wayland compositor substrate. The Forge Tauri surface is undecorated, fixed to
+the output, excluded from the compositor taskbar/window switcher, and kept at
+the bottom of the native window stack. Terminal, browser, file manager, editor,
+and other Linux programs are native compositor windows above that canvas;
+FORGE discovers them and presents their lifecycle and bounded controls in its
+own taskbar.
+
+“Inside FORGE” therefore means inside the Forge-owned desktop session and
+workspace. It does not mean embedding arbitrary foreign Wayland clients inside
+the Tauri webview, which is not the native-window contract. The compositor owns
+native placement and input mechanics while FORGE owns the visible desktop,
+launcher, taskbar, governed operator surfaces, and workspace semantics.
+
+The physical `forge-optiplex-7000` target uses this operator-desktop contract
+with the `vm-safe` renderer and WebKit DMA-BUF rendering disabled. The Cage
+`fullscreen-shell` path remains installed as a single-application rollback and
+test lane; it cannot satisfy native multi-window launcher behavior.
+
 ## Stack Position
 
 | Layer | Responsibility |

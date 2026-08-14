@@ -20,6 +20,14 @@ The shell must talk to `forge-core` through governed local APIs/interfaces. It m
 
 FORGE as graphical shell provides full operating awareness, not full LLM context. The context compiler decides what subset of structured context reaches model calls. Raw full system state must not be dumped into prompts.
 
+Later operator-desktop phases implement the native multi-window form of this
+decision with Labwc as the Wayland compositor substrate. FORGE remains the
+visible, fixed desktop canvas and owns the launcher/taskbar experience; native
+applications are composited above that canvas and observed through bounded
+window interfaces. They are not embedded into the Tauri webview. The Cage
+fullscreen mode remains a single-application fallback and is not sufficient
+for a native browser, terminal, file manager, or editor workflow.
+
 ## Consequences
 
 - NixOS remains the substrate; FORGE does not become a Linux kernel, display server, or package manager.

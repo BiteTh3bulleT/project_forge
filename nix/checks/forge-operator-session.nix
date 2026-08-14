@@ -13,8 +13,11 @@ let
       test "$1" = "--config"
       config_file="$2"
       test -f "$config_file"
-      grep -F '<application identifier="dev.forge.workshop">' "$config_file"
-      grep -F '<decor>no</decor>' "$config_file"
+      grep -F '<windowRule identifier="dev.forge.workshop" serverDecoration="no">' "$config_file"
+      grep -F '<skipTaskbar>yes</skipTaskbar>' "$config_file"
+      grep -F '<skipWindowSwitcher>yes</skipWindowSwitcher>' "$config_file"
+      grep -F '<fixedPosition>yes</fixedPosition>' "$config_file"
+      grep -F '<action name="ToggleAlwaysOnBottom" />' "$config_file"
       shift 2
       test "$1" = "--startup"
       shift
@@ -74,8 +77,12 @@ stdenv.mkDerivation {
     grep -F 'FORGE_OPERATOR_LABWC_CONFIG_DIR=' "$wrapper"
     grep -F 'FORGE_OPERATOR_DESKTOP_LOCKED=true' "$wrapper"
     grep -F 'labwc_config_file="$labwc_config_dir/rc.xml"' "$wrapper"
-    grep -F '<application identifier="dev.forge.workshop">' "$wrapper"
-    grep -F '<decor>no</decor>' "$wrapper"
+    grep -F '<windowRule identifier="dev.forge.workshop" serverDecoration="no">' "$wrapper"
+    grep -F '<skipTaskbar>yes</skipTaskbar>' "$wrapper"
+    grep -F '<skipWindowSwitcher>yes</skipWindowSwitcher>' "$wrapper"
+    grep -F '<fixedPosition>yes</fixedPosition>' "$wrapper"
+    grep -F '<action name="MoveTo" x="0" y="0" />' "$wrapper"
+    grep -F '<action name="ToggleAlwaysOnBottom" />' "$wrapper"
     grep -F 'exec "$compositor" --config "$labwc_config_file" --startup "$shell_session" "$@"' "$wrapper"
 
     if grep -F 'FORGE_OPERATOR_COMPOSITOR' "$real_wrapper" "$wrapper"; then

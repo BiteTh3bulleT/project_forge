@@ -6,8 +6,25 @@
 }:
 
 let
-  forgeShellSession = pkgs.forge-shell-session;
-  forgeWaylandSession = pkgs.forge-wayland-session;
+  forgeDesktopShell = pkgs.callPackage ../../packages/forge-desktop-shell.nix {
+    renderProfile = "vm-safe";
+    bootLogin = false;
+    emptyDesktopOnBoot = true;
+  };
+  forgeShellSession = pkgs.callPackage ../../packages/forge-shell-session.nix {
+    inherit forgeDesktopShell;
+  };
+  forgeOperatorSession = pkgs.callPackage ../../packages/forge-operator-session.nix {
+    forge-shell-session = forgeShellSession;
+  };
+  forgeOperatorToolbelt = pkgs.callPackage ../../packages/forge-operator-toolbelt.nix {
+    inherit pkgs;
+  };
+  # Keep the single-application Cage path installed as a rollback session.
+  forgeWaylandSession = pkgs.callPackage ../../packages/forge-wayland-session.nix {
+    forge-shell-session = forgeShellSession;
+  };
+  notoEmoji = pkgs.noto-fonts-color-emoji or pkgs.noto-fonts-emoji;
 in
 {
   imports = [
@@ -97,17 +114,17 @@ in
     enable = true;
     user = "operator";
     package = forgeShellSession;
-    mode = "fullscreen-shell";
+    mode = "operator-desktop";
     displayBackend = "wayland";
-    compositor = "cage";
+    compositor = "labwc";
     autoStart = false;
     safeMode = true;
-    fullscreen = true;
+    fullscreen = false;
     wayland = {
       enable = true;
-      package = pkgs.cage;
-      sessionPackage = forgeWaylandSession;
-      sessionName = "forge-shell";
+      package = pkgs.labwc;
+      sessionPackage = forgeOperatorSession;
+      sessionName = "forge-operator";
     };
   };
 
@@ -119,7 +136,7 @@ in
     greetd = {
       enable = true;
       settings.default_session = {
-        command = "${pkgs.tuigreet}/bin/tuigreet --time --remember --cmd ${forgeWaylandSession}/bin/forge-wayland-session";
+        command = "${pkgs.tuigreet}/bin/tuigreet --time --remember --cmd ${forgeOperatorSession}/bin/forge-operator-session";
         user = "greeter";
       };
     };
@@ -158,6 +175,12 @@ in
   ];
   programs.dconf.enable = true;
 
+  fonts.packages = [
+    pkgs.noto-fonts
+    notoEmoji
+    pkgs.dejavu_fonts
+  ];
+
   xdg.portal = {
     enable = true;
     config.common.default = "gtk";
@@ -180,14 +203,46 @@ in
   };
 
   environment.systemPackages = [
+    forgeDesktopShell
     forgeShellSession
+    forgeOperatorSession
+    forgeOperatorToolbelt
+    pkgs.labwc
+    pkgs.lswt
+    pkgs.wlrctl
+    # The Cage session remains available for rollback and fullscreen testing.
     forgeWaylandSession
     pkgs.cage
     pkgs.curl
+    pkgs.dbus
     pkgs.git
     pkgs.mesa-demos
+    pkgs.xdg-utils
+    pkgs.xdg-desktop-portal
+    pkgs.xdg-desktop-portal-gtk
     pkgs.vim
   ];
+
+  environment.sessionVariables = {
+    FORGE_SHELL_SESSION_ENABLED = "true";
+    FORGE_SHELL_MODE = "operator-desktop";
+    FORGE_SHELL_DISPLAY_BACKEND = "wayland";
+    FORGE_SHELL_COMPOSITOR = "labwc";
+    FORGE_SHELL_SAFE_MODE = "true";
+    FORGE_SHELL_FULLSCREEN = "false";
+    FORGE_SHELL_HOST_MUTATION = "false";
+    FORGE_SHELL_DIRECT_SYSTEM_CONTROL = "false";
+    FORGE_SHELL_MODEL_MUTATION = "false";
+    FORGE_SHELL_SEMANTIC_MEMORY_WRITE = "false";
+    FORGE_SHELL_FORGE_K_LIVE_AUTHORITY = "false";
+    FORGE_RENDER_PROFILE = "vm-safe";
+    VITE_FORGE_RENDER_PROFILE = "vm-safe";
+    FORGE_CORE_URL = "http://127.0.0.1:18492";
+    VITE_FORGE_API_URL = "http://127.0.0.1:18492";
+    XDG_SESSION_TYPE = "wayland";
+    GDK_BACKEND = "wayland,x11";
+    WEBKIT_DISABLE_DMABUF_RENDERER = "1";
+  };
 
   zramSwap = {
     enable = true;
@@ -209,6 +264,11 @@ in
     FORGE_MODEL_MAX_LOADED_MODELS=1
     FORGE_SAFE_MODE_FORCE_CPU_ONLY=true
     FORGE_SHELL_SAFE_MODE=true
+    FORGE_SHELL_MODE=operator-desktop
+    FORGE_SHELL_COMPOSITOR=labwc
+    FORGE_SHELL_FULLSCREEN=false
+    FORGE_RENDER_PROFILE=vm-safe
+    WEBKIT_DISABLE_DMABUF_RENDERER=1
     FORGE_SHELL_HOST_MUTATION=false
     FORGE_SHELL_DIRECT_SYSTEM_CONTROL=false
     FORGE_SHELL_MODEL_MUTATION=false
@@ -236,6 +296,14 @@ in
     {
       assertion = config.forge.shellSession.safeMode == true;
       message = "FORGE OptiPlex test shell must remain in safe mode.";
+    }
+    {
+      assertion = config.forge.shellSession.mode == "operator-desktop";
+      message = "FORGE OptiPlex native application launchers require the operator desktop session.";
+    }
+    {
+      assertion = config.forge.shellSession.compositor == "labwc";
+      message = "FORGE OptiPlex operator desktop must use the bounded Labwc session wrapper.";
     }
   ];
 }
