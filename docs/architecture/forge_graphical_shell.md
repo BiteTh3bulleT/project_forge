@@ -23,6 +23,12 @@ and other Linux programs are native compositor windows above that canvas;
 FORGE discovers them and presents their lifecycle and bounded controls in its
 own taskbar.
 
+The packaged Linux shell currently reports the Wayland app-id
+`forge_desktop`; the Labwc desktop rule matches that observed runtime identity
+and retains `dev.forge.workshop` as a compatibility identity. Bundle metadata
+must not be assumed to equal the compositor-visible app-id; live `lswt`
+evidence is the verification source for the installed session.
+
 “Inside FORGE” therefore means inside the Forge-owned desktop session and
 workspace. It does not mean embedding arbitrary foreign Wayland clients inside
 the Tauri webview, which is not the native-window contract. The compositor owns

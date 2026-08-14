@@ -199,3 +199,10 @@ The native multi-window FORGE session. FORGE is a fixed desktop canvas while
 Labwc composites native application windows above it and supplies bounded
 window lifecycle/control data to the Forge taskbar. “Inside FORGE” means inside
 this Forge-owned desktop session, not embedded inside the Tauri webview.
+
+## Offline direct link
+
+A point-to-point test network between the build workstation and a FORGE target
+using static local addresses with no gateway, DNS, IPv6, forwarding, or NAT.
+It permits bounded local administration and artifact transfer without giving
+the target an internet route.

@@ -76,6 +76,16 @@ let
           <!-- FORGE is the desktop canvas, not a peer application window.
                The Tauri shell sizes itself to the active output; Labwc keeps
                that surface fixed below the native windows it launches. -->
+          <!-- The packaged Wayland binary currently reports forge_desktop.
+               Keep the Tauri bundle identifier as a compatibility rule for
+               runtimes that expose the configured application identifier. -->
+          <windowRule identifier="forge_desktop" serverDecoration="no">
+            <skipTaskbar>yes</skipTaskbar>
+            <skipWindowSwitcher>yes</skipWindowSwitcher>
+            <fixedPosition>yes</fixedPosition>
+            <action name="MoveTo" x="0" y="0" />
+            <action name="ToggleAlwaysOnBottom" />
+          </windowRule>
           <windowRule identifier="dev.forge.workshop" serverDecoration="no">
             <skipTaskbar>yes</skipTaskbar>
             <skipWindowSwitcher>yes</skipWindowSwitcher>

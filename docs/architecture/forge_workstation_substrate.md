@@ -62,6 +62,20 @@ The intended opt-in workstation profile composes:
 
 Every component must be independently removable or disableable without deleting canonical data.
 
+## Physical Test Target Network Isolation
+
+The physical `forge-optiplex-7000` target uses an offline direct Ethernet link
+for the current test posture. The target has a static local address but no
+gateway, DNS server, IPv6 configuration, or default route. The attached build
+workstation must use an ordinary manual address on the same subnet; it must not
+use NetworkManager shared mode, forwarding, or NAT for this link.
+
+This is transport isolation, not a new FORGE authority boundary. Repository
+commits, Nix closures, and model artifacts are prepared on the networked build
+workstation and transferred as bounded artifacts over the local link. The
+offline target does not fetch packages, repositories, models, or runtime data
+from the internet.
+
 ## Promotion Doctrine
 
 Workstation capabilities move through this ladder:

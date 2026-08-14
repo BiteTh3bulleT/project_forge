@@ -32,7 +32,22 @@ The target intentionally uses:
   (approximately 1 GB); only one model may be loaded and one request may run at
   a time;
 - key-only SSH for the explicitly provisioned operator key;
+- a static offline direct Ethernet link at `192.168.50.2/24` with no gateway,
+  no DNS, no IPv6, and `never-default=true`;
 - no VirtualBox guest integration, autologin, or automatic host mutation.
+
+## Offline direct-link contract
+
+The OptiPlex is intentionally offline. Its `enp0s31f6` interface uses the
+declarative NetworkManager profile `forge-direct-link` at
+`192.168.50.2/24`. The directly attached workstation uses
+`192.168.50.1/24`. Neither side has a gateway or DNS server on this link.
+
+The workstation profile must use `ipv4.method manual`, not
+`ipv4.method shared`. NetworkManager shared mode starts DHCP/DNS forwarding and
+NAT, which would give the OptiPlex internet access through the workstation.
+Repository updates, Nix closures, and model artifacts must be staged on the
+workstation and transferred across the direct link.
 
 ## Disk contract
 
@@ -91,7 +106,16 @@ cat /etc/forge/shell-session.env
 free -h
 swapon --show
 command -v foot firefox pcmanfm mousepad micro hx
+ip -4 address show dev enp0s31f6
+ip route
+nmcli connection show forge-direct-link
+! ip route get 1.1.1.1
 ```
+
+The route table must contain only `192.168.50.0/24` through `enp0s31f6`.
+There must be no default route. `ip route get 1.1.1.1` must fail with
+`Network is unreachable`; failure to resolve an internet hostname alone is not
+sufficient evidence because a public route could still exist without DNS.
 
 After `operator` signs in, the Labwc session must show a borderless FORGE
 surface covering the output. The live `forge_desktop` process must receive
@@ -108,6 +132,17 @@ and remain focusable/minimizable/closable through the bounded compositor
 bridge. Forge remains the desktop canvas below those windows; it must not raise
 over them as an ordinary peer application. Native applications are composed on
 the Forge workspace rather than embedded inside the Tauri webview.
+
+Confirm the compositor-visible Forge identity and active desktop rule:
+
+```bash
+XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 lswt -j
+grep -F 'identifier="forge_desktop"' /run/user/1000/forge-operator-labwc/rc.xml
+```
+
+The installed Tauri binary currently reports `app-id: forge_desktop`. A rule
+that matches only the bundle identifier `dev.forge.workshop` does not prove the
+desktop surface is pinned below native windows.
 
 For freeze diagnosis after a forced restart, capture the previous boot before
 switching generations:

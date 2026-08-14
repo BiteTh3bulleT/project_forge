@@ -20,6 +20,17 @@ runCommand "forge-optiplex-7000-check"
     grep -F 'device = "/dev/disk/by-label/FORGE_ROOT";' "$config"
     grep -F 'device = "/dev/disk/by-label/FORGE_EFI";' "$config"
     grep -F 'device = "/dev/disk/by-label/FORGE_SWAP";' "$config"
+    grep -F 'ensureProfiles.profiles."forge-direct-link"' "$config"
+    grep -F 'interface-name = "enp0s31f6";' "$config"
+    grep -F 'address1 = "192.168.50.2/24";' "$config"
+    grep -F 'method = "manual";' "$config"
+    grep -F 'gateway = "";' "$config"
+    grep -F 'dns = "";' "$config"
+    grep -F 'ignore-auto-dns = true;' "$config"
+    grep -F 'never-default = true;' "$config"
+    grep -F 'ipv6.method = "disabled";' "$config"
+    grep -F 'FORGE_OPTIPLEX_NETWORK_MODE=offline-direct' "$config"
+    grep -F 'FORGE_OPTIPLEX_DEFAULT_ROUTE=false' "$config"
     grep -F 'enableModelRuntime = true;' "$config"
     grep -F 'safeModeForceCPUOnly = true;' "$config"
     grep -F 'bindHost = "127.0.0.1";' "$config"
@@ -53,6 +64,7 @@ runCommand "forge-optiplex-7000-check"
     grep -F 'pkgs.wlrctl' "$config"
     grep -F 'WEBKIT_DISABLE_DMABUF_RENDERER = "1";' "$config"
     grep -F 'FORGE_RENDER_PROFILE = "vm-safe";' "$config"
+    grep -F '<windowRule identifier="forge_desktop" serverDecoration="no">' "$operator_session"
     grep -F '<windowRule identifier="dev.forge.workshop" serverDecoration="no">' "$operator_session"
     grep -F '<skipWindowSwitcher>yes</skipWindowSwitcher>' "$operator_session"
     grep -F '<fixedPosition>yes</fixedPosition>' "$operator_session"
@@ -67,7 +79,7 @@ runCommand "forge-optiplex-7000-check"
     done
     grep -F 'forge-optiplex-7000 = nixpkgs.lib.nixosSystem' "$flake"
 
-    forbidden='boot.loader.grub.devices|virtualisation.virtualbox|autoLogin.enable = true|autologinUser = "[^"]+"|bindHost = "0.0.0.0"|PasswordAuthentication = true|PermitRootLogin = "yes"|nixos-install|parted|mkfs|wipefs|rm -rf'
+    forbidden='boot.loader.grub.devices|virtualisation.virtualbox|autoLogin.enable = true|autologinUser = "[^"]+"|bindHost = "0.0.0.0"|PasswordAuthentication = true|PermitRootLogin = "yes"|ipv4.method = "shared"|method = "auto"|nixos-install|parted|mkfs|wipefs|rm -rf'
     if grep -E "$forbidden" "$config"; then
       echo "forbidden VM, installer, mutation, or unsafe host default found" >&2
       exit 1

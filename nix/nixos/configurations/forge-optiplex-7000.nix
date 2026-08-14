@@ -77,7 +77,27 @@ in
 
   networking = {
     hostName = "forge-optiplex";
-    networkmanager.enable = true;
+    networkmanager = {
+      enable = true;
+      ensureProfiles.profiles."forge-direct-link" = {
+        connection = {
+          id = "forge-direct-link";
+          type = "ethernet";
+          interface-name = "enp0s31f6";
+          autoconnect = true;
+          autoconnect-priority = 100;
+        };
+        ipv4 = {
+          method = "manual";
+          address1 = "192.168.50.2/24";
+          gateway = "";
+          dns = "";
+          ignore-auto-dns = true;
+          never-default = true;
+        };
+        ipv6.method = "disabled";
+      };
+    };
   };
   time.timeZone = "America/Chicago";
 
@@ -256,6 +276,9 @@ in
 
   environment.etc."forge/optiplex-test.env".text = ''
     FORGE_OPTIPLEX_TEST_TARGET=true
+    FORGE_OPTIPLEX_NETWORK_MODE=offline-direct
+    FORGE_OPTIPLEX_DIRECT_ADDRESS=192.168.50.2/24
+    FORGE_OPTIPLEX_DEFAULT_ROUTE=false
     FORGE_CORE_URL=http://127.0.0.1:18492
     FORGE_MODEL_RUNTIME_ENABLED=true
     FORGE_MODEL_DEFAULT_BACKEND=ollama_compat
@@ -280,6 +303,12 @@ in
     {
       assertion = config.services.forge-core.bindHost == "127.0.0.1";
       message = "FORGE OptiPlex test core must remain loopback-only.";
+    }
+    {
+      assertion =
+        config.networking.networkmanager.ensureProfiles.profiles."forge-direct-link".ipv4.never-default
+        == true;
+      message = "FORGE OptiPlex direct test link must never install a default route.";
     }
     {
       assertion = config.services.forge-core.enableModelRuntime == true;
