@@ -10,6 +10,8 @@ import (
 
 	"forge/projectforge/services/core/internal/adapters"
 	"forge/projectforge/services/core/internal/chat"
+	"forge/projectforge/services/core/internal/consensusgate"
+	"forge/projectforge/services/core/internal/forgekernel/runtimeproposal"
 	"forge/projectforge/services/core/internal/gateway"
 )
 
@@ -24,7 +26,6 @@ const (
 	modelRuntimePlainChatTimeoutMs      = 30000
 	modelRuntimePlainChatMaxAttempts    = 1
 	chatToolArgumentMaxBytes            = 32 << 10
-	chatToolArgumentStageMaxBytes       = 4 << 10
 	assistantStreamFlushChars           = 160
 	assistantStreamFlushIntervalMs      = 24
 )
@@ -440,6 +441,9 @@ func (s *Server) completeAssistantWithGatewayTools(
 	callSummaries := make([]map[string]any, 0, 8)
 	toolCallsExecuted := 0
 	toolCallEmittedEver := false
+	finalFromModel := false
+	var finalModelPrompt []map[string]any
+	runtimeGatewayEvidenceRows := make([]runtimeGatewayEvidence, 0, 4)
 	modelTurns := 0
 	fallbackRan := false
 	terminalState := "skipped"
@@ -447,6 +451,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 
 	for turn := 0; turn < maxToolTurns; turn++ {
 		modelTurns = turn + 1
+		turnPrompt := append([]map[string]any(nil), msgs...)
 		var turnToolChoice any
 		if turn == 0 {
 			turnToolChoice = toolChoice
@@ -480,11 +485,11 @@ func (s *Server) completeAssistantWithGatewayTools(
 		}
 
 		rawJSON, _ := json.Marshal(raw)
-		rawSnippet := string(rawJSON)
-		if len(rawSnippet) > 14000 {
-			rawSnippet = rawSnippet[:14000] + "…(truncated)"
-		}
-		pushStage("model_raw_response", map[string]any{"turn": turn, "json": rawSnippet})
+		pushStage("model_raw_response_bound", map[string]any{
+			"turn":  turn,
+			"bytes": len(rawJSON),
+			"hash":  runtimeproposal.HashText(string(rawJSON)),
+		})
 
 		msg, _ := raw["message"].(map[string]any)
 		toolCalls := collectToolCallsFromOllamaMessage(msg)
@@ -574,6 +579,8 @@ func (s *Server) completeAssistantWithGatewayTools(
 				final.WriteString("(empty response)")
 			} else {
 				final.WriteString(content)
+				finalFromModel = true
+				finalModelPrompt = turnPrompt
 			}
 			if toolCallEmittedEver {
 				terminalState = "ok"
@@ -599,14 +606,14 @@ func (s *Server) completeAssistantWithGatewayTools(
 			default:
 				argsStr = ""
 			}
-			argsForStage := trimSummary(argsStr, chatToolArgumentStageMaxBytes)
-			pushStage("tool_args", map[string]any{"turn": turn, "index": idx, "name": name, "arguments": argsForStage})
+			argsHash := runtimeproposal.HashText(argsStr)
+			pushStage("tool_args_bound", map[string]any{"turn": turn, "index": idx, "name": name, "bytes": len(argsStr), "hash": argsHash})
 			if emit != nil {
 				emit("tool_call", map[string]any{
-					"turn":      turn,
-					"index":     idx,
-					"modelName": name,
-					"arguments": argsForStage,
+					"turn":          turn,
+					"index":         idx,
+					"modelName":     name,
+					"argumentsHash": argsHash,
 				})
 			}
 
@@ -629,6 +636,16 @@ func (s *Server) completeAssistantWithGatewayTools(
 			}
 
 			result := s.dispatchToolCall(ctx, corr, threadID, name, argsStr, lastUserContent, pushStage)
+			if result.gatewayRequest != nil && result.gatewayResult != nil {
+				runtimeGatewayEvidenceRows = append(runtimeGatewayEvidenceRows, runtimeGatewayEvidence{
+					InvocationID: result.gatewayResult.InvocationID,
+					ToolID:       result.gatewayResult.Tool,
+					State:        result.state,
+					AuditID:      result.auditID,
+					Request:      result.gatewayRequest,
+					Result:       result.gatewayResult,
+				})
+			}
 			summary := map[string]any{
 				"turn":        turn,
 				"index":       idx,
@@ -710,6 +727,38 @@ func (s *Server) completeAssistantWithGatewayTools(
 	if final.Len() == 0 {
 		final.WriteString("(empty response)")
 	}
+	var runtimeDecision any
+	var runtimeDecisionError string
+	var consensusDecision any
+	if finalFromModel {
+		decision, decisionErr := decideRuntimeProposal(runtimeProposalRequest{
+			SourceKind:    runtimeproposal.SourceNativeOllama,
+			WorkspacePath: s.cfg.WorkspaceDir,
+			ThreadID:      threadID, UserMessageID: userMessageID, CorrelationID: corr,
+			Prompt: finalModelPrompt, Output: final.String(), Backend: baseURL, ModelID: model,
+			GatewayEvidence: runtimeGatewayEvidenceRows,
+		})
+		candidate, _ := sanitizeAssistantVisibleContent(final.String())
+		consensus := consensusgate.Gate(consensusgate.Input{
+			Content: candidate, Surface: consensusgate.SurfaceChatFinal,
+			WorkspaceID: s.cfg.WorkspaceDir, CorrelationID: corr, ModelProposalOnly: true,
+		})
+		visible := runtimeProposalFailureText
+		if decisionErr == nil {
+			visible = decision.VisibleContent
+			if decision.Status == runtimeproposal.StatusAccepted {
+				visible = consensus.Content
+			}
+		}
+		if strings.TrimSpace(visible) == "" {
+			visible = assistantContentFallback
+		}
+		final.Reset()
+		final.WriteString(visible)
+		runtimeDecision = runtimeProposalEvidence(decision)
+		runtimeDecisionError = runtimeProposalError(decisionErr)
+		consensusDecision = consensus
+	}
 
 	gwActivity["toolCallEmitted"] = toolCallEmittedEver || fallbackRan
 	gwActivity["executionState"] = terminalState
@@ -729,6 +778,9 @@ func (s *Server) completeAssistantWithGatewayTools(
 		"toolManifest":         manifests,
 		"toolPipeline":         map[string]any{"stages": stages},
 		"toolGatewayActivity":  gwActivity,
+		"runtimeProposal":      runtimeDecision,
+		"runtimeProposalError": runtimeDecisionError,
+		"consensusGate":        consensusDecision,
 	})
 	if err != nil {
 		return nil

@@ -7,6 +7,8 @@ import (
 
 	"forge/projectforge/services/core/internal/adapters"
 	"forge/projectforge/services/core/internal/chat"
+	"forge/projectforge/services/core/internal/consensusgate"
+	"forge/projectforge/services/core/internal/forgekernel/runtimeproposal"
 )
 
 func (s *Server) completeAssistantWithoutTools(
@@ -182,12 +184,30 @@ func (s *Server) completeAssistantWithoutTools(
 		return am
 	}
 
-	content := ""
+	driverContent := ""
 	if msg, _ := raw["message"].(map[string]any); msg != nil {
-		content = strings.TrimSpace(asString(msg["content"]))
+		driverContent = asString(msg["content"])
+	}
+	runtimeDecision, runtimeDecisionErr := decideRuntimeProposal(runtimeProposalRequest{
+		SourceKind: runtimeproposal.SourceNativeOllama, WorkspacePath: s.cfg.WorkspaceDir,
+		ThreadID: threadID, UserMessageID: userMessageID, CorrelationID: corr,
+		Prompt: msgs, Output: driverContent, Backend: "ollama", ModelID: model,
+	})
+	content := runtimeProposalFailureText
+	if runtimeDecisionErr == nil {
+		content = runtimeDecision.VisibleContent
 	}
 	content, contentWarnings := sanitizeAssistantVisibleContent(content)
-	if content == "" {
+	consensusCandidate, _ := sanitizeAssistantVisibleContent(driverContent)
+	consensusDecision := consensusgate.Gate(consensusgate.Input{
+		Content: consensusCandidate, Surface: consensusgate.SurfaceChatFinal,
+		WorkspaceID: strings.TrimSpace(s.cfg.WorkspaceDir), CorrelationID: corr,
+		ModelProposalOnly: true,
+	})
+	if runtimeDecisionErr == nil && runtimeDecision.Status == runtimeproposal.StatusAccepted {
+		content = consensusDecision.Content
+	}
+	if strings.TrimSpace(content) == "" {
 		content = assistantContentFallback
 	}
 	trace := chatLatencyTrace(requestStart, perf, map[string]any{
@@ -205,6 +225,9 @@ func (s *Server) completeAssistantWithoutTools(
 		"chatLatencyTrace":     trace,
 		"toolManifest":         manifests,
 		"toolPipeline":         map[string]any{"stages": stages},
+		"runtimeProposal":      runtimeProposalEvidence(runtimeDecision),
+		"runtimeProposalError": runtimeProposalError(runtimeDecisionErr),
+		"consensusGate":        consensusDecision,
 		"toolGatewayActivity": map[string]any{
 			"userRequestSummary": trimSummary(lastUserContent, 500),
 			"toolManifest":       manifests,
@@ -267,46 +290,11 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 	})
 
 	var rawStream strings.Builder
-	lastFlush := time.Time{}
-	emittedFirst := false
-	emittedChars := 0
 	streamCut := false
-	flushVisible := func(force bool) {
-		visible, cut := stripSyntheticTranscriptContinuation(rawStream.String())
-		if cut {
-			streamCut = true
-		}
-		emitLimit := len(visible)
-		if !force && !streamCut {
-			const markerLookbehind = 16
-			if emitLimit > markerLookbehind {
-				emitLimit -= markerLookbehind
-			} else if emittedFirst {
-				emitLimit = emittedChars
-			}
-		}
-		if emitLimit <= emittedChars {
-			return
-		}
-		now := time.Now()
-		if !force && emittedFirst && emitLimit-emittedChars < assistantStreamFlushChars && now.Sub(lastFlush) < time.Duration(assistantStreamFlushIntervalMs)*time.Millisecond {
-			return
-		}
-		chunk := visible[emittedChars:emitLimit]
-		emit("token", map[string]any{"text": chunk})
-		emittedChars = emitLimit
-		emittedFirst = true
-		lastFlush = now
-	}
 	content, streamMeta, err := ol.StreamChat(ctx, baseURL, model, messages, 120*time.Second, func(token string) error {
-		if streamCut {
-			return nil
-		}
 		rawStream.WriteString(token)
-		flushVisible(false)
 		return nil
 	})
-	flushVisible(true)
 	if err != nil {
 		pushStage("ollama_native_stream_error", map[string]any{"error": err.Error()})
 		return nil
@@ -314,8 +302,33 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 	if streamCut {
 		pushStage("ollama_native_stream_truncated", map[string]any{"reason": "synthetic transcript continuation"})
 	}
+	driverOutput := content
+	if strings.TrimSpace(driverOutput) == "" {
+		driverOutput = rawStream.String()
+	}
+	if _, cut := stripSyntheticTranscriptContinuation(driverOutput); cut {
+		streamCut = true
+	}
+	runtimeDecision, runtimeDecisionErr := decideRuntimeProposal(runtimeProposalRequest{
+		SourceKind: runtimeproposal.SourceNativeOllama, WorkspacePath: s.cfg.WorkspaceDir,
+		ThreadID: threadID, UserMessageID: userMessageID, CorrelationID: corr,
+		Prompt: messages, Output: driverOutput, Backend: "ollama", ModelID: model,
+	})
+	content = runtimeProposalFailureText
+	if runtimeDecisionErr == nil {
+		content = runtimeDecision.VisibleContent
+	}
 	content, contentWarnings := sanitizeAssistantVisibleContent(content)
-	if content == "" {
+	consensusCandidate, _ := sanitizeAssistantVisibleContent(driverOutput)
+	consensusDecision := consensusgate.Gate(consensusgate.Input{
+		Content: consensusCandidate, Surface: consensusgate.SurfaceChatFinal,
+		WorkspaceID: strings.TrimSpace(s.cfg.WorkspaceDir), CorrelationID: corr,
+		ModelProposalOnly: true,
+	})
+	if runtimeDecisionErr == nil && runtimeDecision.Status == runtimeproposal.StatusAccepted {
+		content = consensusDecision.Content
+	}
+	if strings.TrimSpace(content) == "" {
 		content = assistantContentFallback
 	}
 	trace := chatLatencyTraceWithPrompt(requestStart, perf, promptBudget, map[string]any{
@@ -331,14 +344,11 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 		"ollamaStream":         true,
 		"ollamaModelSource":    modelSource,
 		"chatLatencyTrace":     trace,
-		"streamBatching": map[string]any{
-			"flushChars":      assistantStreamFlushChars,
-			"flushIntervalMs": assistantStreamFlushIntervalMs,
-		},
-		"toolsBypassed":       true,
-		"modelRuntimeSkipped": true,
-		"toolManifest":        getManifests(),
-		"toolPipeline":        map[string]any{"stages": stages},
+		"streamBatching":       map[string]any{"bufferedUntilRuntimeDecision": true},
+		"toolsBypassed":        true,
+		"modelRuntimeSkipped":  true,
+		"toolManifest":         getManifests(),
+		"toolPipeline":         map[string]any{"stages": stages},
 		"toolGatewayActivity": map[string]any{
 			"userRequestSummary": trimSummary(lastUserContent, 500),
 			"toolManifest":       getManifests(),
@@ -353,7 +363,10 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 			"contextBudgetClass": perf.ContextBudgetClass,
 			"outputMode":         perf.OutputMode,
 		},
-		"ollamaMetadata": streamMeta,
+		"ollamaMetadata":       streamMeta,
+		"runtimeProposal":      runtimeProposalEvidence(runtimeDecision),
+		"runtimeProposalError": runtimeProposalError(runtimeDecisionErr),
+		"consensusGate":        consensusDecision,
 	}
 	if len(contentWarnings) > 0 {
 		metadata["assistantContentWarnings"] = contentWarnings
@@ -363,6 +376,7 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 		pushStage("ollama_native_stream_save_failed", map[string]any{"error": err.Error()})
 		return nil
 	}
+	emit("token", map[string]any{"text": content, "runtimeProposalDecision": runtimeDecision.DecisionDigest})
 	pushStage("ollama_native_stream_done", map[string]any{"messageId": am.ID})
 	return am
 }

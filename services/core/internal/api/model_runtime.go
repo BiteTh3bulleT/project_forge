@@ -15,6 +15,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"forge/projectforge/services/core/internal/consensusgate"
+	"forge/projectforge/services/core/internal/forgekernel/runtimeproposal"
 	"forge/projectforge/services/core/internal/modelruntime"
 )
 
@@ -800,12 +802,20 @@ func (s *Server) handleForgeModelChat(w http.ResponseWriter, r *http.Request) {
 		s.writeModelRuntimeError(w, err, metaReq)
 		return
 	}
+	content, runtimeDecision, consensusDecision, runtimeDecisionErr := classifyDirectRuntimeProposal(ModelRuntimeChatRequest{
+		ModelID: pathModelID, Backend: strings.TrimSpace(body.Backend), Messages: body.Messages,
+		Prompt: strings.TrimSpace(body.Prompt), Meta: metaReq,
+	}, result)
+	result.Content = content
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"result":        result,
-		"correlationId": metaReq.CorrelationID,
-		"traceId":       metaReq.TraceID,
-		"workspaceId":   metaReq.WorkspaceID,
+		"result":               result,
+		"runtimeProposal":      runtimeProposalEvidence(runtimeDecision),
+		"runtimeProposalError": runtimeProposalError(runtimeDecisionErr),
+		"consensusGate":        consensusDecision,
+		"correlationId":        metaReq.CorrelationID,
+		"traceId":              metaReq.TraceID,
+		"workspaceId":          metaReq.WorkspaceID,
 	})
 }
 
@@ -1007,6 +1017,9 @@ func (s *Server) handleV1ChatCompletions(w http.ResponseWriter, r *http.Request)
 		s.writeModelRuntimeError(w, err, metaReq)
 		return
 	}
+	content, runtimeDecision, consensusDecision, runtimeDecisionErr := classifyDirectRuntimeProposal(ModelRuntimeChatRequest{
+		ModelID: modelID, Messages: body.Messages, Meta: metaReq,
+	}, result)
 
 	totalTokens := result.Usage.TotalTokens
 	if totalTokens == 0 {
@@ -1030,7 +1043,7 @@ func (s *Server) handleV1ChatCompletions(w http.ResponseWriter, r *http.Request)
 				"index": 0,
 				"message": map[string]any{
 					"role":    "assistant",
-					"content": result.Content,
+					"content": content,
 				},
 				"finish_reason": finishReason,
 			},
@@ -1040,30 +1053,60 @@ func (s *Server) handleV1ChatCompletions(w http.ResponseWriter, r *http.Request)
 			"completion_tokens": result.Usage.CompletionTokens,
 			"total_tokens":      totalTokens,
 		},
-		"correlationId": metaReq.CorrelationID,
-		"traceId":       metaReq.TraceID,
-		"workspaceId":   metaReq.WorkspaceID,
+		"correlationId":        metaReq.CorrelationID,
+		"traceId":              metaReq.TraceID,
+		"workspaceId":          metaReq.WorkspaceID,
+		"runtimeProposal":      runtimeProposalEvidence(runtimeDecision),
+		"runtimeProposalError": runtimeProposalError(runtimeDecisionErr),
+		"consensusGate":        consensusDecision,
 	})
+}
+
+func classifyDirectRuntimeProposal(req ModelRuntimeChatRequest, result ModelRuntimeChatResult) (string, runtimeproposal.Decision, consensusgate.Decision, error) {
+	prompt := any(req.Messages)
+	if len(req.Messages) == 0 {
+		prompt = req.Prompt
+	}
+	decision, decisionErr := decideRuntimeProposal(runtimeProposalRequest{
+		SourceKind: runtimeproposal.SourceModelRuntime, WorkspacePath: req.Meta.WorkspaceID,
+		CorrelationID: req.Meta.CorrelationID, Prompt: prompt, Output: result.Content,
+		Backend: result.Backend, ModelID: firstNonEmpty(result.ModelID, req.ModelID),
+		AuditID: result.AuditID, ExecutionID: result.ExecutionID, Proposal: result.Proposal,
+	})
+	content := runtimeProposalFailureText
+	if decisionErr == nil {
+		content = decision.VisibleContent
+	}
+	consensusCandidate, _ := sanitizeAssistantVisibleContent(result.Content)
+	consensus := consensusgate.Gate(consensusgate.Input{
+		Content: consensusCandidate, Surface: consensusgate.SurfaceChatFinal,
+		WorkspaceID: req.Meta.WorkspaceID, CorrelationID: req.Meta.CorrelationID,
+		ModelProposalOnly: true,
+	})
+	if decisionErr == nil && decision.Status == runtimeproposal.StatusAccepted {
+		content = consensus.Content
+	}
+	if strings.TrimSpace(content) == "" {
+		content = runtimeProposalFailureText
+	}
+	return content, decision, consensus, decisionErr
 }
 
 func (s *Server) streamForgeModelChat(w http.ResponseWriter, r *http.Request, runtimeSvc modelRuntimeStreamingService, req ModelRuntimeChatRequest) {
 	prepareModelRuntimeSSE(w)
+	var rawStream strings.Builder
 	result, err := runtimeSvc.StreamChat(r.Context(), req, func(token ModelRuntimeChatStreamToken) error {
 		if token.Done {
 			return nil
 		}
 		if strings.TrimSpace(token.Reasoning) != "" {
-			return writeModelRuntimeSSE(w, "reasoning", map[string]any{
-				"text":    token.Reasoning,
-				"index":   token.Index,
-				"backend": token.Backend,
-				"modelId": token.ModelID,
-			})
+			return nil
 		}
 		if strings.TrimSpace(token.Text) == "" {
 			return nil
 		}
-		return writeModelRuntimeSSE(w, "token", token)
+		rawStream.WriteString(token.Text)
+		return nil
 	})
 	if err != nil {
 		_ = writeModelRuntimeSSE(w, "error", map[string]any{
@@ -1078,11 +1121,22 @@ func (s *Server) streamForgeModelChat(w http.ResponseWriter, r *http.Request, ru
 		flushModelRuntimeSSE(w)
 		return
 	}
+	if strings.TrimSpace(result.Content) == "" {
+		result.Content = rawStream.String()
+	}
+	content, runtimeDecision, consensusDecision, runtimeDecisionErr := classifyDirectRuntimeProposal(req, result)
+	result.Content = content
+	_ = writeModelRuntimeSSE(w, "token", map[string]any{
+		"text": content, "runtimeProposalDecision": runtimeDecision.DecisionDigest,
+	})
 	_ = writeModelRuntimeSSE(w, "result", map[string]any{
-		"result":        result,
-		"correlationId": req.Meta.CorrelationID,
-		"traceId":       req.Meta.TraceID,
-		"workspaceId":   req.Meta.WorkspaceID,
+		"result":               result,
+		"runtimeProposal":      runtimeProposalEvidence(runtimeDecision),
+		"runtimeProposalError": runtimeProposalError(runtimeDecisionErr),
+		"consensusGate":        consensusDecision,
+		"correlationId":        req.Meta.CorrelationID,
+		"traceId":              req.Meta.TraceID,
+		"workspaceId":          req.Meta.WorkspaceID,
 	})
 	_ = writeModelRuntimeSSE(w, "done", map[string]any{"done": true})
 	flushModelRuntimeSSE(w)
@@ -1093,6 +1147,7 @@ func (s *Server) streamOpenAICompatChatCompletions(w http.ResponseWriter, r *htt
 	id := fmt.Sprintf("chatcmpl-%d", time.Now().UnixNano())
 	created := time.Now().Unix()
 	modelID := strings.TrimSpace(req.ModelID)
+	var rawStream strings.Builder
 	result, err := runtimeSvc.StreamChat(r.Context(), req, func(token ModelRuntimeChatStreamToken) error {
 		if token.Done {
 			return nil
@@ -1101,46 +1156,13 @@ func (s *Server) streamOpenAICompatChatCompletions(w http.ResponseWriter, r *htt
 			modelID = strings.TrimSpace(token.ModelID)
 		}
 		if strings.TrimSpace(token.Reasoning) != "" {
-			return writeModelRuntimeSSEData(w, map[string]any{
-				"id":      id,
-				"object":  "chat.completion.chunk",
-				"created": created,
-				"model":   modelID,
-				"choices": []map[string]any{
-					{
-						"index": token.Index,
-						"delta": map[string]any{
-							"reasoning": token.Reasoning,
-						},
-						"finish_reason": nil,
-					},
-				},
-				"correlationId": req.Meta.CorrelationID,
-				"traceId":       req.Meta.TraceID,
-				"workspaceId":   req.Meta.WorkspaceID,
-			})
+			return nil
 		}
 		if strings.TrimSpace(token.Text) == "" {
 			return nil
 		}
-		return writeModelRuntimeSSEData(w, map[string]any{
-			"id":      id,
-			"object":  "chat.completion.chunk",
-			"created": created,
-			"model":   modelID,
-			"choices": []map[string]any{
-				{
-					"index": token.Index,
-					"delta": map[string]any{
-						"content": token.Text,
-					},
-					"finish_reason": nil,
-				},
-			},
-			"correlationId": req.Meta.CorrelationID,
-			"traceId":       req.Meta.TraceID,
-			"workspaceId":   req.Meta.WorkspaceID,
-		})
+		rawStream.WriteString(token.Text)
+		return nil
 	})
 	if err != nil {
 		_ = writeModelRuntimeSSEData(w, map[string]any{
@@ -1158,6 +1180,17 @@ func (s *Server) streamOpenAICompatChatCompletions(w http.ResponseWriter, r *htt
 	if strings.TrimSpace(result.ModelID) != "" {
 		modelID = strings.TrimSpace(result.ModelID)
 	}
+	if strings.TrimSpace(result.Content) == "" {
+		result.Content = rawStream.String()
+	}
+	content, runtimeDecision, consensusDecision, runtimeDecisionErr := classifyDirectRuntimeProposal(req, result)
+	_ = writeModelRuntimeSSEData(w, map[string]any{
+		"id": id, "object": "chat.completion.chunk", "created": created, "model": modelID,
+		"choices":       []map[string]any{{"index": 0, "delta": map[string]any{"content": content}, "finish_reason": nil}},
+		"correlationId": req.Meta.CorrelationID, "traceId": req.Meta.TraceID, "workspaceId": req.Meta.WorkspaceID,
+		"runtimeProposal": runtimeProposalEvidence(runtimeDecision), "runtimeProposalError": runtimeProposalError(runtimeDecisionErr),
+		"consensusGate": consensusDecision,
+	})
 	finishReason := strings.TrimSpace(result.FinishReason)
 	if finishReason == "" {
 		finishReason = "stop"

@@ -37,9 +37,6 @@ func (s *Server) buildChatLLMMessages(ctx context.Context, th *chat.ThreadDetail
 	if crossThreadMemory := s.buildCrossThreadChatContext(ctx, th.ID, chatCrossThreadContextMaxMessages, chatCrossThreadContextMaxRunes); crossThreadMemory != "" {
 		user += "\n\n---\nRELATED CHAT MEMORY\n" + crossThreadMemory
 	}
-	if observationMemory := s.buildMemoryObservationContext(ctx, th.DossierID, chatMemoryObservationMaxItems, chatMemoryObservationMaxRunes); observationMemory != "" {
-		user += "\n\n---\nMEMORY OBSERVATIONS\n" + observationMemory
-	}
 	if att := s.buildThreadAttachmentContext(ctx, th); att != "" {
 		user += "\n\n---\nATTACHMENTS CONTEXT\n" + att
 	}
@@ -67,10 +64,6 @@ func (s *Server) buildModelRuntimePlainChatMessages(ctx context.Context, th *cha
 	if crossThreadMemory := s.buildCrossThreadChatContext(ctx, th.ID, 4, 800); crossThreadMemory != "" {
 		budget.CrossThreadMemoryChars = len(crossThreadMemory)
 		systemSections = append(systemSections, "Related chat memory:\n"+crossThreadMemory)
-	}
-	if observationMemory := s.buildMemoryObservationContext(ctx, th.DossierID, 4, 800); observationMemory != "" {
-		budget.ObservationMemoryChars = len(observationMemory)
-		systemSections = append(systemSections, "Memory observations:\n"+observationMemory)
 	}
 	if budget.Compacted {
 		systemSections = append(systemSections, "Recent chat context was compacted for local model runtime latency. Answer only the latest operator turn.")

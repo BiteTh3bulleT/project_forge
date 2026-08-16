@@ -58,8 +58,8 @@ a second live authority. No fallback or shadow path performs dual commits.
 | Semantic Algebra | FORGE-K deterministic `semantic.diff.v1`; other operators staged | Governed live operations | Add operators only through separate deterministic contracts |
 | Memory Palace | Court-derived immutable evidence, append-only revision, governed VSA projection, narrow intent routes | Structured governed objects/routes | Finish context/runtime consumers and offline recovery |
 | Context Compiler | FORGE-K-only ingress with temporary Control Lane decision/apply; pure production contract ready | FORGE-K bundles | Connect pure decision, admitted-source manifest, prompt commitment, snapshot-head CAS |
-| Runtime Boundary | `modelruntime` proposal envelopes | FORGE-K driver contract over modelruntime | No model authority, cancellation/usage evidence |
-| Consensus | Narrow final-response guard | Composition/admission guard | All response surfaces covered |
+| Runtime Boundary | Pure production runtime-proposal decision gates every model visibility surface; prompt context binding remains transitional | FORGE-K driver contract over Kernel context bundles | Replace transitional prompt binding with the live Context Compiler decision; add cancellation/usage evidence |
+| Consensus | Final-response guard after runtime-proposal classification | Composition/admission guard | Closed for current API response surfaces; admission remains a separate syscall |
 | Snapshots/replay | Existing backup/context snapshots | FORGE-K shape/replay authority | Restore seed, hash-chain, rollback tests |
 | KV | Identity validation canary | Acceleration only | Exact identity plus invalidation proof |
 | Lymphatic | Proposal metadata | Proposal-only maintenance lane | No silent mutation tests |
@@ -73,6 +73,9 @@ a second live authority. No fallback or shadow path performs dual commits.
 - No production code imports simulator services as live authority.
 - Models cannot select tools, approve actions, execute tools, admit evidence, or
   mutate canonical state.
+- Model text and reasoning cannot become visible or persistent before the pure
+  runtime-proposal decision and final-response consensus gate. Tool-loop stage
+  events expose commitments, not raw model JSON or arguments.
 - Current truth and historical truth remain separately queryable.
 - Replay detects journal divergence and cannot silently repair truth.
 - Operator status reports the active sole authority owner and offline rollback posture.

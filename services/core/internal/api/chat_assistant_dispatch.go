@@ -16,6 +16,9 @@ type toolDispatchResult struct {
 	text            string
 	failureReason   string
 	executionResult any
+	gatewayRequest  *gateway.Request
+	gatewayResult   *gateway.Result
+	auditID         int64
 }
 
 func normalizeChatInvokeArgs(args map[string]any) (paths []string, input map[string]any) {
@@ -230,10 +233,11 @@ func (s *Server) dispatchToolCall(ctx context.Context, corr string, threadID int
 
 	resMap, _ := json.Marshal(res)
 	pushStage("execution_result", map[string]any{"status": res.Status, "json": trimSummary(string(resMap), 8000)})
+	auditID := s.gatewayInvocationAuditID(ctx, corr, res.InvocationID)
 
 	if res.Status == gateway.StatusOK {
 		text := formatToolResult(toolID, res)
-		return toolDispatchResult{args: args, state: "ok", text: text, executionResult: res.Data}
+		return toolDispatchResult{args: args, state: "ok", text: text, executionResult: res.Data, gatewayRequest: &gwReq, gatewayResult: res, auditID: auditID}
 	}
 
 	reason := strings.TrimSpace(res.DeniedReason)
@@ -269,7 +273,26 @@ func (s *Server) dispatchToolCall(ctx context.Context, corr string, threadID int
 		text:            text,
 		failureReason:   reason,
 		executionResult: outData,
+		gatewayRequest:  &gwReq,
+		gatewayResult:   res,
+		auditID:         auditID,
 	}
+}
+
+func (s *Server) gatewayInvocationAuditID(ctx context.Context, correlationID string, invocationID int64) int64 {
+	if s.auditSvc == nil || invocationID <= 0 {
+		return 0
+	}
+	records, err := s.auditSvc.Trace(ctx, correlationID)
+	if err != nil {
+		return 0
+	}
+	for i := len(records) - 1; i >= 0; i-- {
+		if records[i].GatewayInvocationID != nil && *records[i].GatewayInvocationID == invocationID {
+			return records[i].ID
+		}
+	}
+	return 0
 }
 
 func (s *Server) resolveThreadAttachmentRead(ctx context.Context, threadID int64, requestedPath string) (content string, meta map[string]any, ok bool, err error) {

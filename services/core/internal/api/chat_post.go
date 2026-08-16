@@ -29,8 +29,6 @@ const (
 	chatThreadMemoryContextMaxRunes    = 1800
 	chatCrossThreadContextMaxMessages  = 6
 	chatCrossThreadContextMaxRunes     = 1400
-	chatMemoryObservationMaxItems      = 5
-	chatMemoryObservationMaxRunes      = 1400
 	chatPromptTranscriptMessageRunes   = 1000
 	chatPromptTranscriptTotalRunes     = 8000
 )
@@ -118,9 +116,6 @@ func (s *Server) buildChatPrompt(ctx context.Context, th *chat.ThreadDetail) str
 	if crossThreadMemory := s.buildCrossThreadChatContext(ctx, th.ID, chatCrossThreadContextMaxMessages, chatCrossThreadContextMaxRunes); crossThreadMemory != "" {
 		prompt += "\n\n---\nRELATED CHAT MEMORY\n" + crossThreadMemory
 	}
-	if observationMemory := s.buildMemoryObservationContext(ctx, th.DossierID, chatMemoryObservationMaxItems, chatMemoryObservationMaxRunes); observationMemory != "" {
-		prompt += "\n\n---\nMEMORY OBSERVATIONS\n" + observationMemory
-	}
 	if attachments != "" {
 		prompt += "\n\n---\nATTACHMENTS CONTEXT\n" + attachments
 	}
@@ -192,72 +187,6 @@ LIMIT ?`, currentThreadID, maxMessages)
 			break
 		}
 		b.WriteString(line)
-	}
-	return strings.TrimSpace(b.String())
-}
-
-func (s *Server) buildMemoryObservationContext(ctx context.Context, dossierID *int64, maxItems, maxRunes int) string {
-	if s == nil || s.st == nil || s.st.DB == nil {
-		return ""
-	}
-	if maxItems <= 0 {
-		maxItems = chatMemoryObservationMaxItems
-	}
-	if maxRunes <= 0 {
-		maxRunes = chatMemoryObservationMaxRunes
-	}
-
-	query := `
-SELECT id, type, summary, raw_content, origin_kind, origin_id
-FROM memory_observations
-WHERE stale = 0`
-	args := []any{}
-	if dossierID != nil && *dossierID > 0 {
-		query += ` AND dossier_id = ?`
-		args = append(args, *dossierID)
-	}
-	query += ` ORDER BY usefulness_score DESC, observed_at DESC, id DESC LIMIT ?`
-	args = append(args, maxItems)
-
-	rows, err := s.st.DB.QueryContext(ctx, query, args...)
-	if err != nil {
-		return ""
-	}
-	defer rows.Close()
-
-	var b strings.Builder
-	b.WriteString("Recent structured memory observations. These are non-canonical retrieval hints; do not treat them as proof without source evidence.\n")
-	count := 0
-	for rows.Next() {
-		var id int64
-		var typ, summary, raw, originKind, originID string
-		if err := rows.Scan(&id, &typ, &summary, &raw, &originKind, &originID); err != nil {
-			return ""
-		}
-		text := strings.Join(strings.Fields(nonEmpty(summary, raw)), " ")
-		if text == "" {
-			continue
-		}
-		origin := strings.TrimSpace(originKind)
-		if strings.TrimSpace(originID) != "" {
-			if origin != "" {
-				origin += ":"
-			}
-			origin += strings.TrimSpace(originID)
-		}
-		if origin == "" {
-			origin = "unscoped"
-		}
-		line := fmt.Sprintf("observation #%d [%s, %s]: %s\n", id, nonEmpty(strings.TrimSpace(typ), "observation"), origin, trimSummary(text, 260))
-		if len([]rune(b.String()+line)) > maxRunes {
-			b.WriteString("...")
-			break
-		}
-		b.WriteString(line)
-		count++
-	}
-	if count == 0 {
-		return ""
 	}
 	return strings.TrimSpace(b.String())
 }

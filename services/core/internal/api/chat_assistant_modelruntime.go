@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,6 +9,7 @@ import (
 
 	"forge/projectforge/services/core/internal/chat"
 	"forge/projectforge/services/core/internal/consensusgate"
+	"forge/projectforge/services/core/internal/forgekernel/runtimeproposal"
 )
 
 func (s *Server) completeAssistantWithModelRuntimeStream(
@@ -61,38 +61,8 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 	})
 
 	var rawStream strings.Builder
-	lastFlush := time.Time{}
-	emittedFirst := false
-	emittedChars := 0
 	streamCut := false
 	firstTokenMs := int64(0)
-	flushVisible := func(force bool) {
-		visible, cut := stripSyntheticTranscriptContinuation(rawStream.String())
-		if cut {
-			streamCut = true
-		}
-		emitLimit := len(visible)
-		if !force && !streamCut {
-			const markerLookbehind = 16
-			if emitLimit > markerLookbehind {
-				emitLimit -= markerLookbehind
-			} else if emittedFirst {
-				emitLimit = emittedChars
-			}
-		}
-		if emitLimit <= emittedChars {
-			return
-		}
-		now := time.Now()
-		if !force && emittedFirst && emitLimit-emittedChars < assistantStreamFlushChars && now.Sub(lastFlush) < time.Duration(assistantStreamFlushIntervalMs)*time.Millisecond {
-			return
-		}
-		chunk := visible[emittedChars:emitLimit]
-		emit("token", map[string]any{"text": chunk})
-		emittedChars = emitLimit
-		emittedFirst = true
-		lastFlush = now
-	}
 
 	modelStart := time.Now()
 	result, err := streamRuntime.StreamChat(ctx, ModelRuntimeChatRequest{
@@ -120,12 +90,8 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 			return nil
 		}
 		if strings.TrimSpace(token.Reasoning) != "" {
-			emit("reasoning", map[string]any{
-				"text":    token.Reasoning,
-				"index":   token.Index,
-				"backend": token.Backend,
-				"modelId": token.ModelID,
-			})
+			// Reasoning is untrusted driver output and cannot become visible
+			// before the final runtime-proposal decision.
 			return nil
 		}
 		if strings.TrimSpace(token.Text) == "" {
@@ -135,15 +101,8 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 			firstTokenMs = time.Since(modelStart).Milliseconds()
 		}
 		rawStream.WriteString(token.Text)
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		flushVisible(false)
 		return nil
 	})
-	if !errors.Is(err, context.Canceled) && ctx.Err() == nil {
-		flushVisible(true)
-	}
 	modelRuntimeMs := time.Since(modelStart).Milliseconds()
 	if err != nil {
 		_, code, message := mapModelRuntimeError(err)
@@ -156,22 +115,36 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 		emit("agent_stage", map[string]any{"stage": "model_runtime_stream_truncated", "atMs": time.Now().UnixMilli(), "reason": "synthetic transcript continuation"})
 	}
 
-	content, contentWarnings := sanitizeAssistantVisibleContent(result.Content)
-	if content == "" {
-		stripped, _ := stripSyntheticTranscriptContinuation(rawStream.String())
-		content = strings.TrimSpace(stripped)
+	driverOutput := result.Content
+	if strings.TrimSpace(driverOutput) == "" {
+		driverOutput = rawStream.String()
 	}
-	if content == "" {
-		content = assistantContentFallback
+	runtimeDecision, runtimeDecisionErr := decideRuntimeProposal(runtimeProposalRequest{
+		SourceKind: runtimeproposal.SourceModelRuntime, WorkspacePath: workspaceID,
+		ThreadID: threadID, UserMessageID: userMessageID, CorrelationID: corr,
+		Prompt: messages, Output: driverOutput, Backend: result.Backend,
+		ModelID: nonEmpty(strings.TrimSpace(result.ModelID), modelID), AuditID: result.AuditID,
+		ExecutionID: result.ExecutionID, Proposal: result.Proposal,
+	})
+	content := runtimeProposalFailureText
+	if runtimeDecisionErr == nil {
+		content = runtimeDecision.VisibleContent
 	}
+	content, contentWarnings := sanitizeAssistantVisibleContent(content)
+	consensusCandidate, _ := sanitizeAssistantVisibleContent(driverOutput)
 	consensusDecision := consensusgate.Gate(consensusgate.Input{
-		Content:           content,
+		Content:           consensusCandidate,
 		Surface:           consensusgate.SurfaceChatFinal,
 		WorkspaceID:       workspaceID,
 		CorrelationID:     corr,
 		ModelProposalOnly: result.Proposal != nil,
 	})
-	content = consensusDecision.Content
+	if runtimeDecisionErr == nil && runtimeDecision.Status == runtimeproposal.StatusAccepted {
+		content = consensusDecision.Content
+	}
+	if strings.TrimSpace(content) == "" {
+		content = assistantContentFallback
+	}
 	traceExtras := map[string]any{
 		"modelruntime_ms":             modelRuntimeMs,
 		"modelruntime_first_token_ms": firstTokenMs,
@@ -216,6 +189,8 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 		"toolPipeline":         map[string]any{"stages": stages},
 		"toolGatewayActivity":  activity,
 		"consensusGate":        consensusDecision,
+		"runtimeProposal":      runtimeProposalEvidence(runtimeDecision),
+		"runtimeProposalError": runtimeProposalError(runtimeDecisionErr),
 	}
 	if requested := strings.TrimSpace(requestedModelID); requested != "" {
 		metadata["modelRuntimeRequestedModelId"] = requested
@@ -234,6 +209,7 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 	if err != nil {
 		return nil, "assistant reply could not be saved"
 	}
+	emit("token", map[string]any{"text": content, "runtimeProposalDecision": runtimeDecision.DecisionDigest})
 	emit("agent_stage", map[string]any{"stage": "model_runtime_stream_done", "atMs": time.Now().UnixMilli(), "messageId": am.ID})
 	return am, ""
 }
@@ -303,18 +279,32 @@ func (s *Server) completeAssistantWithModelRuntime(
 		return nil, message
 	}
 
-	content, contentWarnings := sanitizeAssistantVisibleContent(result.Content)
-	if content == "" {
-		content = assistantContentFallback
+	runtimeDecision, runtimeDecisionErr := decideRuntimeProposal(runtimeProposalRequest{
+		SourceKind: runtimeproposal.SourceModelRuntime, WorkspacePath: workspaceID,
+		ThreadID: threadID, UserMessageID: userMessageID, CorrelationID: corr,
+		Prompt: messages, Output: result.Content, Backend: result.Backend,
+		ModelID: nonEmpty(strings.TrimSpace(result.ModelID), modelID), AuditID: result.AuditID,
+		ExecutionID: result.ExecutionID, Proposal: result.Proposal,
+	})
+	content := runtimeProposalFailureText
+	if runtimeDecisionErr == nil {
+		content = runtimeDecision.VisibleContent
 	}
+	content, contentWarnings := sanitizeAssistantVisibleContent(content)
+	consensusCandidate, _ := sanitizeAssistantVisibleContent(result.Content)
 	consensusDecision := consensusgate.Gate(consensusgate.Input{
-		Content:           content,
+		Content:           consensusCandidate,
 		Surface:           consensusgate.SurfaceChatFinal,
 		WorkspaceID:       workspaceID,
 		CorrelationID:     corr,
 		ModelProposalOnly: result.Proposal != nil,
 	})
-	content = consensusDecision.Content
+	if runtimeDecisionErr == nil && runtimeDecision.Status == runtimeproposal.StatusAccepted {
+		content = consensusDecision.Content
+	}
+	if strings.TrimSpace(content) == "" {
+		content = assistantContentFallback
+	}
 	traceExtras := map[string]any{
 		"modelruntime_ms":      modelRuntimeMs,
 		"gateway_execution_ms": int64(0),
@@ -361,6 +351,8 @@ func (s *Server) completeAssistantWithModelRuntime(
 		"toolPipeline":         map[string]any{"stages": stages},
 		"toolGatewayActivity":  activity,
 		"consensusGate":        consensusDecision,
+		"runtimeProposal":      runtimeProposalEvidence(runtimeDecision),
+		"runtimeProposalError": runtimeProposalError(runtimeDecisionErr),
 	}
 	if requested := strings.TrimSpace(requestedModelID); requested != "" {
 		metadata["modelRuntimeRequestedModelId"] = requested

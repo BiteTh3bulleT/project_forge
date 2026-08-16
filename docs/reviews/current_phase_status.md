@@ -10,6 +10,18 @@ recovery, never a second live orchestrator. Full subsystem authority is still
 incomplete while Context Compiler, Runtime/Consensus, KV, Lymphatic, recovery,
 and final operator/OptiPlex gates remain open.
 
+K20J runtime addendum (2026-08-16): the pure production
+`forgekernel/runtimeproposal` decision now gates every current model visibility
+surface: modelruntime and native Ollama plain/stream chat, gateway tool-loop
+synthesis, direct FORGE model chat, and OpenAI-compatible chat. Driver text and
+reasoning are buffered until exact output/prompt/provenance bindings pass;
+unsupported authority and action-completion claims fail closed. Tool-loop stage
+events expose hashes rather than raw model JSON or arguments, and completion
+claims require the actual gateway request/result plus durable audit identity.
+Legacy memory observations are no longer included in authoritative prompt
+construction. The context decision/bundle binding remains prompt-derived until
+the pure Context Compiler is live-wired, so this is not yet full cutover.
+
 Latest K20I note (2026-08-16): production FORGE-K now owns the deliberately
 narrow `COMPUTE_SEMANTIC_DIFF` action. It accepts only two exact-scope,
 current, admitted K20H evidence identities and fixed `semantic.diff.v1`,

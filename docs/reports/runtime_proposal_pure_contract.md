@@ -1,6 +1,6 @@
 # Production runtime proposal pure contract
 
-Status: **implemented and tested as an isolated production package; not live-wired**.
+Status: **implemented, live-wired on every model visibility surface, and tested**.
 
 Package: `services/core/internal/forgekernel/runtimeproposal`
 
@@ -31,24 +31,24 @@ A withheld decision returns fixed safe text, never the driver output. Evidence o
 
 Gateway evidence validation here proves reference shape and exact binding, not existence in a live store. A future caller must populate references from a trusted gateway/audit resolver; model-supplied references are not admissible.
 
-## Exact live integration seam
+## Live integration
 
-The future production chat coordinator should call this package after a driver returns but before any response byte becomes user-visible or any assistant reply is persisted:
+The production API coordinator calls this package after a driver returns but before any response byte becomes user-visible or any assistant reply is persisted:
 
-1. The Kernel-owned context compiler supplies the sealed context decision digest, bundle hash, selected-path scope, and hash of the exact prompt bytes sent to the driver.
+1. The current transition coordinator binds the exact prompt bytes and a deterministic prompt-bundle identity. This is fail-closed runtime binding, but it is not yet the live Kernel Context Compiler decision; that replacement remains the next cutover gate.
 2. A trusted runtime adapter resolves the actual driver/runtime/model/tokenizer versions, retains the exact returned bytes, and supplies the driver's output commitment.
-3. If a response reports tool completion, a trusted gateway/audit adapter resolves immutable invocation, request, result, scope, and trace commitments. It must not copy these from model output.
+3. If a response reports tool completion, the API resolves the actual gateway invocation, exact request/result commitments, and durable audit-record identity. It never accepts those fields from model output.
 4. The coordinator calls `runtimeproposal.Decide`. Only `accepted_proposal` content may become a final chat response. Streaming paths must buffer driver tokens or label them non-visible proposal material until this decision exists.
 5. Persisted/read or replayed decisions call `runtimeproposal.VerifyDecision`. Semantic assertions remain proposals until separately admitted and committed by the Kernel.
 
-The same seam must cover ordinary chat, native Ollama chat and streaming, gateway tool-loop synthesis, `/forge/models/{id}/chat`, and `/v1/chat/completions`; otherwise those routes remain authority bypasses.
+The seam now covers ordinary chat, native Ollama chat and streaming, gateway tool-loop synthesis, `/forge/models/{id}/chat`, and `/v1/chat/completions`. Streaming buffers driver text and reasoning until the final decision. Gateway stage events expose hashes and sizes instead of raw model JSON or tool arguments.
 
 ## Deliberately not included
 
-- no API, modelruntime, gateway, domain, store, or Control Lane edits;
 - no import from simulator `internal/forgek`;
-- no live route, stream, persistence, or canonical-state behavior change;
-- no claim that the current context compiler or gateway evidence resolver already provides these bindings.
+- no admission of model output, canonical-state mutation, tool selection, tool execution, or approval authority;
+- no claim that the transitional prompt binding is a Kernel-owned Context Compiler decision;
+- no driver-supplied gateway evidence or authority claim can grant visibility.
 
 ## Verification
 

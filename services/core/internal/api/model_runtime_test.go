@@ -758,7 +758,7 @@ func TestModelRuntimeChatValidationAndStructuredMapping(t *testing.T) {
 	}
 }
 
-func TestOpenAICompatStreamingEmitsSSEChunks(t *testing.T) {
+func TestOpenAICompatStreamingBuffersUntilRuntimeDecision(t *testing.T) {
 	t.Parallel()
 
 	srv, _ := newModelRuntimeHarness(t)
@@ -777,8 +777,11 @@ func TestOpenAICompatStreamingEmitsSSEChunks(t *testing.T) {
 		t.Fatalf("content-type=%q want text/event-stream", contentType)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, `"object":"chat.completion.chunk"`) || !strings.Contains(body, `"content":"hello "`) || !strings.Contains(body, `"content":"stream"`) {
-		t.Fatalf("expected streamed content chunks, got body=%s", body)
+	if !strings.Contains(body, `"object":"chat.completion.chunk"`) || !strings.Contains(body, `"content":"hello stream"`) || strings.Count(body, `"content":`) != 1 {
+		t.Fatalf("expected one post-decision content chunk, got body=%s", body)
+	}
+	if !strings.Contains(body, `"status":"accepted_proposal"`) || !strings.Contains(body, `"runtimeProposal"`) {
+		t.Fatalf("expected runtime proposal decision before visibility, got body=%s", body)
 	}
 	if !strings.Contains(body, `"finish_reason":"stop"`) || !strings.Contains(body, "data: [DONE]") {
 		t.Fatalf("expected final stop chunk and done sentinel, got body=%s", body)
@@ -788,7 +791,36 @@ func TestOpenAICompatStreamingEmitsSSEChunks(t *testing.T) {
 	}
 }
 
-func TestForgeModelRuntimeStreamingEmitsSSEEvents(t *testing.T) {
+func TestDirectModelChatWithholdsUnboundActionCompletion(t *testing.T) {
+	t.Parallel()
+
+	srv, _ := newModelRuntimeHarness(t)
+	fake := newFakeModelRuntime()
+	fake.chatContent = "I deleted the workspace file."
+	srv.modelRuntime = fake
+
+	raw := []byte(`{"messages":[{"role":"user","content":"did you delete it?"}],"correlationId":"corr-unbound-action","workspaceId":"ws-unbound-action"}`)
+	req := httptest.NewRequest(http.MethodPost, "/forge/models/mistral-7b-instruct/chat", bytes.NewReader(raw))
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
+	}
+	body := rr.Body.String()
+	if strings.Contains(body, "I deleted the workspace file") {
+		t.Fatalf("direct model surface leaked an unbound completion claim: %s", body)
+	}
+	if !strings.Contains(body, `"status":"withheld"`) || !strings.Contains(body, "unbound_action_completion_claim") {
+		t.Fatalf("missing runtime-proposal withholding evidence: %s", body)
+	}
+	for _, forbidden := range []string{`"canonicalTruth":true`, `"memoryMutation":true`, `"toolExecutionAuthority":true`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("direct model response claimed forbidden authority %s: %s", forbidden, body)
+		}
+	}
+}
+
+func TestForgeModelRuntimeStreamingBuffersUntilRuntimeDecision(t *testing.T) {
 	t.Parallel()
 
 	srv, _ := newModelRuntimeHarness(t)
@@ -807,14 +839,17 @@ func TestForgeModelRuntimeStreamingEmitsSSEEvents(t *testing.T) {
 		t.Fatalf("content-type=%q want text/event-stream", contentType)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "event: token") || !strings.Contains(body, `"text":"forge "`) || !strings.Contains(body, `"text":"stream"`) {
-		t.Fatalf("expected token events, got body=%s", body)
+	if strings.Count(body, "event: token") != 1 || !strings.Contains(body, `"text":"forge stream"`) {
+		t.Fatalf("expected one post-decision token event, got body=%s", body)
 	}
 	if !strings.Contains(body, "event: result") || !strings.Contains(body, `"content":"forge stream"`) {
 		t.Fatalf("expected final result event, got body=%s", body)
 	}
 	if !strings.Contains(body, `"proposalOnly":true`) || strings.Contains(body, `"canonicalCommit":true`) || strings.Contains(body, `"modelOutputAuthority":true`) {
 		t.Fatalf("expected final stream result to preserve proposal-only envelope, got body=%s", body)
+	}
+	if !strings.Contains(body, `"status":"accepted_proposal"`) || !strings.Contains(body, `"runtimeProposalDecision"`) {
+		t.Fatalf("expected runtime proposal decision evidence, got body=%s", body)
 	}
 	if !fake.lastChat.Stream || fake.lastChat.Meta.CorrelationID != "corr-forge-stream" || fake.lastChat.Meta.WorkspaceID != "ws-forge-stream" {
 		t.Fatalf("forge stream request not propagated correctly: %#v", fake.lastChat)

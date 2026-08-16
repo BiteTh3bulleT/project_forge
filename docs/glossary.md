@@ -150,6 +150,15 @@ evidence events. It may support ranking or operator display, but never replaces
 the original retrieval result, restore outcome, event history, or journal
 proof.
 
+## Runtime proposal decision
+
+A pure production FORGE-K classification of exact model-driver output bytes,
+runtime identity, scope, prompt/context commitment, provenance, and any trusted
+Gateway execution evidence. Accepted content remains noncanonical and
+proposal-only. Withheld content is replaced before persistence or visibility;
+the model cannot grant itself truth, admission, memory, tool, or approval
+authority.
+
 ## AuthorizationProof
 
 Typed production FORGE-K evidence binding a trusted service principal or

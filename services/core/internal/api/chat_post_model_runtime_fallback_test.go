@@ -612,7 +612,7 @@ func TestChatLLMMessagesBoundTranscriptAfterLargeAssistantReply(t *testing.T) {
 	if !strings.Contains(user, "latest operator turn") {
 		t.Fatalf("expected latest user turn in prompt, got %q", user)
 	}
-	if len(user) > chatPromptTranscriptTotalRunes+chatThreadMemoryContextMaxRunes+chatCrossThreadContextMaxRunes+chatMemoryObservationMaxRunes+4096 {
+	if len(user) > chatPromptTranscriptTotalRunes+chatThreadMemoryContextMaxRunes+chatCrossThreadContextMaxRunes+4096 {
 		t.Fatalf("expected bounded prompt, got %d chars", len(user))
 	}
 	if strings.Contains(user, strings.Repeat("z", chatPromptTranscriptMessageRunes+1)) {
@@ -620,7 +620,7 @@ func TestChatLLMMessagesBoundTranscriptAfterLargeAssistantReply(t *testing.T) {
 	}
 }
 
-func TestChatLLMMessagesIncludeMemoryObservations(t *testing.T) {
+func TestChatLLMMessagesExcludeLegacyMemoryObservations(t *testing.T) {
 	srv, st := newBackupAuditHarness(t)
 	res, err := st.DB.Exec(`
 INSERT INTO memory_observations(created_at,updated_at,observed_at,type,summary,raw_content,origin_kind,origin_id,confidence,verification_state)
@@ -645,12 +645,12 @@ VALUES(1,1,1,'decision','The operator prefers compact context cards for memory-h
 		t.Fatalf("get thread: %v", err)
 	}
 	_, user := srv.buildChatLLMMessages(context.Background(), detail)
-	if !strings.Contains(user, "MEMORY OBSERVATIONS") || !strings.Contains(user, "compact context cards") {
-		t.Fatalf("expected memory observations in user prompt, got %q", user)
+	if strings.Contains(user, "MEMORY OBSERVATIONS") || strings.Contains(user, "compact context cards") {
+		t.Fatalf("legacy memory observation entered user prompt: %q", user)
 	}
 }
 
-func TestChatLLMMessagesIncludeMemoryObservationsAfterStoreReopen(t *testing.T) {
+func TestChatLLMMessagesExcludeLegacyMemoryObservationsAfterStoreReopen(t *testing.T) {
 	ctx := context.Background()
 	dataDir := t.TempDir()
 	workspaceDir := t.TempDir()
@@ -687,8 +687,8 @@ VALUES(1,1,1,'decision','Cross-session recall marker: remember the basalt notebo
 		t.Fatalf("get reopened thread: %v", err)
 	}
 	_, user := srv2.buildChatLLMMessages(ctx, detail)
-	if !strings.Contains(user, "MEMORY OBSERVATIONS") || !strings.Contains(user, "basalt notebook") {
-		t.Fatalf("expected reopened memory observation in user prompt, got %q", user)
+	if strings.Contains(user, "MEMORY OBSERVATIONS") || strings.Contains(user, "basalt notebook") {
+		t.Fatalf("reopened legacy observation entered user prompt: %q", user)
 	}
 }
 
@@ -2341,7 +2341,7 @@ func TestChatAssistantStreamAvoidsDeepModelRuntimePreflightBeforeStreaming(t *te
 	}
 }
 
-func TestChatAssistantStreamEmitsModelRuntimeReasoningEvents(t *testing.T) {
+func TestChatAssistantStreamBuffersModelRuntimeReasoningUntilDecision(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	fakeRuntime := &fakeStreamingModelRuntime{
 		fakeModelRuntime: newFakeModelRuntime(),
@@ -2370,11 +2370,11 @@ func TestChatAssistantStreamEmitsModelRuntimeReasoningEvents(t *testing.T) {
 		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "event: reasoning") || !strings.Contains(body, `"text":"checking facts"`) {
-		t.Fatalf("expected reasoning SSE event, got body=%s", body)
+	if strings.Contains(body, "event: reasoning") || strings.Contains(body, `"text":"checking facts"`) {
+		t.Fatalf("unclassified reasoning became visible, got body=%s", body)
 	}
-	if !strings.Contains(body, "event: token") || !strings.Contains(body, `"text":"cloud "`) || !strings.Contains(body, `"text":"stream"`) {
-		t.Fatalf("expected visible token SSE events, got body=%s", body)
+	if strings.Count(body, "event: token") != 1 || !strings.Contains(body, `"text":"cloud stream"`) {
+		t.Fatalf("expected one post-decision token event, got body=%s", body)
 	}
 	if strings.Contains(body, `"content":"checking factscloud stream"`) || strings.Contains(body, `"content":"checking facts cloud stream"`) {
 		t.Fatalf("reasoning leaked into assistant message content, got body=%s", body)
@@ -2539,8 +2539,8 @@ func TestChatAssistantStreamUsesNativeOllamaStreamForNoToolChat(t *testing.T) {
 	if !sawStream {
 		t.Fatalf("expected ollama stream request")
 	}
-	if !strings.Contains(body, "event: token") || !strings.Contains(body, `"text":"fast "`) || !strings.Contains(body, `"text":"path"`) {
-		t.Fatalf("expected streamed token events, got body=%s", body)
+	if strings.Count(body, "event: token") != 1 || !strings.Contains(body, `"text":"fast path"`) {
+		t.Fatalf("expected one post-decision token event, got body=%s", body)
 	}
 	if !strings.Contains(body, `"ollamaStream":true`) {
 		t.Fatalf("expected persisted assistant metadata to mark ollamaStream, got body=%s", body)
