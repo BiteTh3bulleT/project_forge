@@ -13,7 +13,7 @@ FORGE-K simulator packages define target authority behavior. Live daemon integra
 | Simulator services | `services/core/internal/forgek` | Target architecture only; no live daemon authority |
 | Phase 12 shadow diagnostics | `services/core/internal/forgekshadow` | Disabled-by-default read-only metadata/advisory reports |
 | Phase 14 Control Lane seams | `services/core/internal/aios/controllane` plus shared pure validators | Validation/enforcement only; no simulator service authority |
-| K20A Kernel ingress | `services/core/internal/forgekernel` | Default production semantic syscall ingress; single boot authority; `legacy_v1` rollback only |
+| K20J Kernel ingress | `services/core/internal/forgekernel` | Sole production semantic syscall ingress; no alternate live authority selector; offline recovery only |
 | Remaining live daemon authority | API, Control Lane durable adapter, gateway, permissions, lanes, audit, modelruntime, retrieval/search/embeddings, memory | Existing roles remain authoritative until their explicit migration gates close |
 
 ## Migration Pattern

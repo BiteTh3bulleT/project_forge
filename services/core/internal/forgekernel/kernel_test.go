@@ -162,11 +162,11 @@ func testProductionAuthorizationPolicy(req domain.SyscallRequest) error {
 
 func TestSelectAuthorityDefaultsToForgeKWithOneCommitAuthority(t *testing.T) {
 	delegate := &recordingProcessor{out: domain.SyscallResult{Success: true}}
-	selection, err := SelectAuthority("", delegate, testAuthorizationPort{})
+	selection, err := SelectAuthority(delegate, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}
-	if selection.Mode != ModeForgeK || selection.AuthorityOwner != AuthorityOwnerForgeK || !selection.SingleAuthority {
+	if selection.AuthorityOwner != AuthorityOwnerForgeK || !selection.SingleAuthority {
 		t.Fatalf("unexpected selection: %#v", selection)
 	}
 	result, err := selection.Processor.Process(context.Background(), kernelTestRequest("sys-1"))
@@ -192,7 +192,7 @@ func TestSelectAuthorityDefaultsToForgeKWithOneCommitAuthority(t *testing.T) {
 
 func TestKernelRequiresIdempotencyForPersistedContextCompile(t *testing.T) {
 	delegate := &recordingProcessor{out: domain.SyscallResult{Success: true}}
-	selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
+	selection, err := SelectAuthority(delegate, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestForgeKCompleteDispositionNeverCommits(t *testing.T) {
 		out:         domain.SyscallResult{Success: false, DeterministicErrCode: domain.ErrCapabilityDenied},
 		disposition: DispositionComplete,
 	}
-	selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
+	selection, err := SelectAuthority(delegate, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestForgeKRejectsMissingOrTamperedAuthorizationBeforePrepare(t *testing.T) 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			delegate := &recordingProcessor{out: domain.SyscallResult{Success: true}}
-			selection, err := SelectAuthority(string(ModeForgeK), delegate, tc.port)
+			selection, err := SelectAuthority(delegate, tc.port)
 			if err != nil {
 				t.Fatalf("select authority: %v", err)
 			}
@@ -281,7 +281,7 @@ func TestForgeKRejectsAdapterSuppliedAuthorizationMismatch(t *testing.T) {
 		t.Fatalf("build mismatched proof: %v", err)
 	}
 	delegate := &recordingProcessor{out: domain.SyscallResult{Success: true}, suppliedAuth: &supplied}
-	selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
+	selection, err := SelectAuthority(delegate, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}
@@ -297,7 +297,7 @@ func TestForgeKRejectsMissingPreparedPlanBeforeCommit(t *testing.T) {
 		out:  domain.SyscallResult{Success: true},
 		plan: &missing,
 	}
-	selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
+	selection, err := SelectAuthority(delegate, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}
@@ -340,7 +340,7 @@ func TestForgeKRejectsMissingOrTamperedReceiptAfterCommit(t *testing.T) {
 				out:     domain.SyscallResult{Success: true},
 				receipt: &tc.receipt,
 			}
-			selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
+			selection, err := SelectAuthority(delegate, testAuthorizationPort{})
 			if err != nil {
 				t.Fatalf("select authority: %v", err)
 			}
@@ -395,7 +395,7 @@ func TestForgeKValidatesBoundReplayWithoutCommittingAgain(t *testing.T) {
 		ReplayRequest: original, ReplayPlan: plan, ReplaySeal: seal, ReplayReceipt: receipt,
 		ReplayAuthorizationProof: originalAuthorization,
 	}}
-	selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
+	selection, err := SelectAuthority(delegate, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}
@@ -447,7 +447,7 @@ func TestForgeKRejectsLegacyUnboundOrTamperedReplay(t *testing.T) {
 			}
 			tc.edit(&prepared)
 			delegate := &recordingProcessor{prepared: &prepared}
-			selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
+			selection, err := SelectAuthority(delegate, testAuthorizationPort{})
 			if err != nil {
 				t.Fatalf("select authority: %v", err)
 			}
@@ -503,24 +503,13 @@ func TestForgeKReplayReconstructsOriginalCourtDecision(t *testing.T) {
 		ReplayRequest: original, ReplayPlan: plan, ReplaySeal: seal, ReplayReceipt: receipt,
 		ReplayAuthorizationProof: originalAuthorization,
 	}}
-	selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
+	selection, err := SelectAuthority(delegate, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}
 	result, err := selection.Processor.Process(context.Background(), current)
 	if err != nil || !result.Success || result.StateSummary["commitProofVerified"] != true || delegate.calls != 0 {
 		t.Fatalf("Court replay: result=%#v err=%v delegate=%#v", result, err, delegate)
-	}
-}
-
-func TestSelectAuthorityLegacyRollbackBypassesForgeKFacade(t *testing.T) {
-	delegate := &recordingProcessor{}
-	selection, err := SelectAuthority(string(ModeLegacyV1), delegate)
-	if err != nil {
-		t.Fatalf("select authority: %v", err)
-	}
-	if selection.Mode != ModeLegacyV1 || selection.Processor != delegate || !selection.SingleAuthority {
-		t.Fatalf("unexpected rollback selection: %#v", selection)
 	}
 }
 
@@ -532,7 +521,7 @@ func TestForgeKRejectsExternalAuthorityClaimBeforeCommit(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			delegate := &recordingProcessor{out: domain.SyscallResult{Success: true}}
-			selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
+			selection, err := SelectAuthority(delegate, testAuthorizationPort{})
 			if err != nil {
 				t.Fatalf("select authority: %v", err)
 			}
@@ -551,16 +540,13 @@ func TestForgeKRejectsExternalAuthorityClaimBeforeCommit(t *testing.T) {
 }
 
 func TestSelectAuthorityFailsClosed(t *testing.T) {
-	if _, err := SelectAuthority("both", &recordingProcessor{}); !errors.Is(err, ErrInvalidAuthorityMode) {
-		t.Fatalf("invalid mode error=%v", err)
-	}
-	if _, err := SelectAuthority(string(ModeForgeK), nil); !errors.Is(err, ErrMissingCommitAdapter) {
+	if _, err := SelectAuthority(nil, testAuthorizationPort{}); !errors.Is(err, ErrMissingCommitAdapter) {
 		t.Fatalf("missing adapter error=%v", err)
 	}
-	if _, err := SelectAuthority(string(ModeForgeK), processorWithoutDurablePort{}); !errors.Is(err, ErrMissingDurablePort) {
+	if _, err := SelectAuthority(processorWithoutDurablePort{}, testAuthorizationPort{}); !errors.Is(err, ErrMissingDurablePort) {
 		t.Fatalf("missing durable port error=%v", err)
 	}
-	if _, err := SelectAuthority(string(ModeForgeK), &recordingProcessor{}); !errors.Is(err, ErrMissingAuthorization) {
+	if _, err := SelectAuthority(&recordingProcessor{}, nil); !errors.Is(err, ErrMissingAuthorization) {
 		t.Fatalf("missing authorization port error=%v", err)
 	}
 }
@@ -582,7 +568,7 @@ func TestForgeKLiveCommitCarriesAuthorityIntoAuditAndJournal(t *testing.T) {
 		AuditSink:    auditSink,
 		NowMillis:    func() int64 { return 1760000000000 },
 	})
-	selection, err := SelectAuthority(string(ModeForgeK), commit, testAuthorizationPort{})
+	selection, err := SelectAuthority(commit, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}
@@ -746,7 +732,7 @@ func newLiveSQLiteAuthority(t *testing.T) (Selection, *store.Store, *controllane
 		AuditSink: auditSink,
 		NowMillis: func() int64 { return 1760000000000 },
 	})
-	selection, err := SelectAuthority(string(ModeForgeK), adapter, testAuthorizationPort{})
+	selection, err := SelectAuthority(adapter, testAuthorizationPort{})
 	if err != nil {
 		t.Fatalf("select authority: %v", err)
 	}

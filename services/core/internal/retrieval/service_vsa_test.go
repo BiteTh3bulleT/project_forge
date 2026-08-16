@@ -205,7 +205,7 @@ func installTestForgeKAuthority(t *testing.T, svc *Service, db *sql.DB) {
 	if err != nil {
 		t.Fatalf("production authorization: %v", err)
 	}
-	selection, err := forgekernel.SelectAuthority(string(forgekernel.ModeForgeK), adapter, authorization)
+	selection, err := forgekernel.SelectAuthority(adapter, authorization)
 	if err != nil {
 		t.Fatalf("select FORGE-K authority: %v", err)
 	}

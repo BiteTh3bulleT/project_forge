@@ -182,7 +182,8 @@ This remains partial enforcement, not full FORGE-K live authority. It does not i
 ## K20A Production Ingress Cutover
 
 K20A adds `services/core/internal/forgekernel` as a production-owned authority
-boundary. The default boot mode is `forge_k`; `legacy_v1` is an explicit tested
+boundary. K20J supersedes the original mode design: production boot constructs
+only `forge_k`; the former alternate was an explicit tested
 rollback. Only one processor is selected and only one durable commit occurs.
 
 K20A does not import `services/core/internal/forgek`, replace SQLite, duplicate
@@ -196,4 +197,4 @@ K20B closes that extraction gate. `forgekernel.Kernel` now owns the live stage
 order through `DurablePort`: deterministic prepare, exactly one atomic
 apply+journal commit, audit persistence/linkage, then best-effort observation.
 Control Lane implements those port methods and retains combined orchestration
-only for the explicit `legacy_v1` rollback mode.
+only for historical compatibility tests and is never a production rollback mode.

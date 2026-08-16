@@ -16,7 +16,7 @@ import (
 func TestCourtAdmissionRouteDerivesAuthorityFieldsFromGovernedRetrievalEvidence(t *testing.T) {
 	srv, st := newBackupAuditHarness(t)
 	processor := &capturingUtilityProcessor{}
-	srv.kernelAuthority = forgekernel.Selection{Processor: processor, Mode: forgekernel.ModeForgeK, SingleAuthority: true}
+	srv.kernelAuthority = forgekernel.Selection{Processor: processor, SingleAuthority: true}
 	srv.kernelAuthorizationReady = true
 	resultID := seedGovernedRetrievalEvidenceForAdmission(t, st)
 	body := []byte(`{"retrievalResultId":` + jsonNumber(resultID) + `,"workspaceId":"workspace-a","laneId":"lane-a","selectedPaths":["/repo/a.go"]}`)
@@ -48,7 +48,7 @@ func TestCourtAdmissionRouteDerivesAuthorityFieldsFromGovernedRetrievalEvidence(
 func TestGovernedMemoryAndSemanticRoutesBuildNarrowKernelRequests(t *testing.T) {
 	srv, st := newBackupAuditHarness(t)
 	processor := &capturingUtilityProcessor{}
-	srv.kernelAuthority = forgekernel.Selection{Processor: processor, Mode: forgekernel.ModeForgeK, SingleAuthority: true}
+	srv.kernelAuthority = forgekernel.Selection{Processor: processor, SingleAuthority: true}
 	srv.kernelAuthorizationReady = true
 	seedGovernedVSAEvidenceAPI(t, st, "/repo/a.go")
 
@@ -78,7 +78,7 @@ func TestGovernedMemoryAndSemanticRoutesBuildNarrowKernelRequests(t *testing.T) 
 func TestGovernedEvidenceRoutesRejectSpoofedFieldsAndMissingIdempotency(t *testing.T) {
 	srv, _ := newBackupAuditHarness(t)
 	processor := &capturingUtilityProcessor{}
-	srv.kernelAuthority = forgekernel.Selection{Processor: processor, Mode: forgekernel.ModeForgeK, SingleAuthority: true}
+	srv.kernelAuthority = forgekernel.Selection{Processor: processor, SingleAuthority: true}
 	srv.kernelAuthorizationReady = true
 
 	missingKey := httptest.NewRequest(http.MethodPost, "/api/memory/evidence/diffs", bytes.NewBufferString(`{"workspaceId":"ws","laneId":"lane","selectedPaths":["/a"],"leftEvidenceId":"a","rightEvidenceId":"b"}`))

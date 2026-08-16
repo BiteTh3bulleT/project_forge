@@ -127,20 +127,6 @@ func TestCourthouseFailsClosedOutsideKernelAndForProposerActors(t *testing.T) {
 		}
 		assertNoCourtRows(t, st, req.ID)
 	})
-	t.Run("legacy rollback cannot rule", func(t *testing.T) {
-		_, st, _ := newLiveSQLiteAuthority(t)
-		adapter := controllane.NewProcessor(controllane.ProcessorOptions{TxRunner: controllane.NewSQLiteTransactionRunner(st.DB)})
-		legacy, err := SelectAuthority(string(ModeLegacyV1), adapter)
-		if err != nil {
-			t.Fatal(err)
-		}
-		req := liveCourtRequest(domain.ActionAdmitEvidence, "court-legacy")
-		result, err := legacy.Processor.Process(ctx, req)
-		if err != nil || result.Success || result.DeterministicErrCode != domain.ErrUnauthorized {
-			t.Fatalf("legacy authority admitted evidence: err=%v result=%#v", err, result)
-		}
-		assertNoCourtRows(t, st, req.ID)
-	})
 }
 
 func TestForgeKCourthouseJournalFailureRollsBackAllRows(t *testing.T) {

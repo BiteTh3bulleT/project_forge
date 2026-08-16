@@ -1,8 +1,8 @@
 # FORGE-K Live Cutover
 
-Status: K20A-K20G active; full cutover in progress.
+Status: K20A-K20J active; full cutover in progress.
 
-Date: 2026-08-14.
+Date: 2026-08-16.
 
 ## Target
 
@@ -35,13 +35,15 @@ caller
      -> DurablePort.ObserveResult           [best-effort, no decision authority]
 
 The temporary DurablePort implementation lives in
-`aios/controllane.Processor`; its combined `Process` method is used only by the
-`legacy_v1` rollback mode and tests.
+`aios/controllane.Processor`; its combined `Process` method remains only as an
+isolated adapter-test compatibility surface and is never selected by production
+assembly.
 ```
 
-Boot selects one chain only. `FORGE_KERNEL_AUTHORITY_MODE=forge_k` is the
-default. `legacy_v1` bypasses the FORGE-K ingress facade for rollback and must be
-removed after final parity acceptance. No mode performs dual commits.
+Boot constructs one chain only. There is no production authority-mode selector:
+daemon assembly always constructs `forgekernel.Kernel` over its one durable
+port. Rollback is a daemon-stopped, verified store/generation operation, never
+a second live authority. No fallback or shadow path performs dual commits.
 
 ## Authority matrix
 
@@ -53,9 +55,9 @@ removed after final parity acceptance. No mode performs dual commits.
 | Tool execution | Gateway | Gateway external driver | Keep single execution ingress |
 | Courthouse | Production FORGE-K deterministic admission/rejection, immutable rulings, and appeals | FORGE-K | Closed in K20C; K20D makes its commit receipt, journal chain, provenance, audit intent, and optional idempotency proof atomic with the Court mutation |
 | Utility evidence | FORGE-K append-only retrieval usefulness and restore-outcome feedback events; separate rebuildable projections | FORGE-K | K20G closes the mutable feedback writers; retrieval job-outcome recording remains fail-closed pending an exact batch contract |
-| Semantic Algebra | Shape validation only | Governed live operations | Operation parity and journal tests |
-| Memory Palace | Shadow/mirror plus current memory stores | Structured governed objects/routes | Current/history separation and migration proof |
-| Context Compiler | Legacy `COMPILE_CONTEXT` plus attribution validation | FORGE-K bundles | Prompt parity, attribution, token-budget tests |
+| Semantic Algebra | FORGE-K deterministic `semantic.diff.v1`; other operators staged | Governed live operations | Add operators only through separate deterministic contracts |
+| Memory Palace | Court-derived immutable evidence, append-only revision, governed VSA projection, narrow intent routes | Structured governed objects/routes | Finish context/runtime consumers and offline recovery |
+| Context Compiler | FORGE-K-only ingress with temporary Control Lane decision/apply; pure production contract ready | FORGE-K bundles | Connect pure decision, admitted-source manifest, prompt commitment, snapshot-head CAS |
 | Runtime Boundary | `modelruntime` proposal envelopes | FORGE-K driver contract over modelruntime | No model authority, cancellation/usage evidence |
 | Consensus | Narrow final-response guard | Composition/admission guard | All response surfaces covered |
 | Snapshots/replay | Existing backup/context snapshots | FORGE-K shape/replay authority | Restore seed, hash-chain, rollback tests |
@@ -73,10 +75,10 @@ removed after final parity acceptance. No mode performs dual commits.
   mutate canonical state.
 - Current truth and historical truth remain separately queryable.
 - Replay detects journal divergence and cannot silently repair truth.
-- Operator status reports the active authority owner and rollback posture.
+- Operator status reports the active sole authority owner and offline rollback posture.
 - The complete test suite and native offline OptiPlex acceptance pass.
-- `legacy_v1` mode and stale v1 authority documentation are removed only after
-  all prior gates close.
+- No alternate live kernel mode or production Control Lane combined-orchestrator
+  callsite exists.
 
 ## K20C Courthouse cutover
 
@@ -87,7 +89,7 @@ idempotency preflight before the production Kernel computes the ruling. The
 durable adapter may persist that typed decision but cannot invent one. Initial
 exhibit/current-state rows, append-only ruling/appeal history, provenance, and
 the semantic journal event share one SQLite transaction. Model actors,
-proposal-only sources, and `legacy_v1` fail closed. The simulator Courthouse is
+proposal-only sources, and obsolete alternate authority modes fail closed. The simulator Courthouse is
 not imported.
 
 K20D closes the canonical commit-integrity gap described by the K20C report.

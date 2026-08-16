@@ -9,7 +9,7 @@ Goal: one authoritative path per operation. Legacy mutation boundaries are retir
 | Area | Authoritative path | Legacy boundary | Current state |
 |---|---|---|---|
 | Tool execution | `/api/gateway/invoke` -> `gateway.Execute` | none | complete (legacy `/api/adapters/{id}/invoke` route removed; execution authority is gateway-only) |
-| Semantic mutation | `forgekernel.Kernel` -> Control Lane durable adapter | `legacy_v1` boot rollback | K20A ingress cutover active; no dual commit |
+| Semantic mutation | `forgekernel.Kernel` -> Control Lane durable adapter | offline verified recovery only | K20J sole boot authority; no live fallback or dual commit |
 | Memory observation mutation | FORGE-K semantic syscall ingress | `/api/memory/observations*` mutation endpoints | complete for route cutover: legacy mutation endpoints return `410 Gone` and emit retired audit records |
 | Approvals | `approvals.Service` | direct decision endpoints | stable |
 | Audit | `audit.Service` | none observed | stable |

@@ -3,8 +3,8 @@
 Phase 2 made Control Lane a deterministic semantic syscall processor. K20A
 placed it behind production FORGE-K ingress. K20B split its behavior into the
 K-owned `DurablePort` stages: `Prepare`, `Commit`, `RecordResult`, and
-`ObserveResult`. The combined `Process` method is now the `legacy_v1` rollback
-facade rather than the default production orchestrator.
+`ObserveResult`. The combined `Process` method is now a bounded adapter-test
+facade and cannot be selected by production assembly.
 
 Implementation location:
 

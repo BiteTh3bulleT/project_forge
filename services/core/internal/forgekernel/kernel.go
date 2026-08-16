@@ -19,19 +19,12 @@ import (
 	"forge/projectforge/services/core/internal/forgekernel/semanticdiff"
 )
 
-type AuthorityMode string
-
 const (
-	ModeForgeK   AuthorityMode = "forge_k"
-	ModeLegacyV1 AuthorityMode = "legacy_v1"
-
-	AuthorityOwnerForgeK   = "forge_k.kernel"
-	AuthorityOwnerLegacyV1 = "aios.controllane"
-	DurableCommitAdapter   = "aios.controllane.sqlite"
+	AuthorityOwnerForgeK = "forge_k.kernel"
+	DurableCommitAdapter = "aios.controllane.sqlite"
 )
 
 var (
-	ErrInvalidAuthorityMode = errors.New("invalid kernel authority mode")
 	ErrMissingCommitAdapter = errors.New("missing durable kernel commit adapter")
 	ErrMissingDurablePort   = errors.New("commit adapter does not implement the FORGE-K durable port")
 	ErrMissingAuthorization = errors.New("missing production FORGE-K authorization port")
@@ -93,10 +86,8 @@ type AuthorizationPort interface {
 
 type Selection struct {
 	Processor       Processor
-	Mode            AuthorityMode
 	AuthorityOwner  string
 	CommitAdapter   string
-	RollbackMode    AuthorityMode
 	SingleAuthority bool
 }
 
@@ -125,53 +116,26 @@ func HasVerifiedAuthorizationContext(ctx context.Context) bool {
 	return verified
 }
 
-// SelectAuthority accepts the production authorization port as a variadic
-// parameter only to keep the explicit legacy_v1 rollback call source-compatible.
-// forge_k requires exactly one non-nil port and otherwise fails closed.
-func SelectAuthority(rawMode string, commit Processor, authorization ...AuthorizationPort) (Selection, error) {
-	mode, err := ParseAuthorityMode(rawMode)
-	if err != nil {
-		return Selection{}, err
-	}
+// SelectAuthority constructs the sole production semantic authority.
+// Operational rollback is an offline store/generation procedure and never a
+// second live orchestrator.
+func SelectAuthority(commit Processor, authorization AuthorizationPort) (Selection, error) {
 	if commit == nil {
 		return Selection{}, ErrMissingCommitAdapter
-	}
-	if mode == ModeLegacyV1 {
-		return Selection{
-			Processor:       commit,
-			Mode:            mode,
-			AuthorityOwner:  AuthorityOwnerLegacyV1,
-			CommitAdapter:   DurableCommitAdapter,
-			RollbackMode:    ModeLegacyV1,
-			SingleAuthority: true,
-		}, nil
 	}
 	port, ok := commit.(DurablePort)
 	if !ok {
 		return Selection{}, ErrMissingDurablePort
 	}
-	if len(authorization) != 1 || authorization[0] == nil {
+	if authorization == nil {
 		return Selection{}, ErrMissingAuthorization
 	}
 	return Selection{
-		Processor:       &Kernel{port: port, authorization: authorization[0]},
-		Mode:            ModeForgeK,
+		Processor:       &Kernel{port: port, authorization: authorization},
 		AuthorityOwner:  AuthorityOwnerForgeK,
 		CommitAdapter:   DurableCommitAdapter,
-		RollbackMode:    ModeLegacyV1,
 		SingleAuthority: true,
 	}, nil
-}
-
-func ParseAuthorityMode(raw string) (AuthorityMode, error) {
-	switch AuthorityMode(strings.ToLower(strings.TrimSpace(raw))) {
-	case "", ModeForgeK:
-		return ModeForgeK, nil
-	case ModeLegacyV1:
-		return ModeLegacyV1, nil
-	default:
-		return "", ErrInvalidAuthorityMode
-	}
 }
 
 func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain.SyscallResult, error) {

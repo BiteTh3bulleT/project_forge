@@ -15,7 +15,7 @@ This is the starting path for a new collaborator, future operator session, or ag
 ## Authority Rules
 
 - FORGE-K simulator packages under `services/core/internal/forgek` are not live daemon authority.
-- Production FORGE-K lives under `services/core/internal/forgekernel`; K20A makes it the default semantic syscall ingress owner, K20B makes it own durable stage orchestration through a narrow port, and K20C makes it the deterministic Courthouse admission/ruling owner. Control Lane remains the temporary validation/apply/SQLite implementation and rollback facade. K20D atomic receipt/audit/idempotency/journal-chain work is the next integrity gate.
+- Production FORGE-K lives under `services/core/internal/forgekernel`; it is the sole boot-selectable semantic syscall authority, owns durable stage orchestration through a narrow port, and owns deterministic Courthouse admission/ruling. Control Lane remains the temporary validation/apply/SQLite implementation, not a selectable orchestrator. Alternate live authority modes fail closed; rollback is an offline recovery procedure.
 - Gateway, modelruntime, approvals, audit, memory, retrieval, API, and the temporary Control Lane adapter retain their documented live roles until each staged cutover gate closes.
 - Model output is proposal/evidence text, not canonical truth.
 - Durable semantic writes need deterministic validation, journal/audit/provenance, and governed commit boundaries.

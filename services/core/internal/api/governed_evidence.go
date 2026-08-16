@@ -121,7 +121,7 @@ func exactGovernedAPIScope(left, right domain.ForgeScope) bool {
 }
 
 func (s *Server) requireGovernedKernel(w http.ResponseWriter) bool {
-	if s.kernelAuthority.Processor == nil || !s.kernelAuthorizationReady || s.kernelAuthority.Mode != forgekernel.ModeForgeK {
+	if s.kernelAuthority.Processor == nil || !s.kernelAuthority.SingleAuthority || !s.kernelAuthorizationReady {
 		writeAPIError(w, http.StatusServiceUnavailable, "kernel_authority_unavailable", "production FORGE-K authority is unavailable", nil)
 		return false
 	}

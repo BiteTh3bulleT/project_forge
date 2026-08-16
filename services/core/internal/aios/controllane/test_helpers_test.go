@@ -56,7 +56,7 @@ func processContextThroughForgeK(ctx context.Context, processor *Processor, req 
 	if mergeCompileContextOptions(req.Payload).PersistSnapshot && req.IdempotencyKey == "" {
 		req.IdempotencyKey = "test-context:" + req.ID
 	}
-	selection, err := forgekernel.SelectAuthority(string(forgekernel.ModeForgeK), processor, testForgeKAuthorizationPort{})
+	selection, err := forgekernel.SelectAuthority(processor, testForgeKAuthorizationPort{})
 	if err != nil {
 		return domain.SyscallResult{}, err
 	}

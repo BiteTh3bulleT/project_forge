@@ -95,7 +95,6 @@ type Config struct {
 	ModelChatModelCooldownMs                    int
 	ModelChatCheckpointLimit                    int
 	EnableOpenAICompatAPI                       bool
-	ForgeKernelAuthorityMode                    string
 	ForgeKShadowModeEnabled                     bool
 	ForgeKShadowChatMetadataEnabled             bool
 	ForgeKShadowRetrievalMetadataEnabled        bool
@@ -237,7 +236,6 @@ func Load() Config {
 		ModelChatModelCooldownMs:                 envInt("FORGE_MODEL_CHAT_MODEL_COOLDOWN_MS", 5000, 0),
 		ModelChatCheckpointLimit:                 envInt("FORGE_MODEL_CHAT_CHECKPOINT_LIMIT", 128, 1),
 		EnableOpenAICompatAPI:                    envBool("FORGE_ENABLE_OPENAI_COMPAT_API", false),
-		ForgeKernelAuthorityMode:                 envStringDefault("FORGE_KERNEL_AUTHORITY_MODE", "forge_k"),
 		ForgeKShadowModeEnabled:                  envBool("FORGE_K_SHADOW_MODE_ENABLED", false),
 		ForgeKShadowChatMetadataEnabled:          envBool("FORGE_K_SHADOW_CHAT_METADATA_ENABLED", false),
 		ForgeKShadowRetrievalMetadataEnabled:     envBool("FORGE_K_SHADOW_RETRIEVAL_METADATA_ENABLED", false),

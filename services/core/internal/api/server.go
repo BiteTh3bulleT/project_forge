@@ -233,7 +233,7 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	if authorizationErr != nil {
 		kernelAuthorityErr = authorizationErr
 	} else {
-		kernelAuthority, kernelAuthorityErr = forgekernel.SelectAuthority(cfg.ForgeKernelAuthorityMode, commitAdapter, productionAuthorization)
+		kernelAuthority, kernelAuthorityErr = forgekernel.SelectAuthority(commitAdapter, productionAuthorization)
 	}
 	kernelErr := ""
 	if kernelAuthorityErr != nil {
@@ -350,7 +350,7 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		shadowDB:                 shadowDB,
 		kernelAuthority:          kernelAuthority,
 		kernelErr:                kernelErr,
-		kernelAuthorizationReady: authorizationErr == nil && kernelAuthorityErr == nil && kernelAuthority.Mode == forgekernel.ModeForgeK,
+		kernelAuthorizationReady: authorizationErr == nil && kernelAuthorityErr == nil && kernelAuthority.SingleAuthority,
 	}
 	srv.telegramGateway = srv.tryStartTelegramGateway(ctx, cfg)
 	srv.discordGateway = srv.tryStartDiscordGateway(ctx, cfg)

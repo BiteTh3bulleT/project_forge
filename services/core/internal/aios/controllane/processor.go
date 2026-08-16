@@ -95,8 +95,9 @@ func NewProcessor(opts ProcessorOptions) *Processor {
 	}
 }
 
-// Process is the legacy_v1 rollback orchestration. Production FORGE-K calls
-// Prepare, Commit, RecordResult, and ObserveResult itself through DurablePort.
+// Process is retained temporarily for isolated adapter compatibility tests.
+// Production assembly never selects it as authority; FORGE-K calls Prepare,
+// Commit, RecordResult, and ObserveResult itself through DurablePort.
 func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (domain.SyscallResult, error) {
 	prepared, err := p.Prepare(ctx, req)
 	if err != nil || prepared.Disposition == forgekernel.DispositionComplete {
@@ -105,7 +106,7 @@ func (p *Processor) Process(ctx context.Context, req domain.SyscallRequest) (dom
 		return result, err
 	}
 	if prepared.Disposition == forgekernel.DispositionReplay {
-		result, replayErr := verifyLegacyReplay(prepared)
+		result, replayErr := verifyStoredReplayProof(prepared)
 		result = p.RecordResult(ctx, prepared.Request, result)
 		p.ObserveResult(ctx, prepared.Request, result)
 		return result, replayErr
@@ -185,7 +186,7 @@ func (p *Processor) Prepare(ctx context.Context, req domain.SyscallRequest) (for
 
 	if productionAuthorized {
 		// Production identity/capability/approval authority was already resolved
-		// and verified by FORGE-K. Static services remain legacy_v1/test policy
+		// and verified by FORGE-K. Static services remain isolated test policy
 		// only and cannot override the production proof.
 		result.ApprovalStatus = domain.ApprovalAllowed
 		result.ValidationDetails = append(result.ValidationDetails,
@@ -568,10 +569,10 @@ func (p *Processor) Commit(ctx context.Context, prepared forgekernel.PreparedSys
 	return forgekernel.CommitOutcome{Result: result, Receipt: receipt}, nil
 }
 
-// verifyLegacyReplay keeps the explicit rollback mode compatible without
-// trusting an unproved cached result. Production requests use Kernel.replay;
-// this path exists only until legacy_v1 is retired.
-func verifyLegacyReplay(prepared forgekernel.PreparedSyscall) (domain.SyscallResult, error) {
+// verifyStoredReplayProof keeps the adapter's combined Process test facade
+// from trusting an unproved cached result. Production requests use
+// Kernel.replay; this compatibility path is not reachable from assembly.
+func verifyStoredReplayProof(prepared forgekernel.PreparedSyscall) (domain.SyscallResult, error) {
 	currentFingerprint, err := commitproof.IdempotencyFingerprint(prepared.Request)
 	if err == nil {
 		err = commitproof.VerifyPreparedPlan(prepared.ReplayRequest, prepared.ReplayPlan, prepared.ReplaySeal)

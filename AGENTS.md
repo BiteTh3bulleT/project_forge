@@ -28,7 +28,7 @@ Last convergence sweep update: 2026-08-14 (K20A production authority alignment).
 ## FORGE-K Live Authority Boundary
 - `[SIMULATOR-ONLY]` The FORGE-K simulator under `services/core/internal/forgek` is not live daemon authority yet.
 - `[LIVE / CUTOVER IN PROGRESS]` `services/core/internal/forgekernel` is the production FORGE-K boundary. K20A-K20E make it the authenticated semantic syscall ingress, durable stage-order, Courthouse-decision, sealed commit/receipt/replay, and authorization-proof owner. `aios/controllane` still implements validation/apply logic and the temporary SQLite port.
-- Boot selects one authority with `FORGE_KERNEL_AUTHORITY_MODE=forge_k` (default) or `legacy_v1` (rollback). Dual commits are forbidden.
+- Boot constructs exactly one production semantic authority: `forgekernel.Kernel`. No live alternate authority selector exists; rollback is daemon-stopped verified recovery.
 - `[LIVE]` The daemon still uses existing gateway, permissions, lane, audit, model runtime, retrieval, embeddings, memory, API, and temporary Control Lane commit-adapter paths during staged migration.
 - `[PARTIAL]` K20F makes default/manual memory repair and VSA reindex proposal-only and stops retrieval from rewriting legacy observations. Remaining evidence/projection writers are not canonical truth authority but still require later append-only or atomic-rebuild contracts.
 - Do not assume FORGE-K doctrine is enforced in live AI-OS, gateway, permissions, lane, audit, model runtime, retrieval, embeddings, memory, or API paths unless the live path has explicit integration tests.
@@ -43,6 +43,7 @@ Last convergence sweep update: 2026-08-14 (K20A production authority alignment).
 - Do not overclaim full FORGE-K authority. The production `forgekernel` boundary is live for the explicitly integrated K20A-K20E surfaces; simulator services and unintegrated subsystems remain non-authoritative.
 
 ## Project Priorities
+- **2026-08-16**: K20J removes the live authority-mode selector. Production assembly always constructs the single FORGE-K Kernel over its temporary Control Lane durable port; alternate live orchestrators cannot be selected. Operational rollback is offline verified store/generation recovery.
 - **2026-08-14**: K20E requires a Kernel-verified service principal or trusted request origin plus registry, scope-exact capability, and approval evidence before prepare. Exact request and full authorization proof persist with immutable audit/idempotency evidence and are required for replay. Live raw backup restore and mutable restore-outcome feedback are retired pending daemon-stopped recovery and Kernel-owned append contracts.
 - **2026-08-14**: K20F contains legacy memory-plane writers: scheduled/manual repair and VSA rebuild are proposal-only, retrieval no longer creates or updates legacy observations, and usefulness updates VSA reliability once.
 - **2026-08-14**: K20D makes successful canonical commits require a sealed prepared plan and Kernel-validated receipt; semantic mutation, provenance, journal hash-chain/head, audit intent, and idempotency proof share one SQLite transaction.

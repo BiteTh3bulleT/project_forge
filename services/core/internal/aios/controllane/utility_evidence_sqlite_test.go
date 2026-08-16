@@ -127,7 +127,7 @@ func newSQLiteUtilityAuthority(t *testing.T) (forgekernel.Processor, *store.Stor
 	if err != nil {
 		t.Fatal(err)
 	}
-	selection, err := forgekernel.SelectAuthority(string(forgekernel.ModeForgeK), processor, authorization)
+	selection, err := forgekernel.SelectAuthority(processor, authorization)
 	if err != nil {
 		t.Fatal(err)
 	}

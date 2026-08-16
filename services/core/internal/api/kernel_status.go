@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"forge/projectforge/services/core/internal/aios/controllane"
-	"forge/projectforge/services/core/internal/forgekernel"
 )
 
 func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActivationReadinessReport {
@@ -20,9 +19,6 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 		if s.kernelErr != "" {
 			report.Notes = append(report.Notes, "boot authority selection failed: "+s.kernelErr)
 		}
-		return report
-	}
-	if selection.Mode != forgekernel.ModeForgeK {
 		return report
 	}
 	report.Status = "forge_k_authenticated_commit_integrity_live"
@@ -65,7 +61,7 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 	}
 	report.Notes = []string{
 		"production semantic syscall construction selects exactly one boot authority",
-		"FORGE_KERNEL_AUTHORITY_MODE=legacy_v1 is the tested rollback mode",
+		"obsolete alternate authority modes fail closed; rollback is an offline store/generation procedure",
 		"exact prepared requests and plans are sealed; successful commits require a validated typed receipt",
 		"semantic mutation, journal hash-chain head and provenance, immutable audit intent, and optional idempotency proof share one SQLite transaction",
 		"verified idempotent replay does not re-commit; legacy unbound replay proof fails closed",
@@ -81,8 +77,8 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_ADMISSION_AND_RULING_LIVE"
 			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
 			report.AuthorityMatrix[i].TargetOwner = selection.AuthorityOwner
-			report.AuthorityMatrix[i].FeatureFlag = "production FORGE-K authority mode only; legacy_v1 fails closed"
-			report.AuthorityMatrix[i].RollbackPath = "select legacy_v1 to disable admission/ruling mutations; existing Court history remains inspectable"
+			report.AuthorityMatrix[i].FeatureFlag = "production FORGE-K is the sole boot-constructed authority"
+			report.AuthorityMatrix[i].RollbackPath = "stop the daemon and use the verified offline store/generation rollback procedure"
 			report.AuthorityMatrix[i].TestsPassing = append(report.AuthorityMatrix[i].TestsPassing,
 				"deterministic admission/rejection tests",
 				"immutable ruling and appeal history tests",
@@ -96,8 +92,8 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_COMMIT_INTEGRITY_LIVE"
 			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
 			report.AuthorityMatrix[i].TargetOwner = selection.AuthorityOwner
-			report.AuthorityMatrix[i].FeatureFlag = "FORGE_KERNEL_AUTHORITY_MODE=forge_k (default); legacy_v1 is rollback only"
-			report.AuthorityMatrix[i].RollbackPath = "set FORGE_KERNEL_AUTHORITY_MODE=legacy_v1 and restart; boot selects one authority and never dual-commits"
+			report.AuthorityMatrix[i].FeatureFlag = "no live authority-mode selector; production always constructs FORGE-K"
+			report.AuthorityMatrix[i].RollbackPath = "stop the daemon and restore a verified prior store/generation; no alternate live authority exists"
 			report.AuthorityMatrix[i].TestsPassing = append(report.AuthorityMatrix[i].TestsPassing,
 				"production kernel authority selection tests",
 				"single-delegate commit tests",
@@ -119,8 +115,8 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_DETERMINISTIC_DIFF_LIVE"
 			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
 			report.AuthorityMatrix[i].TargetOwner = selection.AuthorityOwner
-			report.AuthorityMatrix[i].FeatureFlag = "production FORGE-K authority mode only; legacy_v1 fails closed"
-			report.AuthorityMatrix[i].RollbackPath = "select legacy_v1 to disable new semantic diff commits; immutable diff history remains inspectable"
+			report.AuthorityMatrix[i].FeatureFlag = "production FORGE-K is the sole boot-constructed authority"
+			report.AuthorityMatrix[i].RollbackPath = "stop the daemon and use verified offline rollback; immutable diff history remains inspectable"
 			report.AuthorityMatrix[i].TestsPassing = append(report.AuthorityMatrix[i].TestsPassing,
 				"exact-scope current admitted source authority tests",
 				"deterministic diff golden and permutation tests",
@@ -135,8 +131,8 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 		case "Context Compiler":
 			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_INGRESS_ONLY_ADAPTER_DECISION"
 			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
-			report.AuthorityMatrix[i].FeatureFlag = "production FORGE-K authority mode only; legacy_v1 fails closed"
-			report.AuthorityMatrix[i].RollbackPath = "select legacy_v1 to disable context compilation; existing snapshot evidence remains inspectable"
+			report.AuthorityMatrix[i].FeatureFlag = "production FORGE-K is the sole boot-constructed authority"
+			report.AuthorityMatrix[i].RollbackPath = "stop the daemon and use verified offline rollback; existing snapshot evidence remains inspectable"
 		}
 	}
 	return report

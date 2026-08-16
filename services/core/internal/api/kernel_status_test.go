@@ -6,14 +6,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"forge/projectforge/services/core/internal/aios/domain"
-	"forge/projectforge/services/core/internal/config"
 	"forge/projectforge/services/core/internal/forgekernel"
-	"forge/projectforge/services/core/internal/store"
 )
 
 type kernelStatusProcessor struct{}
@@ -25,10 +22,8 @@ func (kernelStatusProcessor) Process(context.Context, domain.SyscallRequest) (do
 func liveForgeKStatusSelection() forgekernel.Selection {
 	return forgekernel.Selection{
 		Processor:       kernelStatusProcessor{},
-		Mode:            forgekernel.ModeForgeK,
 		AuthorityOwner:  forgekernel.AuthorityOwnerForgeK,
 		CommitAdapter:   forgekernel.DurableCommitAdapter,
-		RollbackMode:    forgekernel.ModeLegacyV1,
 		SingleAuthority: true,
 	}
 }
@@ -198,18 +193,8 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	}
 }
 
-func TestForgeKernelStatusReportsLegacyRollbackMode(t *testing.T) {
-	srv := &Server{
-		cfg: config.Config{ForgeKernelAuthorityMode: "legacy_v1"},
-		kernelAuthority: forgekernel.Selection{
-			Processor:       kernelStatusProcessor{},
-			Mode:            forgekernel.ModeLegacyV1,
-			AuthorityOwner:  forgekernel.AuthorityOwnerLegacyV1,
-			CommitAdapter:   forgekernel.DurableCommitAdapter,
-			RollbackMode:    forgekernel.ModeLegacyV1,
-			SingleAuthority: true,
-		},
-	}
+func TestForgeKernelStatusReportsUnavailableAuthorityFailClosed(t *testing.T) {
+	srv := &Server{kernelErr: forgekernel.ErrMissingAuthorization.Error()}
 	req := httptest.NewRequest(http.MethodGet, "/forge/kernel/status", nil)
 	rr := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr, req)
@@ -220,42 +205,8 @@ func TestForgeKernelStatusReportsLegacyRollbackMode(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload["status"] != "partial_live_validation_ready" || payload["live_kernel_ingress_authority"] != false || payload["live_durable_orchestration"] != false || payload["live_authority_migration"] != false {
-		t.Fatalf("legacy rollback posture incorrect: %#v", payload)
-	}
-}
-
-func TestForgeKernelStatusReportsBootSelectionFailureClosed(t *testing.T) {
-	dataDir := t.TempDir()
-	st, err := store.Open(dataDir)
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
-	srv := NewServer(st, config.Config{
-		DataDir:                  dataDir,
-		WorkspaceDir:             filepath.Join(dataDir, "workspace"),
-		ForgeKernelAuthorityMode: "both",
-	})
-	t.Cleanup(srv.ShutdownWatch)
-	if srv.kernelAuthority.SingleAuthority || srv.kernelAuthority.Processor != nil || srv.kernelErr == "" || srv.autonomy != nil {
-		t.Fatalf("invalid boot authority did not fail closed: selection=%#v err=%q autonomy=%#v", srv.kernelAuthority, srv.kernelErr, srv.autonomy)
-	}
-	req := httptest.NewRequest(http.MethodGet, "/forge/kernel/status", nil)
-	rr := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if payload["status"] != "kernel_authority_unavailable" || payload["mode"] != "fail_closed" || payload["live_owner"] != "none" {
-		t.Fatalf("boot selection failure posture incorrect: %#v", payload)
-	}
-	if payload["live_kernel_ingress_authority"] != false || payload["live_durable_orchestration"] != false || payload["live_authority_migration"] != false {
-		t.Fatalf("boot selection failure claimed live authority: %#v", payload)
+	if payload["status"] != "kernel_authority_unavailable" || payload["live_kernel_ingress_authority"] != false || payload["live_durable_orchestration"] != false || payload["live_authority_migration"] != false {
+		t.Fatalf("unavailable authority fail-closed posture incorrect: %#v", payload)
 	}
 }
 

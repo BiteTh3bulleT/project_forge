@@ -55,7 +55,7 @@ type ProductionAuthorizationOptions struct {
 }
 
 // ProductionAuthorizationService resolves evidence independently of the
-// legacy StaticCapabilityService and StaticApprovalGate used by legacy_v1.
+// static compatibility services used only by isolated adapter tests.
 type ProductionAuthorizationService struct {
 	registry  ActionRegistry
 	db        *sql.DB

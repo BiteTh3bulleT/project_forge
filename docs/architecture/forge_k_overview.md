@@ -11,8 +11,8 @@ Current boundary banner:
 - `[SIMULATOR-ONLY]` Kernel, Courthouse, Memory Palace, Semantic Algebra, Snapshots, Context Compiler, KV System, Runtime Boundary, Lymphatic Lane, and Consensus Mesh are simulator authorities only.
 - `[LIVE / READ_ONLY]` Phase 12 shadow diagnostics can observe bounded metadata and produce advisory reports; they cannot affect output or state.
 - `[PARTIAL LIVE VALIDATION]` Phase 14 Control Lane seams validate identity, ref shape, source-object authority, comparison shape, and semantic-operation envelopes without executing those operations.
-- `[LIVE / K20A]` `internal/forgekernel` owns semantic syscall ingress by default; daemon boot selects it or the rollback-only `legacy_v1` path, never both.
-- `[LIVE / K20B]` FORGE-K owns prepare/commit/audit/observe order through `DurablePort`; the Control Lane combined processor path is rollback-only.
+- `[LIVE / K20J]` `internal/forgekernel` is the sole boot-constructed semantic syscall authority; no alternate live authority selector remains.
+- `[LIVE / K20B]` FORGE-K owns prepare/commit/audit/observe order through `DurablePort`; the Control Lane combined processor path is test-only.
 - `[LIVE / K20C]` Production FORGE-K owns deterministic evidence admission/rejection and appeal rulings. Current exhibit state plus immutable ruling/appeal history, provenance, and journal evidence commit atomically; audit sink/linkage remains a K20D blocker.
 - `[BLOCKED]` Live Courthouse admission, live Context Compiler prompt authority, FORGE-K-owned durable commit ports, runtime driver authority, and full Kernel authority require later migration gates.
 

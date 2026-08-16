@@ -20,6 +20,7 @@ func TestProductionAuthorizationConstructionAndOriginAuthorityAreUnique(t *testi
 	wanted := map[string][]string{
 		"NewForgeCoreServicePrincipal":      nil,
 		"NewProductionAuthorizationService": nil,
+		"SelectAuthority":                   nil,
 		"WithTrustedOrigin":                 nil,
 	}
 	fset := token.NewFileSet()
@@ -67,6 +68,9 @@ func TestProductionAuthorizationConstructionAndOriginAuthorityAreUnique(t *testi
 			t.Fatalf("%s production callsites=%v, want exactly [internal/api/server.go]", constructor, calls)
 		}
 	}
+	if calls := wanted["SelectAuthority"]; len(calls) != 1 || calls[0] != "internal/api/server.go" {
+		t.Fatalf("production Kernel construction callsites=%v, want exactly [internal/api/server.go]", calls)
+	}
 	for _, callsite := range wanted["WithTrustedOrigin"] {
 		if callsite != "internal/api/auth.go" {
 			t.Fatalf("trusted origin minted outside API authentication: %v", wanted["WithTrustedOrigin"])
@@ -86,5 +90,13 @@ func TestProductionAuthorizationConstructionAndOriginAuthorityAreUnique(t *testi
 	if strings.Count(serverSource, "controllane.NewStaticActionRegistry()") != 1 ||
 		len(registryBindings) != 2 {
 		t.Fatalf("production commit adapter and authorization resolver must share one actionRegistry construction")
+	}
+	configSource, err := os.ReadFile(filepath.Join(coreRoot, "internal", "config", "config.go"))
+	if err != nil {
+		t.Fatalf("read production config: %v", err)
+	}
+	if strings.Contains(string(configSource), "FORGE_KERNEL_AUTHORITY_MODE") ||
+		strings.Contains(string(configSource), "ForgeKernelAuthorityMode") {
+		t.Fatal("production configuration must not expose an alternate semantic authority selector")
 	}
 }

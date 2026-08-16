@@ -11,7 +11,7 @@ Legend:
 | Operation | Official path | Legacy/alternate path | Status | Current guard |
 |---|---|---|---|---|
 | Tool execution | `/api/gateway/invoke` -> `gateway.Execute` | none | official | legacy adapter invoke route removed; `/api/adapters/{id}/invoke` is not registered |
-| Memory semantic mutation (AI-OS) | `forgekernel.Kernel` -> K-owned `DurablePort` -> Control Lane SQLite implementation | `FORGE_KERNEL_AUTHORITY_MODE=legacy_v1` rollback | partial cutover (K20B) | one boot authority; K owns prepare/commit/audit/observe order; atomic object+journal commit; no dual commit |
+| Memory semantic mutation (AI-OS) | `forgekernel.Kernel` -> K-owned `DurablePort` -> Control Lane SQLite implementation | offline verified store/generation recovery only | partial subsystem cutover (K20J) | one boot authority; K owns prepare/commit/audit/observe order; atomic object+journal commit; no live fallback or dual commit |
 | Retired memory observation mutation | production FORGE-K semantic syscall path | `/api/memory/observations` POST, `/api/memory/observations/{id}` PATCH, `/api/memory/observations/{id}/usefulness` POST | retired | mutation endpoints return `410 Gone`; retired attempts are audited with correlation/trace/workspace payload context |
 | Memory/read inspection | `/api/memory/*` GET read routes | n/a | official | read-only inspection remains enabled |
 | Approval gate | `approvals.Service` via gateway/syscall flows | direct approval decision APIs | official | request/decision split preserved |

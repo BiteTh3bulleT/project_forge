@@ -1,5 +1,15 @@
 # FORGE-K Current Phase Status
 
+Latest K20J note (2026-08-16): production boot now has one semantic syscall
+authority. The authority-mode configuration/environment selector is removed;
+daemon assembly can construct only the production Kernel. Control Lane remains
+the Kernel's temporary validation/apply/SQLite `DurablePort`, but its combined
+`Process` facade is retained only for bounded adapter tests and is not selected
+by daemon assembly. Operational rollback is daemon-stopped store/generation
+recovery, never a second live orchestrator. Full subsystem authority is still
+incomplete while Context Compiler, Runtime/Consensus, KV, Lymphatic, recovery,
+and final operator/OptiPlex gates remain open.
+
 Latest K20I note (2026-08-16): production FORGE-K now owns the deliberately
 narrow `COMPUTE_SEMANTIC_DIFF` action. It accepts only two exact-scope,
 current, admitted K20H evidence identities and fixed `semantic.diff.v1`,
@@ -39,9 +49,9 @@ K20D controls remain live beneath that retirement guard: production `services/co
 
 Latest K20C note (2026-08-14): production `services/core/internal/forgekernel/court` owns deterministic `ADMIT_EVIDENCE` and `APPEAL_RULING` decisions after normal Kernel preflight. Current exhibit state, append-only ruling/appeal history, provenance, and the semantic journal event persist atomically; workspace/lane reads are scoped, prior-current appeal conflicts fail closed, and model/proposal/`legacy_v1` ruling attempts are rejected. This does not promote the simulator Courthouse. K20D now binds these mutations to the production Kernel's sealed plan, validated receipt, journal hash chain, immutable audit-outbox intent, and optional idempotency proof.
 
-Latest K20B note (2026-08-14): `services/core/internal/forgekernel` now owns the live syscall stage order as `PREPARE -> COMMIT -> AUDIT -> OBSERVE` through the production `DurablePort` contract. Control Lane implements deterministic preflight/apply logic and the temporary SQLite port; its combined `Process` orchestration is rollback-only under `legacy_v1`. Tests cover stage order, single commit, idempotent replay, capability denial, approval-required denial, journal-failure rollback, audit/journal authority evidence, and simulator isolation. Full FORGE-K authority remains incomplete until Courthouse, Memory Palace, Context Compiler, Runtime, Snapshot, KV, Lymphatic, and Consensus gates close.
+Latest K20B note (2026-08-14, superseded by K20J): `services/core/internal/forgekernel` owns the live syscall stage order as `PREPARE -> COMMIT -> AUDIT -> OBSERVE` through the production `DurablePort` contract. Control Lane implements deterministic preflight/apply logic and the temporary SQLite port; its combined `Process` orchestration is now test-only and cannot be selected at daemon boot. Tests cover stage order, single commit, idempotent replay, capability denial, approval-required denial, journal-failure rollback, audit/journal authority evidence, and simulator isolation. Full FORGE-K authority remains incomplete until Context Compiler, Runtime, KV, Lymphatic, recovery, and final system gates close.
 
-Latest K20A note (2026-08-14): `services/core/internal/forgekernel` is the default production semantic syscall ingress owner as `FORGE_K_INGRESS_LIVE / SINGLE_BOOT_AUTHORITY / ROLLBACK_AVAILABLE`. `FORGE_KERNEL_AUTHORITY_MODE=forge_k` is the default and `legacy_v1` is the explicit rollback; no mode dual-commits. The live facade rejects external model authority claims and reports its owner/adapter posture. The simulator under `internal/forgek` remains isolated.
+Latest K20A note (2026-08-14, superseded by K20J): `services/core/internal/forgekernel` is the sole production semantic syscall ingress owner as `FORGE_K_INGRESS_LIVE / SINGLE_BOOT_AUTHORITY / NO_ALTERNATE_LIVE_MODE`. The former authority-mode selector is removed. The live facade rejects external model authority claims and reports its owner/adapter posture. The simulator under `internal/forgek` remains isolated.
 
 Latest tool authority note (2026-08-14): FORGE now selects the exact chat tool before any structured proposal request. Ambiguous operational turns expose no tool schema and use the no-tool response path. A model can format arguments only for the one schema FORGE selected; it cannot choose a tool, switch tools, approve, or execute. Gateway remains the only tool execution authority.
 
