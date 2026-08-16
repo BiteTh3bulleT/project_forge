@@ -55,6 +55,7 @@ func TestFullBackupExportRestoreParityForHighValueSections(t *testing.T) {
 		"court_exhibits", "court_rulings", "court_appeals", "forge_k_journal_head", "forge_k_audit_outbox",
 		"forge_k_memory_evidence", "forge_k_memory_evidence_supersessions",
 		"forge_k_semantic_diff_operations", "forge_k_semantic_diff_results", "forge_k_semantic_derived_objects",
+		"forge_k_context_bundles", "forge_k_context_snapshot_heads",
 		"project_context_records", "evaluation_records", "gateway_invocations", "audit_records",
 		"autonomy_settings",
 		"permission_profiles", "approval_presets", "execution_strategies",

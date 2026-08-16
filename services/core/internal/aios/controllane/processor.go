@@ -388,6 +388,15 @@ func (p *Processor) Prepare(ctx context.Context, req domain.SyscallRequest) (for
 		}
 		prepared.SemanticDiffInput = input
 	}
+	if req.Action == domain.ActionCompileContext {
+		input, inputErr := prepareContextCompileAuthorityInput(req, p.txRunner.ReadStore())
+		if inputErr != nil {
+			return reject("context_compile_authority_input", []domain.SyscallError{{
+				Code: domain.ErrConflict, Field: "contextCompile.sources", Message: inputErr.Error(),
+			}}, inputErr)
+		}
+		prepared.ContextCompileInput = input
+	}
 	return prepared, nil
 }
 

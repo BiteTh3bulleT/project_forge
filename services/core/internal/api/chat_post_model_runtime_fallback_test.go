@@ -498,14 +498,14 @@ func TestChatPostSyncBoundsPlainModelRuntimePrompt(t *testing.T) {
 			t.Fatalf("expected user message <= %d chars, got=%d", modelRuntimePlainChatUserMax, len(msg.Content))
 		}
 	}
-	if !strings.Contains(joinedPrompt, "Recent chat context was compacted") {
-		t.Fatalf("expected compaction notice in model runtime prompt")
+	if !strings.Contains(joinedPrompt, "FORGE-K governed context bundle") {
+		t.Fatalf("expected Kernel-owned context bundle in model runtime prompt")
 	}
 	if strings.Contains(joinedPrompt, "USER:") || strings.Contains(joinedPrompt, "ASSISTANT:") {
 		t.Fatalf("expected structured chat messages without transcript labels, got=%q", joinedPrompt)
 	}
 	if strings.Count(joinedPrompt, strings.Repeat("x", modelRuntimePlainChatMessageMax+1)) > 0 {
-		t.Fatalf("expected oversized message content to be truncated")
+		t.Fatalf("legacy prior chat content entered the governed prompt")
 	}
 	if fakeRuntime.lastChat.MaxTokens != modelRuntimePlainChatMaxOutputToken {
 		t.Fatalf("expected max tokens=%d, got=%d", modelRuntimePlainChatMaxOutputToken, fakeRuntime.lastChat.MaxTokens)

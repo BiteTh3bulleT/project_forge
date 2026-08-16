@@ -8,7 +8,6 @@ import (
 
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/audit"
-	"forge/projectforge/services/core/internal/forgekernel"
 	"forge/projectforge/services/core/internal/store"
 )
 
@@ -39,7 +38,7 @@ func newSQLiteKernel(t *testing.T, approval ApprovalGate) (*Processor, *SQLiteTr
 func validSQLiteRequest(action domain.SemanticActionType, id, workspaceID string) domain.SyscallRequest {
 	req := validBaseRequest(action)
 	req.ID = id
-	req.Scope = domain.ForgeScope{WorkspaceID: workspaceID, LaneID: "control.semantic"}
+	req.Scope = domain.ForgeScope{WorkspaceID: workspaceID, LaneID: "control.semantic", SelectedPaths: []string{"/workspace"}}
 	req.CorrelationID = "corr-" + id
 	req.TraceID = "trace-" + id
 	req.Provenance.TraceID = req.TraceID
@@ -656,7 +655,7 @@ func TestSQLiteContextCompileDryRunAndReadOnlyPath(t *testing.T) {
 	}
 
 	// read-store BuildContext still deterministic and queryable.
-	pkt := read.BuildContext("summarize", domain.ForgeScope{WorkspaceID: "ws-main", LaneID: "control.semantic"}, domain.ContextBudget{
+	pkt := read.buildLegacyContextForInspection("summarize", domain.ForgeScope{WorkspaceID: "ws-main", LaneID: "control.semantic"}, domain.ContextBudget{
 		MaxTokens: 20,
 		MaxEvents: 10,
 		MaxNotes:  10,
@@ -677,8 +676,7 @@ func stringInSlice(values []string, target string) bool {
 
 func TestSQLiteContextCompilePersistsSnapshotEvidence(t *testing.T) {
 	ctx := context.Background()
-	k, txRunner, st := newSQLiteKernel(t, nil)
-	read := txRunner.read
+	k, _, st := newSQLiteKernel(t, nil)
 	scope := ScopeFilter{WorkspaceID: "ws-main", LaneID: "control.semantic"}
 
 	mustCreateNote(ctx, k, "ctx-note-a", "ctx a")
@@ -707,104 +705,18 @@ func TestSQLiteContextCompilePersistsSnapshotEvidence(t *testing.T) {
 	if err != nil || !res.Success {
 		t.Fatalf("persisting compile context failed: err=%v res=%+v", err, res)
 	}
-
-	packet, ok := read.FindLatestContextSnapshot(req.Scope, "summarize blockers", "restore")
-	if !ok {
-		t.Fatalf("expected persisted context snapshot")
+	var bundleCount, headCount, legacyCount int
+	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM forge_k_context_bundles WHERE syscall_id=?`, req.ID).Scan(&bundleCount); err != nil {
+		t.Fatal(err)
 	}
-	if packet.RestoreSnapshot == nil || packet.CompileOptions == nil {
-		t.Fatalf("expected restore snapshot metadata on packet")
+	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM forge_k_context_snapshot_heads`).Scan(&headCount); err != nil {
+		t.Fatal(err)
 	}
-	if _, ok := packet.RestoreSnapshot.Metadata["restore_trace_json"].(map[string]any); !ok {
-		t.Fatalf("expected restore_trace_json in restore snapshot metadata")
+	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM context_packet_snapshots`).Scan(&legacyCount); err != nil {
+		t.Fatal(err)
 	}
-	if got := readString(packet.RestoreSnapshot.Metadata, "rendered_card_artifact_id"); got == "" {
-		t.Fatalf("expected rendered card artifact link")
-	}
-	if packet.RestoreSnapshot.SnapshotID != packet.ID {
-		t.Fatalf("expected restore snapshot id to align with packet id, got packet=%q restore=%q", packet.ID, packet.RestoreSnapshot.SnapshotID)
-	}
-
-	var corr, traceID, syscallID, auditID, proposedBy, committedBy, metadataRaw string
-	var snapshotKind, snapshotFingerprint, parentSnapshotID, headerJSON, graphJSON, deltaJSON, restoreScoresJSON, renderArtifactRefID, resumeHintsJSON string
-	if err := st.DB.QueryRowContext(ctx, `
-SELECT correlation_id, trace_id, syscall_id, audit_id, proposed_by, committed_by, metadata_json,
-       snapshot_kind, snapshot_fingerprint, parent_snapshot_id, header_json, graph_json, delta_json,
-       restore_scores_json, render_artifact_ref_id, resume_hints_json
-FROM context_packet_snapshots
-WHERE id = ?`, packet.ID).Scan(
-		&corr,
-		&traceID,
-		&syscallID,
-		&auditID,
-		&proposedBy,
-		&committedBy,
-		&metadataRaw,
-		&snapshotKind,
-		&snapshotFingerprint,
-		&parentSnapshotID,
-		&headerJSON,
-		&graphJSON,
-		&deltaJSON,
-		&restoreScoresJSON,
-		&renderArtifactRefID,
-		&resumeHintsJSON,
-	); err != nil {
-		t.Fatalf("query persisted snapshot metadata: %v", err)
-	}
-	if corr != req.CorrelationID || traceID != req.TraceID || syscallID != req.ID || auditID == "" {
-		t.Fatalf("unexpected snapshot lineage corr=%q trace=%q syscall=%q audit=%q resultAudit=%q warnings=%v", corr, traceID, syscallID, auditID, res.AuditID, res.Warnings)
-	}
-	if proposedBy == "" || committedBy != forgekernel.AuthorityOwnerForgeK {
-		t.Fatalf("unexpected proposed/committed metadata proposed=%q committed=%q", proposedBy, committedBy)
-	}
-	if !strings.Contains(metadataRaw, `"snapshot_kind":"restore"`) {
-		t.Fatalf("expected snapshot metadata to carry snapshot_kind, got %s", metadataRaw)
-	}
-	if snapshotKind != "restore" {
-		t.Fatalf("expected snapshot_kind column to persist restore, got %q", snapshotKind)
-	}
-	if snapshotFingerprint == "" {
-		t.Fatalf("expected snapshot_fingerprint column to be populated")
-	}
-	if parentSnapshotID != "" {
-		t.Fatalf("first persisted snapshot should not set parent snapshot id, got %q", parentSnapshotID)
-	}
-	if headerJSON == "{}" || graphJSON == "{}" || deltaJSON == "{}" {
-		t.Fatalf("expected header/graph/delta columns to persist non-empty snapshot evidence")
-	}
-	if restoreScoresJSON == "{}" {
-		t.Fatalf("expected restore_scores_json to persist scored selection metadata, got %s", restoreScoresJSON)
-	}
-	if !strings.Contains(metadataRaw, `"restore_trace_json"`) {
-		t.Fatalf("expected metadata_json to persist restore_trace_json, got %s", metadataRaw)
-	}
-	if renderArtifactRefID == "" {
-		t.Fatalf("expected render_artifact_ref_id column to persist rendered card artifact")
-	}
-	if resumeHintsJSON == "{}" {
-		t.Fatalf("expected resume_hints_json to persist resume contract metadata, got %s", resumeHintsJSON)
-	}
-
-	renderedArtifactID := readString(packet.RestoreSnapshot.Metadata, "rendered_card_artifact_id")
-	var artifactCorr, artifactTrace, artifactSyscall, artifactAudit, artifactProposed, artifactCommitted string
-	if err := st.DB.QueryRowContext(ctx, `
-SELECT correlation_id, trace_id, syscall_id, audit_id, proposed_by, committed_by
-FROM artifact_refs
-WHERE id = ?`, renderedArtifactID).Scan(&artifactCorr, &artifactTrace, &artifactSyscall, &artifactAudit, &artifactProposed, &artifactCommitted); err != nil {
-		t.Fatalf("query rendered card artifact: %v", err)
-	}
-	if artifactCorr != req.CorrelationID || artifactTrace != req.TraceID || artifactSyscall != req.ID || artifactAudit == "" {
-		t.Fatalf("unexpected artifact lineage corr=%q trace=%q syscall=%q audit=%q", artifactCorr, artifactTrace, artifactSyscall, artifactAudit)
-	}
-	if artifactProposed == "" || artifactCommitted != forgekernel.AuthorityOwnerForgeK {
-		t.Fatalf("unexpected artifact proposed/committed metadata proposed=%q committed=%q", artifactProposed, artifactCommitted)
-	}
-	if res.StateSummary["snapshotFingerprint"] == "" {
-		t.Fatalf("expected snapshot fingerprint in syscall summary")
-	}
-	if readString(res.StateSummary, "restoreDecision") == "" {
-		t.Fatalf("expected restoreDecision summary field")
+	if bundleCount != 1 || headCount != 1 || legacyCount != 0 || res.StateSummary["kernelContextCompiler"] != true {
+		t.Fatalf("governed bundle/head mismatch bundle=%d head=%d legacy=%d result=%+v", bundleCount, headCount, legacyCount, res)
 	}
 }
 
@@ -834,46 +746,21 @@ func TestSQLiteContextCompileRepeatedFingerprintLinksParent(t *testing.T) {
 	if err != nil || !secondRes.Success {
 		t.Fatalf("second persisted compile failed: err=%v res=%+v", err, secondRes)
 	}
-
-	packet, ok := txRunner.read.FindLatestContextSnapshot(second.Scope, "summarize blockers", "restore")
-	if !ok || packet.RestoreSnapshot == nil {
-		t.Fatalf("expected latest repeated snapshot")
+	var bundleCount, headRevision int
+	if err := txRunner.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM forge_k_context_bundles`).Scan(&bundleCount); err != nil {
+		t.Fatal(err)
 	}
-	if parent := readString(packet.RestoreSnapshot.Metadata, "parent_snapshot_id"); parent == "" {
-		t.Fatalf("expected parent snapshot linkage on repeated compile")
+	if err := txRunner.db.QueryRowContext(ctx, `SELECT revision FROM forge_k_context_snapshot_heads LIMIT 1`).Scan(&headRevision); err != nil {
+		t.Fatal(err)
 	}
-	var parentSnapshotID string
-	if err := txRunner.db.QueryRowContext(ctx, `
-SELECT parent_snapshot_id
-FROM context_packet_snapshots
-WHERE id = ?`, packet.ID).Scan(&parentSnapshotID); err != nil {
-		t.Fatalf("query parent_snapshot_id: %v", err)
-	}
-	if strings.TrimSpace(parentSnapshotID) == "" {
-		t.Fatalf("expected parent_snapshot_id column to persist repeated lineage")
-	}
-	if reason, ok := packet.RestoreSnapshot.Metadata["restore_reason_json"].(map[string]any); !ok || reason["fingerprint_matched"] != true {
-		t.Fatalf("expected fingerprint matched restore reason, got %#v", packet.RestoreSnapshot.Metadata["restore_reason_json"])
-	}
-	if trace, ok := packet.RestoreSnapshot.Metadata["restore_trace_json"].(map[string]any); !ok {
-		t.Fatalf("expected restore_trace_json on repeated compile snapshot, got %#v", packet.RestoreSnapshot.Metadata["restore_trace_json"])
-	} else if _, ok := trace["winner"]; !ok {
-		t.Fatalf("expected winner section in restore trace")
-	}
-	scores, ok := packet.RestoreSnapshot.Metadata["restore_scores_json"].(map[string]any)
-	if !ok || scores["decision"] != "selected" {
-		t.Fatalf("expected selected restore_scores_json metadata, got %#v", packet.RestoreSnapshot.Metadata["restore_scores_json"])
-	}
-	if got := packet.RestoreSnapshot.Evidence["delta"]; got == nil {
-		t.Fatalf("expected persisted delta evidence")
+	if bundleCount != 2 || headRevision != 2 {
+		t.Fatalf("expected two immutable bundles and head revision 2, got bundles=%d revision=%d", bundleCount, headRevision)
 	}
 }
 
 func TestSQLiteListContextSnapshotsFiltersByScopeQueryAndKind(t *testing.T) {
 	ctx := context.Background()
 	k, txRunner, _ := newSQLiteKernel(t, nil)
-	read := txRunner.read
-
 	mustCreateNote(ctx, k, "ctx-list-note-a", "list a")
 
 	first := validSQLiteRequest(domain.ActionCompileContext, "ctx-list-compile-1", "ws-main")
@@ -905,22 +792,15 @@ func TestSQLiteListContextSnapshotsFiltersByScopeQueryAndKind(t *testing.T) {
 	if res, err := processContextThroughForgeK(ctx, k, otherKind); err != nil || !res.Success {
 		t.Fatalf("other-kind compile failed: err=%v res=%+v", err, res)
 	}
-
-	if _, err := txRunner.db.ExecContext(ctx, `
-UPDATE context_packet_snapshots
-SET created_at = ?
-WHERE workspace_id = ? AND query = ? AND snapshot_kind = ?`, int64(1760001999000), "ws-main", "summarize blockers", "restore"); err != nil {
-		t.Fatalf("force timestamp tie: %v", err)
+	var restoreCount, reviewCount int
+	if err := txRunner.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM forge_k_context_bundles WHERE snapshot_kind='restore'`).Scan(&restoreCount); err != nil {
+		t.Fatal(err)
 	}
-	list := read.ListContextSnapshots(domain.ForgeScope{WorkspaceID: "ws-main", LaneID: "control.semantic"}, "summarize blockers", "restore", 10)
-	if len(list) != 2 {
-		t.Fatalf("expected 2 restore snapshots, got %d", len(list))
+	if err := txRunner.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM forge_k_context_bundles WHERE snapshot_kind='review'`).Scan(&reviewCount); err != nil {
+		t.Fatal(err)
 	}
-	if list[0].CreatedAt < list[1].CreatedAt {
-		t.Fatalf("expected descending created_at order, got %d then %d", list[0].CreatedAt, list[1].CreatedAt)
-	}
-	if list[0].CreatedAt == list[1].CreatedAt && list[0].ID < list[1].ID {
-		t.Fatalf("expected deterministic id-desc tie ordering, got %q then %q", list[0].ID, list[1].ID)
+	if restoreCount != 2 || reviewCount != 1 {
+		t.Fatalf("governed context kind counts restore=%d review=%d", restoreCount, reviewCount)
 	}
 }
 
@@ -928,7 +808,7 @@ func TestSQLiteContextCompileNoDirectPersistenceByReadStore(t *testing.T) {
 	ctx := context.Background()
 	_, txRunner, _ := newSQLiteKernel(t, nil)
 
-	_ = txRunner.read.BuildContext("summarize blockers", domain.ForgeScope{WorkspaceID: "ws-main", LaneID: "control.semantic"}, domain.ContextBudget{
+	_ = txRunner.read.buildLegacyContextForInspection("summarize blockers", domain.ForgeScope{WorkspaceID: "ws-main", LaneID: "control.semantic"}, domain.ContextBudget{
 		MaxTokens: 50,
 		MaxEvents: 20,
 		MaxNotes:  20,
@@ -1014,7 +894,7 @@ func TestSQLiteBuildContextPreFiltersSnapshotArtifactsAndCompileEvents(t *testin
 		t.Fatalf("seed compile event: %v", err)
 	}
 
-	packet := read.BuildContext("filter-check", scope, domain.ContextBudget{
+	packet := read.buildLegacyContextForInspection("filter-check", scope, domain.ContextBudget{
 		MaxTokens: 100,
 		MaxEvents: 1,
 		MaxNotes:  1,

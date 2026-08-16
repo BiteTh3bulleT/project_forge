@@ -47,15 +47,15 @@ type forgeSystemHostReadOnlySection struct {
 }
 
 type forgeSystemHostSession struct {
-	ShellMode                     string `json:"shell_mode"`
-	DisplayBackend                string `json:"display_backend"`
-	CompositorSession             string `json:"compositor_session"`
-	SafeMode                      bool   `json:"safe_mode"`
-	HostMutationDisabled          bool   `json:"host_mutation_disabled"`
-	ModelMutationDisabled         bool   `json:"model_mutation_disabled"`
-	SemanticMemoryWriteDisabled   bool   `json:"semantic_memory_write_disabled"`
-	ForgeKLiveAuthorityDisabled   bool   `json:"forge_k_live_authority_disabled"`
-	ContextCompilerRequiredForLLM bool   `json:"context_compiler_required_for_llm"`
+	ShellMode                       string `json:"shell_mode"`
+	DisplayBackend                  string `json:"display_backend"`
+	CompositorSession               string `json:"compositor_session"`
+	SafeMode                        bool   `json:"safe_mode"`
+	HostMutationDisabled            bool   `json:"host_mutation_disabled"`
+	ModelMutationDisabled           bool   `json:"model_mutation_disabled"`
+	SemanticMemoryWriteDisabled     bool   `json:"semantic_memory_write_disabled"`
+	ShellCannotClaimKernelAuthority bool   `json:"shell_cannot_claim_kernel_authority"`
+	ContextCompilerRequiredForLLM   bool   `json:"context_compiler_required_for_llm"`
 }
 
 type forgeSystemHostConfig struct {
@@ -123,15 +123,15 @@ func (s *Server) handleForgeSystemHost(w http.ResponseWriter, r *http.Request) {
 			MutationDisabled: true,
 		},
 		Session: forgeSystemHostSession{
-			ShellMode:                     firstNonEmpty(os.Getenv("FORGE_SHELL_MODE"), "manual"),
-			DisplayBackend:                firstNonEmpty(os.Getenv("XDG_SESSION_TYPE"), os.Getenv("WAYLAND_DISPLAY"), "unknown"),
-			CompositorSession:             firstNonEmpty(os.Getenv("FORGE_SHELL_COMPOSITOR"), "not reported"),
-			SafeMode:                      s != nil && s.cfg.SafeModeForceCPUOnly,
-			HostMutationDisabled:          true,
-			ModelMutationDisabled:         true,
-			SemanticMemoryWriteDisabled:   true,
-			ForgeKLiveAuthorityDisabled:   true,
-			ContextCompilerRequiredForLLM: true,
+			ShellMode:                       firstNonEmpty(os.Getenv("FORGE_SHELL_MODE"), "manual"),
+			DisplayBackend:                  firstNonEmpty(os.Getenv("XDG_SESSION_TYPE"), os.Getenv("WAYLAND_DISPLAY"), "unknown"),
+			CompositorSession:               firstNonEmpty(os.Getenv("FORGE_SHELL_COMPOSITOR"), "not reported"),
+			SafeMode:                        s != nil && s.cfg.SafeModeForceCPUOnly,
+			HostMutationDisabled:            true,
+			ModelMutationDisabled:           true,
+			SemanticMemoryWriteDisabled:     true,
+			ShellCannotClaimKernelAuthority: true,
+			ContextCompilerRequiredForLLM:   true,
 		},
 		Config:       s.forgeSystemHostConfig(),
 		SourceErrors: snapshot.SourceErrors,

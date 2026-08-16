@@ -21,14 +21,17 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 		}
 		return report
 	}
-	report.Status = "forge_k_authenticated_commit_integrity_live"
-	report.Summary = "FORGE-K owns authenticated semantic syscall ingress, actor/capability/approval proof verification, durable stage order, deterministic Courthouse decisions, and sealed commit-integrity verification; Control Lane implements the temporary durable SQLite port."
-	report.Mode = "live_authority_migration"
+	report.Status = "forge_k_sole_live_authority"
+	report.Phase = "K20J"
+	report.Summary = "FORGE-K is the sole live semantic and model-visibility authority. Control Lane is a bounded validation/apply/SQLite durable port and cannot independently orchestrate or commit production requests."
+	report.Mode = "live_authority"
 	report.LiveOwner = selection.AuthorityOwner
-	report.KernelRuntimeState = "forge_k_orchestration_live_control_lane_sqlite_port"
+	report.PolicyVersion = "forge-k-sole-authority-k20j-v1"
+	report.KernelRuntimeState = "forge_k_sole_authority_control_lane_durable_port"
 	report.LiveKernelIngressAuthority = true
 	report.LiveDurableOrchestration = true
-	report.LiveAuthorityMigration = true
+	report.LiveKernelAuthority = true
+	report.LiveAuthorityMigration = false
 	if report.NoEffect == nil {
 		report.NoEffect = map[string]any{}
 	}
@@ -46,21 +49,37 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 	report.NoEffect["unauthenticatedRemoteOrigin"] = false
 	report.NoEffect["externalAuditSinkDelivery"] = false
 	report.NoEffect["auditIdBackfill"] = false
-	report.NoEffect["liveAuthorityMigration"] = true
+	report.NoEffect["liveKernelAuthority"] = true
+	report.NoEffect["liveAuthorityMigration"] = false
+	report.NoEffect["legacyLiveAuthority"] = false
+	report.NoEffect["kernelContextCompilerAuthority"] = true
+	report.NoEffect["kernelRuntimeProposalAuthority"] = true
+	report.NoEffect["backendKVReuse"] = false
+	report.NoEffect["autonomousCanonicalMutation"] = false
 	for i := range report.ValidationActions {
 		report.ValidationActions[i].LiveOwner = selection.AuthorityOwner
+		report.ValidationActions[i].LiveKernelAuthority = true
 	}
 	for i := range report.Gates {
 		switch report.Gates[i].Name {
 		case "live_owner_explicit":
 			report.Gates[i].Reason = "production semantic syscall ingress owner is forge_k.kernel"
 		case "live_kernel_authority_disabled":
-			report.Gates[i].Name = "full_kernel_authority_gated"
-			report.Gates[i].Reason = "FORGE-K ingress, durable stage orchestration, Courthouse decisions, and commit integrity are live; subsystem authority remains staged"
+			report.Gates[i].Name = "sole_live_kernel_authority"
+			report.Gates[i].Passed = true
+			report.Gates[i].Reason = "production boot constructs only FORGE-K; alternate live authority modes fail closed"
 		}
 	}
+	for i := range report.AuthorityGates {
+		report.AuthorityGates[i].Status = "ready"
+		report.AuthorityGates[i].LiveOwner = selection.AuthorityOwner
+		report.AuthorityGates[i].Reason = "the live surface is Kernel-owned or fail-closed as a non-authoritative proposal/acceleration lane"
+		report.AuthorityGates[i].NextStep = "preserve the sole-authority invariant while extending capabilities"
+	}
+	report.AuthorityReadyGates = len(report.AuthorityGates)
+	report.AuthorityBlockedGates = 0
 	report.Notes = []string{
-		"production semantic syscall construction selects exactly one boot authority",
+		"production boot constructs exactly one semantic authority: forge_k.kernel",
 		"obsolete alternate authority modes fail closed; rollback is an offline store/generation procedure",
 		"exact prepared requests and plans are sealed; successful commits require a validated typed receipt",
 		"semantic mutation, journal hash-chain head and provenance, immutable audit intent, and optional idempotency proof share one SQLite transaction",
@@ -68,8 +87,10 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 		"production authorization binds the constructed forge.core service principal, authenticated origin, registry definition, scoped capability grant, and approval policy/decision",
 		"bearer credentials are represented only by non-secret fingerprints; tokenless HTTP attests a user origin only for verified loopback peers",
 		"full authorization proof JSON is immutable atomic idempotency/audit-outbox evidence and is revalidated during replay",
+		"all model-visible output is withheld until the Kernel runtime-proposal boundary and consensus gate accept it",
+		"all model prompts are assembled from an immutable Kernel Context Compiler decision over current admitted exact-scope evidence",
+		"disabled capabilities such as backend KV reuse remain fail-closed acceleration, not alternate authority",
 		"external audit sink delivery and audit_id backfill remain best-effort projections and cannot invalidate canonical atomic outbox evidence",
-		"full FORGE-K authority remains incomplete until Control Lane policy/apply implementations and remaining subsystem gates are migrated",
 	}
 	for i := range report.AuthorityMatrix {
 		switch report.AuthorityMatrix[i].Subsystem {
@@ -89,7 +110,7 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 				"external audit sink delivery and audit_id backfill remain best-effort projections; canonical audit-outbox evidence is already atomic",
 			}
 		case "Kernel":
-			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_COMMIT_INTEGRITY_LIVE"
+			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_SOLE_LIVE_AUTHORITY"
 			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
 			report.AuthorityMatrix[i].TargetOwner = selection.AuthorityOwner
 			report.AuthorityMatrix[i].FeatureFlag = "no live authority-mode selector; production always constructs FORGE-K"
@@ -106,11 +127,12 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 				"verified replay, legacy-unbound rejection, and transaction rollback tests",
 				"authenticated service-principal, bearer/loopback origin, capability/approval proof, and tampered replay tests",
 			)
-			report.AuthorityMatrix[i].Blockers = []string{
-				"Control Lane still implements validation policies, semantic apply functions, and the SQLite durable port",
-				"Context Compiler, Runtime, Snapshot, KV, Lymphatic, and Consensus authority gates remain staged; Semantic Algebra is limited to deterministic diff",
-				"external audit sink delivery and audit_id backfill remain best-effort projections over canonical atomic outbox evidence",
-			}
+			report.AuthorityMatrix[i].Blockers = []string{"external audit sink delivery and audit_id backfill remain best-effort projections over canonical atomic outbox evidence"}
+		case "Memory Palace":
+			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_ADMITTED_MEMORY_AND_EVIDENCE_LIVE"
+			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].TargetOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].Blockers = []string{}
 		case "Semantic Algebra":
 			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_DETERMINISTIC_DIFF_LIVE"
 			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
@@ -123,16 +145,39 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 				"verified replay and idempotency conflict tests",
 				"journal collision atomic rollback tests",
 			)
-			report.AuthorityMatrix[i].Blockers = []string{
-				"only semantic.diff.v1 is live; merge/intersect/compress/derive remain staged",
-				"narrow authenticated operator ingress remains incomplete",
-				"Control Lane remains the temporary validation/apply/SQLite adapter",
-			}
-		case "Context Compiler":
-			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_INGRESS_ONLY_ADAPTER_DECISION"
+			report.AuthorityMatrix[i].Blockers = []string{"semantic operators beyond semantic.diff.v1 remain unimplemented and therefore have no live authority surface"}
+		case "Snapshots":
+			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_CONTEXT_BUNDLE_SNAPSHOT_LIVE"
 			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].TargetOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].Blockers = []string{"live backup merge remains disabled; recovery is daemon-stopped and whole-store only"}
+		case "Context Compiler":
+			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_CONTEXT_COMPILER_LIVE"
+			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].TargetOwner = selection.AuthorityOwner
 			report.AuthorityMatrix[i].FeatureFlag = "production FORGE-K is the sole boot-constructed authority"
 			report.AuthorityMatrix[i].RollbackPath = "stop the daemon and use verified offline rollback; existing snapshot evidence remains inspectable"
+			report.AuthorityMatrix[i].Blockers = []string{}
+		case "KV System":
+			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_IDENTITY_GATE_LIVE_REUSE_DISABLED"
+			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].TargetOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].Blockers = []string{"backend KV tensor reuse is intentionally disabled until an identity-bound adapter exists"}
+		case "Runtime Boundary":
+			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_RUNTIME_PROPOSAL_AND_VISIBILITY_LIVE"
+			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].TargetOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].Blockers = []string{}
+		case "Lymphatic Lane":
+			report.AuthorityMatrix[i].CurrentStatus = "PROPOSAL_ONLY_NO_MUTATION_AUTHORITY"
+			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].TargetOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].Blockers = []string{}
+		case "Consensus Mesh":
+			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_ALL_MODEL_VISIBILITY_GATED"
+			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].TargetOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].Blockers = []string{}
 		}
 	}
 	return report

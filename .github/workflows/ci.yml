@@ -6,6 +6,21 @@ on:
   pull_request:
 
 jobs:
+  optiplex-nix-static:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Evaluate OptiPlex configuration
+        run: nix eval .#nixosConfigurations.forge-optiplex-7000.config.system.build.toplevel.drvPath
+
+      - name: Validate OptiPlex static contract
+        run: nix build .#checks.x86_64-linux.forge-optiplex-7000 --no-link
+
   core-and-desktop:
     runs-on: ubuntu-latest
     services:

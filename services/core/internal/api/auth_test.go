@@ -66,11 +66,12 @@ func TestNoTokenAttestsOnlyVerifiedLoopback(t *testing.T) {
 		name       string
 		remoteAddr string
 		wantOrigin bool
+		wantStatus int
 	}{
-		{name: "ipv4 loopback", remoteAddr: "127.0.0.1:4123", wantOrigin: true},
-		{name: "ipv6 loopback", remoteAddr: "[::1]:4123", wantOrigin: true},
-		{name: "remote", remoteAddr: "192.0.2.20:4123", wantOrigin: false},
-		{name: "missing", remoteAddr: "", wantOrigin: false},
+		{name: "ipv4 loopback", remoteAddr: "127.0.0.1:4123", wantOrigin: true, wantStatus: http.StatusNoContent},
+		{name: "ipv6 loopback", remoteAddr: "[::1]:4123", wantOrigin: true, wantStatus: http.StatusNoContent},
+		{name: "remote", remoteAddr: "192.0.2.20:4123", wantOrigin: false, wantStatus: http.StatusUnauthorized},
+		{name: "missing", remoteAddr: "", wantOrigin: false, wantStatus: http.StatusUnauthorized},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			handler := srv.requireAPIAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -87,8 +88,8 @@ func TestNoTokenAttestsOnlyVerifiedLoopback(t *testing.T) {
 			req.RemoteAddr = tc.remoteAddr
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
-			if rr.Code != http.StatusNoContent {
-				t.Fatalf("status=%d", rr.Code)
+			if rr.Code != tc.wantStatus {
+				t.Fatalf("status=%d want=%d", rr.Code, tc.wantStatus)
 			}
 		})
 	}

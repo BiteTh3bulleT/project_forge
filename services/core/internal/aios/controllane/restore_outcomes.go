@@ -79,7 +79,6 @@ type RestoreOutcomeFeedback struct {
 }
 
 type RestoreOutcomeStore interface {
-	CreateRestoreOutcome(ctx context.Context, event RestoreOutcomeEvent) error
 	GetRestoreOutcome(ctx context.Context, id string) (RestoreOutcomeEvent, bool, error)
 	ListRestoreOutcomes(ctx context.Context, filter RestoreOutcomeFilter) ([]RestoreOutcomeEvent, error)
 }

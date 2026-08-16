@@ -411,7 +411,12 @@ func (s *Server) completeAssistantWithGatewayTools(
 	}
 	pushStage("ollama_model_resolved", map[string]any{"model": model, "source": modelSource})
 
-	sys, userBody := s.buildChatLLMMessages(ctx, th)
+	sys, userBody, contextBinding, contextErr := s.prepareGovernedOllamaPrompt(ctx, th)
+	if contextErr != nil {
+		pushStage("context_compile_failed", map[string]any{"reason": contextErr.Error()})
+		am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", "FORGE-K Context Compiler failed closed: "+contextErr.Error(), map[string]any{"failure": true, "replyToUserMessageId": userMessageID, "correlationId": corr})
+		return am
+	}
 	msgs := []map[string]any{
 		{"role": "system", "content": sys},
 		{"role": "user", "content": userBody},
@@ -737,6 +742,7 @@ func (s *Server) completeAssistantWithGatewayTools(
 			ThreadID:      threadID, UserMessageID: userMessageID, CorrelationID: corr,
 			Prompt: finalModelPrompt, Output: final.String(), Backend: baseURL, ModelID: model,
 			GatewayEvidence: runtimeGatewayEvidenceRows,
+			ContextBinding:  contextBinding,
 		})
 		candidate, _ := sanitizeAssistantVisibleContent(final.String())
 		consensus := consensusgate.Gate(consensusgate.Input{

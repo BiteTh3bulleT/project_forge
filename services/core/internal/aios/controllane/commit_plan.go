@@ -132,21 +132,5 @@ func expectedCommitObjectIDs(req domain.SyscallRequest, read SemanticReadStore) 
 }
 
 func expectedCompileContextIDs(req domain.SyscallRequest) []string {
-	opts := mergeCompileContextOptions(req.Payload)
-	if !opts.PersistSnapshot {
-		return []string{}
-	}
-	query := readString(req.Payload, "query")
-	if strings.TrimSpace(query) == "" {
-		if value, ok := req.Metadata["query"]; ok {
-			query = strings.TrimSpace(fmt.Sprintf("%v", value))
-		}
-	}
-	packetID := "ctx-" + strings.ReplaceAll(query, " ", "_") + "-" + fmt.Sprintf("%d", req.RequestedAt)
-	ids := []string{packetID}
-	if opts.RenderSnapshotCard {
-		ids = append(ids, packetID+":snapshot_card")
-	}
-	ids = append(ids, NewRestoreOutcomeID(req.ID, packetID, "compiled"))
-	return ids
+	return []string{req.ID + ":context_packet"}
 }

@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/forgekernel/contextcompile"
 	"forge/projectforge/services/core/internal/forgekernel/court"
 	forgejournal "forge/projectforge/services/core/internal/forgekernel/journal"
 	"forge/projectforge/services/core/internal/forgekernel/semanticdiff"
@@ -362,7 +363,7 @@ func IdempotencyFingerprint(req domain.SyscallRequest) (string, error) {
 	// metadata key is excluded.
 	metadata := make(map[string]any, len(req.Metadata))
 	for key, value := range req.Metadata {
-		if key != court.MetadataDecisionKey && key != semanticdiff.MetadataDecisionKey {
+		if key != court.MetadataDecisionKey && key != semanticdiff.MetadataDecisionKey && key != contextcompile.MetadataInputKey && key != contextcompile.MetadataDecisionKey {
 			metadata[key] = value
 		}
 	}

@@ -141,7 +141,7 @@ func NewStaticActionRegistry() *StaticActionRegistry {
 		domain.ActionCompileContext: {
 			Action:           domain.ActionCompileContext,
 			Capability:       CapContextCompile,
-			Mutating:         false,
+			Mutating:         true,
 			SupportsDryRun:   true,
 			ApprovalPossible: false,
 			TargetObjectType: "context_packet",

@@ -151,7 +151,11 @@ func (s *Server) completeAssistantWithoutTools(
 		return am
 	}
 
-	sys, userBody := s.buildChatLLMMessages(ctx, th)
+	sys, userBody, contextBinding, contextErr := s.prepareGovernedOllamaPrompt(ctx, th)
+	if contextErr != nil {
+		am, _ := s.chat.AppendMessage(ctx, threadID, "assistant", "FORGE-K Context Compiler failed closed: "+contextErr.Error(), map[string]any{"failure": true, "replyToUserMessageId": userMessageID, "correlationId": corr})
+		return am
+	}
 	msgs := []map[string]any{
 		{"role": "system", "content": sys},
 		{"role": "user", "content": userBody},
@@ -192,6 +196,7 @@ func (s *Server) completeAssistantWithoutTools(
 		SourceKind: runtimeproposal.SourceNativeOllama, WorkspacePath: s.cfg.WorkspaceDir,
 		ThreadID: threadID, UserMessageID: userMessageID, CorrelationID: corr,
 		Prompt: msgs, Output: driverContent, Backend: "ollama", ModelID: model,
+		ContextBinding: contextBinding,
 	})
 	content := runtimeProposalFailureText
 	if runtimeDecisionErr == nil {
@@ -274,7 +279,11 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 		return nil
 	}
 
-	runtimeMessages, promptBudget := s.buildModelRuntimePlainChatMessages(ctx, th)
+	runtimeMessages, promptBudget, contextBinding, contextErr := s.prepareGovernedModelRuntimePrompt(ctx, th)
+	if contextErr != nil {
+		pushStage("context_compile_failed", map[string]any{"reason": contextErr.Error()})
+		return nil
+	}
 	messages := make([]map[string]any, 0, len(runtimeMessages))
 	for _, msg := range runtimeMessages {
 		messages = append(messages, map[string]any{
@@ -313,6 +322,7 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 		SourceKind: runtimeproposal.SourceNativeOllama, WorkspacePath: s.cfg.WorkspaceDir,
 		ThreadID: threadID, UserMessageID: userMessageID, CorrelationID: corr,
 		Prompt: messages, Output: driverOutput, Backend: "ollama", ModelID: model,
+		ContextBinding: contextBinding,
 	})
 	content = runtimeProposalFailureText
 	if runtimeDecisionErr == nil {

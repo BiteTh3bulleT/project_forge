@@ -103,6 +103,15 @@ probe /api/telegram/status 200
 probe /api/discord/status 200
 probe /api/adapters 200
 probe /api/jobs 200
+probe /forge/kernel/status 200
+if ! grep -Fq '"status":"forge_k_sole_live_authority"' /tmp/forge-smoke-body ||
+   ! grep -Fq '"live_kernel_authority":true' /tmp/forge-smoke-body ||
+   ! grep -Fq '"live_authority_migration":false' /tmp/forge-smoke-body; then
+  echo "FAIL  /forge/kernel/status did not report sole live FORGE-K authority" >&2
+  cat /tmp/forge-smoke-body >&2 || true
+  exit 1
+fi
+echo "ok    /forge/kernel/status -> sole live FORGE-K authority"
 
 echo "==> shutting down"
 kill "$PID" 2>/dev/null || true

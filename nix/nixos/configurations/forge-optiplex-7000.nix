@@ -77,6 +77,36 @@ in
 
   networking = {
     hostName = "forge-optiplex";
+
+    # Hard offline boundary: the target may talk only to itself and to the
+    # directly attached 192.168.50.0/24 commissioning network. Additional
+    # NetworkManager profiles or interfaces cannot create an egress path.
+    firewall.enable = false;
+    nftables = {
+      enable = true;
+      ruleset = ''
+        table inet forge_offline {
+          chain input {
+            type filter hook input priority 0; policy drop;
+            iifname "lo" accept
+            ct state established,related accept
+            iifname "enp0s31f6" ip saddr 192.168.50.0/24 icmp type echo-request accept
+            iifname "enp0s31f6" ip saddr 192.168.50.0/24 tcp dport 22 accept
+          }
+
+          chain forward {
+            type filter hook forward priority 0; policy drop;
+          }
+
+          chain output {
+            type filter hook output priority 0; policy drop;
+            oifname "lo" accept
+            ct state established,related accept
+            oifname "enp0s31f6" ip daddr 192.168.50.0/24 accept
+          }
+        }
+      '';
+    };
     networkmanager = {
       enable = true;
       ensureProfiles.profiles."forge-direct-link" = {
@@ -237,6 +267,7 @@ in
     pkgs.curl
     pkgs.dbus
     pkgs.git
+    pkgs.jq
     pkgs.mesa-demos
     pkgs.xdg-utils
     pkgs.xdg-desktop-portal
@@ -280,6 +311,7 @@ in
     FORGE_OPTIPLEX_NETWORK_MODE=offline-direct
     FORGE_OPTIPLEX_DIRECT_ADDRESS=192.168.50.2/24
     FORGE_OPTIPLEX_DEFAULT_ROUTE=false
+    FORGE_OPTIPLEX_EGRESS_POLICY=loopback-and-192.168.50.0/24-only
     FORGE_CORE_URL=http://127.0.0.1:18492
     FORGE_MODEL_RUNTIME_ENABLED=true
     FORGE_MODEL_DEFAULT_BACKEND=ollama_compat
@@ -310,6 +342,14 @@ in
         config.networking.networkmanager.ensureProfiles.profiles."forge-direct-link".ipv4.never-default
         == true;
       message = "FORGE OptiPlex direct test link must never install a default route.";
+    }
+    {
+      assertion = config.networking.nftables.enable == true;
+      message = "FORGE OptiPlex offline target must enforce its nftables egress allowlist.";
+    }
+    {
+      assertion = lib.hasInfix ''policy drop;'' config.networking.nftables.ruleset;
+      message = "FORGE OptiPlex nftables policy must fail closed.";
     }
     {
       assertion = config.services.forge-core.enableModelRuntime == true;

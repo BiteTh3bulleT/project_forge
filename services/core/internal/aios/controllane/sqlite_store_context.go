@@ -2,7 +2,6 @@ package controllane
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"forge/projectforge/services/core/internal/aios/domain"
@@ -25,10 +24,6 @@ INSERT INTO context_packet_snapshots(
 		pkt.CreatedAt, correlationID, traceID, syscallID, encodeJSON(nonNilMap(metadata)), string(s.meta.Source), nonEmpty(s.meta.CommittedBy, "forge_kernel"), "",
 	)
 	return err
-}
-
-func (s *SQLiteSemanticStore) CreateContextSnapshot(pkt domain.ContextPacket) error {
-	return s.CreateSnapshot(s.background, pkt, s.meta.SyscallID, s.meta.CorrelationID, s.meta.TraceID, nil)
 }
 
 func (s *SQLiteSemanticStore) GetSnapshotByID(ctx context.Context, id string) (domain.ContextPacket, bool, error) {
@@ -111,28 +106,6 @@ LIMIT 1`, scope.WorkspaceID, scope.LaneID, scope.LaneID, query, snapshotKind, sn
 		return domain.ContextPacket{}, false, nil
 	}
 	return out[0], true, nil
-}
-
-func (s *SQLiteSemanticStore) CreateRestoreOutcome(ctx context.Context, event RestoreOutcomeEvent) error {
-	event = normalizeRestoreOutcomeEvent(event)
-	if event.ID == "" {
-		return fmt.Errorf("restore outcome id required")
-	}
-	_, err := s.exec.ExecContext(ctx, `
-INSERT INTO restore_outcome_events(
-  id, created_at, updated_at, workspace_id, lane_id, query, context_packet_id, snapshot_id, snapshot_kind,
-  restore_score, requires_fresh_compile, selected_evidence_json, selected_state_keys_json, selected_loop_ids_json,
-  selected_artifact_ids_json, outcome, outcome_confidence, operator_feedback, failure_reason, correction_summary,
-  downstream_action_type, downstream_object_id, correlation_id, trace_id, syscall_id, audit_id, proposed_by,
-  committed_by, metadata_json
-) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		event.ID, event.CreatedAt, event.UpdatedAt, event.WorkspaceID, event.LaneID, event.Query, event.ContextPacketID, event.SnapshotID, event.SnapshotKind,
-		event.RestoreScore, boolToInt(event.RequiresFreshCompile), encodeStringSlice(event.SelectedEvidence), encodeStringSlice(event.SelectedStateKeys), encodeStringSlice(event.SelectedLoopIDs),
-		encodeStringSlice(event.SelectedArtifactIDs), string(event.Outcome), event.OutcomeConfidence, event.OperatorFeedback, event.FailureReason, event.CorrectionSummary,
-		event.DownstreamActionType, event.DownstreamObjectID, event.CorrelationID, event.TraceID, event.SyscallID, event.AuditID, event.ProposedBy,
-		event.CommittedBy, encodeJSON(nonNilMap(event.Metadata)),
-	)
-	return err
 }
 
 func (s *SQLiteSemanticStore) GetRestoreOutcome(ctx context.Context, id string) (RestoreOutcomeEvent, bool, error) {

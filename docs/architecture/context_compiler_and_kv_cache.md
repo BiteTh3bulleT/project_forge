@@ -1,6 +1,6 @@
 # Context Compiler and Deterministic KV Cache
 
-Status: Phase 7 Context Compiler and Phase 8 Deterministic KV System are implemented in the FORGE-K simulator. Phase i1 adds `[PARTIAL]` live validation-only reuse of the deterministic KV identity gate logic through `services/core/internal/kvidentity` and AI-OS Control Lane `VALIDATE_KV_IDENTITY`; FORGE-K `KVService` remains `[SIMULATOR-ONLY]`. PhaseI2 adds `[PARTIAL LIVE ENFORCEMENT]` around that live validation syscall with fail-closed policy decisions, audit fields, and internal counters. FORGE-K Online Phase 15 adds a validation-only exact-identity canary signal after final-token identity proof; it still does not enable backend KV tensor reuse. FORGE-K Online Phase 19 adds Control Lane-owned context attribution validation for planned source refs and selection reasons only; it does not replace live `COMPILE_CONTEXT`, generate prompt text, or make the simulator Context Compiler live authority.
+Status: K20J makes `services/core/internal/forgekernel/contextcompile` the live production Context Compiler decision contract. The older Phase 7 compiler under `services/core/internal/forgek/contextcompiler` remains simulator-only. Phase 8 deterministic KV remains simulator-only; live `VALIDATE_KV_IDENTITY` is validation-only and backend KV tensor reuse remains disabled.
 
 The Context Compiler turns admitted semantic shape, snapshot refs, and restore seeds into deterministic, token-addressable ContextBlocks and ContextBundles. The KV cache accelerates exact reusable token shapes in a later phase. Neither context shape nor KV reuse is canonical memory.
 
@@ -77,7 +77,7 @@ The full architecture compiler runs an expansion/contraction loop:
 4. Emit ContextBlocks with stable ordering and citations.
 5. Hash final token inputs for Phase 7 cache eligibility metadata.
 
-In the current repository, the live AI-OS `COMPILE_CONTEXT` path remains separate. Phase 7 implements only the FORGE-K simulator Context Compiler and does not alter live restore scoring, fresh-compile fallback, persisted snapshot evidence, `restore_scores_json`, or `resume_hints_json`.
+The live `COMPILE_CONTEXT` path is distinct from the simulator design. Production Kernel code invokes the pure `forgekernel/contextcompile` fixed-point contract over current admitted immutable memory evidence and governed bundle candidates. Its exact input and decision are plan-sealed; the bounded durable port revalidates sources and the prior scope head in the transaction that appends the immutable bundle, CAS head, journal entry, authorization proof, audit intent, and replay proof. Legacy snapshots remain inspection-only and cannot influence model prompts.
 
 ## Deterministic Serialization
 

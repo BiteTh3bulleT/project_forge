@@ -1685,6 +1685,51 @@ CREATE TABLE IF NOT EXISTS context_packet_snapshots (
   audit_id TEXT NOT NULL DEFAULT ''
 );
 
+CREATE TABLE IF NOT EXISTS forge_k_context_bundles (
+  packet_id TEXT PRIMARY KEY,
+  snapshot_id TEXT NOT NULL UNIQUE,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL,
+  selected_paths_json TEXT NOT NULL,
+  query TEXT NOT NULL,
+  snapshot_kind TEXT NOT NULL,
+  source_manifest_hash TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  packet_commitment TEXT NOT NULL,
+  snapshot_commitment TEXT NOT NULL,
+  outcome_commitment TEXT NOT NULL,
+  decision_digest TEXT NOT NULL UNIQUE,
+  policy_digest TEXT NOT NULL,
+  input_json TEXT NOT NULL,
+  decision_json TEXT NOT NULL,
+  candidate_json TEXT NOT NULL,
+  sources_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  provenance_id TEXT NOT NULL,
+  syscall_id TEXT NOT NULL UNIQUE,
+  correlation_id TEXT NOT NULL,
+  trace_id TEXT NOT NULL,
+  transaction_id TEXT NOT NULL UNIQUE,
+  journal_event_id TEXT NOT NULL UNIQUE,
+  audit_outbox_id TEXT NOT NULL UNIQUE,
+  authorization_fingerprint TEXT NOT NULL,
+  committed_by TEXT NOT NULL CHECK(committed_by='forge_k.kernel')
+);
+CREATE INDEX IF NOT EXISTS idx_forge_k_context_bundle_scope ON forge_k_context_bundles(workspace_id,lane_id,created_at DESC,packet_id);
+CREATE TRIGGER IF NOT EXISTS forge_k_context_bundles_no_update BEFORE UPDATE ON forge_k_context_bundles BEGIN SELECT RAISE(FAIL, 'FORGE-K context bundles are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS forge_k_context_bundles_no_delete BEFORE DELETE ON forge_k_context_bundles BEGIN SELECT RAISE(FAIL, 'FORGE-K context bundles are immutable'); END;
+
+CREATE TABLE IF NOT EXISTS forge_k_context_snapshot_heads (
+  scope_hash TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL,
+  selected_paths_json TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  head_hash TEXT NOT NULL,
+  head_json TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS dream_reports (
   id TEXT PRIMARY KEY,
   created_at INTEGER NOT NULL,

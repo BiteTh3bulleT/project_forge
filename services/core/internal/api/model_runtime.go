@@ -756,56 +756,30 @@ func (s *Server) handleForgeModelChat(w http.ResponseWriter, r *http.Request) {
 
 	meta := requestAuditMetaForBackup(r, body.CorrelationID, body.TraceID, body.WorkspaceID, "model.runtime.chat")
 	metaReq := modelRuntimeMetaFromRequestAudit(meta)
+	governedReq, contextErr := s.prepareGovernedDirectModelRequest(r.Context(), ModelRuntimeChatRequest{
+		ModelID: pathModelID, Backend: strings.TrimSpace(body.Backend), Role: strings.TrimSpace(body.Role), WorkloadClass: strings.TrimSpace(body.WorkloadClass),
+		Messages: body.Messages, Prompt: strings.TrimSpace(body.Prompt), Parameters: body.Parameters, MaxTokens: body.MaxTokens, TimeoutMs: body.TimeoutMs,
+		Stream: body.Stream, Actor: strings.TrimSpace(body.Actor), Source: strings.TrimSpace(body.Source), Meta: metaReq, Provenance: body.Provenance, Metadata: body.Metadata,
+	})
+	if contextErr != nil {
+		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusServiceUnavailable, code: "CONTEXT_COMPILE_FAILED", message: contextErr.Error()}, metaReq)
+		return
+	}
 	if body.Stream {
 		streamRuntime, ok := runtimeSvc.(modelRuntimeStreamingService)
 		if !ok {
 			s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusNotImplemented, code: "STREAM_UNSUPPORTED", message: "streaming is unavailable for the current model runtime service"}, metaReq)
 			return
 		}
-		s.streamForgeModelChat(w, r, streamRuntime, ModelRuntimeChatRequest{
-			ModelID:       pathModelID,
-			Backend:       strings.TrimSpace(body.Backend),
-			Role:          strings.TrimSpace(body.Role),
-			WorkloadClass: strings.TrimSpace(body.WorkloadClass),
-			Messages:      body.Messages,
-			Prompt:        strings.TrimSpace(body.Prompt),
-			Parameters:    body.Parameters,
-			MaxTokens:     body.MaxTokens,
-			TimeoutMs:     body.TimeoutMs,
-			Stream:        true,
-			Actor:         strings.TrimSpace(body.Actor),
-			Source:        strings.TrimSpace(body.Source),
-			Meta:          metaReq,
-			Provenance:    body.Provenance,
-			Metadata:      body.Metadata,
-		})
+		s.streamForgeModelChat(w, r, streamRuntime, governedReq)
 		return
 	}
-	result, err := runtimeSvc.Chat(r.Context(), ModelRuntimeChatRequest{
-		ModelID:       pathModelID,
-		Backend:       strings.TrimSpace(body.Backend),
-		Role:          strings.TrimSpace(body.Role),
-		WorkloadClass: strings.TrimSpace(body.WorkloadClass),
-		Messages:      body.Messages,
-		Prompt:        strings.TrimSpace(body.Prompt),
-		Parameters:    body.Parameters,
-		MaxTokens:     body.MaxTokens,
-		TimeoutMs:     body.TimeoutMs,
-		Stream:        body.Stream,
-		Actor:         strings.TrimSpace(body.Actor),
-		Source:        strings.TrimSpace(body.Source),
-		Meta:          metaReq,
-		Provenance:    body.Provenance,
-		Metadata:      body.Metadata,
-	})
+	result, err := runtimeSvc.Chat(r.Context(), governedReq)
 	if err != nil {
 		s.writeModelRuntimeError(w, err, metaReq)
 		return
 	}
-	content, runtimeDecision, consensusDecision, runtimeDecisionErr := classifyDirectRuntimeProposal(ModelRuntimeChatRequest{
-		ModelID: pathModelID, Backend: strings.TrimSpace(body.Backend), Messages: body.Messages,
-		Prompt: strings.TrimSpace(body.Prompt), Meta: metaReq,
-	}, result)
+	content, runtimeDecision, consensusDecision, runtimeDecisionErr := classifyDirectRuntimeProposal(governedReq, result)
 	result.Content = content
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -979,47 +953,26 @@ func (s *Server) handleV1ChatCompletions(w http.ResponseWriter, r *http.Request)
 
 	meta := requestAuditMetaForBackup(r, body.CorrelationID, body.TraceID, body.WorkspaceID, "model.runtime.openai.chat")
 	metaReq := modelRuntimeMetaFromRequestAudit(meta)
+	governedReq, contextErr := s.prepareGovernedDirectModelRequest(r.Context(), ModelRuntimeChatRequest{ModelID: modelID, Role: strings.TrimSpace(body.Role), WorkloadClass: strings.TrimSpace(body.WorkloadClass), Messages: body.Messages, MaxTokens: body.MaxTokens, TimeoutMs: body.TimeoutMs, Stream: body.Stream, Actor: strings.TrimSpace(body.User), Source: "openai_compat", Meta: metaReq, Metadata: body.Metadata})
+	if contextErr != nil {
+		s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusServiceUnavailable, code: "CONTEXT_COMPILE_FAILED", message: contextErr.Error()}, metaReq)
+		return
+	}
 	if body.Stream {
 		streamRuntime, ok := runtimeSvc.(modelRuntimeStreamingService)
 		if !ok {
 			s.writeModelRuntimeError(w, &modelRuntimeError{status: http.StatusNotImplemented, code: "STREAM_UNSUPPORTED", message: "streaming is unavailable for the current model runtime service"}, metaReq)
 			return
 		}
-		s.streamOpenAICompatChatCompletions(w, r, streamRuntime, ModelRuntimeChatRequest{
-			ModelID:       modelID,
-			Role:          strings.TrimSpace(body.Role),
-			WorkloadClass: strings.TrimSpace(body.WorkloadClass),
-			Messages:      body.Messages,
-			MaxTokens:     body.MaxTokens,
-			TimeoutMs:     body.TimeoutMs,
-			Stream:        true,
-			Actor:         strings.TrimSpace(body.User),
-			Source:        "openai_compat",
-			Meta:          metaReq,
-			Metadata:      body.Metadata,
-		})
+		s.streamOpenAICompatChatCompletions(w, r, streamRuntime, governedReq)
 		return
 	}
-	result, err := runtimeSvc.Chat(r.Context(), ModelRuntimeChatRequest{
-		ModelID:       modelID,
-		Role:          strings.TrimSpace(body.Role),
-		WorkloadClass: strings.TrimSpace(body.WorkloadClass),
-		Messages:      body.Messages,
-		MaxTokens:     body.MaxTokens,
-		TimeoutMs:     body.TimeoutMs,
-		Stream:        body.Stream,
-		Actor:         strings.TrimSpace(body.User),
-		Source:        "openai_compat",
-		Meta:          metaReq,
-		Metadata:      body.Metadata,
-	})
+	result, err := runtimeSvc.Chat(r.Context(), governedReq)
 	if err != nil {
 		s.writeModelRuntimeError(w, err, metaReq)
 		return
 	}
-	content, runtimeDecision, consensusDecision, runtimeDecisionErr := classifyDirectRuntimeProposal(ModelRuntimeChatRequest{
-		ModelID: modelID, Messages: body.Messages, Meta: metaReq,
-	}, result)
+	content, runtimeDecision, consensusDecision, runtimeDecisionErr := classifyDirectRuntimeProposal(governedReq, result)
 
 	totalTokens := result.Usage.TotalTokens
 	if totalTokens == 0 {
@@ -1072,6 +1025,7 @@ func classifyDirectRuntimeProposal(req ModelRuntimeChatRequest, result ModelRunt
 		CorrelationID: req.Meta.CorrelationID, Prompt: prompt, Output: result.Content,
 		Backend: result.Backend, ModelID: firstNonEmpty(result.ModelID, req.ModelID),
 		AuditID: result.AuditID, ExecutionID: result.ExecutionID, Proposal: result.Proposal,
+		ContextBinding: governedBindingFromModelRequest(req),
 	})
 	content := runtimeProposalFailureText
 	if decisionErr == nil {

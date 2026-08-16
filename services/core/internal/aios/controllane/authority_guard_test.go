@@ -224,6 +224,69 @@ func TestForgeKSemanticDiffHasOneProductionWriter(t *testing.T) {
 	}
 }
 
+func TestForgeKContextCompilerHasOneProductionWriterAndNoLegacyCompileCalls(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve guard source")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", ".."))
+	internalRoot := filepath.Join(repoRoot, "services", "core", "internal")
+	adapter := filepath.Join("services", "core", "internal", "aios", "controllane", "sqlite_store_context_authority.go")
+	apply := filepath.Join("services", "core", "internal", "aios", "controllane", "processor_apply.go")
+	migration := filepath.Join("services", "core", "internal", "store", "migrate_schema.go")
+	legacyCall := regexp.MustCompile(`\.(?:BuildContext|CreateContextSnapshot|CreateSnapshot|CreateRestoreOutcome)\s*\(`)
+	governedWrite := regexp.MustCompile(`(?i)\b(?:insert\s+into|update|delete\s+from)\s+(forge_k_context_bundles|forge_k_context_snapshot_heads)\b`)
+	createCall := regexp.MustCompile(`\.CreateGovernedContextBundle\s*\(`)
+	writes := map[string]int{}
+	calls := []string{}
+	violations := []string{}
+	err := filepath.WalkDir(internalRoot, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() || filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(repoRoot, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.Clean(rel)
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if legacyCall.Match(body) {
+			violations = append(violations, rel+": legacy context compiler/write call")
+		}
+		for _, match := range governedWrite.FindAllStringSubmatch(string(body), -1) {
+			writes[strings.ToLower(match[1])]++
+			if rel != adapter && rel != migration {
+				violations = append(violations, rel+": "+match[0])
+			}
+		}
+		if createCall.Match(body) {
+			calls = append(calls, rel)
+			if rel != apply {
+				violations = append(violations, rel+": CreateGovernedContextBundle call")
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(violations) != 0 {
+		t.Fatalf("context compiler authority bypasses found: %v", violations)
+	}
+	if writes["forge_k_context_bundles"] != 1 || writes["forge_k_context_snapshot_heads"] != 2 {
+		t.Fatalf("unexpected governed context SQL writer counts: %v", writes)
+	}
+	if len(calls) != 1 || calls[0] != apply {
+		t.Fatalf("unexpected CreateGovernedContextBundle callsites: %v", calls)
+	}
+}
+
 func TestForgeKMemoryVSAProjectionHasOneProductionWriter(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {

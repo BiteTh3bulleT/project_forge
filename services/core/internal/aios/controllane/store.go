@@ -13,6 +13,7 @@ import (
 	"forge/projectforge/services/core/internal/forgekernel"
 	"forge/projectforge/services/core/internal/forgekernel/authproof"
 	"forge/projectforge/services/core/internal/forgekernel/commitproof"
+	"forge/projectforge/services/core/internal/forgekernel/contextcompile"
 	"forge/projectforge/services/core/internal/forgekernel/court"
 	forgejournal "forge/projectforge/services/core/internal/forgekernel/journal"
 	"forge/projectforge/services/core/internal/forgekernel/semanticdiff"
@@ -131,10 +132,12 @@ type SemanticReadStore interface {
 	GetRestoreOutcomeFeedbackProjection(ctx context.Context, id string, scope domain.ForgeScope) (RestoreOutcomeFeedbackProjection, bool, error)
 	FindMemoryEvidence(id string, scope domain.ForgeScope) (MemoryEvidence, bool)
 	HasMemoryEvidenceSupersession(id string) bool
+	ListCurrentMemoryEvidence(scope domain.ForgeScope, limit int) ([]MemoryEvidence, error)
+	ListGovernedContextCandidates(scope domain.ForgeScope, query, snapshotKind string, limit int) ([]contextcompile.CandidateSnapshot, error)
+	FindGovernedContextHead(scope domain.ForgeScope) (contextcompile.PriorSnapshotHead, bool, error)
 	FindSemanticDiffOperation(id string, scope domain.ForgeScope) (SemanticDiffOperation, bool)
 	FindSemanticDiffResult(id string) (SemanticDiffResult, bool)
 	FindSemanticDerivedObject(id string, scope domain.ForgeScope) (SemanticDerivedObject, bool)
-	BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket
 }
 
 type SemanticStore interface {
@@ -150,13 +153,13 @@ type SemanticStore interface {
 	CreateContradiction(record ContradictionRecord) error
 	CreateSupersession(record SupersessionRecord) error
 	CreateArtifactRef(ref domain.ArtifactRef) error
-	CreateContextSnapshot(pkt domain.ContextPacket) error
 	CreateCourtDecision(exhibit court.Exhibit, ruling court.Ruling, appeal *court.Appeal) error
 	RecordRetrievalEvidence(ctx context.Context, req domain.SyscallRequest, evidence RetrievalEvidence) (RetrievalEvidenceCommit, error)
 	CreateRetrievalUsefulnessEvent(event RetrievalUsefulnessEvent) error
 	CreateRestoreOutcomeFeedbackEvent(event RestoreOutcomeFeedbackEvent) error
 	RebuildMemoryAcceleration(ctx context.Context, req MemoryAccelerationRebuildRequest) (MemoryAccelerationCommit, error)
 	CreateMemoryEvidence(evidence MemoryEvidence, supersession *MemoryEvidenceSupersession) error
+	CreateGovernedContextBundle(bundle GovernedContextBundle) error
 	CreateSemanticDiff(req domain.SyscallRequest, decision semanticdiff.Decision) error
 	SetIdempotency(key string, rec IdempotencyRecord) error
 	CreateAuditOutbox(rec AuditOutboxRecord) error
@@ -192,6 +195,8 @@ type memoryState struct {
 	semanticDiffOperations     map[string]SemanticDiffOperation
 	semanticDiffResults        map[string]SemanticDiffResult
 	semanticDerivedObjects     map[string]SemanticDerivedObject
+	governedContextBundles     map[string]GovernedContextBundle
+	governedContextHeads       map[string]contextcompile.PriorSnapshotHead
 	idempotency                map[string]IdempotencyRecord
 	auditOutbox                map[string]AuditOutboxRecord
 	journalEntries             []forgejournal.Entry
@@ -225,6 +230,8 @@ func newMemoryState() memoryState {
 		semanticDiffOperations:     map[string]SemanticDiffOperation{},
 		semanticDiffResults:        map[string]SemanticDiffResult{},
 		semanticDerivedObjects:     map[string]SemanticDerivedObject{},
+		governedContextBundles:     map[string]GovernedContextBundle{},
+		governedContextHeads:       map[string]contextcompile.PriorSnapshotHead{},
 		idempotency:                map[string]IdempotencyRecord{},
 		auditOutbox:                map[string]AuditOutboxRecord{},
 		journalEntries:             []forgejournal.Entry{},
@@ -309,6 +316,12 @@ func cloneState(in memoryState) memoryState {
 	}
 	for k, v := range in.semanticDerivedObjects {
 		out.semanticDerivedObjects[k] = cloneIntegrityValue(v)
+	}
+	for k, v := range in.governedContextBundles {
+		out.governedContextBundles[k] = cloneIntegrityValue(v)
+	}
+	for k, v := range in.governedContextHeads {
+		out.governedContextHeads[k] = cloneIntegrityValue(v)
 	}
 	for k, v := range in.idempotency {
 		out.idempotency[k] = cloneIdempotencyRecord(v)
@@ -685,16 +698,6 @@ func (s *InMemorySemanticStore) CreateArtifactRef(ref domain.ArtifactRef) error 
 	return nil
 }
 
-func (s *InMemorySemanticStore) CreateContextSnapshot(pkt domain.ContextPacket) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.state.contextSnapshots[pkt.ID]; ok {
-		return fmt.Errorf("context snapshot %q already exists", pkt.ID)
-	}
-	s.state.contextSnapshots[pkt.ID] = pkt
-	return nil
-}
-
 func (s *InMemorySemanticStore) CreateCourtDecision(exhibit court.Exhibit, ruling court.Ruling, appeal *court.Appeal) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -720,20 +723,6 @@ func (s *InMemorySemanticStore) CreateCourtDecision(exhibit court.Exhibit, rulin
 	return nil
 }
 
-func (s *InMemorySemanticStore) CreateRestoreOutcome(ctx context.Context, event RestoreOutcomeEvent) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	event = normalizeRestoreOutcomeEvent(event)
-	if event.ID == "" {
-		return fmt.Errorf("restore outcome id required")
-	}
-	if _, ok := s.state.restoreOutcomes[event.ID]; ok {
-		return fmt.Errorf("restore outcome %q already exists", event.ID)
-	}
-	s.state.restoreOutcomes[event.ID] = event
-	return nil
-}
-
 func (s *InMemorySemanticStore) GetRestoreOutcome(ctx context.Context, id string) (RestoreOutcomeEvent, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -747,7 +736,9 @@ func (s *InMemorySemanticStore) ListRestoreOutcomes(ctx context.Context, filter 
 	return filterRestoreOutcomes(s.state.restoreOutcomes, filter), nil
 }
 
-func (s *InMemorySemanticStore) BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket {
+// buildLegacyContextForInspection reconstructs historical v1 context for
+// package-level diagnostics only. Production compilation is owned by FORGE-K.
+func (s *InMemorySemanticStore) buildLegacyContextForInspection(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -1040,18 +1031,6 @@ func (s *TransactionalSemanticStore) ListCourtRulings(scope domain.ForgeScope, c
 	return filterCourtRulings(s.state.courtRulings, scope, caseID, exhibitID)
 }
 
-func (s *TransactionalSemanticStore) CreateRestoreOutcome(ctx context.Context, event RestoreOutcomeEvent) error {
-	event = normalizeRestoreOutcomeEvent(event)
-	if event.ID == "" {
-		return fmt.Errorf("restore outcome id required")
-	}
-	if _, ok := s.state.restoreOutcomes[event.ID]; ok {
-		return fmt.Errorf("restore outcome %q already exists", event.ID)
-	}
-	s.state.restoreOutcomes[event.ID] = event
-	return nil
-}
-
 func (s *TransactionalSemanticStore) GetRestoreOutcome(ctx context.Context, id string) (RestoreOutcomeEvent, bool, error) {
 	event, ok := s.state.restoreOutcomes[strings.TrimSpace(id)]
 	return event, ok, nil
@@ -1306,11 +1285,6 @@ func filterContextSnapshots(all map[string]domain.ContextPacket, scope domain.Fo
 	return matches
 }
 
-func (s *TransactionalSemanticStore) BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket {
-	tmp := &InMemorySemanticStore{state: cloneState(*s.state)}
-	return tmp.BuildContext(query, scope, budget, now)
-}
-
 func (s *TransactionalSemanticStore) CreateNote(note domain.MemoryNote) error {
 	if _, ok := s.state.notes[note.ID]; ok {
 		return fmt.Errorf("note %q already exists", note.ID)
@@ -1398,14 +1372,6 @@ func (s *TransactionalSemanticStore) CreateArtifactRef(ref domain.ArtifactRef) e
 		return fmt.Errorf("artifact %q already exists", ref.ID)
 	}
 	s.state.artifacts[ref.ID] = ref
-	return nil
-}
-
-func (s *TransactionalSemanticStore) CreateContextSnapshot(pkt domain.ContextPacket) error {
-	if _, ok := s.state.contextSnapshots[pkt.ID]; ok {
-		return fmt.Errorf("context snapshot %q already exists", pkt.ID)
-	}
-	s.state.contextSnapshots[pkt.ID] = pkt
 	return nil
 }
 

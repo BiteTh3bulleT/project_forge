@@ -49,3 +49,36 @@ func TestRuntimeProposalBoundaryOwnsEveryModelVisibilitySurface(t *testing.T) {
 		}
 	}
 }
+
+func TestContextCompilerOwnsEveryModelPromptSurface(t *testing.T) {
+	t.Parallel()
+	exactCalls := map[string]struct {
+		name string
+		want int
+	}{
+		"chat_assistant_modelruntime.go": {"prepareGovernedModelRuntimePrompt(", 2},
+		"chat_assistant_ollama.go":       {"prepareGoverned", 2},
+		"chat_assistant_gateway.go":      {"prepareGovernedOllamaPrompt(", 1},
+		"model_runtime.go":               {"prepareGovernedDirectModelRequest(", 2},
+	}
+	for file, check := range exactCalls {
+		raw, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("read %s: %v", file, err)
+		}
+		if got := strings.Count(string(raw), check.name); got != check.want {
+			t.Fatalf("%s governed context calls=%d want=%d (%s)", file, got, check.want, check.name)
+		}
+	}
+	for _, file := range []string{"chat_assistant_modelruntime.go", "chat_assistant_ollama.go", "chat_assistant_gateway.go", "model_runtime.go"} {
+		raw, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, forbidden := range []string{"buildChatLLMMessages(", "buildModelRuntimePlainChatMessages(", "buildMemoryObservationContext("} {
+			if strings.Contains(string(raw), forbidden) {
+				t.Fatalf("%s bypasses FORGE-K Context Compiler via %s", file, forbidden)
+			}
+		}
+	}
+}

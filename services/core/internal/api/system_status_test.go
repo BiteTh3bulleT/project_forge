@@ -40,7 +40,7 @@ func TestForgeSystemStatusReadOnlySurface(t *testing.T) {
 		"host_mutation_disabled",
 		"model_mutation_disabled",
 		"semantic_memory_write_disabled",
-		"forge_k_live_authority_disabled",
+		"shell_cannot_claim_kernel_authority",
 	} {
 		if shellSession[key] != true {
 			t.Fatalf("shell_session.%s=%v, want true", key, shellSession[key])
@@ -68,18 +68,18 @@ func TestForgeSystemStatusReadOnlySurface(t *testing.T) {
 	}
 
 	kernel := asMap(t, payload["kernel_activation"])
-	if kernel["status"] != "forge_k_authenticated_commit_integrity_live" {
-		t.Fatalf("kernel_activation.status=%v, want forge_k_authenticated_commit_integrity_live", kernel["status"])
+	if kernel["status"] != "forge_k_sole_live_authority" {
+		t.Fatalf("kernel_activation.status=%v, want forge_k_sole_live_authority", kernel["status"])
 	}
-	if kernel["live_kernel_authority"] != false ||
+	if kernel["live_kernel_authority"] != true ||
 		kernel["simulator_authority"] != false ||
 		kernel["live_kernel_ingress_authority"] != true ||
 		kernel["live_durable_orchestration"] != true ||
-		kernel["live_authority_migration"] != true ||
+		kernel["live_authority_migration"] != false ||
 		kernel["mutation_controls_available"] != false {
 		t.Fatalf("kernel_activation claimed forbidden authority or mutation controls: %#v", kernel)
 	}
-	if kernel["authority_ready_gates"] != float64(4) || kernel["authority_blocked_gates"] != float64(3) {
+	if kernel["authority_ready_gates"] != float64(7) || kernel["authority_blocked_gates"] != float64(0) {
 		t.Fatalf("kernel_activation authority gate counts unexpected: %#v", kernel)
 	}
 	integrity := asMap(t, kernel["no_effect"])

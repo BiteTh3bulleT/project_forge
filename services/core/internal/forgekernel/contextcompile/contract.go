@@ -21,6 +21,8 @@ const (
 	SourceManifestVersion = "forge.memory_evidence.source_manifest.v1"
 	CommittedByForgeK     = "forge_k.kernel"
 	ScoreScale            = int64(1000)
+	MetadataInputKey      = "forgeKContextCompileInput"
+	MetadataDecisionKey   = "forgeKContextCompileDecision"
 )
 
 var ErrInvalidInput = errors.New("invalid context compile input")
@@ -291,6 +293,46 @@ func Compile(input Input) (Decision, error) {
 	return d, nil
 }
 
+func VerifyDecision(input Input, decision Decision) error {
+	expected, err := Compile(input)
+	if err != nil {
+		return err
+	}
+	left, err := json.Marshal(expected)
+	if err != nil {
+		return err
+	}
+	right, err := json.Marshal(decision)
+	if err != nil {
+		return err
+	}
+	if string(left) != string(right) {
+		return invalid("decision", "decision differs from deterministic context compile contract")
+	}
+	return nil
+}
+
+func InputFromMetadata(metadata map[string]any) (Input, bool) {
+	return decodeMetadataValue[Input](metadata, MetadataInputKey)
+}
+
+func DecisionFromMetadata(metadata map[string]any) (Decision, bool) {
+	return decodeMetadataValue[Decision](metadata, MetadataDecisionKey)
+}
+
+func decodeMetadataValue[T any](metadata map[string]any, key string) (T, bool) {
+	var out T
+	value, ok := metadata[key]
+	if !ok || value == nil {
+		return out, false
+	}
+	raw, err := json.Marshal(value)
+	if err != nil || json.Unmarshal(raw, &out) != nil {
+		return out, false
+	}
+	return out, true
+}
+
 func normalizeAndValidate(in Input) (Input, error) {
 	pd, err := policyDigest(in.Policy)
 	if err != nil || in.Policy.Version != PolicyVersionV1 || in.Policy.Digest != pd {
@@ -393,7 +435,7 @@ func normalizeManifest(m *SourceManifest, scope Scope, p Policy) error {
 	var err error
 	m.Version = strings.TrimSpace(m.Version)
 	m.Scope, err = normalizeScope(m.Scope, p)
-	if err != nil || m.Version != SourceManifestVersion || !sameScope(m.Scope, scope) || len(m.Sources) < 1 || len(m.Sources) > p.Limits.MaxSources {
+	if err != nil || m.Version != SourceManifestVersion || !sameScope(m.Scope, scope) || len(m.Sources) > p.Limits.MaxSources {
 		return invalid("sourceManifest", "invalid version, scope, or source count")
 	}
 	seen := map[string]struct{}{}
@@ -736,6 +778,11 @@ func SealCandidateSnapshot(c CandidateSnapshot) (CandidateSnapshot, error) {
 	}
 	c.SnapshotHash, err = candidateSnapshotDigest(c)
 	return c, err
+}
+
+func QueryCommitment(query string) string {
+	digest, _ := hash(normalizeQuery(query))
+	return digest
 }
 
 func SealOutcomeProjectionHead(h OutcomeProjectionHead) (OutcomeProjectionHead, error) {

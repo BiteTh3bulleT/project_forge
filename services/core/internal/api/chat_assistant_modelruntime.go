@@ -43,7 +43,10 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 		return nil, resolveReason
 	}
 
-	messages, promptBudget := s.buildModelRuntimePlainChatMessages(ctx, th)
+	messages, promptBudget, contextBinding, contextErr := s.prepareGovernedModelRuntimePrompt(ctx, th)
+	if contextErr != nil {
+		return nil, "FORGE-K Context Compiler failed: " + contextErr.Error()
+	}
 	preflightTrace, preflightReason := s.modelRuntimeChatStreamPreflight(ctx, meta)
 	if strings.TrimSpace(preflightReason) != "" {
 		return nil, preflightReason
@@ -125,6 +128,7 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 		Prompt: messages, Output: driverOutput, Backend: result.Backend,
 		ModelID: nonEmpty(strings.TrimSpace(result.ModelID), modelID), AuditID: result.AuditID,
 		ExecutionID: result.ExecutionID, Proposal: result.Proposal,
+		ContextBinding: contextBinding,
 	})
 	content := runtimeProposalFailureText
 	if runtimeDecisionErr == nil {
@@ -241,7 +245,10 @@ func (s *Server) completeAssistantWithModelRuntime(
 		return nil, resolveReason
 	}
 
-	messages, promptBudget := s.buildModelRuntimePlainChatMessages(ctx, th)
+	messages, promptBudget, contextBinding, contextErr := s.prepareGovernedModelRuntimePrompt(ctx, th)
+	if contextErr != nil {
+		return nil, "FORGE-K Context Compiler failed: " + contextErr.Error()
+	}
 	preflightTrace, preflightReason := s.modelRuntimeChatPreflight(ctx, meta, modelID)
 	if strings.TrimSpace(preflightReason) != "" {
 		return nil, preflightReason
@@ -285,6 +292,7 @@ func (s *Server) completeAssistantWithModelRuntime(
 		Prompt: messages, Output: result.Content, Backend: result.Backend,
 		ModelID: nonEmpty(strings.TrimSpace(result.ModelID), modelID), AuditID: result.AuditID,
 		ExecutionID: result.ExecutionID, Proposal: result.Proposal,
+		ContextBinding: contextBinding,
 	})
 	content := runtimeProposalFailureText
 	if runtimeDecisionErr == nil {

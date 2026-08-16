@@ -15,6 +15,7 @@ import (
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/forgekernel/authproof"
 	"forge/projectforge/services/core/internal/forgekernel/commitproof"
+	"forge/projectforge/services/core/internal/forgekernel/contextcompile"
 	"forge/projectforge/services/core/internal/forgekernel/court"
 	"forge/projectforge/services/core/internal/forgekernel/semanticdiff"
 )
@@ -58,6 +59,7 @@ type PreparedSyscall struct {
 	ReplayReceipt            commitproof.CommitReceipt
 	ReplayAuthorizationProof authproof.Proof
 	SemanticDiffInput        semanticdiff.AuthorityInput
+	ContextCompileInput      contextcompile.Input
 }
 
 type CommitOutcome struct {
@@ -157,8 +159,8 @@ func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain
 		k.port.ObserveResult(ctx, req, result)
 		return result, nil
 	}
-	if req.Action == domain.ActionCompileContext && contextCompilePersists(req.Payload) && strings.TrimSpace(req.IdempotencyKey) == "" {
-		result := rejectedResult(req, domain.ErrMissingRequiredField, "idempotencyKey", "persisted context compilation requires an idempotency key")
+	if req.Action == domain.ActionCompileContext && strings.TrimSpace(req.IdempotencyKey) == "" {
+		result := rejectedResult(req, domain.ErrMissingRequiredField, "idempotencyKey", "context compilation requires an idempotency key")
 		result = annotateAuthority(result)
 		result = k.port.RecordResult(ctx, req, result)
 		k.port.ObserveResult(ctx, req, result)
@@ -245,6 +247,22 @@ func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain
 		prepared.Request.Metadata[semanticdiff.MetadataDecisionKey] = decision
 		bindSemanticDiffPlan(&prepared.Plan, decision)
 		prepared.Result.ValidationDetails = append(prepared.Result.ValidationDetails, domain.ValidationDetail{Layer: "forge_k_semantic_algebra", Passed: true, Issues: []domain.SyscallError{}})
+	}
+	if prepared.Request.Action == domain.ActionCompileContext {
+		decision, decisionErr := contextcompile.Compile(prepared.ContextCompileInput)
+		if decisionErr != nil {
+			result := rejectedResult(prepared.Request, domain.ErrConflict, "contextCompile.authorityInput", decisionErr.Error())
+			result.ValidationDetails = append(result.ValidationDetails, domain.ValidationDetail{Layer: "forge_k_context_compiler", Passed: false, Issues: append([]domain.SyscallError(nil), result.RejectedReasons...)})
+			result = annotateAuthority(result)
+			result = k.port.RecordResult(ctx, prepared.Request, result)
+			k.port.ObserveResult(ctx, prepared.Request, result)
+			return result, decisionErr
+		}
+		prepared.Request.Metadata = cloneMetadata(prepared.Request.Metadata)
+		prepared.Request.Metadata[contextcompile.MetadataInputKey] = prepared.ContextCompileInput
+		prepared.Request.Metadata[contextcompile.MetadataDecisionKey] = decision
+		bindContextCompilePlan(&prepared.Plan, decision)
+		prepared.Result.ValidationDetails = append(prepared.Result.ValidationDetails, domain.ValidationDetail{Layer: "forge_k_context_compiler", Passed: true, Issues: []domain.SyscallError{}})
 	}
 	boundPlan, proofErr := commitproof.BindPreparedPlan(prepared.Request, prepared.Plan)
 	prepared.Plan = boundPlan
@@ -350,6 +368,22 @@ func (k *Kernel) replay(ctx context.Context, prepared PreparedSyscall, currentAu
 		proofRequest.Metadata = cloneMetadata(proofRequest.Metadata)
 		proofRequest.Metadata[semanticdiff.MetadataDecisionKey] = decision
 	}
+	if proofRequest.Action == domain.ActionCompileContext {
+		input, inputOK := contextcompile.InputFromMetadata(proofRequest.Metadata)
+		decision, decisionOK := contextcompile.DecisionFromMetadata(proofRequest.Metadata)
+		if !inputOK || !decisionOK {
+			return k.rejectCommitProof(ctx, prepared.Request, domain.ErrPersistenceUnavailable, "kernel.commitProof.replayContextCompile", ErrInvalidPreparedProof, errors.New("stored context compile input or decision missing"))
+		}
+		if proofErr = contextcompile.VerifyDecision(input, decision); proofErr != nil {
+			return k.rejectCommitProof(ctx, prepared.Request, domain.ErrPersistenceUnavailable, "kernel.commitProof.replayContextCompile", ErrInvalidPreparedProof, proofErr)
+		}
+		if proofErr = verifyContextCompilePlan(prepared.ReplayPlan, decision); proofErr != nil {
+			return k.rejectCommitProof(ctx, prepared.Request, domain.ErrPersistenceUnavailable, "kernel.commitProof.replayContextCompilePlan", ErrInvalidPreparedProof, proofErr)
+		}
+		proofRequest.Metadata = cloneMetadata(proofRequest.Metadata)
+		proofRequest.Metadata[contextcompile.MetadataInputKey] = input
+		proofRequest.Metadata[contextcompile.MetadataDecisionKey] = decision
+	}
 	prepared.ReplayPlan, proofErr = commitproof.BindPreparedPlan(proofRequest, prepared.ReplayPlan)
 	var computedSeal commitproof.PreparedPlanSeal
 	if proofErr == nil {
@@ -421,6 +455,51 @@ func semanticDiffPlanCommitments(decision semanticdiff.Decision) map[string]any 
 		"semanticLeftMaterialHash":   decision.Left.MaterialHash,
 		"semanticRightEvidenceId":    decision.Right.EvidenceID,
 		"semanticRightMaterialHash":  decision.Right.MaterialHash,
+	}
+}
+
+func bindContextCompilePlan(plan *commitproof.PreparedPlan, decision contextcompile.Decision) {
+	if plan == nil {
+		return
+	}
+	journalID := plan.ExpectedJournalEventID
+	if journalID == "" {
+		for _, id := range plan.ExpectedObjectIDs {
+			if strings.HasSuffix(id, ":journal_event") {
+				journalID = id
+				break
+			}
+		}
+	}
+	plan.ExpectedObjectIDs = []string{decision.PacketID, journalID}
+	plan.Mutating = true
+	plan.Details = cloneMetadata(plan.Details)
+	for key, value := range contextCompilePlanCommitments(decision) {
+		plan.Details[key] = value
+	}
+}
+
+func verifyContextCompilePlan(plan commitproof.PreparedPlan, decision contextcompile.Decision) error {
+	for key, expected := range contextCompilePlanCommitments(decision) {
+		if !reflect.DeepEqual(plan.Details[key], expected) {
+			return errors.New("stored context compile plan commitment mismatch: " + key)
+		}
+	}
+	return nil
+}
+
+func contextCompilePlanCommitments(decision contextcompile.Decision) map[string]any {
+	return map[string]any{
+		"contextPacketId":            decision.PacketID,
+		"contextSnapshotId":          decision.SnapshotID,
+		"contextRequestHash":         decision.RequestHash,
+		"contextSourceManifestHash":  decision.SourceManifestHash,
+		"contextPacketCommitment":    decision.PacketCommitment,
+		"contextSnapshotCommitment":  decision.SnapshotCommitment,
+		"contextOutcomeCommitment":   decision.OutcomeCommitment,
+		"contextDecisionDigest":      decision.DecisionDigest,
+		"contextPolicyDigest":        decision.PolicyDigest,
+		"contextPriorHeadCommitment": decision.PriorSnapshotHeadCommitment,
 	}
 }
 

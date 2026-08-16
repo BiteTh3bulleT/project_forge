@@ -7,8 +7,10 @@ the Kernel's temporary validation/apply/SQLite `DurablePort`, but its combined
 `Process` facade is retained only for bounded adapter tests and is not selected
 by daemon assembly. Operational rollback is daemon-stopped store/generation
 recovery, never a second live orchestrator. Full subsystem authority is still
-incomplete while Context Compiler, Runtime/Consensus, KV, Lymphatic, recovery,
-and final operator/OptiPlex gates remain open.
+the live production invariant: bounded ports may validate/apply/persist, while
+only FORGE-K authorizes, decides, commits, replays, and exposes model output.
+Unimplemented KV/backend and semantic-operator capabilities remain fail-closed;
+whole-store recovery remains daemon-stopped.
 
 K20J runtime addendum (2026-08-16): the pure production
 `forgekernel/runtimeproposal` decision now gates every current model visibility
@@ -19,8 +21,17 @@ unsupported authority and action-completion claims fail closed. Tool-loop stage
 events expose hashes rather than raw model JSON or arguments, and completion
 claims require the actual gateway request/result plus durable audit identity.
 Legacy memory observations are no longer included in authoritative prompt
-construction. The context decision/bundle binding remains prompt-derived until
-the pure Context Compiler is live-wired, so this is not yet full cutover.
+construction. The runtime binding now comes from the live Kernel Context
+Compiler decision and immutable bundle commitment.
+
+K20J Context Compiler addendum (2026-08-16): the pure production
+`forgekernel/contextcompile` contract now owns live compile decisions over
+exact-scope current admitted memory evidence, governed candidates, prior CAS
+head, and sealed integer-only policy. The bounded durable port revalidates the
+same source set inside the transaction and atomically persists immutable
+bundle/head, journal, authorization, audit-outbox, and replay proof. All model
+prompt surfaces use this result; legacy notes, raw chat memory, and legacy
+snapshots remain inspection-only.
 
 Latest K20I note (2026-08-16): production FORGE-K now owns the deliberately
 narrow `COMPUTE_SEMANTIC_DIFF` action. It accepts only two exact-scope,

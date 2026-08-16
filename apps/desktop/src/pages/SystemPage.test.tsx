@@ -44,7 +44,7 @@ describe("SystemPage", () => {
         host_mutation_disabled: true,
         model_mutation_disabled: true,
         semantic_memory_write_disabled: true,
-        forge_k_live_authority_disabled: true,
+        shell_cannot_claim_kernel_authority: true,
         context_compiler_required_for_llm: true,
       },
       hostbridge: {
@@ -124,14 +124,14 @@ describe("SystemPage", () => {
         },
       },
       kernel_activation: {
-        phase: "19",
-        status: "forge_k_courthouse_live",
+        phase: "K20J",
+        status: "forge_k_sole_live_authority",
         summary:
-          "FORGE-K owns live semantic syscall ingress; the existing Control Lane SQLite transaction path is the temporary durable commit adapter.",
-        mode: "live_authority_migration",
+          "FORGE-K is the sole live semantic and model-visibility authority. Control Lane is a bounded validation/apply/SQLite durable port and cannot independently orchestrate or commit production requests.",
+        mode: "live_authority",
         live_owner: "forge_k.kernel",
-        policy_version: "phase-14f-control-lane-enforcement-v1",
-        kernel_runtime_state: "forge_k_orchestration_live_control_lane_sqlite_port",
+        policy_version: "forge-k-sole-authority-k20j-v1",
+        kernel_runtime_state: "forge_k_sole_authority_control_lane_durable_port",
         closed_validation_lanes: 7,
         total_validation_lanes: 7,
         validation_actions: [
@@ -143,9 +143,9 @@ describe("SystemPage", () => {
             approval_possible: false,
             supports_dry_run: true,
             closed: true,
-            live_owner: "aios.controllane",
+            live_owner: "forge_k.kernel",
             simulator_authority: false,
-            live_kernel_authority: false,
+            live_kernel_authority: true,
           },
           {
             action: "VALIDATE_REF_SHAPE",
@@ -155,9 +155,9 @@ describe("SystemPage", () => {
             approval_possible: false,
             supports_dry_run: true,
             closed: true,
-            live_owner: "aios.controllane",
+            live_owner: "forge_k.kernel",
             simulator_authority: false,
-            live_kernel_authority: false,
+            live_kernel_authority: true,
           },
           {
             action: "VALIDATE_SOURCE_OBJECT_AUTHORITY",
@@ -167,9 +167,9 @@ describe("SystemPage", () => {
             approval_possible: false,
             supports_dry_run: true,
             closed: true,
-            live_owner: "aios.controllane",
+            live_owner: "forge_k.kernel",
             simulator_authority: false,
-            live_kernel_authority: false,
+            live_kernel_authority: true,
           },
           {
             action: "VALIDATE_CONTEXT_ATTRIBUTION",
@@ -179,38 +179,38 @@ describe("SystemPage", () => {
             approval_possible: false,
             supports_dry_run: true,
             closed: true,
-            live_owner: "aios.controllane",
+            live_owner: "forge_k.kernel",
             simulator_authority: false,
-            live_kernel_authority: false,
+            live_kernel_authority: true,
           },
         ],
         gates: [
           {
             name: "live_owner_explicit",
             passed: true,
-            reason: "live owner remains aios.controllane",
+            reason: "production semantic syscall ingress owner is forge_k.kernel",
           },
         ],
-        authority_ready_gates: 4,
-        authority_blocked_gates: 3,
+        authority_ready_gates: 7,
+        authority_blocked_gates: 0,
         authority_gates: [
           {
             name: "control_lane_validation_enforcement",
             status: "ready",
-            live_owner: "aios.controllane",
+            live_owner: "forge_k.kernel",
             required_for_live_authority: true,
             mutation_authority: false,
             reason: "validation-only Control Lane enforcement is connected",
-            next_step: "keep validation-only",
+            next_step: "preserve the sole-authority invariant while extending capabilities",
           },
           {
             name: "source_object_authority_lookup",
             status: "ready",
-            live_owner: "aios.controllane",
+            live_owner: "forge_k.kernel",
             required_for_live_authority: true,
             mutation_authority: false,
             reason: "source object authority lookup is connected through the live Control Lane read store and fails closed",
-            next_step: "keep source-object authority lookup read-only while evidence admission and mutation routing gates are designed",
+            next_step: "preserve the sole-authority invariant while extending capabilities",
           },
         ],
         authority_matrix: [
@@ -219,35 +219,35 @@ describe("SystemPage", () => {
             current_status: "FORGE_K_ADMISSION_AND_RULING_LIVE",
             live_owner: "forge_k.kernel",
             target_owner: "forge_k.kernel",
-            feature_flag: "production FORGE-K authority mode only; legacy_v1 fails closed",
-            rollback_path: "select legacy_v1 to disable admission/ruling mutations",
+            feature_flag: "production FORGE-K is the sole boot-constructed authority",
+            rollback_path: "stop the daemon and use the verified offline store/generation rollback procedure",
             tests_required: ["admission and ruling tests"],
             tests_passing: ["immutable ruling and appeal history tests"],
-            blockers: ["atomic audit receipt integration remains"],
+            blockers: ["external audit delivery remains a projection"],
             operator_visible: true,
           },
           {
             subsystem: "Context Compiler",
-            current_status: "CONTEXT_ATTRIBUTION_VALIDATION_ONLY",
-            live_owner: "aios.controllane plus services/core/internal/forgekshadow and legacy COMPILE_CONTEXT paths",
-            target_owner: "forgek.contextcompiler",
-            feature_flag: "n/a; VALIDATE_CONTEXT_ATTRIBUTION is validation-only",
-            rollback_path: "remove context attribution validation",
+            current_status: "FORGE_K_CONTEXT_COMPILER_LIVE",
+            live_owner: "forge_k.kernel",
+            target_owner: "forge_k.kernel",
+            feature_flag: "production FORGE-K is the sole boot-constructed authority",
+            rollback_path: "stop the daemon and use verified offline rollback",
             tests_required: ["context attribution validation tests"],
             tests_passing: ["context attribution validation tests"],
-            blockers: ["live prompt/context assembly remains outside FORGE-K"],
+            blockers: [],
             operator_visible: true,
           },
           {
             subsystem: "Lymphatic Lane",
-            current_status: "LYMPHATIC_PROPOSAL_ONLY_ONLINE",
-            live_owner: "existing dream/autonomy/maintenance paths",
-            target_owner: "forgek.lymphatic",
+            current_status: "PROPOSAL_ONLY_NO_MUTATION_AUTHORITY",
+            live_owner: "forge_k.kernel",
+            target_owner: "forge_k.kernel",
             feature_flag: "n/a; dry-run metadata only",
             rollback_path: "remove proposal-only lymphatic metadata",
             tests_required: ["cleanup proposal no-execution tests"],
             tests_passing: ["autonomy maintenance dry-run proposal-only tests"],
-            blockers: ["FORGE-K Lymphatic Lane does not run live cleanup"],
+            blockers: [],
             operator_visible: true,
           },
         ],
@@ -261,13 +261,13 @@ describe("SystemPage", () => {
           retrievalExecution: false,
           kernelIngressAuthority: true,
           durableOrchestrationAuthority: true,
-          liveAuthorityMigration: true,
+          liveAuthorityMigration: false,
         },
         simulator_authority: false,
         live_kernel_ingress_authority: true,
         live_durable_orchestration: true,
-        live_kernel_authority: false,
-        live_authority_migration: true,
+        live_kernel_authority: true,
+        live_authority_migration: false,
         shadow_authoritative: false,
         mutation_controls_available: false,
       },
@@ -327,7 +327,7 @@ describe("SystemPage", () => {
             id: "authority_gates",
             label: "Authority gates",
             live: true,
-            status: "4 ready / 3 blocked",
+            status: "7 ready / 0 blocked",
             live_owner: "aios.controllane",
             target_owner: "FORGE-K Kernel",
             source: "kernel_activation.authority_gates",
@@ -501,7 +501,7 @@ describe("SystemPage", () => {
     expect(screen.getByText("Last core refresh")).toBeTruthy();
     expect(screen.getByText("Safe mode")).toBeTruthy();
     expect(screen.getByText("Host mutation disabled")).toBeTruthy();
-    expect(screen.getByText("FORGE-K live authority disabled")).toBeTruthy();
+    expect(screen.getByText("Shell cannot claim Kernel authority")).toBeTruthy();
     expect(screen.getByText("FORGE-K Activation Readiness")).toBeTruthy();
     expect(screen.getByText("Authority Matrix")).toBeTruthy();
     expect(screen.getAllByText("model.delete_file").length).toBeGreaterThanOrEqual(1);
@@ -525,7 +525,7 @@ describe("SystemPage", () => {
     expect(screen.getByText("Enforcement wired")).toBeTruthy();
     expect(screen.getByText("Operator Cockpit Index")).toBeTruthy();
     expect(screen.getByText("Authority gates")).toBeTruthy();
-    expect(screen.getByText("4 ready / 3 blocked")).toBeTruthy();
+    expect(screen.getByText("7 ready / 0 blocked")).toBeTruthy();
     expect(screen.getByText("Cases")).toBeTruthy();
     expect(screen.getByText("FORGE-K case packets")).toBeTruthy();
     expect(screen.getByText("Context bundles")).toBeTruthy();
@@ -536,27 +536,26 @@ describe("SystemPage", () => {
     expect(screen.getByText("audit/journal trace APIs")).toBeTruthy();
     expect(screen.getByText("Lymphatic reports")).toBeTruthy();
     expect(screen.getByText("autonomy maintenance dry-run reports")).toBeTruthy();
-    expect(screen.getAllByText("forge_k_courthouse_live").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("forge_k_sole_live_authority").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("7/7")).toBeTruthy();
     expect(screen.getByText("Simulator authority disabled")).toBeTruthy();
     expect(screen.getByText("FORGE-K syscall ingress live")).toBeTruthy();
     expect(screen.getByText("FORGE-K durable orchestration live")).toBeTruthy();
-    expect(screen.getByText("Full FORGE-K authority still gated")).toBeTruthy();
-    expect(screen.getByText("Live authority migration active")).toBeTruthy();
+    expect(screen.getByText("FORGE-K sole live authority")).toBeTruthy();
+    expect(screen.getByText("Alternate live authority absent")).toBeTruthy();
     expect(screen.getByText("Mutation controls absent")).toBeTruthy();
     expect(screen.getByText("Kernel Authority Gates")).toBeTruthy();
-    expect(screen.getByText("Ready: 4")).toBeTruthy();
-    expect(screen.getByText("Blocked: 3")).toBeTruthy();
+    expect(screen.getByText("Ready: 7")).toBeTruthy();
+    expect(screen.getByText("Blocked: 0")).toBeTruthy();
     expect(screen.getByText("source_object_authority_lookup")).toBeTruthy();
-    expect(screen.getByText("keep source-object authority lookup read-only while evidence admission and mutation routing gates are designed")).toBeTruthy();
+    expect(screen.getAllByText("preserve the sole-authority invariant while extending capabilities").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("FORGE-K Subsystem Cockpit")).toBeTruthy();
     expect(screen.getByText("Courthouse")).toBeTruthy();
     expect(screen.getByText("FORGE_K_ADMISSION_AND_RULING_LIVE")).toBeTruthy();
     expect(screen.getByText("Context Compiler")).toBeTruthy();
-    expect(screen.getByText("CONTEXT_ATTRIBUTION_VALIDATION_ONLY")).toBeTruthy();
+    expect(screen.getByText("FORGE_K_CONTEXT_COMPILER_LIVE")).toBeTruthy();
     expect(screen.getByText("Lymphatic Lane")).toBeTruthy();
-    expect(screen.getByText("LYMPHATIC_PROPOSAL_ONLY_ONLINE")).toBeTruthy();
-    expect(screen.getByText("FORGE-K Lymphatic Lane does not run live cleanup")).toBeTruthy();
+    expect(screen.getByText("PROPOSAL_ONLY_NO_MUTATION_AUTHORITY")).toBeTruthy();
     expect(screen.getByText("VALIDATE_KV_IDENTITY")).toBeTruthy();
     expect(screen.getByText("VALIDATE_SOURCE_OBJECT_AUTHORITY")).toBeTruthy();
     expect(screen.getByText("VALIDATE_CONTEXT_ATTRIBUTION")).toBeTruthy();
@@ -622,7 +621,7 @@ describe("SystemPage", () => {
         host_mutation_disabled: true,
         model_mutation_disabled: true,
         semantic_memory_write_disabled: true,
-        forge_k_live_authority_disabled: true,
+        shell_cannot_claim_kernel_authority: true,
       },
       hostbridge: {
         wired: true,

@@ -1,6 +1,6 @@
 # FORGE-K Live Cutover
 
-Status: K20A-K20J active; full cutover in progress.
+Status: K20J sole live authority active; physical OptiPlex acceptance pending.
 
 Date: 2026-08-16.
 
@@ -56,13 +56,13 @@ a second live authority. No fallback or shadow path performs dual commits.
 | Courthouse | Production FORGE-K deterministic admission/rejection, immutable rulings, and appeals | FORGE-K | Closed in K20C; K20D makes its commit receipt, journal chain, provenance, audit intent, and optional idempotency proof atomic with the Court mutation |
 | Utility evidence | FORGE-K append-only retrieval usefulness and restore-outcome feedback events; separate rebuildable projections | FORGE-K | K20G closes the mutable feedback writers; retrieval job-outcome recording remains fail-closed pending an exact batch contract |
 | Semantic Algebra | FORGE-K deterministic `semantic.diff.v1`; other operators staged | Governed live operations | Add operators only through separate deterministic contracts |
-| Memory Palace | Court-derived immutable evidence, append-only revision, governed VSA projection, narrow intent routes | Structured governed objects/routes | Finish context/runtime consumers and offline recovery |
-| Context Compiler | FORGE-K-only ingress with temporary Control Lane decision/apply; pure production contract ready | FORGE-K bundles | Connect pure decision, admitted-source manifest, prompt commitment, snapshot-head CAS |
-| Runtime Boundary | Pure production runtime-proposal decision gates every model visibility surface; prompt context binding remains transitional | FORGE-K driver contract over Kernel context bundles | Replace transitional prompt binding with the live Context Compiler decision; add cancellation/usage evidence |
+| Memory Palace | Court-derived immutable evidence, append-only revision, governed VSA projection, narrow intent routes | Structured governed objects/routes | Closed for live authority; offline recovery remains operational work |
+| Context Compiler | Pure production Kernel decision over admitted sources; immutable bundle and scope-head CAS | FORGE-K bundles | Closed in K20J |
+| Runtime Boundary | Pure runtime-proposal decision and consensus gate cover every model visibility surface, bound to the Kernel context decision | FORGE-K driver contract | Closed for current model surfaces in K20J |
 | Consensus | Final-response guard after runtime-proposal classification | Composition/admission guard | Closed for current API response surfaces; admission remains a separate syscall |
-| Snapshots/replay | Existing backup/context snapshots | FORGE-K shape/replay authority | Restore seed, hash-chain, rollback tests |
-| KV | Identity validation canary | Acceleration only | Exact identity plus invalidation proof |
-| Lymphatic | Proposal metadata | Proposal-only maintenance lane | No silent mutation tests |
+| Snapshots/replay | Immutable governed context bundles; legacy snapshots inspection-only; live restore disabled | FORGE-K shape/replay authority | Closed for live authority; daemon-stopped whole-store recovery remains |
+| KV | Identity validation canary; backend reuse disabled | Acceleration only | No authority gap while reuse is disabled |
+| Lymphatic | Proposal-only maintenance, mutating legacy writers retired | Proposal-only maintenance lane | Closed for authority; future execution requires a new Kernel contract |
 
 ## Completion gates
 

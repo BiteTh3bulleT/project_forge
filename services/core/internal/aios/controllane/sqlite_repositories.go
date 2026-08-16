@@ -251,9 +251,6 @@ func (r *SQLiteSupersessionRepository) GetCurrentSuccessor(ctx context.Context, 
 	return r.store.GetCurrentSuccessor(ctx, objectID, scope)
 }
 
-func (r *SQLiteContextPacketRepository) CreateSnapshot(ctx context.Context, pkt domain.ContextPacket, syscallID, correlationID, traceID string, metadata map[string]any) error {
-	return r.store.CreateSnapshot(ctx, pkt, syscallID, correlationID, traceID, metadata)
-}
 func (r *SQLiteContextPacketRepository) GetSnapshotByID(ctx context.Context, id string) (domain.ContextPacket, bool, error) {
 	return r.store.GetSnapshotByID(ctx, id)
 }

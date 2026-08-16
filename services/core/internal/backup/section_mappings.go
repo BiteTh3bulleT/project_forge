@@ -96,6 +96,8 @@ func init() {
 	extractQueries["forge_k_semantic_diff_operations"] = "SELECT * FROM forge_k_semantic_diff_operations ORDER BY created_at ASC, id ASC"
 	extractQueries["forge_k_semantic_diff_results"] = "SELECT * FROM forge_k_semantic_diff_results ORDER BY created_at ASC, id ASC"
 	extractQueries["forge_k_semantic_derived_objects"] = "SELECT * FROM forge_k_semantic_derived_objects ORDER BY created_at ASC, id ASC"
+	extractQueries["forge_k_context_bundles"] = "SELECT * FROM forge_k_context_bundles ORDER BY created_at ASC, packet_id ASC"
+	extractQueries["forge_k_context_snapshot_heads"] = "SELECT * FROM forge_k_context_snapshot_heads ORDER BY scope_hash ASC"
 }
 
 // Section upserts used during restore.

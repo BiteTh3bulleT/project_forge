@@ -45,15 +45,15 @@ func (testForgeKAuthorizationPort) ResolveAuthorization(_ context.Context, req d
 			Status: authproof.ApprovalNotNeeded,
 		},
 	}
-	if req.Action == domain.ActionCompileContext {
-		proof.Registry.MutationPolicy = authproof.MutationRequestDependent
-		proof.Registry.AuthorizedMutating = mergeCompileContextOptions(req.Payload).PersistSnapshot
+	if def.Mutating {
+		proof.Registry.MutationPolicy = authproof.MutationAlways
+		proof.Registry.AuthorizedMutating = true
 	}
 	return authproof.BuildProof(req, proof)
 }
 
 func processContextThroughForgeK(ctx context.Context, processor *Processor, req domain.SyscallRequest) (domain.SyscallResult, error) {
-	if mergeCompileContextOptions(req.Payload).PersistSnapshot && req.IdempotencyKey == "" {
+	if req.IdempotencyKey == "" {
 		req.IdempotencyKey = "test-context:" + req.ID
 	}
 	selection, err := forgekernel.SelectAuthority(processor, testForgeKAuthorizationPort{})
@@ -72,7 +72,7 @@ func validBaseRequest(action domain.SemanticActionType) domain.SyscallRequest {
 			Kind: string(domain.SourceUser),
 		},
 		Source:  domain.SourceUser,
-		Scope:   domain.ForgeScope{WorkspaceID: "ws-main"},
+		Scope:   domain.ForgeScope{WorkspaceID: "ws-main", LaneID: "control.semantic", SelectedPaths: []string{"/workspace"}},
 		Payload: map[string]any{},
 		Provenance: domain.Provenance{
 			Actor:     "operator",

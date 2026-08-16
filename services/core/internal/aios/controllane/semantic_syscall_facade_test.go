@@ -81,8 +81,8 @@ func TestBuildSemanticSyscallFacadeReportsPersistedCompileAsMutating(t *testing.
 
 	req.Payload["persistSnapshot"] = false
 	facade = BuildSemanticSyscallFacade(req, def)
-	if facade.Mutating || facade.ExpectedEffect != "validate_context_packet" {
-		t.Fatalf("non-persisted compile must remain non-mutating, got %+v", facade)
+	if !facade.Mutating || facade.ExpectedEffect != "commit_context_packet" {
+		t.Fatalf("every governed compile must commit immutable bundle evidence, got %+v", facade)
 	}
 }
 

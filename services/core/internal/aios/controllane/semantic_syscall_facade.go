@@ -69,7 +69,7 @@ func semanticSyscallMutating(req domain.SyscallRequest, def ActionDefinition) bo
 	if def.Mutating {
 		return true
 	}
-	return req.Action == domain.ActionCompileContext && mergeCompileContextOptions(req.Payload).PersistSnapshot
+	return false
 }
 
 func expectedEffect(def ActionDefinition, mutating bool) string {
@@ -108,12 +108,13 @@ func capabilityScope(req domain.SyscallRequest) map[string]any {
 
 func authorityEffects(req domain.SyscallRequest, def ActionDefinition, mutating bool) map[string]bool {
 	forgeKIngress, _ := req.Metadata["forgeKIngressAuthority"].(bool)
+	canonicalMutation := def.Mutating && req.Action != domain.ActionCompileContext
 	return map[string]bool{
 		"forgeKIngressOwned":       forgeKIngress,
 		"controlLaneOwned":         !forgeKIngress,
 		"controlLaneCommitAdapter": forgeKIngress,
 		"mutatesDurableData":       mutating,
-		"mutatesCanonicalData":     def.Mutating,
+		"mutatesCanonicalData":     canonicalMutation,
 		"callsModelRuntime":        false,
 		"executesGatewayTool":      false,
 		"importsForgeKSimulator":   false,

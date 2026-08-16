@@ -504,9 +504,9 @@ func TestInMemoryListContextSnapshotsFiltersAndOrders(t *testing.T) {
 	otherRestore.CompileOptions = &domain.ContextCompileOptions{PersistSnapshot: true, SnapshotKind: "restore"}
 
 	for _, pkt := range []domain.ContextPacket{mainRestoreA, mainRestoreB, mainReview, otherRestore} {
-		if err := store.CreateContextSnapshot(pkt); err != nil {
-			t.Fatalf("seed context snapshot %s: %v", pkt.ID, err)
-		}
+		store.mu.Lock()
+		store.state.contextSnapshots[pkt.ID] = pkt
+		store.mu.Unlock()
 	}
 
 	list := store.ListContextSnapshots(scopeMain, "summarize blockers", "restore", 10)

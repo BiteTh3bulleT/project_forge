@@ -25,6 +25,7 @@ type runtimeProposalRequest struct {
 	ExecutionID     string
 	Proposal        *modelruntime.ProposalEnvelope
 	GatewayEvidence []runtimeGatewayEvidence
+	ContextBinding  governedPromptBinding
 }
 
 type runtimeGatewayEvidence struct {
@@ -62,6 +63,10 @@ func decideRuntimeProposal(req runtimeProposalRequest) (runtimeproposal.Decision
 	}{"forge.chat.prompt_binding.v1", workspaceID, req.ThreadID, req.UserMessageID, promptHash})
 	bundleHash := runtimeproposal.HashText(string(bundleJSON))
 	contextDigest := runtimeproposal.HashText("forge.chat.context_binding.v1\n" + bundleHash)
+	if strings.TrimSpace(req.ContextBinding.BundleHash) != "" && strings.TrimSpace(req.ContextBinding.DecisionDigest) != "" {
+		bundleHash = strings.TrimSpace(req.ContextBinding.BundleHash)
+		contextDigest = strings.TrimSpace(req.ContextBinding.DecisionDigest)
+	}
 
 	declaredHash := runtimeproposal.HashText(req.Output)
 	claims := runtimeproposal.AuthorityClaims{}

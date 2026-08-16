@@ -76,6 +76,8 @@ func TestInspectFullBackupProducesDeterministicNonMergeablePlan(t *testing.T) {
 		"forge_k_semantic_diff_operations":      "offline_recovery_only",
 		"forge_k_semantic_diff_results":         "offline_recovery_only",
 		"forge_k_semantic_derived_objects":      "offline_recovery_only",
+		"forge_k_context_bundles":               "offline_recovery_only",
+		"forge_k_context_snapshot_heads":        "offline_recovery_only",
 	}
 	for section, want := range wantDisposition {
 		inspection, ok := first.SectionInspections[section]

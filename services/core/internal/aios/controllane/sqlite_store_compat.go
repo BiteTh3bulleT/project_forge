@@ -481,7 +481,9 @@ LIMIT ?`, scope.WorkspaceID, scope.LaneID, scope.LaneID, query, query, snapshotK
 	return packets
 }
 
-func (s *SQLiteSemanticStore) BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket {
+// buildLegacyContextForInspection reconstructs historical v1 context for
+// package-level diagnostics only. It is not a production compile authority.
+func (s *SQLiteSemanticStore) buildLegacyContextForInspection(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket {
 	notes, _ := s.ListActive(context.Background(), toScopeFilter(scope))
 	if len(notes) > budget.MaxNotes {
 		notes = notes[:budget.MaxNotes]

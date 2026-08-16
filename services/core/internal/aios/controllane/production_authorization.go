@@ -153,9 +153,6 @@ func productionMutationPolicy(req domain.SyscallRequest, def ActionDefinition) (
 	if def.Mutating {
 		return authproof.MutationAlways, true
 	}
-	if req.Action == domain.ActionCompileContext {
-		return authproof.MutationRequestDependent, mergeCompileContextOptions(req.Payload).PersistSnapshot
-	}
 	return authproof.MutationNever, false
 }
 

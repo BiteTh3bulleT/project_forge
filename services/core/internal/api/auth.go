@@ -19,12 +19,17 @@ type authenticatedActor struct {
 
 type authContextKey struct{}
 
+// allowTestNetLoopback is enabled only by the package test binary. The
+// standard httptest request uses 192.0.2.1 (TEST-NET-1) as its synthetic
+// peer; production binaries leave this false.
+var allowTestNetLoopback bool
+
 func (s *Server) requireAPIAuth(next http.Handler) http.Handler {
 	token := strings.TrimSpace(s.cfg.APIToken)
 	if token == "" {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !verifiedLoopbackRequest(r) {
-				next.ServeHTTP(w, r)
+				writeAuthError(w)
 				return
 			}
 			actor := strings.TrimSpace(s.cfg.APIActor)
@@ -85,7 +90,7 @@ func verifiedLoopbackRequest(r *http.Request) bool {
 	}
 	host = strings.Trim(host, "[]")
 	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+	return ip != nil && (ip.IsLoopback() || (allowTestNetLoopback && ip.Equal(net.ParseIP("192.0.2.1"))))
 }
 
 func authenticatedActorName(r *http.Request) string {

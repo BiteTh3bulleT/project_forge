@@ -18,7 +18,19 @@ const warnedUnknownStatuses = new Set<string>();
 
 function statusClass(status?: string) {
   const normalized = (status ?? "").toLowerCase();
-  if (["ok", "normal", "available", "healthy", "reachable", "fresh", "read_only"].includes(normalized)) {
+  if ([
+    "ok",
+    "normal",
+    "available",
+    "healthy",
+    "reachable",
+    "fresh",
+    "read_only",
+    "forge_k_sole_live_authority",
+    "forge_k_admission_and_ruling_live",
+    "forge_k_context_compiler_live",
+    "proposal_only_no_mutation_authority",
+  ].includes(normalized) || /^\d+ ready \/ 0 blocked$/.test(normalized)) {
     return "forge-ops-status forge-ops-status--ok";
   }
   if (normalized === "partial_live_validation_ready" || normalized === "ready") {
@@ -353,8 +365,8 @@ export function SystemPage() {
                 enabled={status?.shell_session?.semantic_memory_write_disabled}
               />
               <BoundaryFlag
-                label="FORGE-K live authority disabled"
-                enabled={status?.shell_session?.forge_k_live_authority_disabled}
+                label="Shell cannot claim Kernel authority"
+                enabled={status?.shell_session?.shell_cannot_claim_kernel_authority}
               />
             </div>
           </Panel>
@@ -640,12 +652,12 @@ export function SystemPage() {
                 enabled={kernelActivation?.live_durable_orchestration ?? false}
               />
               <BoundaryFlag
-                label="Full FORGE-K authority still gated"
-                enabled={kernelActivation ? !kernelActivation.live_kernel_authority : false}
+                label="FORGE-K sole live authority"
+                enabled={kernelActivation?.live_kernel_authority ?? false}
               />
               <BoundaryFlag
-                label="Live authority migration active"
-                enabled={kernelActivation?.live_authority_migration ?? false}
+                label="Alternate live authority absent"
+                enabled={kernelActivation ? !kernelActivation.live_authority_migration : false}
               />
               <BoundaryFlag
                 label="Mutation controls absent"

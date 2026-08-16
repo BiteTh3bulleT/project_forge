@@ -3,8 +3,9 @@
 ## Scope
 
 `forge-optiplex-7000` is the physical x86_64 NixOS test target for the local
-Dell OptiPlex 7000. It is not the canonical operator VM and does not make
-FORGE-K simulator services live authority.
+Dell OptiPlex 7000. It is not the canonical operator VM. Production
+`forgekernel` is the sole live authority; the separate `forgek` simulator
+packages remain non-authoritative.
 
 The target intentionally uses:
 
@@ -37,7 +38,8 @@ The target intentionally uses:
   instead of consuming its response budget with a thinking trace;
 - key-only SSH for the explicitly provisioned operator key;
 - a static offline direct Ethernet link at `192.168.50.2/24` with no gateway,
-  no DNS, no IPv6, and `never-default=true`;
+  no DNS, no IPv6, and `never-default=true`, plus an nftables output policy
+  that permits only loopback and `192.168.50.0/24`;
 - no VirtualBox guest integration, autologin, or automatic host mutation.
 
 ## Offline direct-link contract
@@ -52,6 +54,12 @@ The workstation profile must use `ipv4.method manual`, not
 NAT, which would give the OptiPlex internet access through the workstation.
 Repository updates, Nix closures, and model artifacts must be staged on the
 workstation and transferred across the direct link.
+
+The nftables `forge_offline` table is the hard boundary. Its output and forward
+chains default to drop. Output is allowed only over loopback or through
+`enp0s31f6` to `192.168.50.0/24`; inbound traffic is limited to established
+connections, ICMP echo, and SSH from that direct subnet. A newly created
+NetworkManager profile therefore cannot silently add internet egress.
 
 ## Disk contract
 
@@ -117,7 +125,14 @@ command -v foot firefox pcmanfm mousepad micro hx
 ip -4 address show dev enp0s31f6
 ip route
 nmcli connection show forge-direct-link
+sudo nft list table inet forge_offline
 ! ip route get 1.1.1.1
+! curl --connect-timeout 3 http://1.1.1.1
+curl -fsS http://127.0.0.1:18492/forge/kernel/status | jq -e '
+  .status == "forge_k_sole_live_authority" and
+  .live_kernel_authority == true and
+  .live_owner == "forge_k.kernel" and
+  .authority_blocked_gates == 0'
 ```
 
 The route table must contain only `192.168.50.0/24` through `enp0s31f6`.
@@ -166,6 +181,7 @@ Then complete the native desktop smoke checklist in
 zram remain enabled for the 4 GiB test host, but swap is not evidence that a
 graphics hang is fixed; inspect the journal and repeat the interactive smoke.
 
-The expected boundary is live AI-OS/core authority with the existing governed
-paths. FORGE-K remains simulator-only except for the already documented narrow
-live validation seams.
+The expected boundary is production FORGE-K as the sole live semantic,
+context, and model-visibility authority. The `services/core/internal/forgek`
+simulator remains isolated, Control Lane remains a bounded durable port, and
+disabled capabilities retain no alternate authority.

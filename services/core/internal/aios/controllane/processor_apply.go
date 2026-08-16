@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"forge/projectforge/services/core/internal/aios/domain"
+	"forge/projectforge/services/core/internal/forgekernel/contextcompile"
 	"forge/projectforge/services/core/internal/forgekernel/court"
 )
 
@@ -528,179 +529,33 @@ func applyArchiveNote(store SemanticStore, req domain.SyscallRequest) ([]string,
 }
 
 func applyCompileContext(ctx context.Context, store SemanticStore, req domain.SyscallRequest, engine RuleEngine) ([]string, map[string]any, []string, []domain.SyscallError) {
-	query := readString(req.Payload, "query")
-	if strings.TrimSpace(query) == "" {
-		if v, ok := req.Metadata["query"]; ok {
-			query = strings.TrimSpace(fmt.Sprintf("%v", v))
-		}
+	_ = ctx
+	_ = engine
+	input, inputOK := contextcompile.InputFromMetadata(req.Metadata)
+	decision, decisionOK := contextcompile.DecisionFromMetadata(req.Metadata)
+	if !inputOK || !decisionOK {
+		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrUnauthorized, Field: "metadata.forgeKContextCompileDecision", Message: "missing production FORGE-K Context Compiler decision"}}
 	}
-	budget := defaultBudget()
-	if raw, ok := req.Payload["budget"].(map[string]any); ok {
-		budget.MaxTokens = readInt(raw, "maxTokens", budget.MaxTokens)
-		budget.MaxEvents = readInt(raw, "maxEvents", budget.MaxEvents)
-		budget.MaxNotes = readInt(raw, "maxNotes", budget.MaxNotes)
+	bundle, err := buildGovernedContextBundle(req, input, decision, store)
+	if err != nil {
+		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrConflict, Field: "contextCompile", Message: err.Error()}}
 	}
-	packet := store.BuildContext(query, req.Scope, budget, req.RequestedAt)
-	opts := mergeCompileContextOptions(req.Payload)
-	if !opts.PersistSnapshot {
-		outcomeDraft := restoreOutcomeSummary(RestoreOutcomeEvent{
-			ID:                   NewRestoreOutcomeID(req.ID, packet.ID, "draft"),
-			CreatedAt:            req.RequestedAt,
-			UpdatedAt:            req.RequestedAt,
-			WorkspaceID:          req.Scope.WorkspaceID,
-			LaneID:               req.Scope.LaneID,
-			Query:                packet.Query,
-			ContextPacketID:      packet.ID,
-			SnapshotKind:         opts.SnapshotKind,
-			Outcome:              RestoreOutcomeUnknown,
-			DownstreamActionType: "compile_context",
-			DownstreamObjectID:   packet.ID,
-			CorrelationID:        req.CorrelationID,
-			TraceID:              req.TraceID,
-			SyscallID:            req.ID,
-			ProposedBy:           string(req.Source),
-			CommittedBy:          "forge_kernel",
-			Metadata:             map[string]any{"persisted": false, "non_canonical_evidence": true},
-		})
-		return []string{}, map[string]any{
-			"contextPacketId": packet.ID,
-			"notes":           len(packet.Notes),
-			"openLoops":       len(packet.OpenLoops),
-			"models":          len(packet.Models),
-			"restoreOutcome":  outcomeDraft,
-		}, []string{"compile_context is deterministic Phase 2 stub"}, nil
+	if err := store.CreateGovernedContextBundle(bundle); err != nil {
+		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrConflict, Field: "contextCompile.head", Message: err.Error()}}
 	}
-
-	restoreInput := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
-		Packet:        packet,
-		SnapshotID:    packet.ID,
-		SnapshotKind:  opts.SnapshotKind,
-		CorrelationID: req.CorrelationID,
-		TraceID:       req.TraceID,
-		SyscallID:     req.ID,
-		ProposedBy:    string(req.Source),
-		CommittedBy:   "forge_kernel",
-	}, nil)
-	resumeHints := readCompileContextResumeHints(req.Payload)
-	if opts.RestoreMinScore > 0 {
-		resumeHints.MinimumScore = opts.RestoreMinScore
-	}
-	candidateLimit := opts.RestoreCandidateLimit
-	if candidateLimit <= 0 {
-		candidateLimit = defaultRestoreCandidateLimit
-	}
-	outcomeSignals, outcomeSignalWarnings := listRestoreOutcomeSignals(ctx, store, req.Scope, packet.Query, candidateLimit*4)
-	candidates := store.ListContextSnapshots(req.Scope, packet.Query, opts.SnapshotKind, candidateLimit)
-	restoreSelection := selectCompileContextRestoreCandidateCached(ctx, engine, req.RequestedAt, restoreInput, candidates, opts.SnapshotKind, resumeHints, outcomeSignals, opts.RestoreCacheDisabled)
-	prior := restoreSelection.selectedPrior()
-
-	snapshot := buildCompiledContextSnapshot(compiledSnapshotBuildInput{
-		Packet:        packet,
-		SnapshotID:    packet.ID,
-		SnapshotKind:  opts.SnapshotKind,
-		CorrelationID: req.CorrelationID,
-		TraceID:       req.TraceID,
-		SyscallID:     req.ID,
-		ProposedBy:    string(req.Source),
-		CommittedBy:   "forge_kernel",
-	}, prior)
-
-	committedIDs := []string{}
-	if opts.RenderSnapshotCard {
-		svg := renderCompiledContextSnapshotSVG(snapshot)
-		artifact := contextSnapshotArtifactRef(packet, snapshot, svg)
-		if err := store.CreateArtifactRef(artifact); err != nil {
-			return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrConflict, Field: "payload.renderSnapshotCard", Message: err.Error()}}
-		}
-		snapshot.Header.RenderedCardArtifactID = artifact.ID
-		committedIDs = append(committedIDs, artifact.ID)
-	}
-
-	applyCompiledSnapshotToPacket(&packet, snapshot, opts)
-	selected := restoreSelection.selectedCandidate()
-	selectedHeaderOnly := false
-	selectedEvidence := []string{}
-	if selected != nil {
-		selectedHeaderOnly = selected.HeaderOnly
-		selectedEvidence = dominantEvidenceIDs(selected.Snapshot.Graph)
-	}
-	if packet.RestoreSnapshot != nil {
-		if packet.RestoreSnapshot.Metadata == nil {
-			packet.RestoreSnapshot.Metadata = map[string]any{}
-		}
-		packet.RestoreSnapshot.Metadata["restore_scores_json"] = restoreSelection.restoreScoresMetadata()
-		packet.RestoreSnapshot.Metadata["resume_hints_json"] = restoreSelection.resumeHintsMetadata()
-		packet.RestoreSnapshot.Metadata["restore_trace_json"] = restoreSelection.selectionTraceMetadata()
-		packet.RestoreSnapshot.Metadata["restore_package_json"] = restoreSelection.restorePackageMetadata(opts.ExpandRestoreGraph)
-		packet.RestoreSnapshot.Metadata["restore_reason_json"] = map[string]any{
-			"mode":                    "compile_context_restore_selection",
-			"decision":                restoreSelection.Decision,
-			"decision_reason":         restoreSelection.decisionReason(),
-			"threshold":               restoreSelection.Threshold,
-			"candidate_count":         len(restoreSelection.Candidates),
-			"candidate_pool_count":    restoreSelection.CandidatePool,
-			"cache_hit":               restoreSelection.CacheHit,
-			"candidates_filtered_out": restoreSelection.FilteredOut,
-			"selected_snapshot_id":    restoreSelection.selectedSnapshotID(),
-			"selected_evidence_ids":   selectedEvidence,
-			"selected_header_only":    selectedHeaderOnly,
-			"fingerprint_matched":     snapshot.Delta.FingerprintMatched,
-			"resume_hint_overrides":   map[string]any{"preferredSnapshotId": resumeHints.PreferredSnapshotID, "minimumScore": resumeHints.MinimumScore, "freshCompileOnly": resumeHints.FreshCompileOnly},
-		}
-		if selectedID := strings.TrimSpace(restoreSelection.selectedSnapshotID()); selectedID != "" {
-			packet.RestoreSnapshot.Metadata["restore_source_snapshot_id"] = selectedID
-		}
-		if selected != nil {
-			packet.RestoreSnapshot.Metadata["selected_evidence_ids"] = selectedEvidence
-			packet.RestoreSnapshot.Metadata["selected_header_only"] = selectedHeaderOnly
-		}
-	}
-	if err := store.CreateContextSnapshot(packet); err != nil {
-		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrConflict, Field: "payload.persistSnapshot", Message: err.Error()}}
-	}
-	committedIDs = append([]string{packet.ID}, committedIDs...)
-
-	warnings := []string{"compile_context snapshot evidence is non-canonical"}
-	warnings = append(warnings, outcomeSignalWarnings...)
-	switch restoreSelection.Decision {
-	case "fresh_compile_no_candidates":
-		warnings = append(warnings, "restore selection found no candidates; fresh compile used")
-	case "fresh_compile_below_threshold":
-		warnings = append(warnings, "restore selection score below threshold; fresh compile used")
-	case "fresh_compile_forced":
-		warnings = append(warnings, "restore selection forced to fresh compile by resume hints")
-	}
-	if restoreSelection.Decision == "selected" && selectedHeaderOnly {
-		warnings = append(warnings, "restore selected header-only candidate; evidence expansion will continue during compile")
-	}
-	outcomeEvent := buildRestoreOutcomeEvent(req, packet, snapshot, restoreSelection, selectedEvidence, selectedHeaderOnly)
-	if outcomeStore, ok := store.(RestoreOutcomeStore); ok {
-		if err := outcomeStore.CreateRestoreOutcome(ctx, outcomeEvent); err != nil {
-			return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrPersistenceUnavailable, Field: "restore_outcome_events", Message: err.Error()}}
-		}
-		committedIDs = append(committedIDs, outcomeEvent.ID)
-	} else {
-		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrPersistenceUnavailable, Field: "restore_outcome_events", Message: "restore outcome evidence store unavailable"}}
-	}
-
-	return committedIDs, map[string]any{
-		"contextPacketId":         packet.ID,
-		"notes":                   len(packet.Notes),
-		"openLoops":               len(packet.OpenLoops),
-		"models":                  len(packet.Models),
-		"persistedSnapshot":       true,
-		"snapshotKind":            snapshot.Header.SnapshotKind,
-		"snapshotFingerprint":     snapshot.Header.Fingerprint,
-		"parentSnapshotId":        snapshot.Header.ParentSnapshotID,
-		"renderedCardArtifactId":  snapshot.Header.RenderedCardArtifactID,
-		"restoreDecision":         restoreSelection.Decision,
-		"restoreThreshold":        restoreSelection.Threshold,
-		"restoreTopScore":         restoreSelection.TopScore,
-		"restoreCandidateCount":   len(restoreSelection.Candidates),
-		"restoreSourceSnapshotId": restoreSelection.selectedSnapshotID(),
-		"restoreCacheHit":         restoreSelection.CacheHit,
-		"restoreOutcome":          restoreOutcomeSummary(outcomeEvent),
-	}, warnings, nil
+	return []string{decision.PacketID}, map[string]any{
+		"contextPacketId":           decision.PacketID,
+		"contextSnapshotId":         decision.SnapshotID,
+		"contextDecisionDigest":     decision.DecisionDigest,
+		"contextPacketCommitment":   decision.PacketCommitment,
+		"contextSnapshotCommitment": decision.SnapshotCommitment,
+		"sourceManifestHash":        decision.SourceManifestHash,
+		"selectedEvidenceIds":       append([]string(nil), decision.SelectedEvidenceIDs...),
+		"restoreDecision":           decision.Selection.Mode,
+		"governedSources":           cloneIntegrityValue(bundle.Sources),
+		"kernelContextCompiler":     true,
+		"legacyContextInputs":       false,
+	}, []string{"context bundle is immutable governed evidence, not canonical truth"}, nil
 }
 
 func defaultBudget() domain.ContextBudget {

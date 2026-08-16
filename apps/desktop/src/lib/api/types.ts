@@ -718,7 +718,7 @@ export type ForgeSystemStatus = {
     host_mutation_disabled?: boolean;
     model_mutation_disabled?: boolean;
     semantic_memory_write_disabled?: boolean;
-    forge_k_live_authority_disabled?: boolean;
+    shell_cannot_claim_kernel_authority?: boolean;
     context_compiler_required_for_llm?: boolean;
   };
   hostbridge: {
@@ -1092,7 +1092,7 @@ export type ForgeSystemHost = {
     host_mutation_disabled?: boolean;
     model_mutation_disabled?: boolean;
     semantic_memory_write_disabled?: boolean;
-    forge_k_live_authority_disabled?: boolean;
+    shell_cannot_claim_kernel_authority?: boolean;
     context_compiler_required_for_llm?: boolean;
   };
   config?: {

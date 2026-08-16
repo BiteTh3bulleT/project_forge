@@ -46,14 +46,17 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload["status"] != "forge_k_authenticated_commit_integrity_live" {
+	if payload["status"] != "forge_k_sole_live_authority" {
 		t.Fatalf("unexpected kernel status payload: %#v", payload)
 	}
-	if payload["live_kernel_authority"] != false ||
+	if payload["phase"] != "K20J" || payload["policy_version"] != "forge-k-sole-authority-k20j-v1" {
+		t.Fatalf("unexpected kernel cutover identity: %#v", payload)
+	}
+	if payload["live_kernel_authority"] != true ||
 		payload["simulator_authority"] != false ||
 		payload["live_kernel_ingress_authority"] != true ||
 		payload["live_durable_orchestration"] != true ||
-		payload["live_authority_migration"] != true ||
+		payload["live_authority_migration"] != false ||
 		payload["shadow_authoritative"] != false ||
 		payload["mutation_controls_available"] != false {
 		t.Fatalf("kernel status claimed forbidden authority or mutation controls: %#v", payload)
@@ -96,6 +99,9 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 		if action["live_owner"] != forgekernel.AuthorityOwnerForgeK {
 			t.Fatalf("validation action bypassed boot-selected ingress owner: %#v", action)
 		}
+		if action["live_kernel_authority"] != true {
+			t.Fatalf("validation action retained pre-cutover authority metadata: %#v", action)
+		}
 	}
 	if !seenActions["VALIDATE_ADMISSION_CANDIDATE"] {
 		t.Fatalf("missing admission candidate validation action: %#v", actions)
@@ -107,24 +113,24 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing activation gates: %#v", payload["gates"])
 	}
-	seenFullAuthorityGate := false
+	seenSoleAuthorityGate := false
 	for _, raw := range activationGates {
 		gate, ok := raw.(map[string]any)
 		if !ok {
 			t.Fatalf("unexpected activation gate shape: %#v", raw)
 		}
-		if gate["name"] == "full_kernel_authority_gated" {
-			seenFullAuthorityGate = true
+		if gate["name"] == "sole_live_kernel_authority" && gate["passed"] == true {
+			seenSoleAuthorityGate = true
 		}
 		if gate["name"] == "live_kernel_authority_disabled" {
 			t.Fatalf("live K20A status retained legacy disabled gate: %#v", gate)
 		}
 	}
-	if !seenFullAuthorityGate {
-		t.Fatalf("missing full authority migration gate: %#v", activationGates)
+	if !seenSoleAuthorityGate {
+		t.Fatalf("missing sole live authority gate: %#v", activationGates)
 	}
 
-	if payload["authority_ready_gates"] != float64(4) || payload["authority_blocked_gates"] != float64(3) {
+	if payload["authority_ready_gates"] != float64(7) || payload["authority_blocked_gates"] != float64(0) {
 		t.Fatalf("unexpected authority gate counts: %#v", payload)
 	}
 	gates, ok := payload["authority_gates"].([]any)
@@ -162,11 +168,14 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 		if subsystem == "Courthouse" && (entry["current_status"] != "FORGE_K_ADMISSION_AND_RULING_LIVE" || entry["live_owner"] != "forge_k.kernel") {
 			t.Fatalf("courthouse live authority not reported, got %#v", entry)
 		}
-		if subsystem == "Kernel" && (entry["current_status"] != "FORGE_K_COMMIT_INTEGRITY_LIVE" || entry["live_owner"] != "forge_k.kernel") {
-			t.Fatalf("kernel commit integrity authority not reported: %#v", entry)
+		if subsystem == "Kernel" && (entry["current_status"] != "FORGE_K_SOLE_LIVE_AUTHORITY" || entry["live_owner"] != "forge_k.kernel") {
+			t.Fatalf("sole kernel authority not reported: %#v", entry)
 		}
 		if subsystem == "Semantic Algebra" && (entry["current_status"] != "FORGE_K_DETERMINISTIC_DIFF_LIVE" || entry["live_owner"] != "forge_k.kernel") {
 			t.Fatalf("semantic diff authority not reported: %#v", entry)
+		}
+		if subsystem == "Context Compiler" && (entry["current_status"] != "FORGE_K_CONTEXT_COMPILER_LIVE" || entry["live_owner"] != "forge_k.kernel") {
+			t.Fatalf("context compiler authority not reported: %#v", entry)
 		}
 		if entry["live_owner"] == "" || entry["target_owner"] == "" || entry["rollback_path"] == "" {
 			t.Fatalf("authority matrix entry missing owner/rollback fields: %#v", entry)

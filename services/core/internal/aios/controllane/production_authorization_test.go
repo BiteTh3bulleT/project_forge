@@ -175,7 +175,7 @@ func TestProductionAuthorizationCompileMutationPolicy(t *testing.T) {
 		if err != nil {
 			t.Fatalf("persist=%v resolve: %v", persist, err)
 		}
-		if proof.Registry.MutationPolicy != authproof.MutationRequestDependent || proof.Registry.AuthorizedMutating != persist {
+		if proof.Registry.MutationPolicy != authproof.MutationAlways || !proof.Registry.AuthorizedMutating {
 			t.Fatalf("persist=%v registry=%#v", persist, proof.Registry)
 		}
 	}

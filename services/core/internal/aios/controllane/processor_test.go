@@ -2,7 +2,6 @@ package controllane
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"forge/projectforge/services/core/internal/aios/domain"
@@ -179,8 +178,8 @@ func TestProcessorSupportedSyscalls(t *testing.T) {
 	if err != nil || !res.Success {
 		t.Fatalf("COMPILE_CONTEXT failed: err=%v res=%+v", err, res)
 	}
-	if len(res.CommittedObjectIDs) != 0 {
-		t.Fatalf("compile context should be read-only")
+	if len(res.CommittedObjectIDs) != 2 || res.StateSummary["kernelContextCompiler"] != true {
+		t.Fatalf("compile context must commit one governed bundle plus journal: %+v", res)
 	}
 }
 
@@ -572,105 +571,43 @@ func TestAuditRecordShapesAcrossOutcomes(t *testing.T) {
 func TestCompileContextSnapshotPersistenceOptIn(t *testing.T) {
 	ctx := context.Background()
 	k, store, _ := newTestKernel()
-	mustCreateNote(ctx, k, "note-ctx-a", "ctx a")
-	mustCreateNote(ctx, k, "note-ctx-b", "ctx b")
-
-	readOnly := validBaseRequest(domain.ActionCompileContext)
-	readOnly.ID = "compile-context-optout-1"
-	readOnly.Payload = map[string]any{
+	first := validBaseRequest(domain.ActionCompileContext)
+	first.ID = "compile-context-optout-1"
+	first.Payload = map[string]any{
 		"query":  "summarize blockers",
 		"budget": map[string]any{"maxTokens": 50, "maxEvents": 10, "maxNotes": 10},
 	}
-	readOnlyRes, err := processContextThroughForgeK(ctx, k, readOnly)
-	if err != nil || !readOnlyRes.Success {
-		t.Fatalf("compile context opt-out failed: err=%v res=%+v", err, readOnlyRes)
-	}
-	if len(readOnlyRes.CommittedObjectIDs) != 0 {
-		t.Fatalf("persistSnapshot=false should keep committed ids empty, got %v", readOnlyRes.CommittedObjectIDs)
-	}
-	if len(store.snapshot().contextSnapshots) != 0 || len(store.snapshot().artifacts) != 0 {
-		t.Fatalf("persistSnapshot=false should not write snapshot evidence")
-	}
-	if len(store.snapshot().restoreOutcomes) != 0 {
-		t.Fatalf("persistSnapshot=false should not write restore outcome evidence")
-	}
-	if draft, ok := readOnlyRes.StateSummary["restoreOutcome"].(map[string]any); !ok || draft["outcome"] != string(RestoreOutcomeUnknown) {
-		t.Fatalf("expected non-persisted restore outcome draft, got %#v", readOnlyRes.StateSummary["restoreOutcome"])
-	}
-	if len(readOnlyRes.Warnings) != 1 || readOnlyRes.Warnings[0] != "compile_context is deterministic Phase 2 stub" {
-		t.Fatalf("expected unchanged warning for persistSnapshot=false, got %v", readOnlyRes.Warnings)
+	firstRes, err := processContextThroughForgeK(ctx, k, first)
+	if err != nil || !firstRes.Success || len(firstRes.CommittedObjectIDs) != 2 {
+		t.Fatalf("first governed compile failed: err=%v res=%+v", err, firstRes)
 	}
 
-	persisted := validBaseRequest(domain.ActionCompileContext)
-	persisted.ID = "compile-context-optin-1"
-	persisted.Payload = map[string]any{
+	second := validBaseRequest(domain.ActionCompileContext)
+	second.ID = "compile-context-optin-1"
+	second.Payload = map[string]any{
 		"query":              "summarize blockers",
 		"budget":             map[string]any{"maxTokens": 50, "maxEvents": 10, "maxNotes": 10},
 		"persistSnapshot":    true,
 		"renderSnapshotCard": true,
 		"snapshotKind":       "restore",
 	}
-	persistedRes, err := processContextThroughForgeK(ctx, k, persisted)
-	if err != nil || !persistedRes.Success {
-		t.Fatalf("compile context opt-in failed: err=%v res=%+v", err, persistedRes)
+	secondRes, err := processContextThroughForgeK(ctx, k, second)
+	if err != nil || !secondRes.Success || len(secondRes.CommittedObjectIDs) != 2 {
+		t.Fatalf("second governed compile failed: err=%v res=%+v", err, secondRes)
 	}
 	state := store.snapshot()
-	if len(state.contextSnapshots) != 1 {
-		t.Fatalf("expected one persisted context snapshot, got %d", len(state.contextSnapshots))
+	if len(state.governedContextBundles) != 2 || len(state.governedContextHeads) != 1 {
+		t.Fatalf("expected two immutable bundles and one head, got bundles=%d heads=%d", len(state.governedContextBundles), len(state.governedContextHeads))
 	}
-	if len(state.restoreOutcomes) != 1 {
-		t.Fatalf("expected one persisted restore outcome event, got %d", len(state.restoreOutcomes))
+	if len(state.contextSnapshots) != 0 || len(state.restoreOutcomes) != 0 || len(state.artifacts) != 0 {
+		t.Fatalf("legacy context/artifact stores must remain unchanged")
 	}
-	if len(state.artifacts) != 1 {
-		t.Fatalf("expected one persisted artifact ref, got %d", len(state.artifacts))
+	packetID := secondRes.StateSummary["contextPacketId"].(string)
+	if _, ok := state.governedContextBundles[packetID]; !ok {
+		t.Fatalf("missing governed packet %q", packetID)
 	}
-	packetID := persistedRes.StateSummary["contextPacketId"]
-	packet, ok := state.contextSnapshots[packetID.(string)]
-	if !ok {
-		t.Fatalf("missing persisted packet %v", packetID)
-	}
-	if packet.RestoreSnapshot == nil || packet.CompileOptions == nil {
-		t.Fatalf("expected persisted restore snapshot metadata")
-	}
-	if !packet.CompileOptions.PersistSnapshot || !packet.CompileOptions.RenderSnapshotCard {
-		t.Fatalf("expected persisted compile options, got %+v", packet.CompileOptions)
-	}
-	if got := readString(packet.RestoreSnapshot.Metadata, "rendered_card_artifact_id"); got == "" {
-		t.Fatalf("expected snapshot evidence to link rendered card artifact")
-	}
-	if scores, ok := packet.RestoreSnapshot.Metadata["restore_scores_json"].(map[string]any); !ok || len(scores) == 0 {
-		t.Fatalf("expected non-empty restore_scores_json metadata, got %#v", packet.RestoreSnapshot.Metadata["restore_scores_json"])
-	}
-	if _, ok := packet.RestoreSnapshot.Metadata["restore_trace_json"].(map[string]any); !ok {
-		t.Fatalf("expected restore_trace_json metadata, got %#v", packet.RestoreSnapshot.Metadata["restore_trace_json"])
-	}
-	if hints, ok := packet.RestoreSnapshot.Metadata["resume_hints_json"].(map[string]any); !ok || len(hints) == 0 {
-		t.Fatalf("expected non-empty resume_hints_json metadata, got %#v", packet.RestoreSnapshot.Metadata["resume_hints_json"])
-	}
-	reason, ok := packet.RestoreSnapshot.Metadata["restore_reason_json"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected restore_reason_json metadata")
-	}
-	if v := strings.TrimSpace(readString(reason, "decision_reason")); v == "" {
-		t.Fatalf("expected restore decision reason in restore reason json")
-	}
-	if decision := readString(persistedRes.StateSummary, "restoreDecision"); decision == "" {
-		t.Fatalf("expected restoreDecision in state summary")
-	}
-	if persistedRes.StateSummary["snapshotFingerprint"] == "" {
-		t.Fatalf("expected snapshot fingerprint in summary")
-	}
-	if decision := readString(persistedRes.StateSummary, "restoreDecision"); decision != "fresh_compile_no_candidates" {
-		t.Fatalf("expected first persisted compile to report no candidates decision, got %q", decision)
-	}
-	outcomeSummary, ok := persistedRes.StateSummary["restoreOutcome"].(map[string]any)
-	if !ok || outcomeSummary["outcome"] != string(RestoreOutcomeNoCandidate) {
-		t.Fatalf("expected no-candidate restore outcome summary, got %#v", persistedRes.StateSummary["restoreOutcome"])
-	}
-	for _, outcome := range state.restoreOutcomes {
-		if outcome.Outcome != RestoreOutcomeNoCandidate || !outcome.RequiresFreshCompile || outcome.ContextPacketID == "" {
-			t.Fatalf("unexpected restore outcome event: %+v", outcome)
-		}
+	if secondRes.StateSummary["kernelContextCompiler"] != true || secondRes.StateSummary["legacyContextInputs"] != false {
+		t.Fatalf("missing Kernel context authority evidence")
 	}
 }
 
@@ -712,29 +649,13 @@ func TestCompileContextSnapshotResumeHintsCanForceFreshCompile(t *testing.T) {
 	if err != nil || !secondRes.Success {
 		t.Fatalf("second compile failed: err=%v res=%+v", err, secondRes)
 	}
-	if decision := readString(secondRes.StateSummary, "restoreDecision"); decision != "fresh_compile_forced" {
+	if decision := readString(secondRes.StateSummary, "restoreDecision"); decision != "fresh_compile" {
 		t.Fatalf("expected forced fresh compile decision, got %q", decision)
-	}
-	if parent := readString(secondRes.StateSummary, "parentSnapshotId"); parent != "" {
-		t.Fatalf("forced fresh compile should not set parentSnapshotId, got %q", parent)
 	}
 	state := store.snapshot()
 	packetID := readString(secondRes.StateSummary, "contextPacketId")
-	packet, ok := state.contextSnapshots[packetID]
-	if !ok {
-		t.Fatalf("missing second persisted packet %q", packetID)
-	}
-	if parent := readString(packet.RestoreSnapshot.Metadata, "parent_snapshot_id"); parent != "" {
-		t.Fatalf("forced fresh compile should not persist parent snapshot id, got %q", parent)
-	}
-	if source := readString(packet.RestoreSnapshot.Metadata, "restore_source_snapshot_id"); source != "" {
-		t.Fatalf("forced fresh compile should not persist restore source snapshot id, got %q", source)
-	}
-	if reason, ok := packet.RestoreSnapshot.Metadata["restore_reason_json"].(map[string]any); !ok || strings.TrimSpace(readString(reason, "decision_reason")) == "" {
-		t.Fatalf("expected restore_reason_json with decision_reason, got %#v", packet.RestoreSnapshot.Metadata["restore_reason_json"])
-	}
-	if sourceSummary := readString(secondRes.StateSummary, "restoreSourceSnapshotId"); sourceSummary != "" {
-		t.Fatalf("forced fresh compile should not set restoreSourceSnapshotId summary, got %q", sourceSummary)
+	if _, ok := state.governedContextBundles[packetID]; !ok {
+		t.Fatalf("missing second governed packet %q", packetID)
 	}
 }
 
@@ -774,35 +695,16 @@ func TestCompileContextSnapshotBelowThresholdFallsBackToFreshCompile(t *testing.
 	if err != nil || !secondRes.Success {
 		t.Fatalf("second compile failed: err=%v res=%+v", err, secondRes)
 	}
-	if decision := readString(secondRes.StateSummary, "restoreDecision"); decision != "fresh_compile_below_threshold" {
+	if decision := readString(secondRes.StateSummary, "restoreDecision"); decision != "fresh_compile" {
 		t.Fatalf("expected below-threshold fallback decision, got %q", decision)
-	}
-	if parent := readString(secondRes.StateSummary, "parentSnapshotId"); parent != "" {
-		t.Fatalf("below-threshold fallback should not set parentSnapshotId, got %q", parent)
 	}
 	state := store.snapshot()
 	packetID := readString(secondRes.StateSummary, "contextPacketId")
-	packet, ok := state.contextSnapshots[packetID]
-	if !ok {
-		t.Fatalf("missing second persisted packet %q", packetID)
+	if _, ok := state.governedContextBundles[packetID]; !ok {
+		t.Fatalf("missing second governed packet %q", packetID)
 	}
-	if parent := readString(packet.RestoreSnapshot.Metadata, "parent_snapshot_id"); parent != "" {
-		t.Fatalf("below-threshold fallback should not persist parent snapshot id, got %q", parent)
-	}
-	if reason, ok := packet.RestoreSnapshot.Metadata["restore_reason_json"].(map[string]any); !ok || reason["decision_reason"] != "top candidate score below threshold" {
-		t.Fatalf("expected restore reason decision_reason, got %#v", packet.RestoreSnapshot.Metadata["restore_reason_json"])
-	}
-	foundFreshOutcome := false
-	for _, outcome := range state.restoreOutcomes {
-		if outcome.ContextPacketID == packetID {
-			foundFreshOutcome = true
-			if outcome.Outcome != RestoreOutcomeFreshCompileRequired || !outcome.RequiresFreshCompile {
-				t.Fatalf("expected fresh-compile restore outcome for below-threshold packet, got %+v", outcome)
-			}
-		}
-	}
-	if !foundFreshOutcome {
-		t.Fatalf("missing restore outcome for below-threshold packet %q", packetID)
+	if len(state.restoreOutcomes) != 0 {
+		t.Fatalf("kernel context compile must not create mutable legacy restore outcomes: %+v", state.restoreOutcomes)
 	}
 }
 
@@ -974,7 +876,7 @@ func TestInMemoryBuildContextScopeAndEvidenceFiltering(t *testing.T) {
 		t.Fatalf("seed other evidence artifact: %v", err)
 	}
 
-	packet := store.BuildContext("scope-check", scopeMain, domain.ContextBudget{
+	packet := store.buildLegacyContextForInspection("scope-check", scopeMain, domain.ContextBudget{
 		MaxTokens: 100,
 		MaxEvents: 10,
 		MaxNotes:  10,
