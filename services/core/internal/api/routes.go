@@ -283,6 +283,10 @@ func (s *Server) mountContextRoutes(r chi.Router) {
 }
 
 func (s *Server) mountMemoryRoutes(r chi.Router) {
+	r.Post("/court/cases/{caseId}/exhibits", s.handleAdmitRetrievalEvidence)
+	r.Post("/memory/evidence/diffs", s.handleComputeSemanticDiff)
+	r.Post("/memory/evidence/{exhibitId}/materializations", s.handleMaterializeAdmittedEvidence)
+	r.Post("/memory/evidence/{priorEvidenceId}/revisions", s.handleReviseAdmittedEvidence)
 	r.Get("/embeddings/status", s.handleEmbeddingStatus)
 	r.Post("/embeddings/reembed", s.handleReembed)
 	r.Get("/retrieval/runs", s.handleListRetrievalRuns)

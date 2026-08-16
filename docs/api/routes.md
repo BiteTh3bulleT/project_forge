@@ -127,6 +127,10 @@ Check without writing with `node scripts/generate-api-routes.mjs --check`.
 | GET | `/api/project-context` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
 | POST | `/api/project-context/import` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
 | POST | `/api/project-context/regenerate` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
+| POST | `/api/court/cases/{caseId}/exhibits` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
+| POST | `/api/memory/evidence/diffs` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
+| POST | `/api/memory/evidence/{exhibitId}/materializations` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
+| POST | `/api/memory/evidence/{priorEvidenceId}/revisions` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
 | GET | `/api/embeddings/status` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
 | POST | `/api/embeddings/reembed` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |
 | GET | `/api/retrieval/runs` | Bearer token when `APIToken` is configured; transport-open when `APIToken` is empty | Always mounted |

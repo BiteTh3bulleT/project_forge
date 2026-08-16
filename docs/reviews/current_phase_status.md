@@ -15,6 +15,16 @@ retires the restore-decision cache. Its tested pure
 `forgekernel/contextcompile` decision contract is not yet wired; Control Lane
 still owns live source reads and packet/snapshot/restore computation.
 
+K20I governed-ingress addendum (2026-08-16): four strict intent routes make
+the production Court, admitted-memory materialization/revision, and semantic
+diff actions reachable without exposing generic syscall dispatch. Admission
+is limited to an existing exact-scope FORGE-K retrieval result; the server
+derives its versioned content hash and installed Court policy. All routes
+require `Idempotency-Key`, derive authority and trace fields from authenticated
+request context, reject unknown fields, and traverse the boot-selected Kernel.
+An HTTP end-to-end test proves admission then materialization commits Court,
+memory-evidence, audit-outbox, and idempotency rows through the real Kernel.
+
 Latest K20H VSA note (2026-08-14): `REBUILD_MEMORY_ACCELERATION` now seals only exact-scope, current-leaf `forge_k_memory_evidence` joined to its current admitted Courthouse exhibit/ruling. Dedicated `forge_k_memory_vsa_*` tables reference immutable memory-evidence rows and carry semantic evidence identity; they never reuse legacy observation IDs. Runtime readers revalidate Court/current-leaf integrity under the active v2 manifest, so legacy, corrupt, superseded, unscoped, mismatched, and stale-head rows have zero influence. Production end-to-end coverage proves Kernel admit -> materialize -> rebuild -> revise -> rollback-safe replacement rebuild and scoring.
 
 Latest K20G retrieval note (2026-08-14): live retrieval run persistence now enters production FORGE-K through the narrow `RECORD_RETRIEVAL_EVIDENCE` action. Canonical source ids resolve to an exact sorted selected-path scope before search; one transaction writes the immutable run, ordered results, selection reasons, optional already-known packet join, provenance-linked journal hash-chain transition, audit intent, authorization proof, and idempotency proof. No memory observation or VSA-signal duplicate is created, manifest-less VSA influence is disabled, and models remain proposal-only. Original dossier/packet/job/chunk/file identities survive detachable live-FK cleanup. API calls retain authenticated user attribution; system/internal calls bind the constructed service principal. Full FORGE-K authority remains partial because search/embedding execution is still live-service-owned, Control Lane remains the temporary apply/SQLite port, safe whole-store recovery is incomplete, and other subsystem/direct-writer gates remain.
