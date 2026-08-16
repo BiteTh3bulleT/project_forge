@@ -164,6 +164,66 @@ func TestForgeKMemoryEvidenceHasOneProductionWriter(t *testing.T) {
 	}
 }
 
+func TestForgeKSemanticDiffHasOneProductionWriter(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve guard source")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..", ".."))
+	internalRoot := filepath.Join(repoRoot, "services", "core", "internal")
+	adapter := filepath.Join("services", "core", "internal", "aios", "controllane", "sqlite_store_semantic_diff.go")
+	apply := filepath.Join("services", "core", "internal", "aios", "controllane", "semantic_diff.go")
+	sqlWrite := regexp.MustCompile(`(?i)\binsert\s+into\s+(forge_k_semantic_(?:diff_operations|diff_results|derived_objects))\b`)
+	createCall := regexp.MustCompile(`\.CreateSemanticDiff\s*\(`)
+	writes := map[string]int{}
+	calls := []string{}
+	violations := []string{}
+	err := filepath.WalkDir(internalRoot, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() || filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(repoRoot, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.Clean(rel)
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, match := range sqlWrite.FindAllStringSubmatch(string(body), -1) {
+			writes[match[1]]++
+			if rel != adapter {
+				violations = append(violations, rel+": "+match[0])
+			}
+		}
+		if createCall.Match(body) {
+			calls = append(calls, rel)
+			if rel != apply {
+				violations = append(violations, rel+": CreateSemanticDiff call")
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(violations) != 0 {
+		t.Fatalf("semantic diff authority bypasses found: %v", violations)
+	}
+	for _, table := range []string{"forge_k_semantic_diff_operations", "forge_k_semantic_diff_results", "forge_k_semantic_derived_objects"} {
+		if writes[table] != 1 {
+			t.Fatalf("unexpected %s writer count: %d (%v)", table, writes[table], writes)
+		}
+	}
+	if len(calls) != 1 || calls[0] != apply {
+		t.Fatalf("unexpected CreateSemanticDiff callsites: %v", calls)
+	}
+}
+
 func TestForgeKMemoryVSAProjectionHasOneProductionWriter(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {

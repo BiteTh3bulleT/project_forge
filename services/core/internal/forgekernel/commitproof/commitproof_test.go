@@ -7,6 +7,7 @@ import (
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/forgekernel/court"
 	forgejournal "forge/projectforge/services/core/internal/forgekernel/journal"
+	"forge/projectforge/services/core/internal/forgekernel/semanticdiff"
 )
 
 func TestRequestFingerprintAndPlanSealAreMapOrderStable(t *testing.T) {
@@ -250,7 +251,7 @@ func TestValidateCommitReceiptRejectsReportedObjectMismatch(t *testing.T) {
 	}
 }
 
-func TestIdempotencyFingerprintExcludesOnlyDerivedCourtDecision(t *testing.T) {
+func TestIdempotencyFingerprintExcludesOnlyDerivedKernelDecisions(t *testing.T) {
 	before := testRequest()
 	after := cloneTestRequest(before)
 	after.Metadata[court.MetadataDecisionKey] = court.Decision{
@@ -267,6 +268,18 @@ func TestIdempotencyFingerprintExcludesOnlyDerivedCourtDecision(t *testing.T) {
 	}
 	if beforeFingerprint != afterFingerprint {
 		t.Fatalf("deterministic Court metadata changed idempotency identity:\nbefore=%s\nafter=%s", beforeFingerprint, afterFingerprint)
+	}
+	semanticAfter := cloneTestRequest(after)
+	semanticAfter.Metadata[semanticdiff.MetadataDecisionKey] = map[string]any{
+		"operatorVersion": semanticdiff.OperatorVersion,
+		"contentHash":     "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}
+	semanticFingerprint, err := IdempotencyFingerprint(semanticAfter)
+	if err != nil {
+		t.Fatalf("fingerprint after semantic decision: %v", err)
+	}
+	if semanticFingerprint != afterFingerprint {
+		t.Fatalf("deterministic semantic decision changed idempotency identity:\nbase=%s\nsemantic=%s", afterFingerprint, semanticFingerprint)
 	}
 	retry := cloneTestRequest(after)
 	retry.ID = "syscall-retry"

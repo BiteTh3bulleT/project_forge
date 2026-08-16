@@ -1564,6 +1564,93 @@ BEGIN
   SELECT RAISE(FAIL, 'FORGE-K memory supersessions are append-only');
 END;
 
+-- K20I production Semantic Algebra history. The operation is the canonical
+-- fact that a deterministic transform ran. Its result/object remain explicitly
+-- non-canonical derived evidence until a separate Courthouse admission.
+CREATE TABLE IF NOT EXISTS forge_k_semantic_diff_operations (
+  id TEXT PRIMARY KEY,
+  operator_version TEXT NOT NULL CHECK (operator_version = 'semantic.diff.v1'),
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL,
+  selected_paths_json TEXT NOT NULL,
+  left_evidence_id TEXT NOT NULL REFERENCES forge_k_memory_evidence(evidence_id) ON DELETE RESTRICT,
+  right_evidence_id TEXT NOT NULL REFERENCES forge_k_memory_evidence(evidence_id) ON DELETE RESTRICT,
+  left_source_json TEXT NOT NULL,
+  right_source_json TEXT NOT NULL,
+  source_manifest_hash TEXT NOT NULL,
+  provenance_id TEXT NOT NULL REFERENCES provenance_records(id) ON DELETE RESTRICT,
+  provenance_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  syscall_id TEXT NOT NULL UNIQUE,
+  correlation_id TEXT NOT NULL,
+  trace_id TEXT NOT NULL,
+  proposed_by TEXT NOT NULL,
+  committed_by TEXT NOT NULL CHECK (committed_by = 'forge_k.kernel'),
+  transaction_id TEXT NOT NULL,
+  journal_event_id TEXT NOT NULL,
+  audit_outbox_id TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  authorization_fingerprint TEXT NOT NULL,
+  CHECK (left_evidence_id <> right_evidence_id)
+);
+
+CREATE TABLE IF NOT EXISTS forge_k_semantic_diff_results (
+  id TEXT PRIMARY KEY,
+  operation_id TEXT NOT NULL UNIQUE REFERENCES forge_k_semantic_diff_operations(id) ON DELETE RESTRICT,
+  operator_version TEXT NOT NULL CHECK (operator_version = 'semantic.diff.v1'),
+  tokens_json TEXT NOT NULL,
+  content TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  source_manifest_hash TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  syscall_id TEXT NOT NULL UNIQUE,
+  committed_by TEXT NOT NULL CHECK (committed_by = 'forge_k.kernel')
+);
+
+CREATE TABLE IF NOT EXISTS forge_k_semantic_derived_objects (
+  id TEXT PRIMARY KEY,
+  operation_id TEXT NOT NULL UNIQUE REFERENCES forge_k_semantic_diff_operations(id) ON DELETE RESTRICT,
+  result_id TEXT NOT NULL UNIQUE REFERENCES forge_k_semantic_diff_results(id) ON DELETE RESTRICT,
+  object_class TEXT NOT NULL CHECK (object_class = 'NONCANONICAL_DERIVED_EVIDENCE'),
+  workspace_id TEXT NOT NULL,
+  lane_id TEXT NOT NULL,
+  selected_paths_json TEXT NOT NULL,
+  source_evidence_ids_json TEXT NOT NULL,
+  source_manifest_hash TEXT NOT NULL,
+  content TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  canonical_truth INTEGER NOT NULL DEFAULT 0 CHECK (canonical_truth = 0),
+  provenance_id TEXT NOT NULL REFERENCES provenance_records(id) ON DELETE RESTRICT,
+  provenance_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  syscall_id TEXT NOT NULL UNIQUE,
+  correlation_id TEXT NOT NULL,
+  trace_id TEXT NOT NULL,
+  committed_by TEXT NOT NULL CHECK (committed_by = 'forge_k.kernel')
+);
+
+CREATE INDEX IF NOT EXISTS idx_forge_k_semantic_diff_scope
+ON forge_k_semantic_diff_operations(workspace_id, lane_id, created_at, id);
+
+CREATE TRIGGER IF NOT EXISTS forge_k_semantic_diff_operations_no_update
+BEFORE UPDATE ON forge_k_semantic_diff_operations
+BEGIN SELECT RAISE(FAIL, 'FORGE-K semantic operations are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS forge_k_semantic_diff_operations_no_delete
+BEFORE DELETE ON forge_k_semantic_diff_operations
+BEGIN SELECT RAISE(FAIL, 'FORGE-K semantic operations are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS forge_k_semantic_diff_results_no_update
+BEFORE UPDATE ON forge_k_semantic_diff_results
+BEGIN SELECT RAISE(FAIL, 'FORGE-K semantic results are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS forge_k_semantic_diff_results_no_delete
+BEFORE DELETE ON forge_k_semantic_diff_results
+BEGIN SELECT RAISE(FAIL, 'FORGE-K semantic results are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS forge_k_semantic_derived_objects_no_update
+BEFORE UPDATE ON forge_k_semantic_derived_objects
+BEGIN SELECT RAISE(FAIL, 'FORGE-K semantic derived objects are immutable'); END;
+CREATE TRIGGER IF NOT EXISTS forge_k_semantic_derived_objects_no_delete
+BEFORE DELETE ON forge_k_semantic_derived_objects
+BEGIN SELECT RAISE(FAIL, 'FORGE-K semantic derived objects are immutable'); END;
+
 CREATE TABLE IF NOT EXISTS context_packet_snapshots (
   id TEXT PRIMARY KEY,
   query TEXT NOT NULL,

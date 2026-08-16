@@ -112,8 +112,25 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 			)
 			report.AuthorityMatrix[i].Blockers = []string{
 				"Control Lane still implements validation policies, semantic apply functions, and the SQLite durable port",
-				"Memory Palace, Semantic Algebra, Context Compiler, Runtime, Snapshot, KV, Lymphatic, and Consensus authority gates remain staged",
+				"Context Compiler, Runtime, Snapshot, KV, Lymphatic, and Consensus authority gates remain staged; Semantic Algebra is limited to deterministic diff",
 				"external audit sink delivery and audit_id backfill remain best-effort projections over canonical atomic outbox evidence",
+			}
+		case "Semantic Algebra":
+			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_DETERMINISTIC_DIFF_LIVE"
+			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].TargetOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].FeatureFlag = "production FORGE-K authority mode only; legacy_v1 fails closed"
+			report.AuthorityMatrix[i].RollbackPath = "select legacy_v1 to disable new semantic diff commits; immutable diff history remains inspectable"
+			report.AuthorityMatrix[i].TestsPassing = append(report.AuthorityMatrix[i].TestsPassing,
+				"exact-scope current admitted source authority tests",
+				"deterministic diff golden and permutation tests",
+				"verified replay and idempotency conflict tests",
+				"journal collision atomic rollback tests",
+			)
+			report.AuthorityMatrix[i].Blockers = []string{
+				"only semantic.diff.v1 is live; merge/intersect/compress/derive remain staged",
+				"narrow authenticated operator ingress remains incomplete",
+				"Control Lane remains the temporary validation/apply/SQLite adapter",
 			}
 		}
 	}

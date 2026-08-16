@@ -377,7 +377,17 @@ func (p *Processor) Prepare(ctx context.Context, req domain.SyscallRequest) (for
 			Code: domain.ErrInternal, Field: "kernel.commitPlan", Message: planErr.Error(),
 		}}, planErr)
 	}
-	return forgekernel.PreparedSyscall{Request: req, Result: result, Disposition: forgekernel.DispositionCommit, Plan: plan}, nil
+	prepared := forgekernel.PreparedSyscall{Request: req, Result: result, Disposition: forgekernel.DispositionCommit, Plan: plan}
+	if req.Action == domain.ActionComputeSemanticDiff {
+		input, inputErr := prepareSemanticDiffAuthorityInput(req, p.txRunner.ReadStore())
+		if inputErr != nil {
+			return reject("semantic_diff_authority_input", []domain.SyscallError{{
+				Code: domain.ErrConflict, Field: "semanticDiff.sources", Message: inputErr.Error(),
+			}}, inputErr)
+		}
+		prepared.SemanticDiffInput = input
+	}
+	return prepared, nil
 }
 
 func isForgeKOnlyAction(action domain.SemanticActionType) bool {
@@ -389,7 +399,8 @@ func isForgeKOnlyAction(action domain.SemanticActionType) bool {
 		domain.ActionRecordRetrievalUsefulness,
 		domain.ActionRecordRestoreOutcomeFeedback,
 		domain.ActionMaterializeAdmittedEvidence,
-		domain.ActionReviseMemoryEvidence:
+		domain.ActionReviseMemoryEvidence,
+		domain.ActionComputeSemanticDiff:
 		return true
 	default:
 		return false

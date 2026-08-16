@@ -541,6 +541,7 @@ func (s *Service) pickSections(kind string) ([]string, error) {
 			"derived_models", "contradiction_records", "supersession_records",
 			"court_exhibits", "court_rulings", "court_appeals",
 			"forge_k_memory_evidence", "forge_k_memory_evidence_supersessions",
+			"forge_k_semantic_diff_operations", "forge_k_semantic_diff_results", "forge_k_semantic_derived_objects",
 			"context_packet_snapshots", "dream_reports", "restore_outcome_events", "semantic_idempotency_keys", "autonomy_settings",
 			"forge_k_journal_head", "forge_k_audit_outbox",
 			"chat_threads", "chat_messages", "canvas_boards", "canvas_notes",
@@ -763,6 +764,11 @@ func backupSectionManifest(section string) SectionManifest {
 	case "forge_k_memory_evidence", "forge_k_memory_evidence_supersessions":
 		entry.AuthorityClass = "canonical_or_historical_truth"
 		entry.Purpose = "immutable Court-admitted Memory Palace evidence and revision lineage"
+		entry.RestoreRequired = false
+		entry.ExportOnly = true
+	case "forge_k_semantic_diff_operations", "forge_k_semantic_diff_results", "forge_k_semantic_derived_objects":
+		entry.AuthorityClass = "non_canonical_evidence"
+		entry.Purpose = "immutable production Semantic Algebra operation history and derived evidence"
 		entry.RestoreRequired = false
 		entry.ExportOnly = true
 	case "forge_k_journal_head", "forge_k_audit_outbox":

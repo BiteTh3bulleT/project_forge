@@ -19,6 +19,7 @@ import (
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/forgekernel/court"
 	forgejournal "forge/projectforge/services/core/internal/forgekernel/journal"
+	"forge/projectforge/services/core/internal/forgekernel/semanticdiff"
 )
 
 const (
@@ -348,20 +349,20 @@ func VerifyPreparedPlan(req domain.SyscallRequest, plan PreparedPlan, seal Prepa
 
 // IdempotencyFingerprint binds the caller's idempotency key (including an
 // intentionally empty key) to the semantic request while excluding only
-// retry-local transport identity and deterministic Courthouse metadata.
+// retry-local transport identity and deterministic Kernel decision metadata.
 func IdempotencyFingerprint(req domain.SyscallRequest) (string, error) {
 	if _, err := FingerprintRequest(req); err != nil {
 		return "", err
 	}
-	// The Courthouse decision is deterministic production-derived metadata
-	// added after Prepare. It remains bound by the prepared-plan seal, but it
-	// must not turn an otherwise identical retry into a different idempotency
-	// identity. Request-local transport identity is also excluded so a retry
-	// may carry a fresh request/correlation/trace envelope. No other semantic
-	// request field or metadata key is excluded.
+	// Kernel decisions are deterministic production-derived metadata added
+	// after Prepare. They remain bound by the prepared-plan seal, but must not
+	// turn an otherwise identical retry into a different idempotency identity.
+	// Request-local transport identity is also excluded so a retry may carry a
+	// fresh request/correlation/trace envelope. No other semantic field or
+	// metadata key is excluded.
 	metadata := make(map[string]any, len(req.Metadata))
 	for key, value := range req.Metadata {
-		if key != court.MetadataDecisionKey {
+		if key != court.MetadataDecisionKey && key != semanticdiff.MetadataDecisionKey {
 			metadata[key] = value
 		}
 	}

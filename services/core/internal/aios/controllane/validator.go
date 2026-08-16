@@ -84,6 +84,8 @@ func (v *DeterministicValidator) ValidatePayload(req domain.SyscallRequest, def 
 		return validateRecordRestoreOutcomeFeedback(req, store)
 	case domain.ActionMaterializeAdmittedEvidence, domain.ActionReviseMemoryEvidence:
 		return validateMemoryEvidenceAction(req, store)
+	case domain.ActionComputeSemanticDiff:
+		return validateComputeSemanticDiff(req, store)
 	default:
 		return []domain.SyscallError{errField(domain.ErrUnsupportedAction, "action", "unsupported action")}
 	}

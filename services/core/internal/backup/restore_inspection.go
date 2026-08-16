@@ -236,6 +236,8 @@ func restoreInspectionDisposition(section, authorityClass string) (string, []str
 		return "offline_recovery_only", []string{"Courthouse current state and immutable history require whole-store consistency", global}
 	case "forge_k_memory_evidence", "forge_k_memory_evidence_supersessions":
 		return "offline_recovery_only", []string{"immutable Court-admitted memory evidence and lineage require whole-store consistency", global}
+	case "forge_k_semantic_diff_operations", "forge_k_semantic_diff_results", "forge_k_semantic_derived_objects":
+		return "offline_recovery_only", []string{"sealed Semantic Algebra history and derived evidence require whole-store consistency", global}
 	case "provenance_records", "audit_records", "approval_requests", "approval_decisions", "gateway_invocations", "events", "job_events", "job_status_history":
 		return "quarantine_evidence_only", []string{"foreign history cannot overwrite local immutable lineage", global}
 	}

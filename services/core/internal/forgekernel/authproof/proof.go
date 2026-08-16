@@ -19,6 +19,7 @@ import (
 
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/forgekernel/court"
+	"forge/projectforge/services/core/internal/forgekernel/semanticdiff"
 )
 
 const (
@@ -355,7 +356,7 @@ func RequestFingerprint(req domain.SyscallRequest) (string, error) {
 	metadata := make(map[string]any, len(req.Metadata))
 	for key, value := range req.Metadata {
 		switch key {
-		case court.MetadataDecisionKey, "forgeKIngressAuthority", "kernelAuthorityOwner", "durableCommitAdapter", "forgeKAuthorizationProof",
+		case court.MetadataDecisionKey, semanticdiff.MetadataDecisionKey, "forgeKIngressAuthority", "kernelAuthorityOwner", "durableCommitAdapter", "forgeKAuthorizationProof",
 			"approvalRequestId", "approvalId":
 			continue
 		default:

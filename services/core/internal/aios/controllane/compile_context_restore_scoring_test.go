@@ -647,9 +647,7 @@ func TestRestoreRuleEngineNilKeepsBaseScoring(t *testing.T) {
 	}
 }
 
-func TestRestoreScoringCacheHitMissInvalidationAndScope(t *testing.T) {
-	resetRestoreScoringCacheForTest()
-	t.Cleanup(resetRestoreScoringCacheForTest)
+func TestRestoreScoringCacheIsRetiredFromAuthoritativePath(t *testing.T) {
 	now := int64(1760004300000)
 	currentPacket := createTestContextPacketSnapshot("ctx-cache-current", "ws-main", now)
 	currentPacket.Query = "summarize blockers"
@@ -666,21 +664,21 @@ func TestRestoreScoringCacheHitMissInvalidationAndScope(t *testing.T) {
 	candidate := makeSnapshotCandidatePacket("ctx-cache-candidate", currentPacket, now-1000, "restore")
 
 	first := selectCompileContextRestoreCandidateCached(context.Background(), nil, now, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{}, nil, false)
-	if first.CacheHit {
-		t.Fatalf("expected first scoring run to miss cache")
+	if first.CacheHit || first.CacheKey != "" {
+		t.Fatalf("retired cache must not report identity or a hit: %+v", first)
 	}
 	second := selectCompileContextRestoreCandidateCached(context.Background(), nil, now+1000, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{}, nil, false)
-	if !second.CacheHit {
-		t.Fatalf("expected repeated scoring run to hit cache")
+	if second.CacheHit || second.CacheKey != "" {
+		t.Fatalf("repeated scoring must recompute without cache authority: %+v", second)
 	}
 	if first.TopScore != second.TopScore || first.Decision != second.Decision {
-		t.Fatalf("expected cached result to match non-cache scoring, first=%+v second=%+v", first, second)
+		t.Fatalf("expected deterministic recomputation, first=%+v second=%+v", first, second)
 	}
 
 	newCandidate := makeSnapshotCandidatePacket("ctx-cache-new", currentPacket, now+2000, "restore")
 	invalidated := selectCompileContextRestoreCandidateCached(context.Background(), nil, now+2000, current, []domain.ContextPacket{newCandidate, candidate}, "restore", compileContextResumeHints{}, nil, false)
-	if invalidated.CacheHit {
-		t.Fatalf("expected new snapshot candidate set to invalidate cache")
+	if invalidated.CacheHit || invalidated.CacheKey != "" {
+		t.Fatalf("candidate changes must still use uncached scoring")
 	}
 
 	otherWorkspacePacket := currentPacket
@@ -697,14 +695,12 @@ func TestRestoreScoringCacheHitMissInvalidationAndScope(t *testing.T) {
 	}, nil)
 	otherCandidate := makeSnapshotCandidatePacket("ctx-cache-other", otherWorkspacePacket, now-1000, "restore")
 	other := selectCompileContextRestoreCandidateCached(context.Background(), nil, now+3000, otherCurrent, []domain.ContextPacket{otherCandidate}, "restore", compileContextResumeHints{}, nil, false)
-	if other.CacheHit {
-		t.Fatalf("expected wrong workspace not to share restore cache")
+	if other.CacheHit || other.CacheKey != "" {
+		t.Fatalf("cross-workspace scoring must not use cache authority")
 	}
 }
 
-func TestRestoreScoringCacheCanBeDisabled(t *testing.T) {
-	resetRestoreScoringCacheForTest()
-	t.Cleanup(resetRestoreScoringCacheForTest)
+func TestRestoreScoringCacheCompatibilityFlagCannotReenableCache(t *testing.T) {
 	now := int64(1760004300000)
 	currentPacket := createTestContextPacketSnapshot("ctx-cache-disabled-current", "ws-main", now)
 	currentPacket.Query = "summarize blockers"
@@ -726,10 +722,9 @@ func TestRestoreScoringCacheCanBeDisabled(t *testing.T) {
 		t.Fatalf("expected disabled restore cache to miss, first=%t second=%t", first.CacheHit, second.CacheHit)
 	}
 
-	setRestoreScoringCacheEnabledForTest(false)
 	third := selectCompileContextRestoreCandidateCached(context.Background(), nil, now+2000, current, []domain.ContextPacket{candidate}, "restore", compileContextResumeHints{}, nil, false)
-	if third.CacheHit {
-		t.Fatalf("expected globally disabled restore cache to miss")
+	if third.CacheHit || third.CacheKey != "" {
+		t.Fatalf("compatibility flag must not re-enable retired cache")
 	}
 }
 

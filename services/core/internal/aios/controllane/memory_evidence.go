@@ -281,6 +281,16 @@ func createMemoryEvidenceInState(state *memoryState, evidence MemoryEvidence, ed
 	if _, exists := state.memoryEvidence[evidence.EvidenceID]; exists {
 		return fmt.Errorf("memory evidence already exists")
 	}
+	if evidence.RowID <= 0 {
+		for _, existing := range state.memoryEvidence {
+			if existing.RowID >= evidence.RowID {
+				evidence.RowID = existing.RowID + 1
+			}
+		}
+		if evidence.RowID <= 0 {
+			evidence.RowID = 1
+		}
+	}
 	for _, existing := range state.memoryEvidence {
 		if existing.CourtExhibitID == evidence.CourtExhibitID && existing.CourtRulingID == evidence.CourtRulingID {
 			return fmt.Errorf("Court exhibit/ruling is already materialized")

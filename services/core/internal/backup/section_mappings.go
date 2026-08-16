@@ -93,6 +93,9 @@ var extractQueries = map[string]string{
 func init() {
 	extractQueries["forge_k_memory_evidence"] = "SELECT * FROM forge_k_memory_evidence ORDER BY id ASC"
 	extractQueries["forge_k_memory_evidence_supersessions"] = "SELECT * FROM forge_k_memory_evidence_supersessions ORDER BY created_at ASC, id ASC"
+	extractQueries["forge_k_semantic_diff_operations"] = "SELECT * FROM forge_k_semantic_diff_operations ORDER BY created_at ASC, id ASC"
+	extractQueries["forge_k_semantic_diff_results"] = "SELECT * FROM forge_k_semantic_diff_results ORDER BY created_at ASC, id ASC"
+	extractQueries["forge_k_semantic_derived_objects"] = "SELECT * FROM forge_k_semantic_derived_objects ORDER BY created_at ASC, id ASC"
 }
 
 // Section upserts used during restore.

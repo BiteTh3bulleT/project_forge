@@ -43,6 +43,7 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 		CapRestoreOutcomeFeedback,
 		CapMemoryEvidenceMaterialize,
 		CapMemoryEvidenceRevise,
+		CapSemanticDiffCompute,
 	)
 	return &StaticCapabilityService{
 		sourceCapabilities: map[domain.ActionSource]map[string]struct{}{
@@ -75,6 +76,7 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 				CapRestoreOutcomeFeedback,
 				CapMemoryEvidenceMaterialize,
 				CapMemoryEvidenceRevise,
+				CapSemanticDiffCompute,
 			),
 			domain.SourceAdapter: setOf(
 				CapMemoryNoteCreate,

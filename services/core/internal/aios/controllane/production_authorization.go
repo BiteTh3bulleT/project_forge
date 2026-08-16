@@ -163,6 +163,8 @@ func productionCapabilityPolicy(source domain.ActionSource, action domain.Semant
 	switch source {
 	case domain.SourceUser:
 		switch action {
+		case domain.ActionComputeSemanticDiff:
+			return "authenticated_user_scoped_semantic_algebra", true
 		case domain.ActionMaterializeAdmittedEvidence, domain.ActionReviseMemoryEvidence:
 			return "authenticated_user_scoped_admitted_evidence", true
 		case domain.ActionRebuildMemoryAcceleration:

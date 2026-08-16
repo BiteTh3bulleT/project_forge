@@ -247,6 +247,7 @@ const (
 	ActionRecordRestoreOutcomeFeedback SemanticActionType = "RECORD_RESTORE_OUTCOME_FEEDBACK"
 	ActionMaterializeAdmittedEvidence  SemanticActionType = "MATERIALIZE_ADMITTED_EVIDENCE"
 	ActionReviseMemoryEvidence         SemanticActionType = "REVISE_MEMORY_EVIDENCE"
+	ActionComputeSemanticDiff          SemanticActionType = "COMPUTE_SEMANTIC_DIFF"
 )
 
 type SyscallRequest struct {

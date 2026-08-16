@@ -149,6 +149,9 @@ var restoreExportOnlyReasons = map[string]string{
 	"court_appeals":                         "restore export-only by live policy: immutable Courthouse appeal history cannot be live-merged",
 	"forge_k_memory_evidence":               "restore export-only by live policy: immutable admitted memory evidence requires whole-store Kernel recovery verification",
 	"forge_k_memory_evidence_supersessions": "restore export-only by live policy: immutable memory evidence lineage cannot be live-merged",
+	"forge_k_semantic_diff_operations":      "restore export-only by live policy: immutable Semantic Algebra history requires whole-store Kernel recovery verification",
+	"forge_k_semantic_diff_results":         "restore export-only by live policy: sealed Semantic Algebra results cannot be live-merged",
+	"forge_k_semantic_derived_objects":      "restore export-only by live policy: non-canonical derived evidence requires whole-store recovery verification",
 	"forge_k_journal_head":                  "restore export-only by live policy: the local journal head is whole-store recovery proof",
 	"forge_k_audit_outbox":                  "restore export-only by live policy: immutable audit intents cannot be live-merged or redelivered",
 }

@@ -110,6 +110,8 @@ func expectedCommitObjectIDs(req domain.SyscallRequest, read SemanticReadStore) 
 		return []string{req.ID + ":memory_evidence"}, nil
 	case domain.ActionReviseMemoryEvidence:
 		return []string{req.ID + ":memory_evidence", req.ID + ":memory_supersession"}, nil
+	case domain.ActionComputeSemanticDiff:
+		return semanticDiffObjectIDs(req.ID), nil
 	case domain.ActionRebuildMemoryAcceleration:
 		return []string{readString(req.Payload, "expectedManifestHash")}, nil
 	case domain.ActionRecordRetrievalUsefulness:

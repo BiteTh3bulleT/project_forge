@@ -16,6 +16,7 @@ import (
 	"forge/projectforge/services/core/internal/forgekernel/authproof"
 	"forge/projectforge/services/core/internal/forgekernel/commitproof"
 	"forge/projectforge/services/core/internal/forgekernel/court"
+	"forge/projectforge/services/core/internal/forgekernel/semanticdiff"
 )
 
 type AuthorityMode string
@@ -63,6 +64,7 @@ type PreparedSyscall struct {
 	ReplaySeal               commitproof.PreparedPlanSeal
 	ReplayReceipt            commitproof.CommitReceipt
 	ReplayAuthorizationProof authproof.Proof
+	SemanticDiffInput        semanticdiff.AuthorityInput
 }
 
 type CommitOutcome struct {
@@ -258,6 +260,21 @@ func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain
 		prepared.Request.Metadata[court.MetadataDecisionKey] = decision
 		prepared.Result.ValidationDetails = append(prepared.Result.ValidationDetails, domain.ValidationDetail{Layer: "forge_k_courthouse", Passed: true, Issues: []domain.SyscallError{}})
 	}
+	if semanticdiff.IsAction(prepared.Request.Action) {
+		decision, issues := semanticdiff.Decide(prepared.Request, prepared.SemanticDiffInput)
+		if len(issues) > 0 {
+			result := rejectedResult(prepared.Request, issues[0].Code, issues[0].Field, issues[0].Message)
+			result.ValidationDetails = append(result.ValidationDetails, domain.ValidationDetail{Layer: "forge_k_semantic_algebra", Passed: false, Issues: issues})
+			result = annotateAuthority(result)
+			result = k.port.RecordResult(ctx, prepared.Request, result)
+			k.port.ObserveResult(ctx, prepared.Request, result)
+			return result, nil
+		}
+		prepared.Request.Metadata = cloneMetadata(prepared.Request.Metadata)
+		prepared.Request.Metadata[semanticdiff.MetadataDecisionKey] = decision
+		bindSemanticDiffPlan(&prepared.Plan, decision)
+		prepared.Result.ValidationDetails = append(prepared.Result.ValidationDetails, domain.ValidationDetail{Layer: "forge_k_semantic_algebra", Passed: true, Issues: []domain.SyscallError{}})
+	}
 	boundPlan, proofErr := commitproof.BindPreparedPlan(prepared.Request, prepared.Plan)
 	prepared.Plan = boundPlan
 	var seal commitproof.PreparedPlanSeal
@@ -328,6 +345,23 @@ func (k *Kernel) replay(ctx context.Context, prepared PreparedSyscall, currentAu
 		}
 		proofRequest.Metadata[court.MetadataDecisionKey] = decision
 	}
+	if semanticdiff.IsAction(proofRequest.Action) {
+		decision, ok := semanticdiff.DecisionFromMetadata(proofRequest.Metadata)
+		if !ok {
+			return k.rejectCommitProof(ctx, prepared.Request, domain.ErrPersistenceUnavailable, "kernel.commitProof.replaySemanticDiff", ErrInvalidPreparedProof, errors.New("stored semantic diff decision missing"))
+		}
+		if proofErr = semanticdiff.VerifyDecision(proofRequest, decision); proofErr != nil {
+			return k.rejectCommitProof(ctx, prepared.Request, domain.ErrPersistenceUnavailable, "kernel.commitProof.replaySemanticDiff", ErrInvalidPreparedProof, proofErr)
+		}
+		if proofErr = verifySemanticDiffPlan(prepared.ReplayPlan, decision); proofErr != nil {
+			return k.rejectCommitProof(ctx, prepared.Request, domain.ErrPersistenceUnavailable, "kernel.commitProof.replaySemanticDiffPlan", ErrInvalidPreparedProof, proofErr)
+		}
+		// JSON persistence decodes metadata objects through map[string]any. Put
+		// the verified typed decision back before rebuilding the exact request
+		// fingerprint so replay uses the same canonical envelope as commit.
+		proofRequest.Metadata = cloneMetadata(proofRequest.Metadata)
+		proofRequest.Metadata[semanticdiff.MetadataDecisionKey] = decision
+	}
 	prepared.ReplayPlan, proofErr = commitproof.BindPreparedPlan(proofRequest, prepared.ReplayPlan)
 	var computedSeal commitproof.PreparedPlanSeal
 	if proofErr == nil {
@@ -368,6 +402,38 @@ func (k *Kernel) replay(ctx context.Context, prepared PreparedSyscall, currentAu
 	result = k.port.RecordResult(ctx, prepared.Request, result)
 	k.port.ObserveResult(ctx, prepared.Request, result)
 	return result, nil
+}
+
+func bindSemanticDiffPlan(plan *commitproof.PreparedPlan, decision semanticdiff.Decision) {
+	if plan == nil {
+		return
+	}
+	plan.Details = cloneMetadata(plan.Details)
+	for key, value := range semanticDiffPlanCommitments(decision) {
+		plan.Details[key] = value
+	}
+}
+
+func verifySemanticDiffPlan(plan commitproof.PreparedPlan, decision semanticdiff.Decision) error {
+	for key, expected := range semanticDiffPlanCommitments(decision) {
+		if !reflect.DeepEqual(plan.Details[key], expected) {
+			return errors.New("stored semantic diff plan commitment mismatch: " + key)
+		}
+	}
+	return nil
+}
+
+func semanticDiffPlanCommitments(decision semanticdiff.Decision) map[string]any {
+	return map[string]any{
+		"semanticOperatorVersion":    decision.OperatorVersion,
+		"semanticSourceManifestHash": decision.SourceManifestHash,
+		"semanticResultContentHash":  decision.ContentHash,
+		"semanticObjectClass":        decision.ObjectClass,
+		"semanticLeftEvidenceId":     decision.Left.EvidenceID,
+		"semanticLeftMaterialHash":   decision.Left.MaterialHash,
+		"semanticRightEvidenceId":    decision.Right.EvidenceID,
+		"semanticRightMaterialHash":  decision.Right.MaterialHash,
+	}
 }
 
 func (k *Kernel) rejectAuthorizationProof(ctx context.Context, req domain.SyscallRequest, cause error) (domain.SyscallResult, error) {

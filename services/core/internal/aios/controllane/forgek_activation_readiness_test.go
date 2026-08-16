@@ -155,6 +155,9 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	if matrix["Memory Palace"].CurrentStatus != "ADMITTED_EVIDENCE_MATERIALIZATION_PARTIAL" {
 		t.Fatalf("memory palace matrix status=%q, want ADMITTED_EVIDENCE_MATERIALIZATION_PARTIAL", matrix["Memory Palace"].CurrentStatus)
 	}
+	if matrix["Semantic Algebra"].CurrentStatus != "DETERMINISTIC_DIFF_AUTHORITY_PARTIAL" {
+		t.Fatalf("semantic algebra matrix status=%q, want DETERMINISTIC_DIFF_AUTHORITY_PARTIAL", matrix["Semantic Algebra"].CurrentStatus)
+	}
 	if matrix["Context Compiler"].CurrentStatus != "CONTEXT_ATTRIBUTION_VALIDATION_ONLY" {
 		t.Fatalf("context compiler matrix status=%q, want CONTEXT_ATTRIBUTION_VALIDATION_ONLY", matrix["Context Compiler"].CurrentStatus)
 	}

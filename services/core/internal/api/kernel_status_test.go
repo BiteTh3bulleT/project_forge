@@ -170,6 +170,9 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 		if subsystem == "Kernel" && (entry["current_status"] != "FORGE_K_COMMIT_INTEGRITY_LIVE" || entry["live_owner"] != "forge_k.kernel") {
 			t.Fatalf("kernel commit integrity authority not reported: %#v", entry)
 		}
+		if subsystem == "Semantic Algebra" && (entry["current_status"] != "FORGE_K_DETERMINISTIC_DIFF_LIVE" || entry["live_owner"] != "forge_k.kernel") {
+			t.Fatalf("semantic diff authority not reported: %#v", entry)
+		}
 		if entry["live_owner"] == "" || entry["target_owner"] == "" || entry["rollback_path"] == "" {
 			t.Fatalf("authority matrix entry missing owner/rollback fields: %#v", entry)
 		}

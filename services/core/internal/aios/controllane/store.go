@@ -15,6 +15,7 @@ import (
 	"forge/projectforge/services/core/internal/forgekernel/commitproof"
 	"forge/projectforge/services/core/internal/forgekernel/court"
 	forgejournal "forge/projectforge/services/core/internal/forgekernel/journal"
+	"forge/projectforge/services/core/internal/forgekernel/semanticdiff"
 )
 
 type ContradictionRecord struct {
@@ -130,6 +131,9 @@ type SemanticReadStore interface {
 	GetRestoreOutcomeFeedbackProjection(ctx context.Context, id string, scope domain.ForgeScope) (RestoreOutcomeFeedbackProjection, bool, error)
 	FindMemoryEvidence(id string, scope domain.ForgeScope) (MemoryEvidence, bool)
 	HasMemoryEvidenceSupersession(id string) bool
+	FindSemanticDiffOperation(id string, scope domain.ForgeScope) (SemanticDiffOperation, bool)
+	FindSemanticDiffResult(id string) (SemanticDiffResult, bool)
+	FindSemanticDerivedObject(id string, scope domain.ForgeScope) (SemanticDerivedObject, bool)
 	BuildContext(query string, scope domain.ForgeScope, budget domain.ContextBudget, now int64) domain.ContextPacket
 }
 
@@ -153,6 +157,7 @@ type SemanticStore interface {
 	CreateRestoreOutcomeFeedbackEvent(event RestoreOutcomeFeedbackEvent) error
 	RebuildMemoryAcceleration(ctx context.Context, req MemoryAccelerationRebuildRequest) (MemoryAccelerationCommit, error)
 	CreateMemoryEvidence(evidence MemoryEvidence, supersession *MemoryEvidenceSupersession) error
+	CreateSemanticDiff(req domain.SyscallRequest, decision semanticdiff.Decision) error
 	SetIdempotency(key string, rec IdempotencyRecord) error
 	CreateAuditOutbox(rec AuditOutboxRecord) error
 }
@@ -184,6 +189,9 @@ type memoryState struct {
 	restoreFeedbackProjection  map[string]RestoreOutcomeFeedbackProjection
 	memoryEvidence             map[string]MemoryEvidence
 	memoryEvidenceSupersession map[string]MemoryEvidenceSupersession
+	semanticDiffOperations     map[string]SemanticDiffOperation
+	semanticDiffResults        map[string]SemanticDiffResult
+	semanticDerivedObjects     map[string]SemanticDerivedObject
 	idempotency                map[string]IdempotencyRecord
 	auditOutbox                map[string]AuditOutboxRecord
 	journalEntries             []forgejournal.Entry
@@ -214,6 +222,9 @@ func newMemoryState() memoryState {
 		restoreFeedbackProjection:  map[string]RestoreOutcomeFeedbackProjection{},
 		memoryEvidence:             map[string]MemoryEvidence{},
 		memoryEvidenceSupersession: map[string]MemoryEvidenceSupersession{},
+		semanticDiffOperations:     map[string]SemanticDiffOperation{},
+		semanticDiffResults:        map[string]SemanticDiffResult{},
+		semanticDerivedObjects:     map[string]SemanticDerivedObject{},
 		idempotency:                map[string]IdempotencyRecord{},
 		auditOutbox:                map[string]AuditOutboxRecord{},
 		journalEntries:             []forgejournal.Entry{},
@@ -289,6 +300,15 @@ func cloneState(in memoryState) memoryState {
 	}
 	for k, v := range in.memoryEvidenceSupersession {
 		out.memoryEvidenceSupersession[k] = cloneIntegrityValue(v)
+	}
+	for k, v := range in.semanticDiffOperations {
+		out.semanticDiffOperations[k] = cloneIntegrityValue(v)
+	}
+	for k, v := range in.semanticDiffResults {
+		out.semanticDiffResults[k] = cloneIntegrityValue(v)
+	}
+	for k, v := range in.semanticDerivedObjects {
+		out.semanticDerivedObjects[k] = cloneIntegrityValue(v)
 	}
 	for k, v := range in.idempotency {
 		out.idempotency[k] = cloneIdempotencyRecord(v)

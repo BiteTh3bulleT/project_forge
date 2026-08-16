@@ -83,6 +83,8 @@ func (p *Processor) apply(ctx context.Context, store SemanticStore, req domain.S
 		return applyRecordRestoreOutcomeFeedback(ctx, store, req)
 	case domain.ActionMaterializeAdmittedEvidence, domain.ActionReviseMemoryEvidence:
 		return applyMemoryEvidenceAction(ctx, store, req)
+	case domain.ActionComputeSemanticDiff:
+		return applyComputeSemanticDiff(ctx, store, req)
 	default:
 		return nil, nil, nil, []domain.SyscallError{{Code: domain.ErrUnsupportedAction, Field: "action", Message: "unsupported action"}}
 	}

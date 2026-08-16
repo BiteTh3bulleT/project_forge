@@ -33,6 +33,7 @@ const (
 	CapRestoreOutcomeFeedback     = "context.restore.outcome.feedback.record"
 	CapMemoryEvidenceMaterialize  = "memory.evidence.materialize"
 	CapMemoryEvidenceRevise       = "memory.evidence.revise"
+	CapSemanticDiffCompute        = "semantic.diff.compute"
 )
 
 type ActionDefinition struct {
@@ -272,6 +273,11 @@ func NewStaticActionRegistry() *StaticActionRegistry {
 			Action: domain.ActionReviseMemoryEvidence, Capability: CapMemoryEvidenceRevise,
 			Mutating: true, SupportsDryRun: true, ApprovalPossible: false,
 			TargetObjectType: "forge_k_memory_evidence_revision", AuditEventName: "semantic_syscall.revise_memory_evidence",
+		},
+		domain.ActionComputeSemanticDiff: {
+			Action: domain.ActionComputeSemanticDiff, Capability: CapSemanticDiffCompute,
+			Mutating: true, SupportsDryRun: false, ApprovalPossible: false,
+			TargetObjectType: "semantic_diff_operation", AuditEventName: "semantic_syscall.compute_semantic_diff",
 		},
 	}
 	return &StaticActionRegistry{definitions: defs}
