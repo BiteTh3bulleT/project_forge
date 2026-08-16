@@ -132,6 +132,11 @@ func (s *Server) forgeKActivationReadiness(now time.Time) controllane.ForgeKActi
 				"narrow authenticated operator ingress remains incomplete",
 				"Control Lane remains the temporary validation/apply/SQLite adapter",
 			}
+		case "Context Compiler":
+			report.AuthorityMatrix[i].CurrentStatus = "FORGE_K_INGRESS_ONLY_ADAPTER_DECISION"
+			report.AuthorityMatrix[i].LiveOwner = selection.AuthorityOwner
+			report.AuthorityMatrix[i].FeatureFlag = "production FORGE-K authority mode only; legacy_v1 fails closed"
+			report.AuthorityMatrix[i].RollbackPath = "select legacy_v1 to disable context compilation; existing snapshot evidence remains inspectable"
 		}
 	}
 	return report

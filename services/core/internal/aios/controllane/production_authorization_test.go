@@ -181,6 +181,23 @@ func TestProductionAuthorizationCompileMutationPolicy(t *testing.T) {
 	}
 }
 
+func TestProductionAuthorizationDeniesProposalSourcesContextCompile(t *testing.T) {
+	svc, _ := newProductionAuthorizationHarness(t)
+	for _, source := range []domain.ActionSource{domain.SourceAdapter, domain.SourceFutureIRIS} {
+		if policy, allowed := productionCapabilityPolicy(source, domain.ActionCompileContext); allowed {
+			t.Fatalf("proposal source %q received context compile policy %q", source, policy)
+		}
+		req := productionAuthorizationRequest(source)
+		req.Action = domain.ActionCompileContext
+		req.RequiredCapability = CapContextCompile
+		req.Payload = map[string]any{"query": "forge", "persistSnapshot": false}
+		ctx := authproof.WithTrustedOrigin(context.Background(), productionTestOrigin(req.Actor, req.Source, "compile-denied"))
+		if _, err := svc.ResolveAuthorization(ctx, req); !errors.Is(err, ErrAuthorizationDenied) {
+			t.Fatalf("source=%q error=%v", source, err)
+		}
+	}
+}
+
 func TestProductionAuditOutboxBindsExactRequestAndAuthorizationProof(t *testing.T) {
 	svc, st := newProductionAuthorizationHarness(t)
 	req := productionAuthorizationRequest(domain.SourceUser)

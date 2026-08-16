@@ -193,6 +193,13 @@ func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain
 		k.port.ObserveResult(ctx, req, result)
 		return result, nil
 	}
+	if req.Action == domain.ActionCompileContext && contextCompilePersists(req.Payload) && strings.TrimSpace(req.IdempotencyKey) == "" {
+		result := rejectedResult(req, domain.ErrMissingRequiredField, "idempotencyKey", "persisted context compilation requires an idempotency key")
+		result = annotateAuthority(result)
+		result = k.port.RecordResult(ctx, req, result)
+		k.port.ObserveResult(ctx, req, result)
+		return result, nil
+	}
 	authorizationProof, authErr := k.authorization.ResolveAuthorization(ctx, req)
 	if authErr == nil {
 		authErr = authproof.VerifyProof(req, authorizationProof)
@@ -303,6 +310,23 @@ func (k *Kernel) Process(ctx context.Context, req domain.SyscallRequest) (domain
 	result = k.port.RecordResult(ctx, prepared.Request, result)
 	k.port.ObserveResult(ctx, prepared.Request, result)
 	return result, err
+}
+
+func contextCompilePersists(payload map[string]any) bool {
+	persist := false
+	apply := func(values map[string]any) {
+		if value, ok := values["persistSnapshot"].(bool); ok {
+			persist = value
+		}
+	}
+	apply(payload)
+	if nested, ok := payload["restoreSnapshot"].(map[string]any); ok {
+		apply(nested)
+	}
+	if nested, ok := payload["compileOptions"].(map[string]any); ok {
+		apply(nested)
+	}
+	return persist
 }
 
 func preparedAuthorityMetadataValid(req domain.SyscallRequest, proof authproof.Proof) bool {

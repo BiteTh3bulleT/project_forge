@@ -394,6 +394,7 @@ func isForgeKOnlyAction(action domain.SemanticActionType) bool {
 	switch action {
 	case domain.ActionAdmitEvidence,
 		domain.ActionAppealRuling,
+		domain.ActionCompileContext,
 		domain.ActionRecordRetrievalEvidence,
 		domain.ActionRebuildMemoryAcceleration,
 		domain.ActionRecordRetrievalUsefulness,

@@ -178,7 +178,7 @@ func productionCapabilityPolicy(source domain.ActionSource, action domain.Semant
 		return "forge_core_service", true
 	case domain.SourceAdapter:
 		switch action {
-		case domain.ActionCreateNote, domain.ActionCreateLink, domain.ActionCompileContext,
+		case domain.ActionCreateNote, domain.ActionCreateLink,
 			domain.ActionValidateKVIdentity, domain.ActionValidateRefShape, domain.ActionCompareRefShape,
 			domain.ActionValidateSourceObject, domain.ActionValidateSemanticOperation,
 			domain.ActionValidateAdmissionCandidate, domain.ActionValidateContextAttribution:
@@ -187,7 +187,7 @@ func productionCapabilityPolicy(source domain.ActionSource, action domain.Semant
 	case domain.SourceFutureIRIS:
 		switch action {
 		case domain.ActionCreateNote, domain.ActionCreateLink, domain.ActionRegisterContradict,
-			domain.ActionDeriveModel, domain.ActionCompileContext:
+			domain.ActionDeriveModel:
 			return "bounded_iris_proposal", true
 		}
 	}

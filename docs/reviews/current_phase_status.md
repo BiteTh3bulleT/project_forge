@@ -9,8 +9,11 @@ noncanonical derived object, provenance, chained journal entry, audit intent,
 authorization proof, and idempotency replay proof. `legacy_v1`, adapters,
 Future IRIS, stale/superseded/cross-scope sources, and caller-supplied content
 or output claims fail closed. Other algebra operators and public ingress remain
-staged. K20I lane C also adds a tested pure `forgekernel/contextcompile`
-decision contract; it is not yet wired to live `COMPILE_CONTEXT` authority.
+staged. K20I lane C also makes live `COMPILE_CONTEXT` production-FORGE-K-only,
+denies adapter/Future-IRIS execution, requires idempotency for persistence, and
+retires the restore-decision cache. Its tested pure
+`forgekernel/contextcompile` decision contract is not yet wired; Control Lane
+still owns live source reads and packet/snapshot/restore computation.
 
 Latest K20H VSA note (2026-08-14): `REBUILD_MEMORY_ACCELERATION` now seals only exact-scope, current-leaf `forge_k_memory_evidence` joined to its current admitted Courthouse exhibit/ruling. Dedicated `forge_k_memory_vsa_*` tables reference immutable memory-evidence rows and carry semantic evidence identity; they never reuse legacy observation IDs. Runtime readers revalidate Court/current-leaf integrity under the active v2 manifest, so legacy, corrupt, superseded, unscoped, mismatched, and stale-head rows have zero influence. Production end-to-end coverage proves Kernel admit -> materialize -> rebuild -> revise -> rollback-safe replacement rebuild and scoring.
 

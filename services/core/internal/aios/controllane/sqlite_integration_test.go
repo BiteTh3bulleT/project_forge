@@ -8,6 +8,7 @@ import (
 
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/audit"
+	"forge/projectforge/services/core/internal/forgekernel"
 	"forge/projectforge/services/core/internal/store"
 )
 
@@ -641,7 +642,7 @@ func TestSQLiteContextCompileDryRunAndReadOnlyPath(t *testing.T) {
 		"query":  "summarize",
 		"budget": map[string]any{"maxTokens": 20, "maxEvents": 10, "maxNotes": 10},
 	}
-	res, err := k.Process(ctx, req)
+	res, err := processContextThroughForgeK(ctx, k, req)
 	if err != nil || !res.Success || !res.DryRun {
 		t.Fatalf("compile context dry-run failed: err=%v res=%+v", err, res)
 	}
@@ -702,7 +703,7 @@ func TestSQLiteContextCompilePersistsSnapshotEvidence(t *testing.T) {
 		"renderSnapshotCard": true,
 		"snapshotKind":       "restore",
 	}
-	res, err := k.Process(ctx, req)
+	res, err := processContextThroughForgeK(ctx, k, req)
 	if err != nil || !res.Success {
 		t.Fatalf("persisting compile context failed: err=%v res=%+v", err, res)
 	}
@@ -754,7 +755,7 @@ WHERE id = ?`, packet.ID).Scan(
 	if corr != req.CorrelationID || traceID != req.TraceID || syscallID != req.ID || auditID == "" {
 		t.Fatalf("unexpected snapshot lineage corr=%q trace=%q syscall=%q audit=%q resultAudit=%q warnings=%v", corr, traceID, syscallID, auditID, res.AuditID, res.Warnings)
 	}
-	if proposedBy == "" || committedBy != "forge_kernel" {
+	if proposedBy == "" || committedBy != forgekernel.AuthorityOwnerForgeK {
 		t.Fatalf("unexpected proposed/committed metadata proposed=%q committed=%q", proposedBy, committedBy)
 	}
 	if !strings.Contains(metadataRaw, `"snapshot_kind":"restore"`) {
@@ -796,7 +797,7 @@ WHERE id = ?`, renderedArtifactID).Scan(&artifactCorr, &artifactTrace, &artifact
 	if artifactCorr != req.CorrelationID || artifactTrace != req.TraceID || artifactSyscall != req.ID || artifactAudit == "" {
 		t.Fatalf("unexpected artifact lineage corr=%q trace=%q syscall=%q audit=%q", artifactCorr, artifactTrace, artifactSyscall, artifactAudit)
 	}
-	if artifactProposed == "" || artifactCommitted != "forge_kernel" {
+	if artifactProposed == "" || artifactCommitted != forgekernel.AuthorityOwnerForgeK {
 		t.Fatalf("unexpected artifact proposed/committed metadata proposed=%q committed=%q", artifactProposed, artifactCommitted)
 	}
 	if res.StateSummary["snapshotFingerprint"] == "" {
@@ -821,7 +822,7 @@ func TestSQLiteContextCompileRepeatedFingerprintLinksParent(t *testing.T) {
 		"persistSnapshot": true,
 		"snapshotKind":    "restore",
 	}
-	firstRes, err := k.Process(ctx, first)
+	firstRes, err := processContextThroughForgeK(ctx, k, first)
 	if err != nil || !firstRes.Success {
 		t.Fatalf("first persisted compile failed: err=%v res=%+v", err, firstRes)
 	}
@@ -829,7 +830,7 @@ func TestSQLiteContextCompileRepeatedFingerprintLinksParent(t *testing.T) {
 	second := validSQLiteRequest(domain.ActionCompileContext, "ctx-repeat-compile-2", "ws-main")
 	second.RequestedAt = first.RequestedAt + 1000
 	second.Payload = first.Payload
-	secondRes, err := k.Process(ctx, second)
+	secondRes, err := processContextThroughForgeK(ctx, k, second)
 	if err != nil || !secondRes.Success {
 		t.Fatalf("second persisted compile failed: err=%v res=%+v", err, secondRes)
 	}
@@ -882,14 +883,14 @@ func TestSQLiteListContextSnapshotsFiltersByScopeQueryAndKind(t *testing.T) {
 		"persistSnapshot": true,
 		"snapshotKind":    "restore",
 	}
-	if res, err := k.Process(ctx, first); err != nil || !res.Success {
+	if res, err := processContextThroughForgeK(ctx, k, first); err != nil || !res.Success {
 		t.Fatalf("first compile failed: err=%v res=%+v", err, res)
 	}
 
 	second := validSQLiteRequest(domain.ActionCompileContext, "ctx-list-compile-2", "ws-main")
 	second.RequestedAt = first.RequestedAt + 1000
 	second.Payload = first.Payload
-	if res, err := k.Process(ctx, second); err != nil || !res.Success {
+	if res, err := processContextThroughForgeK(ctx, k, second); err != nil || !res.Success {
 		t.Fatalf("second compile failed: err=%v res=%+v", err, res)
 	}
 
@@ -901,7 +902,7 @@ func TestSQLiteListContextSnapshotsFiltersByScopeQueryAndKind(t *testing.T) {
 		"persistSnapshot": true,
 		"snapshotKind":    "review",
 	}
-	if res, err := k.Process(ctx, otherKind); err != nil || !res.Success {
+	if res, err := processContextThroughForgeK(ctx, k, otherKind); err != nil || !res.Success {
 		t.Fatalf("other-kind compile failed: err=%v res=%+v", err, res)
 	}
 

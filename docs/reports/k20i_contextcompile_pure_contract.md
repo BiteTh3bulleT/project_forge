@@ -1,12 +1,15 @@
 # K20I lane C — production context compile decision contract
 
-Status: `PURE PRODUCTION CONTRACT / NOT YET LIVE-INTEGRATED`
+Status: `PURE PRODUCTION CONTRACT / LIVE INGRESS CONTAINED / DECISION NOT YET INTEGRATED`
 
 `services/core/internal/forgekernel/contextcompile` is the production-owned,
 model-free decision contract for a future `COMPILE_CONTEXT` cutover. It has no
 database, clock, model, gateway, global cache, API, Control Lane, or simulator
-dependency. This lane does not change the live action registry or the current
-legacy compiler.
+dependency. The live action is now contained: `COMPILE_CONTEXT` requires the
+production FORGE-K ingress, adapter and Future-IRIS sources are denied,
+persisted compilation requires an idempotency key, and the authority-affecting
+restore cache is retired. Control Lane still computes and applies the live
+packet/snapshot decision, so this pure contract is not yet live authority.
 
 ## Sealed v1 policy
 

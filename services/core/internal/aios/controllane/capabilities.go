@@ -81,7 +81,6 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 			domain.SourceAdapter: setOf(
 				CapMemoryNoteCreate,
 				CapMemoryLinkCreate,
-				CapContextCompile,
 				CapKVIdentityValidate,
 				CapRefShapeValidate,
 				CapRefShapeCompare,
@@ -95,7 +94,6 @@ func NewStaticCapabilityService() *StaticCapabilityService {
 				CapMemoryLinkCreate,
 				CapMemoryContradictionReg,
 				CapModelDerive,
-				CapContextCompile,
 			),
 		},
 	}

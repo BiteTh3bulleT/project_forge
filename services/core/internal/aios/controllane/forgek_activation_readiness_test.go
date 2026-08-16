@@ -158,8 +158,8 @@ func TestForgeKActivationReadinessReportsClosedValidationSurface(t *testing.T) {
 	if matrix["Semantic Algebra"].CurrentStatus != "DETERMINISTIC_DIFF_AUTHORITY_PARTIAL" {
 		t.Fatalf("semantic algebra matrix status=%q, want DETERMINISTIC_DIFF_AUTHORITY_PARTIAL", matrix["Semantic Algebra"].CurrentStatus)
 	}
-	if matrix["Context Compiler"].CurrentStatus != "CONTEXT_ATTRIBUTION_VALIDATION_ONLY" {
-		t.Fatalf("context compiler matrix status=%q, want CONTEXT_ATTRIBUTION_VALIDATION_ONLY", matrix["Context Compiler"].CurrentStatus)
+	if matrix["Context Compiler"].CurrentStatus != "FORGE_K_INGRESS_ONLY_ADAPTER_DECISION" {
+		t.Fatalf("context compiler matrix status=%q, want FORGE_K_INGRESS_ONLY_ADAPTER_DECISION", matrix["Context Compiler"].CurrentStatus)
 	}
 	if matrix["Runtime Boundary"].CurrentStatus != "RUNTIME_PROPOSAL_BOUNDARY" {
 		t.Fatalf("runtime boundary status=%q, want RUNTIME_PROPOSAL_BOUNDARY", matrix["Runtime Boundary"].CurrentStatus)

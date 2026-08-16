@@ -21,6 +21,24 @@ func TestProcessorConstructsAndWires(t *testing.T) {
 	}
 }
 
+func TestCompileContextRequiresProductionForgeKOrchestration(t *testing.T) {
+	ctx := context.Background()
+	processor, _, _ := newTestKernel()
+	req := validBaseRequest(domain.ActionCompileContext)
+	req.ID = "legacy-compile-context-denied"
+	req.Payload = map[string]any{"query": "forge context"}
+	result, err := processor.Process(ctx, req)
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	if result.Success || result.DeterministicErrCode != domain.ErrUnauthorized {
+		t.Fatalf("legacy compile result=%#v", result)
+	}
+	if len(result.RejectedReasons) != 1 || result.RejectedReasons[0].Field != "kernel.authority" {
+		t.Fatalf("reasons=%#v", result.RejectedReasons)
+	}
+}
+
 func TestProcessorSupportedSyscalls(t *testing.T) {
 	ctx := context.Background()
 	k, store, _ := newTestKernel()
@@ -157,7 +175,7 @@ func TestProcessorSupportedSyscalls(t *testing.T) {
 			"maxNotes":  20,
 		},
 	}
-	res, err = k.Process(ctx, compile)
+	res, err = processContextThroughForgeK(ctx, k, compile)
 	if err != nil || !res.Success {
 		t.Fatalf("COMPILE_CONTEXT failed: err=%v res=%+v", err, res)
 	}
@@ -411,7 +429,7 @@ func TestDryRunAndIdempotencyBehavior(t *testing.T) {
 		"query":  "test",
 		"budget": map[string]any{"maxTokens": 10, "maxEvents": 10, "maxNotes": 10},
 	}
-	conflictRes, err := k.Process(ctx, conflict)
+	conflictRes, err := processContextThroughForgeK(ctx, k, conflict)
 	if err != nil {
 		t.Fatalf("unexpected error for conflicting idempotency key: %v", err)
 	}
@@ -524,7 +542,7 @@ func TestAuditRecordShapesAcrossOutcomes(t *testing.T) {
 			"maxNotes":  5,
 		},
 	}
-	dryRes, err := k.Process(ctx, dryRun)
+	dryRes, err := processContextThroughForgeK(ctx, k, dryRun)
 	if err != nil || !dryRes.Success || !dryRes.DryRun {
 		t.Fatalf("expected dry-run success, err=%v res=%+v", err, dryRes)
 	}
@@ -563,7 +581,7 @@ func TestCompileContextSnapshotPersistenceOptIn(t *testing.T) {
 		"query":  "summarize blockers",
 		"budget": map[string]any{"maxTokens": 50, "maxEvents": 10, "maxNotes": 10},
 	}
-	readOnlyRes, err := k.Process(ctx, readOnly)
+	readOnlyRes, err := processContextThroughForgeK(ctx, k, readOnly)
 	if err != nil || !readOnlyRes.Success {
 		t.Fatalf("compile context opt-out failed: err=%v res=%+v", err, readOnlyRes)
 	}
@@ -592,7 +610,7 @@ func TestCompileContextSnapshotPersistenceOptIn(t *testing.T) {
 		"renderSnapshotCard": true,
 		"snapshotKind":       "restore",
 	}
-	persistedRes, err := k.Process(ctx, persisted)
+	persistedRes, err := processContextThroughForgeK(ctx, k, persisted)
 	if err != nil || !persistedRes.Success {
 		t.Fatalf("compile context opt-in failed: err=%v res=%+v", err, persistedRes)
 	}
@@ -670,7 +688,7 @@ func TestCompileContextSnapshotResumeHintsCanForceFreshCompile(t *testing.T) {
 		"persistSnapshot": true,
 		"snapshotKind":    "restore",
 	}
-	firstRes, err := k.Process(ctx, first)
+	firstRes, err := processContextThroughForgeK(ctx, k, first)
 	if err != nil || !firstRes.Success {
 		t.Fatalf("first compile failed: err=%v res=%+v", err, firstRes)
 	}
@@ -690,7 +708,7 @@ func TestCompileContextSnapshotResumeHintsCanForceFreshCompile(t *testing.T) {
 			"freshCompileOnly": true,
 		},
 	}
-	secondRes, err := k.Process(ctx, second)
+	secondRes, err := processContextThroughForgeK(ctx, k, second)
 	if err != nil || !secondRes.Success {
 		t.Fatalf("second compile failed: err=%v res=%+v", err, secondRes)
 	}
@@ -734,7 +752,7 @@ func TestCompileContextSnapshotBelowThresholdFallsBackToFreshCompile(t *testing.
 		"persistSnapshot": true,
 		"snapshotKind":    "restore",
 	}
-	if res, err := k.Process(ctx, first); err != nil || !res.Success {
+	if res, err := processContextThroughForgeK(ctx, k, first); err != nil || !res.Success {
 		t.Fatalf("first compile failed: err=%v res=%+v", err, res)
 	}
 	// Shift semantic input so restore scoring is no longer a perfect fingerprint match.
@@ -752,7 +770,7 @@ func TestCompileContextSnapshotBelowThresholdFallsBackToFreshCompile(t *testing.
 			"minimumScore": 0.99,
 		},
 	}
-	secondRes, err := k.Process(ctx, second)
+	secondRes, err := processContextThroughForgeK(ctx, k, second)
 	if err != nil || !secondRes.Success {
 		t.Fatalf("second compile failed: err=%v res=%+v", err, secondRes)
 	}
@@ -802,7 +820,7 @@ func TestCompileContextSnapshotDryRunDoesNotWrite(t *testing.T) {
 		"renderSnapshotCard": true,
 		"snapshotKind":       "restore",
 	}
-	res, err := k.Process(ctx, req)
+	res, err := processContextThroughForgeK(ctx, k, req)
 	if err != nil || !res.Success || !res.DryRun {
 		t.Fatalf("compile context dry-run failed: err=%v res=%+v", err, res)
 	}

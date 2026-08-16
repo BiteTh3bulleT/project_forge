@@ -134,7 +134,7 @@ func testProductionAuthorizationPolicy(req domain.SyscallRequest) error {
 	switch req.Source {
 	case domain.SourceAdapter:
 		switch req.Action {
-		case domain.ActionCreateNote, domain.ActionCreateLink, domain.ActionCompileContext,
+		case domain.ActionCreateNote, domain.ActionCreateLink,
 			domain.ActionValidateKVIdentity, domain.ActionValidateRefShape, domain.ActionCompareRefShape,
 			domain.ActionValidateSourceObject, domain.ActionValidateSemanticOperation,
 			domain.ActionValidateAdmissionCandidate, domain.ActionValidateContextAttribution:
@@ -143,7 +143,7 @@ func testProductionAuthorizationPolicy(req domain.SyscallRequest) error {
 	case domain.SourceFutureIRIS:
 		switch req.Action {
 		case domain.ActionCreateNote, domain.ActionCreateLink, domain.ActionRegisterContradict,
-			domain.ActionDeriveModel, domain.ActionCompileContext:
+			domain.ActionDeriveModel:
 			allowed = true
 		}
 	}
@@ -188,6 +188,35 @@ func TestSelectAuthorityDefaultsToForgeKWithOneCommitAuthority(t *testing.T) {
 	if !slices.Equal(delegate.events, []string{"prepare", "commit", "record", "observe"}) {
 		t.Fatalf("FORGE-K did not own durable stage order: %v", delegate.events)
 	}
+}
+
+func TestKernelRequiresIdempotencyForPersistedContextCompile(t *testing.T) {
+	delegate := &recordingProcessor{out: domain.SyscallResult{Success: true}}
+	selection, err := SelectAuthority(string(ModeForgeK), delegate, testAuthorizationPort{})
+	if err != nil {
+		t.Fatalf("select authority: %v", err)
+	}
+	req := kernelTestRequest("compile-context-without-idempotency")
+	req.Action = domain.ActionCompileContext
+	req.RequiredCapability = "context.compile"
+	req.Payload = map[string]any{
+		"query": "forge context",
+		"compileOptions": map[string]any{
+			"persistSnapshot": true,
+		},
+	}
+	req.IdempotencyKey = ""
+	result, err := selection.Processor.Process(context.Background(), req)
+	if err != nil {
+		t.Fatalf("process: %v", err)
+	}
+	if result.Success || delegate.prepares != 0 || delegate.calls != 0 || delegate.records != 1 || delegate.observes != 1 {
+		t.Fatalf("result=%#v delegate=%#v", result, delegate)
+	}
+	if len(result.RejectedReasons) != 1 || result.RejectedReasons[0].Code != domain.ErrMissingRequiredField || result.RejectedReasons[0].Field != "idempotencyKey" {
+		t.Fatalf("errors=%#v", result.RejectedReasons)
+	}
+
 }
 
 func TestForgeKCompleteDispositionNeverCommits(t *testing.T) {
