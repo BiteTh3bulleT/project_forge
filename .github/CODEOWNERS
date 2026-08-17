@@ -1,0 +1,31 @@
+# Default ownership
+* @BiteTh3bulleT
+
+# Current-state and operator documentation
+/README.md @BiteTh3bulleT
+/CONTRIBUTING.md @BiteTh3bulleT
+/SECURITY.md @BiteTh3bulleT
+/docs/status/ @BiteTh3bulleT
+/docs/runbooks/ @BiteTh3bulleT
+/docs/api/ @BiteTh3bulleT
+
+# Production authority, execution, identity, and recovery boundaries
+/services/core/internal/forgekernel/ @BiteTh3bulleT
+/services/core/internal/gateway/ @BiteTh3bulleT
+/services/core/internal/approvals/ @BiteTh3bulleT
+/services/core/internal/audit/ @BiteTh3bulleT
+/services/core/internal/backup/ @BiteTh3bulleT
+/services/core/internal/config/ @BiteTh3bulleT
+/services/core/internal/modelruntime/ @BiteTh3bulleT
+/services/core/internal/api/ @BiteTh3bulleT
+
+# Desktop native capabilities and host substrate
+/apps/desktop/src-tauri/ @BiteTh3bulleT
+/nix/ @BiteTh3bulleT
+/flake.nix @BiteTh3bulleT
+/flake.lock @BiteTh3bulleT
+
+# Build and repository governance
+/.github/workflows/ @BiteTh3bulleT
+/package.json @BiteTh3bulleT
+/package-lock.json @BiteTh3bulleT
