@@ -1,0 +1,100 @@
+name: Bug report
+description: Report a reproducible FORGE defect. Do not use this form for security vulnerabilities.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping harden FORGE. Remove credentials, private data, bearer tokens, API keys, and sensitive audit contents before submitting.
+
+  - type: checkboxes
+    id: security
+    attributes:
+      label: Security check
+      options:
+        - label: This report does not contain a vulnerability or exploit details. I will use the private security process in SECURITY.md for security issues.
+          required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit, branch, or build
+      placeholder: 40786fd, main, local Nix generation, etc.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Chat and continuation
+        - Gateway and tools
+        - Approvals and audit
+        - Production Kernel / authority
+        - Memory and retrieval
+        - Modelruntime
+        - Backup and recovery
+        - Desktop / Tauri
+        - Nix / NixOS / host integration
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, hardware profile, model/backend, and relevant configuration. Redact secrets.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Start FORGE with ...
+        2. Submit ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted evidence
+      description: Logs, traces, screenshots, or test output using synthetic or redacted values.
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Authority, persistence, or operator impact
+      description: Note whether this affects tool execution, model-visible claims, canonical state, actor identity, recovery, or host behavior.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Final checks
+      options:
+        - label: I searched existing issues and current-state documentation.
+          required: true
+        - label: I can reproduce this on the stated commit or build.
+          required: true
