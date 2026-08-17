@@ -19,6 +19,39 @@ curl -fsS http://127.0.0.1:18492/health
 graphical login -> labwc -> forge-shell-session -> forge-desktop-shell
 ```
 
+For this profile, `forge-desktop-shell` is a Tauri/WebKit process, so a
+`WebKitWebProcess` child is normal. The real validation is that the shell is
+started through the expected session path, and no separate browser daemon is
+running before you intentionally launch one.
+
+You can run this directly with:
+
+```bash
+cd /path/to/ProjectForge
+./scripts/verify-forge-shell-session.sh
+```
+
+```bash
+# Direct-shell proof (run immediately after login, before opening Firefox/Browser):
+pgrep -af "(^|/)labwc([[:space:]]|$)" || true
+pgrep -af "(^|/)forge-shell-session([[:space:]]|$)" || true
+pgrep -af "(^|/)forge-desktop-shell([[:space:]]|$)" || true
+pgrep -af "(^|/)forge_desktop([[:space:]]|$)" || true
+
+for browser in firefox firefox-esr chromium chrome google-chrome microsoft-edge webex; do
+  pgrep -af "(^|/)${browser}([[:space:]]|$)" && exit 1 || true
+done
+
+# Expected webkit child; use presence only as evidence this is a native shell.
+pgrep -af "(^|/)WebKitWebProcess([[:space:]]|$)" || true
+```
+
+Important: if you require **zero WebKit code at runtime**, the current
+`forge-desktop-shell` cannot satisfy it. This shell is Tauri-based by design.
+Removing WebKit requires a native non-WebKit operator shell implementation
+(for example GTK/Rust/Wayland) and a new session package path. That is a
+separate architecture slice, not just a session-path switch.
+
 ## Boundaries
 
 This smoke test must not run `systemctl`, `nixos-rebuild`, package installs, reboot/shutdown operations, kernel module changes, model load/unload commands, direct semantic memory writes, or host mutation controls from the shell UI.

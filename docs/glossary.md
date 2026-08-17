@@ -125,9 +125,18 @@ stable idempotency fingerprint. It is proof of a commit, not model output.
 ## Audit outbox
 
 An immutable canonical audit intent persisted in the same transaction as the
-semantic mutation, provenance, and journal hash-chain transition. Delivery to
-the external audit sink and later `audit_id` backfill are best-effort
-projections; their failure does not erase or invalidate the outbox evidence.
+semantic mutation, provenance, and journal hash-chain transition. A
+restart-safe projector revalidates its request, authorization, result, receipt,
+and journal proof and delivers it idempotently by outbox identity. Sink failure
+does not erase or invalidate the outbox evidence.
+
+## Audit delivery attempt
+
+An immutable append-only projection record for one audit-outbox delivery. Its
+status is `delivered`, `retry`, or `quarantined`. Delivered attempts bind the
+external audit identity; retries preserve outage evidence; quarantine means
+the stored proof failed revalidation and was not sent to the sink. These rows
+replace mutable semantic-object `audit_id` backfill as the delivery lineage.
 
 ## Verified idempotent replay
 

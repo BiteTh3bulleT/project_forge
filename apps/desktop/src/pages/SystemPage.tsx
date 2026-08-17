@@ -26,9 +26,6 @@ function statusClass(status?: string) {
     "reachable",
     "fresh",
     "read_only",
-    "forge_k_sole_live_authority",
-    "forge_k_admission_and_ruling_live",
-    "forge_k_context_compiler_live",
     "proposal_only_no_mutation_authority",
   ].includes(normalized) || /^\d+ ready \/ 0 blocked$/.test(normalized)) {
     return "forge-ops-status forge-ops-status--ok";
@@ -644,6 +641,18 @@ export function SystemPage() {
                 enabled={kernelActivation ? !kernelActivation.simulator_authority : false}
               />
               <BoundaryFlag
+                label="Kernel authority exclusive"
+                enabled={kernelActivation?.kernel_authority_exclusive}
+              />
+              <BoundaryFlag
+                label="Capability implemented"
+                enabled={kernelActivation?.capability_implemented}
+              />
+              <BoundaryFlag
+                label="Projection healthy"
+                enabled={kernelActivation?.projection_healthy}
+              />
+              <BoundaryFlag
                 label="FORGE-K syscall ingress live"
                 enabled={kernelActivation?.live_kernel_ingress_authority ?? false}
               />
@@ -652,7 +661,7 @@ export function SystemPage() {
                 enabled={kernelActivation?.live_durable_orchestration ?? false}
               />
               <BoundaryFlag
-                label="FORGE-K sole live authority"
+                label="FORGE-K exclusive kernel authority"
                 enabled={kernelActivation?.live_kernel_authority ?? false}
               />
               <BoundaryFlag
@@ -662,6 +671,18 @@ export function SystemPage() {
               <BoundaryFlag
                 label="Mutation controls absent"
                 enabled={kernelActivation ? !kernelActivation.mutation_controls_available : false}
+              />
+              <BoundaryFlag
+                label="Host ready"
+                enabled={kernelActivation?.host_ready}
+              />
+              <BoundaryFlag
+                label="Recovery verified"
+                enabled={kernelActivation?.recovery_verified}
+              />
+              <BoundaryFlag
+                label="Unsafe test mode"
+                enabled={kernelActivation?.unsafe_test_mode}
               />
             </div>
             <div className="mt-3 rounded border border-white/10 bg-black/20 p-3">

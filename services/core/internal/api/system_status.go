@@ -194,7 +194,7 @@ func (s *Server) handleForgeSystemStatus(w http.ResponseWriter, r *http.Request)
 	warnings := []string{
 		"shell system surface is read-only",
 		"host command-backed probes are disabled for this endpoint",
-		"production FORGE-K is the sole live authority; simulator packages remain non-authoritative",
+		"production FORGE-K is live authority for observed ingress and commit-order assertions; Control Lane validation is partial-live and simulator packages remain non-authoritative",
 	}
 	if s != nil && !s.capStoreOK {
 		warnings = append(warnings, "gateway capability override store unavailable; capability status overrides are in-memory only for this process")

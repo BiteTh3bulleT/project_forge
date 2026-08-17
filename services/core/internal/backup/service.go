@@ -544,7 +544,7 @@ func (s *Service) pickSections(kind string) ([]string, error) {
 			"forge_k_semantic_diff_operations", "forge_k_semantic_diff_results", "forge_k_semantic_derived_objects",
 			"forge_k_context_bundles", "forge_k_context_snapshot_heads",
 			"context_packet_snapshots", "dream_reports", "restore_outcome_events", "semantic_idempotency_keys", "autonomy_settings",
-			"forge_k_journal_head", "forge_k_audit_outbox",
+			"forge_k_journal_head", "forge_k_audit_outbox", "forge_k_audit_delivery_attempts",
 			"chat_threads", "chat_messages", "canvas_boards", "canvas_notes",
 			"tool_capability_overrides", "feature_flags", "alert_rules", "scheduled_tasks",
 			"memory_vsa_pointers", "memory_vsa_role_bindings", "memory_vsa_associations",
@@ -777,9 +777,9 @@ func backupSectionManifest(section string) SectionManifest {
 		entry.Purpose = "immutable FORGE-K context decisions and their scope-local CAS head"
 		entry.RestoreRequired = false
 		entry.ExportOnly = true
-	case "forge_k_journal_head", "forge_k_audit_outbox":
+	case "forge_k_journal_head", "forge_k_audit_outbox", "forge_k_audit_delivery_attempts":
 		entry.AuthorityClass = "kernel_commit_proof"
-		entry.Purpose = "production FORGE-K journal head or immutable audit intent"
+		entry.Purpose = "production FORGE-K journal head, immutable audit intent, or append-only delivery evidence"
 		entry.RestoreRequired = false
 		entry.ExportOnly = true
 	case "context_packet_snapshots":

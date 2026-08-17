@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -1152,6 +1153,38 @@ func validateAuditOutboxRecord(rec AuditOutboxRecord) error {
 		if proofFingerprint, _ := rec.Request.Metadata["forgeKAuthorizationProof"].(string); proofFingerprint != rec.AuthorizationProof.AuthorizationFingerprint {
 			return ErrInvalidAuditOutboxRecord
 		}
+	}
+	return nil
+}
+
+// VerifyAuditOutboxRecord revalidates an immutable commit-time audit intent
+// before a delivery projector is allowed to expose it to an audit sink. The
+// projector must not trust JSON merely because it came from the outbox table:
+// the request, authorization proof, result identity, receipt, and embedded
+// journal entry are all part of the delivery boundary.
+func VerifyAuditOutboxRecord(rec AuditOutboxRecord) error {
+	rec = normalizeAuditOutboxRecord(rec)
+	if err := validateAuditOutboxRecord(rec); err != nil {
+		return err
+	}
+	if !rec.Success || !rec.Result.Success || rec.Result.DryRun ||
+		rec.Result.Action != rec.Action || rec.Result.RequestID != rec.SyscallID ||
+		rec.Result.CorrelationID != rec.CorrelationID || rec.Result.TraceID != rec.TraceID ||
+		rec.Result.IdempotencyKey != rec.Request.IdempotencyKey ||
+		rec.Request.ID != rec.SyscallID || rec.Request.DryRun {
+		return ErrInvalidAuditOutboxRecord
+	}
+	entry := rec.Receipt.JournalEntry
+	hash, err := forgejournal.HashEntry(entry)
+	if err != nil || hash != entry.Hash || entry.Hash != rec.Receipt.JournalEventHash ||
+		entry.EventID != rec.Receipt.JournalEventID || entry.SyscallID != rec.SyscallID ||
+		entry.CorrelationID != rec.CorrelationID || entry.TraceID != rec.TraceID ||
+		entry.WorkspaceID != rec.WorkspaceID || entry.LaneID != rec.LaneID ||
+		entry.CommittedBy != rec.CommittedBy {
+		return ErrInvalidAuditOutboxRecord
+	}
+	if !slices.Equal(rec.Result.CommittedObjectIDs, rec.Receipt.ObjectIDs) {
+		return ErrInvalidAuditOutboxRecord
 	}
 	return nil
 }

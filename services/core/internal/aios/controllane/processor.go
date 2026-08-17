@@ -664,6 +664,18 @@ func (p *Processor) rejectResult(req domain.SyscallRequest, result domain.Syscal
 // typed receipt in their canonical transaction; this best-effort projection
 // may subsequently backfill the external audit id onto the transaction lineage.
 func (p *Processor) RecordResult(ctx context.Context, req domain.SyscallRequest, result domain.SyscallResult) domain.SyscallResult {
+	// Successful production commits already persisted a self-verifying audit
+	// intent in the canonical transaction. Delivery is owned by the durable
+	// audit projector; doing it here would reintroduce a crash window and
+	// duplicate sink records. Rejections, dry runs, and the isolated legacy test
+	// facade have no committed production outbox and remain synchronous.
+	if result.Success && !req.DryRun && hasKernelAuthorizationMetadata(req) {
+		if result.StateSummary == nil {
+			result.StateSummary = map[string]any{}
+		}
+		result.StateSummary["auditProjection"] = "queued"
+		return result
+	}
 	result.AuditID = p.writeAudit(ctx, req, result)
 	if result.Success && !req.DryRun && result.AuditID != "" {
 		if linker, ok := p.txRunner.(auditLinkingRunner); ok {

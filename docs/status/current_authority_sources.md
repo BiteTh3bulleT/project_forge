@@ -10,13 +10,14 @@ This file maps the current authority docs for FORGE. It is a navigation document
 2. `docs/reviews/current_phase_status.md` - current phase status, including FORGE-K simulator/live authority boundaries.
 3. `docs/status/implementation_matrix.md` - live AI-OS and daemon authority implementation matrix.
 4. `docs/runbooks/current_forge_bringup.md` - current operator bring-up path.
-5. `docs/reports/FORGE_PUNCHLIST.md` - active product/engineering punch list.
+5. `docs/reports/FORGE_K_FULL_IMPLEMENTATION_PUNCHLIST.md` - active production FORGE-K/full-system implementation ledger.
+6. `docs/reports/FORGE_PUNCHLIST.md` - historical 2026-05 product/engineering punch list; not the current authority-completion ledger.
 
 ## Live Authority Map
 
 | Area | Current source | Authority note |
 |---|---|---|
-| Canonical semantic syscall ingress | `services/core/internal/forgekernel`, `docs/architecture/forge_k_live_cutover.md` | K20J sole live FORGE-K ingress authority. Boot accepts only empty/default or `forge_k`; alternate authority modes fail closed. |
+| Canonical semantic syscall ingress | `services/core/internal/forgekernel`, `docs/architecture/forge_k_live_cutover.md` | K20J primary live ingress owner at startup (`forge_k`) with partial-live Control Lane metadata-only enforcement; bootstrap selects a single owner and alternate authority modes fail closed. |
 | Canonical durable orchestration | `services/core/internal/forgekernel`, `services/core/internal/aios/controllane`, `docs/architecture/forge_k_live_cutover.md` | FORGE-K owns prepare/commit/audit/observe order through `DurablePort`; Control Lane remains the temporary validation/apply/SQLite implementation, and its combined processor is test-only. |
 | Canonical commit integrity | `services/core/internal/forgekernel/commitproof`, production Kernel, Control Lane SQLite durable port | K20D seals exact requests/plans and validates typed receipts. Mutation, journal hash-chain head/provenance, immutable audit intent, and optional idempotency proof share one transaction; verified replay never re-commits and legacy unbound proof fails closed. |
 | Courthouse admission/ruling | `services/core/internal/forgekernel/court`, production Kernel, Control Lane SQLite court adapter | K20C FORGE-K computes deterministic admission/rejection and appeal rulings; K20D atomically binds Court mutation/history to the journal hash chain, provenance, immutable audit intent, receipt, and optional idempotency proof. |
@@ -36,7 +37,7 @@ This file maps the current authority docs for FORGE. It is a navigation document
 
 ## FORGE-K Boundary
 
-The simulator packages under `services/core/internal/forgek` remain simulator-only. The distinct production package `services/core/internal/forgekernel` is the sole live authority (K20J), owning stage order, Courthouse decisions, sealed commit/authorization/replay proof, evidence admission, immutable admitted memory, governed VSA rebuilds, deterministic semantic diff, Context Compiler decisions, and model-output visibility decisions. Control Lane is a bounded validation/apply/SQLite durable port, not an alternate orchestrator. Live backup row-merge restore remains disabled; recovery is daemon-stopped and whole-store only. Unimplemented capabilities remain fail-closed rather than retaining alternate authority.
+The simulator packages under `services/core/internal/forgek` remain simulator-only. The distinct production package `services/core/internal/forgekernel` is the primary live authority owner for ingress/order boundaries under K20J, while Control Lane is a bounded partial-live validation/apply/SQLite durable port and not an alternate orchestrator. Live backup row-merge restore remains disabled; recovery is daemon-stopped and whole-store only. Unimplemented capabilities remain fail-closed rather than retaining alternate authority.
 
 Current partial live integrations are narrow validation/enforcement seams through shared pure packages and existing live Control Lane paths. They do not:
 
@@ -45,7 +46,7 @@ Current partial live integrations are narrow validation/enforcement seams throug
 - admit evidence, compile live context, execute semantic operations, or write canonical truth outside existing live authority paths
 - enable live KV reuse or runtime cache reuse
 
-Current Courthouse authority is production-owned under `services/core/internal/forgekernel/court`. `ADMIT_EVIDENCE` and `APPEAL_RULING` are decided only by the production Kernel. Current exhibit state, immutable ruling/appeal history, provenance-linked journal hash-chain transition, immutable audit intent, and optional idempotency proof persist atomically and are bound by a Kernel-validated typed receipt. `legacy_v1`, adapter/Future IRIS proposer sources, and model actors fail closed. The earlier `VALIDATE_ADMISSION_CANDIDATE` seam remains validation-only, and the simulator under `services/core/internal/forgek/court` remains non-authoritative. External audit sink delivery and `audit_id` backfill remain post-commit/best-effort projections; they cannot invalidate canonical atomic outbox evidence.
+Current Courthouse authority is production-owned under `services/core/internal/forgekernel/court`. `ADMIT_EVIDENCE` and `APPEAL_RULING` are decided only by the production Kernel. Current exhibit state, immutable ruling/appeal history, provenance-linked journal hash-chain transition, immutable audit intent, and optional idempotency proof persist atomically and are bound by a Kernel-validated typed receipt. `legacy_v1`, adapter/Future IRIS proposer sources, and model actors fail closed. The earlier `VALIDATE_ADMISSION_CANDIDATE` seam remains validation-only, and the simulator under `services/core/internal/forgek/court` remains non-authoritative. External audit delivery is a restart-safe idempotent projector over canonical outbox evidence with append-only delivered/retry/quarantine attempts. Legacy object-row `audit_id` backfill is retired; projection linkage is carried by immutable outbox and audit identities.
 
 Current retrieval evidence admission is production-owned through `RECORD_RETRIEVAL_EVIDENCE`; this does not make the simulator Memory Palace live. Live search/embedding services still compute candidates, while the production Kernel admits only a deterministic, authenticated, exact-scope run/results/selection bundle with atomic journal/audit/idempotency proof. Existing `forgekshadow` retrieval diagnostics remain bounded metadata-only observers.
 

@@ -27,22 +27,25 @@ func TestForgeKCourthousePersistsCurrentAndImmutableHistory(t *testing.T) {
 	}
 	read := controllane.NewSQLiteSemanticStore(st.DB)
 	exhibit, ok := read.FindCourtExhibit("exhibit-1", req.Scope)
-	if !ok || exhibit.Status != court.DecisionAdmitted || exhibit.CurrentRulingID != "ruling-1" || exhibit.AuditID == "" {
+	if !ok || exhibit.Status != court.DecisionAdmitted || exhibit.CurrentRulingID != "ruling-1" || exhibit.AuditID != "" {
 		t.Fatalf("unexpected current exhibit: ok=%v exhibit=%#v", ok, exhibit)
 	}
 	rulings := read.ListCourtRulings(req.Scope, "case-1", "exhibit-1")
-	if len(rulings) != 1 || rulings[0].ID != "ruling-1" || rulings[0].PriorRulingID != "" || rulings[0].AuditID == "" {
+	if len(rulings) != 1 || rulings[0].ID != "ruling-1" || rulings[0].PriorRulingID != "" || rulings[0].AuditID != "" {
 		t.Fatalf("unexpected ruling history: %#v", rulings)
 	}
-	var journals, provenance int
+	var journals, provenance, outbox int
 	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM journal_events WHERE id = ?`, req.ID+":journal_event").Scan(&journals); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM provenance_records WHERE syscall_id = ?`, req.ID).Scan(&provenance); err != nil {
 		t.Fatal(err)
 	}
-	if journals != 1 || provenance == 0 {
-		t.Fatalf("missing atomic lineage: journals=%d provenance=%d", journals, provenance)
+	if err := st.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM forge_k_audit_outbox WHERE syscall_id = ?`, req.ID).Scan(&outbox); err != nil {
+		t.Fatal(err)
+	}
+	if journals != 1 || provenance == 0 || outbox != 1 {
+		t.Fatalf("missing atomic lineage: journals=%d provenance=%d outbox=%d", journals, provenance, outbox)
 	}
 	if _, err := st.DB.ExecContext(ctx, `UPDATE court_rulings SET decision = 'rejected' WHERE id = ?`, "ruling-1"); err == nil {
 		t.Fatal("immutable ruling accepted an update")

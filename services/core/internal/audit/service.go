@@ -4,16 +4,20 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 )
+
+var ErrForgeKOutboxConflict = errors.New("FORGE-K audit outbox projection conflict")
 
 // Record is a single immutable audit entry. Audit records are meant to be
 // append-only and carry a correlation id so related records across jobs,
 // approvals, and gateway invocations can be rolled up into a trace.
 type Record struct {
 	ID                  int64           `json:"id"`
+	ForgeKOutboxID      string          `json:"forgeKOutboxId,omitempty"`
 	CreatedAtMs         int64           `json:"createdAtMs"`
 	CorrelationID       string          `json:"correlationId"`
 	Category            string          `json:"category"`
@@ -53,6 +57,21 @@ type Service struct {
 func New(db *sql.DB) *Service { return &Service{db: db} }
 
 func (s *Service) Record(ctx context.Context, req CreateRequest) (*Record, error) {
+	return s.record(ctx, "", req)
+}
+
+// RecordForgeKOutbox projects one immutable FORGE-K audit intent into the
+// operator audit log. outboxID is a sink-level idempotency key: retries after a
+// crash return the original audit record instead of creating a duplicate.
+func (s *Service) RecordForgeKOutbox(ctx context.Context, outboxID string, req CreateRequest) (*Record, error) {
+	outboxID = strings.TrimSpace(outboxID)
+	if outboxID == "" {
+		return nil, fmt.Errorf("FORGE-K audit outbox id required")
+	}
+	return s.record(ctx, outboxID, req)
+}
+
+func (s *Service) record(ctx context.Context, outboxID string, req CreateRequest) (*Record, error) {
 	if strings.TrimSpace(req.Category) == "" {
 		return nil, fmt.Errorf("audit category required")
 	}
@@ -64,10 +83,11 @@ func (s *Service) Record(ctx context.Context, req CreateRequest) (*Record, error
 	now := time.Now().UnixMilli()
 	res, err := s.db.ExecContext(ctx, `
 INSERT INTO audit_records(
-  created_at, correlation_id, category, action, actor,
+  forge_k_outbox_id, created_at, correlation_id, category, action, actor,
   subject_type, subject_id, job_id, gateway_invocation_id, approval_request_id,
   risk_class, outcome, summary, payload_json
-) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		outboxID,
 		now,
 		req.CorrelationID,
 		strings.ToLower(req.Category),
@@ -84,10 +104,30 @@ INSERT INTO audit_records(
 		string(raw),
 	)
 	if err != nil {
+		if outboxID != "" {
+			existing, existingErr := s.GetByForgeKOutbox(ctx, outboxID)
+			if existingErr == nil {
+				if auditRecordMatchesRequest(existing, req, raw) {
+					return existing, nil
+				}
+				return nil, fmt.Errorf("%w: outbox %q", ErrForgeKOutboxConflict, outboxID)
+			}
+		}
 		return nil, err
 	}
 	id, _ := res.LastInsertId()
 	return s.Get(ctx, id)
+}
+
+// GetByForgeKOutbox resolves the stable projection identity used by the
+// delivery worker. A missing row returns sql.ErrNoRows.
+func (s *Service) GetByForgeKOutbox(ctx context.Context, outboxID string) (*Record, error) {
+	row := s.db.QueryRowContext(ctx, `
+SELECT id, forge_k_outbox_id, created_at, correlation_id, category, action, actor,
+       subject_type, subject_id, job_id, gateway_invocation_id, approval_request_id,
+       risk_class, outcome, summary, payload_json
+FROM audit_records WHERE forge_k_outbox_id = ?`, strings.TrimSpace(outboxID))
+	return scanRecord(row)
 }
 
 type ListFilter struct {
@@ -127,7 +167,7 @@ func (s *Service) List(ctx context.Context, filter ListFilter) ([]Record, error)
 	}
 	args = append(args, limit)
 	query := fmt.Sprintf(`
-SELECT id, created_at, correlation_id, category, action, actor,
+SELECT id, forge_k_outbox_id, created_at, correlation_id, category, action, actor,
        subject_type, subject_id, job_id, gateway_invocation_id, approval_request_id,
        risk_class, outcome, summary, payload_json
 FROM audit_records %s ORDER BY id DESC LIMIT ?`, where)
@@ -152,7 +192,7 @@ FROM audit_records %s ORDER BY id DESC LIMIT ?`, where)
 // logical operation.
 func (s *Service) Trace(ctx context.Context, correlationID string) ([]Record, error) {
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, created_at, correlation_id, category, action, actor,
+SELECT id, forge_k_outbox_id, created_at, correlation_id, category, action, actor,
        subject_type, subject_id, job_id, gateway_invocation_id, approval_request_id,
        risk_class, outcome, summary, payload_json
 FROM audit_records WHERE correlation_id = ? ORDER BY id ASC`, correlationID)
@@ -173,7 +213,7 @@ FROM audit_records WHERE correlation_id = ? ORDER BY id ASC`, correlationID)
 
 func (s *Service) Get(ctx context.Context, id int64) (*Record, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT id, created_at, correlation_id, category, action, actor,
+SELECT id, forge_k_outbox_id, created_at, correlation_id, category, action, actor,
        subject_type, subject_id, job_id, gateway_invocation_id, approval_request_id,
        risk_class, outcome, summary, payload_json
 FROM audit_records WHERE id = ?`, id)
@@ -191,7 +231,7 @@ func scanRecord(row rowScanner) (*Record, error) {
 	var appr sql.NullInt64
 	var payload string
 	if err := row.Scan(
-		&r.ID, &r.CreatedAtMs, &r.CorrelationID, &r.Category, &r.Action, &r.Actor,
+		&r.ID, &r.ForgeKOutboxID, &r.CreatedAtMs, &r.CorrelationID, &r.Category, &r.Action, &r.Actor,
 		&r.SubjectType, &r.SubjectID, &job, &gw, &appr,
 		&r.RiskClass, &r.Outcome, &r.Summary, &payload,
 	); err != nil {
@@ -211,6 +251,17 @@ func scanRecord(row rowScanner) (*Record, error) {
 	}
 	r.Payload = json.RawMessage(payload)
 	return &r, nil
+}
+
+func auditRecordMatchesRequest(record *Record, req CreateRequest, payload []byte) bool {
+	if record == nil {
+		return false
+	}
+	return record.CorrelationID == req.CorrelationID && record.Category == strings.ToLower(req.Category) &&
+		record.Action == strings.ToLower(req.Action) && record.Actor == nonEmpty(req.Actor, "operator") &&
+		record.SubjectType == req.SubjectType && record.SubjectID == req.SubjectID &&
+		record.RiskClass == req.RiskClass && record.Outcome == req.Outcome && record.Summary == req.Summary &&
+		string(record.Payload) == string(payload)
 }
 
 func nonNilMap(v map[string]any) map[string]any {

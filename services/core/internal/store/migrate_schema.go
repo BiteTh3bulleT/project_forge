@@ -974,6 +974,7 @@ CREATE TABLE IF NOT EXISTS gateway_invocations (
 
 CREATE TABLE IF NOT EXISTS audit_records (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  forge_k_outbox_id TEXT NOT NULL DEFAULT '',
   created_at INTEGER NOT NULL,
   correlation_id TEXT NOT NULL DEFAULT '',
   category TEXT NOT NULL,
@@ -1931,6 +1932,39 @@ CREATE TABLE IF NOT EXISTS forge_k_audit_outbox (
   committed_by TEXT NOT NULL DEFAULT 'forge_k.kernel'
 );
 
+CREATE TABLE IF NOT EXISTS forge_k_audit_delivery_attempts (
+  id TEXT PRIMARY KEY,
+  outbox_id TEXT NOT NULL REFERENCES forge_k_audit_outbox(id),
+  request_fingerprint TEXT NOT NULL,
+  attempt_number INTEGER NOT NULL CHECK(attempt_number > 0),
+  status TEXT NOT NULL CHECK(status IN ('delivered','retry','quarantined')),
+  audit_id TEXT NOT NULL DEFAULT '',
+  error_code TEXT NOT NULL DEFAULT '',
+  error_message TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  UNIQUE(outbox_id, attempt_number)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_records_forge_k_outbox
+ON audit_records(forge_k_outbox_id) WHERE forge_k_outbox_id <> '';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_forge_k_audit_delivery_terminal
+ON forge_k_audit_delivery_attempts(outbox_id)
+WHERE status IN ('delivered','quarantined');
+CREATE INDEX IF NOT EXISTS idx_forge_k_audit_delivery_pending
+ON forge_k_audit_delivery_attempts(outbox_id, created_at DESC, attempt_number DESC);
+
+CREATE TRIGGER IF NOT EXISTS forge_k_audit_delivery_attempts_no_update
+BEFORE UPDATE ON forge_k_audit_delivery_attempts
+BEGIN
+  SELECT RAISE(FAIL, 'forge_k audit delivery attempts are immutable');
+END;
+
+CREATE TRIGGER IF NOT EXISTS forge_k_audit_delivery_attempts_no_delete
+BEFORE DELETE ON forge_k_audit_delivery_attempts
+BEGIN
+  SELECT RAISE(FAIL, 'forge_k audit delivery attempts are immutable');
+END;
+
 CREATE INDEX IF NOT EXISTS idx_forge_k_audit_outbox_created
 ON forge_k_audit_outbox(created_at ASC, id ASC);
 CREATE INDEX IF NOT EXISTS idx_forge_k_audit_outbox_correlation
@@ -2152,6 +2186,15 @@ func ensureForgeKJournalChain(db *sql.DB) error {
 		{"authproof_json", "TEXT NOT NULL DEFAULT '{}'"},
 	}); err != nil {
 		return fmt.Errorf("audit outbox receipt column: %w", err)
+	}
+	if err := ensureSQLiteColumns(tx, "audit_records", []struct{ name, ddl string }{
+		{"forge_k_outbox_id", "TEXT NOT NULL DEFAULT ''"},
+	}); err != nil {
+		return fmt.Errorf("audit record FORGE-K outbox identity column: %w", err)
+	}
+	if _, err := tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_audit_records_forge_k_outbox
+ON audit_records(forge_k_outbox_id) WHERE forge_k_outbox_id <> ''`); err != nil {
+		return fmt.Errorf("audit record FORGE-K outbox identity index: %w", err)
 	}
 	if err := ensureSQLiteColumns(tx, "retrieval_runs", []struct{ name, ddl string }{
 		{"evidence_id", "TEXT NOT NULL DEFAULT ''"},

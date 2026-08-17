@@ -1,5 +1,17 @@
 # FORGE-K Current Phase Status
 
+P0 audit-delivery note (2026-08-17): successful production commits no longer
+perform a best-effort sink write from `RecordResult`. They queue only the
+immutable audit intent already committed with semantic state. A daemon-bound
+projector revalidates the stored request, authorization proof, result, receipt,
+and embedded journal entry; delivers idempotently using the outbox identity;
+and appends immutable `delivered`, `retry`, or `quarantined` attempt evidence.
+Retries survive restart with bounded backoff. Legacy semantic-row `audit_id`
+backfill is retired in favor of immutable outbox-to-audit projection identity.
+Rejected/dry-run results without a committed outbox remain synchronously
+audited. This closes external audit delivery durability, not the remaining
+Control Lane extraction or whole-store recovery work.
+
 Latest K20J note (2026-08-16): production boot now has one semantic syscall
 authority. The authority-mode configuration/environment selector is removed;
 daemon assembly can construct only the production Kernel. Control Lane remains

@@ -4,8 +4,9 @@
 
 `forge-optiplex-7000` is the physical x86_64 NixOS test target for the local
 Dell OptiPlex 7000. It is not the canonical operator VM. Production
-`forgekernel` is the sole live authority; the separate `forgek` simulator
-packages remain non-authoritative.
+`forgekernel` owns bootstrap ingress and canonical commit order through the
+production Kernel owner; Control Lane is currently partial-live validation metadata
+while the separate `forgek` simulator packages remain non-authoritative.
 
 The target intentionally uses:
 
@@ -203,9 +204,15 @@ sudo nft list table inet forge_offline
 ! ip route get 1.1.1.1
 ! curl --connect-timeout 3 http://1.1.1.1
 curl -fsS http://127.0.0.1:18492/forge/kernel/status | jq -e '
-  .status == "forge_k_sole_live_authority" and
-  .live_kernel_authority == true and
+  .status == "partial_live_validation_ready" and
+  .kernel_authority_exclusive == true and
+  .capability_implemented == true and
+  .projection_healthy == true and
+  .host_ready == true and
+  .recovery_verified == true and
+  .unsafe_test_mode == false and
   .live_owner == "forge_k.kernel" and
+  .live_kernel_authority == false and
   .authority_blocked_gates == 0'
 ```
 
@@ -273,6 +280,9 @@ session from a TTY) before testing power or settings controls. Confirm with:
 pid="$(pgrep -n forge_desktop)"
 tr '\0' '\n' < "/proc/$pid/environ" | grep -E \
   '^(FORGE_SHELL_DIRECT_SYSTEM_CONTROL|FORGE_SHELL_SAFE_MODE|PATH)='
+
+# direct shell proof: correct compositor/path, no auto-started browser daemon
+./scripts/verify-forge-shell-session.sh
 ```
 
 In full test mode, `FORGE_SHELL_DIRECT_SYSTEM_CONTROL=true`. Restart and Shut
@@ -314,7 +324,7 @@ Then complete the native desktop smoke checklist in
 zram remain enabled for the 4 GiB test host, but swap is not evidence that a
 graphics hang is fixed; inspect the journal and repeat the interactive smoke.
 
-The expected boundary is production FORGE-K as the sole live semantic,
-context, and model-visibility authority. The `services/core/internal/forgek`
+The expected boundary is production FORGE-K as the observed partial-live
+semantic, context, and model-visibility authority. The `services/core/internal/forgek`
 simulator remains isolated, Control Lane remains a bounded durable port, and
 disabled capabilities retain no alternate authority.

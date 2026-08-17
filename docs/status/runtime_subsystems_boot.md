@@ -60,8 +60,13 @@ default posture.
 
 ### Audit
 
-- SQLite-backed. Every syscall commit carries `audit_id`. No external
-  audit sink configured by default.
+- SQLite-backed canonical outbox plus operator audit projection. Successful
+  FORGE-K commits atomically carry an immutable outbox identity and receipt;
+  they do not rewrite committed object rows with a later `audit_id`.
+- The daemon projector revalidates each outbox proof, delivers idempotently by
+  outbox ID, and appends immutable delivery/retry/quarantine attempt evidence.
+- Rejections and dry runs without a committed outbox remain synchronous audit
+  records.
 
 ### Artifacts
 

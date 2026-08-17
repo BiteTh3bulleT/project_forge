@@ -584,8 +584,18 @@ func TestForgeKLiveCommitCarriesAuthorityIntoAuditAndJournal(t *testing.T) {
 	if err != nil || !result.Success {
 		t.Fatalf("process: err=%v result=%#v", err, result)
 	}
-	if len(auditSink.Records) != 1 {
-		t.Fatalf("audit records=%d", len(auditSink.Records))
+	if len(auditSink.Records) != 0 || result.StateSummary["auditProjection"] != "queued" {
+		t.Fatalf("commit bypassed durable audit projection: records=%d result=%#v", len(auditSink.Records), result)
+	}
+	projector, err := controllane.NewAuditProjector(controllane.AuditProjectorOptions{
+		DB: st.DB, Sink: auditSink, NowMillis: func() int64 { return req.RequestedAt + 1 },
+	})
+	if err != nil {
+		t.Fatalf("new audit projector: %v", err)
+	}
+	projection, err := projector.RunOnce(ctx)
+	if err != nil || projection.Delivered != 1 || len(auditSink.Records) != 1 {
+		t.Fatalf("project committed audit: report=%#v records=%d err=%v", projection, len(auditSink.Records), err)
 	}
 	authority, _ := auditSink.Records[0].SemanticSyscallEnvelope["authorityEffects"].(map[string]any)
 	if authority["forgeKIngressOwned"] != true || authority["controlLaneOwned"] != false || authority["controlLaneCommitAdapter"] != true {

@@ -39,12 +39,32 @@ type AuditSink interface {
 	Record(ctx context.Context, rec SyscallAuditRecord) (string, error)
 }
 
+// AuditOutboxSink is the idempotent delivery boundary used for successful
+// FORGE-K commits. The immutable outbox ID is the sink idempotency key.
+type AuditOutboxSink interface {
+	DeliverOutbox(ctx context.Context, rec AuditOutboxRecord) (string, error)
+}
+
 type InMemoryAuditSink struct {
-	Records []SyscallAuditRecord
+	Records         []SyscallAuditRecord
+	DeliveredOutbox map[string]string
 }
 
 func NewInMemoryAuditSink() *InMemoryAuditSink {
-	return &InMemoryAuditSink{Records: []SyscallAuditRecord{}}
+	return &InMemoryAuditSink{Records: []SyscallAuditRecord{}, DeliveredOutbox: map[string]string{}}
+}
+
+func (s *InMemoryAuditSink) DeliverOutbox(_ context.Context, rec AuditOutboxRecord) (string, error) {
+	if err := VerifyAuditOutboxRecord(rec); err != nil {
+		return "", err
+	}
+	if id := s.DeliveredOutbox[rec.ID]; id != "" {
+		return id, nil
+	}
+	s.Records = append(s.Records, syscallAuditRecordFromOutbox(rec))
+	id := fmt.Sprintf("audit-%d", len(s.Records))
+	s.DeliveredOutbox[rec.ID] = id
+	return id, nil
 }
 
 func (s *InMemoryAuditSink) Record(_ context.Context, rec SyscallAuditRecord) (string, error) {
@@ -106,4 +126,66 @@ func (s *CoreAuditSink) Record(ctx context.Context, rec SyscallAuditRecord) (str
 		return "", nil
 	}
 	return strconv.FormatInt(created.ID, 10), nil
+}
+
+func (s *CoreAuditSink) DeliverOutbox(ctx context.Context, rec AuditOutboxRecord) (string, error) {
+	if s == nil || s.Service == nil {
+		return "", fmt.Errorf("audit service unavailable")
+	}
+	if err := VerifyAuditOutboxRecord(rec); err != nil {
+		return "", err
+	}
+	created, err := s.Service.RecordForgeKOutbox(ctx, rec.ID, audit.CreateRequest{
+		CorrelationID: rec.CorrelationID,
+		Category:      "semantic_syscall",
+		Action:        "delivered",
+		Actor:         rec.Request.Actor.ID,
+		SubjectType:   "semantic_action",
+		SubjectID:     string(rec.Action),
+		Outcome:       "ok",
+		Summary:       fmt.Sprintf("action=%s source=%s FORGE-K outbox=%s", rec.Action, rec.Request.Source, rec.ID),
+		Payload: map[string]any{
+			"forgeKOutboxId":     rec.ID,
+			"requestFingerprint": rec.RequestFingerprint,
+			"workspaceId":        rec.WorkspaceID,
+			"laneId":             rec.LaneID,
+			"requestId":          rec.SyscallID,
+			"traceId":            rec.TraceID,
+			"committedIds":       rec.Result.CommittedObjectIDs,
+			"transactionId":      rec.Receipt.TransactionID,
+			"journalEventId":     rec.Receipt.JournalEventID,
+			"journalEventHash":   rec.Receipt.JournalEventHash,
+			"authorizationProof": rec.AuthorizationProof,
+			"request":            rec.Request,
+			"result":             rec.Result,
+			"receipt":            rec.Receipt,
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	if created == nil {
+		return "", fmt.Errorf("audit service returned no record")
+	}
+	return strconv.FormatInt(created.ID, 10), nil
+}
+
+func syscallAuditRecordFromOutbox(rec AuditOutboxRecord) SyscallAuditRecord {
+	out := SyscallAuditRecord{
+		Timestamp:      rec.CreatedAt,
+		Action:         rec.Action,
+		Actor:          rec.Request.Actor.ID,
+		Source:         rec.Request.Source,
+		WorkspaceID:    rec.WorkspaceID,
+		RequestID:      rec.SyscallID,
+		CorrelationID:  rec.CorrelationID,
+		TraceID:        rec.TraceID,
+		Success:        rec.Success,
+		ApprovalStatus: rec.Result.ApprovalStatus,
+		CommittedIDs:   append([]string{}, rec.Result.CommittedObjectIDs...),
+	}
+	if def, ok := NewStaticActionRegistry().Get(rec.Action); ok {
+		out.SemanticSyscallEnvelope = BuildSemanticSyscallFacade(rec.Request, def).ToAuditFields()
+	}
+	return out
 }

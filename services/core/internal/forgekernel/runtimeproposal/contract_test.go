@@ -342,7 +342,7 @@ func TestDecisionGoldenDigest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "sha256:b279369b5e1670276c45d089b49d8577b5711766cd7d3b055022cd16585dcad8"
+	const want = "sha256:84f7182dbfd8cdc7a0342ef042c7c1ecb7997edd84d01bd28412017aa08f904b"
 	if decision.DecisionDigest != want {
 		t.Fatalf("decision digest = %q, want %q", decision.DecisionDigest, want)
 	}

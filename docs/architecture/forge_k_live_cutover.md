@@ -1,6 +1,6 @@
 # FORGE-K Live Cutover
 
-Status: K20J sole live authority active; physical OptiPlex acceptance pending.
+Status: K20J partial-live authority posture active; physical OptiPlex acceptance pending.
 
 Date: 2026-08-16.
 
@@ -31,8 +31,14 @@ caller
         -> immutable audit intent with typed commit receipt
         -> immutable idempotency proof, when a key is supplied
      -> validate typed commit receipt        [production Kernel]
-     -> DurablePort.RecordResult            [best-effort external audit projection]
+     -> DurablePort.RecordResult            [non-commit terminal audit only]
      -> DurablePort.ObserveResult           [best-effort, no decision authority]
+
+  immutable audit outbox
+     -> restart-safe audit projector
+        -> reverify request/auth/receipt/journal proof
+        -> idempotent external audit insert keyed by outbox ID
+        -> append immutable delivered/retry/quarantined attempt evidence
 
 The temporary DurablePort implementation lives in
 `aios/controllane.Processor`; its combined `Process` method remains only as an
@@ -81,7 +87,7 @@ a second live authority. No fallback or shadow path performs dual commits.
   arguments.
 - Current truth and historical truth remain separately queryable.
 - Replay detects journal divergence and cannot silently repair truth.
-- Operator status reports the active sole authority owner and offline rollback posture.
+- Operator status reports the active partial-live authority posture and offline rollback posture.
 - The complete test suite and native offline OptiPlex acceptance pass.
 - No alternate live kernel mode or production Control Lane combined-orchestrator
   callsite exists.
@@ -99,10 +105,13 @@ proposal-only sources, and obsolete alternate authority modes fail closed. The s
 not imported.
 
 K20D closes the canonical commit-integrity gap described by the K20C report.
-The external audit sink and `audit_id` backfill still occur after the canonical
-transaction and remain best-effort projections, but failures there cannot
-invalidate or erase the immutable audit intent committed in the canonical
-transaction.
+The canonical transaction records the immutable audit intent. The P0 durable
+audit projector subsequently revalidates its exact request, authorization,
+receipt, result, and embedded journal hash before delivery. Delivery is
+idempotent by outbox identity and every success, retry, or proof quarantine is
+append-only evidence. Sink failure cannot invalidate the canonical commit and
+cannot lose the delivery intent. Legacy object-row `audit_id` rewriting is
+retired; trace linkage uses the immutable outbox/delivery/audit identities.
 
 ## K20D commit integrity
 

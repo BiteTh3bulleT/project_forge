@@ -1,7 +1,7 @@
 # FORGE-K Full Implementation Punch List
 
 **Created:** 2026-08-17
-**Objective:** Implement the complete documented production FORGE architecture while preserving FORGE-K as the sole live semantic authority.
+**Objective:** Implement the complete documented production FORGE architecture while preserving FORGE-K as the observed partial-live semantic authority and narrowing remaining gaps through explicit fail-closed controls.
 **Status vocabulary:** `DONE`, `IN PROGRESS`, `NOT STARTED`, `BLOCKED`, `INTENTIONALLY NON-AUTHORITATIVE`.
 
 This is the active execution ledger for the instruction **“implement everything.”**

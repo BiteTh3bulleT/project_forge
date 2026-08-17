@@ -68,10 +68,20 @@ func TestForgeSystemStatusReadOnlySurface(t *testing.T) {
 	}
 
 	kernel := asMap(t, payload["kernel_activation"])
-	if kernel["status"] != "forge_k_sole_live_authority" {
-		t.Fatalf("kernel_activation.status=%v, want forge_k_sole_live_authority", kernel["status"])
+	if kernel["status"] != "partial_live_validation_ready" {
+		t.Fatalf("kernel_activation.status=%v, want partial_live_validation_ready", kernel["status"])
 	}
-	if kernel["live_kernel_authority"] != true ||
+	if kernel["phase"] != "19" ||
+		kernel["policy_version"] != "phase-14f-control-lane-enforcement-v1" {
+		t.Fatalf("kernel_activation phase/policy not updated: %#v", kernel)
+	}
+	if kernel["kernel_authority_exclusive"] != true ||
+		kernel["capability_implemented"] != true ||
+		kernel["projection_healthy"] != false ||
+		kernel["host_ready"] != true ||
+		kernel["recovery_verified"] != false ||
+		kernel["unsafe_test_mode"] != false ||
+		kernel["live_kernel_authority"] != false ||
 		kernel["simulator_authority"] != false ||
 		kernel["live_kernel_ingress_authority"] != true ||
 		kernel["live_durable_orchestration"] != true ||
@@ -88,9 +98,20 @@ func TestForgeSystemStatusReadOnlySurface(t *testing.T) {
 		integrity["typedCommitReceiptValidation"] != true ||
 		integrity["atomicAuditOutboxEvidence"] != true ||
 		integrity["verifiedIdempotentReplay"] != true ||
-		integrity["externalAuditSinkDelivery"] != false ||
+		integrity["externalAuditSinkDelivery"] != true ||
 		integrity["auditIdBackfill"] != false {
 		t.Fatalf("kernel_activation commit integrity posture unexpected: %#v", integrity)
+	}
+
+	var foundPartialLiveWarning bool
+	for _, value := range asStringSlice(payload["warnings"]) {
+		if value == "partial-live" || value == "partial live authority" || strings.Contains(value, "partial-live") {
+			foundPartialLiveWarning = true
+			break
+		}
+	}
+	if !foundPartialLiveWarning {
+		t.Fatalf("system status warnings should include partial-live claim: %#v", payload["warnings"])
 	}
 
 	operatorCockpit := asMap(t, payload["operator_cockpit"])
@@ -337,6 +358,144 @@ func TestForgeSystemSurfacesSourceContainsNoHostMutationCommands(t *testing.T) {
 	}
 }
 
+func TestStatusSurfaceClaimsArePartialAndCoherent(t *testing.T) {
+	dataDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: filepath.Join(dataDir, "workspace")})
+	req := httptest.NewRequest(http.MethodGet, "/forge/system/status", nil)
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	kernel := asMap(t, payload["kernel_activation"])
+	if kernel["status"] != "partial_live_validation_ready" {
+		t.Fatalf("kernel status stale for partial-live posture: %#v", kernel["status"])
+	}
+	if kernel["kernel_authority_exclusive"] != true ||
+		kernel["capability_implemented"] != true {
+		t.Fatalf("kernel API claims partial readiness fields missing: %#v", kernel)
+	}
+
+	runbook, err := os.ReadFile("docs/runbooks/forge_optiplex_7000_test.md")
+	if err != nil {
+		t.Fatalf("read runbook: %v", err)
+	}
+	if !strings.Contains(string(runbook), `.status == "partial_live_validation_ready"`) {
+		t.Fatalf("runbook status assertion still expects old kernel status: %s", runbook[0:256])
+	}
+	if strings.Contains(string(runbook), "forge_k_sole_live_authority") {
+		t.Fatalf("runbook still carries obsolete sole-authority status claim")
+	}
+
+	phase, err := os.ReadFile("docs/architecture/forge_k_live_cutover.md")
+	if err != nil {
+		t.Fatalf("read cutover doc: %v", err)
+	}
+	if strings.Contains(string(phase), "K20J sole live authority active") {
+		t.Fatalf("phase document still claims sole live authority")
+	}
+	phaseText := string(phase)
+	if !strings.Contains(phaseText, "partial-live authority posture active") {
+		t.Fatalf("phase document missing partial-live authority posture: %s", phaseText[:160])
+	}
+	if !strings.Contains(phaseText, "No alternate live kernel mode or production Control Lane combined-orchestrator callsite exists.") {
+		t.Fatalf("phase document no longer reflects alternate-orchestrator lock: %s", phaseText[:160])
+	}
+
+	matrix, err := os.ReadFile("docs/status/implementation_matrix.md")
+	if err != nil {
+		t.Fatalf("read implementation matrix: %v", err)
+	}
+	matrixText := string(matrix)
+	if !strings.Contains(matrixText, "| Semantic mutation Kernel | partial boot-selectable `forgekernel.Kernel`") {
+		t.Fatalf("implementation matrix no longer describes primary kernel authority path: %#v", matrixText[:200])
+	}
+	if !strings.Contains(matrixText, "partial subsystem cutover (K20J + P0)") {
+		t.Fatalf("implementation matrix no longer marks semantic mutation as partial-cutover: %#v", matrixText[:200])
+	}
+	if !strings.Contains(matrixText, "| Context Compiler | production `forgekernel/contextcompile` decision -> bounded Control Lane gather/SQLite port | partial-labeled production kernel authority (K20J)") {
+		t.Fatalf("implementation matrix stale context compiler authority posture: %#v", matrixText[:200])
+	}
+	matrixSubsystemStatus := parseImplementationMatrixSubsystemStatus(matrixText)
+	if len(matrixSubsystemStatus) == 0 {
+		t.Fatalf("could not parse implementation matrix rows from %s", "docs/status/implementation_matrix.md")
+	}
+	authorityEntries, ok := kernel["authority_matrix"].([]any)
+	if !ok {
+		t.Fatalf("kernel_activation.authority_matrix=%#v, want list", kernel["authority_matrix"])
+	}
+	apiSubsystemStatuses := map[string]string{}
+	for _, raw := range authorityEntries {
+		entry, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected authority matrix entry: %#v", raw)
+		}
+		subsystem, ok := entry["subsystem"].(string)
+		if !ok || subsystem == "" {
+			t.Fatalf("authority matrix entry missing subsystem: %#v", entry)
+		}
+		currentStatus, _ := entry["current_status"].(string)
+		if currentStatus != "" {
+			apiSubsystemStatuses[subsystem] = currentStatus
+		}
+	}
+	coherenceChecks := map[string]string{
+		"Kernel":             "Semantic mutation Kernel",
+		"Context Compiler":    "Context Compiler",
+		"Memory Palace":       "Admitted Memory Palace evidence",
+		"Semantic Algebra":    "Semantic Algebra",
+		"Courthouse":          "Governed evidence ingress",
+		"Snapshots":           "Backup restore authority",
+	}
+	for apiSubsystem, matrixSubsystem := range coherenceChecks {
+		matrixStatus, ok := matrixSubsystemStatus[matrixSubsystem]
+		if !ok || matrixStatus == "" {
+			t.Fatalf("implementation matrix lacks %q row for API subsystem %q", matrixSubsystem, apiSubsystem)
+		}
+		apiCurrentStatus := apiSubsystemStatuses[apiSubsystem]
+		if apiCurrentStatus == "STATE_AND_LOOP_COMMIT_LIVE" {
+			if !strings.Contains(strings.ToLower(matrixStatus), "partial") {
+				t.Fatalf("kernel matrix row %q does not encode partial status in implementation matrix: %#v", matrixSubsystem, matrixStatus)
+			}
+		}
+		if apiCurrentStatus == "DETERMINISTIC_DIFF_AUTHORITY_PARTIAL" {
+			if !strings.Contains(strings.ToLower(matrixStatus), "partial") {
+				t.Fatalf("semantic algebra matrix row %q does not encode partial status in implementation matrix: %#v", matrixSubsystem, matrixStatus)
+			}
+		}
+	}
+
+	ui, err := os.ReadFile("apps/desktop/src/pages/SystemPage.tsx")
+	if err != nil {
+		t.Fatalf("read SystemPage: %v", err)
+	}
+	uiText := string(ui)
+	for _, term := range []string{
+		"Kernel authority exclusive",
+		"Capability implemented",
+		"Projection healthy",
+		"Recovery verified",
+		"FORGE-K sole live authority",
+	} {
+		if term == "FORGE-K sole live authority" && strings.Contains(uiText, term) {
+			t.Fatalf("SystemPage still renders obsolete sole-authority status text")
+		}
+		if term != "FORGE-K sole live authority" && !strings.Contains(uiText, term) {
+			t.Fatalf("SystemPage missing partial-authority claim text %q", term)
+		}
+	}
+}
+
 func containsStringValue(values []any, want string) bool {
 	for _, value := range values {
 		if value == want {
@@ -344,6 +503,58 @@ func containsStringValue(values []any, want string) bool {
 		}
 	}
 	return false
+}
+
+func parseImplementationMatrixSubsystemStatus(text string) map[string]string {
+	lines := strings.Split(text, "\n")
+	rows := map[string]string{}
+	inTable := false
+
+	for _, rawLine := range lines {
+		line := strings.TrimSpace(rawLine)
+		if strings.HasPrefix(line, "| Subsystem | Current authoritative path | Status |") {
+			inTable = true
+			continue
+		}
+		if !inTable {
+			continue
+		}
+		if line == "" {
+			break
+		}
+		if !strings.HasPrefix(line, "|") {
+			break
+		}
+		if strings.HasPrefix(line, "|---") {
+			continue
+		}
+		parts := strings.Split(line, "|")
+		if len(parts) < 4 {
+			continue
+		}
+		subsystem := strings.TrimSpace(parts[1])
+		status := strings.TrimSpace(parts[3])
+		if subsystem == "" || subsystem == "Subsystem" || status == "" {
+			continue
+		}
+		rows[subsystem] = status
+	}
+
+	return rows
+}
+
+func asStringSlice(value any) []string {
+	items, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	s := make([]string, 0, len(items))
+	for _, item := range items {
+		if text, ok := item.(string); ok {
+			s = append(s, text)
+		}
+	}
+	return s
 }
 
 func asMap(t *testing.T, value any) map[string]any {

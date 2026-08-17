@@ -807,6 +807,12 @@ export type ForgeSystemStatus = {
     kernel_runtime_state?: string;
     closed_validation_lanes?: number;
     total_validation_lanes?: number;
+    kernel_authority_exclusive?: boolean;
+    capability_implemented?: boolean;
+    projection_healthy?: boolean;
+    recovery_verified?: boolean;
+    host_ready?: boolean;
+    unsafe_test_mode?: boolean;
     validation_actions?: Array<{
       action?: string;
       capability?: string;
@@ -849,7 +855,7 @@ export type ForgeSystemStatus = {
       passed?: boolean;
       reason?: string;
     }>;
-    no_effect?: Record<string, boolean>;
+    no_effect?: Record<string, unknown>;
     simulator_authority?: boolean;
     live_kernel_ingress_authority?: boolean;
     live_durable_orchestration?: boolean;

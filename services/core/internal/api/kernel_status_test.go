@@ -11,6 +11,7 @@ import (
 
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/forgekernel"
+	"forge/projectforge/services/core/internal/store"
 )
 
 type kernelStatusProcessor struct{}
@@ -29,11 +30,28 @@ func liveForgeKStatusSelection() forgekernel.Selection {
 }
 
 func liveForgeKStatusServer() *Server {
-	return &Server{kernelAuthority: liveForgeKStatusSelection(), kernelAuthorizationReady: true}
+	return &Server{kernelAuthority: liveForgeKStatusSelection(), kernelAuthorizationReady: true, auditProjectionReady: true}
+}
+
+func liveForgeKStatusReadinessServer(t *testing.T) *Server {
+	t.Helper()
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = st.Close()
+	})
+	return &Server{
+		st:                      st,
+		kernelAuthority:         liveForgeKStatusSelection(),
+		kernelAuthorizationReady: true,
+		auditProjectionReady:     true,
+	}
 }
 
 func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
-	srv := liveForgeKStatusServer()
+	srv := liveForgeKStatusReadinessServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/forge/kernel/status", nil)
 	rr := httptest.NewRecorder()
 
@@ -46,13 +64,19 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload["status"] != "forge_k_sole_live_authority" {
+	if payload["status"] != "partial_live_validation_ready" {
 		t.Fatalf("unexpected kernel status payload: %#v", payload)
 	}
-	if payload["phase"] != "K20J" || payload["policy_version"] != "forge-k-sole-authority-k20j-v1" {
+	if payload["phase"] != "19" || payload["policy_version"] != "phase-14f-control-lane-enforcement-v1" {
 		t.Fatalf("unexpected kernel cutover identity: %#v", payload)
 	}
-	if payload["live_kernel_authority"] != true ||
+	if payload["kernel_authority_exclusive"] != true ||
+		payload["capability_implemented"] != true ||
+		payload["projection_healthy"] != true ||
+		payload["host_ready"] != true ||
+		payload["recovery_verified"] != true ||
+		payload["unsafe_test_mode"] != false ||
+		payload["live_kernel_authority"] != false ||
 		payload["simulator_authority"] != false ||
 		payload["live_kernel_ingress_authority"] != true ||
 		payload["live_durable_orchestration"] != true ||
@@ -77,8 +101,8 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 			t.Fatalf("kernel status integrity flag %s=%v, want true: %#v", key, integrity[key], integrity)
 		}
 	}
-	if integrity["externalAuditSinkDelivery"] != false || integrity["auditIdBackfill"] != false {
-		t.Fatalf("kernel status overclaimed external audit projection completion: %#v", integrity)
+	if integrity["externalAuditSinkDelivery"] != true || integrity["auditIdBackfill"] != false {
+		t.Fatalf("kernel status audit projection posture is incorrect: %#v", integrity)
 	}
 
 	actions, ok := payload["validation_actions"].([]any)
@@ -99,7 +123,7 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 		if action["live_owner"] != forgekernel.AuthorityOwnerForgeK {
 			t.Fatalf("validation action bypassed boot-selected ingress owner: %#v", action)
 		}
-		if action["live_kernel_authority"] != true {
+		if action["live_kernel_authority"] != false {
 			t.Fatalf("validation action retained pre-cutover authority metadata: %#v", action)
 		}
 	}
@@ -113,21 +137,14 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing activation gates: %#v", payload["gates"])
 	}
-	seenSoleAuthorityGate := false
 	for _, raw := range activationGates {
 		gate, ok := raw.(map[string]any)
 		if !ok {
 			t.Fatalf("unexpected activation gate shape: %#v", raw)
 		}
-		if gate["name"] == "sole_live_kernel_authority" && gate["passed"] == true {
-			seenSoleAuthorityGate = true
-		}
 		if gate["name"] == "live_kernel_authority_disabled" {
-			t.Fatalf("live K20A status retained legacy disabled gate: %#v", gate)
+			t.Fatalf("kernel status still carries legacy disabled gate: %#v", gate)
 		}
-	}
-	if !seenSoleAuthorityGate {
-		t.Fatalf("missing sole live authority gate: %#v", activationGates)
 	}
 
 	if payload["authority_ready_gates"] != float64(7) || payload["authority_blocked_gates"] != float64(0) {
@@ -165,16 +182,16 @@ func TestForgeKernelStatusReadOnlyActivationReadiness(t *testing.T) {
 		if entry["operator_visible"] != true {
 			t.Fatalf("authority matrix entry must be operator visible: %#v", entry)
 		}
-		if subsystem == "Courthouse" && (entry["current_status"] != "FORGE_K_ADMISSION_AND_RULING_LIVE" || entry["live_owner"] != "forge_k.kernel") {
-			t.Fatalf("courthouse live authority not reported, got %#v", entry)
+		if subsystem == "Courthouse" && (entry["current_status"] != "DETERMINISTIC_ADMISSION_RULING_PARTIAL") {
+			t.Fatalf("courthouse partial authority not reported, got %#v", entry)
 		}
-		if subsystem == "Kernel" && (entry["current_status"] != "FORGE_K_SOLE_LIVE_AUTHORITY" || entry["live_owner"] != "forge_k.kernel") {
-			t.Fatalf("sole kernel authority not reported: %#v", entry)
+		if subsystem == "Kernel" && (entry["current_status"] != "STATE_AND_LOOP_COMMIT_LIVE") {
+			t.Fatalf("kernel partial authority not reported: %#v", entry)
 		}
-		if subsystem == "Semantic Algebra" && (entry["current_status"] != "FORGE_K_DETERMINISTIC_DIFF_LIVE" || entry["live_owner"] != "forge_k.kernel") {
+		if subsystem == "Semantic Algebra" && (entry["current_status"] != "DETERMINISTIC_DIFF_AUTHORITY_PARTIAL") {
 			t.Fatalf("semantic diff authority not reported: %#v", entry)
 		}
-		if subsystem == "Context Compiler" && (entry["current_status"] != "FORGE_K_CONTEXT_COMPILER_LIVE" || entry["live_owner"] != "forge_k.kernel") {
+		if subsystem == "Context Compiler" && (entry["current_status"] != "FORGE_K_INGRESS_ONLY_ADAPTER_DECISION") {
 			t.Fatalf("context compiler authority not reported: %#v", entry)
 		}
 		if entry["live_owner"] == "" || entry["target_owner"] == "" || entry["rollback_path"] == "" {
@@ -214,7 +231,13 @@ func TestForgeKernelStatusReportsUnavailableAuthorityFailClosed(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload["status"] != "kernel_authority_unavailable" || payload["live_kernel_ingress_authority"] != false || payload["live_durable_orchestration"] != false || payload["live_authority_migration"] != false {
+	if payload["status"] != "kernel_authority_unavailable" ||
+		payload["kernel_authority_exclusive"] != false ||
+		payload["capability_implemented"] != false ||
+		payload["projection_healthy"] != false ||
+		payload["live_kernel_ingress_authority"] != false ||
+		payload["live_durable_orchestration"] != false ||
+		payload["live_authority_migration"] != false {
 		t.Fatalf("unavailable authority fail-closed posture incorrect: %#v", payload)
 	}
 }

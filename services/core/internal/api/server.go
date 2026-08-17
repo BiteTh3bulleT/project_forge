@@ -94,6 +94,8 @@ type Server struct {
 	lanes                    *lanes.Service
 	permissions              *permissions.Service
 	auditSvc                 *audit.Service
+	auditProjectionReady     bool
+	auditProjectionErr       string
 	backup                   *backup.Service
 	release                  *release.Service
 	modelRuntime             modelRuntimeService
@@ -159,6 +161,7 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	permSvc := permissions.New(st.DB)
 	laneSvc := lanes.New(st.DB)
 	auditSvc := audit.New(st.DB)
+	coreAuditSink := controllane.NewCoreAuditSink(auditSvc)
 	_ = permSvc.EnsureDefaults(bg, cfg.WorkspaceDir)
 	_ = os.MkdirAll(filepath.Join(cfg.WorkspaceDir, "scratch"), 0o755)
 	_ = permSvc.EnsureMkdirChatPolicy(bg, cfg.WorkspaceDir)
@@ -219,7 +222,7 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		Capabilities:                  controllane.NewStaticCapabilityService(),
 		ApprovalGate:                  controllane.NewStaticApprovalGate(),
 		TxRunner:                      controllane.NewSQLiteTransactionRunner(st.DB),
-		AuditSink:                     controllane.NewCoreAuditSink(auditSvc),
+		AuditSink:                     coreAuditSink,
 		RuleEngine:                    ruleEngine,
 		NowMillis:                     domain.NowMillis,
 		ControlLaneValidationObserver: shadowObserver,
@@ -294,6 +297,27 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	startApprovalExpiryReaper(ctx, appSvc)
+	auditProjectionReady := false
+	auditProjectionErr := ""
+	if auditProjector, projectorErr := controllane.NewAuditProjector(controllane.AuditProjectorOptions{
+		DB: st.DB, Sink: coreAuditSink,
+	}); projectorErr != nil {
+		auditProjectionErr = projectorErr.Error()
+		apiLogWarn("FORGE-K audit delivery projector unavailable", apiLogErr(projectorErr))
+	} else {
+		auditProjectionReady = true
+		go auditProjector.Run(ctx, 15*time.Second, func(report controllane.AuditProjectionReport, err error) {
+			if err != nil {
+				apiLogWarn("FORGE-K audit delivery sweep failed", apiLogErr(err))
+				return
+			}
+			if report.Delivered > 0 || report.Quarantined > 0 || report.Retried > 0 {
+				apiLogInfo("FORGE-K audit delivery sweep",
+					slog.Int("delivered", report.Delivered), slog.Int("retried", report.Retried),
+					slog.Int("quarantined", report.Quarantined), slog.Int("deferred", report.Deferred))
+			}
+		})
+	}
 	if wm != nil {
 		wm.Run(ctx)
 		_ = wm.SyncSources(context.Background(), listSourcePaths(st.DB))
@@ -337,6 +361,8 @@ func NewServer(st *store.Store, cfg config.Config) *Server {
 		lanes:                    laneSvc,
 		permissions:              permSvc,
 		auditSvc:                 auditSvc,
+		auditProjectionReady:     auditProjectionReady,
+		auditProjectionErr:       auditProjectionErr,
 		backup:                   backupSvc,
 		release:                  releaseSvc,
 		modelRuntime:             modelRuntimeSvc,

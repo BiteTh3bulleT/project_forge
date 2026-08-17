@@ -124,16 +124,22 @@ describe("SystemPage", () => {
         },
       },
       kernel_activation: {
-        phase: "K20J",
-        status: "forge_k_sole_live_authority",
+        phase: "19",
+        status: "partial_live_validation_ready",
         summary:
-          "FORGE-K is the sole live semantic and model-visibility authority. Control Lane is a bounded validation/apply/SQLite durable port and cannot independently orchestrate or commit production requests.",
-        mode: "live_authority",
-        live_owner: "forge_k.kernel",
-        policy_version: "forge-k-sole-authority-k20j-v1",
-        kernel_runtime_state: "forge_k_sole_authority_control_lane_durable_port",
+          "FORGE-K currently runs as partial-live enforcement metadata; Control Lane owns validation/apply/SQLite durable orchestration while semantic ingress remains in the production boundary.",
+        mode: "partial_live_enforcement",
+        live_owner: "services/core/internal/aios/controllane",
+        policy_version: "phase-14f-control-lane-enforcement-v1",
+        kernel_runtime_state: "partial_live_validation",
         closed_validation_lanes: 7,
         total_validation_lanes: 7,
+        kernel_authority_exclusive: true,
+        capability_implemented: true,
+        projection_healthy: true,
+        host_ready: true,
+        recovery_verified: true,
+        unsafe_test_mode: false,
         validation_actions: [
           {
             action: "VALIDATE_KV_IDENTITY",
@@ -143,9 +149,9 @@ describe("SystemPage", () => {
             approval_possible: false,
             supports_dry_run: true,
             closed: true,
-            live_owner: "forge_k.kernel",
+            live_owner: "services/core/internal/aios/controllane",
             simulator_authority: false,
-            live_kernel_authority: true,
+            live_kernel_authority: false,
           },
           {
             action: "VALIDATE_REF_SHAPE",
@@ -155,9 +161,9 @@ describe("SystemPage", () => {
             approval_possible: false,
             supports_dry_run: true,
             closed: true,
-            live_owner: "forge_k.kernel",
+            live_owner: "services/core/internal/aios/controllane",
             simulator_authority: false,
-            live_kernel_authority: true,
+            live_kernel_authority: false,
           },
           {
             action: "VALIDATE_SOURCE_OBJECT_AUTHORITY",
@@ -167,9 +173,9 @@ describe("SystemPage", () => {
             approval_possible: false,
             supports_dry_run: true,
             closed: true,
-            live_owner: "forge_k.kernel",
+            live_owner: "services/core/internal/aios/controllane",
             simulator_authority: false,
-            live_kernel_authority: true,
+            live_kernel_authority: false,
           },
           {
             action: "VALIDATE_CONTEXT_ATTRIBUTION",
@@ -179,9 +185,9 @@ describe("SystemPage", () => {
             approval_possible: false,
             supports_dry_run: true,
             closed: true,
-            live_owner: "forge_k.kernel",
+            live_owner: "services/core/internal/aios/controllane",
             simulator_authority: false,
-            live_kernel_authority: true,
+            live_kernel_authority: false,
           },
         ],
         gates: [
@@ -197,29 +203,29 @@ describe("SystemPage", () => {
           {
             name: "control_lane_validation_enforcement",
             status: "ready",
-            live_owner: "forge_k.kernel",
+            live_owner: "services/core/internal/aios/controllane",
             required_for_live_authority: true,
             mutation_authority: false,
             reason: "validation-only Control Lane enforcement is connected",
-            next_step: "preserve the sole-authority invariant while extending capabilities",
+            next_step: "preserve partial-authority invariants while extending capabilities",
           },
           {
             name: "source_object_authority_lookup",
             status: "ready",
-            live_owner: "forge_k.kernel",
+            live_owner: "services/core/internal/aios/controllane",
             required_for_live_authority: true,
             mutation_authority: false,
             reason: "source object authority lookup is connected through the live Control Lane read store and fails closed",
-            next_step: "preserve the sole-authority invariant while extending capabilities",
+            next_step: "preserve partial-authority invariants while extending capabilities",
           },
         ],
         authority_matrix: [
           {
             subsystem: "Courthouse",
-            current_status: "FORGE_K_ADMISSION_AND_RULING_LIVE",
-            live_owner: "forge_k.kernel",
-            target_owner: "forge_k.kernel",
-            feature_flag: "production FORGE-K is the sole boot-constructed authority",
+            current_status: "DETERMINISTIC_ADMISSION_RULING_PARTIAL",
+            live_owner: "services/core/internal/aios/controllane",
+            target_owner: "services/core/internal/forgekernel/court",
+            feature_flag: "partial-live Court authority through production ingress and durable adapter",
             rollback_path: "stop the daemon and use the verified offline store/generation rollback procedure",
             tests_required: ["admission and ruling tests"],
             tests_passing: ["immutable ruling and appeal history tests"],
@@ -228,10 +234,10 @@ describe("SystemPage", () => {
           },
           {
             subsystem: "Context Compiler",
-            current_status: "FORGE_K_CONTEXT_COMPILER_LIVE",
-            live_owner: "forge_k.kernel",
-            target_owner: "forge_k.kernel",
-            feature_flag: "production FORGE-K is the sole boot-constructed authority",
+            current_status: "FORGE_K_INGRESS_ONLY_ADAPTER_DECISION",
+            live_owner: "services/core/internal/aios/controllane",
+            target_owner: "services/core/internal/forgekernel/contextcompile",
+            feature_flag: "partial-live ingress-only context compiler boundary",
             rollback_path: "stop the daemon and use verified offline rollback",
             tests_required: ["context attribution validation tests"],
             tests_passing: ["context attribution validation tests"],
@@ -266,7 +272,7 @@ describe("SystemPage", () => {
         simulator_authority: false,
         live_kernel_ingress_authority: true,
         live_durable_orchestration: true,
-        live_kernel_authority: true,
+        live_kernel_authority: false,
         live_authority_migration: false,
         shadow_authoritative: false,
         mutation_controls_available: false,
@@ -536,24 +542,30 @@ describe("SystemPage", () => {
     expect(screen.getByText("audit/journal trace APIs")).toBeTruthy();
     expect(screen.getByText("Lymphatic reports")).toBeTruthy();
     expect(screen.getByText("autonomy maintenance dry-run reports")).toBeTruthy();
-    expect(screen.getAllByText("forge_k_sole_live_authority").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("partial_live_validation_ready").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("7/7")).toBeTruthy();
     expect(screen.getByText("Simulator authority disabled")).toBeTruthy();
     expect(screen.getByText("FORGE-K syscall ingress live")).toBeTruthy();
     expect(screen.getByText("FORGE-K durable orchestration live")).toBeTruthy();
-    expect(screen.getByText("FORGE-K sole live authority")).toBeTruthy();
+    expect(screen.getByText("FORGE-K exclusive kernel authority")).toBeTruthy();
+    expect(screen.getByText("Kernel authority exclusive")).toBeTruthy();
+    expect(screen.getByText("Capability implemented")).toBeTruthy();
+    expect(screen.getByText("Projection healthy")).toBeTruthy();
+    expect(screen.getByText("Recovery verified")).toBeTruthy();
+    expect(screen.getByText("Host ready")).toBeTruthy();
+    expect(screen.getByText("Unsafe test mode")).toBeTruthy();
     expect(screen.getByText("Alternate live authority absent")).toBeTruthy();
     expect(screen.getByText("Mutation controls absent")).toBeTruthy();
     expect(screen.getByText("Kernel Authority Gates")).toBeTruthy();
     expect(screen.getByText("Ready: 7")).toBeTruthy();
     expect(screen.getByText("Blocked: 0")).toBeTruthy();
     expect(screen.getByText("source_object_authority_lookup")).toBeTruthy();
-    expect(screen.getAllByText("preserve the sole-authority invariant while extending capabilities").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("preserve partial-authority invariants while extending capabilities").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("FORGE-K Subsystem Cockpit")).toBeTruthy();
     expect(screen.getByText("Courthouse")).toBeTruthy();
-    expect(screen.getByText("FORGE_K_ADMISSION_AND_RULING_LIVE")).toBeTruthy();
+    expect(screen.getByText("DETERMINISTIC_ADMISSION_RULING_PARTIAL")).toBeTruthy();
     expect(screen.getByText("Context Compiler")).toBeTruthy();
-    expect(screen.getByText("FORGE_K_CONTEXT_COMPILER_LIVE")).toBeTruthy();
+    expect(screen.getByText("FORGE_K_INGRESS_ONLY_ADAPTER_DECISION")).toBeTruthy();
     expect(screen.getByText("Lymphatic Lane")).toBeTruthy();
     expect(screen.getByText("PROPOSAL_ONLY_NO_MUTATION_AUTHORITY")).toBeTruthy();
     expect(screen.getByText("VALIDATE_KV_IDENTITY")).toBeTruthy();

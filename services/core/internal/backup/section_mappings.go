@@ -91,6 +91,7 @@ var extractQueries = map[string]string{
 }
 
 func init() {
+	extractQueries["forge_k_audit_delivery_attempts"] = "SELECT * FROM forge_k_audit_delivery_attempts ORDER BY created_at ASC, attempt_number ASC, id ASC"
 	extractQueries["forge_k_memory_evidence"] = "SELECT * FROM forge_k_memory_evidence ORDER BY id ASC"
 	extractQueries["forge_k_memory_evidence_supersessions"] = "SELECT * FROM forge_k_memory_evidence_supersessions ORDER BY created_at ASC, id ASC"
 	extractQueries["forge_k_semantic_diff_operations"] = "SELECT * FROM forge_k_semantic_diff_operations ORDER BY created_at ASC, id ASC"

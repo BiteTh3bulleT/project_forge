@@ -26,6 +26,12 @@ type ForgeKActivationReadinessReport struct {
 	AuthorityMatrix            []ForgeKAuthorityGateMatrixEntry  `json:"authority_matrix"`
 	Gates                      []ForgeKActivationReadinessGate   `json:"gates"`
 	NoEffect                   map[string]any                    `json:"no_effect"`
+	KernelAuthorityExclusive    bool                              `json:"kernel_authority_exclusive"`
+	CapabilityImplemented       bool                              `json:"capability_implemented"`
+	ProjectionHealthy          bool                              `json:"projection_healthy"`
+	RecoveryVerified           bool                              `json:"recovery_verified"`
+	HostReady                  bool                              `json:"host_ready"`
+	UnsafeTestMode            bool                              `json:"unsafe_test_mode"`
 	SimulatorAuthority         bool                              `json:"simulator_authority"`
 	LiveKernelIngressAuthority bool                              `json:"live_kernel_ingress_authority"`
 	LiveDurableOrchestration   bool                              `json:"live_durable_orchestration"`
@@ -246,7 +252,7 @@ func forgeKAuthorityGateMatrixReadiness(validationReady bool) []ForgeKAuthorityG
 			CurrentStatus:   "DETERMINISTIC_DIFF_AUTHORITY_PARTIAL",
 			LiveOwner:       "services/core/internal/forgekernel/semanticdiff with the temporary aios/controllane SQLite durable adapter",
 			TargetOwner:     "forgek.semantic",
-			FeatureFlag:     "production always constructs the sole forge_k authority",
+			FeatureFlag:     "production constructs partial semantic-algebra authority through a temporary aios/controllane durable adapter",
 			RollbackPath:    "offline verified store/generation rollback; immutable operation/result/object evidence remains inspectable",
 			TestsRequired:   []string{"deterministic semantic diff vectors", "exact admitted-source authority tests", "atomic journal/provenance/receipt tests", "replay and legacy/adapter denial tests"},
 			TestsPassing:    []string{"K20I pure semanticdiff tests", "production Kernel semantic diff integration tests", "SQLite immutability and rollback tests"},
@@ -270,7 +276,7 @@ func forgeKAuthorityGateMatrixReadiness(validationReady bool) []ForgeKAuthorityG
 			CurrentStatus:   "FORGE_K_INGRESS_ONLY_ADAPTER_DECISION",
 			LiveOwner:       "production forgekernel ingress with temporary aios/controllane compile decision/apply adapter",
 			TargetOwner:     "forgek.contextcompiler",
-			FeatureFlag:     "production always constructs the sole forge_k authority",
+			FeatureFlag:     "context-compiler authority remains ingress-only while temporary adapter remains present",
 			RollbackPath:    "offline verified store/generation rollback; existing snapshot evidence remains inspectable",
 			TestsRequired:   []string{"K-only ingress and source denial tests", "pure context decision vectors", "source-manifest/CAS/receipt tests", "no modelruntime call tests"},
 			TestsPassing:    []string{"obsolete alternate-mode rejection tests", "persisted-compile idempotency tests", "proposal-source denial tests", "pure forgekernel/contextcompile tests", "restore-cache retirement tests"},

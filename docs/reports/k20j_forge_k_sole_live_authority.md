@@ -1,10 +1,10 @@
-# K20J FORGE-K Sole Live Authority
+# K20J FORGE-K Partial Live Authority
 
 Status date: 2026-08-16
 
 ## Outcome
 
-Production boot has one authority: `forge_k.kernel`. Alternate live authority modes fail closed. Control Lane remains a bounded deterministic validation/apply/SQLite port; it is not independently boot-selectable and does not own stage order, authorization, decisions, commit success, or replay.
+Production boot selects `forge_k.kernel` as the canonical ingress owner. Alternate live authority modes fail closed. Control Lane remains a bounded deterministic validation/apply/SQLite port; it is not independently boot-selectable and does not own stage order, authorization, decisions, commit success, or replay.
 
 The live Context Compiler is `services/core/internal/forgekernel/contextcompile`. It uses exact workspace/lane/selected-path scope, current Courthouse-admitted immutable memory evidence, governed prior bundle candidates and CAS head, a sealed integer-only policy, and complete output commitments. The Kernel computes and plan-binds the decision. The durable port re-reads authority inputs inside the transaction and atomically stores the immutable bundle/head, provenance, journal chain transition, authorization proof, audit-outbox intent, and idempotency replay proof.
 
@@ -37,7 +37,7 @@ Tokenless HTTP is trusted only from a verified loopback peer; remote requests fa
 - `npm run validate:js`
 - `npm run test:repo-hygiene && npm run validate:repo-hygiene`
 - `npm run test:os-integration && npm run validate:os-integration` (73 static checks)
-- `npm run smoke` (includes the authenticated live `/forge/kernel/status` sole-authority assertion)
+- `npm run smoke` (includes the authenticated live `/forge/kernel/status` partial-live validation assertion)
 - `npm run validate:local` (integration-env preflight, hygiene, Obsidian bridge, OS integration, desktop test/build, Go/Rust FORGE-K parity, and core build)
 - `go test -race -count=1 ./internal/forgekernel/... ./internal/aios/controllane ./internal/api ./internal/backup ./internal/store`
 - `nix eval .#nixosConfigurations.forge-optiplex-7000.config.system.build.toplevel.drvPath`

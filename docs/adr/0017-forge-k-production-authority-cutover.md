@@ -1,6 +1,6 @@
 # ADR 0017 - FORGE-K Production Authority Cutover
 
-Status: Accepted; Stages K20A-K20G active
+Status: Accepted; K20J sole-authority cutover active; P0 completion in progress
 
 Date: 2026-08-14
 
@@ -68,6 +68,14 @@ FORGE-K moves to production one authority boundary at a time:
    exactly one eligible tool before any model proposal call. If it cannot do so,
    no tool schema is exposed. A model may only format bounded arguments for the
    schema FORGE selected; the gateway remains execution authority.
+14. K20J removes the live authority selector. Production assembly constructs
+   exactly one `forgekernel.Kernel`; rollback is daemon-stopped verified
+   store/generation recovery rather than a second live orchestrator.
+15. P0 replaces synchronous best-effort audit delivery for successful commits
+   with a restart-safe projector. The projector revalidates immutable outbox
+   proof, uses the outbox ID as the sink idempotency key, and appends immutable
+   delivery/retry/quarantine attempts. Legacy object-row `audit_id` backfill is
+   retired.
 
 ## Cutover order
 
@@ -77,7 +85,8 @@ FORGE-K moves to production one authority boundary at a time:
 4. Commit integrity: sealed prepare plans, typed receipts, atomic audit intent
    and idempotency proof, persisted journal hash chain, and replay divergence.
    Closed K20D for the canonical SQLite transaction and production Kernel
-   receipt validation. External audit delivery remains a projection.
+   receipt validation. P0 makes its external audit projection durable,
+   idempotent, restart-safe, and independently observable.
 5. Authenticated principal, registry, capability, approval, and replay proof.
    Closed K20E for production semantic syscalls.
 6. Retire unsafe live restore and mutable restore-outcome feedback. Closed
@@ -93,6 +102,8 @@ FORGE-K moves to production one authority boundary at a time:
 11. Runtime driver proposal boundary and response composition gate.
 12. Snapshots, KV acceleration, and Lymphatic proposal lanes.
 13. Remove `legacy_v1`, compatibility facades, and stale authority claims.
+    Closed for daemon assembly in K20J; the combined facade remains test-only
+    while the temporary durable-port implementation is extracted.
 
 Each step requires deterministic parity tests, malformed-input failure tests,
 capability/approval tests, journal and audit evidence, a tested rollback path,
@@ -105,8 +116,9 @@ operator-visible status, and documentation updates.
   full-kernel flag remains false.
 - Existing durable data remains in the current SQLite schema during migration.
 - The canonical immutable audit-outbox intent is atomic with the mutation and
-  journal proof. External audit sink delivery and `audit_id` backfill remain
-  best-effort projections and cannot invalidate that canonical evidence.
+  journal proof. External delivery is idempotent and restart-safe with
+  append-only attempt evidence. Mutable semantic-row `audit_id` backfill is
+  retired; projection failure cannot invalidate canonical evidence.
 - The Control Lane can be reduced behind ports rather than duplicated or
   bypassed.
 - Simulator service imports remain forbidden in live paths.
