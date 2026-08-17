@@ -25,7 +25,8 @@ stdenv.mkDerivation {
 
     grep -q 'default = "''${config.forge.storage.root}/workspaces/default";' "$module"
     grep -q 'FORGE_WORKSPACE_DIR = toString cfg.workspaceDir;' "$module"
-    grep -q '"workspaces/default"' "$storage"
+    grep -q 'workspaceMode = lib.mkOption' "$storage"
+    grep -q '/workspaces/default ''${cfg.workspaceMode}' "$storage"
 
     mkdir -p "$out"
     echo "ok" > "$out/result"

@@ -16,6 +16,8 @@ let
   };
   forgeOperatorSession = pkgs.callPackage ../../packages/forge-operator-session.nix {
     forge-shell-session = forgeShellSession;
+    polkitAgent = pkgs.polkit_gnome;
+    notificationDaemon = pkgs.mako;
   };
   forgeOperatorToolbelt = pkgs.callPackage ../../packages/forge-operator-toolbelt.nix {
     inherit pkgs;
@@ -25,6 +27,114 @@ let
     forge-shell-session = forgeShellSession;
   };
   notoEmoji = pkgs.noto-fonts-color-emoji or pkgs.noto-fonts-emoji;
+  forgeIDE = pkgs.vscode-with-extensions.override {
+    vscode = pkgs.vscodium;
+    vscodeExtensions = with pkgs.vscode-extensions; [
+      golang.go
+      rust-lang.rust-analyzer
+      ms-python.python
+      redhat.vscode-yaml
+      tamasfe.even-better-toml
+      jnoortheen.nix-ide
+      esbenp.prettier-vscode
+    ];
+  };
+  workstationDesktopPackages = with pkgs; [
+    libreoffice
+    hunspell
+    hunspellDicts.en_US
+    thunderbird
+    evince
+    xournalpp
+    gimp
+    inkscape
+    mpv
+    imv
+    grim
+    slurp
+    wl-clipboard
+    keepassxc
+    qalculate-gtk
+    simple-scan
+    pavucontrol
+    networkmanagerapplet
+    xdg-user-dirs
+    mako
+    polkit_gnome
+  ];
+  workstationDevelopmentPackages = with pkgs; [
+    forgeIDE
+    go
+    gopls
+    gotools
+    delve
+    nodejs_20
+    typescript
+    typescript-language-server
+    prettier
+    eslint
+    rustc
+    cargo
+    rustfmt
+    clippy
+    rust-analyzer
+    cargo-tauri
+    cargo-watch
+    cargo-edit
+    python3
+    uv
+    ruff
+    black
+    gcc
+    clang
+    gdb
+    lldb
+    cmake
+    ninja
+    gnumake
+    pkg-config
+    shellcheck
+    shfmt
+    nil
+    nixfmt
+    just
+    hyperfine
+    sqlite
+    postgresql
+    redis
+    gh
+    git-lfs
+    fzf
+    httpie
+    openssl
+    gnupg
+    pandoc
+    glib.dev
+    gtk3.dev
+    webkitgtk_4_1.dev
+    libsoup_3.dev
+    openssl.dev
+    cairo.dev
+    pango.dev
+    gdk-pixbuf.dev
+    librsvg.dev
+  ];
+  workstationOperationsPackages = with pkgs; [
+    podman
+    buildah
+    skopeo
+    restic
+    borgbackup
+    rsync
+    p7zip
+    unzip
+    zip
+    lm_sensors
+    nvme-cli
+    smartmontools
+    intel-gpu-tools
+    powertop
+  ];
 in
 {
   imports = [
@@ -144,6 +254,7 @@ in
     storageRoot = "/forge";
     safeMode = true;
   };
+  forge.storage.workspaceMode = "2770";
   services.forge-core = {
     bindHost = "127.0.0.1";
     enableModelRuntime = true;
@@ -183,6 +294,23 @@ in
     dbus.enable = true;
     displayManager.autoLogin.enable = lib.mkForce false;
     fstrim.enable = true;
+    fwupd.enable = true;
+    gvfs.enable = true;
+    udisks2.enable = true;
+    tumbler.enable = true;
+    thermald.enable = true;
+    power-profiles-daemon.enable = true;
+    printing = {
+      enable = true;
+      drivers = [ pkgs.gutenprint ];
+    };
+    pipewire = {
+      enable = true;
+      alsa.enable = true;
+      alsa.support32Bit = true;
+      pulse.enable = true;
+    };
+    gnome.gnome-keyring.enable = true;
     getty.autologinUser = lib.mkForce null;
     greetd = {
       enable = true;
@@ -218,18 +346,43 @@ in
 
   security = {
     polkit.enable = true;
+    rtkit.enable = true;
     sudo.wheelNeedsPassword = true;
+  };
+  hardware.sane = {
+    enable = true;
+    extraBackends = [ pkgs.sane-airscan ];
   };
   systemd.tmpfiles.rules = [
     "d /forge/models/ollama 0750 ollama forge -"
     "d /forge/models/ollama/models 0750 ollama forge -"
+    "d /forge/workspaces/default/Projects 2770 operator forge -"
   ];
-  programs.dconf.enable = true;
+  programs = {
+    bash.completion.enable = true;
+    dconf.enable = true;
+    direnv = {
+      enable = true;
+      nix-direnv.enable = true;
+    };
+    gnupg.agent.enable = true;
+    nix-ld.enable = true;
+  };
+
+  virtualisation.podman = {
+    enable = true;
+    dockerCompat = true;
+    defaultNetwork.settings.dns_enabled = false;
+  };
 
   fonts.packages = [
     pkgs.noto-fonts
     notoEmoji
     pkgs.dejavu_fonts
+    pkgs.liberation_ttf
+    pkgs.carlito
+    pkgs.caladea
+    pkgs.jetbrains-mono
   ];
 
   xdg.portal = {
@@ -247,6 +400,20 @@ in
       "video"
       "render"
       "forge"
+      "lp"
+      "scanner"
+    ];
+    subUidRanges = [
+      {
+        startUid = 100000;
+        count = 65536;
+      }
+    ];
+    subGidRanges = [
+      {
+        startGid = 100000;
+        count = 65536;
+      }
     ];
     openssh.authorizedKeys.keys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJQ8NMfyHtDXYQzKk3hMECIVOKlWRyoLJBismJ6eYQ8v rshort@localhost.localdomain"
@@ -273,7 +440,10 @@ in
     pkgs.xdg-desktop-portal
     pkgs.xdg-desktop-portal-gtk
     pkgs.vim
-  ];
+  ]
+  ++ workstationDesktopPackages
+  ++ workstationDevelopmentPackages
+  ++ workstationOperationsPackages;
 
   environment.sessionVariables = {
     FORGE_SHELL_SESSION_ENABLED = "true";
@@ -290,7 +460,10 @@ in
     FORGE_RENDER_PROFILE = "vm-safe";
     VITE_FORGE_RENDER_PROFILE = "vm-safe";
     FORGE_CORE_URL = "http://127.0.0.1:18492";
+    FORGE_WORKSPACE_DIR = "/forge/workspaces/default";
     VITE_FORGE_API_URL = "http://127.0.0.1:18492";
+    EDITOR = "hx";
+    VISUAL = "codium";
     XDG_SESSION_TYPE = "wayland";
     GDK_BACKEND = "wayland,x11";
     WEBKIT_DISABLE_DMABUF_RENDERER = "1";
@@ -348,12 +521,25 @@ in
       message = "FORGE OptiPlex offline target must enforce its nftables egress allowlist.";
     }
     {
-      assertion = lib.hasInfix ''policy drop;'' config.networking.nftables.ruleset;
+      assertion = lib.hasInfix "policy drop;" config.networking.nftables.ruleset;
       message = "FORGE OptiPlex nftables policy must fail closed.";
     }
     {
       assertion = config.services.forge-core.enableModelRuntime == true;
       message = "FORGE OptiPlex test target must route the selected local model through governed modelruntime.";
+    }
+    {
+      assertion = config.forge.storage.workspaceMode == "2770";
+      message = "FORGE OptiPlex development workspace must remain setgid and group-writable for operator and forge-core collaboration.";
+    }
+    {
+      assertion =
+        config.services.pipewire.enable && config.services.printing.enable && config.hardware.sane.enable;
+      message = "FORGE OptiPlex workstation must retain audio, printing, and scanning support.";
+    }
+    {
+      assertion = config.virtualisation.podman.enable && config.virtualisation.podman.dockerCompat;
+      message = "FORGE OptiPlex workstation must retain rootless container tooling without a daemon.";
     }
     {
       assertion = !(config.systemd.services ? ollama-model-loader);

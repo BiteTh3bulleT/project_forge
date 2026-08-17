@@ -16,8 +16,6 @@ let
     "journal"
     "host"
     "config"
-    "workspaces"
-    "workspaces/default"
   ];
 in
 {
@@ -41,6 +39,12 @@ in
       default = "forge";
       description = "Group that owns FORGE storage directories.";
     };
+
+    workspaceMode = lib.mkOption {
+      type = lib.types.strMatching "[0-7]{4}";
+      default = "0750";
+      description = "Mode for the shared FORGE workspace directories; use a setgid group-write mode only on explicit developer workstations.";
+    };
   };
 
   config = lib.mkIf cfg.enable {
@@ -54,8 +58,13 @@ in
       description = "FORGE service account";
     };
 
-    systemd.tmpfiles.rules =
-      [ "d ${cfg.root} 0750 ${cfg.user} ${cfg.group} -" ]
-      ++ map (name: "d ${cfg.root}/${name} 0750 ${cfg.user} ${cfg.group} -") subdirs;
+    systemd.tmpfiles.rules = [
+      "d ${cfg.root} 0750 ${cfg.user} ${cfg.group} -"
+    ]
+    ++ map (name: "d ${cfg.root}/${name} 0750 ${cfg.user} ${cfg.group} -") subdirs
+    ++ [
+      "d ${cfg.root}/workspaces ${cfg.workspaceMode} ${cfg.user} ${cfg.group} -"
+      "d ${cfg.root}/workspaces/default ${cfg.workspaceMode} ${cfg.user} ${cfg.group} -"
+    ];
   };
 }

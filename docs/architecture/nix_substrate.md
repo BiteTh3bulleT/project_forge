@@ -163,6 +163,15 @@ path, or shell mutation control. Nix mutation proposals remain
 DESIGN_ONLY until a later phase adds durable records, build proof,
 VM smoke proof, rollback proof, approval proof, and a governed adapter.
 
+The physical `forge-optiplex-7000` target is now a separately declared,
+operator-applied development workstation profile. Its Nix closure includes the
+FORGE repository toolchains, VSCodium with pinned extensions, office and media
+applications, device integration, rootless containers, and local backup
+clients. This is host provisioning, not a new FORGE mutation path: no daemon
+route can rebuild the host, install packages, start containers, or alter the
+offline firewall. The exact inventory and low-memory operating envelope are
+recorded in `docs/runbooks/forge_optiplex_7000_test.md`.
+
 They do not migrate live authority, fork Linux, execute tools, add
 routes, mutate modelruntime behavior, or make Nix mandatory.
 

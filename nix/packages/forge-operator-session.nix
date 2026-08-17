@@ -4,11 +4,30 @@
   writeShellApplication,
   forge-shell-session,
   labwc ? null,
+  polkitAgent ? null,
+  notificationDaemon ? null,
 }:
 
 let
   defaultCompositor = if labwc != null then "${labwc}/bin/labwc" else "";
   shellSession = "${forge-shell-session}/bin/forge-shell-session";
+  startup = writeShellApplication {
+    name = "forge-operator-startup";
+    text = ''
+      set -euo pipefail
+      ${lib.optionalString (polkitAgent != null) ''
+        if [ -x "${polkitAgent}/libexec/polkit-gnome-authentication-agent-1" ]; then
+          "${polkitAgent}/libexec/polkit-gnome-authentication-agent-1" &
+        fi
+      ''}
+      ${lib.optionalString (notificationDaemon != null) ''
+        if [ -x "${notificationDaemon}/bin/mako" ]; then
+          "${notificationDaemon}/bin/mako" &
+        fi
+      ''}
+      exec "${shellSession}" "$@"
+    '';
+  };
   launcher = writeShellApplication {
     name = "forge-operator-session";
 
@@ -20,6 +39,7 @@ let
           export FORGE_CORE_URL="''${FORGE_CORE_URL:-http://127.0.0.1:18492}"
           export VITE_FORGE_API_URL="''${VITE_FORGE_API_URL:-$FORGE_CORE_URL}"
           export FORGE_DATA_DIR="''${FORGE_DATA_DIR:-/forge/data}"
+          export FORGE_WORKSPACE_DIR="''${FORGE_WORKSPACE_DIR:-/forge/workspaces/default}"
           export FORGE_API_TOKEN_FILE="''${FORGE_API_TOKEN_FILE:-$FORGE_DATA_DIR/auth/api_token}"
           export FORGE_SHELL_SAFE_MODE=true
           export FORGE_SHELL_FULLSCREEN=false
@@ -38,7 +58,7 @@ let
           unset FORGE_REPO_ROOT
 
           compositor="${defaultCompositor}"
-          shell_session="${shellSession}"
+          session_startup="${startup}/bin/forge-operator-startup"
           labwc_config_dir="''${XDG_RUNTIME_DIR:-/tmp}/forge-operator-labwc"
           labwc_config_file="$labwc_config_dir/rc.xml"
 
@@ -52,8 +72,8 @@ let
             exit 1
           fi
 
-          if [ ! -x "$shell_session" ]; then
-            echo "FORGE shell session wrapper is not executable: $shell_session" >&2
+          if [ ! -x "$session_startup" ]; then
+            echo "FORGE operator startup wrapper is not executable: $session_startup" >&2
             exit 1
           fi
 
@@ -97,7 +117,7 @@ let
       </labwc_config>
       EOF
 
-          exec "$compositor" --config "$labwc_config_file" --startup "$shell_session" "$@"
+          exec "$compositor" --config "$labwc_config_file" --startup "$session_startup" "$@"
     '';
 
     meta = with lib; {
@@ -110,7 +130,10 @@ let
 in
 symlinkJoin {
   name = "forge-operator-session";
-  paths = [ launcher ];
+  paths = [
+    launcher
+    startup
+  ];
 
   postBuild = ''
         mkdir -p "$out/share/wayland-sessions"

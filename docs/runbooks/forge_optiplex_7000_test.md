@@ -20,6 +20,17 @@ The target intentionally uses:
   those windows through its launcher and taskbar;
 - the Nix-built Forge operator toolbelt, including Foot, PCManFM, Mousepad,
   Firefox, Micro, Helix, SQLiteBrowser, and bounded diagnostic wrappers;
+- a complete offline development workstation closure: LibreOffice, Thunderbird,
+  PDF/annotation, graphics, media, password-vault, printing/scanning and audio
+  applications; VSCodium with pinned Go/Rust/Python/Nix/YAML/TOML/Prettier
+  extensions; and the Go, Node/TypeScript, Rust, Python, Nix, shell, C/C++ and
+  Tauri toolchains used by this repository;
+- a setgid group-writable `/forge/workspaces/default` development tree shared
+  by the local `operator` and the bounded `forge-core` service, with
+  `/forge/workspaces/default/Projects` created at boot;
+- rootless Podman/Buildah/Skopeo, Git LFS, database clients, archive tools,
+  hardware diagnostics, and Restic/Borg/rsync for operator-directed local
+  development and backup work;
 - `WEBKIT_DISABLE_DMABUF_RENDERER=1` for the Forge shell session to avoid the
   unstable WebKit DMA-BUF renderer path on the physical Intel test target;
 - the single-application Cage session installed only as a fullscreen rollback
@@ -61,6 +72,39 @@ chains default to drop. Output is allowed only over loopback or through
 connections, ICMP echo, and SSH from that direct subnet. A newly created
 NetworkManager profile therefore cannot silently add internet egress.
 
+## Full development workstation contract
+
+The OptiPlex profile is self-contained after its Nix closure and project source
+have been staged. It does not depend on a package marketplace, extension
+download, browser install script, Flatpak, or language-version manager.
+
+The installed workstation covers:
+
+| Area | Included surface |
+| --- | --- |
+| Office and documents | LibreOffice, Hunspell US English, Thunderbird, Evince, Xournal++ and Pandoc |
+| IDE and editors | VSCodium with pinned offline extensions, Mousepad, Helix, Micro and Vim |
+| FORGE toolchains | Go/gopls/delve; Node 20/TypeScript/ESLint/Prettier; Rust/Cargo/Clippy/rust-analyzer/Tauri; Python/uv/ruff/Black; Nix/nil/nixfmt; GCC/Clang/GDB/LLDB/CMake/Ninja/Make/pkg-config |
+| Desktop utilities | PCManFM/GVFS/UDisks, KeePassXC, GIMP, Inkscape, MPV, image/PDF viewers, screenshot/clipboard tools, calculator and archive tools |
+| Devices | PipeWire audio, PulseAudio compatibility, CUPS/Gutenprint printing, SANE/AirScan scanning, firmware and thermal/power services |
+| Data and operations | SQLite/PostgreSQL/Redis clients, Git/Git LFS/GitHub CLI, rootless Podman/Buildah/Skopeo, Restic, Borg and rsync |
+
+All GUI applications that publish a safe `.desktop` entry are discovered by
+the FORGE native-app catalog and open as compositor-managed windows above the
+FORGE desktop canvas. The shell remains the desktop and taskbar; applications
+are native Linux processes, not webview iframes.
+
+The machine has only 4 GiB of RAM. Zram and the 8 GiB disk swap make the full
+toolset available, but do not make simultaneous heavyweight workloads cheap.
+Keep one local model loaded, and normally run only one of VSCodium,
+LibreOffice, Thunderbird, GIMP, or Inkscape at a time. Rootless container tools
+are installed, but no container daemon or image is started automatically.
+
+Internet-dependent collaboration, cloud sync, extension marketplaces, package
+registries and email delivery remain unavailable while the offline firewall is
+active. Their clients are present for local files and for a later explicitly
+approved network posture; they do not weaken the current egress policy.
+
 ## Disk contract
 
 The configuration consumes an already-created disk layout by label and never
@@ -76,6 +120,12 @@ Disk erasure and partition creation are separate operator-approved installation
 steps. Never infer the install disk from `/dev/sd*` or `/dev/nvme*`; validate its
 model, serial, size, removability, and mount state before destructive work.
 
+The realized full-workstation NixOS closure is approximately 16 GiB. Reserve at
+least 40 GiB of free root-filesystem capacity for multiple Nix generations,
+source trees, build outputs, local databases and the staged model cache. A
+64 GiB root device is the practical minimum for this test profile; 128 GiB or
+more leaves substantially better development headroom.
+
 ## Build and install
 
 Evaluate the target before installation:
@@ -83,6 +133,7 @@ Evaluate the target before installation:
 ```bash
 nix eval .#nixosConfigurations.forge-optiplex-7000.config.system.build.toplevel.drvPath
 nix build .#checks.x86_64-linux.forge-optiplex-7000
+nix build .#nixosConfigurations.forge-optiplex-7000.config.system.build.toplevel --no-link
 ```
 
 With the approved labeled filesystems mounted below `/mnt`:
@@ -122,6 +173,16 @@ cat /etc/forge/shell-session.env
 free -h
 swapon --show
 command -v foot firefox pcmanfm mousepad micro hx
+command -v libreoffice codium go gopls node npm rustc cargo python uv gcc clang cmake nil nixfmt
+command -v podman buildah skopeo git-lfs psql redis-cli restic borg rsync
+test -w /forge/workspaces/default
+test -d /forge/workspaces/default/Projects
+systemctl is-active cups
+systemctl is-active udisks2
+systemctl --user is-active pipewire pipewire-pulse
+lpstat -r
+scanimage -L || true
+podman info --format '{{.Host.Security.Rootless}}'
 ip -4 address show dev enp0s31f6
 ip route
 nmcli connection show forge-direct-link
@@ -149,7 +210,8 @@ surface covering the output. The live `forge_desktop` process must receive
 authenticated dashboard calls succeed. CPU-only safe-mode warnings are policy
 advisories and do not by themselves mean modelruntime is degraded.
 
-From the Forge launcher, open Terminal, Files, Editor, and Browser. Each must
+From the Forge launcher, open Terminal, Files, Editor, Browser, VSCodium,
+LibreOffice Writer, Evince, and KeePassXC. Each must
 appear as a native window on the Forge desktop, acquire a Forge taskbar entry,
 and remain focusable/minimizable/closable through the bounded compositor
 bridge. Forge remains the desktop canvas below those windows; it must not raise

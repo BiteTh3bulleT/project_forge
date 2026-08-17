@@ -39,6 +39,8 @@ runCommand "forge-optiplex-7000-check"
     grep -F 'FORGE_OPTIPLEX_NETWORK_MODE=offline-direct' "$config"
     grep -F 'FORGE_OPTIPLEX_DEFAULT_ROUTE=false' "$config"
     grep -F 'FORGE_OPTIPLEX_EGRESS_POLICY=loopback-and-192.168.50.0/24-only' "$config"
+    grep -F 'forge.storage.workspaceMode = "2770";' "$config"
+    grep -F 'd /forge/workspaces/default/Projects 2770 operator forge -' "$config"
     grep -F 'enableModelRuntime = true;' "$config"
     grep -F 'safeModeForceCPUOnly = true;' "$config"
     grep -F 'bindHost = "127.0.0.1";' "$config"
@@ -88,6 +90,27 @@ runCommand "forge-optiplex-7000-check"
     grep -F 'PasswordAuthentication = false;' "$config"
     grep -F 'PermitRootLogin = "no";' "$config"
     grep -F 'FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false' "$config"
+    grep -F 'polkitAgent = pkgs.polkit_gnome;' "$config"
+    grep -F 'notificationDaemon = pkgs.mako;' "$config"
+    grep -F 'printing = {' "$config"
+    grep -F 'pipewire = {' "$config"
+    grep -F 'hardware.sane = {' "$config"
+    grep -F 'gvfs.enable = true;' "$config"
+    grep -F 'udisks2.enable = true;' "$config"
+    grep -F 'virtualisation.podman = {' "$config"
+    grep -F 'dockerCompat = true;' "$config"
+    grep -F 'nix-direnv.enable = true;' "$config"
+    grep -F 'nix-ld.enable = true;' "$config"
+    grep -F 'FORGE_WORKSPACE_DIR = "/forge/workspaces/default";' "$config"
+    for required in \
+      libreoffice thunderbird evince xournalpp gimp inkscape mpv keepassxc simple-scan pavucontrol \
+      vscodium golang.go rust-lang.rust-analyzer ms-python.python redhat.vscode-yaml jnoortheen.nix-ide \
+      go gopls gotools delve nodejs_20 typescript-language-server rustc cargo rust-analyzer cargo-tauri \
+      python3 uv ruff gcc clang gdb cmake ninja pkg-config shellcheck shfmt nil nixfmt \
+      podman buildah skopeo restic borgbackup rsync p7zip unzip zip nvme-cli smartmontools
+    do
+      grep -F "$required" "$config"
+    done
     for required in foot pcmanfm mousepad firefox micro helix xarchiver; do
       grep -F '"'"$required"'"' "$src/nix/packages/forge-operator-toolbelt.nix"
     done

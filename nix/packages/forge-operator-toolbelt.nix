@@ -93,8 +93,9 @@ let
         ${terminalPause}
         exit 0
       fi
-      if [ -d /projectforge/.git ]; then
-        cd /projectforge
+      workspace="''${FORGE_WORKSPACE_DIR:-/forge/workspaces/default}"
+      if [ -d "$workspace/.git" ]; then
+        cd "$workspace"
       fi
       exec lazygit
     '';
