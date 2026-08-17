@@ -68,6 +68,10 @@ let
     simple-scan
     pavucontrol
     networkmanagerapplet
+    wdisplays
+    system-config-printer
+    blueman
+    lxappearance
     xdg-user-dirs
     mako
     polkit_gnome
@@ -372,8 +376,35 @@ in
 
   security = {
     polkit.enable = true;
+    polkit.extraConfig = ''
+      polkit.addRule(function(action, subject) {
+        if (subject.user !== "operator" || !subject.local || !subject.active) {
+          return polkit.Result.NOT_HANDLED;
+        }
+
+        var allowed = [
+          "org.freedesktop.login1.power-off",
+          "org.freedesktop.login1.power-off-multiple-sessions",
+          "org.freedesktop.login1.reboot",
+          "org.freedesktop.login1.reboot-multiple-sessions",
+          "org.freedesktop.NetworkManager.enable-disable-network",
+          "org.freedesktop.NetworkManager.enable-disable-wifi",
+          "org.freedesktop.NetworkManager.network-control",
+          "org.freedesktop.NetworkManager.settings.modify.own",
+          "org.freedesktop.NetworkManager.settings.modify.system"
+        ];
+        if (allowed.indexOf(action.id) >= 0) {
+          return polkit.Result.YES;
+        }
+        return polkit.Result.NOT_HANDLED;
+      });
+    '';
     rtkit.enable = true;
     sudo.wheelNeedsPassword = true;
+  };
+  hardware.bluetooth = {
+    enable = true;
+    powerOnBoot = true;
   };
   hardware.sane = {
     enable = true;
@@ -394,6 +425,8 @@ in
     gnupg.agent.enable = true;
     nix-ld.enable = true;
   };
+
+  services.blueman.enable = true;
 
   virtualisation.podman = {
     enable = true;

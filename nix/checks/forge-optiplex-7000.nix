@@ -97,6 +97,11 @@ runCommand "forge-optiplex-7000-check"
     grep -F 'PermitRootLogin = "no";' "$config"
     grep -F 'FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false' "$config"
     grep -F 'polkitAgent = pkgs.polkit_gnome;' "$config"
+    grep -F 'org.freedesktop.login1.power-off' "$config"
+    grep -F 'org.freedesktop.login1.reboot' "$config"
+    grep -F 'org.freedesktop.NetworkManager.settings.modify.system' "$config"
+    grep -F 'hardware.bluetooth = {' "$config"
+    grep -F 'services.blueman.enable = true;' "$config"
     grep -F 'notificationDaemon = pkgs.mako;' "$config"
     grep -F 'printing = {' "$config"
     grep -F 'pipewire = {' "$config"
@@ -110,12 +115,16 @@ runCommand "forge-optiplex-7000-check"
     grep -F 'FORGE_WORKSPACE_DIR = "/forge/workspaces/default";' "$config"
     for required in \
       libreoffice thunderbird evince xournalpp gimp inkscape mpv keepassxc simple-scan pavucontrol \
+      networkmanagerapplet wdisplays system-config-printer blueman lxappearance \
       vscodium golang.go rust-lang.rust-analyzer ms-python.python redhat.vscode-yaml jnoortheen.nix-ide \
       go gopls gotools delve nodejs_20 typescript-language-server rustc cargo rust-analyzer cargo-tauri \
       python3 uv ruff gcc clang gdb cmake ninja pkg-config shellcheck shfmt nil nixfmt \
       podman buildah skopeo restic borgbackup rsync p7zip unzip zip nvme-cli smartmontools
     do
       grep -F "$required" "$config"
+    done
+    for required in network-settings display-settings audio-settings printer-settings bluetooth-settings appearance-settings; do
+      grep -F 'id: "'"$required"'"' "$desktop_main"
     done
     for required in foot pcmanfm mousepad firefox micro helix xarchiver; do
       grep -F '"'"$required"'"' "$src/nix/packages/forge-operator-toolbelt.nix"

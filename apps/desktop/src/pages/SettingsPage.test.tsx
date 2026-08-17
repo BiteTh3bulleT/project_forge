@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   remoteTelegram: vi.fn(),
   remoteDiscord: vi.fn(),
   systemHost: vi.fn(),
+  desktopIsTauri: vi.fn(),
+  launchOperatorApp: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
@@ -45,8 +47,9 @@ vi.mock("../lib/api", () => ({
 }));
 
 vi.mock("../lib/desktop", () => ({
-  isTauriDesktop: () => false,
+  isTauriDesktop: mocks.desktopIsTauri,
   getDesktopSystemDiagnostics: vi.fn(),
+  launchOperatorApp: mocks.launchOperatorApp,
 }));
 
 const baseSettings = {
@@ -107,6 +110,15 @@ describe("SettingsPage remote secrets", () => {
       mock.mockReset();
     }
     mocks.settingsGet.mockResolvedValue(baseSettings);
+    mocks.desktopIsTauri.mockReturnValue(false);
+    mocks.launchOperatorApp.mockResolvedValue({
+      appId: "network-settings",
+      label: "Network Connections",
+      executable: "nm-connection-editor",
+      launched: true,
+      pid: 123,
+      message: "Network Connections launch requested",
+    });
     mocks.settingsPatch.mockResolvedValue(baseSettings);
     mocks.ollamaModels.mockResolvedValue({
       models: [],
@@ -274,6 +286,20 @@ describe("SettingsPage remote secrets", () => {
     expect(screen.getByText("Power: policy_gated")).toBeTruthy();
     expect(screen.getByText("Host mutation disabled")).toBeTruthy();
     expect(mocks.systemHost).toHaveBeenCalledTimes(1);
+  });
+
+  it("launches native network settings from the host settings surface", async () => {
+    mocks.desktopIsTauri.mockReturnValue(true);
+    renderSettingsPage();
+
+    expect(await screen.findByText("Native System Controls")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open Network Connections" }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.launchOperatorApp).toHaveBeenCalledWith("network-settings"),
+    );
   });
 
   it("keeps primary settings usable when secondary status loads fail", async () => {

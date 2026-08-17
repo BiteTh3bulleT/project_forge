@@ -10,6 +10,14 @@ includes the desktop applications, IDE extensions, language toolchains,
 device services, rootless container tooling, backup clients and diagnostics
 needed to build, test, inspect and operate Project Forge locally.
 
+FORGE Settings now exposes native Network Connections, Displays, Audio,
+Printers, Bluetooth, and Appearance controls. The active local operator has a
+bounded polkit grant for logind reboot/poweroff and NetworkManager profile
+management, while sudo remains password-gated and the offline nftables policy
+remains authoritative. Power requests synchronously verify that systemd
+accepted the nonblocking request instead of reporting success after merely
+spawning a child process.
+
 The 2026-08-17 full-authority test-mode supersession disables the OptiPlex
 safe-mode posture and enables the shell's host-power, model-mutation, and
 semantic-write controls plus model autoload and the loopback OpenAI-compatible

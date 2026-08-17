@@ -56,7 +56,10 @@ The target intentionally uses:
 - explicit full-test shell policy enabling host power, model-lifecycle, and
   semantic-write controls. These remain authenticated and FORGE-K/gateway
   governed where a production contract exists; the shell still cannot claim
-  Kernel authority.
+  Kernel authority;
+- a native settings group inside FORGE Settings and the Start menu with
+  NetworkManager adapter/profile selection, Wayland display arrangement,
+  PipeWire audio, CUPS printers, Bluetooth devices, and GTK appearance tools.
 
 ## Offline direct-link contract
 
@@ -184,6 +187,7 @@ swapon --show
 command -v foot firefox pcmanfm mousepad micro hx
 command -v libreoffice codium go gopls node npm rustc cargo python uv gcc clang cmake nil nixfmt
 command -v podman buildah skopeo git-lfs psql redis-cli restic borg rsync
+command -v nm-connection-editor wdisplays pavucontrol system-config-printer blueman-manager lxappearance
 test -w /forge/workspaces/default
 test -d /forge/workspaces/default/Projects
 systemctl is-active cups
@@ -252,6 +256,30 @@ and retains the offline firewall and authenticated API as its outer boundary.
 `FORGE_UNSAFE_TEST_MODE=true` also permits a model proposal to become visible
 only after its live FORGE-K Context Compiler receipt and runtime-proposal
 decision verify. Missing, caller-forged, or tampered bindings remain withheld.
+
+Open **Settings → Host + hardware → Native System Controls** and verify that
+Network Connections, Displays, Audio, Printers, Bluetooth, and Appearance each
+launch as native windows. Network Connections must enumerate NetworkManager
+adapters and profiles, including `forge-direct-link`. Editing or adding a
+profile does not override the nftables offline-egress boundary.
+
+The running graphical session must come from the current generation. NixOS can
+activate new packages without replacing an already-running Labwc/Tauri session;
+that stale process retains its old environment and policy flags. After a shell
+or session-policy deployment, log out and back in (or terminate the old local
+session from a TTY) before testing power or settings controls. Confirm with:
+
+```bash
+pid="$(pgrep -n forge_desktop)"
+tr '\0' '\n' < "/proc/$pid/environ" | grep -E \
+  '^(FORGE_SHELL_DIRECT_SYSTEM_CONTROL|FORGE_SHELL_SAFE_MODE|PATH)='
+```
+
+In full test mode, `FORGE_SHELL_DIRECT_SYSTEM_CONTROL=true`. Restart and Shut
+Down wait for the local `systemctl --no-block` request to be accepted and show
+an error if logind rejects it. The NixOS test profile grants the active local
+`operator` session only the bounded logind reboot/poweroff and NetworkManager
+control actions; it does not grant blanket passwordless sudo.
 
 From the Forge launcher, open Terminal, Files, Editor, Browser, VSCodium,
 LibreOffice Writer, Evince, and KeePassXC. Each must

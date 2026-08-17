@@ -17,7 +17,8 @@ export const FALLBACK_OPERATOR_APPS: OperatorApp[] = [
   {
     id: "files",
     label: "Files",
-    description: "Open the PCManFM file manager in the current FORGE operator session.",
+    description:
+      "Open the PCManFM file manager in the current FORGE operator session.",
     executable: "pcmanfm",
     category: "Workspace",
     iconName: "system-file-manager",
@@ -33,7 +34,8 @@ export const FALLBACK_OPERATOR_APPS: OperatorApp[] = [
     category: "Workspace",
     iconName: "accessories-text-editor",
     iconPath: null,
-    desktopFile: "/run/current-system/sw/share/applications/org.xfce.mousepad.desktop",
+    desktopFile:
+      "/run/current-system/sw/share/applications/org.xfce.mousepad.desktop",
     native: true,
   },
   {
@@ -50,11 +52,13 @@ export const FALLBACK_OPERATOR_APPS: OperatorApp[] = [
   {
     id: "browser",
     label: "Browser",
-    description: "Open Firefox for local docs, web consoles, and model tooling.",
+    description:
+      "Open Firefox for local docs, web consoles, and model tooling.",
     executable: "firefox",
     category: "Internet",
     iconName: "firefox",
-    iconPath: "/run/current-system/sw/share/icons/hicolor/128x128/apps/firefox.png",
+    iconPath:
+      "/run/current-system/sw/share/icons/hicolor/128x128/apps/firefox.png",
     desktopFile: "/run/current-system/sw/share/applications/firefox.desktop",
     native: true,
   },
@@ -72,7 +76,8 @@ export const FALLBACK_OPERATOR_APPS: OperatorApp[] = [
   {
     id: "ollama-status",
     label: "Ollama Status",
-    description: "Show local Ollama process and model status without loading or unloading models.",
+    description:
+      "Show local Ollama process and model status without loading or unloading models.",
     executable: "foot",
     category: "AI Runtime",
     iconName: "utilities-terminal",
@@ -83,7 +88,8 @@ export const FALLBACK_OPERATOR_APPS: OperatorApp[] = [
   {
     id: "modelruntime-status",
     label: "Modelruntime Status",
-    description: "Show governed FORGE modelruntime status through the local core API.",
+    description:
+      "Show governed FORGE modelruntime status through the local core API.",
     executable: "foot",
     category: "AI Runtime",
     iconName: "utilities-terminal",
@@ -105,7 +111,8 @@ export const FALLBACK_OPERATOR_APPS: OperatorApp[] = [
   {
     id: "core-logs",
     label: "Core Logs",
-    description: "Show recent forge-core journal logs through a fixed read-only wrapper.",
+    description:
+      "Show recent forge-core journal logs through a fixed read-only wrapper.",
     executable: "foot",
     category: "System",
     iconName: "text-x-log",
@@ -116,13 +123,90 @@ export const FALLBACK_OPERATOR_APPS: OperatorApp[] = [
   {
     id: "network-diagnostics",
     label: "Network Diagnostics",
-    description: "Show fixed read-only address, route, socket, and DNS diagnostics.",
+    description:
+      "Show fixed read-only address, route, socket, and DNS diagnostics.",
     executable: "foot",
     category: "System",
     iconName: "network-workgroup",
     iconPath: null,
     desktopFile: null,
     native: false,
+  },
+  {
+    id: "network-settings",
+    label: "Network Connections",
+    description:
+      "Select adapters and manage NetworkManager connection profiles.",
+    executable: "nm-connection-editor",
+    category: "Settings",
+    iconName: "preferences-system-network",
+    iconPath: null,
+    desktopFile:
+      "/run/current-system/sw/share/applications/nm-connection-editor.desktop",
+    native: true,
+  },
+  {
+    id: "display-settings",
+    label: "Displays",
+    description:
+      "Arrange Wayland displays and select resolution, scale, and orientation.",
+    executable: "wdisplays",
+    category: "Settings",
+    iconName: "video-display",
+    iconPath: null,
+    desktopFile:
+      "/run/current-system/sw/share/applications/network.cycles.wdisplays.desktop",
+    native: true,
+  },
+  {
+    id: "audio-settings",
+    label: "Audio",
+    description:
+      "Select PipeWire devices, streams, profiles, and volume levels.",
+    executable: "pavucontrol",
+    category: "Settings",
+    iconName: "multimedia-volume-control",
+    iconPath: null,
+    desktopFile:
+      "/run/current-system/sw/share/applications/org.pulseaudio.pavucontrol.desktop",
+    native: true,
+  },
+  {
+    id: "printer-settings",
+    label: "Printers",
+    description: "Discover and configure local CUPS printers.",
+    executable: "system-config-printer",
+    category: "Settings",
+    iconName: "printer",
+    iconPath: null,
+    desktopFile:
+      "/run/current-system/sw/share/applications/system-config-printer.desktop",
+    native: true,
+  },
+  {
+    id: "bluetooth-settings",
+    label: "Bluetooth",
+    description: "Discover, pair, and manage local Bluetooth devices.",
+    executable: "blueman-manager",
+    category: "Settings",
+    iconName: "bluetooth",
+    iconPath: null,
+    desktopFile:
+      "/run/current-system/sw/share/applications/blueman-manager.desktop",
+    native: true,
+  },
+  {
+    id: "appearance-settings",
+    label: "Appearance",
+    description:
+      "Configure native GTK theme, icons, fonts, and cursor settings.",
+    executable: "lxappearance",
+    category: "Settings",
+    iconName: "preferences-desktop-theme",
+    iconPath: null,
+    desktopFile:
+      "/run/current-system/sw/share/applications/lxappearance.desktop",
+    native: true,
   },
   {
     id: "hardware-diagnostics",
@@ -143,13 +227,15 @@ export const FALLBACK_OPERATOR_APPS: OperatorApp[] = [
     category: "Developer",
     iconName: "sqlitebrowser",
     iconPath: null,
-    desktopFile: "/run/current-system/sw/share/applications/sqlitebrowser.desktop",
+    desktopFile:
+      "/run/current-system/sw/share/applications/sqlitebrowser.desktop",
     native: true,
   },
   {
     id: "lazygit",
     label: "Git UI",
-    description: "Open lazygit in the FORGE workspace through a fixed terminal wrapper.",
+    description:
+      "Open lazygit in the FORGE workspace through a fixed terminal wrapper.",
     executable: "foot",
     category: "Developer",
     iconName: "git",
@@ -160,7 +246,8 @@ export const FALLBACK_OPERATOR_APPS: OperatorApp[] = [
   {
     id: "forge-status",
     label: "FORGE Status",
-    description: "Show local forge-core health through a fixed read-only wrapper.",
+    description:
+      "Show local forge-core health through a fixed read-only wrapper.",
     executable: "foot",
     category: "FORGE",
     iconName: "utilities-terminal",

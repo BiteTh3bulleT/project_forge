@@ -10,7 +10,11 @@ import {
   type TelegramStatusResponse,
 } from "../lib/api";
 import { arrayOrEmpty } from "../lib/arrays";
-import { getDesktopSystemDiagnostics, isTauriDesktop } from "../lib/desktop";
+import {
+  getDesktopSystemDiagnostics,
+  isTauriDesktop,
+  launchOperatorApp,
+} from "../lib/desktop";
 import { useUiStore } from "../stores/uiStore";
 import {
   DiagnosticsSection,
@@ -131,9 +135,7 @@ function HostHardwareSection(props: {
                 label="Memory"
                 value={memoryLabel}
                 detail={host.memory?.pressure_level ?? "pressure unknown"}
-                tone={
-                  host.memory?.pressure_level === "normal" ? "ok" : "warn"
-                }
+                tone={host.memory?.pressure_level === "normal" ? "ok" : "warn"}
               />
               <HostMetric
                 label="GPU"
@@ -193,6 +195,99 @@ function HostHardwareSection(props: {
             }
           />
         )}
+      </Panel>
+    </FoldSection>
+  );
+}
+
+const nativeSystemControls = [
+  {
+    id: "network-settings",
+    label: "Network Connections",
+    detail: "Select adapters and edit NetworkManager profiles.",
+  },
+  {
+    id: "display-settings",
+    label: "Displays",
+    detail: "Arrange outputs and set resolution, scale, and rotation.",
+  },
+  {
+    id: "audio-settings",
+    label: "Audio",
+    detail: "Choose PipeWire devices, profiles, streams, and levels.",
+  },
+  {
+    id: "printer-settings",
+    label: "Printers",
+    detail: "Discover and configure local CUPS printers.",
+  },
+  {
+    id: "bluetooth-settings",
+    label: "Bluetooth",
+    detail: "Pair and manage Bluetooth adapters and devices.",
+  },
+  {
+    id: "appearance-settings",
+    label: "Appearance",
+    detail: "Set native GTK themes, icons, fonts, and cursors.",
+  },
+] as const;
+
+function NativeSystemControlsSection(props: {
+  setStatus: (message: string) => void;
+}) {
+  const desktopAvailable = isTauriDesktop();
+
+  async function openControl(id: string) {
+    try {
+      const result = await launchOperatorApp(id);
+      props.setStatus(result.message);
+    } catch (error) {
+      props.setStatus(
+        error instanceof Error
+          ? error.message
+          : "Native settings launch failed.",
+      );
+    }
+  }
+
+  return (
+    <FoldSection
+      title="Native System Controls"
+      subtitle="Graphical controls for the OptiPlex hardware and desktop session."
+      defaultOpen
+    >
+      <Panel
+        title="Device and Desktop Settings"
+        subtitle="These applications run as native Labwc windows. Network changes remain bounded by the offline nftables policy."
+      >
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {nativeSystemControls.map((control) => (
+            <div
+              key={control.id}
+              className="rounded-xl border border-forge-platinum/10 bg-black/20 p-4"
+            >
+              <div className="text-sm font-semibold text-forge-ash">
+                {control.label}
+              </div>
+              <p className="mt-2 min-h-10 text-xs leading-5 text-forge-mist/70">
+                {control.detail}
+              </p>
+              <GhostButton
+                disabled={!desktopAvailable}
+                onClick={() => void openControl(control.id)}
+              >
+                Open {control.label}
+              </GhostButton>
+            </div>
+          ))}
+        </div>
+        {!desktopAvailable ? (
+          <MiniEmpty
+            title="Native controls require the FORGE desktop"
+            detail="Open this Settings surface in the Tauri operator session to launch host control applications."
+          />
+        ) : null}
       </Panel>
     </FoldSection>
   );
@@ -295,7 +390,7 @@ export function SettingsPage() {
 
   async function loadOllamaModelsFromAdapters() {
     const adapters = await api.adapters.list();
-    const adapterRows = arrayOrEmpty<typeof adapters.adapters[number]>(
+    const adapterRows = arrayOrEmpty<(typeof adapters.adapters)[number]>(
       adapters.adapters,
     );
     const ollamaAdapter = adapterRows.find(
@@ -502,7 +597,10 @@ export function SettingsPage() {
       if (!Number.isFinite(chatId) || chatId <= 0) {
         throw new Error("Provide a valid Telegram chat ID for probe.");
       }
-      if (!remoteAccessToken.trim() || isRedactedSettingSecret(remoteAccessToken)) {
+      if (
+        !remoteAccessToken.trim() ||
+        isRedactedSettingSecret(remoteAccessToken)
+      ) {
         throw new Error(
           "Re-enter the remote access token before probing remote ingress.",
         );
@@ -538,7 +636,10 @@ export function SettingsPage() {
       if (!channelId) {
         throw new Error("Provide a Discord channel ID for probe.");
       }
-      if (!remoteAccessToken.trim() || isRedactedSettingSecret(remoteAccessToken)) {
+      if (
+        !remoteAccessToken.trim() ||
+        isRedactedSettingSecret(remoteAccessToken)
+      ) {
         throw new Error(
           "Re-enter the remote access token before probing remote ingress.",
         );
@@ -1647,10 +1748,13 @@ export function SettingsPage() {
       ) : null}
 
       {settingsView === "all" || settingsView === "host" ? (
-        <HostHardwareSection
-          hostSettings={hostSettings}
-          hostSettingsErr={hostSettingsErr}
-        />
+        <>
+          <HostHardwareSection
+            hostSettings={hostSettings}
+            hostSettingsErr={hostSettingsErr}
+          />
+          <NativeSystemControlsSection setStatus={setStatus} />
+        </>
       ) : null}
 
       {settingsView === "all" || settingsView === "display" ? (

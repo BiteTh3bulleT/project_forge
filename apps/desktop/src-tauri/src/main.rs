@@ -218,6 +218,60 @@ const OPERATOR_APPS: &[OperatorAppDefinition] = &[
         launch_args: &["-e", "forge-operator-network-diagnostics"],
     },
     OperatorAppDefinition {
+        id: "network-settings",
+        label: "Network Connections",
+        description: "Select adapters and manage NetworkManager connection profiles.",
+        executable: "nm-connection-editor",
+        category: "Settings",
+        desktop_ids: &["nm-connection-editor.desktop"],
+        launch_args: &[],
+    },
+    OperatorAppDefinition {
+        id: "display-settings",
+        label: "Displays",
+        description: "Arrange Wayland displays and select resolution, scale, and orientation.",
+        executable: "wdisplays",
+        category: "Settings",
+        desktop_ids: &["network.cycles.wdisplays.desktop"],
+        launch_args: &[],
+    },
+    OperatorAppDefinition {
+        id: "audio-settings",
+        label: "Audio",
+        description: "Select PipeWire devices, streams, profiles, and volume levels.",
+        executable: "pavucontrol",
+        category: "Settings",
+        desktop_ids: &["org.pulseaudio.pavucontrol.desktop"],
+        launch_args: &[],
+    },
+    OperatorAppDefinition {
+        id: "printer-settings",
+        label: "Printers",
+        description: "Discover and configure local CUPS printers.",
+        executable: "system-config-printer",
+        category: "Settings",
+        desktop_ids: &["system-config-printer.desktop"],
+        launch_args: &[],
+    },
+    OperatorAppDefinition {
+        id: "bluetooth-settings",
+        label: "Bluetooth",
+        description: "Discover, pair, and manage local Bluetooth devices.",
+        executable: "blueman-manager",
+        category: "Settings",
+        desktop_ids: &["blueman-manager.desktop"],
+        launch_args: &[],
+    },
+    OperatorAppDefinition {
+        id: "appearance-settings",
+        label: "Appearance",
+        description: "Configure native GTK theme, icons, fonts, and cursor settings.",
+        executable: "lxappearance",
+        category: "Settings",
+        desktop_ids: &["lxappearance.desktop"],
+        launch_args: &[],
+    },
+    OperatorAppDefinition {
         id: "hardware-diagnostics",
         label: "Hardware Diagnostics",
         description: "Show fixed read-only PCI, USB, and process file diagnostics.",
@@ -817,10 +871,19 @@ fn spawn_host_power_command(action: &str) -> Result<(), String> {
         _ => return Err("host power action is not allowlisted".to_string()),
     };
 
-    command
-        .spawn()
-        .map(|_| ())
-        .map_err(|err| format!("failed to request {action}: {err}"))
+    #[cfg(all(unix, not(target_os = "macos")))]
+    command.arg("--no-block");
+
+    let status = command
+        .status()
+        .map_err(|err| format!("failed to request {action}: {err}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "host {action} request was rejected with status {status}"
+        ))
+    }
 }
 
 fn direct_system_control_enabled() -> bool {
@@ -1085,6 +1148,7 @@ mod tests {
             "Internet",
             "AI Runtime",
             "System",
+            "Settings",
             "Developer",
             "FORGE",
         ] {
@@ -1131,6 +1195,51 @@ mod tests {
         assert_eq!(app.executable, "mousepad");
         assert!(app.desktop_ids.contains(&"org.xfce.mousepad.desktop"));
         assert!(app.launch_args.is_empty());
+    }
+
+    #[test]
+    fn operator_settings_cover_native_host_controls() {
+        for (id, executable, desktop_id) in [
+            (
+                "network-settings",
+                "nm-connection-editor",
+                "nm-connection-editor.desktop",
+            ),
+            (
+                "display-settings",
+                "wdisplays",
+                "network.cycles.wdisplays.desktop",
+            ),
+            (
+                "audio-settings",
+                "pavucontrol",
+                "org.pulseaudio.pavucontrol.desktop",
+            ),
+            (
+                "printer-settings",
+                "system-config-printer",
+                "system-config-printer.desktop",
+            ),
+            (
+                "bluetooth-settings",
+                "blueman-manager",
+                "blueman-manager.desktop",
+            ),
+            (
+                "appearance-settings",
+                "lxappearance",
+                "lxappearance.desktop",
+            ),
+        ] {
+            let app = OPERATOR_APPS
+                .iter()
+                .find(|candidate| candidate.id == id)
+                .unwrap_or_else(|| panic!("missing native settings app {id}"));
+            assert_eq!(app.category, "Settings");
+            assert_eq!(app.executable, executable);
+            assert_eq!(app.desktop_ids, &[desktop_id]);
+            assert!(app.launch_args.is_empty());
+        }
     }
 
     #[test]
