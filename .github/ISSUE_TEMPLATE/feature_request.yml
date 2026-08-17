@@ -1,0 +1,90 @@
+name: Feature request
+description: Propose a focused FORGE capability or improvement.
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        FORGE favors bounded, inspectable capabilities over broad implicit authority. Explain the operator problem first, then the smallest governed solution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Operator problem
+      description: What repeated task, limitation, or failure mode needs to be solved?
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe observable behavior rather than only an implementation choice.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Primary area
+      options:
+        - Chat and continuation
+        - Gateway and tools
+        - Automation Foundry
+        - Production Kernel / authority
+        - Memory and retrieval
+        - Modelruntime and scheduling
+        - Backup and recovery
+        - Desktop / operator experience
+        - Nix / NixOS / hardware profile
+        - Testing and observability
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: authority
+    attributes:
+      label: Authority and trust boundary
+      description: Which component should decide, execute, verify, persist, and present the result? State whether any authority expansion is required.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed bounded design
+      description: Include inputs, outputs, scope, approval needs, evidence, limits, and failure behavior.
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - Given ...
+        - When ...
+        - Then ...
+        - And unsupported states fail closed by ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: recovery
+    attributes:
+      label: Rollback or recovery considerations
+      description: Explain how the feature is disabled, rolled back, or recovered after partial failure.
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Design constraints
+      options:
+        - label: The proposal does not let a model select or execute arbitrary tools.
+          required: true
+        - label: The proposal identifies canonical versus rebuildable state.
+          required: true
+        - label: The proposal includes bounded failure and evidence behavior.
+          required: true
