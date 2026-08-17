@@ -7,17 +7,27 @@
 
 let
   forgeDesktopShell = pkgs.callPackage ../../packages/forge-desktop-shell.nix {
-    renderProfile = "vm-safe";
+    renderProfile = "default";
     bootLogin = false;
     emptyDesktopOnBoot = true;
   };
   forgeShellSession = pkgs.callPackage ../../packages/forge-shell-session.nix {
     inherit forgeDesktopShell;
+    safeMode = false;
+    hostMutation = true;
+    directSystemControl = true;
+    modelMutation = true;
+    semanticMemoryWrite = true;
   };
   forgeOperatorSession = pkgs.callPackage ../../packages/forge-operator-session.nix {
     forge-shell-session = forgeShellSession;
     polkitAgent = pkgs.polkit_gnome;
     notificationDaemon = pkgs.mako;
+    safeMode = false;
+    hostMutation = true;
+    directSystemControl = true;
+    modelMutation = true;
+    semanticMemoryWrite = true;
   };
   forgeOperatorToolbelt = pkgs.callPackage ../../packages/forge-operator-toolbelt.nix {
     inherit pkgs;
@@ -252,19 +262,30 @@ in
   forge.os = {
     enable = true;
     storageRoot = "/forge";
-    safeMode = true;
+    safeMode = false;
   };
   forge.storage.workspaceMode = "2770";
   services.forge-core = {
     bindHost = "127.0.0.1";
     enableModelRuntime = true;
-    safeModeForceCPUOnly = true;
+    safeModeForceCPUOnly = false;
     extraEnvironment = {
       OLLAMA_BASE_URL = "http://127.0.0.1:11434";
-      OLLAMA_MODEL = "smuxo/smuxoAI:0.8b";
+      OLLAMA_MODEL = "qwen2.5:1.5b";
       FORGE_MODEL_DEFAULT_BACKEND = "ollama_compat";
-      FORGE_MODEL_DEFAULT_ID = "smuxo/smuxoAI:0.8b";
+      FORGE_MODEL_DEFAULT_ID = "qwen2.5:1.5b";
       FORGE_MODEL_MAX_LOADED_MODELS = "1";
+      FORGE_GPU_ENABLED = "true";
+      FORGE_UNSAFE_TEST_MODE = "true";
+      FORGE_ALLOW_LLAMA_CPP_SPAWN = "true";
+      FORGE_MODEL_POLICY_REQUIRE_EXPLICIT_LOAD = "false";
+      FORGE_MODEL_POLICY_ALLOW_AUTO_LOAD = "true";
+      FORGE_ENABLE_OPENAI_COMPAT_API = "true";
+      FORGE_SHELL_SAFE_MODE = "false";
+      FORGE_SHELL_HOST_MUTATION = "true";
+      FORGE_SHELL_DIRECT_SYSTEM_CONTROL = "true";
+      FORGE_SHELL_MODEL_MUTATION = "true";
+      FORGE_SHELL_SEMANTIC_MEMORY_WRITE = "true";
       FORGE_OLLAMA_CHAT_NUM_CTX = "2048";
       FORGE_OLLAMA_CHAT_NUM_PREDICT = "192";
       FORGE_OLLAMA_CHAT_NUM_THREAD = "6";
@@ -280,7 +301,12 @@ in
     displayBackend = "wayland";
     compositor = "labwc";
     autoStart = false;
-    safeMode = true;
+    safeMode = false;
+    unsafeTestMode = true;
+    hostMutation = true;
+    directSystemControl = true;
+    modelMutation = true;
+    semanticMemoryWrite = true;
     fullscreen = false;
     wayland = {
       enable = true;
@@ -450,15 +476,15 @@ in
     FORGE_SHELL_MODE = "operator-desktop";
     FORGE_SHELL_DISPLAY_BACKEND = "wayland";
     FORGE_SHELL_COMPOSITOR = "labwc";
-    FORGE_SHELL_SAFE_MODE = "true";
+    FORGE_SHELL_SAFE_MODE = "false";
     FORGE_SHELL_FULLSCREEN = "false";
-    FORGE_SHELL_HOST_MUTATION = "false";
-    FORGE_SHELL_DIRECT_SYSTEM_CONTROL = "false";
-    FORGE_SHELL_MODEL_MUTATION = "false";
-    FORGE_SHELL_SEMANTIC_MEMORY_WRITE = "false";
+    FORGE_SHELL_HOST_MUTATION = "true";
+    FORGE_SHELL_DIRECT_SYSTEM_CONTROL = "true";
+    FORGE_SHELL_MODEL_MUTATION = "true";
+    FORGE_SHELL_SEMANTIC_MEMORY_WRITE = "true";
     FORGE_SHELL_FORGE_K_LIVE_AUTHORITY = "false";
-    FORGE_RENDER_PROFILE = "vm-safe";
-    VITE_FORGE_RENDER_PROFILE = "vm-safe";
+    FORGE_RENDER_PROFILE = "default";
+    VITE_FORGE_RENDER_PROFILE = "default";
     FORGE_CORE_URL = "http://127.0.0.1:18492";
     FORGE_WORKSPACE_DIR = "/forge/workspaces/default";
     VITE_FORGE_API_URL = "http://127.0.0.1:18492";
@@ -488,20 +514,21 @@ in
     FORGE_CORE_URL=http://127.0.0.1:18492
     FORGE_MODEL_RUNTIME_ENABLED=true
     FORGE_MODEL_DEFAULT_BACKEND=ollama_compat
-    FORGE_MODEL_DEFAULT_ID=smuxo/smuxoAI:0.8b
+    FORGE_MODEL_DEFAULT_ID=qwen2.5:1.5b
     FORGE_MODEL_SECONDARY_ID=gemma3:1b-it-q4_K_M
     FORGE_MODEL_MAX_LOADED_MODELS=1
-    FORGE_SAFE_MODE_FORCE_CPU_ONLY=true
-    FORGE_SHELL_SAFE_MODE=true
+    FORGE_SAFE_MODE_FORCE_CPU_ONLY=false
+    FORGE_UNSAFE_TEST_MODE=true
+    FORGE_SHELL_SAFE_MODE=false
     FORGE_SHELL_MODE=operator-desktop
     FORGE_SHELL_COMPOSITOR=labwc
     FORGE_SHELL_FULLSCREEN=false
-    FORGE_RENDER_PROFILE=vm-safe
+    FORGE_RENDER_PROFILE=default
     WEBKIT_DISABLE_DMABUF_RENDERER=1
-    FORGE_SHELL_HOST_MUTATION=false
-    FORGE_SHELL_DIRECT_SYSTEM_CONTROL=false
-    FORGE_SHELL_MODEL_MUTATION=false
-    FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false
+    FORGE_SHELL_HOST_MUTATION=true
+    FORGE_SHELL_DIRECT_SYSTEM_CONTROL=true
+    FORGE_SHELL_MODEL_MUTATION=true
+    FORGE_SHELL_SEMANTIC_MEMORY_WRITE=true
     FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false
   '';
 
@@ -550,8 +577,8 @@ in
       message = "FORGE OptiPlex test target must not enable graphical autologin.";
     }
     {
-      assertion = config.forge.shellSession.safeMode == true;
-      message = "FORGE OptiPlex test shell must remain in safe mode.";
+      assertion = config.forge.shellSession.safeMode == false;
+      message = "FORGE OptiPlex full-authority test shell must run outside safe mode.";
     }
     {
       assertion = config.forge.shellSession.mode == "operator-desktop";

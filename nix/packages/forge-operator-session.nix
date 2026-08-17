@@ -6,9 +6,15 @@
   labwc ? null,
   polkitAgent ? null,
   notificationDaemon ? null,
+  safeMode ? true,
+  hostMutation ? false,
+  directSystemControl ? false,
+  modelMutation ? false,
+  semanticMemoryWrite ? false,
 }:
 
 let
+  boolString = value: if value then "true" else "false";
   defaultCompositor = if labwc != null then "${labwc}/bin/labwc" else "";
   shellSession = "${forge-shell-session}/bin/forge-shell-session";
   startup = writeShellApplication {
@@ -41,12 +47,12 @@ let
           export FORGE_DATA_DIR="''${FORGE_DATA_DIR:-/forge/data}"
           export FORGE_WORKSPACE_DIR="''${FORGE_WORKSPACE_DIR:-/forge/workspaces/default}"
           export FORGE_API_TOKEN_FILE="''${FORGE_API_TOKEN_FILE:-$FORGE_DATA_DIR/auth/api_token}"
-          export FORGE_SHELL_SAFE_MODE=true
+          export FORGE_SHELL_SAFE_MODE=${boolString safeMode}
           export FORGE_SHELL_FULLSCREEN=false
-          export FORGE_SHELL_HOST_MUTATION=false
-          export FORGE_SHELL_DIRECT_SYSTEM_CONTROL=false
-          export FORGE_SHELL_MODEL_MUTATION=false
-          export FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false
+          export FORGE_SHELL_HOST_MUTATION=${boolString hostMutation}
+          export FORGE_SHELL_DIRECT_SYSTEM_CONTROL=${boolString directSystemControl}
+          export FORGE_SHELL_MODEL_MUTATION=${boolString modelMutation}
+          export FORGE_SHELL_SEMANTIC_MEMORY_WRITE=${boolString semanticMemoryWrite}
           export FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false
           export FORGE_RENDER_PROFILE="''${FORGE_RENDER_PROFILE:-vm-safe}"
           export VITE_FORGE_RENDER_PROFILE="''${VITE_FORGE_RENDER_PROFILE:-$FORGE_RENDER_PROFILE}"

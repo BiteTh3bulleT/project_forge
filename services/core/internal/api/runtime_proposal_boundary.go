@@ -54,18 +54,9 @@ func decideRuntimeProposal(req runtimeProposalRequest) (runtimeproposal.Decision
 	correlationID := runtimeBoundID("correlation", req.CorrelationID)
 	requestID := runtimeBoundID("request", fmt.Sprintf("chat:%d:%d", req.ThreadID, req.UserMessageID))
 	traceID := runtimeBoundID("trace", firstNonEmpty(req.CorrelationID, requestID))
-	bundleJSON, _ := json.Marshal(struct {
-		Version       string `json:"version"`
-		WorkspaceID   string `json:"workspaceId"`
-		ThreadID      int64  `json:"threadId"`
-		UserMessageID int64  `json:"userMessageId"`
-		PromptHash    string `json:"promptHash"`
-	}{"forge.chat.prompt_binding.v1", workspaceID, req.ThreadID, req.UserMessageID, promptHash})
-	bundleHash := runtimeproposal.HashText(string(bundleJSON))
-	contextDigest := runtimeproposal.HashText("forge.chat.context_binding.v1\n" + bundleHash)
-	if strings.TrimSpace(req.ContextBinding.BundleHash) != "" && strings.TrimSpace(req.ContextBinding.DecisionDigest) != "" {
-		bundleHash = strings.TrimSpace(req.ContextBinding.BundleHash)
-		contextDigest = strings.TrimSpace(req.ContextBinding.DecisionDigest)
+	contextBinding := req.ContextBinding.runtimeBinding(promptHash)
+	if err := runtimeproposal.ValidateContextBinding(contextBinding); err != nil {
+		return runtimeproposal.Decision{}, fmt.Errorf("verify live Context Compiler binding: %w", err)
 	}
 
 	declaredHash := runtimeproposal.HashText(req.Output)
@@ -131,11 +122,7 @@ func decideRuntimeProposal(req runtimeProposalRequest) (runtimeproposal.Decision
 			TokenizerID:       runtimeBoundID("tokenizer", req.ModelID),
 			TokenizerRevision: "unreported.v1",
 		},
-		Context: runtimeproposal.ContextBinding{
-			DecisionDigest: contextDigest,
-			BundleHash:     bundleHash,
-			PromptHash:     promptHash,
-		},
+		Context: contextBinding,
 		Provenance: runtimeproposal.Provenance{
 			ProvenanceID:  provenanceID,
 			ProposedBy:    proposedBy,
@@ -163,6 +150,24 @@ func runtimeProposalError(err error) string {
 		return ""
 	}
 	return err.Error()
+}
+
+// runtimeProposalConsensusEvidence exposes only commitments from a proposal
+// that already passed the production FORGE-K runtime boundary. Consensus may
+// use these references to make proposal text visible; they do not admit the
+// text as canonical truth or prove that any external action completed.
+func runtimeProposalConsensusEvidence(decision runtimeproposal.Decision, err error) []string {
+	if !parseEnvBoolWithDefault("FORGE_UNSAFE_TEST_MODE", false) ||
+		err != nil || decision.Status != runtimeproposal.StatusAccepted ||
+		decision.Envelope.ContextAuthorityOwner != runtimeproposal.ContextAuthorityOwner ||
+		strings.TrimSpace(decision.Envelope.ContextPacketID) == "" ||
+		strings.TrimSpace(decision.DecisionDigest) == "" {
+		return nil
+	}
+	return []string{
+		"context-packet:" + decision.Envelope.ContextPacketID,
+		"runtime-proposal:" + decision.DecisionDigest,
+	}
 }
 
 // runtimeProposalEvidence intentionally omits Decision.VisibleContent. The

@@ -11,7 +11,7 @@ The target intentionally uses:
 
 - UEFI and systemd-boot;
 - labeled, unencrypted test filesystems;
-- the low-memory `vm-safe` FORGE renderer through a target-built
+- the full `default` FORGE renderer through a target-built
   `forge-desktop-shell` package;
 - password-gated `greetd`/`tuigreet` login into the Labwc-backed
   `forge-operator` session;
@@ -35,15 +35,16 @@ The target intentionally uses:
   unstable WebKit DMA-BUF renderer path on the physical Intel test target;
 - the single-application Cage session installed only as a fullscreen rollback
   and test path;
-- loopback-only `forge-core` in CPU-safe mode;
+- loopback-only `forge-core` with safe-mode CPU forcing disabled so available
+  local accelerators and the full runtime policy can be exercised;
 - governed modelruntime with a single loopback-only Ollama worker;
 - a static, unprivileged Ollama service account in the `forge` group so the
   worker can access only its governed `/forge/models/ollama` subtree;
-- `smuxo/smuxoAI:0.8b` (approximately 1 GB) as the default governed worker
-  because its local Ollama manifest advertises structured tool calling;
-- `gemma3:1b-it-q4_K_M` (approximately 815 MB) as the completion-only
-  secondary worker; only one model may be loaded and one request may run at a
-  time;
+- `qwen2.5:1.5b` (approximately 986 MB) as the default governed tool router;
+  its Ollama template supports native tool calls and live routing probes must
+  preserve exact arguments before it is promoted;
+- `gemma3:1b-it-q4_K_M` (approximately 815 MB) as the completion fallback;
+  only one model may be loaded and one request may run at a time;
 - bounded native chat settings (`num_ctx=2048`, `num_predict=192`, six CPU
   threads, and `think=false`) so the small tool worker emits structured calls
   instead of consuming its response budget with a thinking trace;
@@ -51,7 +52,11 @@ The target intentionally uses:
 - a static offline direct Ethernet link at `192.168.50.2/24` with no gateway,
   no DNS, no IPv6, and `never-default=true`, plus an nftables output policy
   that permits only loopback and `192.168.50.0/24`;
-- no VirtualBox guest integration, autologin, or automatic host mutation.
+- no VirtualBox guest integration or autologin;
+- explicit full-test shell policy enabling host power, model-lifecycle, and
+  semantic-write controls. These remain authenticated and FORGE-K/gateway
+  governed where a production contract exists; the shell still cannot claim
+  Kernel authority.
 
 ## Offline direct-link contract
 
@@ -158,6 +163,10 @@ ownership as `ollama:forge` and mode `0750` for directories; do not copy an
 unbounded workstation model cache. Automatic `services.ollama.loadModels`
 downloads are disabled because that helper always checks the remote registry;
 model updates must use the same bounded workstation-to-target staging flow.
+Remove a superseded model with `ollama rm` on both staging and target hosts only
+after the replacement passes direct tool-selection, exact-argument, no-tool,
+and governed FORGE runtime-proposal probes. `ollama rm` is destructive locally;
+recovery requires restaging or downloading the model again.
 
 ## Verification
 
@@ -196,6 +205,36 @@ curl -fsS http://127.0.0.1:18492/forge/kernel/status | jq -e '
   .authority_blocked_gates == 0'
 ```
 
+`ollama list` must contain `qwen2.5:1.5b` and
+`gemma3:1b-it-q4_K_M`, and must not contain the retired Smuxo model. Test the
+router through FORGE as well as directly through Ollama: a direct tool-call
+success alone does not prove Context Compiler, runtime-proposal, consensus, or
+model-visibility enforcement.
+
+For maximum currently supported autonomous operation, use the authenticated
+settings API to select `maintain`, activate governed VSA influence, and select
+deep Dream analysis. `maintain` may commit only actions allowed by an active
+durable charter, freedom budget, authorization proof, and FORGE-K validation;
+it does not bypass approval-required actions. Memory maintenance and Dream v0
+remain proposal-only where no production Kernel commit contract exists.
+
+```bash
+token="$(cat /forge/data/auth/api_token)"
+curl -fsS -X PATCH \
+  -H "Authorization: Bearer $token" \
+  -H 'Content-Type: application/json' \
+  http://127.0.0.1:18492/api/settings \
+  --data '{"autonomyMode":"maintain","retrievalVSAMode":"active","dreamMode":{"enabled":true,"defaultDryRun":true,"mode":"deep_dream","allowLongTermPromotion":true,"requireOperatorReviewForLongTerm":true,"allowCommits":false}}'
+curl -fsS -H "Authorization: Bearer $token" \
+  http://127.0.0.1:18492/api/autonomy/status | jq -e \
+  '.available == true and .mode == "maintain" and .counts.activeCharters > 0 and .counts.budgets > 0'
+```
+
+Do not set `mission` merely as a stronger synonym for `maintain`. Mission mode
+requires an explicit mission-class charter and otherwise fails closed. The
+current default charters intentionally authorize bounded maintenance and
+context preparation, not an open-ended mission.
+
 The route table must contain only `192.168.50.0/24` through `enp0s31f6`.
 There must be no default route. `ip route get 1.1.1.1` must fail with
 `Network is unreachable`; failure to resolve an internet hostname alone is not
@@ -204,11 +243,15 @@ sufficient evidence because a public route could still exist without DNS.
 After `operator` signs in, the Labwc session must show a borderless FORGE
 surface covering the output. The live `forge_desktop` process must receive
 `FORGE_SHELL_MODE=operator-desktop`, `FORGE_SHELL_FULLSCREEN=false`,
-`FORGE_OPERATOR_DESKTOP_LOCKED=true`, `FORGE_RENDER_PROFILE=vm-safe`,
+`FORGE_OPERATOR_DESKTOP_LOCKED=true`, `FORGE_RENDER_PROFILE=default`,
 `WEBKIT_DISABLE_DMABUF_RENDERER=1`, and the configured
 `FORGE_API_TOKEN_FILE`. The shell status must report runtime online when the
-authenticated dashboard calls succeed. CPU-only safe-mode warnings are policy
-advisories and do not by themselves mean modelruntime is degraded.
+authenticated dashboard calls succeed. This profile deliberately sets
+`FORGE_SHELL_SAFE_MODE=false`, enables the implemented unsafe test controls,
+and retains the offline firewall and authenticated API as its outer boundary.
+`FORGE_UNSAFE_TEST_MODE=true` also permits a model proposal to become visible
+only after its live FORGE-K Context Compiler receipt and runtime-proposal
+decision verify. Missing, caller-forged, or tampered bindings remain withheld.
 
 From the Forge launcher, open Terminal, Files, Editor, Browser, VSCodium,
 LibreOffice Writer, Evince, and KeePassXC. Each must

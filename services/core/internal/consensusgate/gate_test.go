@@ -42,8 +42,9 @@ func TestGateAllowsGatewayEvidenceWithoutCanonicalTruth(t *testing.T) {
 }
 
 func TestGateMarksModelOnlyClaimsUncertainAndDetectsConflict(t *testing.T) {
+	original := "The file exists. The file does not exist."
 	decision := Gate(Input{
-		Content:           "The file exists. The file does not exist.",
+		Content:           original,
 		ModelProposalOnly: true,
 	})
 
@@ -52,5 +53,27 @@ func TestGateMarksModelOnlyClaimsUncertainAndDetectsConflict(t *testing.T) {
 	}
 	if len(decision.RiskFlags) == 0 {
 		t.Fatalf("expected conflict risk flags, got %#v", decision)
+	}
+	if decision.Content == original || decision.Content != UncertainVisibleText {
+		t.Fatalf("uncertain candidate remained visible: %#v", decision)
+	}
+}
+
+func TestGateReplacesUngroundedModelOnlyContent(t *testing.T) {
+	original := "A confident but unsupported model answer."
+	decision := Gate(Input{Content: original, ModelProposalOnly: true})
+	if decision.Status != StatusUncertain || decision.Content != UncertainVisibleText {
+		t.Fatalf("ungrounded output was not replaced: %#v", decision)
+	}
+	if decision.Content == original {
+		t.Fatal("raw uncertain model output reached final visibility")
+	}
+}
+
+func TestGateReplacesConflictingContentEvenWithEvidenceMetadata(t *testing.T) {
+	original := "The operation completed and did not complete."
+	decision := Gate(Input{Content: original, EvidenceRefs: []string{"evidence:1"}})
+	if decision.Status != StatusUncertain || decision.Content != UncertainVisibleText {
+		t.Fatalf("conflicting evidence-backed output was not replaced: %#v", decision)
 	}
 }

@@ -14,6 +14,8 @@ const (
 
 	SurfaceChatFinal      = "chat.final_response"
 	SurfaceActionProposal = "action.proposal"
+
+	UncertainVisibleText = "FORGE withheld model output because consensus could not ground it in governed evidence."
 )
 
 type Input struct {
@@ -87,7 +89,8 @@ func Gate(input Input) Decision {
 
 	if content == "" {
 		decision.UncertainClaimCount = 1
-		decision.Warnings = []string{"empty_response"}
+		decision.Content = UncertainVisibleText
+		decision.Warnings = []string{"empty_response", "uncertain_content_withheld"}
 		return decision
 	}
 	if highRiskAction && !gatewayEvidence {
@@ -105,13 +108,15 @@ func Gate(input Input) Decision {
 			decision.Status = StatusUncertain
 			decision.AcceptedClaimCount = 0
 			decision.UncertainClaimCount = 1
-			decision.Warnings = []string{"conflict_detected"}
+			decision.Content = UncertainVisibleText
+			decision.Warnings = []string{"conflict_detected", "uncertain_content_withheld"}
 			decision.RiskFlags = []string{"unresolved_conflict"}
 		}
 		return decision
 	}
 
 	decision.UncertainClaimCount = 1
+	decision.Content = UncertainVisibleText
 	if input.ModelProposalOnly {
 		decision.Warnings = []string{"model_proposal_without_external_evidence"}
 	}
@@ -119,6 +124,7 @@ func Gate(input Input) Decision {
 		decision.Warnings = append(decision.Warnings, "conflict_detected")
 		decision.RiskFlags = []string{"unresolved_conflict"}
 	}
+	decision.Warnings = append(decision.Warnings, "uncertain_content_withheld")
 	return decision
 }
 

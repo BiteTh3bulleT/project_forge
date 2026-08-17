@@ -21,15 +21,21 @@ func validInput(source string) Input {
 			DriverVersion:     "1.0.0",
 			RuntimeID:         "ollama",
 			RuntimeVersion:    "0.8.1",
-			ModelID:           "smuxo/smuxoAI:0.8b",
+			ModelID:           "qwen2.5:1.5b",
 			ModelRevision:     "model-sha256-a1",
 			TokenizerID:       "ollama-tokenizer",
 			TokenizerRevision: "tokenizer-v1",
 		},
 		Context: ContextBinding{
-			DecisionDigest: HashText("context-decision"),
-			BundleHash:     HashText("context-bundle"),
-			PromptHash:     HashText("exact-prompt-bytes"),
+			PacketID:                 "context-packet-1",
+			DecisionDigest:           HashText("context-decision"),
+			BundleHash:               HashText("context-bundle"),
+			PromptHash:               HashText("exact-prompt-bytes"),
+			AuthorityOwner:           ContextAuthorityOwner,
+			TransactionID:            "context-transaction-1",
+			JournalEventID:           "context-journal-event-1",
+			PreparedPlanSeal:         HashText("context-plan-seal"),
+			AuthorizationFingerprint: HashText("context-authorization"),
 		},
 		Provenance: Provenance{
 			ProvenanceID:  "provenance-1",
@@ -294,7 +300,13 @@ func TestMalformedBindingsFailClosed(t *testing.T) {
 	}{
 		{"source", func(in *Input) { in.Identity.SourceKind = "unknown" }},
 		{"model revision", func(in *Input) { in.Identity.ModelRevision = "" }},
+		{"context packet", func(in *Input) { in.Context.PacketID = "" }},
+		{"context authority", func(in *Input) { in.Context.AuthorityOwner = "aios.controllane" }},
+		{"context transaction", func(in *Input) { in.Context.TransactionID = "" }},
+		{"context journal", func(in *Input) { in.Context.JournalEventID = "" }},
 		{"decision digest", func(in *Input) { in.Context.DecisionDigest = "sha256:nope" }},
+		{"prepared plan seal", func(in *Input) { in.Context.PreparedPlanSeal = "" }},
+		{"authorization fingerprint", func(in *Input) { in.Context.AuthorizationFingerprint = "" }},
 		{"prompt hash", func(in *Input) { in.Context.PromptHash = "" }},
 		{"trace", func(in *Input) { in.Provenance.TraceID = "" }},
 		{"declared output hash", func(in *Input) { in.DeclaredOutputHash = "" }},
@@ -330,7 +342,7 @@ func TestDecisionGoldenDigest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "sha256:6efc6f6040f7a6e7b7be884f949812404cda63bf292d28e3b3029df93da7cd98"
+	const want = "sha256:b279369b5e1670276c45d089b49d8577b5711766cd7d3b055022cd16585dcad8"
 	if decision.DecisionDigest != want {
 		t.Fatalf("decision digest = %q, want %q", decision.DecisionDigest, want)
 	}

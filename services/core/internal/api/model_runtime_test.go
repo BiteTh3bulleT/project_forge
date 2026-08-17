@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"forge/projectforge/services/core/internal/config"
+	"forge/projectforge/services/core/internal/consensusgate"
 	"forge/projectforge/services/core/internal/modelruntime"
 	"forge/projectforge/services/core/internal/store"
 )
@@ -777,11 +778,11 @@ func TestOpenAICompatStreamingBuffersUntilRuntimeDecision(t *testing.T) {
 		t.Fatalf("content-type=%q want text/event-stream", contentType)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, `"object":"chat.completion.chunk"`) || !strings.Contains(body, `"content":"hello stream"`) || strings.Count(body, `"content":`) != 1 {
-		t.Fatalf("expected one post-decision content chunk, got body=%s", body)
+	if !strings.Contains(body, `"object":"chat.completion.chunk"`) || !strings.Contains(body, `"content":"`+consensusgate.UncertainVisibleText+`"`) || strings.Contains(body, `"content":"hello stream"`) || strings.Count(body, `"content":`) != 1 {
+		t.Fatalf("expected one consensus-withheld post-decision content chunk, got body=%s", body)
 	}
-	if !strings.Contains(body, `"status":"accepted_proposal"`) || !strings.Contains(body, `"runtimeProposal"`) {
-		t.Fatalf("expected runtime proposal decision before visibility, got body=%s", body)
+	if !strings.Contains(body, `"status":"accepted_proposal"`) || !strings.Contains(body, `"status":"uncertain"`) || !strings.Contains(body, `"runtimeProposal"`) {
+		t.Fatalf("expected runtime proposal acceptance followed by consensus withholding, got body=%s", body)
 	}
 	if !strings.Contains(body, `"finish_reason":"stop"`) || !strings.Contains(body, "data: [DONE]") {
 		t.Fatalf("expected final stop chunk and done sentinel, got body=%s", body)
@@ -839,11 +840,11 @@ func TestForgeModelRuntimeStreamingBuffersUntilRuntimeDecision(t *testing.T) {
 		t.Fatalf("content-type=%q want text/event-stream", contentType)
 	}
 	body := rr.Body.String()
-	if strings.Count(body, "event: token") != 1 || !strings.Contains(body, `"text":"forge stream"`) {
-		t.Fatalf("expected one post-decision token event, got body=%s", body)
+	if strings.Count(body, "event: token") != 1 || !strings.Contains(body, consensusgate.UncertainVisibleText) || strings.Contains(body, `"text":"forge stream"`) {
+		t.Fatalf("expected one consensus-withheld post-decision token event, got body=%s", body)
 	}
-	if !strings.Contains(body, "event: result") || !strings.Contains(body, `"content":"forge stream"`) {
-		t.Fatalf("expected final result event, got body=%s", body)
+	if !strings.Contains(body, "event: result") || !strings.Contains(body, `"content":"`+consensusgate.UncertainVisibleText+`"`) {
+		t.Fatalf("expected consensus-withheld final result event, got body=%s", body)
 	}
 	if !strings.Contains(body, `"proposalOnly":true`) || strings.Contains(body, `"canonicalCommit":true`) || strings.Contains(body, `"modelOutputAuthority":true`) {
 		t.Fatalf("expected final stream result to preserve proposal-only envelope, got body=%s", body)

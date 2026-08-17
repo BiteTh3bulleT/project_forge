@@ -17,6 +17,7 @@ import (
 
 	"forge/projectforge/services/core/internal/adapters"
 	"forge/projectforge/services/core/internal/config"
+	"forge/projectforge/services/core/internal/consensusgate"
 	"forge/projectforge/services/core/internal/store"
 )
 
@@ -343,8 +344,8 @@ func TestChatPostSyncUsesSelectedLocalOllamaModelWhenSettingsModelBlank(t *testi
 	if payload.AssistantMessage == nil {
 		t.Fatalf("expected assistant message in response")
 	}
-	if strings.TrimSpace(payload.AssistantMessage.Content) != "native selected" {
-		t.Fatalf("expected native ollama response, got %q", payload.AssistantMessage.Content)
+	if strings.TrimSpace(payload.AssistantMessage.Content) != consensusgate.UncertainVisibleText {
+		t.Fatalf("expected uncertain native Ollama response to be withheld, got %q", payload.AssistantMessage.Content)
 	}
 	if sawModel != "gemma4:e4b" {
 		t.Fatalf("expected native ollama call to use selected model gemma4:e4b, got %q", sawModel)
@@ -363,9 +364,9 @@ func TestChatPostSyncUsesSelectedLocalOllamaModelWhenSettingsModelBlank(t *testi
 func TestResolveNativeOllamaChatModelPrefersValidRequestOverPersistedDefault(t *testing.T) {
 	srv, st := newBackupAuditHarness(t)
 	fakeRuntime := newFakeModelRuntime()
-	fakeRuntime.models["smuxo/smuxoAI:0.8b"] = ModelRuntimeModel{
-		ID:           "smuxo/smuxoAI:0.8b",
-		DisplayName:  "smuxoAI",
+	fakeRuntime.models["qwen2.5:1.5b"] = ModelRuntimeModel{
+		ID:           "qwen2.5:1.5b",
+		DisplayName:  "Qwen 2.5 1.5B",
 		Backend:      "ollama_compat",
 		Format:       "gguf",
 		Status:       "available",
@@ -382,18 +383,18 @@ func TestResolveNativeOllamaChatModelPrefersValidRequestOverPersistedDefault(t *
 		t.Fatalf("set stale persisted ollama model: %v", err)
 	}
 
-	model, source := srv.resolveNativeOllamaChatModel(ctx, adapters.NewOllama(st.DB), "smuxo/smuxoAI:0.8b")
-	if model != "smuxo/smuxoAI:0.8b" || source != "selected_model" {
-		t.Fatalf("resolved model=%q source=%q, want selected smuxo model", model, source)
+	model, source := srv.resolveNativeOllamaChatModel(ctx, adapters.NewOllama(st.DB), "qwen2.5:1.5b")
+	if model != "qwen2.5:1.5b" || source != "selected_model" {
+		t.Fatalf("resolved model=%q source=%q, want selected Qwen model", model, source)
 	}
 }
 
 func TestChatToolPathUsesValidRequestedModelOverPersistedDefault(t *testing.T) {
 	srv, st := newBackupAuditHarness(t)
 	fakeRuntime := newFakeModelRuntime()
-	fakeRuntime.models["smuxo/smuxoAI:0.8b"] = ModelRuntimeModel{
-		ID:           "smuxo/smuxoAI:0.8b",
-		DisplayName:  "smuxoAI",
+	fakeRuntime.models["qwen2.5:1.5b"] = ModelRuntimeModel{
+		ID:           "qwen2.5:1.5b",
+		DisplayName:  "Qwen 2.5 1.5B",
 		Backend:      "ollama_compat",
 		Format:       "gguf",
 		Status:       "available",
@@ -440,15 +441,15 @@ func TestChatToolPathUsesValidRequestedModelOverPersistedDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create thread: %v", err)
 	}
-	raw := []byte(`{"content":"Show the modified files in the current workspace.","requestAssistant":true,"syncAssistant":true,"modelId":"smuxo/smuxoAI:0.8b"}`)
+	raw := []byte(`{"content":"Show the modified files in the current workspace.","requestAssistant":true,"syncAssistant":true,"modelId":"qwen2.5:1.5b"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/chat/threads/"+strconv.FormatInt(thread.ID, 10)+"/messages", bytes.NewReader(raw))
 	rr := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
 	}
-	if sawModel != "smuxo/smuxoAI:0.8b" {
-		t.Fatalf("tool path used model=%q, want selected smuxo model", sawModel)
+	if sawModel != "qwen2.5:1.5b" {
+		t.Fatalf("tool path used model=%q, want selected Qwen model", sawModel)
 	}
 	if strings.Join(sawToolNames, ",") != "forge_git_status" {
 		t.Fatalf("tool path attached tools=%v, want only forge_git_status", sawToolNames)
@@ -758,8 +759,8 @@ func TestChatPostSyncStripsModelRuntimeReasoningScaffold(t *testing.T) {
 	if payload.AssistantMessage == nil {
 		t.Fatalf("expected assistant message in response")
 	}
-	if got := strings.TrimSpace(payload.AssistantMessage.Content); got != "Certainly. What's on the agenda?" {
-		t.Fatalf("expected final answer only, got=%q", got)
+	if got := strings.TrimSpace(payload.AssistantMessage.Content); got != consensusgate.UncertainVisibleText {
+		t.Fatalf("expected sanitized but ungrounded candidate to be withheld, got=%q", got)
 	}
 	if strings.Contains(payload.AssistantMessage.Content, "Thinking Process") || strings.Contains(payload.AssistantMessage.Content, "Final Answer") {
 		t.Fatalf("assistant content leaked scaffold: %q", payload.AssistantMessage.Content)
@@ -802,8 +803,8 @@ func TestChatPostSyncStripsRawModelPlanningPreamble(t *testing.T) {
 	if payload.AssistantMessage == nil {
 		t.Fatalf("expected assistant message in response")
 	}
-	if got := strings.TrimSpace(payload.AssistantMessage.Content); got != "I'm operational and ready." {
-		t.Fatalf("expected final answer only, got=%q", got)
+	if got := strings.TrimSpace(payload.AssistantMessage.Content); got != consensusgate.UncertainVisibleText {
+		t.Fatalf("expected sanitized but ungrounded candidate to be withheld, got=%q", got)
 	}
 	if strings.Contains(payload.AssistantMessage.Content, "We need to answer") || strings.Contains(payload.AssistantMessage.Content, "Final answer") {
 		t.Fatalf("assistant content leaked planning scaffold: %q", payload.AssistantMessage.Content)
@@ -886,8 +887,8 @@ func TestChatPostSyncFallsBackWhenModelRuntimeOnlyReturnsReasoningScaffold(t *te
 	if payload.AssistantMessage == nil {
 		t.Fatalf("expected assistant message in response")
 	}
-	if got := strings.TrimSpace(payload.AssistantMessage.Content); got != assistantContentFallback {
-		t.Fatalf("expected fallback assistant content, got=%q", got)
+	if got := strings.TrimSpace(payload.AssistantMessage.Content); got != consensusgate.UncertainVisibleText {
+		t.Fatalf("expected empty uncertain candidate to be withheld, got=%q", got)
 	}
 	if strings.Contains(payload.AssistantMessage.Content, "Thinking Process") {
 		t.Fatalf("assistant content leaked scaffold: %q", payload.AssistantMessage.Content)
@@ -2207,8 +2208,8 @@ func TestChatAssistantStreamUsesModelRuntimeStreamingWhenOllamaUnavailable(t *te
 		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "event: token") || !strings.Contains(body, "cloud ") || !strings.Contains(body, "stream") {
-		t.Fatalf("expected streamed runtime token events, got body=%s", body)
+	if strings.Count(body, "event: token") != 1 || !strings.Contains(body, consensusgate.UncertainVisibleText) || strings.Contains(body, `"text":"cloud stream"`) {
+		t.Fatalf("expected one consensus-withheld runtime token event, got body=%s", body)
 	}
 	if strings.Contains(body, "stream_downgrade") {
 		t.Fatalf("did not expect stream downgrade when model runtime streaming is available, got body=%s", body)
@@ -2297,8 +2298,8 @@ func TestChatAssistantStreamDoesNotRefreshRemoteDiscoveryBeforeCloudToken(t *tes
 		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "cloud stream") {
-		t.Fatalf("expected streamed cloud response, got body=%s", body)
+	if !strings.Contains(body, consensusgate.UncertainVisibleText) || strings.Contains(body, `"text":"cloud stream"`) {
+		t.Fatalf("expected ungrounded cloud response to be withheld, got body=%s", body)
 	}
 	if got := atomic.LoadInt32(&modelListCalls); got != readyModelListCalls {
 		t.Fatalf("chat stream refreshed remote discovery before streaming: calls=%d ready=%d", got, readyModelListCalls)
@@ -2373,8 +2374,8 @@ func TestChatAssistantStreamBuffersModelRuntimeReasoningUntilDecision(t *testing
 	if strings.Contains(body, "event: reasoning") || strings.Contains(body, `"text":"checking facts"`) {
 		t.Fatalf("unclassified reasoning became visible, got body=%s", body)
 	}
-	if strings.Count(body, "event: token") != 1 || !strings.Contains(body, `"text":"cloud stream"`) {
-		t.Fatalf("expected one post-decision token event, got body=%s", body)
+	if strings.Count(body, "event: token") != 1 || !strings.Contains(body, consensusgate.UncertainVisibleText) || strings.Contains(body, `"text":"cloud stream"`) {
+		t.Fatalf("expected one consensus-withheld post-decision token event, got body=%s", body)
 	}
 	if strings.Contains(body, `"content":"checking factscloud stream"`) || strings.Contains(body, `"content":"checking facts cloud stream"`) {
 		t.Fatalf("reasoning leaked into assistant message content, got body=%s", body)
@@ -2425,8 +2426,8 @@ func TestChatAssistantStreamPrefersModelRuntimeStreamingOverConfiguredOllama(t *
 		t.Fatalf("status=%d body=%s", rr.Code, strings.TrimSpace(rr.Body.String()))
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "event: token") || !strings.Contains(body, "cloud ") || !strings.Contains(body, "stream") {
-		t.Fatalf("expected runtime token events, got body=%s", body)
+	if strings.Count(body, "event: token") != 1 || !strings.Contains(body, consensusgate.UncertainVisibleText) || strings.Contains(body, `"text":"cloud stream"`) {
+		t.Fatalf("expected one consensus-withheld runtime token event, got body=%s", body)
 	}
 	if ollamaCalled {
 		t.Fatalf("configured Ollama should not preempt available modelruntime streaming")
@@ -2539,8 +2540,8 @@ func TestChatAssistantStreamUsesNativeOllamaStreamForNoToolChat(t *testing.T) {
 	if !sawStream {
 		t.Fatalf("expected ollama stream request")
 	}
-	if strings.Count(body, "event: token") != 1 || !strings.Contains(body, `"text":"fast path"`) {
-		t.Fatalf("expected one post-decision token event, got body=%s", body)
+	if strings.Count(body, "event: token") != 1 || !strings.Contains(body, consensusgate.UncertainVisibleText) || strings.Contains(body, `"text":"fast path"`) {
+		t.Fatalf("expected one consensus-withheld post-decision token event, got body=%s", body)
 	}
 	if !strings.Contains(body, `"ollamaStream":true`) {
 		t.Fatalf("expected persisted assistant metadata to mark ollamaStream, got body=%s", body)
@@ -2600,8 +2601,8 @@ func TestChatAssistantStreamCutsSyntheticTranscriptContinuation(t *testing.T) {
 	if strings.Contains(body, "fake follow-up") || strings.Contains(body, "fake continuation") || strings.Contains(body, "USER:") || strings.Contains(body, "ASSISTANT:") {
 		t.Fatalf("expected synthetic transcript continuation to be cut, got body=%s", body)
 	}
-	if !strings.Contains(body, "Actual answer.") {
-		t.Fatalf("expected actual answer to remain, got body=%s", body)
+	if !strings.Contains(body, consensusgate.UncertainVisibleText) || strings.Contains(body, "Actual answer.") {
+		t.Fatalf("expected sanitized but uncertain actual answer to be withheld, got body=%s", body)
 	}
 	if !strings.Contains(body, "stripped_synthetic_transcript_turn") {
 		t.Fatalf("expected sanitizer warning in metadata, got body=%s", body)

@@ -279,6 +279,7 @@ func (g *Gateway) Execute(ctx context.Context, req Request) (*Result, error) {
 			Capability:    capability,
 			ResolvedPaths: paths,
 			HasAdapter:    hasAdapter,
+			UsesNetwork:   hasAdapter && tool.UsesNetwork(),
 		})
 		riskFromCapability := gatewayRiskClassFromToolRisk(policyDecision.Risk.Risk)
 		if policyDecision.Status == StatusDisabled || policyDecision.Status == StatusUnsupported {
@@ -425,6 +426,16 @@ func (g *Gateway) Execute(ctx context.Context, req Request) (*Result, error) {
 			}
 		}
 		return g.recordNeedsApproval(ctx, req, lane, tool, risk, level, profileID, needsApprovalReason)
+	}
+	if hasCapability && isSelfInitiated(req) {
+		if err := g.policy.ConsumeAuthorizedToolRequest(ctx, ToolAutonomyRequest{
+			Request:     req,
+			Capability:  capability,
+			Risk:        g.policy.riskClassifier.Classify(capability, req),
+			UsesNetwork: tool.UsesNetwork(),
+		}); err != nil {
+			return g.denied(ctx, req, lane.ID, tool.ID(), risk, fmt.Sprintf("autonomy budget consume failed: %v", err))
+		}
 	}
 	invID, err := g.openInvocation(ctx, req, lane, tool, risk, level, profileID, "running", nil)
 	if err != nil {

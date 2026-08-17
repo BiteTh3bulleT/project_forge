@@ -61,9 +61,10 @@ func (DeterministicToolRiskClassifier) Classify(capability domain.ToolCapability
 }
 
 type ToolAutonomyRequest struct {
-	Request    Request
-	Capability domain.ToolCapability
-	Risk       ToolRiskClassification
+	Request     Request
+	Capability  domain.ToolCapability
+	Risk        ToolRiskClassification
+	UsesNetwork bool
 }
 
 type ToolAutonomyDecision struct {
@@ -77,11 +78,16 @@ type ToolAutonomyAuthorizer interface {
 	AuthorizeToolRequest(ctx context.Context, req ToolAutonomyRequest) (ToolAutonomyDecision, error)
 }
 
+type ToolAutonomyConsumer interface {
+	ConsumeAuthorizedToolRequest(ctx context.Context, req ToolAutonomyRequest) error
+}
+
 type ToolPolicyInput struct {
 	Request       Request
 	Capability    domain.ToolCapability
 	ResolvedPaths []string
 	HasAdapter    bool
+	UsesNetwork   bool
 }
 
 type ToolPolicyDecision struct {
@@ -184,9 +190,10 @@ func (e ToolPolicyEvaluator) Evaluate(ctx context.Context, in ToolPolicyInput) T
 		}
 		if e.autonomy != nil {
 			autonomyDecision, err := e.autonomy.AuthorizeToolRequest(ctx, ToolAutonomyRequest{
-				Request:    in.Request,
-				Capability: in.Capability,
-				Risk:       risk,
+				Request:     in.Request,
+				Capability:  in.Capability,
+				Risk:        risk,
+				UsesNetwork: in.UsesNetwork,
 			})
 			if err != nil {
 				decision.Error = &domain.ToolExecutionError{Code: domain.ToolErrPolicyDenied, Field: "autonomy", Message: err.Error()}
@@ -234,6 +241,14 @@ func (e ToolPolicyEvaluator) Evaluate(ctx context.Context, in ToolPolicyInput) T
 	decision.Status = StatusOK
 	decision.Reason = "tool policy allows execution"
 	return decision
+}
+
+func (e ToolPolicyEvaluator) ConsumeAuthorizedToolRequest(ctx context.Context, req ToolAutonomyRequest) error {
+	consumer, ok := e.autonomy.(ToolAutonomyConsumer)
+	if !ok {
+		return nil
+	}
+	return consumer.ConsumeAuthorizedToolRequest(ctx, req)
 }
 
 func scopeDenied(paths, allowed, denied []string) bool {

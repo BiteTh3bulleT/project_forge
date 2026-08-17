@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync"
 
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/gateway"
@@ -10,6 +12,7 @@ import (
 
 type gatewayAutonomyAuthorizer struct {
 	loop *AutonomyMaintenanceLoop
+	mu   sync.Mutex
 }
 
 func newGatewayAutonomyAuthorizer(loop *AutonomyMaintenanceLoop) gateway.ToolAutonomyAuthorizer {
@@ -20,6 +23,19 @@ func newGatewayAutonomyAuthorizer(loop *AutonomyMaintenanceLoop) gateway.ToolAut
 }
 
 func (a *gatewayAutonomyAuthorizer) AuthorizeToolRequest(ctx context.Context, req gateway.ToolAutonomyRequest) (gateway.ToolAutonomyDecision, error) {
+	if a == nil || a.loop == nil || a.loop.intents == nil {
+		return gateway.ToolAutonomyDecision{
+			Allowed:          false,
+			RequiresApproval: true,
+			Reason:           "autonomy loop is not configured",
+		}, nil
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.authorizeToolRequestLocked(ctx, req)
+}
+
+func (a *gatewayAutonomyAuthorizer) authorizeToolRequestLocked(ctx context.Context, req gateway.ToolAutonomyRequest) (gateway.ToolAutonomyDecision, error) {
 	if a == nil || a.loop == nil {
 		return gateway.ToolAutonomyDecision{
 			Allowed:          false,
@@ -35,6 +51,21 @@ func (a *gatewayAutonomyAuthorizer) AuthorizeToolRequest(ctx context.Context, re
 			Reason:           "self-initiated tool request requires intentId",
 		}, nil
 	}
+	intent, ok, err := a.loop.intents.GetByID(ctx, intentID)
+	if err != nil {
+		return gateway.ToolAutonomyDecision{}, err
+	}
+	if !ok {
+		return gateway.ToolAutonomyDecision{Allowed: false, Reason: "autonomy intent does not exist"}, nil
+	}
+	switch intent.Status {
+	case domain.IntentStatusProposed, domain.IntentStatusApproved, domain.IntentStatusRunning:
+	default:
+		return gateway.ToolAutonomyDecision{Allowed: false, Reason: "autonomy intent is not active"}, nil
+	}
+	if strings.TrimSpace(req.Request.WorkspaceID) != strings.TrimSpace(intent.Scope.WorkspaceID) {
+		return gateway.ToolAutonomyDecision{Allowed: false, Reason: "tool request scope does not match autonomy intent"}, nil
+	}
 
 	charterID := strings.TrimSpace(req.Request.CharterID)
 	if charterID == "" {
@@ -43,6 +74,9 @@ func (a *gatewayAutonomyAuthorizer) AuthorizeToolRequest(ctx context.Context, re
 			RequiresApproval: true,
 			Reason:           "self-initiated tool request requires charterId",
 		}, nil
+	}
+	if charterID != strings.TrimSpace(intent.CharterID) {
+		return gateway.ToolAutonomyDecision{Allowed: false, Reason: "tool request charter does not match autonomy intent"}, nil
 	}
 
 	now := domain.NowMillis()
@@ -97,15 +131,23 @@ func (a *gatewayAutonomyAuthorizer) AuthorizeToolRequest(ctx context.Context, re
 	}
 
 	budgetID := strings.TrimSpace(req.Request.BudgetID)
+	if budgetID == "" {
+		return gateway.ToolAutonomyDecision{Allowed: false, Reason: "self-initiated tool request requires budgetId"}, nil
+	}
+	if budgetID != strings.TrimSpace(intent.BudgetID) {
+		return gateway.ToolAutonomyDecision{Allowed: false, Reason: "tool request budget does not match autonomy intent"}, nil
+	}
 	if budgetID != "" {
 		budgets, err := a.loop.ListBudgets(ctx)
 		if err != nil {
 			return gateway.ToolAutonomyDecision{}, err
 		}
+		foundBudget := false
 		for _, budget := range budgets {
 			if !strings.EqualFold(strings.TrimSpace(budget.ID), budgetID) {
 				continue
 			}
+			foundBudget = true
 			if budget.Status != domain.BudgetStatusActive {
 				return gateway.ToolAutonomyDecision{
 					Allowed:          false,
@@ -113,14 +155,16 @@ func (a *gatewayAutonomyAuthorizer) AuthorizeToolRequest(ctx context.Context, re
 					Reason:           "autonomy budget is not active",
 				}, nil
 			}
-			if budget.MaxInternalToolCalls > 0 && budget.Usage.InternalToolCalls+1 > budget.MaxInternalToolCalls {
+			countsAsInternal := !req.UsesNetwork || strings.TrimSpace(req.Request.ApprovalID) != ""
+			if countsAsInternal && budget.MaxInternalToolCalls > 0 && budget.Usage.InternalToolCalls+1 > budget.MaxInternalToolCalls {
 				return gateway.ToolAutonomyDecision{
 					Allowed:          false,
 					RequiresApproval: true,
 					Reason:           "autonomy budget maxInternalToolCalls exceeded",
 				}, nil
 			}
-			if budget.MaxExternalCallsWithoutApprove > 0 && budget.Usage.ExternalToolCallsNoAppr+1 > budget.MaxExternalCallsWithoutApprove {
+			if req.UsesNetwork && strings.TrimSpace(req.Request.ApprovalID) == "" &&
+				budget.Usage.ExternalToolCallsNoAppr+1 > budget.MaxExternalCallsWithoutApprove {
 				return gateway.ToolAutonomyDecision{
 					Allowed:          false,
 					RequiresApproval: true,
@@ -129,6 +173,9 @@ func (a *gatewayAutonomyAuthorizer) AuthorizeToolRequest(ctx context.Context, re
 			}
 			break
 		}
+		if !foundBudget {
+			return gateway.ToolAutonomyDecision{Allowed: false, Reason: "autonomy budget does not exist"}, nil
+		}
 	}
 
 	return gateway.ToolAutonomyDecision{
@@ -136,4 +183,34 @@ func (a *gatewayAutonomyAuthorizer) AuthorizeToolRequest(ctx context.Context, re
 		RequiresApproval: false,
 		Reason:           "autonomy charter and budget allow tool request",
 	}, nil
+}
+
+func (a *gatewayAutonomyAuthorizer) ConsumeAuthorizedToolRequest(ctx context.Context, req gateway.ToolAutonomyRequest) error {
+	if a == nil || a.loop == nil || a.loop.budgets == nil {
+		return fmt.Errorf("autonomy budget repository is not configured")
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	decision, err := a.authorizeToolRequestLocked(ctx, req)
+	if err != nil {
+		return err
+	}
+	if !decision.Allowed {
+		return fmt.Errorf("%s", decision.Reason)
+	}
+	budgetID := strings.TrimSpace(req.Request.BudgetID)
+	budget, ok, err := a.loop.budgets.GetByID(ctx, budgetID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("autonomy budget does not exist")
+	}
+	if req.UsesNetwork && strings.TrimSpace(req.Request.ApprovalID) == "" {
+		budget.Usage.ExternalToolCallsNoAppr++
+	} else {
+		budget.Usage.InternalToolCalls++
+	}
+	budget.UpdatedAt = domain.NowMillis()
+	return a.loop.budgets.Update(ctx, budget)
 }

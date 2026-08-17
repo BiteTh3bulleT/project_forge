@@ -9,18 +9,19 @@ import (
 
 	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/chat"
+	"forge/projectforge/services/core/internal/forgekernel"
 	"forge/projectforge/services/core/internal/forgekernel/runtimeproposal"
 )
 
-const (
-	governedContextDecisionMetadata = "forgeKContextDecisionDigest"
-	governedContextBundleMetadata   = "forgeKContextBundleHash"
-)
-
 type governedPromptBinding struct {
-	DecisionDigest string
-	BundleHash     string
-	PacketID       string
+	PacketID                 string
+	DecisionDigest           string
+	BundleHash               string
+	AuthorityOwner           string
+	TransactionID            string
+	JournalEventID           string
+	PreparedPlanSeal         string
+	AuthorizationFingerprint string
 }
 
 func (s *Server) compileGovernedChatContext(ctx context.Context, th *chat.ThreadDetail) (string, governedPromptBinding, error) {
@@ -56,13 +57,9 @@ func (s *Server) compileGovernedChatContext(ctx context.Context, th *chat.Thread
 		}
 		return "", governedPromptBinding{}, fmt.Errorf("context compilation rejected: %v", result.RejectedReasons)
 	}
-	binding := governedPromptBinding{
-		DecisionDigest: strings.TrimSpace(asString(result.StateSummary["contextDecisionDigest"])),
-		BundleHash:     strings.TrimSpace(asString(result.StateSummary["contextPacketCommitment"])),
-		PacketID:       strings.TrimSpace(asString(result.StateSummary["contextPacketId"])),
-	}
-	if binding.DecisionDigest == "" || binding.BundleHash == "" || binding.PacketID == "" {
-		return "", governedPromptBinding{}, fmt.Errorf("context compiler returned incomplete binding")
+	binding, err := governedPromptBindingFromKernelResult(result)
+	if err != nil {
+		return "", governedPromptBinding{}, err
 	}
 	lines := []string{"FORGE-K governed context bundle " + binding.PacketID + ":"}
 	rawSources, _ := json.Marshal(result.StateSummary["governedSources"])
@@ -156,21 +153,58 @@ func (s *Server) prepareGovernedDirectModelRequest(ctx context.Context, req Mode
 		}
 		return req, fmt.Errorf("context compilation rejected: %v", result.RejectedReasons)
 	}
-	binding := governedPromptBinding{DecisionDigest: strings.TrimSpace(asString(result.StateSummary["contextDecisionDigest"])), BundleHash: strings.TrimSpace(asString(result.StateSummary["contextPacketCommitment"])), PacketID: strings.TrimSpace(asString(result.StateSummary["contextPacketId"]))}
-	if binding.DecisionDigest == "" || binding.BundleHash == "" {
-		return req, fmt.Errorf("context compiler returned incomplete binding")
+	binding, err := governedPromptBindingFromKernelResult(result)
+	if err != nil {
+		return req, err
 	}
 	contextText := "FORGE-K governed context bundle " + binding.PacketID + ". Only current admitted memory evidence is eligible; no legacy chat memory is authoritative."
 	req.Messages = append([]ModelRuntimeChatMessage{{Role: "system", Content: contextText}}, req.Messages...)
 	if len(req.Messages) == 1 && strings.TrimSpace(req.Prompt) != "" {
 		req.Prompt = contextText + "\n\nCURRENT OPERATOR TURN\n" + strings.TrimSpace(req.Prompt)
 	}
-	req.Metadata = cloneAnyMap(req.Metadata)
-	req.Metadata[governedContextDecisionMetadata] = binding.DecisionDigest
-	req.Metadata[governedContextBundleMetadata] = binding.BundleHash
+	req.governedContextBinding = binding
 	return req, nil
 }
 
 func governedBindingFromModelRequest(req ModelRuntimeChatRequest) governedPromptBinding {
-	return governedPromptBinding{DecisionDigest: strings.TrimSpace(asString(req.Metadata[governedContextDecisionMetadata])), BundleHash: strings.TrimSpace(asString(req.Metadata[governedContextBundleMetadata]))}
+	return req.governedContextBinding
+}
+
+func governedPromptBindingFromKernelResult(result domain.SyscallResult) (governedPromptBinding, error) {
+	if !result.Success || result.Action != domain.ActionCompileContext {
+		return governedPromptBinding{}, fmt.Errorf("context compiler did not return a successful compile result")
+	}
+	summary := result.StateSummary
+	if summary == nil || summary["commitProofVerified"] != true || summary["authorizationProofVerified"] != true {
+		return governedPromptBinding{}, fmt.Errorf("context compiler result is missing verified commit or authorization proof")
+	}
+	binding := governedPromptBinding{
+		PacketID:                 strings.TrimSpace(asString(summary["contextPacketId"])),
+		DecisionDigest:           strings.TrimSpace(asString(summary["contextDecisionDigest"])),
+		BundleHash:               strings.TrimSpace(asString(summary["contextPacketCommitment"])),
+		AuthorityOwner:           strings.TrimSpace(asString(summary["kernelAuthorityOwner"])),
+		TransactionID:            strings.TrimSpace(asString(summary["transactionId"])),
+		JournalEventID:           strings.TrimSpace(asString(summary["journalEventId"])),
+		PreparedPlanSeal:         strings.TrimSpace(asString(summary["preparedPlanSeal"])),
+		AuthorizationFingerprint: strings.TrimSpace(asString(summary["authorizationFingerprint"])),
+	}
+	if binding.AuthorityOwner != forgekernel.AuthorityOwnerForgeK ||
+		binding.TransactionID != result.RequestID+":transaction" ||
+		binding.JournalEventID != result.RequestID+":journal_event" {
+		return governedPromptBinding{}, fmt.Errorf("context compiler result has an invalid production authority receipt")
+	}
+	if err := runtimeproposal.ValidateContextCompilerIssuance(binding.runtimeBinding("")); err != nil {
+		return governedPromptBinding{}, fmt.Errorf("context compiler returned incomplete binding: %w", err)
+	}
+	return binding, nil
+}
+
+func (binding governedPromptBinding) runtimeBinding(promptHash string) runtimeproposal.ContextBinding {
+	return runtimeproposal.ContextBinding{
+		PacketID: binding.PacketID, DecisionDigest: binding.DecisionDigest,
+		BundleHash: binding.BundleHash, PromptHash: promptHash,
+		AuthorityOwner: binding.AuthorityOwner, TransactionID: binding.TransactionID,
+		JournalEventID: binding.JournalEventID, PreparedPlanSeal: binding.PreparedPlanSeal,
+		AuthorizationFingerprint: binding.AuthorizationFingerprint,
+	}
 }

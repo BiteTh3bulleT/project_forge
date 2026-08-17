@@ -58,8 +58,8 @@ a second live authority. No fallback or shadow path performs dual commits.
 | Semantic Algebra | FORGE-K deterministic `semantic.diff.v1`; other operators staged | Governed live operations | Add operators only through separate deterministic contracts |
 | Memory Palace | Court-derived immutable evidence, append-only revision, governed VSA projection, narrow intent routes | Structured governed objects/routes | Closed for live authority; offline recovery remains operational work |
 | Context Compiler | Pure production Kernel decision over admitted sources; immutable bundle and scope-head CAS | FORGE-K bundles | Closed in K20J |
-| Runtime Boundary | Pure runtime-proposal decision and consensus gate cover every model visibility surface, bound to the Kernel context decision | FORGE-K driver contract | Closed for current model surfaces in K20J |
-| Consensus | Final-response guard after runtime-proposal classification | Composition/admission guard | Closed for current API response surfaces; admission remains a separate syscall |
+| Runtime Boundary | Pure runtime-proposal decision and consensus gate cover every model visibility surface, bound to a verified live Kernel Context Compiler commit receipt | FORGE-K driver contract | Closed for current model surfaces in K20J; no synthesized binding fallback |
+| Consensus | Final-response guard after runtime-proposal classification; uncertain candidates are replaced before visibility | Composition/admission guard | Closed for current API response surfaces; evidence admission remains a separate syscall |
 | Snapshots/replay | Immutable governed context bundles; legacy snapshots inspection-only; live restore disabled | FORGE-K shape/replay authority | Closed for live authority; daemon-stopped whole-store recovery remains |
 | KV | Identity validation canary; backend reuse disabled | Acceleration only | No authority gap while reuse is disabled |
 | Lymphatic | Proposal-only maintenance, mutating legacy writers retired | Proposal-only maintenance lane | Closed for authority; future execution requires a new Kernel contract |
@@ -74,8 +74,11 @@ a second live authority. No fallback or shadow path performs dual commits.
 - Models cannot select tools, approve actions, execute tools, admit evidence, or
   mutate canonical state.
 - Model text and reasoning cannot become visible or persistent before the pure
-  runtime-proposal decision and final-response consensus gate. Tool-loop stage
-  events expose commitments, not raw model JSON or arguments.
+  runtime-proposal decision verifies a live Context Compiler-issued packet and
+  commit receipt and the final-response consensus gate accepts the candidate.
+  Missing bindings and uncertain consensus replace the candidate before
+  visibility. Tool-loop stage events expose commitments, not raw model JSON or
+  arguments.
 - Current truth and historical truth remain separately queryable.
 - Replay detects journal divergence and cannot silently repair truth.
 - Operator status reports the active sole authority owner and offline rollback posture.

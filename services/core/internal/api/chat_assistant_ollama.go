@@ -207,7 +207,7 @@ func (s *Server) completeAssistantWithoutTools(
 	consensusDecision := consensusgate.Gate(consensusgate.Input{
 		Content: consensusCandidate, Surface: consensusgate.SurfaceChatFinal,
 		WorkspaceID: strings.TrimSpace(s.cfg.WorkspaceDir), CorrelationID: corr,
-		ModelProposalOnly: true,
+		EvidenceRefs: runtimeProposalConsensusEvidence(runtimeDecision, runtimeDecisionErr), ModelProposalOnly: true,
 	})
 	if runtimeDecisionErr == nil && runtimeDecision.Status == runtimeproposal.StatusAccepted {
 		content = consensusDecision.Content
@@ -333,7 +333,7 @@ func (s *Server) completeAssistantWithNativeOllamaStream(
 	consensusDecision := consensusgate.Gate(consensusgate.Input{
 		Content: consensusCandidate, Surface: consensusgate.SurfaceChatFinal,
 		WorkspaceID: strings.TrimSpace(s.cfg.WorkspaceDir), CorrelationID: corr,
-		ModelProposalOnly: true,
+		EvidenceRefs: runtimeProposalConsensusEvidence(runtimeDecision, runtimeDecisionErr), ModelProposalOnly: true,
 	})
 	if runtimeDecisionErr == nil && runtimeDecision.Status == runtimeproposal.StatusAccepted {
 		content = consensusDecision.Content

@@ -141,6 +141,7 @@ func (s *Server) completeAssistantWithModelRuntimeStream(
 		Surface:           consensusgate.SurfaceChatFinal,
 		WorkspaceID:       workspaceID,
 		CorrelationID:     corr,
+		EvidenceRefs:      runtimeProposalConsensusEvidence(runtimeDecision, runtimeDecisionErr),
 		ModelProposalOnly: result.Proposal != nil,
 	})
 	if runtimeDecisionErr == nil && runtimeDecision.Status == runtimeproposal.StatusAccepted {
@@ -305,6 +306,7 @@ func (s *Server) completeAssistantWithModelRuntime(
 		Surface:           consensusgate.SurfaceChatFinal,
 		WorkspaceID:       workspaceID,
 		CorrelationID:     corr,
+		EvidenceRefs:      runtimeProposalConsensusEvidence(runtimeDecision, runtimeDecisionErr),
 		ModelProposalOnly: result.Proposal != nil,
 	})
 	if runtimeDecisionErr == nil && runtimeDecision.Status == runtimeproposal.StatusAccepted {

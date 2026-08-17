@@ -144,7 +144,7 @@ Full list in [server.go handleGetSettings / handleUpdateSettings](../../services
 
 | Key | Default | Effect |
 |---|---|---|
-| `autonomy_mode` | `observe` | `off` / `observe` / `propose` / `maintain` / `mission`. See safety note below. |
+| `autonomy_mode` | `observe` | `off` / `observe` / `propose` / `maintain` / `mission`. Exposed as `autonomyMode` through `GET`/`PATCH /api/settings` and applied to the running autonomy loop without a restart. See safety note below. |
 | `autonomy_dream_enabled` | `true` | Autonomy idle dream-loop goroutine on/off |
 | `dream_mode_enabled` | `true` | Operator-facing `/api/dream/run` default availability flag exposed in settings |
 | `dream_mode_default_dry_run` | `true` | Default posture for Dream Mode v0 reports |

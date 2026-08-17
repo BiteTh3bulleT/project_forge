@@ -747,7 +747,8 @@ func (s *Server) completeAssistantWithGatewayTools(
 		candidate, _ := sanitizeAssistantVisibleContent(final.String())
 		consensus := consensusgate.Gate(consensusgate.Input{
 			Content: candidate, Surface: consensusgate.SurfaceChatFinal,
-			WorkspaceID: s.cfg.WorkspaceDir, CorrelationID: corr, ModelProposalOnly: true,
+			WorkspaceID: s.cfg.WorkspaceDir, CorrelationID: corr,
+			EvidenceRefs: runtimeProposalConsensusEvidence(decision, decisionErr), ModelProposalOnly: true,
 		})
 		visible := runtimeProposalFailureText
 		if decisionErr == nil {

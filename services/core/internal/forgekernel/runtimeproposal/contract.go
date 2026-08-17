@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	ContractVersion = "forge.runtime_proposal.decision.v1"
-	PolicyVersion   = "forge.runtime_proposal.policy.v1"
+	ContractVersion = "forge.runtime_proposal.decision.v2"
+	PolicyVersion   = "forge.runtime_proposal.policy.v2"
 
 	SourceModelRuntime = "modelruntime"
 	SourceNativeOllama = "native_ollama"
@@ -26,14 +26,15 @@ const (
 	StatusAccepted = "accepted_proposal"
 	StatusWithheld = "withheld"
 
-	MaxOutputBytes       = 4 << 20
-	MaxSelectedPaths     = 64
-	MaxGatewayEvidence   = 32
-	MaxIdentifierBytes   = 4096
-	withheldVisibleText  = "FORGE withheld an unverified model proposal before final visibility."
-	OutputHashAlgorithm  = "sha256"
-	ProposalAuthority    = "proposal_only"
-	NonCanonicalEvidence = "NONCANONICAL_MODEL_PROPOSAL"
+	MaxOutputBytes        = 4 << 20
+	MaxSelectedPaths      = 64
+	MaxGatewayEvidence    = 32
+	MaxIdentifierBytes    = 4096
+	withheldVisibleText   = "FORGE withheld an unverified model proposal before final visibility."
+	OutputHashAlgorithm   = "sha256"
+	ProposalAuthority     = "proposal_only"
+	NonCanonicalEvidence  = "NONCANONICAL_MODEL_PROPOSAL"
+	ContextAuthorityOwner = "forge_k.kernel"
 )
 
 var ErrInvalidInput = errors.New("invalid runtime proposal input")
@@ -72,9 +73,15 @@ type RuntimeIdentity struct {
 }
 
 type ContextBinding struct {
-	DecisionDigest string `json:"decisionDigest"`
-	BundleHash     string `json:"bundleHash"`
-	PromptHash     string `json:"promptHash"`
+	PacketID                 string `json:"packetId"`
+	DecisionDigest           string `json:"decisionDigest"`
+	BundleHash               string `json:"bundleHash"`
+	PromptHash               string `json:"promptHash"`
+	AuthorityOwner           string `json:"authorityOwner"`
+	TransactionID            string `json:"transactionId"`
+	JournalEventID           string `json:"journalEventId"`
+	PreparedPlanSeal         string `json:"preparedPlanSeal"`
+	AuthorizationFingerprint string `json:"authorizationFingerprint"`
 }
 
 type Provenance struct {
@@ -135,6 +142,12 @@ type Envelope struct {
 	Identity                  RuntimeIdentity `json:"identity"`
 	ContextDecisionDigest     string          `json:"contextDecisionDigest"`
 	ContextBundleHash         string          `json:"contextBundleHash"`
+	ContextPacketID           string          `json:"contextPacketId"`
+	ContextAuthorityOwner     string          `json:"contextAuthorityOwner"`
+	ContextTransactionID      string          `json:"contextTransactionId"`
+	ContextJournalEventID     string          `json:"contextJournalEventId"`
+	ContextPreparedPlanSeal   string          `json:"contextPreparedPlanSeal"`
+	ContextAuthorizationProof string          `json:"contextAuthorizationProof"`
 	PromptHash                string          `json:"promptHash"`
 	DeclaredOutputHash        string          `json:"declaredOutputHash"`
 	OutputHash                string          `json:"outputHash"`
@@ -218,14 +231,20 @@ func Decide(input Input) (Decision, error) {
 		ProposalID:  "runtime-proposal:" + strings.TrimPrefix(proposalBindingHash, OutputHashAlgorithm+":"),
 		ObjectClass: NonCanonicalEvidence, AuthorityLevel: ProposalAuthority,
 		Scope: normalized.Scope, Identity: normalized.Identity,
-		ContextDecisionDigest: normalized.Context.DecisionDigest,
-		ContextBundleHash:     normalized.Context.BundleHash,
-		PromptHash:            normalized.Context.PromptHash,
-		DeclaredOutputHash:    normalized.DeclaredOutputHash,
-		OutputHash:            outputHash,
-		OutputHashVerified:    normalized.DeclaredOutputHash == outputHash,
-		OutputBytes:           len([]byte(normalized.OutputText)),
-		ProvenanceHash:        provenanceHash, RuntimeIdentityHash: identityHash,
+		ContextDecisionDigest:     normalized.Context.DecisionDigest,
+		ContextBundleHash:         normalized.Context.BundleHash,
+		ContextPacketID:           normalized.Context.PacketID,
+		ContextAuthorityOwner:     normalized.Context.AuthorityOwner,
+		ContextTransactionID:      normalized.Context.TransactionID,
+		ContextJournalEventID:     normalized.Context.JournalEventID,
+		ContextPreparedPlanSeal:   normalized.Context.PreparedPlanSeal,
+		ContextAuthorizationProof: normalized.Context.AuthorizationFingerprint,
+		PromptHash:                normalized.Context.PromptHash,
+		DeclaredOutputHash:        normalized.DeclaredOutputHash,
+		OutputHash:                outputHash,
+		OutputHashVerified:        normalized.DeclaredOutputHash == outputHash,
+		OutputBytes:               len([]byte(normalized.OutputText)),
+		ProvenanceHash:            provenanceHash, RuntimeIdentityHash: identityHash,
 		ScopeHash: scopeHash, GatewayEvidenceCommitment: evidenceCommitment,
 		GatewayEvidenceCount:     len(normalized.GatewayEvidence),
 		GatewayExecutionObserved: validGatewayCompletion,
@@ -283,11 +302,9 @@ func normalizeAndValidate(in Input) (Input, error) {
 	if err := validateIdentity(in.Identity); err != nil {
 		return Input{}, err
 	}
-	in.Context.DecisionDigest = strings.TrimSpace(in.Context.DecisionDigest)
-	in.Context.BundleHash = strings.TrimSpace(in.Context.BundleHash)
-	in.Context.PromptHash = strings.TrimSpace(in.Context.PromptHash)
-	if !validHash(in.Context.DecisionDigest) || !validHash(in.Context.BundleHash) || !validHash(in.Context.PromptHash) {
-		return Input{}, invalid("context", "decision, bundle, and prompt hashes are required")
+	in.Context = normalizeContextBinding(in.Context)
+	if err := ValidateContextBinding(in.Context); err != nil {
+		return Input{}, err
 	}
 	in.Provenance = normalizeProvenance(in.Provenance)
 	if err := validateProvenance(in.Provenance); err != nil {
@@ -321,6 +338,68 @@ func normalizeAndValidate(in Input) (Input, error) {
 		return in.GatewayEvidence[i].ToolID < in.GatewayEvidence[j].ToolID
 	})
 	return in, nil
+}
+
+// ValidateContextBinding requires the immutable identity and commit proof
+// emitted by one successful production Context Compiler transaction. It does
+// not accept caller-synthesized digest/bundle pairs as authority evidence.
+func ValidateContextBinding(binding ContextBinding) error {
+	binding = normalizeContextBinding(binding)
+	if err := ValidateContextCompilerIssuance(binding); err != nil {
+		return err
+	}
+	if !validHash(binding.PromptHash) {
+		return invalid("context.promptHash", "sha256 commitment is required")
+	}
+	return nil
+}
+
+// ValidateContextCompilerIssuance validates the authority and durable receipt
+// portion of a binding before exact prompt bytes are available.
+func ValidateContextCompilerIssuance(binding ContextBinding) error {
+	binding = normalizeContextBinding(binding)
+	if binding.AuthorityOwner != ContextAuthorityOwner {
+		return invalid("context.authorityOwner", "production FORGE-K Context Compiler authority is required")
+	}
+	for _, item := range []struct {
+		field string
+		value string
+	}{
+		{"packetId", binding.PacketID},
+		{"transactionId", binding.TransactionID},
+		{"journalEventId", binding.JournalEventID},
+	} {
+		if !validID(item.value) {
+			return invalid("context."+item.field, "live Context Compiler commit identity is required")
+		}
+	}
+	for _, item := range []struct {
+		field string
+		value string
+	}{
+		{"decisionDigest", binding.DecisionDigest},
+		{"bundleHash", binding.BundleHash},
+		{"preparedPlanSeal", binding.PreparedPlanSeal},
+		{"authorizationFingerprint", binding.AuthorizationFingerprint},
+	} {
+		if !validHash(item.value) {
+			return invalid("context."+item.field, "sha256 commitment is required")
+		}
+	}
+	return nil
+}
+
+func normalizeContextBinding(binding ContextBinding) ContextBinding {
+	binding.PacketID = strings.TrimSpace(binding.PacketID)
+	binding.DecisionDigest = strings.TrimSpace(binding.DecisionDigest)
+	binding.BundleHash = strings.TrimSpace(binding.BundleHash)
+	binding.PromptHash = strings.TrimSpace(binding.PromptHash)
+	binding.AuthorityOwner = strings.TrimSpace(binding.AuthorityOwner)
+	binding.TransactionID = strings.TrimSpace(binding.TransactionID)
+	binding.JournalEventID = strings.TrimSpace(binding.JournalEventID)
+	binding.PreparedPlanSeal = strings.TrimSpace(binding.PreparedPlanSeal)
+	binding.AuthorizationFingerprint = strings.TrimSpace(binding.AuthorizationFingerprint)
+	return binding
 }
 
 func normalizeScope(scope Scope) (Scope, error) {

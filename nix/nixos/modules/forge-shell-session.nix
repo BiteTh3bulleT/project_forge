@@ -105,6 +105,37 @@ in
       description = "Keep the graphical shell in safe mode with host mutation and direct system control disabled.";
     };
 
+    unsafeTestMode = lib.mkOption {
+
+      type = lib.types.bool;
+      default = false;
+      description = "Explicitly permit a test profile to disable shell safe mode and enable dangerous operator controls.";
+    };
+
+    hostMutation = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Advertise enabled host-mutation controls in an explicit unsafe test session.";
+    };
+
+    directSystemControl = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Enable implemented shell shutdown and reboot commands in an explicit unsafe test session.";
+    };
+
+    modelMutation = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Expose governed model-lifecycle controls in an explicit unsafe test session.";
+    };
+
+    semanticMemoryWrite = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = "Expose governed semantic-write controls in an explicit unsafe test session.";
+    };
+
     fullscreen = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -167,8 +198,14 @@ in
         message = "Phase G4 FORGE graphical shell session must not autostart or replace the user's desktop.";
       }
       {
-        assertion = cfg.safeMode == true;
-        message = "Phase G4 FORGE graphical shell session must remain in safe mode.";
+        assertion = cfg.safeMode || cfg.unsafeTestMode;
+        message = "Disabling FORGE shell safe mode requires forge.shellSession.unsafeTestMode = true.";
+      }
+      {
+        assertion =
+          cfg.unsafeTestMode
+          || !(cfg.hostMutation || cfg.directSystemControl || cfg.modelMutation || cfg.semanticMemoryWrite);
+        message = "Dangerous FORGE shell controls require forge.shellSession.unsafeTestMode = true.";
       }
       {
         assertion =
@@ -220,10 +257,10 @@ in
       FORGE_SHELL_SAFE_MODE=${boolString cfg.safeMode}
       FORGE_SHELL_FULLSCREEN=${boolString cfg.fullscreen}
       FORGE_SHELL_AUTOSTART=false
-      FORGE_SHELL_HOST_MUTATION=false
-      FORGE_SHELL_DIRECT_SYSTEM_CONTROL=false
-      FORGE_SHELL_MODEL_MUTATION=false
-      FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false
+      FORGE_SHELL_HOST_MUTATION=${boolString cfg.hostMutation}
+      FORGE_SHELL_DIRECT_SYSTEM_CONTROL=${boolString cfg.directSystemControl}
+      FORGE_SHELL_MODEL_MUTATION=${boolString cfg.modelMutation}
+      FORGE_SHELL_SEMANTIC_MEMORY_WRITE=${boolString cfg.semanticMemoryWrite}
       FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false
       FORGE_SHELL_RUNTIME_DIR=${cfg.runtimePath}
     '';
@@ -253,10 +290,10 @@ in
       X-FORGE-SafeMode=${boolString cfg.safeMode}
       X-FORGE-Fullscreen=${boolString cfg.fullscreen}
       X-FORGE-AutoStart=false
-      X-FORGE-HostMutation=false
-      X-FORGE-DirectSystemControl=false
-      X-FORGE-ModelMutation=false
-      X-FORGE-SemanticMemoryWrite=false
+      X-FORGE-HostMutation=${boolString cfg.hostMutation}
+      X-FORGE-DirectSystemControl=${boolString cfg.directSystemControl}
+      X-FORGE-ModelMutation=${boolString cfg.modelMutation}
+      X-FORGE-SemanticMemoryWrite=${boolString cfg.semanticMemoryWrite}
       X-FORGE-ForgeKLiveAuthority=false
     '';
   };

@@ -101,22 +101,23 @@ type ModelRuntimeChatMessage struct {
 }
 
 type ModelRuntimeChatRequest struct {
-	ModelID       string                    `json:"modelId"`
-	Backend       string                    `json:"backend,omitempty"`
-	Role          string                    `json:"role,omitempty"`
-	WorkloadClass string                    `json:"workloadClass,omitempty"`
-	Messages      []ModelRuntimeChatMessage `json:"messages,omitempty"`
-	Prompt        string                    `json:"prompt,omitempty"`
-	Parameters    map[string]any            `json:"parameters,omitempty"`
-	MaxTokens     int                       `json:"maxTokens,omitempty"`
-	TimeoutMs     int                       `json:"timeoutMs,omitempty"`
-	MaxAttempts   int                       `json:"maxAttempts,omitempty"`
-	Stream        bool                      `json:"stream,omitempty"`
-	Actor         string                    `json:"actor,omitempty"`
-	Source        string                    `json:"source,omitempty"`
-	Meta          ModelRuntimeRequestMeta   `json:"meta"`
-	Provenance    map[string]any            `json:"provenance,omitempty"`
-	Metadata      map[string]any            `json:"metadata,omitempty"`
+	ModelID                string                    `json:"modelId"`
+	Backend                string                    `json:"backend,omitempty"`
+	Role                   string                    `json:"role,omitempty"`
+	WorkloadClass          string                    `json:"workloadClass,omitempty"`
+	Messages               []ModelRuntimeChatMessage `json:"messages,omitempty"`
+	Prompt                 string                    `json:"prompt,omitempty"`
+	Parameters             map[string]any            `json:"parameters,omitempty"`
+	MaxTokens              int                       `json:"maxTokens,omitempty"`
+	TimeoutMs              int                       `json:"timeoutMs,omitempty"`
+	MaxAttempts            int                       `json:"maxAttempts,omitempty"`
+	Stream                 bool                      `json:"stream,omitempty"`
+	Actor                  string                    `json:"actor,omitempty"`
+	Source                 string                    `json:"source,omitempty"`
+	Meta                   ModelRuntimeRequestMeta   `json:"meta"`
+	Provenance             map[string]any            `json:"provenance,omitempty"`
+	Metadata               map[string]any            `json:"metadata,omitempty"`
+	governedContextBinding governedPromptBinding
 }
 
 type ModelRuntimeUsage struct {
@@ -1035,7 +1036,7 @@ func classifyDirectRuntimeProposal(req ModelRuntimeChatRequest, result ModelRunt
 	consensus := consensusgate.Gate(consensusgate.Input{
 		Content: consensusCandidate, Surface: consensusgate.SurfaceChatFinal,
 		WorkspaceID: req.Meta.WorkspaceID, CorrelationID: req.Meta.CorrelationID,
-		ModelProposalOnly: true,
+		EvidenceRefs: runtimeProposalConsensusEvidence(decision, decisionErr), ModelProposalOnly: true,
 	})
 	if decisionErr == nil && decision.Status == runtimeproposal.StatusAccepted {
 		content = consensus.Content

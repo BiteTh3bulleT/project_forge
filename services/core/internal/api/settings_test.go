@@ -61,6 +61,74 @@ func TestPatchSettingsPersistsDreamModeSettings(t *testing.T) {
 	}
 }
 
+func TestPatchSettingsAppliesAutonomyModeWithoutRestart(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+	if srv.autonomy == nil {
+		t.Fatal("autonomy loop was not configured")
+	}
+
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/settings", bytes.NewReader([]byte(`{"autonomyMode":"maintain"}`)))
+	patchRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(patchRR, patchReq)
+	if patchRR.Code != http.StatusOK {
+		t.Fatalf("patch settings status=%d body=%s", patchRR.Code, patchRR.Body.String())
+	}
+	if got := srv.autonomy.Mode(); got != "maintain" {
+		t.Fatalf("live autonomy mode=%q want maintain", got)
+	}
+	if got := loadSetting(st.DB, "autonomy_mode", ""); got != "maintain" {
+		t.Fatalf("persisted autonomy mode=%q want maintain", got)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/settings", nil)
+	getRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(getRR, getReq)
+	if getRR.Code != http.StatusOK {
+		t.Fatalf("get settings status=%d body=%s", getRR.Code, getRR.Body.String())
+	}
+	var payload struct {
+		AutonomyMode         string `json:"autonomyMode"`
+		AutonomyDreamEnabled bool   `json:"autonomyDreamEnabled"`
+	}
+	if err := json.NewDecoder(getRR.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode settings: %v", err)
+	}
+	if payload.AutonomyMode != "maintain" || !payload.AutonomyDreamEnabled {
+		t.Fatalf("unexpected autonomy settings: %#v", payload)
+	}
+}
+
+func TestPatchSettingsRejectsInvalidAutonomyMode(t *testing.T) {
+	dataDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	st, err := store.Open(dataDir)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	srv := NewServer(st, config.Config{DataDir: dataDir, WorkspaceDir: workspaceDir})
+	t.Cleanup(func() { srv.ShutdownWatch() })
+	patchReq := httptest.NewRequest(http.MethodPatch, "/api/settings", bytes.NewReader([]byte(`{"autonomyMode":"unbounded"}`)))
+	patchRR := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(patchRR, patchReq)
+	if patchRR.Code != http.StatusBadRequest {
+		t.Fatalf("patch settings status=%d body=%s", patchRR.Code, patchRR.Body.String())
+	}
+	if got := loadSetting(st.DB, "autonomy_mode", ""); got != "" {
+		t.Fatalf("invalid autonomy mode persisted as %q", got)
+	}
+}
+
 func TestPatchSettingsPersistsRuntimeControls(t *testing.T) {
 	dataDir := t.TempDir()
 	workspaceDir := t.TempDir()

@@ -6,11 +6,11 @@ FORGE-K Online Phase 10 - Consensus Gate.
 
 ## Status marker
 
-`CONSENSUS_GATE_MODEL_RUNTIME_ONLY / LIVE_API_OWNED / FINAL_RESPONSE_GUARD_ONLY / NO_CANONICAL_TRUTH_COMMIT / NO_EVIDENCE_ADMISSION / NO_FORGE_K_CONSENSUS_AUTHORITY`
+`CONSENSUS_GATE_CURRENT_MODEL_SURFACES / LIVE_API_OWNED / FINAL_RESPONSE_GUARD_ONLY / UNCERTAIN_CONTENT_WITHHELD / NO_CANONICAL_TRUTH_COMMIT / NO_EVIDENCE_ADMISSION / NO_FORGE_K_CONSENSUS_AUTHORITY`
 
 ## Summary
 
-Modelruntime-backed assistant final responses now pass through a deterministic live-owned consensus gate before assistant message persistence. Unsupported high-risk action claims from model proposal output are withheld unless gateway/audit-style execution evidence is present.
+All current model-backed assistant final-response surfaces pass through a deterministic live-owned consensus gate after the runtime-proposal boundary and before response visibility or assistant-message persistence. Unsupported high-risk action claims are withheld unless exact gateway execution evidence is present. Any candidate whose consensus status remains `uncertain`, including ordinary model-only output without governed evidence, is replaced with a deterministic withholding message rather than passed through.
 
 ## Live owner
 
@@ -35,7 +35,8 @@ Revert the Phase 10 commit to remove the pure consensus gate package, modelrunti
 ## Blockers
 
 - FORGE-K Consensus Mesh is not live decision authority.
-- Gateway, native Ollama, deterministic shortcut, and streaming token surfaces are not fully consensus gated in this phase.
+- The gate currently receives governed evidence only where API coordination supplies exact evidence refs or gateway execution state. Ordinary model-only chat therefore remains uncertain and is intentionally withheld until an evidence-aware composition contract is wired.
+- FORGE-K Consensus Mesh remains simulator-only; this live guard is the bounded API composition gate.
 - Consensus accepted/uncertain/withheld status is response-composition metadata only, not canonical truth, admitted evidence, approval, tool execution authority, or Kernel commit.
 
 ## Next phase

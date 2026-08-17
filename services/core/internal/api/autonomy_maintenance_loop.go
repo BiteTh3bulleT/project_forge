@@ -98,7 +98,7 @@ func (l *AutonomyMaintenanceLoop) Run(ctx context.Context) {
 	_ = l.emit("autonomy.dream_loop.started", map[string]any{
 		"workspaceId": l.scope.WorkspaceID,
 		"laneId":      l.scope.LaneID,
-		"mode":        l.mode,
+		"mode":        l.Mode(),
 		"idleAfterMs": int64(l.idleAfter / time.Millisecond),
 		"tickEveryMs": int64(l.tickEvery / time.Millisecond),
 	})
@@ -231,7 +231,38 @@ func (l *AutonomyMaintenanceLoop) Mode() domain.AutonomyMode {
 	if l == nil {
 		return domain.AutonomyModeOff
 	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	return l.mode
+}
+
+func (l *AutonomyMaintenanceLoop) SetMode(mode domain.AutonomyMode) error {
+	if l == nil {
+		return fmt.Errorf("autonomy maintenance loop is not configured")
+	}
+	switch mode {
+	case domain.AutonomyModeOff,
+		domain.AutonomyModeObserve,
+		domain.AutonomyModePropose,
+		domain.AutonomyModeMaintain,
+		domain.AutonomyModeMission:
+	default:
+		return fmt.Errorf("unsupported autonomy mode %q", mode)
+	}
+	l.mu.Lock()
+	previous := l.mode
+	l.mode = mode
+	l.mu.Unlock()
+	if previous != mode {
+		_ = l.emit("autonomy.mode.changed", map[string]any{
+			"workspaceId":  l.scope.WorkspaceID,
+			"laneId":       l.scope.LaneID,
+			"previousMode": previous,
+			"mode":         mode,
+			"atMs":         l.nowMillis(),
+		})
+	}
+	return nil
 }
 
 func (l *AutonomyMaintenanceLoop) ListIntents(ctx context.Context, status string, limit int) ([]domain.AutonomyIntent, error) {
@@ -570,7 +601,7 @@ func (l *AutonomyMaintenanceLoop) executeImprovementPhase(ctx context.Context, i
 			})
 			return phase, nil
 		}
-		preview, err := l.runner.Preview(ctx, intent, actions, l.mode)
+		preview, err := l.runner.Preview(ctx, intent, actions, l.Mode())
 		if err != nil {
 			phase.Status = "failed"
 			phase.Diagnostics = append(phase.Diagnostics, AutonomyMaintenanceDiagnostic{
@@ -598,7 +629,7 @@ func (l *AutonomyMaintenanceLoop) executeImprovementPhase(ctx context.Context, i
 		})
 		return phase, nil
 	}
-	run, err := l.runner.Run(ctx, intent, actions, domain.RunModeCommitIfAuthorized, l.mode)
+	run, err := l.runner.Run(ctx, intent, actions, domain.RunModeCommitIfAuthorized, l.Mode())
 	phase.Summary["decision"] = run.Decision
 	phase.Summary["decisionId"] = run.DecisionID
 	phase.Summary["committedCount"] = len(run.CommittedObjectIDs)
@@ -668,7 +699,7 @@ func (l *AutonomyMaintenanceLoop) previewMaintenancePhase(ctx context.Context, i
 		previewWarnings := append([]string{}, plan.Warnings...)
 		decision := domain.DecisionAllowProposeOnly
 		if l.runner != nil {
-			preview, err := l.runner.Preview(ctx, plan.Intent, plan.Actions, l.mode)
+			preview, err := l.runner.Preview(ctx, plan.Intent, plan.Actions, l.Mode())
 			if err != nil {
 				phase.Diagnostics = append(phase.Diagnostics, AutonomyMaintenanceDiagnostic{
 					Code:     "RULE_AGENT_POLICY_PREVIEW_FAILED",

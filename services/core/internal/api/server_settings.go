@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"forge/projectforge/services/core/internal/adapters"
+	"forge/projectforge/services/core/internal/aios/domain"
 	"forge/projectforge/services/core/internal/config"
 	"forge/projectforge/services/core/internal/forgekshadow"
 	"forge/projectforge/services/core/internal/gpu"
@@ -38,6 +39,8 @@ func shouldPersistSettingSecret(value string) bool {
 }
 
 func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
+	autonomyMode := parseAutonomyMode(loadSetting(s.st.DB, "autonomy_mode", string(domain.AutonomyModeObserve)))
+	autonomyDreamEnabled := parseBoolSetting(loadSetting(s.st.DB, "autonomy_dream_enabled", "true"), true)
 	ext := loadSetting(s.st.DB, "extensions_csv", ingest.DefaultExtensionsCSV())
 	theme := loadSetting(s.st.DB, "theme", "dark")
 	ollamaBase := effectiveOllamaBaseURL(s.st.DB)
@@ -79,6 +82,8 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	runtimeControls := runtimeControlsFromSettings(s.st.DB, s.cfg)
 	shadowMode := shadowModeFromSettings(s.st.DB, s.cfg)
 	writeJSON(w, http.StatusOK, map[string]any{
+		"autonomyMode":                  autonomyMode,
+		"autonomyDreamEnabled":          autonomyDreamEnabled,
 		"extensionsCsv":                 ext,
 		"theme":                         theme,
 		"ollamaBaseUrl":                 ollamaBase,
@@ -146,6 +151,34 @@ func (s *Server) handlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	discordConfigChanged := false
 	telegramConfigChanged := false
+	if raw, ok := body["autonomyMode"]; ok {
+		value, ok := raw.(string)
+		if !ok {
+			writeAPIError(w, http.StatusBadRequest, "request_failed", "autonomyMode must be a string", nil)
+			return
+		}
+		mode := domain.AutonomyMode(strings.TrimSpace(strings.ToLower(value)))
+		switch mode {
+		case domain.AutonomyModeOff,
+			domain.AutonomyModeObserve,
+			domain.AutonomyModePropose,
+			domain.AutonomyModeMaintain,
+			domain.AutonomyModeMission:
+		default:
+			writeAPIError(w, http.StatusBadRequest, "request_failed", "autonomyMode must be off, observe, propose, maintain, or mission", nil)
+			return
+		}
+		if err := upsertSetting(ctx, s.st.DB, "autonomy_mode", string(mode)); err != nil {
+			writeAPIRequestError(w, http.StatusInternalServerError, err)
+			return
+		}
+		if s.autonomy != nil {
+			if err := s.autonomy.SetMode(mode); err != nil {
+				writeAPIRequestError(w, http.StatusInternalServerError, err)
+				return
+			}
+		}
+	}
 	if v, ok := body["extensionsCsv"].(string); ok {
 		if err := upsertSetting(ctx, s.st.DB, "extensions_csv", v); err != nil {
 			writeAPIRequestError(w, http.StatusInternalServerError, err)

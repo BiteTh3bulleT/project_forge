@@ -2,6 +2,11 @@
   lib,
   writeShellApplication,
   forgeDesktopShell ? null,
+  safeMode ? true,
+  hostMutation ? false,
+  directSystemControl ? false,
+  modelMutation ? false,
+  semanticMemoryWrite ? false,
 }:
 
 # FORGE graphical shell session wrapper.
@@ -10,6 +15,7 @@
 # Preserve the G2 local-binary fallback when that package is absent or still
 # advertises passthru.containsTauriBinary = false.
 let
+  boolString = value: if value then "true" else "false";
   packagedDesktopShell =
     if forgeDesktopShell != null && (forgeDesktopShell.passthru.containsTauriBinary or false) then
       "${forgeDesktopShell}/bin/forge-desktop-shell"
@@ -26,12 +32,12 @@ writeShellApplication {
     export FORGE_SHELL_MODE="''${FORGE_SHELL_MODE:-fullscreen-shell}"
     export FORGE_CORE_URL="''${FORGE_CORE_URL:-http://127.0.0.1:18492}"
     export VITE_FORGE_API_URL="''${VITE_FORGE_API_URL:-$FORGE_CORE_URL}"
-    export FORGE_SHELL_SAFE_MODE=true
+    export FORGE_SHELL_SAFE_MODE=${boolString safeMode}
     export FORGE_SHELL_FULLSCREEN="''${FORGE_SHELL_FULLSCREEN:-true}"
-    export FORGE_SHELL_HOST_MUTATION=false
-    export FORGE_SHELL_DIRECT_SYSTEM_CONTROL=false
-    export FORGE_SHELL_MODEL_MUTATION=false
-    export FORGE_SHELL_SEMANTIC_MEMORY_WRITE=false
+    export FORGE_SHELL_HOST_MUTATION=${boolString hostMutation}
+    export FORGE_SHELL_DIRECT_SYSTEM_CONTROL=${boolString directSystemControl}
+    export FORGE_SHELL_MODEL_MUTATION=${boolString modelMutation}
+    export FORGE_SHELL_SEMANTIC_MEMORY_WRITE=${boolString semanticMemoryWrite}
     export FORGE_SHELL_FORGE_K_LIVE_AUTHORITY=false
 
     if [ "$FORGE_SHELL_MODE" = "operator-desktop" ] && [ -n "''${FORGE_SHELL_BINARY:-}" ]; then

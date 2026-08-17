@@ -194,7 +194,7 @@ func (s *Server) handleForgeSystemStatus(w http.ResponseWriter, r *http.Request)
 	warnings := []string{
 		"shell system surface is read-only",
 		"host command-backed probes are disabled for this endpoint",
-		"FORGE-K remains simulator authority only",
+		"production FORGE-K is the sole live authority; simulator packages remain non-authoritative",
 	}
 	if s != nil && !s.capStoreOK {
 		warnings = append(warnings, "gateway capability override store unavailable; capability status overrides are in-memory only for this process")
@@ -217,10 +217,10 @@ func (s *Server) handleForgeSystemStatus(w http.ResponseWriter, r *http.Request)
 			ShellMode:                       firstNonEmpty(os.Getenv("FORGE_SHELL_MODE"), "manual"),
 			DisplayBackend:                  firstNonEmpty(os.Getenv("XDG_SESSION_TYPE"), os.Getenv("WAYLAND_DISPLAY"), "unknown"),
 			CompositorSession:               firstNonEmpty(os.Getenv("FORGE_SHELL_COMPOSITOR"), "not reported"),
-			SafeMode:                        s.cfg.SafeModeForceCPUOnly,
-			HostMutationDisabled:            true,
-			ModelMutationDisabled:           true,
-			SemanticMemoryWriteDisabled:     true,
+			SafeMode:                        parseEnvBoolWithDefault("FORGE_SHELL_SAFE_MODE", s.cfg.SafeModeForceCPUOnly),
+			HostMutationDisabled:            !parseEnvBoolWithDefault("FORGE_SHELL_HOST_MUTATION", false),
+			ModelMutationDisabled:           !parseEnvBoolWithDefault("FORGE_SHELL_MODEL_MUTATION", false),
+			SemanticMemoryWriteDisabled:     !parseEnvBoolWithDefault("FORGE_SHELL_SEMANTIC_MEMORY_WRITE", false),
 			ShellCannotClaimKernelAuthority: true,
 			ContextCompilerRequiredForLLM:   true,
 		},
