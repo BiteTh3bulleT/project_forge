@@ -3,6 +3,7 @@ final: prev: {
   # consumers (future NixOS modules, release flakes) can reference
   # `pkgs.forge-core` uniformly.
   forge-core = final.callPackage ../packages/forge-core.nix { };
+  forge-recover = final.callPackage ../packages/forge-recover.nix { };
   forge-desktop-shell = final.callPackage ../packages/forge-desktop-shell.nix { };
   forge-operator-desktop-shell = final.callPackage ../packages/forge-desktop-shell.nix {
     renderProfile = "vm-safe";

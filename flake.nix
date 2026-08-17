@@ -45,6 +45,7 @@
           forge-operator-desktop-shell = forgeOperatorDesktopShell;
           forge-shell-session = forgeShellSession;
           forge-operator-shell-session = forgeOperatorShellSession;
+          forge-recover = pkgs.callPackage ./nix/packages/forge-recover.nix { };
           forge-wayland-session = pkgs.callPackage ./nix/packages/forge-wayland-session.nix {
             forge-shell-session = forgeShellSession;
           };
@@ -77,6 +78,10 @@
           forge-operator-desktop-shell = {
             type = "app";
             program = "${self.packages.${system}.forge-operator-desktop-shell}/bin/forge-desktop-shell";
+          };
+          forge-recover = {
+            type = "app";
+            program = "${self.packages.${system}.forge-recover}/bin/forge-recover";
           };
           forge-wayland-session = {
             type = "app";
