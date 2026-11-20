@@ -198,6 +198,12 @@ The shell now handles native launch lifecycle edges explicitly:
 
 Native taskbar left-click requests focus/restore for inactive or minimized native windows and minimize for focused non-minimized native windows. Middle-click requests bounded close. Right-click exposes bounded focus/minimize/maximize/fullscreen/close requests.
 
+Before each native action, FORGE checks the current compositor listing. If
+multiple toplevels share the selected window's `wlrctl` selectors, FORGE refuses
+the request and directs the operator to the compositor's own window controls.
+The listing and action use separate subprocesses, so this check does not bind the
+action to a persistent compositor handle.
+
 The compositor bridge does not yet report per-window action capability metadata. Until it does, unsupported native actions fail visibly and safely instead of being hidden with precise capability-aware UI.
 
 Current G8 evidence lives in:

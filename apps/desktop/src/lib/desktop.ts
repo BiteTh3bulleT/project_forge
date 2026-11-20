@@ -967,15 +967,7 @@ export async function listLinuxWindows(): Promise<LinuxWindowSnapshot[]> {
 
 export async function focusLinuxWindow(windowId: string): Promise<boolean> {
   if (!isTauriDesktop()) return false;
-  try {
-    const result = await invoke("focus_linux_window", { windowId });
-    return result === true;
-  } catch (error) {
-    if (typeof console !== "undefined") {
-      console.error(`[FORGE] failed to focus Linux window ${windowId}`, error);
-    }
-    return false;
-  }
+  return (await invoke("focus_linux_window", { windowId })) === true;
 }
 
 export async function controlLinuxWindow(
@@ -983,16 +975,5 @@ export async function controlLinuxWindow(
   action: LinuxWindowAction,
 ): Promise<boolean> {
   if (!isTauriDesktop()) return false;
-  try {
-    const result = await invoke("control_linux_window", { windowId, action });
-    return result === true;
-  } catch (error) {
-    if (typeof console !== "undefined") {
-      console.error(
-        `[FORGE] failed to ${action} Linux window ${windowId}`,
-        error,
-      );
-    }
-    return false;
-  }
+  return (await invoke("control_linux_window", { windowId, action })) === true;
 }

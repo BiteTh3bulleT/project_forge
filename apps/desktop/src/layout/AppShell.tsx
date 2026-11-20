@@ -850,14 +850,19 @@ export function AppShell(props: AppShellProps) {
     window_: LinuxWindowSnapshot,
     action: LinuxWindowAction,
   ) {
-    const ok =
-      action === "focus"
-        ? await focusLinuxWindow(window_.id)
-        : await controlLinuxWindow(window_.id, action);
-    if (!ok) {
-      setOperatorAppStatus(
-        `${window_.title} did not accept the ${action} request.`,
-      );
+    const failure = `${window_.title} did not accept the ${action} request.`;
+    try {
+      const ok =
+        action === "focus"
+          ? await focusLinuxWindow(window_.id)
+          : await controlLinuxWindow(window_.id, action);
+      if (!ok) {
+        setOperatorAppStatus(failure);
+        return;
+      }
+    } catch (error) {
+      const detail = typeof error === "string" ? error.trim() : "";
+      setOperatorAppStatus(detail ? `${failure} ${detail}` : failure);
       return;
     }
     const nextWindows = await listLinuxWindows();

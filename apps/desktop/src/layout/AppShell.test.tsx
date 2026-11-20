@@ -1644,7 +1644,8 @@ describe("AppShell confined Tauri tool surfaces", () => {
         native: true,
       },
     ]);
-    desktopMocks.controlLinuxWindow.mockResolvedValue(false);
+    const refusal = "Multiple native windows match this action.";
+    desktopMocks.controlLinuxWindow.mockRejectedValue(refusal);
 
     render(
       <MemoryRouter>
@@ -1666,7 +1667,7 @@ describe("AppShell confined Tauri tool surfaces", () => {
 
     expect(
       await screen.findByText(
-        "Mozilla Firefox did not accept the minimize request.",
+        `Mozilla Firefox did not accept the minimize request. ${refusal}`,
       ),
     ).toBeTruthy();
   });

@@ -63,7 +63,10 @@ This smoke test must not run `systemctl`, `nixos-rebuild`, package installs, reb
 3. Log in and confirm the desktop is empty except for normal shell chrome/taskbar.
 4. Open Terminal from Start.
 5. Open a second Terminal and confirm both native windows have separate taskbar entries.
-6. Close one Terminal and confirm only that taskbar entry disappears.
+6. Give both terminals the same window title and request Close on one from
+   the taskbar. Confirm FORGE reports the ambiguity and both terminals remain
+   open. Close the intended terminal through labwc and confirm only its taskbar
+   entry disappears.
 7. Close the second Terminal and confirm no stale Terminal entry remains.
 8. Open Files from Start.
 9. Open a second Files window if available and confirm separate taskbar entries.

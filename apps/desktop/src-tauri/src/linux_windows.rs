@@ -113,14 +113,10 @@ fn linux_window_from_toplevel(toplevel: LswtToplevel) -> Option<LinuxWindowSnaps
     })
 }
 
-fn parse_linux_window_snapshots(raw: &str) -> Result<Vec<LinuxWindowSnapshot>, String> {
+fn parse_linux_toplevels(raw: &str) -> Result<Vec<LswtToplevel>, String> {
     let output: LswtOutput =
         serde_json::from_str(raw).map_err(|err| format!("failed to parse lswt output: {err}"))?;
-    Ok(output
-        .toplevels
-        .into_iter()
-        .filter_map(linux_window_from_toplevel)
-        .collect())
+    Ok(output.toplevels)
 }
 
 fn linux_window_action_name(action: LinuxWindowAction) -> &'static str {
@@ -133,15 +129,44 @@ fn linux_window_action_name(action: LinuxWindowAction) -> &'static str {
     }
 }
 
-fn linux_window_match_args(target: &LinuxWindowSnapshot) -> Vec<String> {
+fn linux_window_match_args(
+    observed: &[LswtToplevel],
+    window_id: &str,
+) -> Result<Vec<String>, String> {
+    let mut targets = observed.iter().filter(|window| {
+        !window.identifier.trim().is_empty() && window.identifier.trim() == window_id
+    });
+    let target = targets
+        .next()
+        .ok_or_else(|| "linux window is no longer active".to_string())?;
+    if targets.next().is_some() || is_forge_shell_toplevel(&target.app_id, &target.title) {
+        return Err("linux window is not an eligible native target".to_string());
+    }
+
+    let match_app = !target.app_id.trim().is_empty();
+    let match_title = !target.title.trim().is_empty();
+    if !match_app && !match_title {
+        return Err("linux window has no usable compositor selector".to_string());
+    }
+
+    // wlrctl matches exact raw values, ANDing the supplied attributes. Check
+    // all toplevels, including those filtered out of the taskbar.
+    if observed.iter().any(|window| {
+        !std::ptr::eq(window, target)
+            && (!match_app || window.app_id == target.app_id)
+            && (!match_title || window.title == target.title)
+    }) {
+        return Err("Multiple native windows match this action. Use the compositor to select the window directly.".to_string());
+    }
+
     let mut args = Vec::new();
-    if !target.app_id.trim().is_empty() {
+    if match_app {
         args.push(format!("app_id:{}", target.app_id));
     }
-    if !target.title.trim().is_empty() {
+    if match_title {
         args.push(format!("title:{}", target.title));
     }
-    args
+    Ok(args)
 }
 
 fn now_ms() -> u64 {
@@ -186,6 +211,7 @@ impl LinuxWindowRegistry {
             .collect()
     }
 
+    #[cfg(test)]
     fn active_window(&self, window_id: &str) -> Option<LinuxWindowSnapshot> {
         self.records
             .get(window_id)
@@ -194,7 +220,7 @@ impl LinuxWindowRegistry {
     }
 }
 
-fn read_compositor_linux_windows() -> Result<Vec<LinuxWindowSnapshot>, String> {
+fn read_compositor_linux_windows() -> Result<Vec<LswtToplevel>, String> {
     if !cfg!(target_os = "linux") {
         return Ok(Vec::new());
     }
@@ -206,33 +232,22 @@ fn read_compositor_linux_windows() -> Result<Vec<LinuxWindowSnapshot>, String> {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    parse_linux_window_snapshots(&stdout)
+    parse_linux_toplevels(&stdout)
 }
 
 fn refresh_linux_window_registry(
     registry_state: &LinuxWindowRegistryState,
 ) -> Result<Vec<LinuxWindowSnapshot>, String> {
-    let observed = read_compositor_linux_windows()?;
+    let observed = read_compositor_linux_windows()?
+        .into_iter()
+        .filter_map(linux_window_from_toplevel)
+        .collect();
     let mut registry = registry_state
         .registry
         .lock()
         .map_err(|_| "linux window registry lock poisoned".to_string())?;
     registry.refresh(observed, now_ms());
     Ok(registry.active_windows())
-}
-
-fn resolve_registered_linux_window(
-    registry_state: &LinuxWindowRegistryState,
-    window_id: &str,
-) -> Result<LinuxWindowSnapshot, String> {
-    let _ = refresh_linux_window_registry(registry_state)?;
-    let registry = registry_state
-        .registry
-        .lock()
-        .map_err(|_| "linux window registry lock poisoned".to_string())?;
-    registry
-        .active_window(window_id)
-        .ok_or_else(|| "linux window is no longer active".to_string())
 }
 
 #[tauri::command]
@@ -243,24 +258,18 @@ pub fn list_linux_windows(
 }
 
 #[tauri::command]
-pub fn focus_linux_window(
-    registry: tauri::State<'_, LinuxWindowRegistryState>,
-    window_id: String,
-) -> Result<bool, String> {
-    control_linux_window(registry, window_id, LinuxWindowAction::Focus)
+pub fn focus_linux_window(window_id: String) -> Result<bool, String> {
+    control_linux_window(window_id, LinuxWindowAction::Focus)
 }
 
 #[tauri::command]
-pub fn control_linux_window(
-    registry: tauri::State<'_, LinuxWindowRegistryState>,
-    window_id: String,
-    action: LinuxWindowAction,
-) -> Result<bool, String> {
-    let target = resolve_registered_linux_window(&registry, &window_id)?;
+pub fn control_linux_window(window_id: String, action: LinuxWindowAction) -> Result<bool, String> {
+    let observed = read_compositor_linux_windows()?;
+    let args = linux_window_match_args(&observed, &window_id)?;
 
     let mut command = std::process::Command::new("wlrctl");
     command.args(["toplevel", linux_window_action_name(action)]);
-    command.args(linux_window_match_args(&target));
+    command.args(args);
 
     let output = command
         .output()
@@ -293,7 +302,11 @@ mod tests {
             ]
         }"#;
 
-        let windows = parse_linux_window_snapshots(raw).expect("valid lswt json");
+        let windows: Vec<_> = parse_linux_toplevels(raw)
+            .expect("valid lswt json")
+            .into_iter()
+            .filter_map(linux_window_from_toplevel)
+            .collect();
 
         assert_eq!(
             windows,
@@ -404,26 +417,51 @@ mod tests {
 
     #[test]
     fn linux_window_match_args_are_not_shell_expanded() {
-        let target = LinuxWindowSnapshot {
-            id: "terminal-window".to_string(),
-            title: "Terminal; echo not-executed".to_string(),
-            app_id: "foot && echo not-executed".to_string(),
-            icon_name: None,
-            icon_path: None,
-            focused: false,
-            minimized: false,
-            native: true,
-            lifecycle: "active".to_string(),
-            first_seen_ms: 100,
-            last_seen_ms: 100,
-        };
+        let windows = parse_linux_toplevels(
+            r#"{"toplevels":[{"identifier":"terminal-window",
+                "title":" Terminal: notes ","app-id":"foot"}]}"#,
+        )
+        .unwrap();
 
         assert_eq!(
-            linux_window_match_args(&target),
-            vec![
-                "app_id:foot && echo not-executed".to_string(),
-                "title:Terminal; echo not-executed".to_string(),
-            ]
+            linux_window_match_args(&windows, "terminal-window").unwrap(),
+            ["app_id:foot", "title: Terminal: notes "]
+        );
+    }
+
+    #[test]
+    fn linux_window_actions_refuse_duplicate_selectors() {
+        let mut windows = parse_linux_toplevels(
+            r#"{"toplevels":[
+                {"identifier":"first","title":"Terminal","app-id":"foot"},
+                {"identifier":"second","title":"Terminal","app-id":"foot"},
+                {"identifier":"third","title":"Build log","app-id":"foot"}
+            ]}"#,
+        )
+        .unwrap();
+
+        for id in ["first", "second"] {
+            assert!(linux_window_match_args(&windows, id)
+                .unwrap_err()
+                .contains("Multiple native windows"));
+        }
+        assert_eq!(
+            linux_window_match_args(&windows, "third").unwrap(),
+            ["app_id:foot", "title:Build log"]
+        );
+        assert!(linux_window_match_args(&windows, "closed").is_err());
+
+        // An untitled window uses only the real app ID, including when the
+        // competing window is hidden from the taskbar.
+        windows[0].title.clear();
+        windows[1].title = "FORGE Build".to_string();
+        windows.pop();
+        assert!(linux_window_match_args(&windows, "first").is_err());
+        assert!(linux_window_match_args(&windows, "second").is_err());
+        windows.pop();
+        assert_eq!(
+            linux_window_match_args(&windows, "first").unwrap(),
+            ["app_id:foot"]
         );
     }
 }
