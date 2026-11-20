@@ -88,7 +88,7 @@ const checks = [
   includes("optiplex.direct-subnet-only", "nix/nixos/configurations/forge-optiplex-7000.nix", 'oifname "enp0s31f6" ip daddr 192.168.50.0/24 accept'),
   includes("optiplex.ssh-direct-only", "nix/nixos/configurations/forge-optiplex-7000.nix", 'iifname "enp0s31f6" ip saddr 192.168.50.0/24 tcp dport 22 accept'),
   includes("optiplex.nix-check-firewall", "nix/checks/forge-optiplex-7000.nix", "table inet forge_offline"),
-  includes("optiplex.runbook-kernel-status", "docs/runbooks/forge_optiplex_7000_test.md", 'forge_k_sole_live_authority'),
+  includes("optiplex.runbook-kernel-status", "docs/runbooks/forge_optiplex_7000_test.md", 'partial_live_validation_ready'),
   includes("optiplex.runbook-negative-egress", "docs/runbooks/forge_optiplex_7000_test.md", "! curl --connect-timeout 3 http://1.1.1.1"),
   includes("optiplex.developer-workspace", "nix/nixos/configurations/forge-optiplex-7000.nix", 'forge.storage.workspaceMode = "2770";'),
   includes("optiplex.office-suite", "nix/nixos/configurations/forge-optiplex-7000.nix", "libreoffice"),
