@@ -485,8 +485,6 @@ in
     forgeOperatorSession
     forgeOperatorToolbelt
     pkgs.labwc
-    pkgs.lswt
-    pkgs.wlrctl
     # The Cage session remains available for rollback and fullscreen testing.
     forgeWaylandSession
     pkgs.cage

@@ -12,6 +12,7 @@ import {
   launchOperatorApp,
   listForgeWindows,
   listLinuxWindows,
+  subscribeToLinuxWindows,
   listOperatorApps,
   readHostPowerPolicy,
   requestHostPowerAction,
@@ -624,16 +625,40 @@ export function AppShell(props: AppShellProps) {
   useEffect(() => {
     if (!isMainWindow || !isTauriDesktop()) return;
     let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    let loading = false;
+    let dirty = false;
     async function loadLinuxWindows() {
-      const nextWindows = await listLinuxWindows();
-      if (cancelled) return;
-      setLinuxWindows(activeLinuxWindowSnapshots(nextWindows));
+      dirty = true;
+      if (loading || cancelled) return;
+      loading = true;
+      try {
+        while (dirty && !cancelled) {
+          dirty = false;
+          const nextWindows = await listLinuxWindows();
+          if (!cancelled) {
+            setLinuxWindows(activeLinuxWindowSnapshots(nextWindows));
+          }
+        }
+      } finally {
+        loading = false;
+      }
     }
-    void loadLinuxWindows();
-    const id = window.setInterval(() => void loadLinuxWindows(), 1500);
+    // Subscribe before reading the initial snapshot so startup events cannot
+    // fall between the read and listener registration.
+    void subscribeToLinuxWindows(() => void loadLinuxWindows())
+      .then((stop) => {
+        if (cancelled) {
+          stop();
+          return;
+        }
+        unlisten = stop;
+        return loadLinuxWindows();
+      })
+      .catch((error) => console.error("[FORGE] native window subscription failed", error));
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      unlisten?.();
     };
   }, [isMainWindow]);
 
@@ -865,8 +890,6 @@ export function AppShell(props: AppShellProps) {
       setOperatorAppStatus(detail ? `${failure} ${detail}` : failure);
       return;
     }
-    const nextWindows = await listLinuxWindows();
-    setLinuxWindows(activeLinuxWindowSnapshots(nextWindows));
   }
 
   function resolveTransferredWindow(

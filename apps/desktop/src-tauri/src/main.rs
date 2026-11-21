@@ -1072,6 +1072,8 @@ fn main() {
                 }
             }
             notifications::start_freedesktop_service(app.handle().clone());
+            #[cfg(target_os = "linux")]
+            linux_windows::start(app.handle().clone());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

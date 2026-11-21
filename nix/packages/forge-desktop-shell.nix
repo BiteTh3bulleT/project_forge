@@ -45,7 +45,7 @@ let
     inherit version;
 
     src = repoSrc;
-    npmDepsHash = "sha256-mMvIZF89lS9KPTAS4jIYklw55IEi440uCyy3qNR23XU=";
+    npmDepsHash = "sha256-rk6iYSWxzG3ohMljw/XUadiny82BZsYVVElhnuk9V9k=";
     npmBuildScript = "build:desktop";
     VITE_FORGE_BOOT_LOGIN = if bootLogin then "true" else "false";
     VITE_FORGE_EMPTY_DESKTOP_ON_BOOT = if emptyDesktopOnBoot then "true" else "false";

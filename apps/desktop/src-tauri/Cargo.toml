@@ -22,5 +22,9 @@ tauri-plugin-dialog = "2"
 tauri-plugin-os = "2"
 zbus = "5"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+wayland-client = "0.31"
+wayland-protocols-wlr = { version = "0.3", features = ["client"] }
+
 [features]
 custom-protocol = ["tauri/custom-protocol"]

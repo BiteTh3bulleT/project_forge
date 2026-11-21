@@ -299,10 +299,9 @@ bridge. Forge remains the desktop canvas below those windows; it must not raise
 over them as an ordinary peer application. Native applications are composed on
 the Forge workspace rather than embedded inside the Tauri webview.
 
-Confirm the compositor-visible Forge identity and active desktop rule:
+Confirm Forge stays below native windows and the desktop rule matches its app ID:
 
 ```bash
-XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 lswt -j
 grep -F 'identifier="forge_desktop"' /run/user/1000/forge-operator-labwc/rc.xml
 ```
 

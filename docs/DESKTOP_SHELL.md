@@ -106,12 +106,12 @@ frontend store. Native Linux app windows are compositor objects. FORGE may list
 and request bounded actions for native windows, but it does not yet have a
 compositor-native move/resize/output migration protocol.
 
-Native app visibility now flows through a backend-owned Tauri registry. The
-registry refreshes from the compositor, preserves stable first-seen/last-seen
-lifecycle metadata for each toplevel, marks missing windows closed, and only
-executes focus/minimize/maximize/fullscreen/close actions against active
-registered windows. The frontend taskbar is a consumer of that registry; it no
-longer treats raw polling output as the lifecycle owner.
+The Tauri backend tracks native windows over one Wayland connection using
+labwc's foreign toplevel management protocol. It publishes completed compositor
+updates to the taskbar and removes closed handles immediately. It keeps only
+live windows and reuses icon metadata when titles or focus change. If the
+connection ends, it clears the taskbar's native entries. Restart the shell to
+restore tracking after reconnecting to the compositor.
 
 ## Notifications
 
@@ -198,11 +198,10 @@ The shell now handles native launch lifecycle edges explicitly:
 
 Native taskbar left-click requests focus/restore for inactive or minimized native windows and minimize for focused non-minimized native windows. Middle-click requests bounded close. Right-click exposes bounded focus/minimize/maximize/fullscreen/close requests.
 
-Before each native action, FORGE checks the current compositor listing. If
-multiple toplevels share the selected window's `wlrctl` selectors, FORGE refuses
-the request and directs the operator to the compositor's own window controls.
-The listing and action use separate subprocesses, so this check does not bind the
-action to a persistent compositor handle.
+FORGE sends each native window action to the Wayland handle behind the selected
+entry. Windows with identical titles and app IDs remain independently
+controllable. The compositor decides whether to honor each request and reports
+the resulting state through window events.
 
 The compositor bridge does not yet report per-window action capability metadata. Until it does, unsupported native actions fail visibly and safely instead of being hidden with precise capability-aware UI.
 

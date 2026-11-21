@@ -949,6 +949,12 @@ export async function requestShellSessionAction(
   };
 }
 
+export async function subscribeToLinuxWindows(
+  onChange: () => void,
+): Promise<UnlistenFn> {
+  return listen("forge://linux-windows-changed", onChange);
+}
+
 export async function listLinuxWindows(): Promise<LinuxWindowSnapshot[]> {
   if (!isTauriDesktop()) return [];
   try {

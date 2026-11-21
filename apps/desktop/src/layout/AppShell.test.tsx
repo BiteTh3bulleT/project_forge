@@ -46,6 +46,7 @@ const desktopMocks = vi.hoisted(() => ({
   listLinuxWindows: vi.fn<() => Promise<LinuxWindowSnapshot[]>>(
     () => new Promise(() => {}),
   ),
+  subscribeToLinuxWindows: vi.fn<(onChange: () => void) => Promise<() => void>>(),
   focusLinuxWindow: vi.fn(() => Promise.resolve(true)),
   controlLinuxWindow: vi.fn(() => Promise.resolve(true)),
   minimizeTauriWindow: vi.fn(() => Promise.resolve(true)),
@@ -129,6 +130,7 @@ vi.mock("../lib/desktop", () => ({
   isTauriDesktop: desktopMocks.isTauriDesktop,
   listForgeWindows: desktopMocks.listForgeWindows,
   listLinuxWindows: desktopMocks.listLinuxWindows,
+  subscribeToLinuxWindows: desktopMocks.subscribeToLinuxWindows,
   focusLinuxWindow: desktopMocks.focusLinuxWindow,
   controlLinuxWindow: desktopMocks.controlLinuxWindow,
   listOperatorApps: desktopMocks.listOperatorApps,
@@ -184,6 +186,8 @@ describe("AppShell confined Tauri tool surfaces", () => {
     desktopMocks.listLinuxWindows.mockImplementation(
       () => new Promise(() => {}),
     );
+    desktopMocks.subscribeToLinuxWindows.mockReset();
+    desktopMocks.subscribeToLinuxWindows.mockResolvedValue(() => {});
     desktopMocks.focusLinuxWindow.mockResolvedValue(true);
     desktopMocks.controlLinuxWindow.mockResolvedValue(true);
     desktopMocks.listOperatorApps.mockClear();
@@ -1335,6 +1339,9 @@ describe("AppShell confined Tauri tool surfaces", () => {
         lastSeenMs: Date.now() + 100,
       },
     ]);
+    await act(async () => {
+      desktopMocks.subscribeToLinuxWindows.mock.lastCall?.[0]();
+    });
 
     await waitFor(
       () => {
